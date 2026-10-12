@@ -325,7 +325,7 @@ lists what each module exports and what is verified, and
 | **K2** | #332; Wycheproof (all 325 cases) and audit #372 | `nish/crypto/chacha20poly1305` (ChaCha20, Poly1305, the AEAD, RFC 9001 §5.4.4's header-protection mask) | The ChaCha20 rounds and the loops around both halves by disassembly: `ct_asm_chacha20poly1305` reads the Poly1305 block, its final reduction and the tag compare |
 | **K3** | #340, with Wycheproof `aes_gcm`; audit #372 | `nish/crypto/aes` (AES-128 and AES-256, bitsliced; GCM; RFC 9001 §5.4.3's header-protection mask) | AES-NI and PCLMULQDQ, and the ARMv8 AES and PMULL instructions, are done, as a runtime kernel rather than builtins: WP38 S5 sends the key schedule, the block, GCTR and GHASH to `runtime/runtime-aes.c` behind a run-time check, keeping the bitsliced code as the fallback, the wasm32 path and the Node reading ([wp38-simd.md](wp38-simd.md) §2.3). Left: the bitsliced fallback's key schedule, packing and block loops by disassembly (`ct_asm_aes` reads one round, one GHASH multiply and the tag compare); what the kernels leave in vector registers, which no wipe reaches (AEAD-4); choosing the path at build time (a `--cpu` flag, WP38 S2). AES-192 is out of scope |
 | **K4** | #289; ladder by disassembly #339; Wycheproof and audit #373 | `nish/crypto/x25519` | The 255-step ladder loop, the inversion and the encodings remain discipline (`ct_asm_x25519` reads the field operations, the swap and one ladder step) |
-| **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | The 64-window loop, the table build, the inversions and the nonce derivation remain discipline (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations and one window step). A 64-bit or fixed-base-table P-256, when a profile of signing asks |
+| **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | The 64-window loop, the table build, the inversions and the nonce derivation remain discipline (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations and one window step). A 64-bit or fixed-base-table P-256, when a profile of signing asks: [the profile](#k5-p-256-the-baseline) puts signing at 68.9% of a handshake's server instructions, and a fixed-base table is planned against the bar set there (#628) |
 | **K6** | #346; audit #376 | `nish/crypto/x509` (DER, PEM, a P-256 key from SEC1 or PKCS#8, a chain parsed, an ECDSA signature verified, the self-signed 1-to-14-day certificate minted, its SHA-256) | Chrome accepting the hash, which is A1's gate: since X509-9 ([`security/crypto-x509.md`](security/crypto-x509.md)) the minted certificate carries the critical basicConstraints and keyUsage that quiche's `CertificateView` needs before it compares a hash, and the live proof is S2's `chrome (minted certificate)` lane. It parses and does not validate: no path validation and no extensions read, which the relay's own `--cert` needs no more than |
 | **T1** | #407 | `nish/net/tls` (the server state machine), `nish/net/tls/codec`, `nish/net/tls/schedule` | Groups other than x25519; NewSessionTicket, 0-RTT and client authentication (§3 keeps them out); the wipes TLS-1 records (#430) |
 | **T2** | #437 | `nish/net/tls/record`, `nish/net/tls/record-server` (TLS over a byte stream, sans-IO), `nish/net/tls-tcp` (the TCP carrier: a slot pool on `nish:net`) | Chrome; a carrier idle timeout (TLS-4); `record_size_limit`; the client role (N13) |
@@ -368,6 +368,149 @@ WebTransport — each a Nish server on the carrier and the lanes' own scripted
 clients on real loopback sockets in one `pollWait` loop, with every server
 call's `Arena.used()` flat over fifty rounds on a warm connection and the
 memory a whole connection keeps pinned beside it.
+
+#### K5: P-256, the baseline
+
+K5's Left cell waits for "a profile of signing" before P-256 gets a 64-bit or
+fixed-base-table path. This is that profile, taken before anything is built:
+`std/crypto/p256.ts` as it is, fiat-crypto's eight `u32` limbs under a fixed
+4-bit window, with one TLS 1.3 handshake to say how much of the server it is
+(#628).
+
+**What a server handshake asks of P-256.** One signature: CertificateVerify,
+`TlsP256Signer.sign` (`std/net/tls.ts`). The key share is X25519 only (T1's
+Left cell) and there is no client authentication, so the server never
+verifies and never does ECDH. Signing multiplies only the base point, `k·G`
+for RFC 6979's nonce.
+
+**How it was measured.** On `b515c1b` (`main`; the branch adds only this note
+and the bench files), with `build/nish` built from that commit by the 0.18.0
+seed. The machine was an `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family
+6, model 85, stepping 7; 4 vCPUs under KVM), Ubuntu clang 18.1.3. There is no
+`perf` on it, so the profile is valgrind's callgrind, in instructions (Ir), not
+cycles.
+
+**One real handshake.** The server was `tests/link/net_interop_server`, built
+as `tests/interop/server.dockerfile` builds it, plus `-g` so the profile can
+name functions, and run as `serve --www <dir>` under `valgrind
+--tool=callgrind`. Its counters were zeroed once it had printed its ports, so
+minting its identity (a P-256 key and a signed certificate) is left out. Each
+dump then covers one `curl --http2 --tlsv1.3 -k` GET of a 17-byte file:
+the handshake and one 17-byte response.
+The client was curl 8.5.0 with OpenSSL 3.0.13, and it negotiated
+TLS_AES_256_GCM_SHA384 with X25519 and ALPN `h2`. Three handshakes, each zeroed
+and dumped on its own, came to 13,783,045, 13,798,343 and 13,779,535 Ir;
+P-256's share was 9,498,753 Ir in all three, since constant-time code does
+the same work whatever the nonce. The first, by the module each instruction's
+line is in (self cost, so a function inlined into another counts where its
+source is):
+
+| Module | Ir | Share |
+| --- | ---: | ---: |
+| `std/crypto/p256.ts` | 9,498,753 | **68.9%** |
+| `std/crypto/x25519.ts` (two ladders: the key share and the shared secret) | 3,147,968 | 22.8% |
+| `std/crypto/sha512.ts` (SHA-384: the transcript, HMAC and HKDF under the suite) | 629,720 | 4.6% |
+| `std/net/tls*` (`tls.ts`, `tls/record.ts`, `tls/record-server.ts`, `tls/codec.ts`, `tls/schedule.ts`, `tls-tcp.ts`) | 143,448 | 1.0% |
+| `std/crypto/hmac.ts` and `hkdf.ts` (their own lines) | 40,827 | 0.3% |
+| The AEAD (`std/crypto/aes.ts` and `runtime/runtime-aes.c`) | 29,964 | 0.2% |
+| Everything else (HTTP/2, the loop, the runtime, libc) | 292,365 | 2.1% |
+| **All** | **13,783,045** | 100% |
+
+Inside P-256, inclusive of what each calls:
+
+| Function | Calls | Ir | Share of the handshake |
+| --- | ---: | ---: | ---: |
+| `TlsP256Signer.sign`, the whole signature | 1 | 9,499,615 | 68.9% |
+| `p256ScalarMultWith`, `k·G` | 1 | 8,025,428 | 58.2% |
+| — `p256PointDouble` | 256 | 5,744,384 | 41.7% |
+| — `p256PointAdd` (14 to build the table, 64 in the windows) | 78 | 1,979,874 | 14.4% |
+| — `p256TableMove`, the constant-time table read | 3,072 | 261,120 | 1.9% |
+| `p256ScalarInvert`, `k^-1` mod n by Fermat | 1 | 776,344 | 5.6% |
+| `p256AffineX` (`p256FieldInvert`, `Z^-1` mod p, is 552,948 of it) | 1 | 556,013 | 4.0% |
+| `p256ShaInto`: the module's own SHA-256, for the digest and RFC 6979's HMAC-SHA-256 | 11 | 124,189 | 0.9% |
+
+By function rather than by caller, fiat's field multiply `p256FiatMul` is
+5,616,270 Ir on its own (40.7% of the server), its square 1,431,552, its add
+896,400 and subtract 203,658, and the scalar multiply mod n
+`p256FiatScalarMul` 777,777, nearly all of it the inversion.
+
+Natively, the same server built without `-g` used 2.0 to 2.1 ms of user CPU
+and 0.55 to 0.75 ms of system CPU a handshake, read from `/proc/<pid>/stat`
+over two runs of 200 handshakes (30 ms in all over ten, at the clock tick's
+10 ms). An instruction is not a cycle: the bench below puts the signature at
+about 0.75 ms, about 37% of that user time, where its share of the Ir is 69%.
+That suggests fiat's straight-line multiplies retire far more instructions a
+cycle than the rest of the server does. Either way, it is the largest single
+cost of a handshake.
+
+**The stop rule does not apply.** The plan stops here, with nothing built, if
+P-256 is under 10% of a handshake's server Ir. It is 68.9%, and `k·G` alone is
+58.2%.
+
+**The bench.** `bench/p256.ts` times `p256PublicKey`, `p256SignSha256` (on a
+64-byte message) and `p256VerifySha256`, each in its own process, with the
+private key, the message or the signature changing on every iteration and
+every answer folded into a printed checksum
+([bench/README.md](../bench/README.md#p-256)). `node bench/p256.mjs --self
+--runs 16`, twice: sixteen timed rounds after one warm-up, each alternating
+with a byte-identical copy of the binary. From the first sample, in
+microseconds a call:
+
+| Workload | min µs | median µs | calls/s at min | at median |
+| --- | ---: | ---: | ---: | ---: |
+| `p256PublicKey` | 689.6 | 761.9 | 1,450 | 1,312 |
+| `p256SignSha256` | **754.4** | 816.9 | 1,326 | 1,224 |
+| `p256VerifySha256` | 1,377.8 | 1,551.0 | 726 | 645 |
+
+The second sample's baseline minima were 683.2, 761.9 and 1,406.5 µs. Every
+run printed the same checksum for each workload: public-key 1350825148, sign
+2157286632, verify 66543557.
+
+**The noise band.** The copy against the baseline, minimum / median, + slower:
+
+| Workload | first sample | second sample |
+| --- | ---: | ---: |
+| `p256PublicKey` | +0.4% / +5.4% | +2.3% / +5.7% |
+| `p256SignSha256` | −0.3% / +2.8% | +1.4% / +5.6% |
+| `p256VerifySha256` | +0.3% / −1.3% | −0.7% / +4.1% |
+
+A binary differs from itself by up to 2.3% at the minimum and 5.7% at the
+median here; a later figure has to leave that band before it says anything,
+and the minima are again the steadier statistic.
+
+**What a fixed-base table can reach.** A table of `j·16^i·G` removes all 256
+doublings and the 14 table-building additions from `k·G`, leaving 64 mixed
+additions (Renes–Costello–Batina Algorithm 5: 11 field multiplies to the full
+addition's 12) and 64 table reads of two coordinates rather than three. At
+this profile's 25,383 Ir an addition, that is about 1.66 M Ir for `k·G`
+instead of 8.03 M, 4.8x fewer. The rest of the signature does not move: the
+two inversions and the hashing are 1,473,325 Ir, 15.5% of the signature
+today. So the signature comes to about 3.14 M Ir, **about 3.0x** fewer than
+9.50 M, and could not pass 6.4x even if `k·G` cost nothing. `p256PublicKey`
+keeps only the field inversion, so it comes to about 3.9x.
+
+**The bar, set before anything is built.** Both of:
+
+1. `p256SignSha256`'s minimum is at least **3x** faster than this baseline's,
+   at or under **251.5 µs** (754.4 / 3), outside the noise band, on this
+   machine, or on another after the baseline is re-run there in the same
+   rounds, as S5's bar allowed.
+2. P-256 is **no longer the largest module** in one handshake's server Ir:
+   under X25519's 3,147,968 Ir, which puts it under about 42% of the
+   handshake.
+
+And `p256VerifySha256` is not slower than this baseline outside the noise
+band: 2.3% at the minimum and 5.7% at the median.
+
+The plan's second condition was also "under 25% of the handshake", which the
+numbers rule out for a fixed-base table: the parts of the signature the table
+does not touch, 1.47 M Ir, are already 25.6% of a handshake in which `k·G` cost
+nothing. Reaching 25% would take the scalar inversion (0.78 M, the next
+largest) and the field inversion too, which is other work. Condition 2 is
+instead the one the table can meet, and it is tight: the projection, 3.14 M, is
+level with X25519's 3.15 M, as condition 1's projection, 3.0x, is level with
+3x. The table meets the bar only if its additions cost what the full
+addition's do now, and no more.
 
 ## 6. Decisions for the owner
 
