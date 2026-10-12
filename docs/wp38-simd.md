@@ -63,8 +63,8 @@ rules:
    as `nish:unsafe`'s `wrappingAdd` does.
 4. **No target intrinsics in the language (§3.3).** Each one would tie a
    program to an instruction set, and none has a TypeScript reading that is
-   not an emulator. Where one is worth having, as AES-NI may be, it goes into
-   the runtime behind a function, as rule 1 does for byte search.
+   not an emulator. Where one is worth having, as AES-NI was (S5), it goes
+   into the runtime behind a function, as rule 1 does for byte search.
 5. **Auto-vectorisation stays the default way numeric code gets vectors
    (§3.4).** Getting more loops into a shape LLVM vectorises is ordinary work
    for the bounds and overflow pipelines (WP15, #426), and needs no surface.
@@ -494,6 +494,71 @@ bitsliced code a machine without the instructions runs (and
 `NISH_AES=soft`), is not slower than this baseline outside the noise band:
 3.0% at the minimum and 11.1% at the median, on each of the nine workloads.
 
+#### S5: AES-GCM, the result
+
+**Bar met.** The kernel is `runtime/runtime-aes.c` (#594), on the four seams
+#592 cut in `std/crypto/aes.ts`; the compiler calls it behind a branch on
+`nish_aes_hw` (`src/kernels.ts`), keeping the bitsliced walker called on the
+other arm. Measured at `0db1292` with `build/nish` built from it by the 0.18.0
+seed, on an `Intel(R) Xeon(R) Processor @ 2.10GHz` (lscpu: family 6, model
+207; 4 vCPUs under KVM; AES-NI, PCLMULQDQ, VAES and AVX-512 present; the
+kernels use AES-NI, PCLMULQDQ and SSSE3 only), Ubuntu clang 18.1.3. That is
+not the machine the baseline above was taken on, so the baseline was re-run
+here, as the bar allows: `bench/aes-gcm.ts` built by `main`'s compiler
+(`ea34c4e`, the bitsliced code with #592's seams), timed in the same
+interleaved rounds as the kernel. Cycles per byte are again derived, at the
+nominal 2.1 GHz.
+
+`node bench/aes-gcm.mjs --self --binary <main's build> --env NISH_AES=soft
+--runs 16`: sixteen rounds of four columns after one warm-up. Every run
+printed the same checksum, 1163276789.
+
+| Workload | kernel min / median ms | MB/s | main's build min / median ms | MB/s | faster, min / median |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| AES-128-GCM seal, 16 KiB | 1.11 / 1.37 | 3,765.0 / 3,058.4 | 42.76 / 45.37 | 98.1 / 92.4 | **38.5x** / 33.1x |
+| AES-128-GCM open, 16 KiB | 1.08 / 1.35 | 3,885.8 / 3,099.0 | 42.58 / 45.44 | 98.5 / 92.3 | 39.4x / 33.7x |
+| AES-128-GCM seal, 1,200 B | 1.42 / 1.83 | 2,950.4 / 2,287.2 | 41.47 / 47.32 | 101.2 / 88.7 | 29.2x / 25.9x |
+| AES-128-GCM open, 1,200 B | 1.59 / 1.82 | 2,642.2 / 2,309.4 | 42.65 / 47.48 | 98.4 / 88.4 | 26.8x / 26.1x |
+| `aesHeaderMask`, 65,536 samples | 0.72 / 0.91 | 1,460.8 / 1,157.4 | 26.90 / 27.99 | 39.0 / 37.5 | 37.4x / 30.8x |
+
+The kernel's own copy, in the same rounds, stayed within 14.1% of it at the
+minimum and 2.1% at the median, so every ratio is far outside the band. Seal
+on 16 KiB costs 0.5 to 0.7 derived cycles a byte; one header
+mask costs 11 to 14 ns, where the bitsliced cipher's batch of four blocks
+cost about 410. The ChaCha20-Poly1305 rows are unchanged code and are left
+out.
+
+**The fallback.** `NISH_AES=soft node bench/aes-gcm.mjs --compiler <main's
+nish> --self --binary <this build> --runs 18` and again with `--runs 24`: the
+baseline is `main`'s build, its byte-identical copy gives the band, and this
+build runs the bitsliced arm of every branch. + is slower than `main`:
+
+| Workload | first sample: soft, min / median | band, min / median | second sample: soft | band |
+| --- | ---: | ---: | ---: | ---: |
+| AES seal, 16 KiB | −23.3% / −0.2% | −19.8% / +0.4% | −6.7% / −0.3% | −20.1% / +1.1% |
+| AES open, 16 KiB | −0.1% / +1.4% | −17.1% / −0.4% | −7.8% / −5.6% | −21.9% / −0.8% |
+| AES seal, 1,200 B | +7.0% / −0.4% | −10.7% / −1.0% | −13.8% / −3.9% | −20.1% / −1.4% |
+| AES open, 1,200 B | +0.7% / −0.2% | −14.0% / −1.2% | −17.9% / +1.3% | −9.2% / −1.0% |
+| ChaCha seal, 16 KiB | +8.3% / −0.0% | −5.6% / −2.4% | −8.0% / +2.5% | −4.7% / −1.4% |
+| ChaCha open, 16 KiB | +9.2% / +5.2% | +5.4% / +2.5% | −19.1% / +1.7% | −5.7% / −2.4% |
+| ChaCha seal, 1,200 B | +30.2% / +3.6% | +27.5% / +2.0% | −7.1% / +0.9% | −4.4% / −0.7% |
+| ChaCha open, 1,200 B | +13.9% / +1.8% | +12.2% / −0.6% | −9.1% / +0.1% | −6.9% / −0.5% |
+| `aesHeaderMask` | +10.9% / −0.7% | +6.6% / +0.0% | +15.5% / −2.5% | +18.7% / −2.0% |
+
+On this machine the minima scatter: a binary against its own copy moved by
+up to 27.5%, so the baseline's 3.0% band at the minimum does not carry over,
+and the minima here are read against the copy measured in the same rounds.
+The medians are steady, within 2.5% of the copy. Against both, no AES
+workload on the fallback is slower than `main`: at the median every one is
+within 1.4% or faster, and at the minimum within its copy's spread. The
+largest slower figures are ChaCha20-Poly1305's, whose code this change does
+not touch: +5.2% and +3.6% at the median in the first sample, 2.7 and 1.6
+points past that sample's band and inside the baseline's 11.1%, and +2.5% at
+most in the second, inside 0.1 points of its band. So the fallback is not
+slower, outside the noise band, on any of the nine workloads, and a key's
+work on the bitsliced arm costs one extra call to `nish_aes_hw` and one
+branch per seam call.
+
 ---
 
 ## 3. The options
@@ -845,9 +910,10 @@ constant-time checker reads the baseline CPU only. [CT-5 and CT-6](security/ct-v
 record BMI2 and AVX-512 instructions it had to be taught to model although CI,
 building for the baseline, never emits them, and CT-16 leaves the rest open.
 Every intrinsic above the baseline widens that gap. The one strong case is AES-NI and
-PCLMULQDQ for `std/crypto/aes.ts`, which is bitsliced today so that no table
-is ever indexed. That case belongs under §3.1 as a runtime kernel and §6's
-rules. It does not need a language surface. **Declined** (§9).
+PCLMULQDQ for `std/crypto/aes.ts`, which is bitsliced so that no table is ever
+indexed. That case belongs under §3.1 as a runtime kernel and §6's rules, and
+S5 put it there ([§2.3](#s5-aes-gcm-the-result)) without a language surface.
+**Declined** (§9).
 
 ### 3.4 (d) Auto-vectorisation, and the `-march` policy
 
@@ -957,7 +1023,7 @@ a printed checksum.
 | **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
-| **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. |
+| **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, is not slower than the baseline outside the noise band on any of the nine workloads. |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
 missed its bar because a per-call search has nothing to jump on `bench/json`
