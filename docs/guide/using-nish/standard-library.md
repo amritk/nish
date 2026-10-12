@@ -279,8 +279,9 @@ window you gave it.
   surrogate pair on its own is refused, so what you copy out is always valid
   UTF-8.
 - **Numbers.** `numberF64()` reads the current number as `JSON.parse` would,
-  correctly rounded, and `isInteger()` and `numberI64()` read one that fits
-  in an `i64`.
+  correctly rounded. `isInteger()` and `numberI64()` read one that fits in an
+  `i64`, and `isU64()` and `numberU64()` read one written in digits alone, with
+  no minus sign, that fits in a `u64`, up to `18446744073709551615`.
 - **Skipping.** `skipValue()` steps over whatever value comes next, however
   deeply it nests: use it for a field you do not want.
 - **Limits.** `JsonLimits` caps nesting depth (128), the bytes in one string
