@@ -2623,9 +2623,18 @@ export const main = (): i32 => {
     `getOrInsert`'s from `nish/map` — so each is a store into the table, as a
     `push` is (`reject_thread_region_map_value_param`, `_map_fused_value_param`,
     `_map_own_subpath`, `_map_route_subpath`, `_map_route_value_param`,
-    `_set_own_subpath`). The iterable of a `for...of` is only read, and a
-    store through its loop variable is a store into the container
-    (`_walk_array_store`, `_walk_set_store`). An object literal
+    `_set_own_subpath`), and its methods write only the table's own storage,
+    never what it holds. What a container gives back is its element: what
+    `get` or `getOrInsert` answers, and the `const` variable of a `for...of`
+    over an array, a `Set`, or a `Map`'s `keys()` or `values()`, is memory
+    below that container, so a write through it counts against what was
+    stored into the container, and a store through it is a store into the
+    container (`_readback_get`, `_readback_get_or_insert`,
+    `_readback_nested`, `_readback_store_alias`, `_table_param_store`,
+    `_walk_array_param`, `_walk_array_twice`, `_walk_values`, `_walk_keys`,
+    `_walk_set_param`, `_walk_array_store`, `_walk_set_store`). Two values
+    stay unknown: an `x ?? y`, and the variable of a walk of anything else —
+    a `Channel`'s messages are another task's. An object literal
     whose property is an argument's memory carries it however it is written
     (`reject_thread_region_literal_object_param`, `_shorthand_param`,
     `_array_object_param`, `_field_object_param`, `_push_object_param`,
@@ -2650,7 +2659,13 @@ export const main = (): i32 => {
     (`thread_scope_region_own_handoff`). So a `Map` or a `Set` a function
     makes and fills itself writes nothing of the task's
     (`thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert`,
-    `thread_scope_region_set_add`). A task argument read out of a
+    `thread_scope_region_set_add`), and so does one that walks, memoises
+    or indexes a table of its own, or writes through what it reads back out
+    of a container of fresh objects it made
+    (`thread_scope_region_own_tables`, `thread_scope_region_read_back`). A
+    map handed to `set` as a named `const` escapes, as any own object handed
+    to a table does, so a write into it counts against every argument: build
+    a nested table from what `get` reads back instead. A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the

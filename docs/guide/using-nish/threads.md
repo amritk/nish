@@ -140,8 +140,9 @@ export const main = (): i32 => {
   you make in the block is yours to write, until anything a task reads may
   have got into it: stored in a field or an element, pushed, added to a `Map`
   or a `Set`, put in a literal, or handed to a function that keeps it. A field
-  or an element of it counts as much as the object itself. So a `Map` or a
-  `Set` you make there is yours to fill.
+  or an element of it counts as much as the object itself. So a `Map`, a
+  `Set` or an array you make there is yours to fill and walk, and what you
+  read back out of it is yours to write when you put it there fresh.
 - **A task is a named top-level function**, not an arrow, so a debugger or a
   profiler can name its thread. It follows the rules of a parallel `f` above:
   it writes nothing another thread can see (except through a `Mutex` or a
