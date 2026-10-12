@@ -61,14 +61,17 @@ const MAX_BLOCKS: i32 = 64
 
 /**
  * Writes `f(src[i])` into `dst[i]` for every `i` in `[lo, hi)`: one thread's
- * share of a map. Each length is read in the loop condition and `dst`'s again
+ * share of a map. Both lengths are read in the loop condition and `dst`'s again
  * after the call, because a call ends every length fact the bounds proof holds
  * (docs/LANGUAGE.md, "Arrays") and this is what keeps both accesses unchecked.
  * The caller has already checked that the range is inside both arrays, so
- * neither test is ever the one that stops the loop.
+ * neither test is ever the one that stops the loop. `dst`'s in the condition
+ * is what lets the loop vectorise (#619): once `f` is inlined, LLVM sees that
+ * the test after the call repeats one the condition made, drops it, and the
+ * store is no longer conditional. `fromRange` has the same shape.
  */
 const mapRange = <T, U>(src: T[], dst: U[], f: (x: T) => U, lo: i32, hi: i32): void => {
-  for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(src.length); i++) {
+  for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(src.length) && i < toI32(dst.length); i++) {
     const y = f(src[i])
     if (i < toI32(dst.length)) {
       dst[i] = y
