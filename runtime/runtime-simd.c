@@ -2,10 +2,10 @@
  * bytes at a time (WP38 S1, docs/wp38-simd.md §3.1).
  *
  * A translation unit of its own for the reason runtime-host.c is one: each file
- * carries its own measured `.text*` ceiling in tests/run.js, and runtime.c had
- * no room left when this arrived. Section GC means a program that never calls a
- * kernel links none of this file, and scripts/build.sh pairs it with runtime.c
- * like the other halves, so a link line still names one runtime.
+ * carries its own measured `.text*` ceiling in tests/runtime-budgets.js, and
+ * runtime.c had no room left when this arrived. Section GC means a program that
+ * never calls a kernel links none of this file, and scripts/build.sh pairs it
+ * with runtime.c like the other halves, so a link line still names one runtime.
  *
  * Every kernel has up to three paths. The scalar one runs anywhere. The base
  * one uses the vectors every machine of the target has -- SSE2 on x86-64, NEON

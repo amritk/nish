@@ -84,7 +84,7 @@ Compilation                                                            src/compi
   `--link` fails on an undefined symbol), `RUNTIME_C` and the `npm pack` check
   in `tests/run.js`, the link line in `tests/nish/run.ts`, the `nish run` cache
   key in `src/run-cache.ts`, and a `*_TEXT_BUDGET` of its own in
-  `tests/run.js`. `package.json`'s `files` already ships all of `runtime/`. A
+  `tests/runtime-budgets.js`. `package.json`'s `files` already ships all of `runtime/`. A
   plan whose stage may split the runtime must give that stage
   `scripts/build.sh` (WP34 N3, #312, needed it and had not been given it).
 - **The name lives in one file.** `src/branding.ts` is the only source file
