@@ -2643,7 +2643,9 @@ export const main = (): i32 => {
     its element, `getOrInsert` its key and default — so a lookup, `has`,
     `get` or `delete`, keeps nothing (`reject_thread_region_table_key_set`,
     `_table_key_get_or_insert`); and a number, a string or a `boolean` read
-    back through `| undefined`, as `m.get(k) ?? 0`, names no memory. A `?:`
+    back through `| undefined`, as `m.get(k) ?? 0`, names no memory. A
+    lookup in an argument's table, `has` or `get`, reads it and writes
+    nothing (`tests/link/thread_scope_region_param_lookup`). A `?:`
     or a `??` stored somewhere may be either of its sides. Two values may
     be anything where they are written through: an `x ?? y`, and the
     variable of a walk of anything else —

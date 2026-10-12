@@ -2240,10 +2240,11 @@ class FactCollector {
    * of a comparison, a `return` (what the caller does with it is the
    * caller's), or a statement of its own. Every other place — the right side
    * of an assignment, an element of an array literal, a property of an object
-   * literal, an argument of `push`, of a `Map` or `Set` method or of any
-   * builtin, an arm of a `?:` — hands the object on to something the analysis
-   * does not follow. The iterable of a `for...of` is only read: what its loop
-   * variable names is judged where that is used.
+   * literal, an argument of `push`, of a `Map` or `Set` call that keeps it
+   * (`set`, `add`, `getOrInsert`) or of any builtin, an arm of a `?:` — hands
+   * the object on to something the analysis does not follow. A lookup's key
+   * (`has`, `get`, `delete`) is only read, and so is the iterable of a
+   * `for...of`: what its loop variable names is judged where that is used.
    */
   noteEscape(node: Node): void {
     if (node.kind === N_PAREN) {
@@ -2321,7 +2322,8 @@ class FactCollector {
       ) {
         return false
       }
-      // A table call stores what it is handed (`noteTableStores`); only its receiver is followed.
+      // A table call that keeps what it is handed stores it (`noteTableStores`), so only
+      // its receiver is followed; a lookup keeps nothing, so its key is followed too.
       const callee = program.nodeCallees[call.id]
       const owner: StructInfo | null = callee === null ? null : callee.owner
       const collection = owner !== null && isCollectionStruct(owner)
@@ -4707,8 +4709,11 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     }
   }
   for (const edge of f.wholeReaches) {
+    // A table's method writes its receiver only when it writes through its
+    // `this` (parameter 0): `has` and a fused `get`'s `probe` read it.
     const g = facts.get(edge.callee)
-    const writes = g === null || g.sharedWrite
+    const self: PointerParamFacts | null = g === null ? null : g.pointerParamAt(0)
+    const writes = g === null || (g.sharedWrite && (self === null || self.writesReach))
     if (writes && callWrites(f, edge, false)) {
       changed = true
     }
