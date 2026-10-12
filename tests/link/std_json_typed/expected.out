@@ -225,6 +225,12 @@ PASS  map limit: at the last key
 PASS  map limit: reset clears the count
 PASS  map limit: 819 small maps, 4,095 keys, decode
 PASS  map limit: 820 small maps, 4,100 keys, are refused
+PASS  map limit: maps in array elements share it
+PASS  map limit: and are refused past it
+PASS  map limit: at the second element's second key
+PASS  map limit: a | null map shares it
+PASS  map limit: and a | null map is refused past it
+PASS  map limit: at its second key
 PASS  map limit: 0 refuses a map's first key
 PASS  map limit: 0 still takes {}
 PASS  map limit: -1 refuses a map's first key
@@ -252,4 +258,4 @@ PASS  wide: a key of a length no field has
 PASS  wide: an empty key
 PASS  wide: a duplicate
 PASS  wide: a missing field
-std_json_typed: 253 passed, 0 failed, 0 skipped
+std_json_typed: 259 passed, 0 failed, 0 skipped

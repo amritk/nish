@@ -431,7 +431,9 @@ byte at one position, before the whole key is compared, so a key is usually
 compared with one name rather than with each in turn. All the maps of one
 decode take at most `d.maxMapKeys` keys between them, 4,096 unless you set it;
 a body with more is refused with `JSON_DECODE_MAP_LIMIT` rather than left to
-slow the maps down, and `d.reset` starts the count again.
+slow the maps down, and `d.reset` starts the count again. Set it to `0` (or
+below) and no map may take a key at all: `{}` is then the only map value
+accepted.
 
 Both calls need the compiler: under Node, where the types are erased, they end
 the program with an error. The rules in full are in

@@ -177,6 +177,23 @@ export class Xy {
   y: i32 = 0;
 }
 
+/** A map in each element of an array, for the per-decoding limit. */
+export class Bag {
+  counts: Map<string, i32>;
+
+  constructor() {
+    this.counts = new Map<string, i32>();
+  }
+}
+
+export class Bags {
+  bags: Bag[];
+
+  constructor() {
+    this.bags = [];
+  }
+}
+
 /** A `Map` named through an alias, which is the `Map` it names. */
 export type Counts = Map<string, i32>;
 
