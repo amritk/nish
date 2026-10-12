@@ -48,7 +48,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef i32 @total(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define hidden noundef i32 @total$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %t.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4

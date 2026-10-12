@@ -59,7 +59,7 @@ entry:
   ret void
 }
 
-define hidden noundef i32 @addMany(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture %job) #1 {
+define hidden noundef i32 @addMany$(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture %job) #1 {
 entry:
   %k.addr = alloca i32, align 4
   %g.addr = alloca %struct.MutexGuard$$Counter*, align 8

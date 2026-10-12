@@ -46,7 +46,7 @@ slow:
   ret i8* %grown
 }
 
-define hidden noundef double @sumOf(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define hidden noundef double @sumOf$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %t.addr = alloca double, align 8
   %x.addr = alloca double, align 8
@@ -86,7 +86,7 @@ forof.end:
   ret double %14
 }
 
-define hidden noundef i32 @primesBelow(i32 noundef %n) #1 {
+define hidden noundef i32 @primesBelow$(i32 noundef %n) #1 {
 entry:
   %count.addr = alloca i32, align 4
   %k.addr = alloca i32, align 4
