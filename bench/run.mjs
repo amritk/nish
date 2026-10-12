@@ -63,6 +63,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { compilerFrom } from "./compiler.mjs"
+import { BAND_EDGE, cgroupCpus, judge, readAcross, spreadOf, times3 } from "./par-reading.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const benchDir = path.join(root, "bench")
@@ -1234,53 +1235,13 @@ const buildRayon = (kernels) => {
 const pct1 = (n) => `${(n * 100).toFixed(1)}%`
 
 /**
- * The threads Nish's runtime divides over on this machine: the cores the
- * process may use, lowered by a cgroup v2 `cpu.max` quota rounded up, at most
- * 64 (runtime/runtime-parallel.c). Every twin is handed the same count, so no
- * column wins by using more threads than another.
+ * The threads Nish's runtime divides over on this machine: the CPUs this
+ * process may run on, lowered by the cgroup v2 quota of its cgroup or any
+ * above it (`nish_cpu_count` in runtime/runtime-parallel.c), and at most 64,
+ * its 63 workers and the caller. Every twin is handed the same count, so no
+ * column wins by using more threads than Nish does.
  */
-const THREADS = (() => {
-  let n = Math.min(os.availableParallelism(), 64)
-  try {
-    const [quota, period] = fs.readFileSync("/sys/fs/cgroup/cpu.max", "utf8").trim().split(/\s+/)
-    if (quota !== "max" && Number(period) > 0) {
-      n = Math.min(n, Math.max(1, Math.ceil(Number(quota) / Number(period))))
-    }
-  } catch {
-    // No cgroup v2 quota to read: the cores are the count.
-  }
-  return n
-})()
-
-/** How close to its band a ratio may fall and still be read as at the band's edge rather than past it. */
-const BAND_EDGE = 0.005
-
-/** Where a ratio falls against its band: "slower", "faster", "within", or "edge" when it clears the band by less than BAND_EDGE. */
-const sideOf = (quotient, band) => {
-  const past = Math.abs(quotient - 1) - band
-  if (past <= 0) {
-    return "within"
-  }
-  if (past < BAND_EDGE) {
-    return "edge"
-  }
-  return quotient > 1 ? "slower" : "faster"
-}
-
-/**
- * One run's verdict on one statistic (`min` or `median`): the fastest other
- * column on that statistic, Nish's value over its, and the band, which is the
- * larger of the two binaries' gaps to their byte-identical copies.
- */
-const judge = (stats, ids, field) => {
-  const fastest = ids
-    .filter((id) => id !== "nish")
-    .reduce((a, b) => (stats.get(b)[field] < stats.get(a)[field] ? b : a))
-  const gap = (id) => Math.abs(stats.get(id)[field] / stats.get(`${id}-copy`)[field] - 1)
-  const quotient = stats.get("nish")[field] / stats.get(fastest)[field]
-  const band = Math.max(gap("nish"), gap(fastest))
-  return { fastest, ratio: quotient, band, side: sideOf(quotient, band) }
-}
+const THREADS = cgroupCpus(Math.min(os.availableParallelism(), 64))
 
 /**
  * Time every kernel with twins against its Rust and Go ports, `--twin-runs`
@@ -1347,6 +1308,8 @@ const runParallelTwins = () => {
     return {
       bench: kernel.bench,
       ids: variants.map((v) => v.id),
+      cmds: variants.map((v) => v.cmd),
+      checksum: "",
       binaries,
       all: new Map(binaries.map((b) => [b.key, []])),
       passes: [],
@@ -1374,6 +1337,7 @@ const runParallelTwins = () => {
       }
       process.stderr.write("\n")
       const want = outputs.get("nish")
+      k.checksum = want
       for (const [key, got] of outputs) {
         if (!sameOutput(got, want)) {
           disagree++
@@ -1393,6 +1357,8 @@ const runParallelTwins = () => {
   const rows = built.map((k) => ({
     bench: k.bench,
     ids: k.ids,
+    cmds: k.cmds,
+    checksum: k.checksum,
     pooled: new Map(
       k.ids.map((id) => [id, { min: Math.min(...k.all.get(id)), median: median(k.all.get(id)) }])
     ),
@@ -1613,56 +1579,8 @@ if (parallelRows.length > 0) {
   lines.push("")
 }
 
-/** A ratio as the twins' tables print it: three decimals, so that a reading made on the unrounded value never contradicts its figure. */
-const times3 = (n) => `${n.toFixed(3)}x`
-
 /** A column's label in the twins' tables. */
 const twinLabel = (id) => TWIN_COLUMNS.find(([c]) => c === id)[1]
-
-/**
- * What every run of a kernel says on one statistic, together: a side the runs
- * agree on, how many runs it held in, and a loss past the 1.10x target named
- * as one. Runs that land on both sides of the band make no claim.
- */
-const readAcross = (verdicts) => {
-  const n = verdicts.length
-  const runs = n === 1 ? "the one run" : `all ${n} runs`
-  const tally = (side) => verdicts.filter((v) => v.side === side).length
-  const slower = tally("slower")
-  const faster = tally("faster")
-  const edge = tally("edge")
-  if (slower > 0 && faster > 0) {
-    return "noisy, machine-dependent; no claim"
-  }
-  if (slower === 0 && faster === 0) {
-    return edge > 0 ? `within the band in ${runs}, at its edge in ${edge}` : `within the band in ${runs}`
-  }
-  const word = slower > 0 ? "slower" : "faster"
-  const k = Math.max(slower, faster)
-  let text =
-    k === n
-      ? `${word} in ${runs}`
-      : `${word} in ${k} of ${n} runs, within the band or at its edge in the rest`
-  if (word === "slower") {
-    const past = verdicts.filter((v) => v.side === "slower" && v.ratio > 1.1).length
-    if (past === n) {
-      text = `${text}; **loses by more than 1.10x in ${runs}**`
-    } else if (past > 0) {
-      text = `${text}; **past 1.10x in ${past} of ${n} runs**`
-    } else {
-      text = `${text}; within 1.10x`
-    }
-  }
-  return text
-}
-
-/** The lowest and highest of a statistic's ratio over the runs, as the spread column prints them. */
-const spreadOf = (verdicts) => {
-  const quotients = verdicts.map((v) => v.ratio)
-  const lo = Math.min(...quotients)
-  const hi = Math.max(...quotients)
-  return lo === hi ? times3(lo) : `${times3(lo)} to ${times3(hi)}`
-}
 
 const TWINS_HEADING = "## Data parallelism against Rust and Go (ms, min / median)"
 if (twins !== null) {
@@ -1715,8 +1633,17 @@ if (twins !== null) {
   lines.push(
     "",
     `Rust flags: \`${SPEED.join(" ")} --edition 2021\`, without \`target-cpu=native\` or LTO; Nish's \`--profile speed\` has no \`-march\` either. Go: \`go build -trimpath -ldflags=-s -w\`. bench/README.md says what each kernel measures and, where Nish loses, what has been measured of why.`,
+    "",
+    "The Checksums and Commands sections below are written by a full run, which `--only par` leaves as they were, so a kernel added since the last full run is missing there. Every binary of this table printed its kernel's checksum, and was built so:",
     ""
   )
+  for (const r of twins.rows) {
+    lines.push(`- **${r.bench.name}**: \`${r.checksum.trim().split("\n").join(" ")}\``, "", "  ```")
+    for (const cmd of r.cmds) {
+      lines.push(`  ${cmd}`)
+    }
+    lines.push("  ```", "")
+  }
 }
 
 if (mapLines.length > 0) {

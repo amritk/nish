@@ -40,6 +40,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
+import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
@@ -14325,6 +14326,83 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 // workload must print the checksum every comparator printed for the same
 // arguments (bench/json-compare/sample.expected). The serialize bytes are also
 // held to Node's own JSON.stringify of the same values.
+// ---- How the twins' table is read ---------------------------------------------------
+// bench/par-reading.mjs decides what docs/BENCHMARKS.md says of Nish against
+// its Rust and Go twins, so its words are pinned here on fixed per-run results,
+// with nothing built or timed: a ratio past its band, inside it, at its edge,
+// runs on both sides of it, and the 1.10x target counted whatever the band says.
+if (!only || "bench: the twins' reading".includes(only)) {
+  // Nish at 120 against Rayon at 100, each 1% from its copy, and Go wide of
+  // its copy: the band is the larger of Nish's gap and Rayon's, never Go's.
+  const stats = new Map([
+    ["nish", { min: 120, median: 120 }],
+    ["nish-copy", { min: 119, median: 119 }],
+    ["rayon", { min: 100, median: 100 }],
+    ["rayon-copy", { min: 101, median: 101 }],
+    ["go", { min: 130, median: 130 }],
+    ["go-copy", { min: 200, median: 200 }],
+  ])
+  const v = judgeTwinRun(stats, ["nish", "rayon", "go"], "min")
+  check(
+    "bench: the twins' reading divides by the fastest column and bands a row by Nish's and that column's copies alone",
+    v.fastest === "rayon" &&
+      v.ratio === 1.2 &&
+      Math.abs(v.band - Math.max(1 / 119, 1 / 101)) < 1e-12 &&
+      v.side === "slower",
+    JSON.stringify(v)
+  )
+  check(
+    "bench: the twins' reading puts a ratio inside, at the edge of and past its band",
+    sideOf(1.04, 0.05) === "within" &&
+      sideOf(1.05 + BAND_EDGE / 2, 0.05) === "edge" &&
+      sideOf(1.06, 0.05) === "slower" &&
+      sideOf(0.94, 0.05) === "faster",
+    `${sideOf(1.04, 0.05)} ${sideOf(1.05 + BAND_EDGE / 2, 0.05)} ${sideOf(1.06, 0.05)} ${sideOf(0.94, 0.05)}`
+  )
+  const runs = (...pairs) => pairs.map(([ratio, band]) => ({ ratio, band, side: sideOf(ratio, band) }))
+  const readings = [
+    [
+      "slower outside the band",
+      runs([1.2, 0.01], [1.25, 0.02], [1.21, 0.01]),
+      "slower outside the band in all 3 runs; **past 1.10x in all 3 runs**",
+    ],
+    [
+      "within the band and past 1.10x",
+      runs([1.15, 0.2], [1.12, 0.2], [1.05, 0.2]),
+      "within the band in all 3 runs; **past 1.10x in 2 of 3 runs**",
+    ],
+    [
+      "at the edge in one run",
+      runs([1.053, 0.05], [1.02, 0.05], [1.01, 0.05]),
+      "within the band in 2 of 3 runs, at its edge in 1 of 3 runs; within 1.10x in all 3 runs",
+    ],
+    [
+      "at the edge in every run",
+      runs([1.053, 0.05], [1.052, 0.05], [1.054, 0.05]),
+      "at the band's edge in all 3 runs; within 1.10x in all 3 runs",
+    ],
+    [
+      "both sides of the band",
+      runs([1.3, 0.05], [0.7, 0.05], [1.0, 0.05]),
+      "noisy, machine-dependent; no claim (slower outside the band in 1 of 3 runs, faster in 1 of 3 runs); Nish ahead in 1 of 3 runs, behind in 1 of 3 runs; **past 1.10x in 1 of 3 runs**",
+    ],
+    [
+      "all within the band, either side of 1.0",
+      runs([1.02, 0.05], [1.01, 0.05], [0.99, 0.05]),
+      "within the band in all 3 runs; Nish ahead in 1 of 3 runs, behind in 2 of 3 runs; within 1.10x in all 3 runs",
+    ],
+    [
+      "slower in one run, ahead in another inside the band",
+      runs([1.237, 0.111], [0.877, 0.304], [1.093, 0.192]),
+      "slower outside the band in 1 of 3 runs, within it or at its edge in the rest; Nish ahead in 1 of 3 runs, behind in 2 of 3 runs; **past 1.10x in 1 of 3 runs**",
+    ],
+  ]
+  for (const [what, verdicts, want] of readings) {
+    const got = readAcross(verdicts)
+    check(`bench: the twins' reading, ${what}`, got === want, `got:  ${got}\nwant: ${want}`)
+  }
+}
+
 if (!only || "json-compare".includes(only) || "bench".includes(only)) {
   // The order a round runs its implementations in, over the rounds run.mjs
   // runs by default: each case's count rounded up to a multiple of 2n, over
@@ -14486,6 +14564,8 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--n",
       "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2",
       "--no-rayon",
+      "--twin-runs",
+      "1",
       "--runs",
       "1",
       "--warmup",
