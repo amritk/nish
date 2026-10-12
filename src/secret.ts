@@ -32,6 +32,7 @@ import { FunctionFacts, FactsTable, PointerParamFacts } from "./attributes"
 import { terminatesControlFlow } from "./builtins"
 import { CheckContext } from "./context"
 import {
+  N_ARRAY,
   N_ARROW,
   N_BINARY,
   N_BLOCK,
@@ -39,6 +40,7 @@ import {
   N_CALL,
   N_CASE,
   N_CONDITIONAL,
+  N_CONSTRUCTOR,
   N_CONTINUE,
   N_DEFAULT,
   N_DO,
@@ -49,9 +51,11 @@ import {
   N_IDENT,
   N_IF,
   N_INDEX,
+  N_LIST,
   N_MEMBER,
   N_NEW,
   N_NULL,
+  N_OBJECT,
   N_PAREN,
   N_RETURN,
   N_SWITCH,
@@ -62,11 +66,20 @@ import {
   N_WHILE,
   Node,
 } from "./nodes"
-import { CheckedProgram, FunctionSig, ParallelCall, StructTemplateInfo, TemplateInfo } from "./program"
+import {
+  CheckedProgram,
+  FunctionSig,
+  Instantiation,
+  ParallelCall,
+  SecretNeed,
+  StructTemplateInfo,
+  TemplateInfo,
+} from "./program"
 import { RuntimeTable } from "./runtime"
 import { isSecretModule } from "./std-modules"
+import { StringBuilder } from "./strings"
 import { Local, Scope, STORAGE_PARAM } from "./symbols"
-import { isInteger, T_ERROR, TypeTable } from "./types"
+import { isInteger, T_CPTR, T_ERROR, TypeTable } from "./types"
 
 /** The class `nish:secret` declares. */
 const SECRET_CLASS: string = "Secret"
@@ -1074,9 +1087,23 @@ class SecretFlow {
     this.produced(node, role)
   }
 
-  /** `secret(arg)`: a fresh value, or a local that is moved and not read again. */
+  /**
+   * `secret(arg)`: a fresh value, or a local that is moved and not read
+   * again. Each arm of a ternary is moved on its own path, so a local named
+   * in either is not read once the two meet.
+   */
   move(arg: Node, state: FlowState): void {
     const named = unwrapSecretNode(arg)
+    if (named.kind === N_CONDITIONAL) {
+      this.expression(named.children[0], ROLE_READ, state)
+      const whenTrue = copyState(state)
+      const whenFalse = copyState(state)
+      this.move(named.children[1], whenTrue)
+      this.move(named.children[2], whenFalse)
+      mergeInto(whenTrue, whenFalse)
+      assign(state, whenTrue)
+      return
+    }
     if (named.kind === N_IDENT) {
       const local = this.ctx.program.nodeLocals[named.id]
       if (local !== null && local.storage === STORAGE_PARAM) {
@@ -1199,17 +1226,28 @@ const collectFlow = (flow: SecretFlow, node: Node): void => {
   if (node.kind === N_CALL && secretRoleOf(program.nodeCallees[node.id]) === SECRET_MAKE) {
     const args = node.children[1].children
     if (args.length > 0) {
-      const named = unwrapSecretNode(args[0])
-      if (named.kind === N_IDENT) {
-        const local = program.nodeLocals[named.id]
-        if (local !== null && local.storage !== STORAGE_PARAM && flow.movableIndex(local) < 0) {
-          flow.movable.push(local)
-        }
-      }
+      collectMoved(flow, args[0])
     }
   }
   for (const child of node.children) {
     collectFlow(flow, child)
+  }
+}
+
+/** The locals `secret(arg)` moves: `arg` itself, or either arm of a ternary. */
+const collectMoved = (flow: SecretFlow, arg: Node): void => {
+  const named = unwrapSecretNode(arg)
+  if (named.kind === N_CONDITIONAL) {
+    collectMoved(flow, named.children[1])
+    collectMoved(flow, named.children[2])
+    return
+  }
+  if (named.kind !== N_IDENT) {
+    return
+  }
+  const local = flow.ctx.program.nodeLocals[named.id]
+  if (local !== null && local.storage !== STORAGE_PARAM && flow.movableIndex(local) < 0) {
+    flow.movable.push(local)
   }
 }
 
@@ -1227,12 +1265,16 @@ export const checkSecretFlow = (ctx: CheckContext, body: Node): void => {
   if (flow.vars.length === 0 && flow.movable.length === 0 && !producesSecret(ctx, body)) {
     return
   }
+  const before = ctx.sink.count()
   const state = flow.fresh()
   if (body.kind === N_BLOCK) {
     flow.statements(body.children, state, body)
     flow.checkScopeEnd(state, body)
   } else {
     flow.returnValue(body, body, state)
+  }
+  if (ctx.sink.count() === before) {
+    checkSoleReferences(ctx, body)
   }
 }
 
@@ -1251,6 +1293,828 @@ const producesSecret = (ctx: CheckContext, node: Node): boolean => {
     }
   }
   return false
+}
+
+// ---- Sole reference ------------------------------------------------------------------------
+
+/** Judging the argument of `secret(...)`, which it moves in. */
+const FRESH_SITE: i32 = 0
+/** Judging what a function returns, for a caller that hands its answer to `secret`. */
+const FRESH_RETURN: i32 = 1
+
+/** `secret(v)` for a `v` that something else still holds. */
+const aliasMessage = (what: string, ref: string, copy: string): string =>
+  `\`secret\` takes a value nothing else holds, and ${what} has a second reference: ${ref}. That ` +
+  "reference would read the key outside the `Secret`, and zeros once it is wiped, so pass a fresh value " +
+  `(\`secret([1, 2, 3])\`, a \`new\`, or a call that makes one) or a copy: ${copy}`
+
+/** The copy `aliasMessage` suggests for the value `name` of `type`. */
+const copyHint = (table: TypeTable, type: i32, name: string): string => {
+  if (type < 0 || type === T_ERROR) {
+    return "a new array or record with every element copied"
+  }
+  const plain = table.stripNull(type)
+  if (table.isArray(plain)) {
+    const element = table.typeName(table.refOf(plain))
+    return `\`const copy: ${element}[] = new Array<${element}>(${name}.length); copy.set(${name})\``
+  }
+  return `a new \`${table.typeName(plain)}\` with each field copied`
+}
+
+/** Whether a value of `type` can be a second reference to memory: an array, a record, a C pointer. */
+const holdsReference = (table: TypeTable, type: i32): boolean => {
+  if (type < 0) {
+    return true
+  }
+  const plain = table.stripNull(type)
+  return table.isArray(plain) || table.isStruct(plain) || plain === T_CPTR
+}
+
+/** The widest source span a diagnostic quotes whole. */
+const QUOTE_WIDTH: i32 = 72
+
+/**
+ * `node` as a diagnostic quotes it: the statement it is part of, on one line,
+ * and its line, `` `const alias = raw` (line 5) ``. `outer` is the statement,
+ * or `node` itself where there is none.
+ */
+const quoteAt = (program: CheckedProgram, node: Node, outer: Node, owner: string): string => {
+  const from = outer.end - outer.start > QUOTE_WIDTH ? node : outer
+  const text = program.source.text.substring(from.start, from.end)
+  const out = new StringBuilder()
+  let space = false
+  let i = 0
+  while (i < text.length) {
+    const c = text.charCodeAt(i)
+    i = i + 1
+    if (c === 32 || c === 10 || c === 13 || c === 9) {
+      space = true
+      continue
+    }
+    if (space && !out.isEmpty()) {
+      out.addChar(32)
+    }
+    space = false
+    out.addChar(c)
+  }
+  let quoted = out.toText()
+  if (quoted.endsWith(";")) {
+    quoted = quoted.substring(0, quoted.length - 1)
+  }
+  const line = program.source.lineOf(from.start)
+  return owner.length > 0 ? `\`${quoted}\` (line ${line}, in \`${owner}\`)` : `\`${quoted}\` (line ${line})`
+}
+
+/** Whether `node` is a statement: what `quoteAt` quotes an expression inside. */
+const isStatement = (node: Node): boolean =>
+  node.kind === N_VAR ||
+  node.kind === N_EXPR_STMT ||
+  node.kind === N_RETURN ||
+  node.kind === N_IF ||
+  node.kind === N_WHILE ||
+  node.kind === N_DO ||
+  node.kind === N_FOR ||
+  node.kind === N_FOR_OF ||
+  node.kind === N_SWITCH ||
+  node.kind === N_THROW
+
+/**
+ * One walk over a body for every occurrence of `local`: the declarations and
+ * assignments that give it a value, and the first occurrence that would leave
+ * a second reference to that value behind. `consumer` is the occurrence being
+ * judged, which is the one place the value is allowed to go.
+ */
+class ReferenceScan {
+  program: CheckedProgram
+  table: TypeTable
+  local: Local
+  consumer: Node
+  mode: i32
+  /** The initialisers and right-hand sides that give `local` its value, and the statement each is in. */
+  sources: Node[]
+  sourceOuters: Node[]
+  /** The first occurrence that leaves a second reference, and the statement around it; `null` while none. */
+  leak: Node | null
+  leakOuter: Node | null
+  /** Set when `local` is the binding of a `for...of`, whose value is an element of the iterable. */
+  element: Node | null
+  /** The user functions an occurrence is handed to, and the parameter it lands in. */
+  keptBy: FunctionSig[]
+  keptAs: string[]
+  keptAt: Node[]
+  keptOuter: Node[]
+  ancestors: Node[]
+
+  constructor(program: CheckedProgram, table: TypeTable, local: Local, consumer: Node, mode: i32) {
+    this.program = program
+    this.table = table
+    this.local = local
+    this.consumer = consumer
+    this.mode = mode
+    this.sources = []
+    this.sourceOuters = []
+    this.leak = null
+    this.leakOuter = null
+    this.element = null
+    this.keptBy = []
+    this.keptAs = []
+    this.keptAt = []
+    this.keptOuter = []
+    this.ancestors = []
+  }
+
+  /**
+   * What a diagnostic quotes for `node`: the statement around it, or, when
+   * that is too long for one line of a message, the widest expression inside
+   * it that is not.
+   */
+  statementAround(node: Node): Node {
+    let quoted = node
+    let i = this.ancestors.length - 1
+    while (i >= 0) {
+      const at = this.ancestors[i]
+      if (at.end - at.start > QUOTE_WIDTH) {
+        return quoted
+      }
+      quoted = at
+      if (isStatement(at)) {
+        return at
+      }
+      i = i - 1
+    }
+    return quoted
+  }
+
+  /** Whether `node` is bound to `local`. */
+  names(node: Node): boolean {
+    const bound = this.program.nodeLocals[node.id]
+    return bound !== null && bound === this.local
+  }
+
+  visit(node: Node, inArrow: boolean): void {
+    if (node.kind === N_VAR_DECL && this.names(node)) {
+      const init = node.children[2]
+      if (init.kind !== N_EMPTY) {
+        this.sources.push(init)
+        this.sourceOuters.push(this.statementAround(node))
+      }
+    }
+    if (node.kind === N_FOR_OF && node.children[0].kind === N_VAR) {
+      for (const decl of node.children[0].children[0].children) {
+        if (decl.kind === N_VAR_DECL && this.names(decl) && this.element === null) {
+          this.element = node
+        }
+      }
+    }
+    if (node.kind === N_BINARY && node.text === "=") {
+      const target = unwrapSecretNode(node.children[0])
+      if (target.kind === N_IDENT && this.names(target)) {
+        this.sources.push(node.children[1])
+        this.sourceOuters.push(this.statementAround(node))
+      }
+    }
+    if (node.kind === N_IDENT && node !== this.consumer && this.names(node)) {
+      if (inArrow || !this.harmless(node)) {
+        this.noteLeak(node)
+      }
+    }
+    this.ancestors.push(node)
+    for (const child of node.children) {
+      this.visit(child, inArrow || node.kind === N_ARROW)
+    }
+    this.ancestors.pop()
+  }
+
+  noteLeak(node: Node): void {
+    if (this.leak === null) {
+      this.leak = node
+      this.leakOuter = this.statementAround(node)
+    }
+  }
+
+  /**
+   * Whether the occurrence `node` (the top of `ancestors` is its parent)
+   * leaves no second reference: it reads an element or a field that holds an
+   * integer, the length, compares, iterates, is the target of an assignment,
+   * calls an array method, or is handed to a callee that keeps nothing (asked
+   * of the facts later, through `keptBy`). Everything else — an initialiser,
+   * an assignment's value, a field or element store, a literal's element, a
+   * ternary arm, a `return` — is a second name for the value.
+   */
+  harmless(node: Node): boolean {
+    let child = node
+    let i = this.ancestors.length - 1
+    while (i >= 0 && this.ancestors[i].kind === N_PAREN) {
+      child = this.ancestors[i]
+      i = i - 1
+    }
+    if (this.consumed(child, i)) {
+      return true
+    }
+    if (i < 0) {
+      return false
+    }
+    const parent = this.ancestors[i]
+    switch (parent.kind) {
+      case N_VAR_DECL:
+        return child === parent.children[0]
+      case N_BINARY:
+        if (parent.text === "=") {
+          return child === parent.children[0]
+        }
+        return true
+      case N_INDEX:
+        return child === parent.children[0] && !holdsReference(this.table, this.program.nodeTypes[parent.id])
+      case N_MEMBER:
+        return this.member(parent, i)
+      case N_LIST:
+        return i > 0 && this.argument(child, parent, this.ancestors[i - 1])
+      case N_FOR_OF:
+        return child === parent.children[1]
+      case N_EXPR_STMT:
+        return true
+      default:
+        return false
+    }
+  }
+
+  /**
+   * Whether `child` is where the value is allowed to go, through parentheses
+   * and ternary arms: the argument of a `secret(...)` (which the move rule
+   * then governs), or, for a function's own result, a `return`.
+   */
+  consumed(child: Node, from: i32): boolean {
+    let at = child
+    let i = from
+    while (
+      i >= 0 &&
+      (this.ancestors[i].kind === N_PAREN ||
+        (this.ancestors[i].kind === N_CONDITIONAL && this.ancestors[i].children[0] !== at))
+    ) {
+      at = this.ancestors[i]
+      i = i - 1
+    }
+    if (this.mode === FRESH_RETURN) {
+      return i < 0 || this.ancestors[i].kind === N_RETURN
+    }
+    if (i < 1 || this.ancestors[i].kind !== N_LIST) {
+      return false
+    }
+    const call = this.ancestors[i - 1]
+    return (
+      call.kind === N_CALL &&
+      call.children[1] === this.ancestors[i] &&
+      call.children[1].children.length > 0 &&
+      call.children[1].children[0] === at &&
+      secretRoleOf(this.program.nodeCallees[call.id]) === SECRET_MAKE
+    )
+  }
+
+  /** `local.length`, `local.lo`, `local.push(1)`, `local.method()`: the receiver of a member. */
+  member(access: Node, at: i32): boolean {
+    const call: Node | null = at > 0 ? this.ancestors[at - 1] : null
+    if (call !== null && call.kind === N_CALL && call.children[0] === access) {
+      const sig = this.program.nodeCallees[call.id]
+      if (sig !== null) {
+        this.keep(sig, "this", call)
+      }
+      // Every array method keeps nothing of its receiver: `push`, `pop`,
+      // `indexOf`, `join`, `set` and `fill` answer a number, a string or nothing.
+      return true
+    }
+    return !holdsReference(this.table, this.program.nodeTypes[access.id])
+  }
+
+  /** `local` as an argument of the call or `new` that `list` belongs to. */
+  argument(child: Node, list: Node, owner: Node): boolean {
+    let index = -1
+    let k = 0
+    while (k < list.children.length) {
+      if (list.children[k] === child) {
+        index = k
+      }
+      k = k + 1
+    }
+    if (index < 0) {
+      return false
+    }
+    if (owner.kind === N_NEW && owner.children[2] === list) {
+      const ctor = this.program.nodeCallees[owner.id]
+      return ctor !== null && this.keepParameter(ctor, index, owner)
+    }
+    if (owner.kind !== N_CALL || owner.children[1] !== list) {
+      return false
+    }
+    const sig = this.program.nodeCallees[owner.id]
+    const role = secretRoleOf(sig)
+    if (role === SECRET_WIPE) {
+      return true
+    }
+    const instance: Instantiation | null = sig === null ? null : sig.instance
+    if (
+      role === SECRET_EXPOSE_WITH &&
+      index === 1 &&
+      instance !== null &&
+      instance.functionArgs.length === 1
+    ) {
+      const fn = instance.functionArgs[0]
+      return fn.paramNames.length > 1 && this.keep(fn, fn.paramNames[1], owner)
+    }
+    if (role !== SECRET_NONE) {
+      return false
+    }
+    if (sig !== null) {
+      return this.keepParameter(sig, index, owner)
+    }
+    // A builtin keeps nothing it is handed: it reads it or writes it and
+    // returns. A method of a value is the exception, which stores what it is
+    // handed (`xs.push(raw)`), but for `dst.set(raw)`, which copies elements.
+    const callee = owner.children[0]
+    if (callee.kind !== N_MEMBER) {
+      return true
+    }
+    const receiver = this.program.nodeTypes[callee.children[0].id]
+    return receiver < 0 || (callee.text === "set" && this.table.isArray(this.table.stripNull(receiver)))
+  }
+
+  /** The `index`-th argument of a call of `sig`, which has `this` first when it is a method or a constructor. */
+  keepParameter(sig: FunctionSig, index: i32, call: Node): boolean {
+    const at = sig.paramNames.length > 0 && sig.paramNames[0] === "this" ? index + 1 : index
+    if (at >= sig.paramNames.length || sig.isCompileTime(at)) {
+      return false
+    }
+    return this.keep(sig, sig.paramNames[at], call)
+  }
+
+  /** Ask the facts later whether `sig` keeps its parameter `name`. */
+  keep(sig: FunctionSig, name: string, call: Node): boolean {
+    this.keptBy.push(sig)
+    this.keptAs.push(name)
+    this.keptAt.push(call)
+    this.keptOuter.push(this.statementAround(call))
+    return true
+  }
+}
+
+/**
+ * Whether an expression is a value nothing else holds, judged over the body
+ * it is in (docs/LANGUAGE.md, "Secrets"). A literal and a `new` are; a call is
+ * when its callee's answer is, and a local is when it is not a parameter, every
+ * value it is given is, and no other occurrence of it leaves a second
+ * reference. What only the whole-program facts can answer — what a callee
+ * returns, what it keeps — is left in `needSigs` for them. The first reason it
+ * is not is `failure`, quoted where the second reference is made.
+ */
+class FreshJudge {
+  program: CheckedProgram
+  table: TypeTable
+  body: Node
+  mode: i32
+  /** The function whose result is judged, for the quotes; "" at a `secret(...)`. */
+  owner: string
+  /** How the diagnostic names what is being judged: the local, or the call. */
+  subject: string
+  failure: string
+  failSubject: string
+  needSigs: FunctionSig[]
+  needParams: string[]
+  needWhats: string[]
+  needVias: string[]
+  judged: Local[]
+  verdicts: boolean[]
+
+  constructor(program: CheckedProgram, table: TypeTable, body: Node, mode: i32, owner: string) {
+    this.program = program
+    this.table = table
+    this.body = body
+    this.mode = mode
+    this.owner = owner
+    this.subject = ""
+    this.failure = ""
+    this.failSubject = ""
+    this.needSigs = []
+    this.needParams = []
+    this.needWhats = []
+    this.needVias = []
+    this.judged = []
+    this.verdicts = []
+  }
+
+  fail(ref: string): boolean {
+    if (this.failure.length === 0) {
+      this.failure = ref
+      this.failSubject = this.subject
+    }
+    return false
+  }
+
+  need(sig: FunctionSig, param: string, via: string): void {
+    this.needSigs.push(sig)
+    this.needParams.push(param)
+    this.needWhats.push(this.subject)
+    this.needVias.push(via)
+  }
+
+  judge(expr: Node): boolean {
+    const e = unwrapSecretNode(expr)
+    switch (e.kind) {
+      case N_ARRAY:
+      case N_OBJECT:
+      case N_NULL:
+        return true
+      case N_CONDITIONAL:
+        return this.judge(e.children[1]) && this.judge(e.children[2])
+      case N_NEW: {
+        const ctor = this.program.nodeCallees[e.id]
+        if (ctor !== null) {
+          this.need(ctor, "this", quoteAt(this.program, e, e, this.owner))
+        }
+        return true
+      }
+      case N_CALL:
+        return this.call(e)
+      case N_IDENT: {
+        const local = this.program.nodeLocals[e.id]
+        if (local === null) {
+          return this.fail(`${quoteAt(this.program, e, e, this.owner)} is not a local this function made`)
+        }
+        return this.local(local, e)
+      }
+      case N_MEMBER:
+      case N_INDEX:
+        return this.fail(
+          `${quoteAt(this.program, e, e, this.owner)} reads a field or an element something else holds`
+        )
+      default:
+        return this.fail(`${quoteAt(this.program, e, e, this.owner)} is not a value this function made`)
+    }
+  }
+
+  call(e: Node): boolean {
+    const sig = this.program.nodeCallees[e.id]
+    if (sig === null) {
+      // An identifier builtin answers memory it allocated; a method of a value
+      // (`xs.pop()`) may answer what the value holds.
+      const callee = e.children[0]
+      if (callee.kind !== N_MEMBER || this.program.nodeTypes[callee.children[0].id] < 0) {
+        return true
+      }
+      return this.fail(`${quoteAt(this.program, e, e, this.owner)} may answer what its receiver holds`)
+    }
+    const saved = this.subject
+    if (this.mode === FRESH_SITE && this.subject.length === 0) {
+      this.subject = `the value \`${this.program.source.text.substring(e.start, e.end)}\` answers`
+    }
+    this.need(sig, "", "")
+    this.subject = saved
+    return true
+  }
+
+  local(local: Local, at: Node): boolean {
+    let k = 0
+    while (k < this.judged.length) {
+      if (this.judged[k] === local) {
+        return (
+          this.verdicts[k] || this.fail(`${quoteAt(this.program, at, at, this.owner)} is given its own value`)
+        )
+      }
+      k = k + 1
+    }
+    const saved = this.subject
+    this.subject = `\`${local.name}\``
+    // A cycle (`a = b`, `b = a`) is judged not fresh while it is in progress.
+    this.judged.push(local)
+    this.verdicts.push(false)
+    const slot = this.judged.length - 1
+    const ok = this.localVerdict(local, at)
+    this.verdicts[slot] = ok
+    this.subject = saved
+    return ok
+  }
+
+  localVerdict(local: Local, at: Node): boolean {
+    if (local.storage === STORAGE_PARAM) {
+      return this.fail(
+        `${quoteAt(this.program, at, at, this.owner)} is a parameter, which the caller still holds`
+      )
+    }
+    const scan = new ReferenceScan(this.program, this.table, local, at, this.mode)
+    scan.visit(this.body, false)
+    const element = scan.element
+    if (element !== null) {
+      return this.fail(
+        `${quoteAt(this.program, element.children[0], element.children[0], this.owner)} binds an element of an array`
+      )
+    }
+    const leak = scan.leak
+    const leakOuter = scan.leakOuter
+    if (leak !== null && leakOuter !== null) {
+      return this.fail(quoteAt(this.program, leak, leakOuter, this.owner))
+    }
+    let k = 0
+    while (k < scan.keptBy.length) {
+      this.need(
+        scan.keptBy[k],
+        scan.keptAs[k],
+        quoteAt(this.program, scan.keptAt[k], scan.keptOuter[k], this.owner)
+      )
+      k = k + 1
+    }
+    k = 0
+    while (k < scan.sources.length) {
+      if (!this.judgeSource(scan.sources[k], scan.sourceOuters[k])) {
+        return false
+      }
+      k = k + 1
+    }
+    return true
+  }
+
+  /**
+   * A value a local is given: fresh as `judge` says, except that another
+   * local is never one, because that local still names the value
+   * (`let raw = [1]; raw = other`).
+   */
+  judgeSource(source: Node, outer: Node): boolean {
+    const e = unwrapSecretNode(source)
+    if (e.kind === N_CONDITIONAL) {
+      return this.judgeSource(e.children[1], outer) && this.judgeSource(e.children[2], outer)
+    }
+    if (e.kind === N_IDENT) {
+      return this.fail(
+        `${quoteAt(this.program, e, outer, this.owner)}, where \`${e.text}\` still names the value`
+      )
+    }
+    return this.judge(e)
+  }
+}
+
+/** Every `secret(...)` call in `node`, outside the arrows, whose bodies are judged as their own. */
+const collectSecretSites = (program: CheckedProgram, node: Node, out: Node[]): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (node.kind === N_CALL && secretRoleOf(program.nodeCallees[node.id]) === SECRET_MAKE) {
+    out.push(node)
+  }
+  for (const child of node.children) {
+    collectSecretSites(program, child, out)
+  }
+}
+
+/**
+ * The sole-reference rule at each `secret(v)` in `body`: `v` is a value
+ * nothing else holds. What the body alone decides is reported here; what a
+ * callee returns or keeps is recorded in `secretNeeds` for
+ * `Compilation.checkSecrets`. Asked only of a body the ownership walk
+ * accepted, so a parameter, a field or an element (NL2447) and a moved local
+ * (NL2445) are said once, by that walk.
+ */
+const checkSoleReferences = (ctx: CheckContext, body: Node): void => {
+  const program = ctx.program
+  const sites: Node[] = []
+  collectSecretSites(program, body, sites)
+  for (const site of sites) {
+    const args = site.children[1].children
+    if (args.length === 0) {
+      continue
+    }
+    const arg = args[0]
+    const named = unwrapSecretNode(arg)
+    const copy = copyHint(ctx.table, program.nodeTypes[arg.id], named.kind === N_IDENT ? named.text : "v")
+    const spelled = `\`${program.source.text.substring(arg.start, arg.end)}\``
+    const judge = new FreshJudge(program, ctx.table, body, FRESH_SITE, "")
+    if (!judge.judge(arg)) {
+      ctx.error(
+        arg,
+        aliasMessage(judge.failSubject.length > 0 ? judge.failSubject : spelled, judge.failure, copy)
+      )
+      ctx.errored = false
+      continue
+    }
+    let k = 0
+    while (k < judge.needSigs.length) {
+      const what = judge.needWhats[k].length > 0 ? judge.needWhats[k] : spelled
+      recordSecretNeed(
+        program,
+        new SecretNeed(arg, judge.needSigs[k], judge.needParams[k], what, judge.needVias[k], copy)
+      )
+      k = k + 1
+    }
+  }
+}
+
+/** Remember `need` once: a generic body is checked once per instantiation and asks again. */
+const recordSecretNeed = (program: CheckedProgram, need: SecretNeed): void => {
+  for (const seen of program.secretNeeds) {
+    if (seen.site === need.site && seen.sig === need.sig && seen.param === need.param) {
+      return
+    }
+  }
+  program.secretNeeds.push(need)
+}
+
+/** Every `return` value of a block body, outside the arrows it holds. */
+const collectReturnValues = (node: Node, out: Node[]): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (node.kind === N_RETURN && node.children[0].kind !== N_EMPTY) {
+    out.push(node.children[0])
+  }
+  for (const child of node.children) {
+    collectReturnValues(child, out)
+  }
+}
+
+/**
+ * The whole-program half of the sole-reference rule: whether a function
+ * answers a value nothing else holds, judged over its own body by the same
+ * rule a `secret(v)` is, and whether it keeps a parameter, which the facts say
+ * (`PointerParamFacts.captured`). Each function's body is judged once
+ * (`FreshSummary`), and the answers are the greatest fixpoint over the calls
+ * between them: a function is fresh unless its own body or a callee it
+ * answers through says otherwise. Every value a call answers was made by some
+ * expression a body holds, and each of those is judged, so a recursive
+ * function that only ever answers a literal is fresh.
+ */
+export class FreshResults {
+  programs: CheckedProgram[]
+  table: TypeTable
+  facts: FactsTable
+  /** Each function judged, by symbol. */
+  names: string[]
+  summaries: FreshSummary[]
+
+  constructor(programs: CheckedProgram[], table: TypeTable, facts: FactsTable) {
+    this.programs = programs
+    this.table = table
+    this.facts = facts
+    this.names = []
+    this.summaries = []
+  }
+
+  /** "" when `need` holds, or the second reference it found. */
+  refOf(need: SecretNeed): string {
+    return need.param.length === 0 ? this.resultRef(need.sig) : this.keepRef(need.sig, need.param, need.via)
+  }
+
+  keepRef(sig: FunctionSig, param: string, via: string): string {
+    const what = param === "this" ? "`this`" : `its parameter \`${param}\``
+    const f = this.facts.get(sig.name)
+    if (f === null) {
+      return `${via}, and ${calleeName(sig)} may keep ${what}`
+    }
+    const pointer = f.pointerParam(param)
+    return pointer !== null && pointer.captured ? `${via}, and ${calleeName(sig)} keeps ${what}` : ""
+  }
+
+  /** "" when `sig` answers a value nothing else holds, or the second reference it may answer. */
+  resultRef(sig: FunctionSig): string {
+    const start = this.summaryOf(sig)
+    // Summarise every function the answer can come through, then settle.
+    let next = 0
+    while (next < this.summaries.length) {
+      const summary = this.summaries[next]
+      next = next + 1
+      let k = 0
+      while (k < summary.needSigs.length) {
+        if (summary.needParams[k].length === 0) {
+          this.summaryOf(summary.needSigs[k])
+        }
+        k = k + 1
+      }
+    }
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const summary of this.summaries) {
+        if (summary.ref.length > 0) {
+          continue
+        }
+        let k = 0
+        while (k < summary.needSigs.length && summary.ref.length === 0) {
+          const ref =
+            summary.needParams[k].length === 0
+              ? this.summaryOf(summary.needSigs[k]).ref
+              : this.keepRef(summary.needSigs[k], summary.needParams[k], summary.needVias[k])
+          if (ref.length > 0) {
+            summary.ref = ref
+            changed = true
+          }
+          k = k + 1
+        }
+      }
+    }
+    return start.ref
+  }
+
+  /** `sig`'s summary, judging its body the first time it is asked for. */
+  summaryOf(sig: FunctionSig): FreshSummary {
+    let k = 0
+    while (k < this.names.length) {
+      if (this.names[k] === sig.name) {
+        return this.summaries[k]
+      }
+      k = k + 1
+    }
+    const summary = this.summarise(sig)
+    this.names.push(sig.name)
+    this.summaries.push(summary)
+    return summary
+  }
+
+  summarise(sig: FunctionSig): FreshSummary {
+    const out = new FreshSummary()
+    const role = secretRoleOf(sig)
+    const instance = sig.instance
+    if ((role === SECRET_EXPOSE || role === SECRET_EXPOSE_WITH) && instance !== null) {
+      // What `expose` answers is what the function it runs answers.
+      if (instance.functionArgs.length === 1) {
+        out.needSigs.push(instance.functionArgs[0])
+        out.needParams.push("")
+        out.needVias.push("")
+      } else {
+        out.ref = `\`${sig.sourceName}\` runs no function here`
+      }
+      return out
+    }
+    const body = sig.body()
+    if (role !== SECRET_NONE || sig.foreign() || body === null) {
+      out.ref = `${calleeName(sig)} is not a function whose answer can be judged`
+      return out
+    }
+    let program: CheckedProgram | null = null
+    for (const p of this.programs) {
+      if (sig.definedIn(p.source)) {
+        program = p
+      }
+    }
+    if (program === null) {
+      out.ref = `${calleeName(sig)} is not a function this program defines`
+      return out
+    }
+    if (instance !== null) {
+      program.enterInstance(instance)
+    }
+    const judge = new FreshJudge(program, this.table, body, FRESH_RETURN, sig.sourceName)
+    let fresh = true
+    if (body.kind === N_BLOCK) {
+      const values: Node[] = []
+      collectReturnValues(body, values)
+      for (const value of values) {
+        fresh = fresh && judge.judge(value)
+      }
+    } else {
+      fresh = judge.judge(body)
+    }
+    // Only one instantiation's side tables are installed at a time, so the
+    // callees are summarised after this one is left.
+    if (instance !== null) {
+      program.leaveInstance()
+    }
+    if (!fresh) {
+      out.ref = judge.failure
+      return out
+    }
+    out.needSigs = judge.needSigs
+    out.needParams = judge.needParams
+    out.needVias = judge.needVias
+    return out
+  }
+}
+
+/**
+ * What one function's own body says about its answer: `ref`, the second
+ * reference it found (or "" for none yet), and the questions left for its
+ * callees, as `FreshJudge` leaves them.
+ */
+class FreshSummary {
+  ref: string
+  needSigs: FunctionSig[]
+  needParams: string[]
+  needVias: string[]
+
+  constructor() {
+    this.ref = ""
+    this.needSigs = []
+    this.needParams = []
+    this.needVias = []
+  }
+}
+
+/** How a diagnostic names the function `sig`: `keep`, `Key.enrol`, the constructor of `Holder`. */
+const calleeName = (sig: FunctionSig): string => {
+  const owner = sig.owner
+  return sig.decl.kind === N_CONSTRUCTOR && owner !== null
+    ? `the constructor of \`${owner.name}\``
+    : `\`${sig.sourceName}\``
+}
+
+/** The sole-reference refusal `need` earns, or "" when its callee answers or keeps as the rule needs. */
+export const secretNeedMessage = (results: FreshResults, need: SecretNeed): string => {
+  const ref = results.refOf(need)
+  return ref.length === 0 ? "" : aliasMessage(need.what, ref, need.copy)
 }
 
 // ---- Exposure ------------------------------------------------------------------------------
