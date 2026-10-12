@@ -1,6 +1,8 @@
 # Test cases from test262 (https://github.com/tc39/test262), test/built-ins/JSON/parse and test/built-ins/JSON/stringify.
 # Copyright (C) 2012 Ecma International and the test262 authors, each file's holder listed below. Used under the BSD licence; see tests/json-conformance/LICENSE-test262.
 # Upstream commit 2e0a56762801e275a9fdf96dc49d90ba0cddcf63, extracted by tests/json-conformance/extract.js, whose header gives the line format.
+# Not kept, it does not run to its end under Node: test262/stringify/replacer-array-proxy-revoked-realm.js
+# Not kept, it does not run to its end under Node: test262/stringify/value-bigint-cross-realm.js
 # The copyright line of each upstream file the cases below come from, as its header states it:
 #   test262/parse/15.12.1.1-0-1.js: Copyright (c) 2012 Ecma International.  All rights reserved.
 #   test262/parse/15.12.1.1-0-2.js: Copyright (c) 2012 Ecma International.  All rights reserved.

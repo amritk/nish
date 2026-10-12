@@ -5262,6 +5262,15 @@ if (!only || "std_json_typed".includes(only)) {
 // which JSON.parse collapses and the tokenizer hands on (docs/security/json.md,
 // JSON-3; the `duplicate-key` reason of tests/json-conformance/divergences.txt):
 // each must still differ, and must parse back to the same value.
+/** Bytes in the packed spelling of tests/json-suite/pack.js: every byte outside `!` to `~`, and `%`, as `%XX`. */
+const jsonSuitePack = (bytes) =>
+  [...bytes]
+    .map((b) =>
+      b > 0x20 && b < 0x7f && b !== 0x25
+        ? String.fromCharCode(b)
+        : `%${b.toString(16).toUpperCase().padStart(2, "0")}`
+    )
+    .join("")
 const JSON_SUITE_DUPLICATE_KEYS = ["y_object_duplicated_key.json", "y_object_duplicated_key_and_value.json"]
 if (!only || "std_json_conformance".includes(only)) {
   // The stack the extractor asks for, so that it does not start a second Node to get it.
@@ -5340,6 +5349,33 @@ if (!only || "std_json_conformance".includes(only)) {
     )
   } else {
     skip("skipped: link/std_json_conformance: no native program to rewrite JSONTestSuite with")
+  }
+  // V8's json.js stringifies every UTF-16 code unit; extract.js leaves those
+  // 65,536 cases to be generated here (its GENERATED). The native program
+  // writes each unit's string, read from its `\uXXXX` literal; each must be
+  // Node's JSON.stringify of that unit, but U+D800 to U+DFFF, the
+  // lone-surrogate reason of tests/json-conformance/divergences.txt as a
+  // range, which the tokenizer must refuse with SURROGATE.
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const units = spawnSync(exe, ["--code-units"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 26 })
+    const lines = String(units.stdout ?? "").split("\n")
+    const unitProblems = []
+    for (let unit = 0; unit < 65536; unit++) {
+      const surrogate = unit >= 0xd800 && unit <= 0xdfff
+      const want = surrogate
+        ? "!SURROGATE"
+        : jsonSuitePack(Buffer.from(JSON.stringify(String.fromCharCode(unit)), "utf8"))
+      if (lines[unit] !== want && unitProblems.length < 20) {
+        unitProblems.push(`U+${unit.toString(16).padStart(4, "0")}: native ${lines[unit]}, want ${want}`)
+      }
+    }
+    check(
+      "link/std_json_conformance: JSON.stringify of each of the 65,536 UTF-16 code units, generated from V8's loop, is Node's, but the 2,048 surrogates, which are refused",
+      units.status === 0 && lines.length === 65537 && unitProblems.length === 0,
+      unitProblems.join("\n") || shown(units)
+    )
+  } else {
+    skip("skipped: link/std_json_conformance: no native program to write the code units with")
   }
   // rewrite.ts declares no `main`, which only an entry module may.
   const underNode = runUnderPrelude(

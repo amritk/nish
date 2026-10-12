@@ -16,7 +16,17 @@ const JC_DIVERGENCES_PATH: string = "tests/json-conformance/divergences.txt";
 
 /** How many cases each data file holds, at the upstream commit its header names. */
 const JC_TEST262_CASES: i32 = 772;
-const JC_V8_CASES: i32 = 66220;
+const JC_V8_CASES: i32 = 684;
+/** How many upstream files those cases come from; each data file's header lists them. */
+const JC_TEST262_FILES: i32 = 64;
+const JC_V8_FILES: i32 = 9;
+
+/**
+ * The tokenizer's refusals that are about the grammar. A case JSON.parse
+ * refuses must be refused for one of these: a refusal by a limit (DEPTH, the
+ * byte limits) or of the window is no agreement, and such a case is listed.
+ */
+const JC_GRAMMAR_ERRORS: string = ",SYNTAX,TRUNCATED,TRAILING,UTF8,ESCAPE,SURROGATE,CONTROL,NUMBER,";
 
 /** What a case answers when its packed input does not unpack, which no expected value matches. */
 const JC_BAD_DATA: string = "malformed data";
@@ -158,8 +168,7 @@ const jcOutcome = (c: JcCase): JcOutcome => {
 /** Whether `o` is the answer upstream expects of `c`. */
 const jcMatches = (c: JcCase, o: JcOutcome): boolean => {
   if (c.expected === "throws") {
-    // A refusal is the tokenizer's: a writer's refusal of a text JSON.parse refuses is no answer.
-    return o.error !== "" && o.error !== JC_BAD_DATA && !o.error.startsWith("write ");
+    return o.error !== "" && JC_GRAMMAR_ERRORS.indexOf(`,${o.error},`) >= 0;
   }
   if (o.error !== "") {
     return false;
@@ -173,9 +182,9 @@ const jcMatches = (c: JcCase, o: JcOutcome): boolean => {
 };
 
 /** Whether `o`, which is not upstream's answer, is the one reason `r` says a case listed under it gives instead. */
-const jcDivergesAs = (c: JcCase, o: JcOutcome, r: JcReason): boolean => {
-  if (r.answer === "text") {
-    return o.error === "";
+const jcDivergesAs = (c: JcCase, o: JcOutcome, r: JcReason, exact: string): boolean => {
+  if (r.answer === "exact") {
+    return o.error === "" && jcPack(o.out, o.len) === exact;
   }
   if (r.answer === "unindented") {
     const want = jcUnpack(c.expected);
@@ -201,7 +210,7 @@ const jcAnswer = (o: JcOutcome): string => {
  * divergence its reason names), or the failed check's line for it. A function
  * of its own so that each case's allocations are released when it returns.
  */
-const jcJudge = (c: JcCase, r: JcReason | null): string => {
+const jcJudge = (c: JcCase, r: JcReason | null, exact: string): string => {
   const o = jcOutcome(c);
   const matches: boolean = jcMatches(c, o);
   let what: string = "";
@@ -209,7 +218,7 @@ const jcJudge = (c: JcCase, r: JcReason | null): string => {
     what = matches ? "" : "answers";
   } else if (matches) {
     what = "is listed but answers as upstream:";
-  } else if (!jcDivergesAs(c, o, r)) {
+  } else if (!jcDivergesAs(c, o, r, exact)) {
     what = "answers otherwise than its reason says:";
   }
   if (what === "") {
@@ -239,6 +248,8 @@ class JcGroup {
 class JcRegister {
   reasons: JcReason[];
   reasonOf: Map<string, i32>;
+  /** The packed text a case listed under an `exact` reason must answer, by name. */
+  textOf: Map<string, string>;
   /** Each reason's index in `reasons`, by key. */
   reasonAt: Map<string, i32>;
   problems: string[];
@@ -246,6 +257,7 @@ class JcRegister {
   constructor() {
     this.reasons = [];
     this.reasonOf = new Map<string, i32>();
+    this.textOf = new Map<string, string>();
     this.reasonAt = new Map<string, i32>();
     this.problems = [];
   }
@@ -276,7 +288,10 @@ const jcLoadRegister = (): JcRegister => {
       continue;
     }
     const name = line.slice(0, a);
-    const key = line.substring(a + 1);
+    const key = line.slice(a + 1, b);
+    if (b < toI32(line.length)) {
+      reg.textOf.set(line.slice(0, a), line.substring(b + 1));
+    }
     const found: i32 = reg.reasonAt.get(key) ?? -1;
     if (found < 0) {
       reg.problems.push(`${name}: no reason ${key}`);
@@ -289,12 +304,23 @@ const jcLoadRegister = (): JcRegister => {
   return reg;
 };
 
+/** How many upstream files `cases` come from: the distinct names before `#`. */
+const jcFileCount = (cases: JcCase[]): i32 => {
+  const files = new Set<string>();
+  for (const c of cases) {
+    files.add(c.name.slice(0, toI32(c.name.indexOf("#"))));
+  }
+  return toI32(files.size);
+};
+
 export const jcConformance = (t: Suite): void => {
   const test262 = jcLoadCases(JC_TEST262_PATH);
   const v8 = jcLoadCases(JC_V8_PATH);
   const okCounts: boolean =
     t.eqI32(`the data: ${JC_TEST262_PATH} holds ${JC_TEST262_CASES} cases`, toI32(test262.length), JC_TEST262_CASES) &&
     t.eqI32(`the data: ${JC_V8_PATH} holds ${JC_V8_CASES} cases`, toI32(v8.length), JC_V8_CASES);
+  t.eqI32(`the data: ${JC_TEST262_PATH}'s cases come from ${JC_TEST262_FILES} upstream files`, jcFileCount(test262), JC_TEST262_FILES);
+  t.eqI32(`the data: ${JC_V8_PATH}'s cases come from ${JC_V8_FILES} upstream files`, jcFileCount(v8), JC_V8_FILES);
   const reg = jcLoadRegister();
   if (!okCounts) {
     return;
@@ -317,7 +343,7 @@ export const jcConformance = (t: Suite): void => {
       seen.add(c.name);
       const at: i32 = reg.reasonOf.get(c.name) ?? -1;
       const r: JcReason | null = at >= 0 && at < toI32(reg.reasons.length) ? reg.reasons[at] : null;
-      const failure: string = jcJudge(c, r);
+      const failure: string = jcJudge(c, r, reg.textOf.get(c.name) ?? "");
       if (at >= 0 && at < toI32(listedCounts.length) && at < toI32(listedFailures.length)) {
         listedCounts[at] = listedCounts[at] + 1;
         if (failure !== "" && toI32(listedFailures[at].length) < JC_SHOWN) {
@@ -378,6 +404,24 @@ export const jcPrintMismatches = (): number => {
         console.log(`${c.name} ${c.op} ${jcAnswer(o)}`);
       }
     }
+  }
+  return 0;
+};
+
+/**
+ * `--code-units`: V8's json.js stringifies every UTF-16 code unit in one loop,
+ * and extract.js leaves those 65,536 cases to be generated here instead of
+ * kept as data. For each unit, its `\\uXXXX` literal is read by the tokenizer
+ * and the string it decodes to written by the writer, packed; a surrogate
+ * prints `!` and the tokenizer's error, the lone-surrogate divergence of
+ * divergences.txt. tests/run.js holds each line to Node's JSON.stringify.
+ */
+export const jcPrintCodeUnits = (): number => {
+  const digits = "0123456789abcdef";
+  for (let unit: i32 = 0; unit < 65536; unit += 1) {
+    const hex = `${digits.substring((unit >> 12) & 15, ((unit >> 12) & 15) + 1)}${digits.substring((unit >> 8) & 15, ((unit >> 8) & 15) + 1)}${digits.substring((unit >> 4) & 15, ((unit >> 4) & 15) + 1)}${digits.substring(unit & 15, (unit & 15) + 1)}`;
+    const o = jcStringify(`s:"\\u${hex}"`);
+    console.log(o.error === "" ? jcPack(o.out, o.len) : `!${o.error}`);
   }
   return 0;
 };
