@@ -295,6 +295,12 @@ const jtNumbers = (t: Suite): void => {
   const long = jtDecode(`{"value":12345,"series":[],"named":{}}`, new Reading(), limits, false);
   t.ok("number: past maxNumberBytes is the tokenizer's error", long.failed < 0 && long.failed !== JSON_DECODE_TYPE);
 
+  // A count a program sets past its bytes reads nothing past them: the writer
+  // refuses the window (docs/security/json.md, JSON-14).
+  const bad = new Reading();
+  bad.value.count = 100;
+  t.eqStr("number: a count past its bytes is the writer's bad window", jtEncode(bad, 256), "error -7");
+
   // Decoded again into the same numbers, nothing grows. A map's values are
   // new for each key, so this input's map is empty.
   const src = jtBytes(`{"value":123456789012345678901234567890,"backup":1.5,"series":[18446744073709551616,1E+400],"named":{}}`);

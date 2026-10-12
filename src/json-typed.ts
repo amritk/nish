@@ -128,6 +128,16 @@ export const noteJsonOptions = (ctx: CheckContext, owner: StructInfo, decl: Node
   owner.jsonOptions = decl
 }
 
+/**
+ * NL2492's sentence, for options written in a shape the compiler does not
+ * read: shared by `checkJsonOptions` and the pass 1 sweep, which refuses
+ * them on a generic class whether or not anything instantiates it.
+ */
+export const jsonOptionsShapeMessage = (shown: string): string =>
+  // The words after the class's name are NL2492's.
+  `\`static\` member \`${JSON_OPTIONS}\` of class \`${shown}\` is written \`static readonly json = { ... }\`, ` +
+  "with no type annotation, in a class that is not generic: it holds the class's typed JSON options and is not a field"
+
 /** A string written as a literal: `"a"`, or a template with no holes. */
 const jsonIsStringLiteral = (node: Node): boolean =>
   node.kind === N_STRING || (node.kind === N_TEMPLATE && node.children.length <= 1)
@@ -344,12 +354,7 @@ export const checkJsonOptions = (ctx: CheckContext, info: StructInfo): void => {
     decl.children[1].kind !== N_EMPTY ||
     info.instance !== null
   ) {
-    // The words after the class's name are NL2492's.
-    ctx.error(
-      decl,
-      `\`static\` member \`${JSON_OPTIONS}\` of class \`${ctx.table.typeName(info.type)}\` is written \`static readonly json = { ... }\`, ` +
-        "with no type annotation, in a class that is not generic: it holds the class's typed JSON options and is not a field"
-    )
+    ctx.error(decl, jsonOptionsShapeMessage(ctx.table.typeName(info.type)))
     return
   }
   const literal = decl.children[2]
