@@ -181,9 +181,12 @@ export class JsonNumber {
     const n: i32 = toI32(text.length)
     const bytes: u8[] = new Array<u8>(n)
     for (let k: i32 = 0; k < n && k < toI32(bytes.length); k += 1) {
-      const c: i32 = toI32(text.charCodeAt(k))
+      let c: i32 = toI32(text.charCodeAt(k))
       // A number is ASCII; anything wider fails the check below as `~` does.
-      bytes[k] = toU8(c < 128 ? c : 126)
+      if (c > 127) {
+        c = 126
+      }
+      bytes[k] = toU8(c)
     }
     const limits: JsonLimits = new JsonLimits()
     limits.maxDepth = 0
@@ -854,7 +857,8 @@ export const jsonEncodeU64 = (w: JsonWriter, v: u64): void => {
 
 /** A `JsonNumber`, as the text it holds, byte for byte. */
 export const jsonEncodeNumber = (w: JsonWriter, n: JsonNumber): void => {
-  w.raw(n.bytes, 0, n.count)
+  const start: i32 = 0
+  w.raw(n.bytes, start, n.count)
 }
 
 export const jsonEncodeI32Array = (w: JsonWriter, xs: i32[]): void => {

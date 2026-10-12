@@ -498,16 +498,6 @@ const jsonValuesOf = (f: JsonField, out: JsonField[]): void => {
 }
 
 /**
- * The fields of `info` the route reads and writes one by one: every field,
- * but none of `JsonNumber`'s, which is read and written whole, as the number
- * it holds.
- */
-const jsonFieldsRead = (info: StructInfo): FieldInfo[] => {
-  const none: FieldInfo[] = []
-  return info.jsonNumber ? none : info.fields
-}
-
-/**
  * Every class a route from `root` reaches, `root` first and each once, in the
  * order the fields name them, through arrays and `Map` values alike. A field
  * the route cannot handle reaches nothing; `jsonRefusal` has refused it.
@@ -521,7 +511,11 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
   while (at < out.length) {
     const info = out[at]
     at = at + 1
-    for (const field of jsonFieldsRead(info)) {
+    // `JsonNumber` is read and written whole, as the number it holds.
+    if (info.jsonNumber) {
+      continue
+    }
+    for (const field of info.fields) {
       const f = jsonFieldOf(program, table, field)
       if (f === null) {
         continue
@@ -543,7 +537,10 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
 const jsonValues = (program: CheckedProgram, table: TypeTable, root: StructInfo): JsonField[] => {
   const out: JsonField[] = []
   for (const info of jsonClasses(program, table, root)) {
-    for (const field of jsonFieldsRead(info)) {
+    if (info.jsonNumber) {
+      continue
+    }
+    for (const field of info.fields) {
       const f = jsonFieldOf(program, table, field)
       if (f !== null) {
         jsonValuesOf(f, out)
@@ -620,7 +617,10 @@ export const jsonRefusal = (
   }
   const classes = jsonClasses(program, table, root)
   for (const info of classes) {
-    for (const field of jsonFieldsRead(info)) {
+    if (info.jsonNumber) {
+      continue
+    }
+    for (const field of info.fields) {
       if (jsonFieldOf(program, table, field) === null) {
         // The words up to `| null` are NL2485's in `src/codes.ts`, and the
         // kinds added since follow them.

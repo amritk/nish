@@ -6387,10 +6387,10 @@ export const main = (): i32 => {
   | an optional field with no initializer | NL2498 | `json_reject_options_no_initializer` |
 
   A spread or a computed key in the literal is refused by Phase 0 as it is
-  anywhere (NL1061, NL1041; `json_reject_options_spread`,
+  anywhere (NL1061, NL1041; `reject_json_options_spread`,
   `json_reject_options_computed`), a subclass by `extends`
   (`json_reject_options_subclass`), and a second `static readonly json` is a
-  duplicate member (`json_reject_options_twice`). Under Node the literal is a
+  duplicate member (`reject_json_options_twice`). Under Node the literal is a
   static property of the class that nothing reads.
 - **A `JsonNumber` is a number's text.** `JsonNumber`, from `nish/json-typed`,
   holds a number as the bytes it was written in, so a field of it decodes and

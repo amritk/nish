@@ -690,6 +690,8 @@ export class FieldInfo {
   offset: i32
   /** `readonly` fields may only be assigned through `this` in the constructor. */
   readonly: boolean
+  /** Named in the class's `json.optional`: a missing key sets the field to its initializer. */
+  jsonOptional: boolean
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null
   decl: Node
@@ -712,8 +714,6 @@ export class FieldInfo {
    * (`src/json-typed.ts`, docs/LANGUAGE.md, "Typed JSON").
    */
   wireName: string
-  /** Named in the class's `json.optional`: a missing key sets the field to its initializer. */
-  jsonOptional: boolean
 
   constructor(name: string, type: i32, decl: Node) {
     this.name = name
@@ -781,6 +781,8 @@ export class StructInfo {
   poisoned: boolean
   /** Pass 1b progress, so a struct is collected once. */
   collected: boolean
+  /** `nish/json-typed`'s `JsonNumber`, which typed JSON reads and writes as one number. */
+  jsonNumber: boolean
   /**
    * The (template, type-argument tuple) this layout was monomorphised from, or
    * `null` for a class or interface somebody declared (WP18 G5).
@@ -799,8 +801,6 @@ export class StructInfo {
    * the fields are collected and writes what it says into each field.
    */
   jsonOptions: Node | null
-  /** `nish/json-typed`'s `JsonNumber`, which typed JSON reads and writes as one number. */
-  jsonNumber: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name

@@ -2628,10 +2628,9 @@ export class Parser {
     const field = this.node(N_FIELD, start, this.end)
     field.children.push(computed === null ? this.parseMemberNameNode() : computed)
     field.flags = modifiers | this.parseMemberMarker()
-    // A `static` field may leave its type to its initializer, as typed JSON's
-    // `static readonly json = { ... }` does; the checker refuses every other
-    // `static` field before it asks for a type (`collectField`).
-    if ((field.flags & FLAG_STATIC) !== 0 && !this.at(TOK_COLON)) {
+    // Typed JSON's `static readonly json = { ... }` leaves its type to its
+    // literal (`src/json-typed.ts`); every other field still needs one here.
+    if ((field.flags & FLAG_STATIC) !== 0 && field.children[0].text === "json" && !this.at(TOK_COLON)) {
       field.children.push(this.empty())
     } else {
       field.children.push(this.parseTypeAnnotation())

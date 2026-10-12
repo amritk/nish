@@ -359,7 +359,7 @@ Arena.used() is flat over them"). It is written back raw (JSON-9). Every
 misuse of the options has its own negative case, and each way the literal can
 be reached is pinned: a module constant (`json_reject_options_alias`,
 `json_reject_options_alias_whole`), a spread and a computed key, which Phase 0
-refuses (`json_reject_options_spread`, `json_reject_options_computed`), a
+refuses (`reject_json_options_spread`, `json_reject_options_computed`), a
 subclass (`json_reject_options_subclass`) and a generic class
 (`json_reject_options_generic`).
 
