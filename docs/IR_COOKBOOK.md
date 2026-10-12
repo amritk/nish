@@ -1520,18 +1520,15 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ### `nish/threads`: a lock that owns its data
 
 `using g = m.lock()` calls the `Mutex`'s `lock()`, and each exit of the block
-is a release exchange of 0 into the guard's lock word, `atomicrmw xchg …,
-i32 0 release`, followed by a branch that calls `nish_mutex_wake` only when
-the word it took back was 2, held with a waiter that may be asleep: below,
-after the returned value has been read through the guard, since the value may
-need the lock. The `lock()` instance lives in
+is a release store of 0 into the guard's lock word, `store atomic i32 0, …
+release`: below, after the returned value has been read through the guard,
+since the value may need the lock. The `lock()` instance lives in
 `nish/threads`'s own module, and the emitter writes its body in place of the
 source's `return this.guard`. It loads the one guard the `Mutex` holds, takes
 the guard's word with `cmpxchg … i32 0, i32 1 acquire monotonic`, and calls
-`nish_mutex_wait` (which looks again a few times, then marks the word 2 and
-sleeps in the kernel until it can take it) only when the swap found the word
-held. The acquire keeps every guarded access after the swap and the release
-every one before the exchange, which is
+`nish_mutex_wait` (which spins briefly, then yields, until it takes the word)
+only when the swap found the word held. The acquire keeps every guarded
+access after the swap and the release every one before the store, which is
 all a lock has to promise. Nothing is allocated per lock, and nothing is
 destroyed, because the word is a field of the guard the `Mutex` made when it
 was made. That instance, exactly as emitted, is in
@@ -1562,7 +1559,6 @@ declare void @nish.Mutex$$Tally.constructor(%struct.Mutex$$Tally* noundef nonnul
 declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #0
 declare void @nish.MutexGuard$$Tally.constructor(%struct.MutexGuard$$Tally* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare void @nish_mutex_wake(i32* noundef nonnull) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @bump(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %m, i32 noundef %k) #0 {
@@ -1593,15 +1589,7 @@ ovf.ok:
   %17 = load %struct.Tally*, %struct.Tally** %16, align 8, !tbaa !5
   %18 = getelementptr inbounds %struct.Tally, %struct.Tally* %17, i32 0, i32 0
   %19 = load i32, i32* %18, align 4, !tbaa !7
-  %20 = atomicrmw xchg i32* %2, i32 0 release
-  %21 = icmp eq i32 %20, 2
-  br i1 %21, label %unlock.wake, label %unlock.done
-
-unlock.wake:
-  call void @nish_mutex_wake(i32* %2)
-  br label %unlock.done
-
-unlock.done:
+  store atomic i32 0, i32* %2 release, align 4
   ret i32 %19
 
 ovf.fail:
@@ -19335,7 +19323,6 @@ declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* nou
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #3
 declare void @nish_mutex_wait(i32* noundef nonnull) #3
-declare void @nish_mutex_wake(i32* noundef nonnull) #3
 declare void @nish_channel_send(i64* noundef nonnull, i64 noundef) #3
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #3
 declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #3

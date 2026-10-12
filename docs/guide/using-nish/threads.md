@@ -213,11 +213,10 @@ export const main = (): i32 => {
   the tasks take the lock in whatever order the scheduler picks, and under
   Node they take it in spawn order; only an order-independent update prints
   the same both ways.
-- **A lock nobody holds is cheap, and a busy one sleeps.** Taking a free lock
-  is one atomic instruction. A task that finds the lock held looks again a few
-  times and then sleeps in the kernel until it is released, so tasks waiting
-  on a busy lock leave their cores to the task holding it rather than
-  spinning. Keeping the block short is still what makes a lock fast.
+- **A lock nobody holds is cheap; keep the block short.** Taking a free lock
+  is one atomic instruction. A task that finds the lock held keeps checking,
+  giving its core up between checks, so a long block makes every waiter spend
+  processor time waiting for it.
 
 ```ts nish:err NL2465
 import { Mutex } from "nish/threads";

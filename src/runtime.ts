@@ -870,22 +870,6 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
-    // A lock's release found a waiter (runtime/runtime-parallel.c): it wakes
-    // one sleeper on the word, which the release's exchange has already set
-    // to 0. It is called only where the function also calls `lock()`, which
-    // carries `nish_mutex_wait` and so already denies the caller `willreturn`
-    // and a read-only effect through the fixpoint; the wake adds nothing
-    // there. It writes nothing the program reads, but it is a system call LLVM
-    // must not move a guarded access across, so it is a write.
-    this.addWrites(
-      WRITES_NOTHING,
-      new RuntimeFunction(
-        "nish_mutex_wake",
-        "declare void @nish_mutex_wake(i32* noundef nonnull)",
-        attrs1("nounwind"),
-        EFFECT_WRITE
-      )
-    )
     // WP29 P3: a channel of scalars (runtime/runtime-parallel.c). Each takes
     // the address of the channel's `state` word, which it may set, and keeps
     // a buffer outside every arena behind it. A send or a receive is the

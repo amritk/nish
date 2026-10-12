@@ -1,13 +1,13 @@
-// The futex lock under contention: eight tasks bin a stream each into one
-// guarded `i32[]`, taking the lock once per value, so on four cores the lock
-// is fought over on every value and a waiter that has spun long enough sleeps
-// in the kernel. Each round draws new values from seeds the round number
-// moves, and the bins are folded into a checksum and emptied after every join,
-// so no round can be computed once. Adding to a bin commutes, so the checksum
-// is the same whatever order the critical sections ran in, and the last line,
-// the bins' total beside the number of values binned, is equal exactly when no
-// guarded increment was lost. `process.argv[1]` sets the rounds: 4 here, more
-// when it is timed.
+// A lock under contention: eight tasks bin a stream each into one guarded
+// `i32[]`, taking the lock once per value, so on four cores the lock is fought
+// over on every value and most takes go through the runtime's wait. Each round
+// draws new values from seeds the round number moves, and the bins are folded
+// into a checksum and emptied after every join, so no round can be computed
+// once. Adding to a bin commutes, so the checksum is the same whatever order
+// the critical sections ran in, and the last line, the bins' total beside the
+// number of values binned, is equal exactly when no guarded increment was lost.
+// `process.argv[1]` sets the rounds: 4 here, more when it is timed
+// (docs/wp29-thread-surface.md §8f).
 import { Mutex, scope } from "nish/threads";
 
 class Hist {

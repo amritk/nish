@@ -26,7 +26,6 @@ declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapt
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #1
-declare void @nish_mutex_wake(i32* noundef nonnull) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
 
@@ -162,30 +161,22 @@ ovf.ok:
   %43 = bitcast i8* %42 to i32*
   %44 = getelementptr inbounds i32, i32* %43, i64 %23
   store i32 %39, i32* %44, align 4, !alias.scope !4, !noalias !3, !tbaa !8
-  %45 = atomicrmw xchg i32* %17, i32 0 release
-  %46 = icmp eq i32 %45, 2
-  br i1 %46, label %unlock.wake, label %unlock.done
-
-unlock.wake:
-  call void @nish_mutex_wake(i32* %17)
-  br label %unlock.done
-
-unlock.done:
+  store atomic i32 0, i32* %17 release, align 4
   br label %forof.inc
 
 forof.inc:
-  %47 = load i64, i64* %forof.idx, align 8
-  %48 = add i64 %47, 1
-  store i64 %48, i64* %forof.idx, align 8
+  %45 = load i64, i64* %forof.idx, align 8
+  %46 = add i64 %45, 1
+  store i64 %46, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:
-  %49 = getelementptr inbounds %struct.Shard, %struct.Shard* %s, i32 0, i32 0
-  %50 = load %struct.nish_array*, %struct.nish_array** %49, align 8, !tbaa !15
-  %51 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %50, i64 0, i32 0
-  %52 = load i64, i64* %51, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %53 = trunc i64 %52 to i32
-  ret i32 %53
+  %47 = getelementptr inbounds %struct.Shard, %struct.Shard* %s, i32 0, i32 0
+  %48 = load %struct.nish_array*, %struct.nish_array** %47, align 8, !tbaa !15
+  %49 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %48, i64 0, i32 0
+  %50 = load i64, i64* %49, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %51 = trunc i64 %50 to i32
+  ret i32 %51
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -623,15 +614,7 @@ ovf.ok.3:
   %187 = call i8* @nish_str_from_i32(i32 %185)
   %188 = call i8* @nish_str_concat(i8* %141, i8* %187)
   call void @nish_print(i8* %188)
-  %189 = atomicrmw xchg i32* %40, i32 0 release
-  %190 = icmp eq i32 %189, 2
-  br i1 %190, label %unlock.wake, label %unlock.done
-
-unlock.wake:
-  call void @nish_mutex_wake(i32* %40)
-  br label %unlock.done
-
-unlock.done:
+  store atomic i32 0, i32* %40 release, align 4
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

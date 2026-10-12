@@ -648,12 +648,12 @@ export const reduceMessage = (
 /**
  * The grain, in estimate units: a map divides once its length passes
  * `REGION_COST` over the body's estimate, and its first division is two
- * chunks of half that. The target is what the cheapest body,
- * `(x) => x * 3 + 1`, needs in each of two chunks to beat the loop it
- * replaces. On the worker pool, two chunks of 2^19 units only break even with
- * the loop and two of 2^20 win by 1.19x, so the grain is 2^21; with a thread
- * started per region two chunks of 2^21 were needed, and the grain was 2^22
- * (docs/wp29-thread-surface.md §8a).
+ * chunks of half that. The target is what the cheapest body there is,
+ * `(x) => x + 1` at an estimate of 3, needs in each of two chunks to beat the
+ * loop it replaces outside the noise band. On the worker pool two chunks of
+ * 2^19 units won by 1.16x on the minimum and only 1.04x on the median, inside
+ * the band, and two of 2^20 won by 1.31x and 1.19x, so the grain is 2^21; with
+ * a thread started per region it was 2^22 (docs/wp29-thread-surface.md §8a).
  */
 const REGION_COST: i32 = 2097152
 

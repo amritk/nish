@@ -24,8 +24,7 @@
  * docs/wp29-thread-surface.md is the surface this is the stage under: P1's
  * `parallelMapInto` and `parallelReduce` divide a range here, P2's scopes
  * run their tasks here (`nish_scope_spawn`, `nish_scope_join`), P3's lock
- * waits here when it finds its word held (`nish_mutex_wait`) and wakes a waiter
- * here when it gives the word back (`nish_mutex_wake`), and P3's
+ * waits here when it finds its word held (`nish_mutex_wait`), and P3's
  * channels keep their buffers here (`nish_channel_send`, `nish_channel_count`,
  * `nish_channel_receive`).
  *
@@ -48,10 +47,6 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
-#ifdef __linux__
-#include <linux/futex.h> /* `FUTEX_WAIT_PRIVATE`, `FUTEX_WAKE_PRIVATE`: the lock's sleep */
-#include <sys/syscall.h>
-#endif
 #endif
 
 /* The ceiling on how many threads one region may use. A fixed bound keeps the
@@ -563,93 +558,27 @@ void nish_scope_join(void *scope) {
 
 /* ---- A lock's contended path (wp29 P3) ----
  *
- * The word is 0 free, 1 held, and 2 held with a waiter that may be asleep on
- * it. The compiler takes a free word inline with a swap of 0 to 1, so this runs
- * only when the word was held, and gives it back inline with an exchange of 0:
- * the exchange answers what the word was, and only a 2 calls `nish_mutex_wake`
- * (src/emit-parallel.ts). An uncontended lock therefore never enters the
- * kernel, on either side.
- *
- * The language keeps a critical section short -- one lock at a time, nothing
- * waited on while it is held -- so a waiter first looks again a few times with
- * relaxed reads, and takes the word if it frees. Past that the holder may have
- * been descheduled, and spinning would only keep it off the core, so the
- * waiter marks the word 2 with an exchange and sleeps in the kernel until the
- * word is no longer 2. The exchange that finds it 0 takes the lock, as 2 rather
- * than 1: another waiter may still be asleep, and the holder's release must not
- * skip the wake it would need. For the same reason a waiter that has slept once
- * takes a free word as 2 from then on, while one that never slept may take it
- * as 1 -- whoever is asleep was put there by an exchange that left the word 2
- * after it, and the release that woke one of them left the next to the one it
- * woke. That costs a spare wake when nobody was left asleep, which is the price
- * of never losing one. It is the third mutex of Drepper's "Futexes Are Tricky"
- * (2011), written from the paper. Every swap that takes the word is an
- * acquire, the edge the release's exchange pairs with.
- *
- * The look is a plain relaxed load, without the pause the pool's spin makes:
- * a pause costs on the order of a hundred cycles on a recent Intel core, and
- * 64 of them between looks made a waiter late for a word that is free for
- * nanoseconds -- the histogram of tests/link/thread_mutex_contended took 3.2 s
- * with them against 1.8 s without (docs/wp29-thread-surface.md, 8f).
- *
- * The sleep is `futex` on Linux and `__ulock_wait` on Darwin, each of which
- * returns at once if the word is no longer 2, so a release between the
- * exchange and the sleep is never missed. Anywhere else with threads the
- * waiter yields instead of sleeping. Without real threads -- no
- * `-DNISH_THREADS`, or WASI -- nothing else can hold the word, and the first
- * try takes it. */
-#define NISH_MUTEX_SPIN 64
-
-#if defined(NISH_PAR_REAL) && defined(__APPLE__)
-/* libSystem's private wait-on-address, which libc++'s `std::atomic::wait`
- * also uses: a compare-and-wait on a 32-bit word (`UL_COMPARE_AND_WAIT`), with
- * the error answered in the return value rather than `errno`
- * (`ULF_NO_ERRNO`). */
-extern int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout);
-extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
-#define NISH_ULOCK_WAIT 0x01000001u /* UL_COMPARE_AND_WAIT | ULF_NO_ERRNO */
-#endif
-
+ * The compiler takes a free lock inline, so this runs only when the word was
+ * held: another task is inside its critical section, which the language keeps
+ * short -- one lock at a time, nothing waited on while it is held -- so a few
+ * relaxed reads usually see it free again. Past that the holder may have been
+ * descheduled, and spinning would only keep it off the core, so each further
+ * try first yields. The swap that takes the word is the acquire the inline
+ * path would have made. */
 void nish_mutex_wait(int32_t *word) {
 #ifdef NISH_PAR_REAL
-  int32_t take = 1;
+  int spins = 0;
+#endif
   for (;;) {
-    for (int spins = 0; spins < NISH_MUTEX_SPIN; spins++) {
-      int32_t seen = __atomic_load_n(word, __ATOMIC_RELAXED);
-      if (seen == 0 &&
-          __atomic_compare_exchange_n(word, &seen, take, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
-        return;
-    }
-    if (__atomic_exchange_n(word, 2, __ATOMIC_ACQUIRE) == 0) return;
-#if defined(__linux__)
-    syscall(SYS_futex, word, FUTEX_WAIT_PRIVATE, 2L, (void *)0, (void *)0, 0L);
-#elif defined(__APPLE__)
-    __ulock_wait(NISH_ULOCK_WAIT, word, 2, 0);
-#else
-    sched_yield();
+    int32_t free_word = 0;
+    if (__atomic_load_n(word, __ATOMIC_RELAXED) == 0 &&
+        __atomic_compare_exchange_n(word, &free_word, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+      return;
+#ifdef NISH_PAR_REAL
+    if (spins < 64) spins++;
+    else sched_yield();
 #endif
-    take = 2;
   }
-#else
-  int32_t free_word = 0;
-  while (!__atomic_compare_exchange_n(word, &free_word, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
-    free_word = 0;
-#endif
-}
-
-/* The release found a waiter: the word is 0 now, and one sleeper is woken to
- * take it. One is enough, because the one woken takes the word as 2 and so
- * wakes the next at its own release. A word another thread took in between is
- * fine too: the woken one finds it held, marks it 2 and sleeps again. The
- * fallback's waiters never sleep, so there is nobody to wake. */
-void nish_mutex_wake(int32_t *word) {
-#if defined(NISH_PAR_REAL) && defined(__linux__)
-  syscall(SYS_futex, word, FUTEX_WAKE_PRIVATE, 1L, (void *)0, (void *)0, 0L);
-#elif defined(NISH_PAR_REAL) && defined(__APPLE__)
-  __ulock_wake(NISH_ULOCK_WAIT, word, 0);
-#else
-  (void)word;
-#endif
 }
 
 /* ---- A channel of scalars (wp29 P3, section 4.4) ----

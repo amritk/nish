@@ -51,8 +51,6 @@ void nish_scope_join(void *scope);
 void nish_channel_send(int64_t *state, int64_t value);
 void nish_channel_count(int64_t *state, int64_t delta);
 int32_t nish_channel_receive(int64_t *state, int64_t *out);
-void nish_mutex_wait(int32_t *word);
-void nish_mutex_wake(int32_t *word);
 nish_str *nish_read_file(const nish_str *);
 void nish_write_file(const nish_str *, const nish_str *);
 void nish_append_file(const nish_str *, const nish_str *);
@@ -570,67 +568,6 @@ static int pool_still_works(pthread_t self) {
 }
 
 static int sec_status(pid_t child); /* below, with the security checks: 128 + n for signal n */
-
-/* ---- A lock's sleep (wp29 P3, docs/wp29-thread-surface.md section 8f) ----
- *
- * The lock the compiler emits, written out: `lock()` swaps the word from 0 to
- * 1 and calls `nish_mutex_wait` when that fails, and the release exchanges 0
- * in and calls `nish_mutex_wake` when the word it took back was 2
- * (src/emit-parallel.ts). The test holds the word while three threads arrive,
- * long enough for every one of them to give up spinning: the word reaching 2
- * is the proof that a waiter went to sleep on it, since only the exchange just
- * before the sleep writes 2. The release then has to wake them, and the count
- * they keep under the lock has to come out exact. */
-#include <time.h>
-int nanosleep(const struct timespec *, struct timespec *); /* POSIX; see ftruncate below */
-
-#define MUTEX_THREADS 3
-#define MUTEX_ROUNDS 20000
-static int32_t mutex_word = 0;
-static int64_t mutex_count = 0;
-
-static void mutex_lock(int32_t *word) {
-  int32_t free_word = 0;
-  if (!__atomic_compare_exchange_n(word, &free_word, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
-    nish_mutex_wait(word);
-}
-
-/* Answers what the release found in the word: 1 nobody waiting, 2 a waiter that may sleep. */
-static int32_t mutex_unlock(int32_t *word) {
-  int32_t old = __atomic_exchange_n(word, 0, __ATOMIC_RELEASE);
-  if (old == 2) nish_mutex_wake(word);
-  return old;
-}
-
-static void *mutex_contender(void *arg) {
-  (void)arg;
-  for (int i = 0; i < MUTEX_ROUNDS; i++) {
-    mutex_lock(&mutex_word);
-    mutex_count++;
-    mutex_unlock(&mutex_word);
-  }
-  return NULL;
-}
-
-static void test_mutex_sleep(void) {
-  mutex_lock(&mutex_word);
-  pthread_t t[MUTEX_THREADS];
-  for (int i = 0; i < MUTEX_THREADS; i++) assert(pthread_create(&t[i], NULL, mutex_contender, NULL) == 0);
-  /* Up to two seconds for a waiter to mark the word and sleep; it takes
-     microseconds once a contender is scheduled. */
-  struct timespec ms = {0, 1000000};
-  int waited = 0;
-  while (__atomic_load_n(&mutex_word, __ATOMIC_RELAXED) != 2 && waited < 2000) {
-    nanosleep(&ms, NULL);
-    waited++;
-  }
-  assert(__atomic_load_n(&mutex_word, __ATOMIC_RELAXED) == 2);
-  mutex_count++;
-  assert(mutex_unlock(&mutex_word) == 2);
-  for (int i = 0; i < MUTEX_THREADS; i++) assert(pthread_join(t[i], NULL) == 0);
-  assert(mutex_count == (int64_t)MUTEX_THREADS * MUTEX_ROUNDS + 1);
-  assert(__atomic_load_n(&mutex_word, __ATOMIC_RELAXED) == 0);
-}
 
 static void test_pool(void) {
   pthread_t self = pthread_self();
@@ -1920,7 +1857,6 @@ int main(void) {
   test_threads();
   test_parallel_threads();
   test_pool();
-  test_mutex_sleep();
   test_host_signal_threads();
   puts("runtime_test: ok (threads)");
 #else
