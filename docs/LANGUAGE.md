@@ -5995,6 +5995,148 @@ export const main = (): i32 => {
   a function that takes or returns one unbridged, with the comment they write
   for a class.
 
+### Typed JSON: `nish/json-typed`
+
+`jsonDecode(d, out)` reads one JSON object into a class and `jsonEncode(w,
+value)` writes one back, and the code that does it is written by the compiler
+from the class's fields. They are generic functions in
+[`std/json-typed.ts`](../std/json-typed.ts), and every call of one is lowered
+in place, in the module that makes it, so nothing is looked up by name at run
+time and no class carries anything it would not otherwise have.
+
+```typescript
+import { JsonWriter } from "nish/json";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
+
+class Player {
+  name: string = "";
+  score: i32 = 0;
+}
+
+class Team {
+  players: Player[];
+  captain: Player | null = null;
+  constructor() {
+    this.players = [];
+  }
+}
+
+export const main = (): i32 => {
+  const d = new JsonDecoder(body, 0, toI32(body.length), new JsonLimits());
+  const t = new Team();
+  const code = jsonDecode(d, t);     // 0, or the first error's code
+  const w = new JsonWriter(out, 0);
+  jsonEncode(w, t);                  // {"players":[...],"captain":...}
+  return code;
+};
+```
+
+- **The decoder is `JsonDecoder`**, a [`JsonTokenizer`](../std/json-tokenizer.ts)
+  over the input and a sticky error, and the encoder is the
+  [`JsonWriter`](../std/json.ts) the call is given. The code written for a
+  class is straight-line calls of their methods, one per field: for decoding,
+  a loop over the object's keys that compares each key with the field names
+  and reads the value with the method of the field's type; for encoding,
+  `w.key(name)` and the value's method per field, in declaration order. A
+  nested class, an array's element class and a `| null` field's class each
+  get the same code of their own, so it recurses as the data does
+  (`tests/link/std_json_typed`, whose `main.ll` is the golden of the code
+  written for a one-field class;
+  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)).
+- **What a field may be.** `T` is a declared class, and every field of every
+  class the call reaches is one of these; anything else is refused at the
+  call's argument, naming the class and the field:
+
+  | Field type | JSON | Decoded with | Encoded with |
+  | --- | --- | --- | --- |
+  | `i32`, `u32`, `i64` | an integer written without a fraction or an exponent, in the type's range | `d.i32()`, `d.u32()`, `d.i64()` | `w.i32`, `w.u32`, `w.i64` |
+  | `f64` (and `number` under `--number-mode f64`) | any number; past the double range an infinity, which the writer writes as `null` | `d.f64()` | `w.f64` |
+  | `boolean` | `true`, `false` | `d.boolean()` | `w.boolean` |
+  | `string`, `string \| null` | a string, and `null` for the second | `d.string(cur)` | `w.string`, `jsonEncodeStringOrNull` |
+  | a declared class `C`, `C \| null` | an object, and `null` for the second | `C`'s own decoding, into the object the field holds | `C`'s own encoding |
+  | `T[]`, `T[] \| null` for any of the above | an array, and `null` for the second | `d.i32Array(cur)` and its kin, or `C`'s decoding per element | `jsonEncodeI32Array` and its kin, or `C`'s encoding per element |
+
+  `` `jsonEncode` cannot handle `Sample.ratio`, which is `f32`: a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null` ``
+  (NL2485, `tests/cases/json_reject_field_type`; two classes down through an
+  array's element, `json_reject_nested_field`; in a `| null` field's class,
+  `json_reject_nullable_field`; `i32[][]`, `json_reject_nested_array`; a
+  `Map`, `json_reject_generic_field`). A value that is not a declared class is
+  `` `jsonEncode`'s value is `Point`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version ``
+  (NL2486, `json_reject_interface`, `json_reject_not_class`). An interface is
+  a record stored inline wherever it is held, and decoding into one is left
+  for a later version. A call inside a generic function is checked for each
+  class an instantiation binds (`json_reject_through_generic`).
+- **Decoding is strict, and every outcome is a code.** The keys are the field
+  names, byte for byte. Every field is required, each key may appear once, and
+  a key that names no field is an error unless `d.ignoreUnknown` is set, when
+  the key's value is stepped over, checked but not kept. The first error sets
+  `d.failed` and `d.errorAt`, the byte offset of the token it was found at,
+  and every later call does nothing, as the tokenizer's and the writer's
+  errors do; `jsonDecode` answers `d.failed`, and `d.reset` starts over:
+
+  | Outcome | Code | `errorAt` |
+  | --- | --- | --- |
+  | a value of the wrong JSON type: a string for an `i32`, an array for a class, `null` for a field that is not `\| null`, a top-level value that is not an object | `JSON_DECODE_TYPE` (-20) | the value |
+  | a number its field cannot hold: a fraction or an exponent for an integer, or out of range | `JSON_DECODE_RANGE` (-21) | the number |
+  | a key that names no field | `JSON_DECODE_UNKNOWN` (-22) | the key |
+  | a key given twice | `JSON_DECODE_DUPLICATE` (-23) | the second |
+  | a field the object does not give | `JSON_DECODE_MISSING` (-24) | the object's `}` |
+  | text that is not JSON, or that crosses a `JsonLimits` limit | the tokenizer's `JSON_TOK_ERR_*` (-1 to -13) | the tokenizer's |
+
+  Nothing an input holds panics: the recursion is the data's, so the
+  tokenizer's depth limit bounds it. That bound is the caller's
+  `JsonLimits.maxDepth`, 128 by default: each level is one native frame, so a
+  limit raised into the hundreds of thousands can run off the stack, and one
+  kept to a few thousand cannot. The writer refuses a 65th open container
+  (`JSON_WRITER_MAX_DEPTH`), so a value decoded from deeper than 64 levels
+  encodes as `JSON_WRITE_TOO_DEEP` (`tests/link/std_json_typed`, which
+  reaches each row at each depth, the limits included). A duplicate of a key
+  `ignoreUnknown` steps over is not detected, because its value is never
+  read. After an error every field of `out` holds a value of its type, some
+  decoded and some as they were.
+- **Decoding reuses what `out` holds.** A nested object is decoded into the
+  object its field holds, an array's elements into the elements it has, with
+  new ones made past its end and the rest dropped, and a string field keeps
+  its string when the input's is equal. So decoding one shape into one object
+  again and again allocates nothing: `Arena.used()` is flat over 1,000 decodes
+  of a three-level object (`tests/link/std_json_typed`). A string that changes
+  is a new string, since strings are immutable, and only that: the bytes it is
+  made from are reclaimed at the call. A class the decoder has to make itself
+  — an array's element past the end, or the object of a `| null` field that
+  holds `null` — is made with `new C()`, so its constructor takes no
+  parameters:
+  `` `jsonDecode` makes a `Pet` with `new Pet()`, and its constructor takes 1 parameter(s): an array's element and a `| null` field's object are made by the decoder with no arguments, so their class's constructor takes none ``
+  (NL2488, `json_reject_constructor`, `json_reject_constructor_nullable`).
+  Decoding assigns every field, so a `readonly` one is refused:
+  `` `Key.id` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into ``
+  (NL2487, `json_reject_readonly`). A decode stores what it makes into the
+  object it fills, so a call inside a `using a = arena()` block is the NL2424
+  of [that block](#using-a--arena) (`json_reject_arena_block`). An encoding only reads the object and keeps nothing, so it may run inside one (`tests/link/std_json_typed`). Two fields
+  holding one object are decoded into it twice, the second winning.
+- **Encoding is `JSON.stringify`'s text** for the same object, its keys in
+  declaration order, which is also the order an object's keys come back in
+  when it is decoded from text whose keys are in that order:
+  `tests/run.js` holds each line of `tests/link/std_json_typed/round-trip.txt`,
+  decoded and encoded natively, to `JSON.stringify(JSON.parse(line))`. A full
+  buffer is the writer's `JSON_WRITE_FULL`, and an object that holds itself
+  ends at the writer's depth limit with `JSON_WRITE_TOO_DEEP`, because the
+  encoding stops at the first failure rather than recursing on.
+- **The TypeScript reading is class C**
+  ([wp33-round-trip.md](wp33-round-trip.md) §2). Under Node the type
+  arguments are erased, so there is no layout to write the code from, and the
+  bodies in `std/json-typed.ts` that Node runs end the program with
+  `panic("nish/json-typed: jsonDecode and jsonEncode are written by the compiler from the class's fields, and under Node the types are erased")`
+  rather than guess a field's type from the value it holds
+  (`tests/run.js`, "under Node, jsonDecode panics"). The translation is the
+  code the compiler writes, written as TypeScript for each class: a function
+  per class of the same calls into `JsonDecoder` and `JsonWriter`, which
+  everything else in the module already runs under Node: `tests/run.js` runs
+  the decoder's readers there and natively and holds both to the same lines
+  (`tests/link/std_json_typed/readers.ts`). A program that
+  imports `std/json-typed.ts` by path rather than as `nish/json-typed` is
+  compiled as written and gets those bodies natively too.
+
 ### Capabilities
 
 Every builtin carries exactly one **capability** label, or a deliberate none,

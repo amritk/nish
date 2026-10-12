@@ -1,0 +1,1 @@
+`jsonEncode`'s value is `string`, which is not a class: typed JSON reads and writes an object through the fields of a declared class, and an interface, a generic class or any other type is not one in this version

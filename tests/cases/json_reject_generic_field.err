@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Index.byName`, which is `Map<string, i32>`

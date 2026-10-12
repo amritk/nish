@@ -26,6 +26,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
+| [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
@@ -236,6 +237,82 @@ window you gave it.
   both, and what to do with the second is your decision.
 
 Its security record is [docs/security/json.md](../../security/json.md).
+
+## `nish/json-typed`
+
+`jsonDecode(d, out)` reads one JSON object into an object of a class you
+declare, and `jsonEncode(w, value)` writes one back. There is nothing to
+register and no schema to write: the compiler writes the code from the class's
+fields at each call. A field can be an `i32`, `u32`, `i64`, `f64`, `boolean`,
+`string`, another class, an array of any of those, or a `string`, a class or an
+array with `| null`.
+
+```ts nish:ok
+import { JsonWriter } from "nish/json";
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed";
+
+class Player {
+  name: string = "";
+  score: i32 = 0;
+}
+
+class Team {
+  players: Player[];
+  captain: Player | null = null;
+
+  constructor() {
+    this.players = [];
+  }
+}
+
+const bytesOf = (text: string): u8[] => {
+  const out = new Array<u8>(toI32(text.length));
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(text.length); i += 1) {
+    out[i] = toU8(text.charCodeAt(i));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const body = bytesOf(`{"players":[{"name":"Ann","score":3}],"captain":null}`);
+  const d = new JsonDecoder(body, 0, toI32(body.length), new JsonLimits());
+  const team = new Team();
+  const code = jsonDecode(d, team);
+  if (code !== 0) {
+    console.log(`error ${code} at byte ${d.errorAt}`);
+    return 1;
+  }
+  const w = new JsonWriter(new Array<u8>(256), 0);
+  jsonEncode(w, team);
+  console.log(w.text()); // {"players":[{"name":"Ann","score":3}],"captain":null}
+  return 0;
+};
+```
+
+Decoding is strict. Every field must be there, each key may appear once, a
+number must fit its field (`1.5` is not an `i32`), and `null` goes only into a
+field declared `| null`. A key the class has no field for is an error too,
+unless you set `d.ignoreUnknown = true` before decoding. Nothing panics: the
+first problem sets a negative code in `d.failed` and the byte it was found at
+in `d.errorAt`, and `jsonDecode` returns it. The tokenizer's limits in
+`JsonLimits` — nesting depth, string, number and body size — apply as they
+would to any JSON you read. The depth limit is also how deep the decoder
+recurses, so keep it to a few thousand at most; and the writer stops at 64
+levels, so an object decoded from deeper than that cannot be encoded back.
+
+Decoding into the same object again reuses what it already holds: nested
+objects, arrays and any string that has not changed. A server can keep one
+decoder and one object per connection, call `d.reset(body, 0, length)` per
+request, and allocate nothing for a request that looks like the last. A class
+the decoder has to create — an array element past the end of the array, or a
+`| null` field that was `null` — is made with `new C()`, so its constructor
+takes no parameters. Encoding writes the fields in the order the class declares
+them, exactly as `JSON.stringify` would.
+
+Both calls need the compiler: under Node, where the types are erased, they end
+the program with an error. The rules in full are in
+[Typed JSON](../../LANGUAGE.md#typed-json-nishjson-typed).
 
 ## `nish/pair`
 

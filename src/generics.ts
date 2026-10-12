@@ -26,6 +26,7 @@
 //     rule does not see, and they say they are a limit rather than a rule.
 
 import { isNishSourceModule } from "./nish-modules"
+import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./json-typed"
 import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectForeignPointer } from "./annotations"
@@ -110,6 +111,7 @@ import {
   FunctionSig,
   ImportBinding,
   Instantiation,
+  JSON_NONE,
   MAP_GET_OR_INSERT,
   MAP_HASH_KEY,
   MAP_NONE,
@@ -1126,7 +1128,13 @@ const instantiate = (
   // The definition is the declaring module's; this module links against it.
   // WP32 S5: except `nish/map`'s two, which are lowered at every call and
   // never called, so there is nothing to link against or declare.
-  if (sig !== null && home !== ctx && mapIntrinsicRole(template) === MAP_NONE) {
+  // Typed JSON: so are `nish/json-typed`'s two (`src/emit-json.ts`).
+  if (
+    sig !== null &&
+    home !== ctx &&
+    mapIntrinsicRole(template) === MAP_NONE &&
+    jsonRouteRole(template) === JSON_NONE
+  ) {
     useExternalInstance(ctx, sig)
   }
   return sig
@@ -1276,6 +1284,7 @@ const instantiateHere = (
   info.functionBindings = bindFunctionParameters(template.decl, functions)
   info.parallel = parallelRole(template)
   info.mapIntrinsic = mapIntrinsicRole(template)
+  info.jsonRoute = jsonRouteRole(template)
   sig.instance = info
   template.count = template.count + 1
   ctx.program.addInstantiation(symbol, info)
@@ -1431,6 +1440,16 @@ export const checkGenericCall = (
   const sig = instantiate(ctx, template, tuple, functions, expr)
   if (sig === null) {
     return T_ERROR
+  }
+  // Typed JSON: the class the call binds is checked here, at the argument,
+  // over every class the written code reaches (`src/json-typed.ts`).
+  const route = jsonRouteOf(sig)
+  if (route !== JSON_NONE) {
+    const refusal = jsonRefusal(template.home.program, ctx.table, template.sourceName, route, tuple[0])
+    if (refusal.length > 0) {
+      return ctx.errorType(args.children[args.children.length - 1], refusal)
+    }
+    noteJsonRoute(ctx, template.home, sig)
   }
   // A generic method's signature starts with `this` (WP18 G8).
   const offset = template.owner === null ? 0 : 1
@@ -1609,6 +1628,33 @@ const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
     fn.hidden = true
   }
   useExternalInstance(home, fn)
+}
+
+/**
+ * Typed JSON: what the code written at a call of `sig` calls, made callable
+ * from the module that makes the call, `ctx`. The receiver's methods and
+ * `nish/json-typed`'s helpers are exported; a constructor of a class the
+ * decoder makes may not be, and is `hidden` for the same reason a function
+ * another module's instantiation calls is (`exposeTo`). And every layout the
+ * code reaches is registered here, which a class's import alone does not do
+ * for a class only its fields name.
+ */
+const noteJsonRoute = (ctx: CheckContext, home: CheckContext, sig: FunctionSig): void => {
+  for (const fn of jsonRouteCallees(home.program, ctx.table, sig)) {
+    exposeTo(ctx, fn)
+  }
+  const names = new StringSet()
+  for (const type of sig.paramTypes) {
+    noteStructNames(ctx.table, type, names)
+  }
+  let i = 0
+  while (i < names.size()) {
+    const info = home.program.struct(names.at(i))
+    if (info !== null) {
+      registerForeignLayouts(ctx, info, home, false)
+    }
+    i = i + 1
+  }
 }
 
 /**

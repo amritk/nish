@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Fixed.values`, which is `readonly i32[]`: a field read or written as JSON is

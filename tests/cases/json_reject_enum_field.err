@@ -1,0 +1,1 @@
+`jsonEncode` cannot handle `Paint.color`, which is `Color`: a field read or written as JSON is
