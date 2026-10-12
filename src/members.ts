@@ -127,7 +127,7 @@ export const neverNullMessage = (ctx: CheckContext, receiverExpr: Node): string 
  * default by the time the link runs where the receiver is `null`
  * (`nodeNullTests`). Any other link reads the type as it is.
  */
-export const linkReceiver = (ctx: CheckContext, access: Node, receiverExpr: Node, receiver: i32): i32 => {
+const linkReceiver = (ctx: CheckContext, access: Node, receiverExpr: Node, receiver: i32): i32 => {
   if ((access.flags & FLAG_OPTIONAL) === 0) {
     return receiver
   }

@@ -32806,7 +32806,7 @@ function neverNullMessage(ctx: CheckContext, receiverExpr: Node): string -> @nev
   pointer receiverExpr: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1
   stackSites=0 stackLocals=0
   callee 121:8 CheckContext.textOf -> @CheckContext.textOf
-function linkReceiver(ctx: CheckContext, access: Node, receiverExpr: Node, receiver: i32): i32 -> @linkReceiver [exported]
+function linkReceiver(ctx: CheckContext, access: Node, receiverExpr: Node, receiver: i32): i32 -> @linkReceiver
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 142:3
   escaping: receiver
