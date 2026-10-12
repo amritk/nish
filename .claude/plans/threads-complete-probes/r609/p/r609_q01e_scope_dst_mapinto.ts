@@ -1,0 +1,7 @@
+import { scope, parallelMapInto } from "nish/threads";
+const work = (x: i32): i32 => x * 2;
+export const main = (): i32 => {
+  const done: i32[] = [0]; const xs: i32[] = [1]; const out: i32[] = [0];
+  { using s = scope(); s.spawn(work, 21, done, 0); parallelMapInto(xs, out, (x) => done[0] + x); }
+  console.log(`${out[0]}`); return 0;
+};
