@@ -121,6 +121,18 @@ export const isMapExtrasModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(MAP_EXTRAS_SPECIFIER)
 
 /**
+ * `nish/json-typed`: ordinary Nish but for `jsonDecode` and `jsonEncode`,
+ * whose every call the compiler lowers in place to code it writes from the
+ * class's fields (`src/json-typed.ts`, `src/emit-json.ts`). The module writes
+ * a `.ll` of its own for everything else in it.
+ */
+const JSON_TYPED_SPECIFIER: string = "nish/json-typed"
+
+/** Whether a module is the standard library's `std/json-typed.ts`: the package is part of the test, as for `isCollectionsModule`. */
+export const isJsonTypedModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(JSON_TYPED_SPECIFIER)
+
+/**
  * `std/secret.ts`, the source behind the builtin module `nish:secret`
  * (`src/nish-modules.ts`). It is in the library's directory so that it ships,
  * type-checks and is listed like every other module, but it is imported only
