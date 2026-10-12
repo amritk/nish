@@ -27,6 +27,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back |
+| [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
@@ -313,6 +314,87 @@ them, exactly as `JSON.stringify` would.
 Both calls need the compiler: under Node, where the types are erased, they end
 the program with an error. The rules in full are in
 [Typed JSON](../../LANGUAGE.md#typed-json-nishjson-typed).
+
+## `nish/json-value`
+
+`nish/json-typed` needs a class that says what the JSON looks like. When you
+do not know — a configuration file, a body you pass on after changing one
+field, a tool that prints whatever it is given — parse the document into a
+`JsonDocument` and walk it.
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JSON_VALUE_NUMBER, JsonDocument } from "nish/json-value";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  const root = doc.parseText(`{"id":12345678901234567890,"price":0.1000000000000000055511151231257827,"tags":["tea"]}`);
+  if (root < 0) {
+    console.log(`refused: code ${doc.failed} at byte ${doc.errorAt}`);
+    return 1;
+  }
+  const id = doc.get(root, "id");
+  console.log(`${doc.kind(id) === JSON_VALUE_NUMBER} ${doc.isI64(id)} ${doc.isU64(id)}`); // true false true
+  console.log(`${doc.u64(id)}`); // 12345678901234567890
+  console.log(`${doc.f64(doc.get(root, "price"))}`); // 0.1
+  console.log(doc.string(doc.at(doc.get(root, "tags"), 0))); // tea
+
+  doc.set(root, "tags", doc.newString("changed"));
+  console.log(doc.stringify(root));
+  // {"id":12345678901234567890,"price":0.1000000000000000055511151231257827,"tags":"changed"}
+  return 0;
+};
+```
+
+A value is a `JsonValue`, a handle into the document that made it, and every
+reader is a method of the document: `kind`, then `boolean`, `string`,
+`numberText`, `length`, `at` (an element, or an object's member by position),
+`keyAt` and `get` (a member by key). A handle that names nothing answers an
+empty value rather than panicking: `get` of a missing key is `-1`, and `kind(-1)`
+is `JSON_VALUE_NONE`.
+
+**Numbers are kept as they were written.** This is where it differs from
+JavaScript. `JSON.parse` turns every number into a double, so the program
+above would see `12345678901234567000` and `0.1`, and `JSON.stringify` would
+write those back. A `JsonDocument` keeps the text and reads it as what you
+ask for: `isI64` and `i64`, `isU64` and `u64` for an integer that fits,
+`f64` for the nearest double, and `numberText` for the digits themselves.
+Writing the document back writes the text, so an ID wider than any integer
+type, or a price with more digits than a double holds, comes out exactly as it
+came in.
+
+**Building.** `newNull`, `newBoolean`, `newString`, `newI64`, `newU64`,
+`newF64`, `newNumber` (any JSON number, as text), `newArray` and `newObject`
+make values; `push(array, v)` appends and `set(object, key, v)` replaces a
+member in place or appends a new one. A value lives in at most one container,
+so adding one that is already in a container, or a container to itself, is
+refused with `JSON_VALUE_ERR_ATTACHED` and changes nothing.
+
+**Writing.** `stringify(v)` answers minified text. `write(v, w)` writes into a
+`JsonWriter` you set up, so the buffer, its reuse and its error codes are the
+writer's, as in [`nish/json`](#nishjson).
+
+**Errors and limits are the tokenizer's.** `parse(bytes, off, len)` and
+`parseText(s)` answer the root, or a negative code: one of the
+[`nish/json-tokenizer`](#nishjson-tokenizer) codes, with the same `JsonLimits`
+and the byte in `doc.errorAt`. Nothing in the input can make it panic.
+
+**Duplicate keys are refused.** `{"a":1,"a":2}` is `JSON_VALUE_ERR_DUPLICATE`,
+because two programs that read different members of one text can disagree
+about what it says. If you need to accept what `JSON.parse` accepts, set
+`doc.duplicates = JSON_VALUE_DUPLICATE_LAST` before parsing, and you get its
+answer: one member, at the place of the first, with the value of the last.
+
+**One document, many parses.** Each `parse` replaces what the document held,
+and every handle from before it is gone. The document keeps its memory, so a
+server that keeps one document and parses each request into it stops
+allocating once it has seen its largest request. `clear()` empties it for
+building from scratch.
+
+Objects keep their members in order, and `get` looks a key up by scanning
+them, so walk a large object once with `keyAt` and `at` rather than calling
+`get` for each of many keys. Its security record is
+[docs/security/json.md](../../security/json.md).
 
 ## `nish/pair`
 
