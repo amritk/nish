@@ -1,0 +1,2 @@
+reject_thread_region_fresh_array_field.ts:49:5
+`bump` writes memory a task of `s` may read, before the scope joins

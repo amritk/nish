@@ -630,7 +630,42 @@ value, so nothing is boxed; `null` takes its type from context.
   (`reject_nullish_element`). A left operand that cannot be `null` (a scalar,
   or a nullable already narrowed to `T`) keeps Phase 0's refusal,
   `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) ``
-  (`reject_nullish`, `reject_nullish_nullable`). `?.` stays forbidden.
+  (`reject_nullish`, `reject_nullish_nullable`).
+- **An optional chain**: `a?.b?.c ?? d` reads each link only where the
+  receiver before its `?.` is not `null`, and answers `d` where one is, as
+  TypeScript does. A `?.` is allowed only in a chain whose value is the left
+  operand of a `??`, so `undefined`, which `a?.b` answers on its own, is never
+  a value: anywhere else, a `const`, an argument, a template hole, an
+  assignment target or behind a parenthesis that ends the chain, it is
+  `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` ``
+  (`reject_optional_chain`, `reject_optional_chain_paren`,
+  `reject_optional_chain_argument`, `reject_optional_chain_assign`,
+  `reject_optional_chain_template`). A link reads a field, a string's or an
+  array's `length`, or calls a method, and its receiver is read as `T`
+  (`optional_chain_field`, `optional_chain_order`,
+  `optional_chain_generic`, `tests/link/optional_chain_modules`). The chain's value is its last link's, typed with
+  the default as a `T | null` is above, so a number at the end works:
+  `o?.next?.id ?? -1` is an `i32`. Only a `?.` link skips a `null`: a plain
+  link after one reads what it is given, so `a?.next.value` with a nullable
+  `next` is `` Cannot read property `value` of `Node | null`; a link of a `?.` chain that may be `null` needs a `?.` of its own: `a?.next?.value` ``
+  (`reject_optional_chain_link_nullable`). `?.` on a receiver that cannot
+  be `null`, `this`, a narrowed local or a builtin namespace, is
+  `` `a` is never `null` here, so `?.` has nothing to skip: write `.` ``
+  (`reject_optional_chain_never_null`, `reject_optional_chain_narrowed`,
+  `reject_optional_chain_this`, `reject_optional_chain_namespace`). `?.[i]`
+  and `f?.()` stay refused (`reject_optional_chain_element`,
+  `reject_optional_call`), a chain that ends in an element read is the
+  element-read refusal above (`reject_optional_chain_element_last`), and one
+  that ends in `get` is
+  `` `h?.counts.get("a")` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers ``
+  (`reject_optional_chain_map_get`). Each `?.` lowers to an `icmp eq` against
+  `null` and a branch to `nullish.default`, which every link shares, and runs
+  nothing after a `null` link, an argument included. What a chain proves about
+  an index holds only where its links ran, so a read after the `??` keeps its
+  check (`optional_chain_bounds`). A call in a chain is held to every rule a
+  call is (`reject_optional_chain_lock`, `reject_optional_chain_channel`), and
+  a `Secret` either operand of the `??` makes is refused as one nobody owns
+  (`reject_optional_chain_secret`).
 - **Attributes**: a nullable parameter or return loses `nonnull` and
   `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
   rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
@@ -2444,10 +2479,27 @@ from the whole-program facts, and each rule is reported there:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `parallelMapInto` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``,
   naming the write, or the callee that makes it (`tests/cases/reject_par_shared_write`,
   `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
-  runtime's `nish_print`). A bounds check, an integer division and
-  `panic` are not writes: each prints and exits, and nothing runs again to see
-  memory. The instance performs every store itself, into slots the partitioner
-  has made disjoint, so a function that writes nothing cannot race.
+  runtime's `nish_print`). A bounds check, an integer division, the length
+  check of `new Array(n)` and `panic` are not writes: each prints and exits,
+  and nothing runs again to see memory. The instance performs every store
+  itself, into slots the partitioner has made disjoint, so a function that
+  writes nothing cannot race.
+- **A store into an array only this call reaches is not a shared write.** A
+  `const` the function binds to its own array literal or `new Array(n)` —
+  one whose elements are not stored inline — is *private* while every use of
+  it is an element, a store into a slot, `.length`, an array method, a
+  `for...of`, or an argument of a function that keeps nothing of it. Such a
+  function may fill it, `push` onto it, or hand it to a helper that writes
+  through its parameter, and still write nothing its caller can see: the
+  helper's writes through that parameter land in the private array
+  (`tests/link/thread_task_private`, whose body takes its element apart into a
+  scratch array). Returned, stored, pushed, bound to a second name (in any
+  declarator), named in an arrow, or handed to a function or a constructor that
+  keeps it, the array is shared, and so is every store into it
+  (`tests/cases/reject_par_private_kept`; the scoped-task twins below). What a
+  private array's slots hold is not private: a store into `rows[0][0]`, or a
+  helper that makes one, writes what `rows[0]` reaches
+  (`reject_par_private_helper_deep`).
 - **What the function allocates dies with its element.** A function may build
   strings, arrays and objects on the way to its result. They are given back
   after every element: the function gets an arena scope of its own, so each
@@ -2553,7 +2605,70 @@ export const main = (): i32 => {
     a store, `push` or `pop`, `Arena`, a call that writes through its
     argument, a task of another scope, whose join stores
     (`reject_thread_region_write`, `reject_thread_region_alias_write`,
-    `reject_thread_region_call_write`). A task argument read out of a
+    `reject_thread_region_call_write`). A constructor is a call: a `new`
+    whose constructor writes through an argument, directly or through a
+    constructor it calls, is
+    `` `new Bump` writes memory a task of `s` may read, before the scope joins: … ``
+    (`tests/cases/reject_thread_region_new_write`, and `_declarator` for the
+    second declarator of a statement, `_nested` for a constructor that calls
+    one, `_this` for one that hands `this` to its argument, which is a store
+    through that argument). A write counts however deep it lands in what the
+    argument reaches: a field of a field, a field of an element, through a
+    `const` that names one, a `for...of` variable over one, a helper, or a
+    method of what a field holds (`reject_thread_region_new_deep`,
+    `_new_element`, `_new_helper`, `_new_method`, `_call_deep`,
+    `_call_element`, `_call_alias`, `_call_loop`). Its stores into
+    the fresh object itself are not counted, so `new Point(3, 4)` is fine
+    there (`tests/link/thread_task_private`). An object a function or a
+    constructor made itself is its own memory, and a write into it counts
+    against nothing, until memory an argument reaches may have got into it:
+    stored into a field or an element at any depth, pushed, put there by a
+    method or a function it was handed to, kept by its constructor from an
+    argument, or any non-number value rooted at it — the object, a field or
+    an element of it at any depth, a constructor's `this` or `this.f` — used
+    as a value anywhere but a read, a comparison or an argument the checker
+    follows into its callee: the right side of an assignment, a `const`'s
+    initialiser, an element of an array literal, a property of an object
+    literal, `{ k: v }` or `{ k }`, an argument of `push`, of a `Map` or `Set`
+    method or of a call, an arm of a `?:`. Each position is refused for each
+    form of the value, a local, a field, an element and `this.f`
+    (`reject_thread_region_escape_<position>_<form>`, with positions
+    `assign`, `alias`, `array`, `object`, `shorthand`, `push`, `call`,
+    `ternary` and `element`, forms `local`, `member`, `index` and
+    `this_field`, and `_this` for the bare `this` in every position but
+    `shorthand`, which cannot name it). A `Map` or a `Set` keeps exactly what
+    its methods are handed — `set`'s key and value, `add`'s element,
+    `getOrInsert`'s from `nish/map` — so each is a store into the table, as a
+    `push` is (`reject_thread_region_map_value_param`, `_map_fused_value_param`,
+    `_map_own_subpath`, `_map_route_subpath`, `_map_route_value_param`,
+    `_set_own_subpath`). The iterable of a `for...of` is only read, and a
+    store through its loop variable is a store into the container
+    (`_walk_array_store`, `_walk_set_store`). An object literal
+    whose property is an argument's memory carries it however it is written
+    (`reject_thread_region_literal_object_param`, `_shorthand_param`,
+    `_array_object_param`, `_field_object_param`, `_push_object_param`,
+    `_new_object_param`, `_object_const_param`, `_object_method_param`). A
+    write below such a slot counts against the arguments
+    whose memory may be there, or against all of them when that cannot be
+    told (`reject_thread_region_new_alias_field`, `_alias_push`,
+    `_alias_element`, `_alias_const`, `_alias_helper`, `_alias_method`,
+    `_alias_item`, `_call_wrap`, `_fresh_field`, `_fresh_method_bind`,
+    `_fresh_attach`, `_fresh_push`, `_fresh_element`, `_fresh_array_field`,
+    `_fresh_nested`, `_fresh_bump_method`, `_fresh_const`, `_fresh_ctor_field`,
+    `_fresh_literal`, `_fresh_escape`, `_fresh_held`, `_fresh_held_temp`,
+    `_fresh_captured`, `_this_local`, `_this_ternary`,
+    `_this_literal`, `_this_object`). A constructor that keeps what it is
+    handed keeps it per argument, so one that keeps the caller's own array, or
+    pushes an argument's object onto an array it made, writes nothing of the
+    task's (`tests/link/thread_scope_region_fresh_object`,
+    `thread_scope_region_kept_own`), and a call that only writes its argument,
+    or returns an object of its own, keeps nothing of the caller's in it:
+    `w = build(h)` on a function that returns a fresh object, and
+    `c.reset(h.nums[0])` on a fresh counter followed by writes into `c`
+    (`thread_scope_region_own_handoff`). So a `Map` or a `Set` a function
+    makes and fills itself writes nothing of the task's
+    (`thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert`,
+    `thread_scope_region_set_add`). A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the
@@ -2616,7 +2731,19 @@ element's arena, which a task does not share, and each rule is reported at the
   is not a write the rule counts:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
-  `reject_mutex_task_unguarded` for a task that also writes through a guard). A task inside a task, or
+  `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A store into an array the task allocated and hands to nothing that keeps it
+  is not counted, as for a [parallel body](#data-parallelism-nishthreads): a
+  sieve may fill its own table, and a helper may fill the array it is handed
+  (`tests/link/thread_task_private`). Returned, stored into its argument's
+  field, pushed onto its argument's array, kept by a helper or a constructor,
+  or bound to a second name in a later declarator, the array is shared
+  (`tests/cases/reject_thread_task_private_returned`, `_field`, `_pushed`,
+  `_kept`, `_new`, `_declarator`). A constructor that hands `this` out can
+  lead to the array only by keeping it, so that route is `_new`'s. A store through a `?:` with the
+  array in one arm is a store into either (`_ternary`), and an element of a
+  private array of arrays is the array it holds
+  (`reject_thread_task_private_nested`). A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
   data-parallel call inside a task is refused by it too
@@ -2976,11 +3103,24 @@ sends and receives:
   between a channel and its scope (`reject_channel_spawn_handed`, and
   `reject_channel_spawn_handed_direct` for the channel as the argument itself).
   In the constructor of a class that holds a channel, directly or through a
-  field's class, `this` appears only as the base of a field store,
-  `this.f = ...`: a method called on it, an argument, a store elsewhere, a
-  second name or an array element would carry a send the count would not see
-  (`reject_channel_ctor_this`, `reject_channel_ctor_this_stored`,
-  `reject_channel_ctor_this_bound`, `reject_channel_ctor_this_array`).
+  field's class, `this` appears only as the base of its own field, `this.f`,
+  used in one of three ways: as the target of a store (`this.f = ...`,
+  `this.f += ...`); as any value, except as the callee of a call, when the field is a
+  number, a `boolean`, an enum, a string or an array of those, from which
+  nothing reaches a channel (`this.total = this.a + this.b`,
+  `this.width = this.name.length`, `this.items.push(x)`); or as the base of a
+  store into a field or element of what it holds, when that is no channel and
+  holds none (`this.span.lo = 1`; `tests/link/thread_channel_ctor_reads`). A
+  method called on it, an argument (to a function or to a constructor), a store
+  elsewhere, a second name (in any declarator), an array element, a read of the
+  channel or of an object that holds one, or `this` stored even into its own
+  field would carry a send the count would not see:
+  `` The constructor of a class that holds a channel uses `this` other than to read or set its own fields, `this.f`, where a send made through it could not be counted: … ``
+  (NL2479; `reject_channel_ctor_this`, `reject_channel_ctor_this_stored`,
+  `reject_channel_ctor_this_bound`, `reject_channel_ctor_this_array`,
+  `reject_channel_ctor_this_new`, `reject_channel_ctor_this_declarator`,
+  `reject_channel_ctor_this_self`, `reject_channel_ctor_this_deep_carrier`,
+  `reject_channel_ctor_this_send`, `reject_channel_ctor_this_carrier`).
 - **C5: a channel has one receiver** — one task, from a `spawn` outside any
   loop, or the parent in a later statement of the block that has the scope's
   block as one of its statements, never both — and inside a scope's block the
@@ -3548,7 +3688,8 @@ under [Semantics decisions](#semantics-decisions).
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
-| `== != ?. in instanceof typeof delete void await yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_await`, `reject_yield` |
+| `a?.b ?? d`, `a?.m() ?? d` | `a` a `T \| null`; a chain of `?.` and `.` links, field reads, `length` and method calls, that is the left operand of `??` | the last link's type, as `a ?? d` on a `T \| null` types it | `icmp eq` against `null` at each `?.` link's receiver, then `br` to `nullish.default`; `phi` at `nullish.end` | `optional_chain_field`, `optional_chain_order`, `optional_chain_generic`, `optional_chain_bounds`; `reject_optional_chain`, `reject_optional_chain_never_null` ([Nullable types](#nullable-types)) |
+| `== != ?.[ ?.() in instanceof typeof delete void await yield` | – | – | forbidden by the validator ([Forbidden constructs](#expressions-1)) | `reject_loose_equality`, `reject_optional_chain_element`, `reject_optional_call`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression`, `reject_await`, `reject_yield` |
 | `** **=` | – | – | not supported: `` Unsupported binary operator `**` `` / `` Unsupported assignment operator `**=` `` | `reject_op_exponent`, `reject_op_exponent_template`, `reject_exponent_assign_local`, `reject_cls_compound_operator` |
 | `+x` | – | – | not supported | `Unsupported unary operator` *(CLI only)* |
 
@@ -3654,9 +3795,9 @@ divide with overflow` is simply unreachable on an unsigned type.
   `process.platform`, `process.arch` (see [`process`](#process));
   `Arena.*` (see [`Arena`](#arena)). Any other bare
   identifier before a dot is `` Unknown identifier `os` `` *(CLI only)*.
-- Member access on a `T | null` value requires narrowing first
-  ([Nullable types](#nullable-types)); `?.` is forbidden
-  (`tests/cases/reject_optional_chain`).
+- Member access on a `T | null` value requires narrowing first, or a `?.`
+  in a chain that ends in `??` ([Nullable types](#nullable-types);
+  `tests/cases/reject_optional_chain`).
 
 ### Element access
 
@@ -7619,7 +7760,8 @@ fragment `tests/run.js` matches and the case that proves it.
 | `void expr` | `` `void` expressions are forbidden in Nish (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator`, `reject_in_newline` |
-| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain`, `reject_optional_call` |
+| `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain_element`, `reject_optional_call` |
+| `a?.b` outside a chain that is the left operand of `??` ([Nullable types](#nullable-types)) | `` `?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null` `` | `reject_optional_chain`, `reject_optional_chain_paren`, `reject_optional_chain_argument` |
 | `a ?? b`, unless `a` is a `T \| null` ([Nullable types](#nullable-types)) or a `Map.get` result ([`Map` and `Set`](#map-and-set)) | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |
 | comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |

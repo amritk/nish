@@ -1,5 +1,7 @@
 // A function with no store of its own inherits the shared write of a callee,
-// which is named by symbol.
+// which is named by symbol. `reset`'s write through its parameter lands in
+// `run`'s own array, which only `run` reaches, so the callee `run` inherits
+// its shared write from is `log`, whose `console.log` writes a stream.
 const fill = (xs: number[], v: number): void => {
   for (let i = 0; i < xs.length; i++) {
     xs[i] = v;

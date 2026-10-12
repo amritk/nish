@@ -56,7 +56,9 @@ export const main = (): i32 => {
 - **`f` writes nothing its caller can see** — no store through its argument,
   no `console.log` — and **answers a number, a `boolean` or an enum**. It may
   build strings and arrays on the way to its answer; they are freed after each
-  element, and the compiler warns that each element pays for that.
+  element, and the compiler warns that each element pays for that. An array it
+  makes itself, keeps in a `const` and hands to nothing that keeps it is its
+  own: it may fill it, `push` onto it, or pass it to a helper that writes it.
 - **A reduce is deterministic.** The array is folded in fixed blocks and the
   blocks are combined in order, so an `f64` sum is the same bits on one core or
   sixty-four. For that to be the fold you meant, `f` must be associative and
@@ -133,7 +135,13 @@ export const main = (): i32 => {
 - **Read the answers after the block.** A destination is a `const` bound to a
   fresh array (`[0]`, `new Array<i32>(n)`) that you only index; never pass it
   on. Inside the block, don't read a destination, and don't write memory a
-  task could read.
+  task could read — through a constructor either: `new Bump(counter)` whose
+  constructor writes `counter` is refused like a call that does. An object
+  you make in the block is yours to write, until anything a task reads may
+  have got into it: stored in a field or an element, pushed, added to a `Map`
+  or a `Set`, put in a literal, or handed to a function that keeps it. A field
+  or an element of it counts as much as the object itself. So a `Map` or a
+  `Set` you make there is yours to fill.
 - **A task is a named top-level function**, not an arrow, so a debugger or a
   profiler can name its thread. It follows the rules of a parallel `f` above:
   it writes nothing another thread can see (except through a `Mutex` or a
@@ -280,6 +288,10 @@ export const main = (): i32 => {
   `spawn`, as `new Pipe(ch, 10)` does. Don't bind it to another name, store it
   anywhere else or return it. `new Channel<i32>()` takes no capacity: a
   channel is unbounded.
+- **In the constructor of a class that holds a channel, use `this` only for its
+  own fields**: set them, update them, read the ones that are numbers, strings
+  or arrays of those, and store into what a channel-free field holds. Never
+  hand `this` on, call a method on it, or keep it anywhere.
 - **One scope and one receiver.** Only one scope's tasks use a channel, and it
   has exactly one receiver: a single task, or the parent after the scope's
   block. The parent sends only before the block.

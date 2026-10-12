@@ -1,0 +1,1 @@
+`h?.counts.get("a")` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers

@@ -1,0 +1,2 @@
+reject_thread_region_new_nested.ts:31:15
+`new Outer` writes memory a task of `s` may read, before the scope joins
