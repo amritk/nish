@@ -1,0 +1,14 @@
+PASS  RFC 9001 A.1 initial_secret
+PASS  RFC 9001 A.1 client_initial_secret
+PASS  RFC 9001 A.1 server_initial_secret
+PASS  RFC 9001 A.1 client key
+PASS  RFC 9001 A.1 client iv
+PASS  RFC 9001 A.1 client hp
+PASS  RFC 9001 A.1 server key, the Secret form and the plain one alike
+PASS  RFC 9001 A.1 server iv, the Secret form and the plain one alike
+PASS  RFC 9001 A.1 server hp, the Secret form and the plain one alike
+PASS  SHA-384 "tls13 derived" over the empty transcript hash
+PASS  SHA-384 key (32 bytes)
+PASS  SHA-384 iv
+PASS  SHA-384 finished (48 bytes)
+hkdf expand label secret: 13 passed, 0 failed, 0 skipped

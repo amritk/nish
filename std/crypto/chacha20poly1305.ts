@@ -22,6 +22,14 @@
  * array so that the words stay in registers, and, as RFC 8439 §3 suggests,
  * the state is built once per message and only its counter moves per block.
  *
+ * **What is wiped.** Every array a call fills from the key — the ChaCha20
+ * state, the keystream block, the Poly1305 one-time key, its `r` and the
+ * accumulator, and on open the tag computed for comparison — is zeroed with
+ * `wipe`'s volatile stores before the call returns, on the refusal path too,
+ * so that no optimiser can drop the zeroing of an array about to die. The
+ * caller's own key, and the words the rounds keep in registers, are not this
+ * module's to reach.
+ *
  * **Poly1305** keeps its accumulator and its key `r` as five limbs of 26 bits
  * each in `u64`, so limb `i` holds bits `26i` to `26i + 25` of a 130-bit
  * number. RFC 8439 §3 asks for constant-time arithmetic without saying how;
@@ -53,6 +61,8 @@
  * module's private functions share the importing program's flat symbol
  * namespace (`docs/wp26-stdlib.md` §3e).
  */
+
+import { wipe } from "nish:secret"
 
 /** The length of a ChaCha20 key in bytes (RFC 8439 §2.3). */
 export const CHACHA20_KEY_SIZE: i32 = 32
@@ -240,7 +250,8 @@ const chacha20Core = (state: u32[], out: u32[]): void => {
  * `dst[dstAt + i] = src[srcAt + i] ^ keystream` for `len` bytes, the keystream
  * running from `state`'s counter on, and the counter left one past the last
  * block used (RFC 8439 §2.4). The caller has checked every window and that
- * the counter does not wrap.
+ * the counter does not wrap. The last keystream block is wiped before it
+ * returns; `state` is the caller's to wipe.
  */
 const chacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[], dstAt: i32): void => {
   const keystream: u32[] = new Array<u32>(16)
@@ -266,6 +277,7 @@ const chacha20XorInto = (state: u32[], src: u8[], srcAt: i32, len: i32, dst: u8[
     }
     done = done + take
   }
+  wipe(keystream)
 }
 
 /**
@@ -329,7 +341,9 @@ export const chacha20Block = (key: u8[], counter: u32, nonce: u8[]): u8[] | null
     return null
   }
   const out: u8[] = new Array<u8>(CHACHA20_BLOCK_SIZE)
-  chacha20XorInto(chacha20State(key, counter, nonce, 0), out, 0, CHACHA20_BLOCK_SIZE, out, 0)
+  const state: u32[] = chacha20State(key, counter, nonce, 0)
+  chacha20XorInto(state, out, 0, CHACHA20_BLOCK_SIZE, out, 0)
+  wipe(state)
   return out
 }
 
@@ -350,7 +364,9 @@ export const chacha20 = (key: u8[], counter: u32, nonce: u8[], data: u8[]): u8[]
     return null
   }
   const out: u8[] = new Array<u8>(len)
-  chacha20XorInto(chacha20State(key, counter, nonce, 0), data, 0, len, out, 0)
+  const state: u32[] = chacha20State(key, counter, nonce, 0)
+  chacha20XorInto(state, data, 0, len, out, 0)
+  wipe(state)
   return out
 }
 
@@ -566,6 +582,8 @@ export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
   poly1305Absorb(h, r, msg, 0, toI32(msg.length), false)
   const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
   poly1305Finish(h, key, tag)
+  wipe(h)
+  wipe(r)
   return tag
 }
 
@@ -579,7 +597,10 @@ export const poly1305KeyGen = (key: u8[], nonce: u8[]): u8[] | null => {
   if (toI32(key.length) !== CHACHA20_KEY_SIZE || toI32(nonce.length) !== CHACHA20POLY1305_NONCE_SIZE) {
     return null
   }
-  return chacha20Poly1305Setup(chacha20State(key, 0, nonce, 0))
+  const state: u32[] = chacha20State(key, 0, nonce, 0)
+  const polyKey: u8[] = chacha20Poly1305Setup(state)
+  wipe(state)
+  return polyKey
 }
 
 /**
@@ -602,6 +623,8 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i
   poly1305Block(h, r, lengths, 0, toU64(POLY1305_HIGH_BIT))
   const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
   poly1305Finish(h, polyKey, tag)
+  wipe(h)
+  wipe(r)
   return tag
 }
 
@@ -664,6 +687,8 @@ export const chacha20Poly1305Seal = (key: u8[], nonce: u8[], aad: u8[], plaintex
   for (let i: i32 = 0; i < toI32(tag.length); i++) {
     sealed[len + i] = tag[i]
   }
+  wipe(state)
+  wipe(polyKey)
   return sealed
 }
 
@@ -694,11 +719,16 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
   const tag: u8[] = chacha20Poly1305Tag(polyKey, aad, sealed, 0, len)
   // The one branch on the comparison, and it is on the answer the caller is
   // about to learn anyway.
-  if (chacha20Poly1305TagMatch(tag, sealed, len) === 0) {
+  const match: u32 = chacha20Poly1305TagMatch(tag, sealed, len)
+  wipe(polyKey)
+  wipe(tag)
+  if (match === 0) {
+    wipe(state)
     return null
   }
   const plaintext: u8[] = new Array<u8>(len)
   chacha20XorInto(state, sealed, 0, len, plaintext, 0)
+  wipe(state)
   return plaintext
 }
 
@@ -714,6 +744,8 @@ export const chacha20HeaderMask = (hpKey: u8[], sample: u8[]): u8[] | null => {
     return null
   }
   const mask: u8[] = new Array<u8>(CHACHA20_HEADER_MASK_SIZE)
-  chacha20XorInto(chacha20State(hpKey, chacha20Word(sample, 0), sample, 4), mask, 0, 5, mask, 0)
+  const state: u32[] = chacha20State(hpKey, chacha20Word(sample, 0), sample, 4)
+  chacha20XorInto(state, mask, 0, 5, mask, 0)
+  wipe(state)
   return mask
 }

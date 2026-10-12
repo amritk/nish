@@ -95,6 +95,8 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 
+import { wipe } from "nish:secret"
+
 /** The AES block, in bytes. */
 export const AES_BLOCK: i32 = 16
 /** GCM's tag, in bytes: this module makes and accepts only the full 128 bits. */
@@ -113,9 +115,13 @@ const AES_BATCH: i32 = 64
  * everywhere (`aesKeyUsable`), and one whose H is zero opens nothing
  * (`aesGcmOpen`). On the runtime kernels' path GHASH takes H and its powers
  * from `roundKeys`, while `ghashLengths` and a non-12-byte IV's J0 take it
- * from `hHi:hLo`; `aesKey` writes both from one schedule, so they agree. A key
+ * from `h`; `aesKey` writes both from one schedule, so they agree. A key
  * edited so that they disagree is outside the contract, and what it seals
  * then depends on which path the process runs.
+ *
+ * Both are secret. A holder done with a key hands it to `aesKeyWipe`, whose
+ * volatile stores zero all of `roundKeys` (the kernels' tail of H's powers
+ * included) and `h`, and stand however dead the key is about to be.
  */
 export class AesKey {
   /** Nr: 10 for AES-128, 14 for AES-256. */
@@ -127,15 +133,31 @@ export class AesKey {
    * the same words hold the kernels' layout instead, `runtime/runtime-aes.c`'s.
    */
   roundKeys: u64[]
-  /** H as a big-endian 128-bit number, high half. */
-  hHi: u64 = 0
-  /** H, low half. */
-  hLo: u64 = 0
+  /**
+   * H as a big-endian 128-bit number, two words: `h[0]` the high half and
+   * `h[1]` the low. An array rather than two scalar fields, so that
+   * `aesKeyWipe`'s volatile wipe reaches it.
+   */
+  h: u64[]
 
   constructor(rounds: i32, roundKeys: u64[]) {
     this.rounds = rounds
     this.roundKeys = roundKeys
+    this.h = new Array<u64>(2)
   }
+}
+
+/**
+ * Zeroes everything secret `key` holds — every word of `roundKeys`, the
+ * runtime kernels' powers of H after the schedule included, and `h` — with
+ * `wipe`'s volatile stores, which no optimiser removes however dead the key
+ * is about to be. `rounds` is not secret and stays. A wiped key seals under
+ * an all-zero schedule and, its H being zero, opens nothing (`aesGcmOpen`);
+ * `aesKeyInto` installs a new key into it.
+ */
+export const aesKeyWipe = (key: AesKey): void => {
+  wipe(key.roundKeys)
+  wipe(key.h)
 }
 
 /** A 16-bit pattern repeated into each of a word's four 16-bit lanes. */
@@ -582,6 +604,10 @@ const aesScheduleInto = (key: u8[], rounds: i32, rk: u64[]): void => {
       }
     }
   }
+  // The key's words, the last round key's bits and its bytes, all secret.
+  wipe(w)
+  wipe(q)
+  wipe(buf)
 }
 
 /**
@@ -623,23 +649,25 @@ const aesCopyPrefix = (dst: u8[], src: u8[], count: i32): void => {
 }
 
 /**
- * Whether `key` has the shape `aesKey` makes: 10 or 14 rounds and the
- * `(rounds + 1) * 8` round-key words the cipher reads. A key of another shape
- * could only have been built or edited by hand, and would index past its round
- * keys and panic, so every entry point answers `null` for it instead. The
- * branch is on the shape, which is not secret.
+ * Whether `key` has the shape `aesKey` makes: 10 or 14 rounds, the
+ * `(rounds + 1) * 8` round-key words the cipher reads and a two-word H. A key
+ * of another shape could only have been built or edited by hand, and would
+ * index past its arrays and panic, so every entry point answers `null` for it
+ * instead. The branch is on the shape, which is not secret.
  */
 const aesKeyUsable = (key: AesKey): boolean => {
   const rounds: i32 = key.rounds
   const words: i32 = (rounds + 1) * 8
-  return (rounds === 10 || rounds === 14) && toI32(key.roundKeys.length) === words
+  return (
+    (rounds === 10 || rounds === 14) && toI32(key.roundKeys.length) === words && toI32(key.h.length) === 2
+  )
 }
 
 /**
  * The single-block seam: `dst[0 .. 16) = E(K, src[0 .. 16))` under the round
  * keys `rk`. The block goes through the first lane of a batch whose other
- * three are zeros and not read, and the batch is zeroed before it is
- * released.
+ * three are zeros and not read, and the batch and the bitsliced state are
+ * wiped before they are released: the block may be H or E(K, J0).
  *
  * Its one caller, `aesEncryptOne`, has checked that `rk` is a schedule of
  * `rounds` rounds and that `src` and `dst` each hold 16 bytes; the compiler
@@ -647,12 +675,12 @@ const aesKeyUsable = (key: AesKey): boolean => {
  */
 const aesBlockInto = (rk: u64[], rounds: i32, src: u8[], dst: u8[]): void => {
   const buf: u8[] = new Array<u8>(AES_BATCH)
+  const q: u64[] = new Array<u64>(8)
   aesCopyPrefix(buf, src, AES_BLOCK)
-  aesEncryptBatch(rk, rounds, buf, new Array<u64>(8))
+  aesEncryptBatch(rk, rounds, buf, q)
   aesCopyPrefix(dst, buf, AES_BLOCK)
-  for (let i: i32 = 0; i < toI32(buf.length); i++) {
-    buf[i] = 0
-  }
+  wipe(buf)
+  wipe(q)
 }
 
 /**
@@ -692,16 +720,20 @@ export const aesKey = (key: u8[]): AesKey | null => {
  * 0^128) for GCM, written into `out`, whose `roundKeys` must already be the
  * `8 * (rounds + 1)` words that key length needs (88 or 120). It answers
  * whether it did; a key of another length, or a schedule array of the wrong
- * size for it, answers `false` and leaves `out` as it was.
+ * size for it (or an `h` that is not two words), answers `false` and leaves
+ * `out` as it was.
  *
  * `aesKey` makes a fresh `AesKey` and stores its schedule into it, which no
  * arena scope may be put around; this stores numbers only, so a caller that
  * keeps one `AesKey` per connection installs every key inside a `using a =
  * arena()` block and leaves the arena where it was. The schedule and H are
- * secret: the caller wipes `out` when it is done with the key. The schedule
- * is written straight into `out.roundKeys`, with no working copy, and the
- * blocks H passes through are zeroed before they are released, by stores that
- * stand no better than `aesKey`'s own temporaries do.
+ * secret: the caller hands `out` to `aesKeyWipe` when it is done with the
+ * key. The schedule is written straight into `out.roundKeys`, and the
+ * working copies the bitsliced schedule and the block H passes through are
+ * wiped with `wipe`'s volatile stores before they are released. On a CPU
+ * that runs the runtime's kernels (the seams, in the module docs) those
+ * copies are the kernels' own, in `runtime/runtime-aes.c`, and what they
+ * leave in vector registers no wipe here reaches.
  *
  * `aesKey` makes its key through this, so this is the one call of
  * `aesScheduleInto`, and the checks its contract needs are made here.
@@ -713,18 +745,17 @@ export const aesKeyInto = (key: u8[], out: AesKey): boolean => {
   }
   const rounds: i32 = length === 16 ? 10 : 14
   const roundKeys: u64[] = out.roundKeys
-  if (toI32(roundKeys.length) !== (rounds + 1) * 8) {
+  const hash: u64[] = out.h
+  if (toI32(roundKeys.length) !== (rounds + 1) * 8 || toI32(hash.length) !== 2) {
     return false
   }
   aesScheduleInto(key, rounds, roundKeys)
   out.rounds = rounds
   const h: u8[] = new Array<u8>(AES_BLOCK)
   aesEncryptOne(out, new Array<u8>(AES_BLOCK), h)
-  out.hHi = aesLoad64(h, 0, 8)
-  out.hLo = aesLoad64(h, 8, 16)
-  for (let i: i32 = 0; i < toI32(h.length); i++) {
-    h[i] = 0
-  }
+  hash[0] = aesLoad64(h, 0, 8)
+  hash[1] = aesLoad64(h, 8, 16)
+  wipe(h)
   return true
 }
 
@@ -897,14 +928,14 @@ const ghashUpdate = (y: u64[], key: AesKey, data: u8[], length: i32): void => {
   if (toI32(y.length) < 2 || length < 0 || length > toI32(data.length) || !aesKeyUsable(key)) {
     return
   }
-  ghashBlocksInto(y, key.hHi, key.hLo, key.roundKeys, data, length)
+  ghashBlocksInto(y, key.h[0], key.h[1], key.roundKeys, data, length)
 }
 
 /** The last GHASH block: the AAD's and the ciphertext's lengths in bits, 64 bits each. */
 const ghashLengths = (y: u64[], key: AesKey, aadLength: i32, textLength: i32): void => {
   y[0] = y[0] ^ (toU64(aadLength) << toU64(3))
   y[1] = y[1] ^ (toU64(textLength) << toU64(3))
-  ghashMultiply(y, key.hHi, key.hLo)
+  ghashMultiply(y, key.h[0], key.h[1])
 }
 
 /**
@@ -1089,7 +1120,7 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
   // authenticate any ciphertext and AAD. Only a key built or edited by hand
   // has it (for one from `aesKey` the chance is 2^-128), and such a key opens
   // nothing. H is secret, so this is folded into the mask, not branched on.
-  const hashKeySet: u64 = ~ctEq(key.hHi | key.hLo, toU64(0))
+  const hashKeySet: u64 = ~ctEq(key.h[0] | key.h[1], toU64(0))
   if ((same & hashKeySet) === toU64(0)) {
     return null
   }
