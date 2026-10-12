@@ -515,16 +515,17 @@ const checkFromBytes = (ctx: CheckContext, call: Node, args: Node, scope: Scope)
       `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`
     )
   }
-  let i = 1
-  while (i < args.children.length) {
-    const end = args.children[i]
-    const type = checkExpression(ctx, end, scope, ctx.numberType())
-    if (type !== T_ERROR && !isNumeric(type)) {
-      ctx.error(end, `\`${name}\` expects a number index, got ${ctx.table.typeName(type)}`)
-    }
-    i = i + 1
-  }
+  checkFromBytesEnd(ctx, args.children[1], scope)
+  checkFromBytesEnd(ctx, args.children[2], scope)
   return T_STRING
+}
+
+/** One end of `String.fromBytes`'s range: a number, as `fromCharCode`'s argument is. */
+const checkFromBytesEnd = (ctx: CheckContext, end: Node, scope: Scope): void => {
+  const type = checkExpression(ctx, end, scope, ctx.numberType())
+  if (type !== T_ERROR && !isNumeric(type)) {
+    ctx.error(end, `\`String.fromBytes\` expects a number index, got ${ctx.table.typeName(type)}`)
+  }
 }
 
 const checkConsole = (
