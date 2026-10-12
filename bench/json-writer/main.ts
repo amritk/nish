@@ -1,6 +1,7 @@
 // WP34 N11: `JsonWriter` writing the TechEmpower `/json` body,
 // `{"message":"…"}`, into one reused buffer, `count` times (default
-// 2,000,000; `process.argv[1]` overrides it). `bench/json-writer/run.mjs`
+// 2,000,000; `process.argv[1]` overrides it), minified or, with `pretty` as
+// `process.argv[2]`, indented by two spaces. `bench/json-writer/run.mjs`
 // builds and times it; this prints the checksum and the loop's own time.
 //
 // The message is one of 64 built before the clock starts, picked by the
@@ -18,6 +19,9 @@ export const main = (): number => {
   }
   const out = new Array<u8>(128)
   const w = new JsonWriter(out, 0)
+  if (toI32(process.argv.length) > 2 && process.argv[2] === "pretty") {
+    w.setIndent(2)
+  }
   let sum: u32 = 0
   const factor: u32 = 31
   const t0: i64 = monotonicNanos()

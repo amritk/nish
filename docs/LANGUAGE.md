@@ -2656,9 +2656,33 @@ export const main = (): i32 => {
     `getOrInsert`'s from `nish/map` — so each is a store into the table, as a
     `push` is (`reject_thread_region_map_value_param`, `_map_fused_value_param`,
     `_map_own_subpath`, `_map_route_subpath`, `_map_route_value_param`,
-    `_set_own_subpath`). The iterable of a `for...of` is only read, and a
-    store through its loop variable is a store into the container
-    (`_walk_array_store`, `_walk_set_store`). An object literal
+    `_set_own_subpath`), and its methods write only the table's own storage,
+    never what it holds. What a container gives back is its element: what
+    `get` or `getOrInsert` answers, and the `const` variable of a `for...of`
+    over an array, a `Set`, or a `Map`'s `keys()` or `values()`, is memory
+    below that container, so a write through it counts against what was
+    stored into the container, and a store through it is a store into the
+    container (`_readback_get`, `_readback_get_or_insert`,
+    `_readback_nested`, `_readback_store_alias`, `_table_param_store`,
+    `_walk_array_param`, `_walk_array_twice`, `_walk_values`, `_walk_keys`,
+    `_walk_set_param`, `_walk_array_store`, `_walk_set_store`). So a call
+    that answers a table or what one holds — `getOrInsert(m, …)`, `m.set(…)`,
+    `s.add(…)` — is a value rooted at that table, and escapes it wherever a
+    name would (`reject_thread_region_call_escape_<position>_<form>`, with
+    positions `push`, `field`, `index`, `array` and `object`, forms `goi`,
+    `set_chain` and `add_chain`, and `_ternary_goi`, `_nullish_get`,
+    `_let_init_goi`, `_let_assign_goi`, `_table_arg_set_chain`). Only a call
+    that keeps what it is handed stores it — `set` its key and value, `add`
+    its element, `getOrInsert` its key and default — so a lookup, `has`,
+    `get` or `delete`, keeps nothing (`reject_thread_region_table_key_set`,
+    `_table_key_get_or_insert`); and a number, a string or a `boolean` read
+    back through `| undefined`, as `m.get(k) ?? 0`, names no memory. A
+    lookup in an argument's table, `has` or `get`, reads it and writes
+    nothing (`tests/link/thread_scope_region_param_lookup`). A `?:`
+    or a `??` stored somewhere may be either of its sides. Two values may
+    be anything where they are written through: an `x ?? y`, and the
+    variable of a walk of anything else —
+    a `Channel`'s messages are another task's. An object literal
     whose property is an argument's memory carries it however it is written
     (`reject_thread_region_literal_object_param`, `_shorthand_param`,
     `_array_object_param`, `_field_object_param`, `_push_object_param`,
@@ -2683,7 +2707,13 @@ export const main = (): i32 => {
     (`thread_scope_region_own_handoff`). So a `Map` or a `Set` a function
     makes and fills itself writes nothing of the task's
     (`thread_scope_region_map_set`, `thread_scope_region_map_get_or_insert`,
-    `thread_scope_region_set_add`). A task argument read out of a
+    `thread_scope_region_set_add`), and so does one that walks, memoises
+    or indexes a table of its own, or writes through what it reads back out
+    of a container of fresh objects it made
+    (`thread_scope_region_own_tables`, `thread_scope_region_read_back`). A
+    map handed to `set` as a named `const` escapes, as any own object handed
+    to a table does, so a write into it counts against every argument: build
+    a nested table from what `get` reads back instead. A task argument read out of a
     variable — `s.spawn(f, ps[0], out, 0)`, or either arm of a `?:` or `??` —
     hands that variable on, so a store into its elements or fields before the
     join is refused too: a record element is the address of its slot, and the
@@ -6279,7 +6309,11 @@ export const main = (): i32 => {
   get the same code of their own, so it recurses as the data does
   (`tests/link/std_json_typed`, whose `main.ll` is the golden of the code
   written for a one-field class;
-  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)).
+  [IR_COOKBOOK.md](IR_COOKBOOK.md#typed-json)). Because the encoding is calls
+  of the writer's methods, it is written in the writer's modes: a writer set
+  with `setIndent(2)` encodes what `JSON.stringify(v, null, 2)` writes, and a
+  `setStrict(true)` writer fails a NaN or infinite `f64` field with
+  `JSON_WRITE_NON_FINITE` (`tests/link/std_json_writer`).
 - **What a field may be.** `T` is a declared class, and every field of every
   class the call reaches is one of these; anything else is refused at the
   call's argument, naming the class and the field:
