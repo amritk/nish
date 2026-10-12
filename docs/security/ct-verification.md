@@ -17,6 +17,8 @@ test now pins each property.
 - `tests/cases/ct_asm_refused`: the functions written to fail.
 - `tests/ct-timing.js` and `tests/ct-timing/dudect.c` / `dudect.h`: the driver
   it generates, the classes, the t-tests, the threshold and the exit codes.
+- Since WP38 S5 (at `74c2716`): `tests/ct-asm-runtime.js`, its reading of
+  `runtime/runtime-aes.c`, and the negative case `tests/simd/aes-leaky.c`.
 - Read, not changed (outside this stage): the `ct_asm` block of
   `tests/run.js` (lines 3346–3530 at the base), `.github/workflows/ci.yml` and
   `.github/workflows/ct-timing.yml`, and every other `tests/cases/ct_asm_*`
@@ -85,6 +87,8 @@ a pass nobody earned, so the model is held to err towards refusing.
 | CT-14 | Low | `tests/run.js:3418` | The check's name says "refused for a conditional branch" for every `expect=` other than `load`, so the new `call` and `latency` seeds are named as branches in the output (the assertion itself is right). | Fixed after this stage: each check is named by the `promise` `ctSpecs` gives its spec in `tests/ct-asm.js`: the kind it expects, and the `via=` callee where there is one, both from the `EXPECT_KINDS` table `ctSpecs` also reads its kinds from, so a kind it accepts always has a name. |
 | CT-15 | Low | `tests/run.js:3376` | A clang without the aarch64 target turns that half of the check into counted skips; `npm test` then exits 0 with a "Note", not the DEGRADED banner, since every tool is present. CI's clang has both targets today, but nothing requires it. | Fixed after this stage: `ct_asm: clang targets <target>` is a check for each of the two targets, and fails with clang's answer when one is missing; the target's fixtures are not tried again. Shown with a `clang` that refuses `--target=aarch64*`: 9 skips and exit 0 before, one failure and exit 1 after. The wasm32 compile, which reads no branches, is still a counted skip. |
 | CT-16 | Low | `tests/run.js:3369` | The checker reads `clang -O2` for the baseline CPU only. A program built with another profile or `-march` is not what was read, and the ISA extensions behind CT-5 and CT-6 never reach it. | Open, documented here. |
+| CT-17 | Low | `tests/ct-asm.js:653`, `:659`, `:666`, `:859` (at `e3d4da1`) | Found reading vector code for WP38 S5 ([below](#the-runtimes-aes-kernels)). Five instructions that read their destination were read as overwriting it, so a secret in the destination came out public: `pshufb`, which the `v?pshuf` overwrite pattern took with `pshufd`; the SSE forms of `shufps` and `palignr`, in the three-operand overwrite list; `movhlps` and `movlhps`, taken as moves; and aarch64's `aese` and `aesd`, which XOR their destination with the key before SubBytes. A `pshufb` by a public mask, the byte reversal every GHASH implementation runs, laundered the block it reversed. No Nish fixture compiles to any of them. | Fixed: each is read as reading its destination; a corner each in `AUDIT_CORNERS`, which fail on the base. |
+| CT-18 | Low | `tests/ct-asm.js:793`, `:865` (at `a7cfdb7`) | Found in review of WP38 S5. The SSE4.2 string compares (`pcmpistri`, `pcmpestri`, `pcmpistrm`, `pcmpestrm` and their `v` forms) write CF, ZF, SF and OF from their operands, and a register they do not name: an index into `%ecx` (the `i` forms) or a mask into `%xmm0` (the `m` forms). `preciseFlags`' list of instructions that leave the flags alone took them in with every other `p…` instruction, so a `jc` or `setc` after one on a secret read as public; and in either mode the implicit `%ecx` or `%xmm0` kept the taint it had before. The kernels compile to none of them. | Fixed: they are left out of the keep list, and the step writes `%ecx` or `%xmm0` and the flags with their operands' taint (with `%eax` and `%edx` for the `e` forms); six `AUDIT_CORNERS` rows that each fail before the fix -- the flags under `preciseFlags`, the `%ecx` and `%xmm0` writes, an `e` form whose only secret is the length in `%eax`, and a secret block read from memory -- each also shown to fail with its own arm of the step deleted where another row does not cover it, and a seventh, a compare on public operands, that must pass. |
 
 No fixture failed the stricter checker: every function in every
 `tests/cases/ct_asm_*` passes on both targets after CT-2 to CT-11, so none of
@@ -293,6 +297,79 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
 
+## The runtime's AES kernels
+
+WP38 S5 adds C to the constant-time surface: `runtime/runtime-aes.c` (anchors
+below at `74c2716`), AES-GCM on AES-NI and PCLMULQDQ or on the ARMv8 AES and
+PMULL instructions, which the compiler is to call in place of four functions
+of `std/crypto/aes.ts`. Unlike every Nish fixture it loops over `length`, so
+`tests/ct-asm.js`, which refuses every conditional branch, cannot read it.
+`tests/ct-asm-runtime.js` does, on the same taint model: the `Taint` state and
+the per-instruction steps are ct-asm.js's own, so a corner one learns the other
+knows. It compiles the file with `clang -O2 -S -ffreestanding` for x86-64 and
+aarch64 and reads each of `nish_aes_schedule` (`:288`), `nish_aes_block`
+(`:323`), `nish_aes_ctr` (`:327`) and `nish_aes_ghash` (`:361`), with every
+array's elements secret and, for GHASH, `hHi` and `hLo`; `rounds`, `length`
+and the array headers are public. It refuses a conditional branch whose flags
+or tested register a secret reaches, and, as ct-asm.js does, a load or store at
+a secret address, a call, and a divide of a secret. Two things are added for
+code with loops:
+
+- **Control flow.** Each label keeps the join of every state that reaches it
+  (a register secret on any edge is secret; a stack place the edges disagree
+  on is unplaced), and the body is walked until no label changes, so what a
+  back edge carries to a loop's head is seen there. The violations are the
+  last walk's.
+- **The flags per instruction.** ct-asm.js's flags only gain a secret, which
+  would refuse every loop once a block had been XORed. Here `cmp`, `test`,
+  `add`, `sub`, `and`, `or`, `xor`, `neg`, `adc`, `sbb`, `ptest` and
+  `(u)comis` set the flags to their own taint, moves and the SSE, AES-NI and
+  PCLMULQDQ instructions but `ptest` and the string compares
+  (`pcmp[ei]str[im]`, CT-18) leave them, and everything else, the string
+  compares among them, still only adds. On aarch64 only compares and `s`-suffixed instructions write the
+  flags, all four at once.
+
+Each kernel must also show at least one conditional branch, all public, so a
+listing with the loops gone cannot pass vacuously, and the functions the unit
+exports (its `.globl` symbols) must be exactly the four kernels and
+`nish_aes_hw`, so a fifth kernel cannot be added unread. The model's corners for
+these additions (a public loop bound; a data byte as the bound; a secret the
+back edge brings to an index; a forward jump past the code that cleared a
+secret; a vector instruction between a compare and its branch; a shift of a
+secret before a branch; `cbz` on a secret; GHASH's H as a bound) run when the
+module loads. `tests/simd/aes-leaky.c` is the negative case in real compiler
+output: `nish_aes_leaky_table` indexes an S-box by a data byte and
+`nish_aes_leaky_branch` stops at the first zero byte, and each must be refused
+for its kind on both targets. Mutating `runtime-aes.c` itself showed the same:
+a loop bound on a keystream byte in `nish_aes_ctr` was refused as a branch,
+and a load from `rk` at an offset a schedule word picked as a load, on both
+targets.
+
+**The one dispatch.** `nish_aes_hw` (`:446`) is not read, and is the one
+branch in the unit on anything but a loop bound: on its stored answer, then,
+on the first call only, on `NISH_AES` (`getenv`, `:451`) and on the CPU's
+feature bits (`nish_aes_cpu`: CPUID leaf 1's AES, PCLMULQDQ and SSSE3 bits at
+`:412`, AT_HWCAP's AES and PMULL at `:423`). Neither depends on a key or data,
+and the answer is fixed for the life of the process, so whether a key's
+operations run the kernel or the bitsliced Nish code is a property of the
+machine and its environment, not of the key. `NISH_AES=soft` pins the
+bitsliced path, whose constant time is the Nish code's own (above).
+
+**What it does not model.** The instructions' own timing: AESENC,
+AESENCLAST, AESKEYGENASSIST and PCLMULQDQ, and AESE, AESMC and PMULL, are
+taken as data-independent. Intel lists them among the instructions whose
+latency does not depend on their data (its data operand independent timing
+list), and Arm among those FEAT_DIT makes so; the kernels do not set
+PSTATE.DIT, so on aarch64 that is the cores' behaviour rather than a
+guarantee, and a core where it does not hold is outside this check. Microcode,
+frequency effects of the AES units, and the cost of the resolver's first call,
+which reads the environment and the CPU but nothing secret. A build other than
+`clang -O2` for the baseline CPU (CT-16): the `speed` profile's `-O3` with LTO
+and the `debug` profile's `-O0` are not what was read, and `-O0` keeps every
+value on the stack. And what the register allocator spills: the stack model
+follows a spill and its reload, but a spill is a copy of a secret no wipe
+reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
+
 ## Properties verified
 
 | property | pinned by |
@@ -301,12 +378,17 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
 | No seed can be deleted, or its `expect=`/`via=` loosened, silently | `SEEDED` in `tests/ct-asm.js`, checked when the module loads |
 | A followed call's leak is found inside the callee, not in inlined code | `via=leakyRow` on `callsLeak` and `tailLeak`; `CALL_CORNERS` `leakVia` / `leakElsewhere` |
 | A chain of calls deeper than `CALL_DEPTH` is refused, not followed for ever | `CALL_CORNERS` `deep` |
-| Each gap in CT-2 to CT-10 is refused, and the shapes beside it still pass | `AUDIT_CORNERS` (19 rows), checked when the module loads |
+| Each gap in CT-2 to CT-10, CT-17 and CT-18 is refused, and the shapes beside it still pass | `AUDIT_CORNERS` (31 rows: 19 for CT-2 to CT-10, 5 for CT-17, 7 for CT-18), checked when the module loads |
 | A spec that makes nothing secret is refused | `seedMisses` in `tests/ct-asm.js` |
 | No existing fixture leaks by the stricter rules | every `ct_asm: … no branch, call, secret-indexed access or secret-dependent latency` check |
 | Each refusal check is named for the kind it expects (CT-14) | `EXPECT_KINDS` and each spec's `promise` in `tests/ct-asm.js` |
 | Both targets are read, or the run fails (CT-15) | `ct_asm: clang targets x86-64 / aarch64` |
 | The timing harness can see a leak it is shown | the control in `tests/ct-timing.js`; a quiet control is exit 2 |
+| Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, the `kernel` promise "no branch on a secret, call, secret-indexed access or secret-dependent latency" (8 checks) |
+| The unit exports no function the reading leaves out, so a fifth kernel cannot go unread | the same, the `exports` promise "exports exactly the kernels read here and nish_aes_hw" (2 checks); and `exportMisses` in `tests/ct-asm-runtime.js`, which runs at load and requires a sixth `.globl` to be named unread and a missing kernel to be named missing |
+| The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the `leak` promise `refused for ${r.expect}` (4 checks, `tests/simd/aes-leaky.c`) |
+| The runtime check's joins and per-instruction flags read loops as they run | `CORNERS` in `tests/ct-asm-runtime.js`, checked when the module loads |
+| A destination-reading vector instruction keeps its destination's taint (CT-17) | `AUDIT_CORNERS` in `tests/ct-asm.js` |
 
 ## Doc corrections for the security-policy stage
 

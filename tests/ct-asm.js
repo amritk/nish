@@ -182,9 +182,11 @@ const LISTINGS = new WeakMap()
  * The instruction lines of `symbol` in the lines of an ELF `.s` for `target`, from its label to the
  * `.Lfunc_end` LLVM writes after it: no directives, labels or comments. `null`
  * when the symbol is not there, which the caller treats as a failure — a check
- * that read nothing has proved nothing.
+ * that read nothing has proved nothing. With `labels`, each local label is
+ * kept as its own line (`.LBB0_3:`), for tests/ct-asm-runtime.js, which reads
+ * the control flow between them.
  */
-export const functionBody = (lines, symbol, target) => {
+export const functionBody = (lines, symbol, target, { labels = false } = {}) => {
   const start = lines.findIndex((line) => line.startsWith(`${symbol}:`))
   if (start < 0) {
     return null
@@ -195,6 +197,10 @@ export const functionBody = (lines, symbol, target) => {
       break
     }
     const text = lines[i].replace(target.comment, "").trim()
+    if (labels && /^\.L\w+:$/.test(text)) {
+      body.push(text)
+      continue
+    }
     if (text.length === 0 || text.startsWith(".") || text.endsWith(":")) {
       continue
     }
@@ -412,8 +418,10 @@ const CALL_DEPTH = 8
  * and which stack offset it holds, if it holds a stack address. `flags` is the condition register, as a register of
  * its own. `sp` is the stack pointer's offset from its value on entry, or
  * `null` once an instruction moves it by something this cannot follow.
+ * Exported for tests/ct-asm-runtime.js, which runs the same steps over code
+ * with loops and joins these states where control flow meets.
  */
-class Taint {
+export class Taint {
   constructor(spec, target) {
     this.target = target
     this.secret = new Set()
@@ -426,6 +434,8 @@ class Taint {
     this.listing = null
     this.depth = 0
     this.found = []
+    this.preciseFlags = spec.preciseFlags === true
+    this.mnemonic = ""
     // `ctSpecs` has already refused a secret that names no parameter or one
     // past the registers, so every index here is a register.
     for (const index of spec.secretArgs) {
@@ -493,15 +503,95 @@ class Taint {
   }
 
   /**
-   * The flags only ever gain a secret: an instruction that leaves them alone
+   * By default the flags only ever gain a secret: an instruction that leaves them alone
    * must not clear one, and telling those apart per mnemonic is a table this
    * check would get wrong. A false alarm is a fixture to look at; a cleared
    * taint would be a pass nobody earned.
    */
   taintFlags(secret) {
-    if (secret) {
+    if (this.preciseFlags && (this.target.name === "aarch64" || X86_FLAGS_ASSIGN.test(this.mnemonic))) {
+      if (secret) {
+        this.secret.add("flags")
+      } else {
+        this.secret.delete("flags")
+      }
+      return
+    }
+    if (secret && !(this.preciseFlags && X86_FLAGS_KEEP.test(this.mnemonic))) {
       this.secret.add("flags")
     }
+  }
+
+  /** A copy that shares nothing mutable with this state. */
+  clone() {
+    const c = new Taint(
+      { contents: this.contents, secretArgs: [], preciseFlags: this.preciseFlags },
+      this.target
+    )
+    c.secret = new Set(this.secret)
+    c.loaded = new Set(this.loaded)
+    c.stackAt = new Map(this.stackAt)
+    c.sp = this.sp
+    c.bytes = new Map([...this.bytes].map(([at, b]) => [at, { ...b }]))
+    c.unknownSecret = this.unknownSecret
+    c.listing = this.listing
+    return c
+  }
+
+  /**
+   * This state joined with `other`, where control flow meets: everything
+   * secret on either side is secret, and a stack place the sides do not agree
+   * on is one this cannot place. A stack byte only one side wrote holds, on
+   * the other, whatever the frame held, which is secret if anything unplaced
+   * was.
+   */
+  join(other) {
+    const j = this.clone()
+    const place = (a, b) => (a === b ? a : null)
+    for (const r of other.secret) {
+      j.secret.add(r)
+    }
+    for (const r of other.loaded) {
+      j.loaded.add(r)
+    }
+    for (const r of new Set([...this.stackAt.keys(), ...other.stackAt.keys()])) {
+      j.stackAt.set(r, place(this.stackAt.get(r), other.stackAt.get(r)))
+    }
+    j.sp = place(this.sp, other.sp)
+    for (const at of new Set([...this.bytes.keys(), ...other.bytes.keys()])) {
+      const x = this.bytes.get(at)
+      const y = other.bytes.get(at)
+      if (x !== undefined && y !== undefined) {
+        const same = x.from === y.from && x.width === y.width
+        j.bytes.set(at, {
+          secret: x.secret || y.secret,
+          loaded: x.loaded || y.loaded,
+          stack: place(x.stack, y.stack),
+          from: same ? x.from : null,
+          width: same ? x.width : null,
+        })
+      } else {
+        const one = x ?? y
+        const unwritten = x === undefined ? this : other
+        j.bytes.set(at, { ...one, secret: one.secret || unwritten.unknownSecret, loaded: true, from: null })
+      }
+    }
+    j.unknownSecret = this.unknownSecret || other.unknownSecret
+    j.contents = this.contents || other.contents
+    return j
+  }
+
+  /** The state as text, for telling whether a join changed anything. */
+  key() {
+    return JSON.stringify([
+      [...this.secret].sort(),
+      [...this.loaded].sort(),
+      [...this.stackAt].sort(),
+      this.sp,
+      [...this.bytes].sort((x, y) => x[0] - y[0]),
+      this.unknownSecret,
+      this.contents,
+    ])
   }
 
   /** The stack pointer moves by `delta`, or by an amount this cannot follow when `delta` is `null`. */
@@ -650,21 +740,28 @@ class Taint {
 const X86_JUMP = /^jmp[wlq]?$/
 /** The conditional jumps: every `j<cc>` (anything `X86_JUMP` is not), the `loop` family and `jcxz`. */
 const X86_BRANCH = /^(j[a-z]+|loop\w*)$/
+/**
+ * Instructions whose last operand is only written. `pshufb` is not among them,
+ * though `pshufd` is: it shuffles its destination by its source, and reading
+ * it as an overwrite would hand a secret block the taint of a public shuffle
+ * mask (`vpshufb`, with three operands, does overwrite).
+ */
 const X86_OVERWRITE =
-  /^(v?mov|lea|set|cvt|v?pmovmsk|v?movmsk|v?pbroadcast|v?pshuf|bsf|bsr|tzcnt|lzcnt|popcnt)/
+  /^(v?mov|lea|set|cvt|v?pmovmsk|v?movmsk|v?pbroadcast|v?pshuf[dhlw]|vpshufb|bsf|bsr|tzcnt|lzcnt|popcnt)/
 /** A plain move: the destination is exactly the source, stack address and all. */
 const X86_COPY = /^(mov[bwlq]?|movabsq)$/
 const X86_COMPARE = /^(cmp[bwlq]?|test[bwlq]?|bt[wlq]?|v?u?comis[sd]|v?ptest)$/
-/** Writes that keep the rest of the register: a lane insert, a scalar move between xmm registers. */
-const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd])$/
+/** Writes that keep the rest of the register: a lane insert, a scalar move between xmm registers, a half moved in. */
+const X86_MERGE = /^(pinsr[bwdq]|insertps|movs[sd]|movlp[sd]|movhp[sd]|movhlps|movlhps)$/
 /**
  * Three operands, and the last is only written. Any other three-operand
  * instruction is read as reading its destination too (`shld`, a fused
- * multiply-add), because a wrong guess that way costs a false alarm and the
- * other way a missed leak.
+ * multiply-add, and the SSE forms of `shufps` and `palignr`, which take half
+ * or more of their result from it; their VEX forms are under `v`), because a
+ * wrong guess that way costs a false alarm and the other way a missed leak.
  */
 const X86_THREE_OVERWRITE =
-  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|shufp|palignr|extractps|v(?!fn?m|pternlog|perm[it]2|pdp|pmadd52|psh[lr]dv))/
+  /^(imul|andn|rorx|sarx|shlx|shrx|pdep|pext|bextr|bzhi|pshuf|extractps|v(?!fn?m|pternlog|perm[it]2|pdp|pmadd52|psh[lr]dv))/
 /** An 8- or 16-bit register name: a write to one leaves the upper bits as they were. */
 const X86_PARTIAL = /^%(?:[abcd][lhx]|[sd]il?|[bs]pl?|r\d+[bw])$/
 const X86_READS_FLAGS = /^(set|cmov|sbb|adc|adox|rcl|rcr)/
@@ -681,8 +778,25 @@ const X86_PREFIX = /^(lock|notrack|bnd|data16|data32|addr32|rex64|[c-gs]s)$/
 /** An AVX-512 write under a mask that keeps the lanes it does not write (`{%k1}` without `{z}`). */
 const X86_MERGE_MASK = /\{%k\d\}(?!\s*\{z\})/
 
+/**
+ * Under `preciseFlags` (tests/ct-asm-runtime.js, which reads loops), the
+ * flags follow the last instruction that wrote them rather than only gaining a
+ * secret. These x86-64 instructions write every flag a conditional jump reads.
+ */
+const X86_FLAGS_ASSIGN = /^(cmp|test|add|sub|and|or|xor|neg|adc|sbb)[bwlq]?$|^v?(ptest|u?comis[sd])$/
+/**
+ * And these write none. `p...` is every SSE integer instruction (and `push`,
+ * `pop`, `pdep`, `pext`), less `ptest`, `popcnt` and the string compares
+ * (`pcmpistri` and its kin), which set CF, ZF, SF and OF from their operands. Anything in neither list
+ * still only adds its taint. On aarch64 only a compare or an `s`-suffixed
+ * instruction writes the flags, all four at once, so there every write sets them.
+ */
+const X86_FLAGS_KEEP =
+  /^(v?mov\w*|lea[wlq]?|bswap[lq]?|not[bwlq]?|set\w+|cmov\w+|cltq|cqto|cltd|cwtl|v?p(?!test|opcnt|cmp[ei]str)\w+|v?aes\w+|v?(shuf|unpck[hl]|xor|andn?|or|blend)p[sd]|v?insertps|v?extractps)$/
+
 /** One x86-64 (AT&T) instruction: the violation it is, if any, and its effect on `t`. */
 const stepX86 = (t, mnemonic, operands) => {
+  t.mnemonic = mnemonic
   if (X86_PREFIX.test(mnemonic)) {
     // What follows is the instruction itself, read as though the prefix were not there.
     return operands.length === 0 ? null : stepX86(t, ...parseInstruction(operands.join(", ")))
@@ -748,6 +862,21 @@ const stepX86 = (t, mnemonic, operands) => {
   // read as leaving the register as it was.
   if (/^(xchg|xadd|cmpxchg\w*)[bwlq]?$/.test(mnemonic)) {
     return "unmodelled"
+  }
+  // The SSE4.2 string compares write a register they do not name: the `i` forms
+  // an index into %ecx, the `m` forms a mask into %xmm0, each from both operands
+  // (and %eax and %edx, the lengths, for the `e` forms). They write the flags
+  // from the same operands.
+  const stringCompare = mnemonic.match(/^v?pcmp([ei])str([im])$/)
+  if (stringCompare !== null) {
+    const regs = ops.flatMap((op) => (op.memory ? [] : op.registers))
+    const secret =
+      ops.some((op) => op.memory && t.loadFrom(op, 16).secret) ||
+      t.anySecret(regs) ||
+      (stringCompare[1] === "e" && t.anySecret(["a", "d"]))
+    t.set(stringCompare[2] === "i" ? "c" : "v0", secret, false)
+    t.taintFlags(secret)
+    return null
   }
   // `mulx` multiplies by %rdx, which it does not name, and writes both of the
   // registers it does: the high half to the last, the low to the one before.
@@ -856,7 +985,9 @@ const ARM_READS_FLAGS = /^(cs\w+|cset\w*|cinc|cinv|cneg|adcs?|sbcs?|ngcs?|f?ccmp
 /** A divide or square root, whose latency follows its operands. */
 const ARM_LATENCY = /^([us]div|fdiv|fsqrt)$/
 const ARM_SETS_FLAGS = /^(adds|subs|ands|bics|negs|adcs|sbcs|ngcs)$/
-const ARM_READ_MODIFY_WRITE = /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx)$/
+/** Instructions that read their destination as well as write it. `aese` and `aesd` XOR it with their key first. */
+const ARM_READ_MODIFY_WRITE =
+  /^(movk|bfi|bfxil|bfm|ins|mla|mls|f?mla|f?mls|sli|sri|bsl|bit|bif|tbx|aese|aesd)$/
 
 /** An aarch64 immediate operand with the `lsl #12` that may follow it, or `null`. */
 const armImmediate = (ops, i) => {
@@ -870,6 +1001,7 @@ const armImmediate = (ops, i) => {
 
 /** One aarch64 instruction, likewise. The destination is the first operand. */
 const stepArm = (t, mnemonic, operands) => {
+  t.mnemonic = mnemonic
   if (ARM_BRANCH.test(mnemonic)) {
     return "branch"
   }
@@ -1013,7 +1145,7 @@ export const CT_TARGETS = [
 ]
 
 /** One instruction line as `[mnemonic, operands]`. */
-const parseInstruction = (line) => {
+export const parseInstruction = (line) => {
   const space = line.search(/\s/)
   return space < 0 ? [line, []] : [line.slice(0, space), splitOperands(line.slice(space + 1))]
 }
@@ -1163,6 +1295,117 @@ const AUDIT_CORNERS = [
   ["aarch64", "a", "load", ["fmov s0, w0", "fccmpe s0, s1, #0, eq", "csetm x2, gt", "ldr w3, [x4, x2]"]],
   ["aarch64", "b", "latency", ["udiv w0, w0, w1"]],
   ["aarch64", "a", null, ["udiv w0, w1, w1"]],
+  // Vector instructions that read their destination, found reading
+  // runtime/runtime-aes.c (tests/ct-asm-runtime.js): `pshufb` by a public mask,
+  // SSE `shufps` and `palignr`, `movhlps`, and `aese` with a public key each
+  // keep the secret already in the destination.
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "movdqa .LCPI0_0(%rip), %xmm1",
+      "pshufb %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "xorps %xmm1, %xmm1",
+      "shufps $0, %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "pxor %xmm1, %xmm1",
+      "palignr $8, %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "xorps %xmm1, %xmm1",
+      "movhlps %xmm1, %xmm0",
+      "movq %xmm0, %rax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+  ],
+  [
+    "aarch64",
+    "a",
+    "load",
+    [
+      "fmov d0, x0",
+      "movi v1.2d, #0000000000000000",
+      "aese v0.16b, v1.16b",
+      "fmov x2, d0",
+      "ldr w3, [x4, x2]",
+    ],
+  ],
+  // The SSE4.2 string compares: each writes the flags and a register it does not
+  // name, %ecx or %xmm0, from its operands. Under `preciseFlags` a flag read after
+  // one on a secret was public, and in either mode so was the index or mask it left.
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm0",
+      "pcmpistri $0, %xmm1, %xmm0",
+      "setb %al",
+      "movzbl %al, %eax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+    { preciseFlags: true },
+  ],
+  [
+    "x86-64",
+    "a",
+    "load",
+    [
+      "movq %rdi, %xmm1",
+      "vpcmpestrm $0, %xmm1, %xmm2",
+      "sete %al",
+      "movzbl %al, %eax",
+      "movl (%rsi,%rax,4), %eax",
+    ],
+    { preciseFlags: true },
+  ],
+  ["x86-64", "a", "load", ["movq %rdi, %xmm1", "pcmpestri $0, %xmm1, %xmm2", "movl (%rsi,%rcx,4), %eax"]],
+  [
+    "x86-64",
+    "a",
+    "load",
+    ["movq %rdi, %xmm1", "pcmpistrm $0, %xmm1, %xmm2", "movq %xmm0, %rax", "movl (%rsi,%rax,4), %eax"],
+  ],
+  // The arms of the step no row above reaches: an `e` form whose only secret is
+  // the length in %eax, and a secret block read from memory as the second operand.
+  ["x86-64", "a", "load", ["movl %edi, %eax", "pcmpestri $0, %xmm1, %xmm2", "movl (%rsi,%rcx,4), %eax"]],
+  [
+    "x86-64",
+    "contents",
+    "load",
+    ["movq 16(%rdi), %rax", "pcmpistri $0, (%rax), %xmm1", "movl (%rsi,%rcx,4), %eax"],
+  ],
+  // And a string compare on public operands, which leaves %ecx and the flags public.
+  ["x86-64", "a", null, ["pcmpistri $0, %xmm1, %xmm2", "movl (%rsi,%rcx,4), %eax"], { preciseFlags: true }],
 ]
 
 /** A listing to follow calls through: the callees first, as LLVM lays them out. */
@@ -1299,10 +1542,10 @@ const CALL_CORNERS = [
 
 const cornerMisses = () => {
   const missed = []
-  for (const [name, secret, kind, body] of [...STACK_CORNERS, ...AUDIT_CORNERS]) {
+  for (const [name, secret, kind, body, options = {}] of [...STACK_CORNERS, ...AUDIT_CORNERS]) {
     const target = CT_TARGETS.find((t) => t.name === name)
     const [spec] = ctSpecs(`// ct-check: f secret=${secret}\nexport const f = (a: u32, b: u32): u32 => a\n`)
-    const found = ctViolations(body, spec, target)
+    const found = ctViolations(body, { ...spec, ...options }, target)
     if (kind === null ? found.length > 0 : !found.some((v) => v.kind === kind)) {
       missed.push(`${name}, expected ${kind ?? "no violation"}: ${body.join("; ")}`)
     }
