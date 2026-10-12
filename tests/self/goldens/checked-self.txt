@@ -21054,7 +21054,7 @@ import TypeTable from "./types" -> struct TypeTable
 const JSON_FIELD_SCALAR: i32 = 1 [exported]
 const JSON_FIELD_CLASS: i32 = 2 [exported]
 const JSON_FIELD_ARRAY: i32 = 3 [exported]
-const JSON_FIELD_CLASS_ARRAY: i32 = 4 [exported]
+const JSON_FIELD_CLASS_ARRAY: i32 = 4
 struct JsonField (class) size=32 align=8 exported
   field field: FieldInfo index=0 offset=0
   field kind: i32 index=1 offset=8
@@ -21142,24 +21142,24 @@ function jsonClasses(program: CheckedProgram, table: TypeTable, root: StructInfo
   callee 155:17 jsonFieldOf -> @jsonFieldOf
   local 156:13 cls: StructInfo | null (const)
   callee 157:27 StringSet.add -> @StringSet.add
-function jsonMadeClasses(program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] -> @jsonMadeClasses [exported]
+function jsonMadeClasses(program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] -> @jsonMadeClasses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 188:9
+  sharedWrite: 184:9
   calls: StringSet.add StringSet.constructor jsonClasses jsonFieldOf nish_array_grow
   pointer program: size=616 writesThrough=false captured=false passedTo=jsonClasses#0 jsonFieldOf#0
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonClasses#1 jsonFieldOf#1
   pointer root: size=128 writesThrough=true captured=true passedTo=jsonClasses#2
   stackSites=1 stackLocals=1
-  local 176:9 out: StructInfo[] (const)
-  local 177:9 made: StringSet (const)
-  callee 177:16 new StringSet -> @StringSet.constructor
-  local 178:14 info: StructInfo (const)
-  callee 178:22 jsonClasses -> @jsonClasses
-  local 179:16 field: FieldInfo (const)
-  local 180:13 f: JsonField | null (const)
-  callee 180:17 jsonFieldOf -> @jsonFieldOf
-  local 181:13 cls: StructInfo | null (const)
-  callee 186:9 StringSet.add -> @StringSet.add
+  local 172:9 out: StructInfo[] (const)
+  local 173:9 made: StringSet (const)
+  callee 173:16 new StringSet -> @StringSet.constructor
+  local 174:14 info: StructInfo (const)
+  callee 174:22 jsonClasses -> @jsonClasses
+  local 175:16 field: FieldInfo (const)
+  local 176:13 f: JsonField | null (const)
+  callee 176:17 jsonFieldOf -> @jsonFieldOf
+  local 177:13 cls: StructInfo | null (const)
+  callee 182:9 StringSet.add -> @StringSet.add
 function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, role: i32, type: i32): string -> @jsonRefusal [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via jsonClasses
@@ -21168,18 +21168,18 @@ function jsonRefusal(program: CheckedProgram, table: TypeTable, name: string, ro
   pointer program: size=616 writesThrough=false captured=false passedTo=jsonClassOf#0 jsonClasses#0 jsonFieldOf#0 jsonMadeClasses#0
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonClassOf#1 TypeTable.typeName#0 jsonClasses#1 jsonFieldOf#1 TypeTable.typeName#0 jsonMadeClasses#1
   stackSites=0 stackLocals=0
-  local 208:9 root: StructInfo | null (const)
-  callee 208:16 jsonClassOf -> @jsonClassOf
-  callee 211:35 TypeTable.typeName -> @TypeTable.typeName
-  local 215:9 classes: StructInfo[] (const)
-  callee 215:19 jsonClasses -> @jsonClasses
-  local 216:14 info: StructInfo (const)
-  local 217:16 field: FieldInfo (const)
-  callee 218:11 jsonFieldOf -> @jsonFieldOf
-  callee 220:83 TypeTable.typeName -> @TypeTable.typeName
-  local 231:16 info: StructInfo (const)
-  callee 231:24 jsonMadeClasses -> @jsonMadeClasses
-  local 232:13 ctor: FunctionSig | null (const)
+  local 204:9 root: StructInfo | null (const)
+  callee 204:16 jsonClassOf -> @jsonClassOf
+  callee 207:35 TypeTable.typeName -> @TypeTable.typeName
+  local 211:9 classes: StructInfo[] (const)
+  callee 211:19 jsonClasses -> @jsonClasses
+  local 212:14 info: StructInfo (const)
+  local 213:16 field: FieldInfo (const)
+  callee 214:11 jsonFieldOf -> @jsonFieldOf
+  callee 216:83 TypeTable.typeName -> @TypeTable.typeName
+  local 227:16 info: StructInfo (const)
+  callee 227:24 jsonMadeClasses -> @jsonMadeClasses
+  local 228:13 ctor: FunctionSig | null (const)
 function jsonScalarMethod(type: i32): string -> @jsonScalarMethod [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -21188,8 +21188,8 @@ function jsonDecodeMethod(f: JsonField): string -> @jsonDecodeMethod [exported]
   calls: jsonScalarMethod nish_str_concat
   pointer f: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 264:9 scalar: string (const)
-  callee 264:18 jsonScalarMethod -> @jsonScalarMethod
+  local 260:9 scalar: string (const)
+  callee 260:18 jsonScalarMethod -> @jsonScalarMethod
 function jsonHelperPart(type: i32): string -> @jsonHelperPart
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -21198,8 +21198,8 @@ function jsonEncodeHelper(f: JsonField): string -> @jsonEncodeHelper [exported]
   calls: jsonHelperPart nish_str_concat
   pointer f: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 301:20 jsonHelperPart -> @jsonHelperPart
-  callee 302:20 jsonHelperPart -> @jsonHelperPart
+  callee 297:20 jsonHelperPart -> @jsonHelperPart
+  callee 298:20 jsonHelperPart -> @jsonHelperPart
 function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, root: StructInfo): StringSet -> @jsonRouteNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via StringSet.constructor
@@ -21208,59 +21208,59 @@ function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, ro
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonClasses#1 jsonFieldOf#1
   pointer root: size=128 writesThrough=true captured=true passedTo=jsonClasses#2
   stackSites=2 stackLocals=0
-  local 312:9 names: StringSet (const)
-  callee 312:17 new StringSet -> @StringSet.constructor
-  local 314:16 name: string (const)
+  local 308:9 names: StringSet (const)
+  callee 308:17 new StringSet -> @StringSet.constructor
+  local 310:16 name: string (const)
+  callee 319:7 StringSet.add -> @StringSet.add
+  local 322:16 name: string (const)
   callee 323:7 StringSet.add -> @StringSet.add
-  local 326:16 name: string (const)
-  callee 327:7 StringSet.add -> @StringSet.add
-  local 330:14 info: StructInfo (const)
-  callee 330:22 jsonClasses -> @jsonClasses
-  local 331:16 field: FieldInfo (const)
-  local 332:13 f: JsonField | null (const)
-  callee 332:17 jsonFieldOf -> @jsonFieldOf
-  local 336:13 holdsClass: boolean (const)
-  callee 339:11 StringSet.add -> @StringSet.add
-  callee 339:21 jsonDecodeMethod -> @jsonDecodeMethod
+  local 326:14 info: StructInfo (const)
+  callee 326:22 jsonClasses -> @jsonClasses
+  local 327:16 field: FieldInfo (const)
+  local 328:13 f: JsonField | null (const)
+  callee 328:17 jsonFieldOf -> @jsonFieldOf
+  local 332:13 holdsClass: boolean (const)
+  callee 335:11 StringSet.add -> @StringSet.add
+  callee 335:21 jsonDecodeMethod -> @jsonDecodeMethod
+  callee 338:11 StringSet.add -> @StringSet.add
+  callee 341:11 StringSet.add -> @StringSet.add
   callee 342:11 StringSet.add -> @StringSet.add
-  callee 345:11 StringSet.add -> @StringSet.add
-  callee 346:11 StringSet.add -> @StringSet.add
-  local 350:13 helper: string (const)
-  callee 350:22 jsonEncodeHelper -> @jsonEncodeHelper
-  callee 352:9 StringSet.add -> @StringSet.add
-  callee 354:9 StringSet.add -> @StringSet.add
-  callee 354:19 jsonScalarMethod -> @jsonScalarMethod
+  local 346:13 helper: string (const)
+  callee 346:22 jsonEncodeHelper -> @jsonEncodeHelper
+  callee 348:9 StringSet.add -> @StringSet.add
+  callee 350:9 StringSet.add -> @StringSet.add
+  callee 350:19 jsonScalarMethod -> @jsonScalarMethod
+  callee 353:9 StringSet.add -> @StringSet.add
+  callee 356:9 StringSet.add -> @StringSet.add
   callee 357:9 StringSet.add -> @StringSet.add
-  callee 360:9 StringSet.add -> @StringSet.add
-  callee 361:9 StringSet.add -> @StringSet.add
 function jsonRouteCallees(program: CheckedProgram, table: TypeTable, sig: FunctionSig): FunctionSig[] -> @jsonRouteCallees [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 395:7
+  sharedWrite: 391:7
   calls: CheckedProgram.struct FunctionSig.definedIn StringSet.at StringSet.has StringSet.size StructInfo.method TypeTable.nameOf jsonClassOf jsonMadeClasses jsonRouteNames nish_array_grow nish_panic_index
   pointer program: size=616 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 jsonClassOf#0 jsonRouteNames#0 jsonMadeClasses#0
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.nameOf#0 jsonClassOf#1 jsonRouteNames#1 jsonMadeClasses#1
   pointer sig: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 380:9 out: FunctionSig[] (const)
-  local 381:9 instance: Instantiation | null (const)
-  local 385:9 receiver: StructInfo | null (const)
-  callee 385:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 385:35 TypeTable.nameOf -> @TypeTable.nameOf
-  local 386:9 root: StructInfo | null (const)
-  callee 386:16 jsonClassOf -> @jsonClassOf
-  local 390:9 names: StringSet (const)
-  callee 390:17 jsonRouteNames -> @jsonRouteNames
-  local 391:7 i: i32 (let)
-  callee 392:14 StringSet.size -> @StringSet.size
-  local 393:11 method: FunctionSig | null (const)
-  callee 393:20 StructInfo.method -> @StructInfo.method
-  callee 393:36 StringSet.at -> @StringSet.at
-  local 399:14 fn: FunctionSig (const)
-  callee 400:33 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 400:65 StringSet.has -> @StringSet.has
-  local 405:16 info: StructInfo (const)
-  callee 405:24 jsonMadeClasses -> @jsonMadeClasses
-  local 406:13 ctor: FunctionSig | null (const)
+  local 376:9 out: FunctionSig[] (const)
+  local 377:9 instance: Instantiation | null (const)
+  local 381:9 receiver: StructInfo | null (const)
+  callee 381:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 381:35 TypeTable.nameOf -> @TypeTable.nameOf
+  local 382:9 root: StructInfo | null (const)
+  callee 382:16 jsonClassOf -> @jsonClassOf
+  local 386:9 names: StringSet (const)
+  callee 386:17 jsonRouteNames -> @jsonRouteNames
+  local 387:7 i: i32 (let)
+  callee 388:14 StringSet.size -> @StringSet.size
+  local 389:11 method: FunctionSig | null (const)
+  callee 389:20 StructInfo.method -> @StructInfo.method
+  callee 389:36 StringSet.at -> @StringSet.at
+  local 395:14 fn: FunctionSig (const)
+  callee 396:33 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 396:65 StringSet.has -> @StringSet.has
+  local 401:16 info: StructInfo (const)
+  callee 401:24 jsonMadeClasses -> @jsonMadeClasses
+  local 402:13 ctor: FunctionSig | null (const)
 module src/declarations.ts
 import refuseTopLevelForm from "./checker" -> function @refuseTopLevelForm
 import skipBlanks from "./checker" -> function @skipBlanks

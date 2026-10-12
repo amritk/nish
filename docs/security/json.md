@@ -30,8 +30,8 @@ layer, all Low.
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
-(#571); the typed decoding and encoding (#573); `parseFloat` itself, which is
-the runtime's `strtod`.
+(#571); `parseFloat` itself, which is the runtime's `strtod`. The typed layer
+has its own scope, in [The typed layer](#the-typed-layer).
 
 ## Threat model
 
@@ -50,7 +50,7 @@ answered with `JSON_TOK_ERR_WINDOW` rather than a panic.
 | --- | --- | --- | --- | --- |
 | JSON-1 | Low | `std/json-tokenizer.ts:933` (`keyEquals`), `:875` (`stringInto`) | Neither is constant time: `keyEquals` stops at the first byte that differs, so its timing says how long a prefix of the name matched. A key is a field name the program wrote, not a secret, and a value read with `stringInto` is copied in full whatever it holds. | **Accepted.** A program that compares a secret it received in JSON (a token, a password) copies it out with `stringInto` and compares it with `timingSafeEqual` from `nish/crypto/ct`, as it would any secret. |
 | JSON-2 | Low | `std/json-tokenizer.ts:255` (`JSON_TOK_END_CEILING`), `:505` (`reset`) | A window that ends within 64 bytes of 2^31 − 1 is refused with `JSON_TOK_ERR_WINDOW`, so that no offset the scanners add up (at most twelve past a position below the end) can overflow and panic. The guard's other arm, that `off + len` is not added before `off <= src.length - len` has proven it fits, is pinned by "WINDOW: an offset and a length of 2^31 - 1, refused without overflow" and "WINDOW: a length of 2^31 - 1 from 0": with a naive `off + len > src.length` the first panics with `attempt to add with overflow`. The ceiling arm itself is not reached by any test: a window passes the first test only inside its array, so ending past 2,147,483,583 takes an array of at least that many bytes. The language allows such a `u8[]` (`NISH_ARRAY_MAX` in `runtime/runtime.c` is 2^31 − 1 elements), but it is 2 GiB of memory on the host that runs the suite, which is the reason, not a limit of the language. | **Open.** The ceiling is one compare in `reset`; a test of it would allocate 2 GiB. |
-| JSON-3 | Low | `std/json-tokenizer.ts:542` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Fixed by the typed layer** (#573). The tokenizer still reports what is there, and a program reading tokens itself decides, as its module header says. `jsonDecode` refuses a duplicate of a field with `JSON_DECODE_DUPLICATE` before the second value is read, at every depth (`std/json-typed.ts`, `duplicateField`; [The typed layer](#the-typed-layer); "a duplicate key: code" and "nested: a duplicate key in an element" in `tests/link/std_json_typed`). |
+| JSON-3 | Low | `std/json-tokenizer.ts:542` (`next`) | Duplicate keys are two keys. `{"a":1,"a":2}` tokenizes as both members, and which one a reader keeps decides what it sees: `JSON.parse` keeps the last, a reader that stops at the first match keeps the first, and two components that disagree are a check bypassed (the shape of request smuggling). | **Fixed for `jsonDecode` callers** (#573). The tokenizer itself is unchanged: it still reports what is there, and a program reading tokens itself still decides, as its module header says. `jsonDecode` refuses a duplicate of a field with `JSON_DECODE_DUPLICATE` before the second value is read, at every depth (`std/json-typed.ts`, `duplicateField`; [The typed layer](#the-typed-layer); "a duplicate key: code" and "nested: a duplicate key in an element" in `tests/link/std_json_typed`). The one exception is a key `ignoreUnknown` steps over, whose duplicates are not refused: that is JSON-4. |
 
 ## Properties verified
 
@@ -251,8 +251,12 @@ the call over every class the call reaches (`src/json-typed.ts:201`), with a
 negative case per way in: `tests/cases/json_reject_field_type`,
 `json_reject_nested_field`, `json_reject_nullable_field`,
 `json_reject_nested_array`, `json_reject_generic_field`,
-`json_reject_interface`, `json_reject_not_class`,
-`json_reject_through_generic`.
+`json_reject_enum_field`, `json_reject_readonly_array`,
+`json_reject_nullable_elements`, `json_reject_interface`,
+`json_reject_not_class` and `json_reject_through_generic`. A `readonly` field
+is refused for decoding (`json_reject_readonly`), and so is a class the
+decoder makes whose constructor takes parameters
+(`json_reject_constructor`, `json_reject_constructor_nullable`).
 
 **Depth.** The decoding recurses only into a container the tokenizer has
 opened, so `maxDepth` bounds it: "limits: depth", and "limits: a depth bomb"

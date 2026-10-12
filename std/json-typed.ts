@@ -304,7 +304,9 @@ export class JsonDecoder {
   u32(): u32 {
     const lo: i64 = 0
     const hi: i64 = 4294967295
-    return toU32(this.integer(lo, hi, true))
+    // Through `f64`, which holds every `u32` exactly: under Node `toU32` takes
+    // no BigInt, and the `i64` the tokenizer answers is one there.
+    return toU32(toF64(this.integer(lo, hi, true)))
   }
 
   /** Any integer `isInteger` accepts fits an `i64`, so there is no range to check. */

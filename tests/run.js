@@ -5182,7 +5182,8 @@ if (!only || "std_json_typed".includes(only)) {
   }
   // What `jsonDecode` calls does run under Node: `readers.ts` drives the
   // decoder's readers directly, at both ends of each integer range, and both
-  // runs must print these lines. An `i64` is a BigInt there, so a reader that
+  // runs must print these lines: every reader once, and each integer reader
+  // at both ends of its range. An `i64` is a BigInt there, so a reader that
   // mixed one with a number throws.
   const readerLines = [
     "i32 2147483647 -2147483648",
@@ -5194,6 +5195,17 @@ if (!only || "std_json_typed".includes(only)) {
     "failed 0",
     "i32 below its range -21 at 1",
     "i64 below its range -21 at 1",
+    "u32 below its range -21 at 1",
+    "u32 above its range -21 at 1",
+    "u32Array 2 7 4294967295",
+    "f64 2.5",
+    "f64Array 2 1.5 -0.25",
+    "boolean true",
+    "booleanArray 2 true false",
+    "stringArray 2 a bc",
+    "i32ArrayOrNull null true",
+    "i32ArrayOrNull present 1",
+    "failed 0",
   ]
   const readersWant = readerLines.map((l) => `${l}\n`).join("")
   const readers = path.join(dir, "readers.ts")

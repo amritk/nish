@@ -41,7 +41,7 @@ export const JSON_FIELD_CLASS: i32 = 2
 /** An array of scalars or strings. */
 export const JSON_FIELD_ARRAY: i32 = 3
 /** An array of objects of a class. */
-export const JSON_FIELD_CLASS_ARRAY: i32 = 4
+const JSON_FIELD_CLASS_ARRAY: i32 = 4
 
 /** One field as the written code reads and writes it. */
 export class JsonField {
@@ -168,11 +168,7 @@ export const jsonClasses = (program: CheckedProgram, table: TypeTable, root: Str
  * array's end, and each `| null` field's class, which it makes when the
  * field holds `null`. One pass over the fields `jsonClasses` reaches.
  */
-export const jsonMadeClasses = (
-  program: CheckedProgram,
-  table: TypeTable,
-  root: StructInfo
-): StructInfo[] => {
+const jsonMadeClasses = (program: CheckedProgram, table: TypeTable, root: StructInfo): StructInfo[] => {
   const out: StructInfo[] = []
   const made = new StringSet()
   for (const info of jsonClasses(program, table, root)) {
