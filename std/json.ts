@@ -1104,8 +1104,7 @@ export class JsonWriter {
     if (this.failed !== JSON_WRITE_OK) {
       return
     }
-    if (off < 0 || len < 0 || off > toI32(bytes.length) - len) {
-      this.failed = JSON_WRITE_BAD_WINDOW
+    if (!jsonWriterWindowOk(this, bytes, off, len)) {
       return
     }
     if (this.depth === 0 && this.done) {
@@ -1144,8 +1143,7 @@ export class JsonWriter {
     if (this.failed !== JSON_WRITE_OK) {
       return
     }
-    if (off < 0 || len < 0 || off > toI32(bytes.length) - len) {
-      this.failed = JSON_WRITE_BAD_WINDOW
+    if (!jsonWriterWindowOk(this, bytes, off, len)) {
       return
     }
     if (jsonWriterValueDue(this) && jsonWriterPutBytes(this, bytes, off, len)) {
@@ -1467,6 +1465,15 @@ const jsonWriterIndented = (w: JsonWriter, level: i32, name: string): boolean =>
     w.afterKey = true
   }
   return false
+}
+
+/** Whether `bytes[off .. off + len)` lies inside `bytes`, for `keyBytes` and `stringBytes`; `JSON_WRITE_BAD_WINDOW` when not. */
+const jsonWriterWindowOk = (w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean => {
+  if (off < 0 || len < 0 || off > toI32(bytes.length) - len) {
+    w.failed = JSON_WRITE_BAD_WINDOW
+    return false
+  }
+  return true
 }
 
 /**

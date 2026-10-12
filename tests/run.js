@@ -5402,12 +5402,9 @@ if (!only || "std_json_value".includes(only)) {
       run.status !== 0 ? shown(run) : problems.join("\n")
     )
   }
-}
-
-// `nish/json-value` has to load under Node, as every `std/` module does:
-// `node.ts` calls every public method of `JsonDocument` once on ASCII text,
-// `u64` at its edge and past it, and both runs must print these lines.
-if (!only || "std_json_value".includes(only)) {
+  // `nish/json-value` has to load under Node, as every `std/` module does:
+  // `node.ts` calls every public method of `JsonDocument` once on ASCII text,
+  // `u64` at its edge and past it, and both runs must print these lines.
   const entry = path.join(linkDir, "std_json_value", "node.ts")
   const want = [
     "parseText 0 kind 6 length 9 keyAt a",
@@ -5432,7 +5429,8 @@ if (!only || "std_json_value".includes(only)) {
     `--- want\n${want}--- node\n${shown(run)}`
   )
   if (HAS_CLANG) {
-    const outDir = path.join(buildDir, "json_value_node") + path.sep
+    const outDir = path.join(buildDir, "link", "std_json_value_node") + path.sep
+    fs.rmSync(outDir, { recursive: true, force: true })
     const app = path.join(outDir, "app")
     const built = spawnSync(NISH, [entry, "-o", outDir, "--link", app], { cwd: root, encoding: "utf8" })
     const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built

@@ -294,8 +294,7 @@ export class JsonDocument {
         keySource = jsonValueGet(this.openKeySource, depth)
         v = c
       } else if (k === JSON_TOK_STRING) {
-        const at: i32 = this.byteTop
-        v = this.newNode(JSON_VALUE_STRING, at, this.storeString(tok))
+        v = this.newNode(JSON_VALUE_STRING, this.byteTop, this.storeString(tok))
       } else if (k === JSON_TOK_NUMBER) {
         v = this.newNode(JSON_VALUE_NUMBER, this.byteTop, this.storeSource(tok))
       } else if (k === JSON_TOK_NULL) {
@@ -438,15 +437,7 @@ export class JsonDocument {
 
   /** Whether pending members `a` and `b` have the same key bytes. */
   samePendingKey(a: i32, b: i32): boolean {
-    return (
-      jsonValueCompareBytes(
-        this.bytes,
-        jsonValueGet(this.pendingKeyAt, a),
-        jsonValueGet(this.pendingKeyLength, a),
-        jsonValueGet(this.pendingKeyAt, b),
-        jsonValueGet(this.pendingKeyLength, b)
-      ) === 0
-    )
+    return this.comparePending(a, b) === 0
   }
 
   /**
@@ -648,10 +639,8 @@ export class JsonDocument {
 
   /** A number's value as an `i64` when `isI64(v)` holds, and `0` otherwise. */
   i64(v: JsonValue): i64 {
-    if (!this.isI64(v)) {
-      return toI64(0)
-    }
-    return this.numbers.numberI64()
+    // `numberI64` is already `0` for a number that is not an `i64`.
+    return this.readNumber(v) ? this.numbers.numberI64() : toI64(0)
   }
 
   /** Whether `v` is a number written without a sign, a fraction or an exponent whose value fits a `u64`. */
@@ -752,20 +741,17 @@ export class JsonDocument {
 
   /** A string holding `s`'s bytes. */
   newString(s: string): JsonValue {
-    const at: i32 = this.byteTop
-    return this.newNode(JSON_VALUE_STRING, at, this.storeText(s))
+    return this.newStored(JSON_VALUE_STRING, s)
   }
 
   /** A number holding `x`'s digits. */
   newI64(x: i64): JsonValue {
-    const at: i32 = this.byteTop
-    return this.newNode(JSON_VALUE_NUMBER, at, this.storeText(`${x}`))
+    return this.newStored(JSON_VALUE_NUMBER, `${x}`)
   }
 
   /** A number holding `x`'s digits. */
   newU64(x: u64): JsonValue {
-    const at: i32 = this.byteTop
-    return this.newNode(JSON_VALUE_NUMBER, at, this.storeText(`${x}`))
+    return this.newStored(JSON_VALUE_NUMBER, `${x}`)
   }
 
   /**
@@ -779,8 +765,7 @@ export class JsonDocument {
     if (x - x !== toF64(0)) {
       return JSON_VALUE_ERR_NUMBER
     }
-    const at: i32 = this.byteTop
-    return this.newNode(JSON_VALUE_NUMBER, at, this.storeText(`${x}`))
+    return this.newStored(JSON_VALUE_NUMBER, `${x}`)
   }
 
   /**
@@ -846,8 +831,7 @@ export class JsonDocument {
       jsonValuePut(this.parent, v, o)
       return JSON_VALUE_OK
     }
-    const at: i32 = this.byteTop
-    this.append(o, v, at, this.storeText(key))
+    this.append(o, v, this.byteTop, this.storeText(key))
     return JSON_VALUE_OK
   }
 
@@ -908,6 +892,11 @@ export class JsonDocument {
     jsonValuePut(this.parent, v, c)
   }
 
+  /** A new value of `kind` holding `s`'s bytes. */
+  newStored(kind: i32, s: string): JsonValue {
+    return this.newNode(kind, this.byteTop, this.storeText(s))
+  }
+
   /** `s`'s bytes onto the end of `bytes`; answers how many. */
   storeText(s: string): i32 {
     const n: i32 = toI32(s.length)
@@ -940,27 +929,32 @@ export class JsonDocument {
     if (k === JSON_VALUE_NULL) {
       w.nullValue()
     } else if (k === JSON_VALUE_BOOLEAN) {
-      w.boolean(this.boolean(v))
+      w.boolean(jsonValueGet(this.first, v) === JSON_VALUE_TRUE_WORD)
     } else if (k === JSON_VALUE_NUMBER) {
       w.raw(this.bytes, jsonValueGet(this.first, v), jsonValueGet(this.count, v))
     } else if (k === JSON_VALUE_STRING) {
       w.stringBytes(this.bytes, jsonValueGet(this.first, v), jsonValueGet(this.count, v))
-    } else if (k === JSON_VALUE_ARRAY) {
-      w.beginArray()
-      const n: i32 = this.length(v)
-      for (let i: i32 = 0; i < n && w.failed === JSON_WRITE_OK; i += 1) {
-        this.write(this.at(v, i), w)
-      }
-      w.endArray()
     } else {
-      w.beginObject()
-      const n: i32 = this.length(v)
-      for (let i: i32 = 0; i < n && w.failed === JSON_WRITE_OK; i += 1) {
-        const s: i32 = this.slot(v, i)
-        w.keyBytes(this.bytes, jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s))
-        this.write(this.at(v, i), w)
+      // A container: its members are the slots from `first`, read directly.
+      const object: boolean = k === JSON_VALUE_OBJECT
+      const start: i32 = jsonValueGet(this.first, v)
+      const end: i32 = start + jsonValueGet(this.count, v)
+      if (object) {
+        w.beginObject()
+      } else {
+        w.beginArray()
       }
-      w.endObject()
+      for (let s: i32 = start; s < end && w.failed === JSON_WRITE_OK; s += 1) {
+        if (object) {
+          w.keyBytes(this.bytes, jsonValueGet(this.slotKeyAt, s), jsonValueGet(this.slotKeyLength, s))
+        }
+        this.write(jsonValueGet(this.slotValue, s), w)
+      }
+      if (object) {
+        w.endObject()
+      } else {
+        w.endArray()
+      }
     }
   }
 
@@ -970,7 +964,9 @@ export class JsonDocument {
    * writer refuses it (a tree past `JSON_WRITER_MAX_DEPTH`).
    */
   stringify(v: JsonValue): string {
-    let size: i32 = 64
+    // Every byte stored and a few of punctuation per value: one pass fits most
+    // documents, and a text with many escapes doubles from there.
+    let size: i32 = this.byteTop + 8 * this.top + 64
     while (true) {
       const buf: u8[] = new Array<u8>(size)
       const w: JsonWriter = new JsonWriter(buf, 0)

@@ -14,16 +14,7 @@ import {
   JsonWriter,
 } from "nish/json";
 import { Suite } from "nish/testing";
-
-/** The bytes of `s`, one per `charCodeAt`: natively a string's own bytes. */
-const bytesOf = (s: string): u8[] => {
-  const n: i32 = toI32(s.length);
-  const out = new Array<u8>(n);
-  for (let i: i32 = 0; i < n && i < toI32(out.length); i += 1) {
-    out[i] = toU8(toI32(s.charCodeAt(i)));
-  }
-  return out;
-};
+import { jvBytes } from "../std_json_value/common";
 
 /** What `w` wrote, or `failed <code> after <written>`; then `w` starts over on `out`. */
 const took = (w: JsonWriter, out: u8[]): string => {
@@ -42,7 +33,7 @@ const bothWays = (s: string, indent: i32): string => {
     w.setIndent(indent);
   }
   w.reset(out, 0);
-  const b = bytesOf(s);
+  const b = jvBytes(s);
   const n: i32 = toI32(b.length);
   w.beginObject();
   w.key(s);
@@ -83,7 +74,7 @@ export const writerBytesChecks = (t: Suite): void => {
 
   const out = new Array<u8>(256);
   const w = new JsonWriter(out, 0);
-  const b = bytesOf('xx"é"yy');
+  const b = jvBytes('xx"é"yy');
   w.stringBytes(b, 2, 4);
   t.eqStr("bytes: a window in the middle, ending on a 2-byte character's last byte", took(w, out), '"\\"é\\""');
   w.stringBytes(b, 8, 0);
@@ -144,7 +135,7 @@ export const writerBytesChecks = (t: Suite): void => {
 
   // A full buffer at every length: the same code and the same prefix as `string` and `key`.
   const text = 'a"\u0001é';
-  const tb = bytesOf(text);
+  const tb = jvBytes(text);
   let mismatches: i32 = 0;
   for (let room: i32 = 0; room < 24; room += 1) {
     for (let indent: i32 = 0; indent < 3; indent += 2) {
@@ -171,7 +162,7 @@ export const writerBytesChecks = (t: Suite): void => {
   t.eqI32("bytes: a full buffer at every length from 0 to 23 stops where string and key stop", mismatches, 0);
 
   // No allocation: 10,000 writes from a reused buffer of bytes.
-  const body = bytesOf("message\tHello, World! é");
+  const body = jvBytes("message\tHello, World! é");
   let kept: i64 = 0;
   let done: i32 = 0;
   for (let round: i32 = 0; round < 10000; round += 1) {
