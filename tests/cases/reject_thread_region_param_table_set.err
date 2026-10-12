@@ -1,0 +1,2 @@
+reject_thread_region_param_table_set.ts:28:9
+`bump` writes memory a task of `s` may read, before the scope joins
