@@ -416,8 +416,8 @@ const binShard = (s: Shard): i32 => {
 **Status: built**, as [LANGUAGE.md](LANGUAGE.md#atomics-atomici32-and-atomici64)
 states it. §9 declined `Atomic<T>` as the *first* escape hatch, to be designed
 after the lock had met real programs; it has, and an atomic is what a
-histogram of counters wanted that a lock per value made 9.6× slower than an
-atomic add per value, and 259× slower than a local tally added once per bin
+histogram of counters wanted that a lock per value made 9.7× slower than an
+atomic add per value, and 273× slower than a local tally added once per bin
 (`examples/histogram-atomic.ts`). It is two classes, not a generic, because
 the instruction is chosen by the width and a generic `T` would admit a word
 `atomicrmw` cannot hold.

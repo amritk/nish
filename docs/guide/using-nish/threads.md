@@ -468,8 +468,8 @@ export const main = (): i32 => {
 - **Update it once per batch, not once per value.** An atomic is cheaper than
   a lock, not free: four tasks incrementing the same few counters wait on each
   other's cores. Binning 32 million values into 256 bins on four cores
-  (`examples/histogram-atomic.ts`) takes 25 ms with a local tally and one `add`
-  per bin, 75 ms on one thread, and 676 ms with one `add` per value.
+  (`examples/histogram-atomic.ts`) takes 24 ms with a local tally and one `add`
+  per bin, 77 ms on one thread, and 677 ms with one `add` per value.
 
 ```ts nish:err NL2513
 import { AtomicI32, scope } from "nish/threads";

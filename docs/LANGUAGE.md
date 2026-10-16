@@ -3467,11 +3467,11 @@ does not try to prove it.
 **Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
 round into 256 bins, four rounds, on four tasks. On a four-core machine, over
 seven interleaved rounds whose seeds move every round, the medians are: each
-task counting into a local tally and adding it with one `add` per bin, 25 ms
-(a byte-identical copy of it, the noise band, 23 ms, its runs 22–32 ms); one
-thread binning into plain counters, 75 ms (3.0× slower); one atomic `add` per
-value, 676 ms (27× slower), because every increment contends for a cache line
-another core is writing; and one `Mutex` taken per value, 6,487 ms. An atomic
+task counting into a local tally and adding it with one `add` per bin, 24 ms
+(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
+thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
+value, 677 ms (28× slower), because every increment contends for a cache line
+another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
 is far cheaper than a lock and still far dearer than a counter no other core
 touches: update it once per batch, not once per value.
 
