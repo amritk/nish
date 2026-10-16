@@ -5,4 +5,4 @@ export class Base {
   x: i32 = 7;
 }
 
-export const read = (b: Base): i32 => b.x;
+export const readBase = (b: Base): i32 => b.x;

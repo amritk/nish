@@ -1,0 +1,1 @@
+`close` is the C library's `close`: an exported function of the program's own package keeps its name as its symbol

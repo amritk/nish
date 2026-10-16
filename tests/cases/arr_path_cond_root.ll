@@ -41,7 +41,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @read(%struct.Holder* noundef nonnull align 8 dereferenceable(8) %a, %struct.Holder* noundef nonnull align 8 dereferenceable(8) %b, i32 noundef %i) #1 {
+define internal noundef i32 @read$(%struct.Holder* noundef nonnull align 8 dereferenceable(8) %a, %struct.Holder* noundef nonnull align 8 dereferenceable(8) %b, i32 noundef %i) #1 {
 entry:
   %h.addr = alloca %struct.Holder*, align 8
   store %struct.Holder* %a, %struct.Holder** %h.addr, align 8
@@ -139,7 +139,7 @@ entry:
   %24 = getelementptr inbounds i32, i32* %23, i64 0
   store i32 7, i32* %24, align 4, !alias.scope !9, !noalias !8, !tbaa !16
   call void @Holder.constructor(%struct.Holder* %16, %struct.nish_array* %18)
-  %25 = call i32 @read(%struct.Holder* %1, %struct.Holder* %16, i32 5)
+  %25 = call i32 @read$(%struct.Holder* %1, %struct.Holder* %16, i32 5)
   %26 = call i8* @nish_str_from_i32(i32 %25)
   call void @nish_print(i8* %26)
   ret i32 0

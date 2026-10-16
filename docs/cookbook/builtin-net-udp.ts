@@ -5,7 +5,7 @@
 // a blocking socket the program inherited can wait.
 import { udpBind, udpRecvFrom, udpSendTo } from "nish:net"
 
-export const bind = (port: i32): i32 => udpBind("::", port, 2)
+export const bindPort = (port: i32): i32 => udpBind("::", port, 2)
 
 export const echoOnce = (fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 => {
   const n = udpRecvFrom(fd, buf, 0, buf.length, from, meta)

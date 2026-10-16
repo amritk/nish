@@ -32,7 +32,7 @@ pop.ok:
   ret i32 %11
 }
 
-define internal noundef i32 @read(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i) #0 {
+define internal noundef i32 @read$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %i) #0 {
 entry:
   %0 = icmp sge i32 %i, 0
   br i1 %0, label %land.rhs.1, label %land.end.1
@@ -99,7 +99,7 @@ entry:
   store i32 2, i32* %6, align 4, !alias.scope !4, !noalias !3, !tbaa !13
   %7 = getelementptr inbounds i32, i32* %4, i64 2
   store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %8 = call i32 @read(%struct.nish_array* %arr.hdr, i32 2)
+  %8 = call i32 @read$(%struct.nish_array* %arr.hdr, i32 2)
   %9 = call i8* @nish_str_from_i32(i32 %8)
   call void @nish_print(i8* %9)
   call void @nish_arena_release(i64 %arena.mark)

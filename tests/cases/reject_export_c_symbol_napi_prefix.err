@@ -1,0 +1,2 @@
+`napi_create_int32` begins with `napi_`, which Node-API reserves for its functions
+`node_api_module_get_api_version_v1` begins with `node_api_`, which Node-API reserves for its functions

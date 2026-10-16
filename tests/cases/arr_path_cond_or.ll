@@ -72,7 +72,7 @@ while.end:
   ret i1 false
 }
 
-define internal noundef i32 @read(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h, i32 noundef %i) #1 {
+define internal noundef i32 @read$(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h, i32 noundef %i) #1 {
 entry:
   %0 = icmp slt i32 %i, 0
   br i1 %0, label %lor.end.1, label %lor.rhs.1
@@ -149,7 +149,7 @@ entry:
   %12 = getelementptr inbounds i32, i32* %6, i64 5
   store i32 6, i32* %12, align 4, !alias.scope !9, !noalias !8, !tbaa !16
   call void @Holder.constructor(%struct.Holder* %Holder.obj, %struct.nish_array* %1)
-  %13 = call i32 @read(%struct.Holder* %Holder.obj, i32 5)
+  %13 = call i32 @read$(%struct.Holder* %Holder.obj, i32 5)
   %14 = call i8* @nish_str_from_i32(i32 %13)
   call void @nish_print(i8* %14)
   ret i32 0

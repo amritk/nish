@@ -26,6 +26,7 @@
 //     rule does not see, and they say they are a limit rather than a rule.
 
 import { isNishSourceModule } from "./nish-modules"
+import { isCReservedSymbol } from "./c-symbols"
 import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./json-typed"
 import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
@@ -1653,7 +1654,7 @@ const bindFunctionParameters = (decl: Node, functions: FunctionSig[]): FunctionB
  * calls and another module defines does.
  *
  * Unique across the program is not unique across the link, though: see
- * `spellHiddenApart`, which renames such a function once every body is checked.
+ * `spellCSymbolsApart`, which renames such a function once every body is checked.
  */
 const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
   if (fn.definedIn(home.source)) {
@@ -1667,27 +1668,38 @@ const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
 }
 
 /**
- * Give every `hidden` symbol C could spell one it cannot (#610).
- *
- * A hidden symbol is global in the executable, so one C could spell -- a
- * function of the program's own package, which carries no prefix -- is the
- * definition the runtime's calls into the C library bind to: a task called
- * `read` was called in place of `read(2)` by the pool's first start, and
- * crashed. Such a symbol takes a `$` at its end, which C cannot spell, no
- * declared name holds, and no instantiation or lifted arrow ends with. A
+ * Give a function whose symbol is not its ABI a spelling C cannot reach, when
+ * the one it has C could (#610, #618): a `$` at its end, which C cannot spell,
+ * no declared name holds, and no instantiation or lifted arrow ends with. A
  * package's prefix and a method's owner already put a `.` in the others.
  *
- * It runs once pass 3 has drained, not in `exposeTo`: a diagnostic about the
- * function, reported while bodies are still checked, names it as it was
- * written, and every instantiation it was given to is keyed on the one
- * spelling, whichever side of the exposure it was minted on. Nothing reads a
- * function's symbol between here and the end of checking but that key, and
- * everything after reads the new one.
+ * Two kinds of function are spelled apart. A `hidden` one, which another
+ * module's instantiation calls, is global in the executable, so a task called
+ * `read` was the definition the runtime's own `read(2)` bound to, and the
+ * pool's first start crashed (#610): every hidden one takes the `$`, whatever
+ * its name. An `internal` one -- not exported, and not made public by
+ * `--no-strict-exports` -- binds nothing outside its module, but LLVM knows
+ * the C library's functions by name and folds a call to one, so a private
+ * `floor` called as `floor(1.5)` printed 1: an internal one takes the `$` when
+ * its name is reserved to C (`isCReservedSymbol`). A `declare function` is the
+ * C function itself and keeps its name; an exported function's name is its
+ * ABI, and `rejectCLibrarySymbols` refuses a reserved one.
+ *
+ * It runs once pass 3 has drained, not when a function is exposed: a
+ * diagnostic about the function, reported while bodies are still checked,
+ * names it as it was written, and every instantiation it was given to is
+ * keyed on the one spelling, whichever side of the exposure it was minted on.
+ * Nothing reads a function's symbol between here and the end of checking but
+ * that key, and everything after reads the new one.
  */
-export const spellHiddenApart = (programs: CheckedProgram[]): void => {
+export const spellCSymbolsApart = (programs: CheckedProgram[], strictExports: boolean): void => {
   for (const program of programs) {
     for (const sig of program.functions) {
-      if (sig.hidden && sig.name.indexOf("$") < 0 && sig.name.indexOf(".") < 0) {
+      if (sig.name.indexOf("$") >= 0 || sig.name.indexOf(".") >= 0 || sig.foreign()) {
+        continue
+      }
+      const internal = !sig.exported && strictExports
+      if (sig.hidden || (internal && isCReservedSymbol(sig.name))) {
         sig.name = `${sig.name}$`
       }
     }

@@ -26,7 +26,7 @@ div.ok:
   ret i32 %5
 }
 
-define internal noundef i32 @remainder(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @remainder$(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %r.addr = alloca i32, align 4
   store i32 %a, i32* %r.addr, align 4
@@ -112,7 +112,7 @@ entry:
   %0 = call i32 @quotient(i32 17, i32 5)
   %1 = call i8* @nish_str_from_i32(i32 %0)
   call void @nish_print(i8* %1)
-  %2 = call i32 @remainder(i32 17, i32 5)
+  %2 = call i32 @remainder$(i32 17, i32 5)
   %3 = call i8* @nish_str_from_i32(i32 %2)
   call void @nish_print(i8* %3)
   %4 = call double @ratio(double 0x3FF0000000000000, double 0x4010000000000000)

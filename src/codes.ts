@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 637
+export const RULE_COUNT: i32 = 638
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -315,6 +315,8 @@ const diagnosticRules = (): string[] => [
   "NL2337",
   "finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more",
   "NL2462",
+  ", so the references the C library and the runtime make to that name would reach this function instead; rename it",
+  "NL3037",
   "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
   "NL2285",
   "; a class or interface name must be unique across the program, and an instantiation is named after its template",
