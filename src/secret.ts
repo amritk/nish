@@ -1494,8 +1494,19 @@ class ReferenceScan {
    * for the value.
    */
   harmless(node: Node): boolean {
+    return this.harmlessAt(node, this.ancestors.length - 1)
+  }
+
+  /**
+   * `harmless` for `node`, whose innermost ancestor is at `at`. An
+   * assignment to the local is harmless only where its own value is
+   * dropped, by a statement or a `for` header; anywhere else that value is
+   * the local's array, judged as `node` would be (`alias = raw = [...]`,
+   * `xs.push(raw = [...])`).
+   */
+  harmlessAt(node: Node, at: i32): boolean {
     let child = node
-    let i = this.ancestors.length - 1
+    let i = at
     let up = this.handsOn(child, i)
     while (up > 0) {
       i = i - up
@@ -1514,7 +1525,7 @@ class ReferenceScan {
         return child === parent.children[0]
       case N_BINARY:
         if (parent.text === "=") {
-          return child === parent.children[0]
+          return child === parent.children[0] && this.harmlessAt(parent, i - 1)
         }
         return parent.text === "===" || parent.text === "!=="
       case N_INDEX:
@@ -1530,6 +1541,8 @@ class ReferenceScan {
         return child === parent.children[1]
       case N_EXPR_STMT:
         return true
+      case N_FOR:
+        return child === parent.children[0] || child === parent.children[2]
       default:
         return false
     }

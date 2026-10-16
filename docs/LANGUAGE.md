@@ -5105,8 +5105,10 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
     handing it to a builtin, or to a function or method the whole-program
     facts say keeps nothing of it, are all such uses. An initialiser, an
     assignment's value, a field or element store, a literal's element, a
-    ternary arm, either side of `??`, the argument of `Ok` or `Err`, a later
-    declarator of the same statement, a `return`, an argument of a method of
+    ternary arm, either side of `??`, the argument of `Ok` or `Err`, an
+    assignment to it used as a value (`alias = raw = [1]`, `xs.push(raw =
+    [1])`; one whose value is dropped, as a statement or in a `for` header,
+    is not), a later declarator of the same statement, a `return`, an argument of a method of
     another value (`rows.push(raw)`, `m.set(k, raw)`), a read by an arrow
     that captures it (a data-parallel body), and a function or constructor
     that keeps it each leave one.
@@ -5115,7 +5117,9 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   reference: `const alias = raw` (line 6) ``, naming the reference and its
   line, or the callee and its parameter that keep it (NL2506,
   `reject_secret_alias_const`, `reject_secret_alias_let`,
-  `reject_secret_alias_reassigned`, `reject_secret_alias_declarators`,
+  `reject_secret_alias_reassigned`, `reject_secret_alias_assign_chain`,
+  `_assign_init`, `_assign_push`, `_assign_field`, `_assign_kept`,
+  `_assign_helper`, `reject_secret_alias_declarators`,
   `reject_secret_alias_field`, `reject_secret_alias_element`,
   `reject_secret_alias_param`,
   `reject_secret_alias_return`, `reject_secret_alias_mutual`,
