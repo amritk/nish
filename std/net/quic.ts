@@ -87,7 +87,7 @@
  *
  * **Time.** The connection has no clock: `receive`, `takeDatagram` and
  * `handleTimer` take the caller's monotonic time in milliseconds, and
- * `deadline()` says when `handleTimer` is next due. Three things run on it.
+ * `deadline()` says when `handleTimer` is next due. Four things run on it.
  * The idle timeout (RFC 9000 §10.1) is the smaller of the two sides'
  * `max_idle_timeout`, never under `QUIC_CONN_IDLE_FLOOR` or three probe
  * timeouts; once it passes with nothing received, the connection closes
@@ -95,7 +95,10 @@
  * timer declares packets lost by the time threshold or fires the probe
  * timeout. And after a key update the previous read keys are kept for a
  * probe timeout (`recovery.probeTimeout()`), for packets the network
- * reordered, before the next generation's are derived (RFC 9001 §6.5).
+ * reordered, before the next generation's are derived (RFC 9001 §6.5). Once
+ * the connection has closed, by either side, its keys are kept through the
+ * closing or draining period, three probe timeouts (RFC 9000 §10.2), and
+ * wiped at its end; `deadline()` is that end, then -1.
  *
  * **Key update** (RFC 9001 §6), both ways. A 1-RTT packet whose Key Phase
  * bit differs from the current one is opened with the next generation's read
@@ -135,21 +138,22 @@
  * slots as long as the level does, and in `TlsServer`'s (TLS-1); so do the
  * 1-RTT secrets the next key generation is derived from, and the next
  * generation's read keys. A `Secret` may not be a field (NL2430), so they are
- * plain bytes; `secureZero` wipes each level's key, IV and header-protection
- * key, and its AES schedules with ordinary stores, when the level is
- * discarded, each generation's key, IV and secret when a key update
- * replaces it, and `release()` (and `reset`) the rest — the 1-RTT keys, the
- * key-update secrets, the traffic secrets `TlsServer` holds, its ephemeral
- * key and the connection-ID seed. What no wipe reaches (`aesKeyInto`'s
- * working copy of a schedule) is recorded as QUIC-2 in
- * `docs/security/quic.md`, with #430, the follow-up that moves these structs
- * onto `nish:secret`.
+ * plain bytes, wiped with stores no optimiser removes (`secureZero`, and
+ * `aesKeyWipe` for an AES schedule): each level's key, IV, header-protection
+ * key and schedules when the level is discarded; each generation's key, IV,
+ * schedule and secret when a key update replaces it; and the rest — the
+ * 1-RTT keys, the key-update secrets, the traffic secrets `TlsServer` holds,
+ * its ephemeral key and the connection-ID seed — by `release()`, `reset`,
+ * the idle timeout, and the end of the closing or draining period (RFC 9000
+ * §10.2), three probe timeouts after the connection closed either way.
+ * `docs/security/quic.md` records what is wiped where as QUIC-2.
  *
  * Written from RFC 9000, RFC 9001 and RFC 9221, in this module's own
  * structure; nothing here is ported from another implementation. Private
  * names carry the `quicConn` prefix (`docs/wp26-stdlib.md` §3e).
  */
 import { timingSafeEqualAt } from "nish/crypto/ct"
+import { AesKey, aesKeyWipe } from "nish/crypto/aes"
 import { HkdfScratch } from "nish/crypto/hkdf"
 import { HmacSha256Scratch, hmacSha256 } from "nish/crypto/hmac"
 import {
@@ -923,7 +927,7 @@ const quicConnAead = (suite: i32): i32 => {
   return QUIC_AEAD_AES_128_GCM
 }
 
-/** Wipes a level's key, IV and header-protection key; the expanded AES schedules are out of reach (QUIC-2). */
+/** Wipes a level's key, IV and header-protection key; `QuicKeysSlot.wipe` takes the header-protection schedule. */
 const quicConnWipeKeys = (keys: QuicKeys | null): void => {
   quicConnWipePacketKey(keys)
   if (keys !== null) {
@@ -932,14 +936,19 @@ const quicConnWipeKeys = (keys: QuicKeys | null): void => {
 }
 
 /**
- * Wipes a key generation's packet key and IV that a key update replaced. The
- * header-protection key is left alone: every generation shares it (RFC 9001
- * §6), so it goes only when the level does.
+ * Wipes a key generation's packet key, IV and the packet key's AES schedule,
+ * which a key update replaced. The header-protection key and its schedule are
+ * left alone: every generation shares them (RFC 9001 §6), so they go only
+ * when the level does.
  */
 const quicConnWipePacketKey = (keys: QuicKeys | null): void => {
   if (keys !== null) {
     secureZero(keys.key)
     secureZero(keys.iv)
+    const packetAes: AesKey | null = keys.packetAes
+    if (packetAes !== null) {
+      aesKeyWipe(packetAes)
+    }
   }
 }
 
@@ -1152,6 +1161,12 @@ export class QuicConnection {
   writePhaseFirst: i64 = 0
   /** When the previous read keys go and the next are derived, or -1. */
   keyRetainUntil: i64 = -1
+  /**
+   * When a closed connection's closing or draining period ends (RFC 9000
+   * §10.2), and `runClocks` wipes every key it kept for it, or -1: before
+   * the close, and once the keys are wiped.
+   */
+  closingUntil: i64 = -1
   /** The packet number of a client key update read but not applied yet, or -1. */
   phasePending: i64 = -1
   /** The largest DATAGRAM frame the client takes (its `max_datagram_frame_size`), 0 for none. */
@@ -1320,6 +1335,7 @@ export class QuicConnection {
     this.readPhaseHighest = -1
     this.writePhaseFirst = 0
     this.keyRetainUntil = -1
+    this.closingUntil = -1
     this.phasePending = -1
     this.peerMaxDatagramFrame = 0
     this.originalDcidLength = 0
@@ -1356,6 +1372,7 @@ export class QuicConnection {
       this.state = QUIC_STATE_CLOSING
       this.error = QUIC_ERROR_INTERNAL
       this.closeSent = true
+      this.startClosingPeriod()
     }
   }
 
@@ -1408,6 +1425,7 @@ export class QuicConnection {
     this.error = code
     this.errorFrameType = frameType
     this.errorIsApplication = false
+    this.startClosingPeriod()
   }
 
   /**
@@ -1424,6 +1442,17 @@ export class QuicConnection {
     this.error = code
     this.errorFrameType = 0
     this.errorIsApplication = true
+    this.startClosingPeriod()
+  }
+
+  /**
+   * Starts the closing or draining period, three probe timeouts long (RFC
+   * 9000 §10.2). The keys stay through it, for the CONNECTION_CLOSE still to
+   * go out, and `runClocks` wipes them all at its end, which `deadline()`
+   * names, so that a connection nobody `release()`s does not keep them.
+   */
+  startClosingPeriod(): void {
+    this.closingUntil = this.now + this.recovery.probeTimeout() * 3
   }
 
   /** The space of packets of `type`, or `null` for a 0-RTT or Retry packet. */
@@ -2123,6 +2152,7 @@ export class QuicConnection {
     this.error = code
     this.errorIsApplication = application
     this.closeSent = true
+    this.startClosingPeriod()
   }
 
   /**
@@ -2677,12 +2707,16 @@ export class QuicConnection {
    * When `handleTimer` is next due, in the caller's milliseconds: the idle
    * timeout, loss recovery's timer (a time-threshold loss or the probe
    * timeout), or the end of a key update's probe timeout, whichever comes
-   * first. -1 when nothing is timed: before the first packet, once the
-   * connection has closed, and with no idle timeout, nothing in flight and
-   * no update pending.
+   * first; once the connection has closed, the end of its closing or
+   * draining period, when its keys are wiped. -1 when nothing is timed:
+   * before the first packet, once a closed connection's keys are wiped, and
+   * with no idle timeout, nothing in flight and no update pending.
    */
   deadline(): i64 {
-    if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
+    if (this.closed()) {
+      return this.closingUntil
+    }
+    if (this.state === QUIC_STATE_WAIT_INITIAL) {
       return -1
     }
     let due: i64 = this.idleDeadline()
@@ -2709,9 +2743,10 @@ export class QuicConnection {
    * Runs whatever is due by `now`, the caller's monotonic time in
    * milliseconds; call it at `deadline()`, or any time. Past the idle timeout
    * the connection closes silently (`QUIC_STATE_TIMED_OUT`, RFC 9000 §10.1):
-   * no CONNECTION_CLOSE, every key wiped. Past a key update's probe timeout
-   * the previous read keys are wiped and the next generation's derived (RFC
-   * 9001 §6.5). Past loss recovery's timer, packets lost by the time
+   * no CONNECTION_CLOSE, every key wiped. Past the closing or draining
+   * period of a connection that closed, every key is wiped (§10.2). Past a
+   * key update's probe timeout the previous read keys are wiped and the next
+   * generation's derived (RFC 9001 §6.5). Past loss recovery's timer, packets lost by the time
    * threshold have their frames queued again, or a probe timeout queues
    * every space's packets in flight and asks for a probe (RFC 9002 §6.1.2,
    * §6.2.4): `takeDatagram` then sends it. `receive` and `takeDatagram` run
@@ -2723,12 +2758,24 @@ export class QuicConnection {
     this.runRecoveryTimer()
   }
 
-  /** `handleTimer`'s idle timeout and key retention, which `receive` runs before it reads a datagram. */
+  /**
+   * `handleTimer`'s idle timeout, key retention and the end of the closing
+   * or draining period, which `receive` runs before it reads a datagram.
+   */
   runClocks(now: i64): void {
     if (now > this.now) {
       this.now = now
     }
-    if (this.closed() || this.state === QUIC_STATE_WAIT_INITIAL) {
+    if (this.closed()) {
+      // RFC 9000 §10.2: past the period, nothing more goes out, so the keys
+      // kept for the CONNECTION_CLOSE are wiped (QUIC-2).
+      if (this.closingUntil >= 0 && this.now >= this.closingUntil) {
+        this.closeSent = true
+        this.wipeAll()
+      }
+      return
+    }
+    if (this.state === QUIC_STATE_WAIT_INITIAL) {
       return
     }
     const idle: i64 = this.idleDeadline()
@@ -3527,9 +3574,10 @@ export class QuicConnection {
 
   /**
    * Wipes every key and secret the connection holds and discards every
-   * level: `release()`'s work, the idle timeout's and `reset`'s. That takes
-   * in both sides' stateless reset tokens and `TlsServer`'s expected client
-   * Finished.
+   * level: `release()`'s work, the idle timeout's, the end of the closing or
+   * draining period's and `reset`'s. That takes in both sides' stateless
+   * reset tokens and `TlsServer`'s expected client Finished and resumption
+   * secret.
    */
   wipeAll(): void {
     this.discard(this.initial)
@@ -3539,6 +3587,7 @@ export class QuicConnection {
     this.otherReadKeys = null
     this.otherIsNext = false
     this.keyRetainUntil = -1
+    this.closingUntil = -1
     secureZero(this.appReadSecret)
     secureZero(this.appWriteSecret)
     secureZero(this.nextReadSecret)
@@ -3573,6 +3622,7 @@ export class QuicConnection {
       secureZero(tls.clientApplicationSecret)
       secureZero(tls.serverApplicationSecret)
       secureZero(tls.exporterSecret)
+      secureZero(tls.resumptionSecret)
     }
   }
 }

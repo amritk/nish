@@ -1,3 +1,50 @@
-// The QUIC connection's wipes after `opt -O2` (`index.js` says what a group is):
-// filled by the stage that wipes `QuicKeysSlot` and `QuicConnection` (#430).
-export const wipeChecks = []
+// The QUIC connection's wipes after `opt -O2` (`index.js` says what a group is
+// and how a root's count is read). The counts are as LLVM 18's `opt -O2` leaves
+// them, and each wipe this group pins was deleted in turn to show its roots'
+// counts drop.
+
+/** The modules that define the QUIC connection, its packet protection, or AES. */
+const QUIC_MODULES = /^define [^\n]*@"?nish\.(Quic|quic|Aes|aes)/m
+
+export const wipeChecks = [
+  // `nish/net/quic-packet`'s key slots and packet protection, and
+  // `nish/net/quic`'s connection (#430). `net_quic_wipes` imports both. A
+  // slot's `wipe` 13: its five byte arrays with `secureZero` and its four AES
+  // schedules with `aesKeyWipe`, 2 each. Sealing a packet wipes its nonce and
+  // its header-protection mask once each is used; `opt` copies each wipe into
+  // the two arms of the AEAD's branch, so `quicSealInPlace` reaches 4 of its
+  // own, besides `aesGcmSeal`'s 7 and `aesHeaderMask`'s 2, 13; opening, the
+  // mask's 1 and `aesHeaderMask`'s 2 in `quicUnprotectHeader`, 3, and the
+  // nonce's 2 and `aesGcmOpen`'s 8 in `quicDecryptPayload`, 10. (ChaCha20's
+  // functions are in a module this group does not run through `opt`.) A key
+  // update: `updateWriteKeys` 12 (the replaced key, IV and secret, the next
+  // secret on the failure path, the replaced packet key's schedule 2, and
+  // the next generation's `aesKeyInto`, 6), `prepareNextReadKeys` 10 (the
+  // previous read generation's key and IV, its schedule 2, and `aesKeyInto`
+  // 6). Discarding a level, `discard` 23: the read and write keys' key, IV
+  // and header-protection key, 6, their packet schedules, 4, and one slot's
+  // `wipe` in the loop over the space's slots, 13. `wipeAll` 95: three
+  // `discard`s, the previous generation's packet schedule 2, and 24 wipes of
+  // its own (a loop's one call site counted once), `TlsServer`'s resumption
+  // secret among them; `release` is `wipeAll`. `runClocks` 200: `wipeAll` at the idle timeout and again at
+  // the end of the closing or draining period, each copy counted, and
+  // `prepareNextReadKeys` once a key update's previous keys have had their
+  // probe timeout.
+  {
+    name: "quic: the wipes survive opt -O2 (a key slot's keys and AES schedules, each packet's nonce and mask, a key update's replaced generation, a discarded level, and every key at release, the idle timeout and the end of the closing or draining period)",
+    program: "tests/link/net_quic_wipes/main.ts",
+    modules: QUIC_MODULES,
+    roots: [
+      ["nish.QuicKeysSlot.wipe", 13],
+      ["nish.quicSealInPlace", 13],
+      ["nish.quicUnprotectHeader", 3],
+      ["nish.quicDecryptPayload", 10],
+      ["nish.QuicConnection.updateWriteKeys", 12],
+      ["nish.QuicConnection.prepareNextReadKeys", 10],
+      ["nish.QuicConnection.discard", 23],
+      ["nish.QuicConnection.wipeAll", 95],
+      ["nish.QuicConnection.release", 95],
+      ["nish.QuicConnection.runClocks", 200],
+    ],
+  },
+]

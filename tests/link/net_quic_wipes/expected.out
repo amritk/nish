@@ -1,0 +1,70 @@
+PASS  AES-128-GCM: the handshake completes
+PASS  AES-128-GCM: the Initial level's slots, schedules included, read zero once it is discarded
+PASS  AES-128-GCM: and the Handshake level's, once the handshake is confirmed
+PASS  AES-128-GCM: while the 1-RTT keys are held
+PASS  AES-128-GCM: the server follows the client's key update
+PASS  AES-128-GCM: the write slot the update replaced reads zero: packet key, IV and its schedule
+PASS  AES-128-GCM: but for the header-protection key, which every generation shares
+PASS  AES-128-GCM: the previous read generation is kept for a probe timeout
+PASS  AES-128-GCM: then its slot holds the next generation instead
+PASS  AES-128-GCM: release() leaves every key and secret zero
+PASS  AES-128-GCM, closed: the CONNECTION_CLOSE goes out
+PASS  AES-128-GCM, closed: the keys are kept through the period, three probe timeouts
+PASS  AES-128-GCM, closed: and at its end every key and secret reads zero
+PASS  AES-128-GCM, closed: in the same state, with nothing more to send or time
+PASS  AES-128-GCM, failed: the CONNECTION_CLOSE goes out
+PASS  AES-128-GCM, failed: the keys are kept through the period, three probe timeouts
+PASS  AES-128-GCM, failed: and at its end every key and secret reads zero
+PASS  AES-128-GCM, failed: in the same state, with nothing more to send or time
+PASS  AES-128-GCM, drained: nothing goes out
+PASS  AES-128-GCM, drained: the keys are kept through the period, three probe timeouts
+PASS  AES-128-GCM, drained: and at its end every key and secret reads zero
+PASS  AES-128-GCM, drained: in the same state, with nothing more to send or time
+PASS  AES-128-GCM, idle: past the idle timeout every key and secret reads zero
+PASS  AES-256-GCM: the handshake completes
+PASS  AES-256-GCM: the Initial level's slots, schedules included, read zero once it is discarded
+PASS  AES-256-GCM: and the Handshake level's, once the handshake is confirmed
+PASS  AES-256-GCM: while the 1-RTT keys are held
+PASS  AES-256-GCM: the server follows the client's key update
+PASS  AES-256-GCM: the write slot the update replaced reads zero: packet key, IV and its schedule
+PASS  AES-256-GCM: but for the header-protection key, which every generation shares
+PASS  AES-256-GCM: the previous read generation is kept for a probe timeout
+PASS  AES-256-GCM: then its slot holds the next generation instead
+PASS  AES-256-GCM: release() leaves every key and secret zero
+PASS  AES-256-GCM, closed: the CONNECTION_CLOSE goes out
+PASS  AES-256-GCM, closed: the keys are kept through the period, three probe timeouts
+PASS  AES-256-GCM, closed: and at its end every key and secret reads zero
+PASS  AES-256-GCM, closed: in the same state, with nothing more to send or time
+PASS  AES-256-GCM, failed: the CONNECTION_CLOSE goes out
+PASS  AES-256-GCM, failed: the keys are kept through the period, three probe timeouts
+PASS  AES-256-GCM, failed: and at its end every key and secret reads zero
+PASS  AES-256-GCM, failed: in the same state, with nothing more to send or time
+PASS  AES-256-GCM, drained: nothing goes out
+PASS  AES-256-GCM, drained: the keys are kept through the period, three probe timeouts
+PASS  AES-256-GCM, drained: and at its end every key and secret reads zero
+PASS  AES-256-GCM, drained: in the same state, with nothing more to send or time
+PASS  AES-256-GCM, idle: past the idle timeout every key and secret reads zero
+PASS  ChaCha20-Poly1305: the handshake completes
+PASS  ChaCha20-Poly1305: the Initial level's slots, schedules included, read zero once it is discarded
+PASS  ChaCha20-Poly1305: and the Handshake level's, once the handshake is confirmed
+PASS  ChaCha20-Poly1305: while the 1-RTT keys are held
+PASS  ChaCha20-Poly1305: the server follows the client's key update
+PASS  ChaCha20-Poly1305: the write slot the update replaced reads zero: packet key, IV and its schedule
+PASS  ChaCha20-Poly1305: but for the header-protection key, which every generation shares
+PASS  ChaCha20-Poly1305: the previous read generation is kept for a probe timeout
+PASS  ChaCha20-Poly1305: then its slot holds the next generation instead
+PASS  ChaCha20-Poly1305: release() leaves every key and secret zero
+PASS  ChaCha20-Poly1305, closed: the CONNECTION_CLOSE goes out
+PASS  ChaCha20-Poly1305, closed: the keys are kept through the period, three probe timeouts
+PASS  ChaCha20-Poly1305, closed: and at its end every key and secret reads zero
+PASS  ChaCha20-Poly1305, closed: in the same state, with nothing more to send or time
+PASS  ChaCha20-Poly1305, failed: the CONNECTION_CLOSE goes out
+PASS  ChaCha20-Poly1305, failed: the keys are kept through the period, three probe timeouts
+PASS  ChaCha20-Poly1305, failed: and at its end every key and secret reads zero
+PASS  ChaCha20-Poly1305, failed: in the same state, with nothing more to send or time
+PASS  ChaCha20-Poly1305, drained: nothing goes out
+PASS  ChaCha20-Poly1305, drained: the keys are kept through the period, three probe timeouts
+PASS  ChaCha20-Poly1305, drained: and at its end every key and secret reads zero
+PASS  ChaCha20-Poly1305, drained: in the same state, with nothing more to send or time
+PASS  ChaCha20-Poly1305, idle: past the idle timeout every key and secret reads zero
+quic wipes: 69 passed, 0 failed, 0 skipped
