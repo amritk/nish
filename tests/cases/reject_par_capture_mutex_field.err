@@ -1,0 +1,1 @@
+The arrow reads `h`, which is `Holder`, and a data-parallel body cannot capture it: a scope, a lock, a guard or a channel is shared only by the rules of its own block

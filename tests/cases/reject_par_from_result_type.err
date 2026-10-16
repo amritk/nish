@@ -1,0 +1,1 @@
+`(i) => ...` answers `string`, and `parallelFrom` hands back only a number, a `boolean` or an enum

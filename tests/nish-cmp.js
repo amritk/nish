@@ -613,6 +613,56 @@ const QPACK_NEW = [
 
 const DECLARED = [
   {
+    program: "tests/link/par_map_new/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` from `nish/threads`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/par_from/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have",
+  },
+  {
+    program: "tests/link/par_capture/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have, and passes `parallelMapInto` and `parallelReduce` arrows that read their function's `const` locals, which it refuses",
+  },
+  {
+    program: "tests/link/par_capture_large/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have, and its arrows read their function's `const` locals across a region large enough to split, which it refuses",
+  },
+  {
+    program: "tests/link/port_rec_capture_copy/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelFrom`, which the reference compiler's `nish/threads` does not have, to pin NL8003 at a record read through a capture",
+  },
+  {
+    program: "tests/link/port_rec_capture_quiet/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelFrom`, which the reference compiler's `nish/threads` does not have, to pin the quiet side of NL8003 through a capture",
+  },
+  {
+    program: "tests/link/port_str_capture_offset/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelFrom`, which the reference compiler's `nish/threads` does not have, to pin NL8001 at a byte offset read through a capture",
+  },
+  {
+    program: "tests/link/port_num_capture_wide/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelMap` from `nish/threads`, which the reference compiler's standard library does not have, to pin NL8009 on the written parameters of an arrow that captures",
+  },
+  {
+    program: "tests/link/port_str_capture_result/main.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new program: it imports `parallelFrom` from `nish/threads`, which the reference compiler's standard library does not have, to pin NL8001 on a captured offset an arrow answers with",
+  },
+  {
+    program: "docs/cookbook/par-capture.ts",
+    changelog: "ParallelMap, parallelFrom and arrows that read the enclosing function's consts",
+    why: "a new cookbook entry: it imports `parallelMap` and `parallelFrom`, which the reference compiler's `nish/threads` does not have",
+  },
+  {
     program: "tests/cases/math_clz32.ts",
     changelog: "Add `Math.clz32`, the leading zero bits of a 32-bit integer",
     why: "a new program: it calls `Math.clz32`, which the reference compiler refuses as an unknown builtin",
