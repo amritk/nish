@@ -45,7 +45,7 @@ import { internalErrorFor } from "./ice"
 import { N_FALSE, N_MEMBER, N_NULL, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
-import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID } from "./types"
+import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID, UNION_TYPE } from "./types"
 
 // ---- Helpers ------------------------------------------------------------------------
 
@@ -251,6 +251,14 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
   if (emitter.table.isArray(receiver)) {
     return emitArrayLength(emitter, expr)
   }
+  if (emitter.table.isUnion(receiver)) {
+    // The tag, the one member a union has: every variant's first field, so at
+    // offset 0 whichever variant it holds. No TBAA tag, because the access
+    // aliases each variant's own tag field.
+    const union = emitter.emitExpression(expr.children[0])
+    const ptr = emitter.fn.emitValue(`getelementptr inbounds %union.tagged, ${UNION_TYPE} ${union}, i32 0, i32 0`)
+    return emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4`)
+  }
   const info = structInfoOf(emitter, receiver)
   const field = info.field(expr.text)
   if (field !== null && field.inline()) {
@@ -447,6 +455,11 @@ export const structTypeDeclarations = (emitter: Emitter): string[] => {
   // dedupes by first insertion, and these lines precede both.
   for (const decl of headers) {
     lines.push(decl)
+  }
+  // Every discriminated union is this one type: the tag every variant keeps
+  // as its first field (docs/LANGUAGE.md, "Discriminated unions").
+  if (emitter.table.unions.length > 0) {
+    lines.push("%union.tagged = type { i32 }")
   }
   return lines
 }

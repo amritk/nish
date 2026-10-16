@@ -331,6 +331,10 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   if (refuseParameterMember(ctx, receiverExpr, receiver, access, "call", true, scope)) {
     return T_ERROR
   }
+  if (ctx.table.isUnion(receiver)) {
+    ctx.errorAtProperty(access, unionMemberMessage(ctx, receiver, access.text))
+    return T_ERROR
+  }
   if (receiver === T_STRING) {
     return checkStringMethod(ctx, expr, access, args, scope)
   }
@@ -750,6 +754,14 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   }
   if (refuseSecretMember(ctx, receiver, target)) {
     return T_ERROR
+  }
+  if (ctx.table.isUnion(receiver)) {
+    // tsc writes a union's member at the intersection of its variants'
+    // types, which for a tag is \`never\`.
+    return ctx.errorType(
+      target,
+      `Cannot assign to \`${target.text}\` through the union \`${ctx.table.typeName(receiver)}\`: a union is read-only, so assign to the variant itself`
+    )
   }
   if (ctx.table.isArray(receiver) && target.text === "length") {
     return ctx.errorType(

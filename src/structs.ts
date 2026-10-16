@@ -985,7 +985,7 @@ export const coercesTo = (ctx: CheckContext, from: i32, want: i32): boolean => {
   const target = ctx.table.stripNull(want) // a class converts to `I | null` as it does to `I`
   // A variant converts to its union, and a nullable one to the nullable
   // union. Only the variant itself: a class that implements an interface
-  // variant is not one, because its tag is not where the union reads it.
+  // variant converts to that interface first, as a narrower rule than tsc's.
   if (ctx.table.isUnion(target)) {
     const variant = ctx.table.stripNull(from)
     return (variant === from || target !== want) && ctx.table.hasVariant(target, variant)
