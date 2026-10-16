@@ -11,7 +11,7 @@ import { fromHex, toHex } from "../crypto_aes/hex";
 
 /** Whether `a` and `b` hold the same words, schedule and H alike. */
 const sameKey = (a: AesKey, b: AesKey): boolean => {
-  if (a.rounds !== b.rounds || a.hHi !== b.hHi || a.hLo !== b.hLo || toI32(a.roundKeys.length) !== toI32(b.roundKeys.length)) {
+  if (a.rounds !== b.rounds || a.h[0] !== b.h[0] || a.h[1] !== b.h[1] || toI32(a.roundKeys.length) !== toI32(b.roundKeys.length)) {
     return false;
   }
   for (let i: i32 = 0; i < toI32(a.roundKeys.length) && i < toI32(b.roundKeys.length); i++) {

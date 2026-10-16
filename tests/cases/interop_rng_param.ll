@@ -4,9 +4,8 @@
 @.str.1 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"value out of range: expected integer<0, 23>\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<0, 9>\00" }, align 8
 
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
-declare void @nish_exit(i32 noundef) #3
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
@@ -17,8 +16,7 @@ entry:
   br i1 %1, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [43 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -61,8 +59,7 @@ entry:
   br i1 %0, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.1 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [44 x i8] }* @.str.1 to i8*))
   unreachable
 
 rng.ok:
@@ -84,8 +81,7 @@ entry:
   br i1 %1, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.2 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [43 x i8] }* @.str.2 to i8*))
   unreachable
 
 rng.ok:
@@ -125,9 +121,7 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
+attributes #2 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

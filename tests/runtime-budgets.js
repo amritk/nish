@@ -30,8 +30,25 @@
  * Raised by 1 more, to 3,606, by checked signed arithmetic: `nish_panic_overflow` sits
  * beside the division panic and the two share one table of messages, which measured 3,606
  * against 3,604 the same day (docs/wp7-runtime.md, "Checked arithmetic").
+ *
+ * Raised by 16, to 3,622, for `nish_panic` (#611): `panic`, `expect` and a failed range
+ * entry call it where they called `nish_write` and then `nish_exit`, so that the runtime
+ * owns the message and the exit together and only the first of several panicking threads
+ * prints. Measured 3,622 on 2026-10-12 with clang 18 on linux-x64. The claim that parks a
+ * second panic is compiled only into the threads build below; here it is empty.
+ *
+ * Raised by 34, to 3,656, in the same change, for retrying `write` on `EINTR` in
+ * `nish_write`, the one place a panic's message is written: a C host may install a signal
+ * handler without `SA_RESTART`, and the loop used to stop there and lose the rest of the
+ * message. Measured 3,656 against 3,622 on 2026-10-16 with clang 18 on linux-x64; calling
+ * `exit` rather than `_exit` after the claim measured the same.
+ *
+ * Raised by 28 more, to 3,684, in the same change: the newline is retried on `EINTR` as
+ * well, and `nish_die`, the arithmetic and out-of-memory panics, writes its message through
+ * the same retrying loop (`nish_write_all`) instead of `fputs`, which gives up on `EINTR`.
+ * Measured 3,684 on 2026-10-16 with clang 18 on linux-x64.
  */
-const RUNTIME_TEXT_BUDGET = 3606
+const RUNTIME_TEXT_BUDGET = 3684
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -81,8 +98,14 @@ const RUNTIME_OS_TEXT_BUDGET = 1536
  * It is deliberately a *separate* ceiling rather than a raised shared one. Making the core
  * budget 3,840 to cover both would give the default build 360 bytes of room it has no
  * business having, and the point of the split was that a number should mean one thing.
+ *
+ * Raised by 20, to 3,860, by #611: the first-panic claim (measured 3,826 with it, under the
+ * old 3,840) and then the `EINTR` retry in `nish_write` (34 bytes, as above), measured
+ * 3,860 on 2026-10-16 with clang 18 on linux-x64, and then 3,885 with the newline's retry
+ * and `nish_die` writing through the same loop (as above). The raise is what was measured
+ * and no more, as `nish_wipe`'s was.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3840
+const RUNTIME_THREADS_TEXT_BUDGET = 3885
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across

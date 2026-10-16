@@ -6,11 +6,10 @@ declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @nish_free_arena() #3
 declare noundef i64 @nish_arena_mark() #3
 declare void @nish_arena_release(i64 noundef) #3
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #3
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
-declare void @nish_exit(i32 noundef) #4
-declare extern_weak void @nish_panic_overflow(i32 noundef) #5
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
+declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 
 define internal noundef i8 @getByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %i) #0 {
@@ -326,8 +325,7 @@ ovf.ok.5:
   br i1 %120, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [47 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [47 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -354,8 +352,7 @@ attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
 attributes #3 = { nounwind willreturn }
-attributes #4 = { noreturn nounwind }
-attributes #5 = { nounwind noreturn cold }
+attributes #4 = { nounwind noreturn cold }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

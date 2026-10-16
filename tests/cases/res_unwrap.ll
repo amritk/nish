@@ -11,11 +11,10 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_exit(i32 noundef) #3
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 declare i32 @llvm.fptosi.sat.i32.f64(double) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
@@ -98,8 +97,7 @@ res.end:
   br i1 %9, label %res.ok.1, label %res.panic
 
 res.panic:
-  call void @nish_write(i8* bitcast ({ i64, [15 x i8] }* @.str.3 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [15 x i8] }* @.str.3 to i8*))
   unreachable
 
 res.ok.1:
@@ -121,6 +119,6 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { noreturn nounwind }
+attributes #3 = { nounwind noreturn cold }
 attributes #4 = { nounwind willreturn readnone }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }

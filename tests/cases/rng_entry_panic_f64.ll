@@ -3,10 +3,9 @@
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_exit(i32 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -36,8 +35,7 @@ for.inc:
   br i1 %7, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -61,4 +59,4 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
+attributes #2 = { nounwind noreturn cold }

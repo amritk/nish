@@ -174,11 +174,11 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 
 | File | Subject | Budget (constant) | Measured 2026-10-05 |
 | --- | --- | ---: | ---: |
-| `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,606 (`RUNTIME_TEXT_BUDGET`) | 3,606 |
-| `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`) | 3,840 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,731 |
+| `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,684 (`RUNTIME_TEXT_BUDGET`) | 3,684 (2026-10-16) |
+| `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,885 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,885 (2026-10-16) |
 | `runtime/runtime-os.c` | syscall wrappers: files, directories, subprocesses, `getenv`, the clock, `realpath`, platform | 1,536 (`RUNTIME_OS_TEXT_BUDGET`) | 1,530 |
-| `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 597 (2026-10-11) |
-| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path and channels | 1,536 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 1,403 (2026-10-11) |
+| `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 610 (2026-10-16) |
+| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,816 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,665 (2026-10-16) |
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, UDP, the readiness loop | 2,304 (`NET_TEXT_BUDGET`) | 2,303 |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
@@ -203,6 +203,10 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | after 0.16.0 | `nish_panic_overflow` (#426): 3,606 | core 3,606 |
 | 2026-10-09 | `runtime-simd.c` (675), wp38 S1 | simd 768 |
 | 2026-10-11 | `runtime-aes.c` (2,532), wp38 S5 | aes 2,560 |
+| 2026-10-11 | the worker pool (#586): `nish_pool_disable` in the fallback (610), the pool, the core count and `NISH_NUM_THREADS` in the threads build (2,660) | parallel threads 2,816 |
+| 2026-10-12 | `nish_panic` (#611): one call for `panic`'s message and exit, 3,606 → 3,622; its claim, threads build only | core 3,622 |
+| 2026-10-16 | `nish_write` retries `EINTR` (#611), so a panic's message is not cut short by a handler without `SA_RESTART`: core 3,622 → 3,656, threads 3,840 → 3,860 | core 3,656, threads 3,860 |
+| 2026-10-16 | the newline too, and `nish_die` through the same loop rather than `fputs` (#611): core 3,656 → 3,684, threads 3,860 → 3,885 | core 3,684, threads 3,885 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same

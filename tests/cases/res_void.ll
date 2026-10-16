@@ -10,9 +10,8 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_exit(i32 noundef) #3
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
@@ -86,8 +85,7 @@ if.end:
   br i1 %10, label %res.ok, label %res.panic
 
 res.panic:
-  call void @nish_write(i8* bitcast ({ i64, [14 x i8] }* @.str.1 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [14 x i8] }* @.str.1 to i8*))
   unreachable
 
 res.ok:
@@ -106,5 +104,5 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { noreturn nounwind }
+attributes #3 = { nounwind noreturn cold }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }

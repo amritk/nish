@@ -54,7 +54,11 @@ export const main = (): i32 => {
 - **`dst` must be at least as long as `src`**, or the call panics before it
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
-  no `console.log` — and **answers a number, a `boolean` or an enum**. It may
+  and no output: not `console.log`, `console.error`, `write`, `writeError` or
+  `process.exit` — and **answers a number, a `boolean` or an enum**. It may
+  look keys up in a `Map` or `Set` its element reaches (`get`, `has`, `size`),
+  and it may `panic`: if several elements panic at once, only the first
+  prints its message, and the program exits 1. It may
   build strings and arrays on the way to its answer; they are freed after each
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
@@ -206,7 +210,11 @@ export const main = (): i32 => {
   fresh array (`[0]`, `new Array<i32>(n)`) that you only index; never pass it
   on. Inside the block, don't read a destination, and don't write memory a
   task could read — through a constructor either: `new Bump(counter)` whose
-  constructor writes `counter` is refused like a call that does. An object
+  constructor writes `counter` is refused like a call that does. Don't call a
+  `Map` or `Set` method that changes or walks the table either, even on one
+  no task can reach or one you made in the block: the compiler judges the
+  call, not which tables the tasks hold. Do it before the first `spawn`,
+  after the block, or in a helper that makes and fills its own table. An object
   you make in the block is yours to write, until anything a task reads may
   have got into it: stored in a field or an element, pushed, added to a `Map`
   or a `Set`, put in a literal, or handed to a function that keeps it. A field
@@ -216,8 +224,13 @@ export const main = (): i32 => {
 - **A task is a named top-level function**, not an arrow, so a debugger or a
   profiler can name its thread. It follows the rules of a parallel `f` above:
   it writes nothing another thread can see (except through a `Mutex` or a
-  `Channel`, below), answers a number, a `boolean` or an enum, and opens no
-  scope of its own.
+  `Channel`, below) and prints nothing (`console.log`, `console.error`,
+  `write`, `writeError` and `process.exit` are all refused), answers a number, a `boolean` or an enum, and opens no
+  scope of its own. Looking a key up in a shared `Map` or `Set` (`get`,
+  `has`, `size`) is a read, so tasks may share a table that way; changing it,
+  or walking it with `for...of`, is a write. A task may `panic`: if several
+  threads panic at once, only the first prints its message, and the program
+  exits 1.
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.
