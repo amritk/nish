@@ -1533,13 +1533,14 @@ export class Emitter {
     const aesSeam = isWasmBuild(this.opts) ? AES_SEAM_NONE : isAesSeam(this.program, sig)
     const aesJoin: IRBlock | null =
       aesSeam === AES_SEAM_NONE ? null : this.emitAesKernelArm(aesSeam, operands)
-    // WP9: the mark goes after the arguments, so only the callee's own bumps
-    // are inside the bracket (`beginReclaim`).
-    // Where that does not apply, a map's or a `parallelFrom`'s chunk loop
-    // keeps each element its body answers and gives back the rest
-    // (`elementKeepSize`).
-    const reclaim = this.beginReclaim(sig)
-    const keepSize = tail || reclaim.length > 0 ? -1 : elementKeepSize(this, this.currentSig, sig)
+    // A map's or a `parallelFrom`'s chunk loop keeps each element its body
+    // answers and gives back the rest (`elementKeepSize`), ahead of WP9's
+    // reclaim: that one keeps the answer in this thread's arena, which the
+    // chunk releases, where this one moves it to the transfer block the
+    // caller adopts. Elsewhere, WP9: the mark goes after the arguments, so
+    // only the callee's own bumps are inside the bracket (`beginReclaim`).
+    const keepSize = tail ? -1 : elementKeepSize(this, this.currentSig, sig)
+    const reclaim = keepSize >= 0 ? "" : this.beginReclaim(sig)
     const mark =
       keepSize >= 0 ? this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`) : reclaim
     const marker = tail ? "tail " : ""

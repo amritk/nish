@@ -47,6 +47,9 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
+#ifdef __GLIBC__
+#include <malloc.h> /* `mallopt`, for `nish_pool_ready` */
+#endif
 #endif
 
 /* The ceiling on how many threads one region may use. A fixed bound keeps the
@@ -317,6 +320,18 @@ static int nish_pool_ready(void) {
       pthread_detach(th);
     }
     pthread_atfork(0, 0, nish_pool_child);
+#ifdef __GLIBC__
+    /* glibc otherwise trims the heap top, or unmaps, every chunk of 128 KB or
+     * more an arena release frees, and a task or element that builds a 1 MB
+     * temporary then pays a page fault per 4 KB of it on every call: 200 such
+     * tasks took 312 ms at one thread, 47 ms with these. Fixed rather than
+     * glibc's sliding threshold, which moves on frees from the main thread
+     * only. Set here, once a program first runs work on other threads; a
+     * region below its grain, or at one thread, runs as the loop it would have
+     * been and keeps that loop's costs. */
+    mallopt(M_MMAP_THRESHOLD, 32 << 20);
+    mallopt(M_TRIM_THRESHOLD, 64 << 20);
+#endif
     __atomic_store_n(&nish_pool.state, 1, __ATOMIC_RELEASE);
   }
   state = nish_pool.state;

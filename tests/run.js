@@ -4969,7 +4969,8 @@ if (!only || "par_alloc".includes(only)) {
 // And copy-at-join: `thread_task_string`, whose tasks answer strings and
 // scalar arrays; `par_map_string`, whose data-parallel bodies do; and
 // `thread_channel_string` and `thread_mutex_string`, which send strings on
-// channels and store them through guards. Each reads what crossed after
+// channels and store them through guards; and `thread_adopt_lifetime`, whose
+// answers the caller adopts and then releases. Each reads what crossed after
 // `churn()`, and prints only what every task order agrees on.
 for (const name of [
   "arena_using_exit_paths",
@@ -5022,6 +5023,7 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_adopt_lifetime",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -5260,7 +5262,8 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `thread_task_string`, `par_map_string`, `thread_channel_string` and
 // `thread_mutex_string` are the strings and scalar arrays that cross by copy,
 // whose transfer block carries a tag in its pointer's low bit on a 32-bit
-// pointer as on a 64-bit one.
+// pointer as on a 64-bit one; `thread_adopt_lifetime` adopts those blocks, and
+// a 24-byte transfer state, on wasm32 as on a 64-bit target.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -5274,6 +5277,7 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_adopt_lifetime",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue

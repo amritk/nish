@@ -134,7 +134,12 @@ export const emitParallelRegion = (
     }
     i = i + 1
   }
-  const ctxType = `{ ${fieldTypes.join(", ")} }`
+  // A region whose elements cross ends its context with the list its chunks
+  // push their transfer blocks on (`nish_cross_keep`), which no chunk loop
+  // reads.
+  const crosses = regionCrosses(emitter, caller)
+  const ctxType =
+    crosses ? `{ ${fieldTypes.join(", ")}, i8* }` : `{ ${fieldTypes.join(", ")} }`
   const fn = emitter.fn
   const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0)
   const hi = values[range - 1]
@@ -155,7 +160,13 @@ export const emitParallelRegion = (
     operands.push(`${types[i]} ${values[i]}`)
     i = i + 1
   }
+  // On this path the elements are not packed: a state with no list hides the
+  // one of any chunk this map runs inside, so they cannot land in its block.
+  const seqState = crosses ? beginTransfer(emitter, fn, "null") : ""
   fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
+  if (crosses) {
+    fn.emit(`call void ${emitter.useRuntime("nish_cross_end")}(i8* ${seqState})`)
+  }
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(regionBlock)
   i = 0
@@ -167,52 +178,56 @@ export const emitParallelRegion = (
     fn.emit(`store ${type} ${value}, ${type}* ${at}`)
     i = i + 1
   }
+  const list = crosses
+    ? fn.emitValue(`getelementptr inbounds ${ctxType}, ${ctxType}* ${slot}, i32 0, i32 ${fieldTypes.length}`)
+    : ""
+  if (crosses) {
+    fn.emit(`store i8* null, i8** ${list}`)
+  }
   const raw = fn.emitValue(`bitcast ${ctxType}* ${slot} to i8*`)
   const len = fn.emitValue(`sext i32 ${hi} to i64`)
   const trampoline = `${caller.name}$chunk`
   fn.emit(
     `call void ${emitter.useRuntime("nish_parallel_range")}(void (i64, i64, i8*)* @${trampoline}, i8* ${raw}, i64 ${len}, i64 ${grain})`
   )
-  const crossing = regionCrossing(emitter, caller)
-  if (crossing.size >= 0) {
-    // Every chunk left its elements in a malloc'd block of their own
-    // (`chunkTrampoline`); each comes into this thread's arena here.
-    const dst = fn.emitValue(`bitcast ${fieldTypes[crossing.field]} ${fieldValues[crossing.field]} to i8*`)
-    fn.emit(
-      `call void ${emitter.useRuntime("nish_cross_in_range")}(i8* ${dst}, i64 ${len}, i64 ${crossing.size})`
-    )
+  if (crosses) {
+    // Every chunk left its elements in malloc'd blocks (`chunkTrampoline`);
+    // the blocks become chunks of this thread's arena here, and the elements
+    // stay where they are.
+    const blocks = fn.emitValue(`load i8*, i8** ${list}`)
+    fn.emit(`call void ${emitter.useRuntime("nish_cross_adopt")}(i8* ${blocks})`)
   }
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(doneBlock)
   emitter.module.addFunction(
-    chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured, crossing)
+    chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured, crosses)
   )
 }
 
 /**
- * Where a region's elements cross by copy: `size` is the element's
- * `crossingSize`, -1 when it is a scalar, which needs no copy, and `field` is
- * the context field of the chunk's `dst` — `mapRange(src, dst, ...)` and
- * `fromRange(dst, ...)` in `std/threads.ts`. A reduce's partials are scalars
- * (`resultMessage`), so a reduce never crosses.
+ * Whether a region's elements cross by copy: a map's or a `parallelFrom`'s
+ * whose element is a string or an array of scalars (`crossingSize`). A
+ * reduce's partials are scalars (`resultMessage`), so a reduce never crosses.
  */
-class RegionCrossing {
-  size: i32
-  field: i32
-  constructor(size: i32, field: i32) {
-    this.size = size
-    this.field = field
-  }
-}
-
-const regionCrossing = (emitter: Emitter, caller: FunctionSig): RegionCrossing => {
+const regionCrosses = (emitter: Emitter, caller: FunctionSig): boolean => {
   const role = parallelRoleOf(caller)
   const instance = caller.instance
   if ((role !== PAR_MAP && role !== PAR_FROM) || instance === null || instance.typeArgs.length === 0) {
-    return new RegionCrossing(-1, 0)
+    return false
   }
-  const size = crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1])
-  return new RegionCrossing(size, role === PAR_MAP ? 1 : 0)
+  return crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1]) >= 0
+}
+
+/**
+ * A chunk's transfer state on the stack, pushed with `nish_cross_begin` on the
+ * `list` its blocks go on (`null`: none); answers the state, as an `i8*`, for
+ * the `nish_cross_end` that pops it.
+ */
+const beginTransfer = (emitter: Emitter, fn: IRFunction, list: string): string => {
+  const slot = fn.emitAlloca("par.xfer", "{ i8*, i8*, i64, i8* }", 8)
+  const state = fn.emitValue(`bitcast { i8*, i8*, i64, i8* }* ${slot} to i8*`)
+  fn.emit(`call void ${emitter.useRuntime("nish_cross_begin")}(i8* ${state}, i8** ${list})`)
+  return state
 }
 
 /**
@@ -229,7 +244,7 @@ const chunkTrampoline = (
   ctxType: string,
   fieldTypes: string[],
   captured: i32,
-  crossing: RegionCrossing
+  crosses: boolean
 ): IRFunction => {
   const optimize = emitter.opts.optimizeAttributes
   const attrs: string[] = []
@@ -273,16 +288,22 @@ const chunkTrampoline = (
     operands.push(operand)
   }
   // An element that crosses by copy was made in this thread's arena, which
-  // the next chunk or job reuses: the chunk's elements move to malloc'd
-  // blocks, and with them out, everything else the chunk allocated is a
-  // temporary its arena gives back.
-  const mark = crossing.size < 0 ? "" : fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
-  fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
-  if (crossing.size >= 0) {
-    const dst = fn.emitValue(`bitcast ${operands[crossing.field]} to i8*`)
-    fn.emit(
-      `call void ${emitter.useRuntime("nish_cross_out_range")}(i8* ${dst}, i64 %lo, i64 %hi, i64 ${crossing.size}, i64 ${mark})`
+  // the next chunk or job reuses: as the chunk loop keeps each one, it moves
+  // to the end of the chunk's malloc'd transfer block, pushed on the
+  // context's list for the caller to adopt (`nish_cross_keep`), and with them
+  // out, everything else the chunk allocated is a temporary its arena gives
+  // back.
+  let state = ""
+  if (crosses) {
+    const list = fn.emitValue(
+      `getelementptr inbounds ${ctxType}, ${ctxType}* ${typed}, i32 0, i32 ${fieldTypes.length}`
     )
+    state = beginTransfer(emitter, fn, list)
+  }
+  const mark = crosses ? fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`) : ""
+  fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
+  if (crosses) {
+    fn.emit(`call void ${emitter.useRuntime("nish_cross_end")}(i8* ${state})`)
     fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
   }
   fn.emit("ret void")

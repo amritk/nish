@@ -918,9 +918,12 @@ export class RuntimeTable {
     // Copy at join (runtime/runtime-cross.c): a string or a scalar array a
     // task or a chunk answers, or a channel carries, leaves the arena that made
     // it through `nish_cross_out` and enters the taker's through
-    // `nish_cross_in`, which frees the block between. Each allocates, or frees,
-    // or both, and the range forms rewrite the slots of the array they are
-    // handed, so LLVM must not move them; but only the compiler calls them, on
+    // `nish_cross_in`, which copies or adopts the block between; a region's
+    // chunks pack theirs into transfer blocks as they keep them, under the
+    // state `nish_cross_begin` pushes and `nish_cross_end` pops, and
+    // `nish_cross_adopt` links the blocks into the caller's arena. Each
+    // allocates, or frees, or moves the arena, or the thread's transfer state,
+    // so LLVM must not move them; but only the compiler calls them, on
     // the value a task, a chunk, a channel or a guard is already moving, so none
     // is a shared write a task's rules would refuse. None waits; the guard's
     // store takes a lock of its own for the moment it holds it.
@@ -963,8 +966,8 @@ export class RuntimeTable {
     this.addWrites(
       WRITES_NOTHING,
       new RuntimeFunction(
-        "nish_cross_out_range",
-        "declare void @nish_cross_out_range(i8* noundef nonnull, i64 noundef, i64 noundef, i64 noundef, i64 noundef)",
+        "nish_cross_begin",
+        "declare void @nish_cross_begin(i8* noundef nonnull, i8** noundef)",
         attrs1("nounwind"),
         EFFECT_WRITE
       )
@@ -972,8 +975,17 @@ export class RuntimeTable {
     this.addWrites(
       WRITES_NOTHING,
       new RuntimeFunction(
-        "nish_cross_in_range",
-        "declare void @nish_cross_in_range(i8* noundef nonnull, i64 noundef, i64 noundef)",
+        "nish_cross_end",
+        "declare void @nish_cross_end(i8* noundef nonnull)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_cross_adopt",
+        "declare void @nish_cross_adopt(i8* noundef)",
         attrs1("nounwind"),
         EFFECT_WRITE
       )

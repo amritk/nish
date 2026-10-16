@@ -556,8 +556,8 @@ void nish_panic_overflow(uint32_t op);
  *     write only through storage the caller lent it and no two chunks share;
  *   - nothing a body leaves in the arena outlives its chunk, because a worker's
  *     arena is rewound after each chunk while chunk 0's is the caller's own: a
- *     string or an array of scalars a chunk answers is copied out first
- *     (`nish_cross_out_range`, below), and the compiler rewinds the caller's
+ *     string or an array of scalars a chunk answers is moved to a transfer block
+ *     first (`nish_cross_keep`, below), and the compiler rewinds the caller's
  *     arena after its chunks as the pool rewinds a worker's. */
 typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
 /* The CPUs a region may divide over: the fewest of those online, those the
@@ -653,15 +653,20 @@ int32_t nish_channel_receive(int64_t *state, int64_t *out);
  * other value, a literal or one an outer frame made, is answered as it is.
  * `nish_cross_send(s)` is a channel send's: it copies every string `s`, so a
  * send costs the string's length and not a walk of the sender's arena.
- * `nish_cross_keep(v, esize, mark)` is a map element's: it copies `v` out,
- * rewinds the arena to `mark`, the position before the body was called, and
- * copies it back in, so a chunk keeps one element's temporaries at a time.
+ * `nish_cross_keep(v, esize, mark)` is a map element's: it moves `v` to the
+ * end of the chunk's transfer block and rewinds the arena to `mark`, the
+ * position before the body was called, so a chunk keeps one element's
+ * temporaries at a time. `nish_cross_begin(state, list)` pushes the chunk's
+ * transfer state, a `{ void *, void *, uint64_t, void * }` the caller holds,
+ * whose filled blocks go on `*list`, and `nish_cross_end(state)` pops it; with
+ * no list (a map's sequential path), or none pushed, keep copies `v` out and
+ * back in below `mark`. `nish_cross_adopt(list)` makes the blocks on a list the newest chunks
+ * of the calling thread's arena, once every chunk is done.
  * `nish_cross_in(p, esize)` runs on the thread that takes the value: a tagged
- * `p` is copied into that thread's arena and its block freed, so each block
- * is freed by the one `cross_in` its value meets. `esize` is 0 for a string
- * and the element size of an array whose elements hold no pointer. The
- * `_range` forms do the same to each of a chunk's slots of `dst`, `[lo, hi)`,
- * and then to its first `n`.
+ * `p` of 64 KB or more that does not fit the arena's current chunk becomes a
+ * chunk of that arena; a smaller one is copied in and its block freed. Either
+ * way the block lives exactly as long as a copy would have. `esize` is 0 for a
+ * string and the element size of an array whose elements hold no pointer.
  *
  * `nish_guard_keep(old, s)` is a guard's string store (`g.value = s`): it
  * answers a copy of `s` that the `Mutex` owns, outside every arena, and frees
@@ -674,8 +679,9 @@ void *nish_cross_out(void *v, uint64_t esize, uint64_t mark);
 void *nish_cross_send(void *s);
 void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark);
 void *nish_cross_in(void *p, uint64_t esize);
-void nish_cross_out_range(nish_array *dst, int64_t lo, int64_t hi, uint64_t esize, uint64_t mark);
-void nish_cross_in_range(nish_array *dst, int64_t n, uint64_t esize);
+void nish_cross_begin(void *state, void **list);
+void nish_cross_end(void *state);
+void nish_cross_adopt(void *list);
 void *nish_guard_keep(void *old, const void *s);
 
 #ifdef __cplusplus
