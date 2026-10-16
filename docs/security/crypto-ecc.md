@@ -286,7 +286,7 @@ say. The one branch on a secret is RFC 6979's retry when a candidate nonce is
 not below n. The RFC prescribes it, it happens about once in 2^32 signatures,
 and it reveals only that a discarded value was large.
 
-**The fixed-base comb** (#628, after this audit; anchors at `@@HASH@@`).
+**The fixed-base comb** (#628, after this audit; anchors at `de81d93`).
 `p256PublicKey` and `p256Sign` now compute k·G with `p256BaseMult`
 (`std/crypto/p256.ts:4662`, over `p256BaseMultWith` at `:4675`): a 4-tooth
 comb over `p256BaseTable` (`:4119`), 240 affine multiples of G that
