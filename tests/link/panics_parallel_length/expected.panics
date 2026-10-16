@@ -6,7 +6,8 @@
 {"name":"reduceBlockStart","symbol":"nish.reduceBlockStart","module":"std/threads.ts","line":114,"panics":[]},
 {"name":"dstTooShort","symbol":"nish.dstTooShort","module":"std/threads.ts","line":148,"panics":[{"kind":"panic","line":149,"column":3,"proven":false},{"kind":"oom","line":149,"column":9,"allowed":true}]},
 {"name":"slotOutOfRange","symbol":"nish.slotOutOfRange","module":"std/threads.ts","line":224,"panics":[{"kind":"panic","line":225,"column":3,"proven":false},{"kind":"oom","line":225,"column":9,"allowed":true}]},
-{"name":"scope","symbol":"nish.scope","module":"std/threads.ts","line":283,"panics":[{"kind":"oom","line":283,"column":41,"allowed":true}]},
+{"name":"slotWritten","symbol":"nish.slotWritten","module":"std/threads.ts","line":270,"panics":[]},
+{"name":"scope","symbol":"nish.scope","module":"std/threads.ts","line":336,"panics":[{"kind":"oom","line":336,"column":41,"allowed":true}]},
 {"name":"parallelMapInto<i32, i32, double>","symbol":"nish.parallelMapInto$i32$i32$fn.6.double","module":"std/threads.ts","line":157,"panics":[{"kind":"call","line":160,"column":5,"callee":"dstTooShort","via":"panic"},{"kind":"call","line":162,"column":3,"callee":"mapRange<i32, i32, double>","via":"overflow"}]},
 {"name":"mapRange<i32, i32, double>","symbol":"nish.mapRange$i32$i32$fn.6.double","module":"std/threads.ts","line":73,"panics":[{"kind":"overflow","line":74,"column":93,"proven":true},{"kind":"call","line":75,"column":15,"callee":"double","via":"overflow"},{"kind":"index","line":75,"column":17,"proven":true},{"kind":"index","line":77,"column":7,"proven":true}]}
 ]}

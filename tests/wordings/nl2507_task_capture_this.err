@@ -1,0 +1,1 @@
+The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` (`const self = this`, `const k = this.k`)

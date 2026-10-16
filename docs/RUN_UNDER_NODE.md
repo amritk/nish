@@ -205,7 +205,12 @@ no prelude can reach it. They are language decisions
   nothing another can see except through a `Mutex`'s guard (the next item), and
   cannot print, and the checker refuses a program that reads a destination, or
   writes what a task may read, before the block ends, so the two print the same
-  — for guarded writes, when they commute, as the next item says. `using` itself needs `--js-explicit-resource-management` on Node
+  — for guarded writes, when they commute, as the next item says.
+  `s.spawn(entry, arg)` and `s.spawn(() => ...)` reach the same `spawn`, which
+  sees that no slot was written (an omitted argument is `undefined`, neither
+  below zero nor at or above it) and runs the task with nothing to store; an
+  arrow task's captures are the `const`s its closure reads, which cannot
+  change. `using` itself needs `--js-explicit-resource-management` on Node
   22 and is native from Node 24; Node 22's flagged `using` never calls
   `[Symbol.dispose]`, and nothing here needs it to, because every task has run
   by the time the block ends.

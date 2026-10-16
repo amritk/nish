@@ -49,11 +49,14 @@ import {
   capturesOf,
   isParallelEntry,
   isSpawnTemplate,
+  isVoidSpawnTemplate,
   letCaptureMessage,
   nestedCaptureMessage,
   parallelRole,
   recordParallelCall,
   reduceElementMessage,
+  taskLetCaptureMessage,
+  taskThisCaptureMessage,
   thisCaptureMessage,
 } from "./parallel"
 import {
@@ -135,6 +138,7 @@ import {
   PAR_MAP,
   PAR_MAP_NEW,
   PAR_REDUCE,
+  PAR_SPAWN,
   ROLE_FUNCTION,
   STRUCT_CLASS,
   StructInfo,
@@ -1970,6 +1974,9 @@ const liftArrowArgument = (
     if (returnType === T_ERROR) {
       return null
     }
+  } else if (arrow.children[3].kind === N_BLOCK && isVoidSpawnTemplate(template)) {
+    // A task with no destination answers nothing, so a block body is `void`.
+    returnType = T_VOID
   } else if (arrow.children[3].kind === N_BLOCK) {
     refuseOnce(
       ctx,
@@ -1980,8 +1987,9 @@ const liftArrowArgument = (
     return null
   }
   const role = parallelRole(template)
-  const capture = role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM
-  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, capture)
+  const task = role === PAR_SPAWN
+  const capture = task || role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM
+  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, capture, task)
   if (fn === null) {
     return null
   }
@@ -2025,7 +2033,8 @@ const liftArrow = (
   types: i32[],
   returnType: i32,
   outer: Scope,
-  capture: boolean
+  capture: boolean,
+  task: boolean
 ): FunctionSig | null => {
   // Checked twice in one body (a caller that re-checks an argument): the arrow
   // is lifted once, and the call node's table slot for it says which.
@@ -2084,6 +2093,7 @@ const liftArrow = (
   ctx.arrowFns.push(fn)
   ctx.arrowScopes.push(scope)
   ctx.arrowCaptures.push(capture)
+  ctx.arrowTasks.push(task)
   fn.captureHost = enclosing
   ctx.functionBindings = new FunctionBindings()
   ctx.current = fn
@@ -2102,6 +2112,7 @@ const liftArrow = (
   ctx.arrowFns.pop()
   ctx.arrowScopes.pop()
   ctx.arrowCaptures.pop()
+  ctx.arrowTasks.pop()
   if (fn.poisoned) {
     // The arrow's own diagnostic stands for the call around it.
     ctx.errored = true
@@ -2163,18 +2174,20 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
     refuseOnce(ctx, expr, capturedMessage(name))
     return null
   }
+  // A scope's task is told about itself: it runs when the scope joins.
+  const task = depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
   if (name === "this") {
-    refuseOnce(ctx, expr, thisCaptureMessage())
+    refuseOnce(ctx, expr, task ? taskThisCaptureMessage() : thisCaptureMessage())
     return null
   }
   if (outer.mutable) {
-    refuseOnce(ctx, expr, letCaptureMessage(name))
+    refuseOnce(ctx, expr, task ? taskLetCaptureMessage(name) : letCaptureMessage(name))
     return null
   }
   // A `const` cannot change, so a narrowing in force at the call holds for
   // as long as the body runs: `if (p !== null)` around the call is enough.
   const type = ctx.arrowOuterScopes[0].typeOf(outer)
-  const why = captureTypeMessage(ctx.program, ctx.table, name, type)
+  const why = captureTypeMessage(ctx.program, ctx.table, name, type, task)
   if (why.length > 0) {
     refuseOnce(ctx, expr, why)
     return null

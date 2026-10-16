@@ -8,17 +8,16 @@ function Counter.constructor(this: Counter): void -> @Counter.constructor [const
   stackSites=0 stackLocals=0
 function bump(c: Counter, by: i32): void -> @bump
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 13:3
+  sharedWrite: 15:3
   escaping: by
   calls: nish_panic_overflow
   pointer c: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function run(n: i32): i32 -> @run [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via bump
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: n
   calls: Counter.constructor bump
   stackSites=1 stackLocals=1
-  local 17:9 c: Counter (const)
-  callee 17:13 new Counter -> @Counter.constructor
-  callee 18:3 bump -> @bump
+  local 19:9 c: Counter (const)
+  callee 19:13 new Counter -> @Counter.constructor
+  callee 20:3 bump -> @bump

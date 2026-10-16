@@ -111,6 +111,20 @@ entry:
   unreachable
 }
 
+define internal noundef zeroext i1 @nish.slotWritten(i32 noundef %at) #0 {
+entry:
+  %0 = icmp slt i32 %at, 0
+  br i1 %0, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %1 = icmp sge i32 %at, 0
+  br label %lor.end
+
+lor.end:
+  %2 = phi i1 [ true, %entry ], [ %1, %lor.rhs ]
+  ret i1 %2
+}
+
 define noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #2 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 4)
@@ -183,37 +197,46 @@ entry:
 define void @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4) %this, %struct.Shard* noundef nonnull align 8 dereferenceable(16) %arg, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %dst, i32 noundef %at) #1 {
 entry:
   %task.payload = alloca { %struct.Shard*, %struct.nish_array*, i32, i32 }, align 8
-  %0 = icmp slt i32 %at, 0
-  br i1 %0, label %lor.end, label %lor.rhs
+  %0 = call i1 @nish.slotWritten(i32 %at)
+  %1 = xor i1 %0, true
+  br i1 %1, label %if.then, label %if.end
+
+if.then:
+  %2 = call i32 @binShard$(%struct.Shard* %arg)
+  ret void
+
+if.end:
+  %3 = icmp slt i32 %at, 0
+  br i1 %3, label %lor.end, label %lor.rhs
 
 lor.rhs:
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !14, !noalias !15, !tbaa !19
-  %3 = trunc i64 %2 to i32
-  %4 = icmp sge i32 %at, %3
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
+  %5 = load i64, i64* %4, align 8, !alias.scope !14, !noalias !15, !tbaa !19
+  %6 = trunc i64 %5 to i32
+  %7 = icmp sge i32 %at, %6
   br label %lor.end
 
 lor.end:
-  %5 = phi i1 [ true, %entry ], [ %4, %lor.rhs ]
-  br i1 %5, label %if.then, label %if.end
+  %8 = phi i1 [ true, %if.end ], [ %7, %lor.rhs ]
+  br i1 %8, label %if.then.1, label %if.end.1
 
-if.then:
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
-  %7 = load i64, i64* %6, align 8, !alias.scope !14, !noalias !15, !tbaa !19
-  %8 = trunc i64 %7 to i32
-  call void @nish.slotOutOfRange(i32 %at, i32 %8)
-  br label %if.end
+if.then.1:
+  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
+  %10 = load i64, i64* %9, align 8, !alias.scope !14, !noalias !15, !tbaa !19
+  %11 = trunc i64 %10 to i32
+  call void @nish.slotOutOfRange(i32 %at, i32 %11)
+  br label %if.end.1
 
-if.end:
-  %9 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload, i32 0, i32 0
-  store %struct.Shard* %arg, %struct.Shard** %9
-  %10 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload, i32 0, i32 1
-  store %struct.nish_array* %dst, %struct.nish_array** %10
-  %11 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload, i32 0, i32 2
-  store i32 %at, i32* %11
-  %12 = bitcast { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload to i8*
-  %13 = bitcast %struct.ThreadScope* %this to i8*
-  call void @nish_scope_spawn(i8* %13, void (i8*)* @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard$run, void (i8*)* @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard$finish, i8* %12, i64 ptrtoint ({ %struct.Shard*, %struct.nish_array*, i32, i32 }* getelementptr ({ %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
+if.end.1:
+  %12 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload, i32 0, i32 0
+  store %struct.Shard* %arg, %struct.Shard** %12
+  %13 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload, i32 0, i32 1
+  store %struct.nish_array* %dst, %struct.nish_array** %13
+  %14 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload, i32 0, i32 2
+  store i32 %at, i32* %14
+  %15 = bitcast { %struct.Shard*, %struct.nish_array*, i32, i32 }* %task.payload to i8*
+  %16 = bitcast %struct.ThreadScope* %this to i8*
+  call void @nish_scope_spawn(i8* %16, void (i8*)* @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard$run, void (i8*)* @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard$finish, i8* %15, i64 ptrtoint ({ %struct.Shard*, %struct.nish_array*, i32, i32 }* getelementptr ({ %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* null, i32 1) to i64))
   ret void
 }
 

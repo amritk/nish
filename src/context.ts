@@ -105,6 +105,8 @@ export class CheckContext {
   arrowFns: FunctionSig[]
   arrowScopes: Scope[]
   arrowCaptures: boolean[]
+  /** WP29: parallel to `arrowCaptures`, whether the arrow is a scope's task, whose captures run at the join. */
+  arrowTasks: boolean[]
   /** The instantiation whose body is being checked, so a request from it records its parent. */
   currentInstance: Instantiation | null
   /**
@@ -209,6 +211,7 @@ export class CheckContext {
     this.arrowFns = []
     this.arrowScopes = []
     this.arrowCaptures = []
+    this.arrowTasks = []
     this.currentInstance = null
     this.currentStructInstance = null
     this.constraintsDeferred = true
