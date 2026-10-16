@@ -138,8 +138,7 @@ export const emitParallelRegion = (
   // push their transfer blocks on (`nish_cross_keep`), which no chunk loop
   // reads.
   const crosses = regionCrosses(emitter, caller)
-  const ctxType =
-    crosses ? `{ ${fieldTypes.join(", ")}, i8* }` : `{ ${fieldTypes.join(", ")} }`
+  const ctxType = crosses ? `{ ${fieldTypes.join(", ")}, i8* }` : `{ ${fieldTypes.join(", ")} }`
   const fn = emitter.fn
   const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0)
   const hi = values[range - 1]
