@@ -1,0 +1,2 @@
+reject_par_process_exit.ts:14:3
+`shout` writes memory its caller can see in the runtime's `nish_exit`, and `parallelMapInto` runs it

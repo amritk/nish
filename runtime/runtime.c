@@ -18,6 +18,7 @@
  * both use `-flto`, and the cold paths that lost the inlining are cold.
  */
 #define _POSIX_C_SOURCE 200809L
+#include <errno.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stddef.h>
@@ -79,12 +80,45 @@ _Static_assert(offsetof(struct nish_arena, off) == 8, "the inlined allocator bum
 _Static_assert(offsetof(struct nish_arena, cap) == 16, "the inlined allocator reads field 2");
 _Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena layout is ABI");
 
-/* `fputs` rather than one `write`: libc's own loop finishes a short write,
-   which a bare `write` would cut off (docs/security/runtime.md, RT-11), and
-   stderr is unbuffered, so the message leaves before `_exit`. A C host that
-   gives stderr a buffer of its own would lose it here. */
+/* ---- Panics: the first one wins.
+
+   Every way a program fails -- a failed check, `panic`, out of memory -- calls
+   `nish_panic_claim` before it prints. Two tasks of a scope, or two workers of
+   a parallel map, can fail at once, and without the claim both messages would
+   reach stderr interleaved and both threads would race to the exit. The first
+   to claim prints its whole message and exits; any later one parks until
+   that exit ends the process, so exactly one message is printed and the exit
+   code is the first panic's. How each path exits is unchanged by the claim:
+   `panic`, `expect` and a failed range entry (`nish_panic`) call `exit(1)`, as
+   they did through `nish_exit`, so atexit handlers run and stdio is flushed;
+   a failed check and out of memory call `_exit(1)`, as they always have. Only
+   one thread can reach either exit, because the claim comes first. Only a
+   threads build (`-DNISH_THREADS`) can have two threads panic, so only it
+   pays for the claim; everywhere else it is an empty inline function. Under wasi with threads, the trap is the
+   defensive answer: no host there gives a parked thread a way to wait. */
+#ifdef NISH_THREADS
+static int nish_panicked;
+void nish_panic_claim(void) {
+  if (__atomic_exchange_n(&nish_panicked, 1, __ATOMIC_ACQ_REL)) {
+#if defined(__wasi__)
+    __builtin_trap();
+#else
+    for (;;) pause();
+#endif
+  }
+}
+#else
+static inline void nish_panic_claim(void) {}
+#endif
+
+/* The message goes out through `nish_write_all`, below, which finishes a
+   short write and retries one a signal interrupts (docs/security/runtime.md,
+   RT-11); it is unbuffered, so the message leaves before `_exit`. It used
+   `fputs`, whose libc loop finishes a short write but gives up on `EINTR`. */
+static void nish_write_all(int fd, const char *p, uint64_t n);
 static NISH_COLD void nish_die(const char *msg) {
-  fputs(msg, stderr);
+  nish_panic_claim();
+  nish_write_all(2, msg, strlen(msg));
   _exit(1);
 }
 /* A function rather than a macro around `nish_die`: seven call sites each
@@ -283,19 +317,34 @@ int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) { return nish_
    does the same. So the bytes are written until all of them are out, or until
    a write fails (docs/security/runtime.md, RT-11). A failure still ends the
    output, `EAGAIN` on a non-blocking stdout included, since spinning on it
-   would burn a core. `EINTR` is not retried here: it needs a handler
-   installed without `SA_RESTART`, and the only one this runtime installs
-   (runtime-host.c) has it, so an interrupted write either restarts in the
-   kernel or comes back short. The newline needs no loop: one byte is never
-   written in part. */
-void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
+   would burn a core. `EINTR` is retried, the newline's included: the only
+   handler this runtime installs (runtime-host.c) has `SA_RESTART`, but a C
+   host may install one without it. `panic`'s message, `expect`'s, and the
+   arithmetic and out-of-memory panics (`nish_die`) are written here. The
+   index and slice panics and the file and entropy failures use `dprintf`, and
+   runtime-parallel.c's out of memory one `write`: neither retries `EINTR`. */
+static void nish_write_all(int fd, const char *p, uint64_t n) {
   uint64_t done = 0;
   ssize_t k;
-  while (done < s->len && (k = write(fd, s->data + done, s->len - done)) > 0) done += k;
-  if (newline) (void)!write(fd, "\n", 1);
+  while (done < n) {
+    k = write(fd, p + done, n - done);
+    if (k > 0) done += k;
+    else if (k == 0 || errno != EINTR) break;
+  }
+}
+void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
+  nish_write_all(fd, s->data, s->len);
+  if (newline) nish_write_all(fd, "\n", 1);
 }
 /* console.log(s) */
 void nish_print(const nish_str *s) { nish_write(s, 1, 1); }
+/* `panic(message)`, `r.expect(message)` and a failed range entry: the message
+   and a newline on stderr, then `exit(1)`, the first panic only. */
+__attribute__((noreturn)) void nish_panic(const nish_str *s) {
+  nish_panic_claim();
+  nish_write(s, 2, 1);
+  exit(1);
+}
 
 /* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the
    widest a uint64_t can be, plus the sign. */
@@ -1245,6 +1294,7 @@ __attribute__((noinline)) void nish_wipe(nish_array *bytes) {
 }
 
 void nish_panic_index(uint64_t idx, uint64_t len) {
+  nish_panic_claim();
   dprintf(2, "index out of range: %" PRIu64 " >= %" PRIu64 "\n", idx, len);
   _exit(1);
 }
@@ -1258,6 +1308,7 @@ void nish_panic_index(uint64_t idx, uint64_t len) {
    a reader who wrote `s.slice(i - 1)` wants to be told `-1` rather than
    18446744073709551615. The length cannot be negative either way. */
 void nish_panic_slice(int64_t start, int64_t end, int64_t len) {
+  nish_panic_claim();
   dprintf(2, "slice out of range: [%" PRId64 ", %" PRId64 ") of length %" PRId64 "\n", start, end, len);
   _exit(1);
 }
