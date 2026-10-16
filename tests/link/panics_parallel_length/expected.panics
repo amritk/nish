@@ -2,12 +2,12 @@
 {"name":"double","symbol":"double$","module":"tests/link/panics_parallel_length/main.ts","line":8,"panics":[{"kind":"overflow","line":8,"column":33,"proven":false}]},
 {"name":"doubleAll","symbol":"doubleAll","module":"tests/link/panics_parallel_length/main.ts","line":10,"panics":[{"kind":"parallel-length","line":11,"column":3,"proven":false,"callee":"parallelMapInto<i32, i32, double>"}]},
 {"name":"main","symbol":"nish_main","module":"tests/link/panics_parallel_length/main.ts","line":14,"panics":[{"kind":"oom","line":15,"column":22,"allowed":true},{"kind":"oom","line":16,"column":22,"allowed":true},{"kind":"call","line":17,"column":3,"callee":"doubleAll","via":"panic"},{"kind":"oom","line":18,"column":15,"allowed":true},{"kind":"overflow","line":18,"column":18,"proven":false},{"kind":"overflow","line":18,"column":18,"proven":false},{"kind":"index","line":18,"column":18,"proven":false},{"kind":"index","line":18,"column":27,"proven":false},{"kind":"index","line":18,"column":36,"proven":false}]},
-{"name":"reduceBlockCount","symbol":"nish.reduceBlockCount","module":"std/threads.ts","line":97,"panics":[]},
-{"name":"reduceBlockStart","symbol":"nish.reduceBlockStart","module":"std/threads.ts","line":111,"panics":[]},
-{"name":"dstTooShort","symbol":"nish.dstTooShort","module":"std/threads.ts","line":145,"panics":[{"kind":"panic","line":146,"column":3,"proven":false},{"kind":"oom","line":146,"column":9,"allowed":true}]},
-{"name":"slotOutOfRange","symbol":"nish.slotOutOfRange","module":"std/threads.ts","line":221,"panics":[{"kind":"panic","line":222,"column":3,"proven":false},{"kind":"oom","line":222,"column":9,"allowed":true}]},
-{"name":"slotWritten","symbol":"nish.slotWritten","module":"std/threads.ts","line":267,"panics":[]},
-{"name":"scope","symbol":"nish.scope","module":"std/threads.ts","line":329,"panics":[{"kind":"oom","line":329,"column":41,"allowed":true}]},
-{"name":"parallelMapInto<i32, i32, double>","symbol":"nish.parallelMapInto$i32$i32$fn.6.double","module":"std/threads.ts","line":154,"panics":[{"kind":"call","line":157,"column":5,"callee":"dstTooShort","via":"panic"},{"kind":"call","line":159,"column":3,"callee":"mapRange<i32, i32, double>","via":"overflow"}]},
-{"name":"mapRange<i32, i32, double>","symbol":"nish.mapRange$i32$i32$fn.6.double","module":"std/threads.ts","line":70,"panics":[{"kind":"overflow","line":71,"column":68,"proven":true},{"kind":"call","line":72,"column":15,"callee":"double","via":"overflow"},{"kind":"index","line":72,"column":17,"proven":true},{"kind":"index","line":74,"column":7,"proven":true}]}
+{"name":"reduceBlockCount","symbol":"nish.reduceBlockCount","module":"std/threads.ts","line":100,"panics":[]},
+{"name":"reduceBlockStart","symbol":"nish.reduceBlockStart","module":"std/threads.ts","line":114,"panics":[]},
+{"name":"dstTooShort","symbol":"nish.dstTooShort","module":"std/threads.ts","line":148,"panics":[{"kind":"panic","line":149,"column":3,"proven":false},{"kind":"oom","line":149,"column":9,"allowed":true}]},
+{"name":"slotOutOfRange","symbol":"nish.slotOutOfRange","module":"std/threads.ts","line":224,"panics":[{"kind":"panic","line":225,"column":3,"proven":false},{"kind":"oom","line":225,"column":9,"allowed":true}]},
+{"name":"slotWritten","symbol":"nish.slotWritten","module":"std/threads.ts","line":270,"panics":[]},
+{"name":"scope","symbol":"nish.scope","module":"std/threads.ts","line":336,"panics":[{"kind":"oom","line":336,"column":41,"allowed":true}]},
+{"name":"parallelMapInto<i32, i32, double>","symbol":"nish.parallelMapInto$i32$i32$fn.6.double","module":"std/threads.ts","line":157,"panics":[{"kind":"call","line":160,"column":5,"callee":"dstTooShort","via":"panic"},{"kind":"call","line":162,"column":3,"callee":"mapRange<i32, i32, double>","via":"overflow"}]},
+{"name":"mapRange<i32, i32, double>","symbol":"nish.mapRange$i32$i32$fn.6.double","module":"std/threads.ts","line":73,"panics":[{"kind":"overflow","line":74,"column":93,"proven":true},{"kind":"call","line":75,"column":15,"callee":"double","via":"overflow"},{"kind":"index","line":75,"column":17,"proven":true},{"kind":"index","line":77,"column":7,"proven":true}]}
 ]}

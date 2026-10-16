@@ -1,0 +1,34 @@
+PASS  AES-128: aesKey makes the key
+PASS  AES-128: the schedule and H are not zero before the wipe
+PASS  AES-128: every one of the 88 round-key words reads zero after aesKeyWipe
+PASS  AES-128: the schedule is still 88 words
+PASS  AES-128: both words of H read zero
+PASS  AES-128: H is still two words
+PASS  AES-128: rounds is left as it was
+PASS  AES-128: the wiped key opens nothing
+PASS  AES-128: aesKeyInto installs the key into the wiped one again
+PASS  AES-128: and it seals what it sealed before
+PASS  AES-128: and opens it
+PASS  AES-128: a second wipe leaves it zero
+PASS  AES-256: aesKey makes the key
+PASS  AES-256: the schedule and H are not zero before the wipe
+PASS  AES-256: every one of the 120 round-key words reads zero after aesKeyWipe
+PASS  AES-256: the schedule is still 120 words
+PASS  AES-256: both words of H read zero
+PASS  AES-256: H is still two words
+PASS  AES-256: rounds is left as it was
+PASS  AES-256: the wiped key opens nothing
+PASS  AES-256: aesKeyInto installs the key into the wiped one again
+PASS  AES-256: and it seals what it sealed before
+PASS  AES-256: and opens it
+PASS  AES-256: a second wipe leaves it zero
+PASS  aesKeyInto refuses an AesKey whose h is three words
+PASS  and leaves its schedule as it was
+PASS  a key whose h is one word seals nothing
+PASS  RFC 8439 §2.8.2's key, nonce and AAD over the first 41 bytes of its message (checked against Python's cryptography)
+PASS  it opens to the message
+PASS  a forgery opens to nothing
+PASS  and the true one still opens after it
+PASS  RFC 8439 §2.6.2's Poly1305 key
+PASS  RFC 9001 A.5's ChaCha20 header-protection mask
+aes wipes: 33 passed, 0 failed, 0 skipped

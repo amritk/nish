@@ -831,56 +831,66 @@ entry:
 for.cond:
   %8 = load i32, i32* %i.addr, align 4
   %9 = icmp sge i32 %8, 0
-  br i1 %9, label %land.rhs.1, label %land.end.1
+  br i1 %9, label %land.rhs.2, label %land.end.2
 
-land.rhs.1:
+land.rhs.2:
   %10 = load i32, i32* %i.addr, align 4
   %11 = icmp slt i32 %10, %hi
-  br label %land.end.1
+  br label %land.end.2
 
-land.end.1:
-  %12 = phi i1 [ false, %for.cond ], [ %11, %land.rhs.1 ]
-  br i1 %12, label %land.rhs, label %land.end
+land.end.2:
+  %12 = phi i1 [ false, %for.cond ], [ %11, %land.rhs.2 ]
+  br i1 %12, label %land.rhs.1, label %land.end.1
 
-land.rhs:
+land.rhs.1:
   %13 = load i32, i32* %i.addr, align 4
   %14 = trunc i64 %1 to i32
   %15 = icmp slt i32 %13, %14
+  br label %land.end.1
+
+land.end.1:
+  %16 = phi i1 [ false, %land.end.2 ], [ %15, %land.rhs.1 ]
+  br i1 %16, label %land.rhs, label %land.end
+
+land.rhs:
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = trunc i64 %5 to i32
+  %19 = icmp slt i32 %17, %18
   br label %land.end
 
 land.end:
-  %16 = phi i1 [ false, %land.end.1 ], [ %15, %land.rhs ]
-  br i1 %16, label %for.body, label %for.end
+  %20 = phi i1 [ false, %land.end.1 ], [ %19, %land.rhs ]
+  br i1 %20, label %for.body, label %for.end
 
 for.body:
-  %17 = load i32, i32* %i.addr, align 4
-  %18 = sext i32 %17 to i64
-  %19 = bitcast i8* %3 to i32*
-  %20 = getelementptr inbounds i32, i32* %19, i64 %18
-  %21 = load i32, i32* %20, align 4, !alias.scope !9, !noalias !8, !tbaa !17
-  %22 = call i32 @nish_main$arrow1(i32 %21, %struct.nish_array* %cap.0, i32 %cap.1)
-  store i32 %22, i32* %y.addr, align 4
-  %23 = load i32, i32* %i.addr, align 4
-  %24 = trunc i64 %5 to i32
-  %25 = icmp slt i32 %23, %24
-  br i1 %25, label %if.then, label %if.end
+  %21 = load i32, i32* %i.addr, align 4
+  %22 = sext i32 %21 to i64
+  %23 = bitcast i8* %3 to i32*
+  %24 = getelementptr inbounds i32, i32* %23, i64 %22
+  %25 = load i32, i32* %24, align 4, !alias.scope !9, !noalias !8, !tbaa !17
+  %26 = call i32 @nish_main$arrow1(i32 %25, %struct.nish_array* %cap.0, i32 %cap.1)
+  store i32 %26, i32* %y.addr, align 4
+  %27 = load i32, i32* %i.addr, align 4
+  %28 = trunc i64 %5 to i32
+  %29 = icmp slt i32 %27, %28
+  br i1 %29, label %if.then, label %if.end
 
 if.then:
-  %26 = load i32, i32* %i.addr, align 4
-  %27 = sext i32 %26 to i64
-  %28 = load i32, i32* %y.addr, align 4
-  %29 = bitcast i8* %7 to i32*
-  %30 = getelementptr inbounds i32, i32* %29, i64 %27
-  store i32 %28, i32* %30, align 4, !alias.scope !9, !noalias !8, !tbaa !17
+  %30 = load i32, i32* %i.addr, align 4
+  %31 = sext i32 %30 to i64
+  %32 = load i32, i32* %y.addr, align 4
+  %33 = bitcast i8* %7 to i32*
+  %34 = getelementptr inbounds i32, i32* %33, i64 %31
+  store i32 %32, i32* %34, align 4, !alias.scope !9, !noalias !8, !tbaa !17
   br label %if.end
 
 if.end:
   br label %for.inc
 
 for.inc:
-  %31 = load i32, i32* %i.addr, align 4
-  %32 = add nsw i32 %31, 1
-  store i32 %32, i32* %i.addr, align 4
+  %35 = load i32, i32* %i.addr, align 4
+  %36 = add nsw i32 %35, 1
+  store i32 %36, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
