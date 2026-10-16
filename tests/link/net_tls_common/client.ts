@@ -29,6 +29,9 @@ import {
 import { tlsDeriveSecret, tlsEarlySecret, tlsFinishedVerifyData, tlsHandshakeSecret } from "nish/net/tls/schedule";
 import { TLS_LEVEL_HANDSHAKE, TLS_LEVEL_INITIAL, TlsServer } from "nish/net/tls";
 import { bytesOf, fromHex, sameBytes } from "../crypto_x509/hex";
+import { Secret, secret, wipe } from "nish:secret";
+import { copyOf } from "../crypto_x25519/plain";
+import { secretCopy } from "./secrets";
 
 /** secp256r1, a group the server does not take, for a share it must look past. */
 export const GROUP_SECP256R1: i32 = 0x0017;
@@ -271,13 +274,21 @@ export const clientFinish = (
   const serverHello: u8[] = initial;
   const shared: u8[] | null = x25519Plain(clientPrivate(), serverShareOf(serverHello));
   const none: u8[] = [];
-  const ecdhe: u8[] = shared === null ? none : shared;
-  const handshakeSecret: u8[] = tlsHandshakeSecret(hashLength, tlsEarlySecret(hashLength), ecdhe);
+  const ecdhe: Secret<u8[]> = secret(copyOf(shared === null ? none : shared));
+  const early: Secret<u8[]> = tlsEarlySecret(hashLength);
+  const handshakeSecret: Secret<u8[]> = tlsHandshakeSecret(hashLength, early, ecdhe);
+  wipe(early);
+  wipe(ecdhe);
   const helloHash: u8[] = transcriptHash(hashLength, cat([before, serverHello]));
-  view.clientHandshakeSecret = tlsDeriveSecret(hashLength, handshakeSecret, "c hs traffic", helloHash);
-  view.serverHandshakeSecret = tlsDeriveSecret(hashLength, handshakeSecret, "s hs traffic", helloHash);
+  const clientHandshakeSecret: Secret<u8[]> = tlsDeriveSecret(hashLength, handshakeSecret, "c hs traffic", helloHash);
+  const serverHandshakeSecret: Secret<u8[]> = tlsDeriveSecret(hashLength, handshakeSecret, "s hs traffic", helloHash);
+  wipe(handshakeSecret);
+  view.clientHandshakeSecret = secretCopy(clientHandshakeSecret);
+  view.serverHandshakeSecret = secretCopy(serverHandshakeSecret);
   view.messages = splitMessages(handshake);
   if (toI32(view.messages.length) !== 4) {
+    wipe(clientHandshakeSecret);
+    wipe(serverHandshakeSecret);
     return view;
   }
   const encryptedExtensions: u8[] = view.messages[0];
@@ -295,18 +306,20 @@ export const clientFinish = (
   }
   const expected: u8[] = tlsFinishedVerifyData(
     hashLength,
-    view.serverHandshakeSecret,
+    serverHandshakeSecret,
     transcriptHash(hashLength, cat([before, serverHello, encryptedExtensions, certificate, certificateVerify]))
   );
   view.serverFinishedVerifies = sameBytes(bytesFrom(finished, 4), expected);
   const verifyData: u8[] = tlsFinishedVerifyData(
     hashLength,
-    view.clientHandshakeSecret,
+    clientHandshakeSecret,
     transcriptHash(
       hashLength,
       cat([before, serverHello, encryptedExtensions, certificate, certificateVerify, finished])
     )
   );
+  wipe(clientHandshakeSecret);
+  wipe(serverHandshakeSecret);
   view.clientFinished = cat([[toU8(20), toU8(0), toU8(0), toU8(hashLength)], verifyData]);
   return view;
 };

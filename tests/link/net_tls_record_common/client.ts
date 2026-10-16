@@ -6,7 +6,9 @@
 import { TLS_GROUP_X25519, TLS_LEGACY_VERSION, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_SIGNATURE_RSA_PSS_RSAE_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
 import { tlsDeriveSecret, tlsEarlySecret, tlsFinishedVerifyData, tlsHandshakeSecret, tlsMasterSecret } from "nish/net/tls/schedule";
 import { TLS_CONTENT_HANDSHAKE, TLS_RECORD_HEADER_SIZE, TlsRecordProtection } from "nish/net/tls/record";
-import { x25519Plain } from "../crypto_x25519/plain";
+import { Secret, secret, wipe } from "nish:secret";
+import { copyOf, x25519Plain } from "../crypto_x25519/plain";
+import { secretCopy } from "../net_tls_common/secrets";
 import {
   GROUP_SECP256R1,
   cat,
@@ -107,13 +109,19 @@ export class ClientKeys {
       return;
     }
     const flightHash: u8[] = transcriptHash(h, cat([this.helloTranscript, flight]));
-    const master: u8[] = tlsMasterSecret(h, this.handshakeSecret);
-    this.clientApplication = tlsDeriveSecret(h, master, "c ap traffic", flightHash);
-    this.serverApplication = tlsDeriveSecret(h, master, "s ap traffic", flightHash);
-    this.finished = cat([
-      [toU8(20), toU8(0), toU8(0), toU8(h)],
-      tlsFinishedVerifyData(h, this.clientHandshake, flightHash),
-    ]);
+    const handshakeSecret: Secret<u8[]> = secret(copyOf(this.handshakeSecret));
+    const master: Secret<u8[]> = tlsMasterSecret(h, handshakeSecret);
+    wipe(handshakeSecret);
+    const clientApplication: Secret<u8[]> = tlsDeriveSecret(h, master, "c ap traffic", flightHash);
+    const serverApplication: Secret<u8[]> = tlsDeriveSecret(h, master, "s ap traffic", flightHash);
+    wipe(master);
+    this.clientApplication = secretCopy(clientApplication);
+    this.serverApplication = secretCopy(serverApplication);
+    wipe(clientApplication);
+    wipe(serverApplication);
+    const clientHandshake: Secret<u8[]> = secret(copyOf(this.clientHandshake));
+    this.finished = cat([[toU8(20), toU8(0), toU8(0), toU8(h)], tlsFinishedVerifyData(h, clientHandshake, flightHash)]);
+    wipe(clientHandshake);
   }
 }
 
@@ -128,10 +136,20 @@ export const clientKeysFor = (hashLength: i32, before: u8[], serverHello: u8[]):
   keys.hashLength = hashLength;
   const shared: u8[] | null = x25519Plain(clientPrivate(), serverShareOf(serverHello));
   const none: u8[] = [];
-  keys.handshakeSecret = tlsHandshakeSecret(hashLength, tlsEarlySecret(hashLength), shared === null ? none : shared);
+  const early: Secret<u8[]> = tlsEarlySecret(hashLength);
+  const ecdhe: Secret<u8[]> = secret(copyOf(shared === null ? none : shared));
+  const handshakeSecret: Secret<u8[]> = tlsHandshakeSecret(hashLength, early, ecdhe);
+  wipe(early);
+  wipe(ecdhe);
   keys.helloTranscript = cat([before, serverHello]);
   const helloHash: u8[] = transcriptHash(hashLength, keys.helloTranscript);
-  keys.clientHandshake = tlsDeriveSecret(hashLength, keys.handshakeSecret, "c hs traffic", helloHash);
-  keys.serverHandshake = tlsDeriveSecret(hashLength, keys.handshakeSecret, "s hs traffic", helloHash);
+  const clientHandshake: Secret<u8[]> = tlsDeriveSecret(hashLength, handshakeSecret, "c hs traffic", helloHash);
+  const serverHandshake: Secret<u8[]> = tlsDeriveSecret(hashLength, handshakeSecret, "s hs traffic", helloHash);
+  keys.handshakeSecret = secretCopy(handshakeSecret);
+  keys.clientHandshake = secretCopy(clientHandshake);
+  keys.serverHandshake = secretCopy(serverHandshake);
+  wipe(handshakeSecret);
+  wipe(clientHandshake);
+  wipe(serverHandshake);
   return keys;
 };
