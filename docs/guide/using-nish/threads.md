@@ -471,7 +471,7 @@ export const main = (): i32 => {
   (`examples/histogram-atomic.ts`) takes 25 ms with a local tally and one `add`
   per bin, 75 ms on one thread, and 676 ms with one `add` per value.
 
-```ts nish:err NL2512
+```ts nish:err NL2513
 import { AtomicI32, scope } from "nish/threads";
 
 const bump = (a: AtomicI32): i32 => a.add(1);
@@ -489,7 +489,7 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2515
+```ts nish:err NL2516
 import { AtomicI32, scope } from "nish/threads";
 
 const bump = (a: AtomicI32): i32 => a.add(1);

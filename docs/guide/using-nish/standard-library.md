@@ -722,8 +722,44 @@ export const main = (): i32 => {
 ```
 
 Printing a `Secret`, putting it in a template, or handing it to any builtin is
-a compile error. The rules are in
-[Secrets](../../LANGUAGE.md#secrets-nishsecret).
+a compile error.
+
+`secret(v)` takes a value nothing else holds: a literal, a call that makes a
+new array or record, or a local that is the only name for its value. A second
+name made before the move would read the key outside the `Secret`, and zeros
+once it is wiped, so the compiler refuses it and says where it was made:
+
+```ts nish:err NL2512
+import { Secret, secret, wipe } from "nish:secret";
+
+export const main = (): i32 => {
+  const raw: u8[] = [1, 2, 3];
+  const alias = raw; // a second name for the same bytes
+  const key: Secret<u8[]> = secret(raw);
+  wipe(key);
+  return toI32(alias[0]);
+};
+```
+
+Storing the array in a field or an element, pushing it, or handing it to a
+function that keeps it is a second name too. To keep the plain bytes as well,
+copy them first, and move the copy in:
+
+```ts nish:ok
+import { Secret, secret, wipe } from "nish:secret";
+
+export const main = (): i32 => {
+  const raw: u8[] = [1, 2, 3];
+  const copy: u8[] = new Array<u8>(raw.length);
+  copy.set(raw);
+  const key: Secret<u8[]> = secret(copy); // `copy` is the only name for its bytes
+  wipe(key);
+  console.log(`${raw[0]}`); // 1: `raw` is its own array
+  return 0;
+};
+```
+
+The rules are in [Secrets](../../LANGUAGE.md#secrets-nishsecret).
 
 ## `nish/crypto`
 

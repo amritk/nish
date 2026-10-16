@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 642
+export const RULE_COUNT: i32 = 643
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -70,9 +70,9 @@ const diagnosticRules = (): string[] => [
   "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter",
   "NL2505",
   "` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open the scopes in `using` statements of their own",
-  "NL2515",
+  "NL2516",
   "` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through",
-  "NL2514",
+  "NL2515",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
   "` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing",
@@ -94,7 +94,7 @@ const diagnosticRules = (): string[] => [
   ": a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned",
   "NL2479",
   "` is not a member a program may name: an atomic is read and updated only by calling its methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race with the update a task makes at the same moment",
-  "NL2513",
+  "NL2514",
   ": a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope",
   "NL2476",
   " is not written as a literal: typed JSON reads a class's options from its text when it writes the class's code, so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals",
@@ -102,7 +102,7 @@ const diagnosticRules = (): string[] => [
   ": inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held",
   "NL2470",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join",
-  "NL2512",
+  "NL2513",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join",
   "NL2472",
   "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",
@@ -193,6 +193,8 @@ const diagnosticRules = (): string[] => [
   "NL2366",
   ", outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope",
   "NL2458",
+  ". That reference would read the key outside the `Secret`, and zeros once it is wiped, so pass a fresh value (`secret([1, 2, 3])`, a `new`, or a call that makes one) or a copy: ",
+  "NL2512",
   "` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock",
   "NL2464",
   "`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)",

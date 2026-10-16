@@ -1,4 +1,4 @@
-// NL2515: two scopes of one `using` whose tasks share an atomic: natively `t`
+// NL2516: two scopes of one `using` whose tasks share an atomic: natively `t`
 // joins first, under Node each task runs at its spawn.
 import { AtomicI32, scope } from "nish/threads";
 const bump = (a: AtomicI32): i32 => a.add(1);

@@ -1,4 +1,4 @@
-// NL2514: a class of `nish/threads` is made only as the module makes it; an
+// NL2515: a class of `nish/threads` is made only as the module makes it; an
 // object literal would be a plain record under Node, with none of its methods.
 import { AtomicI32 } from "nish/threads";
 

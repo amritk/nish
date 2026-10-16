@@ -1516,7 +1516,14 @@ declares its return type, reaches no I/O and no C, keeps nothing of the value
 and returns no `Secret` — that return is what leaves. A `Secret` your function
 makes must be `wipe`d or returned **on every path** (each `return`, `break`,
 `orReturn()`), is moved by `const j = k`, and is never read after `wipe`;
-`secret(local)` moves the local too. `std/crypto`'s `p256`, `x25519` and
+`secret(local)` moves the local too. `secret(v)` takes only a value nothing
+else holds (NL2512): a literal, a `new`, a call that makes one, or a local that
+is the only name for its value. A second name made before the move — `const
+alias = raw`, a field or element store, `push`, `Ok(raw)`, a ternary arm, a
+function that keeps its parameter, a data-parallel arrow that captures it — is
+refused with where it was made; pass a fresh value, or a copy
+(`const copy: u8[] = new Array<u8>(raw.length); copy.set(raw)`, then
+`secret(copy)`). `std/crypto`'s `p256`, `x25519` and
 `x509ParseP256PrivateKey` take and give keys this way.
 
 ```ts nish:ok
@@ -1542,6 +1549,18 @@ const width = (k: u8[]): i32 => toI32(k.length);
 export const main = (): i32 => {
   const k: Secret<u8[]> = secret(key());
   return expose(k, width); // NL2440: `k` leaves unwiped
+};
+```
+
+```ts nish:err NL2512
+import { Secret, secret, wipe } from "nish:secret";
+
+export const main = (): i32 => {
+  const raw: u8[] = [7, 1, 9];
+  const alias = raw; // a second name for the bytes
+  const k: Secret<u8[]> = secret(raw); // NL2512: `raw` has a second reference
+  wipe(k);
+  return toI32(alias[0]);
 };
 ```
 

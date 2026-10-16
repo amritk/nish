@@ -1,4 +1,4 @@
-// NL2512: after a scope's first `spawn` the parent does not touch an atomic its
+// NL2513: after a scope's first `spawn` the parent does not touch an atomic its
 // tasks share. Natively the task has not run here and under Node it has, so
 // `seen` would be 0 compiled and 1 under Node.
 import { AtomicI32, scope } from "nish/threads";

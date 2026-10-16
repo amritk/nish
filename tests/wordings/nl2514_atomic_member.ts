@@ -1,4 +1,4 @@
-// NL2513: an atomic's word is reached only through its methods, each one
+// NL2514: an atomic's word is reached only through its methods, each one
 // indivisible; a plain read would race with a task's update.
 import { AtomicI32 } from "nish/threads";
 
