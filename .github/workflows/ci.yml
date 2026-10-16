@@ -97,7 +97,11 @@ jobs:
   test:
     name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # 25 minutes, up from 15. Shard 1 runs its share of every section plus the
+    # shard-1-only steps (simd, the AES kernels, cpu-level and the rest), and
+    # took 14m49s on main at 6e11fa6b once #663 added about 3 s of clang -O2
+    # to each program that imports p256, so a 15-minute limit cancelled it.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -320,6 +324,17 @@ jobs:
           set -o pipefail
           node tests/run.js par_map_vector | tee "$RUNNER_TEMP/par-map-vector.log"
           grep -E "^PASS  par_map_vector: opt -O3 vectorises parallelMapInto's element loop" "$RUNNER_TEMP/par-map-vector.log"
+
+      # WP38 S2: the `cpu level` section runs a `--cpu x86-64-v3` binary only
+      # where /proc/cpuinfo names avx2, and skips elsewhere. A runner that masked
+      # it would take the skip and stay green, so the line that says the binary
+      # ran and printed what the baseline prints is required here.
+      - name: A --cpu x86-64-v3 binary runs and prints what the baseline prints
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          node tests/run.js cpu-level | tee "$RUNNER_TEMP/cpu-level.log"
+          grep -E '^PASS  cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints' "$RUNNER_TEMP/cpu-level.log"
 
       #
       # `build/nish` is what the steps after the suite drive: stage1, one

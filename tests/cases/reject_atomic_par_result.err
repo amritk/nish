@@ -1,0 +1,1 @@
+`(x) => ...` answers `AtomicI32`, and `parallelMap` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory

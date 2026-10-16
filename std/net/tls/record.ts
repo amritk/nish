@@ -44,17 +44,17 @@
  * derived from it are held in the protection's fields, because a `Secret` may
  * not be one (NL2430), in arrays the protection reuses for every key it is
  * given, and are zeroed when it is installed again or cleared — the key and
- * IV with `secureZero`. The key and IV are derived straight into place, in an
- * HKDF scratch that is wiped after each derivation, and the schedule is
- * expanded into place by `aesKeyInto`. The schedule is `u64` words, which
- * `secureZero` does not take, and are zeroed by ordinary stores that stand
- * because it stays reachable (TLS-2 in `docs/security/tls.md`).
+ * IV with `secureZero`, the schedule with `aesKeyWipe`, the volatile `wipe`
+ * of its round keys (the kernels' powers of H included) and of H. The key and
+ * IV are derived straight into place, in an HKDF scratch that is wiped after
+ * each derivation, and the schedule is expanded into place by `aesKeyInto`
+ * (TLS-2 in `docs/security/tls.md`).
  *
  * The record layer is sans-IO: `nish/net/tls/record-server` runs it over a
  * stream for `TlsServer`, and `nish/net/tls-tcp` puts that on a socket.
  * Written from RFC 8446 §5, not ported from another implementation.
  */
-import { AesKey, aesGcmOpen, aesGcmSeal, aesKeyInto } from "nish/crypto/aes"
+import { AesKey, aesGcmOpen, aesGcmSeal, aesKeyInto, aesKeyWipe } from "nish/crypto/aes"
 import { chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import {
   TLS_ALERT_INTERNAL_ERROR,
@@ -71,6 +71,7 @@ import {
   tlsSuiteKeyLength,
   tlsTrafficKeysInto,
 } from "nish/net/tls/schedule"
+import { Secret } from "nish:secret"
 
 // ---- The wire's constants ------------------------------------------------------
 
@@ -134,11 +135,12 @@ const TLS_RECORD_FROM: i32 = 0
 /**
  * The traffic secret a KeyUpdate moves one direction to (RFC 8446 §7.2):
  * `HKDF-Expand-Label(secret, "traffic upd", "", Hash.length)` over the hash
- * `hashLength` names. The old secret is the caller's to wipe.
+ * `hashLength` names, held as a `Secret`. The old secret is the caller's to
+ * wipe.
  */
-export const tlsNextTrafficSecret = (hashLength: i32, secret: u8[]): u8[] => {
+export const tlsNextTrafficSecret = (hashLength: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> => {
   const none: u8[] = []
-  return tlsExpandLabel(hashLength, secret, "traffic upd", none, hashLength)
+  return tlsExpandLabel(hashLength, trafficSecret, "traffic upd", none, hashLength)
 }
 
 /** Whether `[off, off + len)` is a window inside an array of `length` elements: every caller's range check. */
@@ -180,18 +182,6 @@ export const tlsRecordLength = (buf: u8[], off: i32, avail: i32): i32 => {
     return -TLS_ALERT_RECORD_OVERFLOW
   }
   return TLS_RECORD_HEADER_SIZE + length
-}
-
-/**
- * Zeroes an AES key schedule's round keys and H with ordinary stores, which
- * stand because the schedule stays reachable for the next key (TLS-2).
- */
-const tlsClearAesKey = (aes: AesKey): void => {
-  for (let k: i32 = 0; k < toI32(aes.roundKeys.length); k++) {
-    aes.roundKeys[k] = toU64(0)
-  }
-  aes.h[0] = toU64(0)
-  aes.h[1] = toU64(0)
 }
 
 /**
@@ -334,16 +324,16 @@ export class TlsRecordProtection {
 
   /**
    * Back to cleartext, with the sequence number at 0 and both keys, the IV
-   * and both AES key schedules zeroed: the keys and IV with `secureZero`,
-   * and the schedules' `u64` words with ordinary stores, which stand because
-   * the schedules stay reachable for the next `install` to fill (TLS-2).
+   * and both AES key schedules wiped: the keys and IV with `secureZero`, and
+   * each schedule with `aesKeyWipe`, its whole `roundKeys` and its H, which
+   * the next `install` fills again (TLS-2).
    */
   clear(): void {
     secureZero(this.key16)
     secureZero(this.key32)
     secureZero(this.iv)
-    tlsClearAesKey(this.aes128)
-    tlsClearAesKey(this.aes256)
+    aesKeyWipe(this.aes128)
+    aesKeyWipe(this.aes256)
     this.suite = 0
     this.sequence = 0
     this.contentType = 0

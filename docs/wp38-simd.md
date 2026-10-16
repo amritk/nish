@@ -1,16 +1,15 @@
 # WP38: SIMD — which loops get vectors, and how a program asks for them
 
 **Status: accepted; S0 and S1's kernel and surface landed, S1's `bench/json`
-bar missed and S1b proposed, S2's bar met on a re-measurement but its flag not
-built, S4 declined for now, S5's 5x bar met, S6 proposed, S7 met by #561, S3a and S2 decided and planned (tracking issues #516 and #577).** The owner took the
+bar missed and S1b proposed, S2's bar met on a re-measurement and its flag built (`d835d40`), S4 declined for now, S5's 5x bar met, S6 proposed, S7 met by #561, S3a and S2 decided and planned (tracking issues #516 and #577).** The owner took the
 first four decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
 was reliably faster than S0 on `bench/json`, and none came near 1.5x, so
 `std/json` is unchanged (§2.3); whether to design S1b, the block classifier,
 is the owner's call (§7).
-S2's `--cpu` flag is not built: S0's figures missed its bar, and a
-re-measurement against the noise met it (§7); building it is the owner's call.
+S2's `--cpu` flag is built (`d835d40`): S0's figures missed its bar, and a
+re-measurement against the noise met it (§7); the owner decided to build it.
 What reading every level costs the constant-time checkers was measured: the
 x86-64 levels and ARMv8 without SVE already pass, the SVE levels do not, and
 `native` cannot be read. The owner decided on 2026-10-16 to build it with one
@@ -1321,7 +1320,7 @@ a printed checksum.
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Not built; designing it is the owner's call** (below). |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). **Built (`d835d40`)**: `nish --link`, `nish run` and `scripts/build.sh` take `--cpu x86-64-v3` and refuse every other value; `ct_asm` reads x86-64 at that level for the fixtures and the runtime (CT-16, narrowed). |
 | **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Not built; decided on S3a's figures (Q8, decided 2026-10-16)**: see below. |
 | **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Landed (#658)**, taken at `46a1e4d` (§2.3, S3a): the C vector form beats Nish checked by 1.65x on mat-vec and by 1.81x and 3.51x on the two depth documents at the median, outside a noise band within 5%, so both kernels clear 1.5x on x86-64; no AArch64 machine was at hand. |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
@@ -1357,8 +1356,8 @@ built.
 §2.3's alternating samples (10.7% and 14.7%, then 21.3% and 14.8%, minimum
 and median), but vec3 is at or below zero in three of its four figures
 (−0.3%, then −1.2% and −1.0%), so "no loss on the others" is not met, and the
-bar gives no tolerance. The flag is not built, `tests/ct-asm.js` reads only
-the baseline, and LANGUAGE.md gains no rule. It reopens on a re-measurement on
+bar gives no tolerance. The flag was not built then, `tests/ct-asm.js` read only
+the baseline, and LANGUAGE.md gained no rule; it is built now (`d835d40`). It reopens on a re-measurement on
 a quieter machine, or on a measurement of the noise itself: one binary timed
 against itself, showing vec3's dip lies inside it. `bench/simd-s0.mjs` only
 timed the two builds against each other then.
@@ -1385,7 +1384,7 @@ the same 2.1 GHz Xeon, gave (minimum / median):
 
 So spectral clears 10%, and nothing else loses by more than a binary loses to
 itself. That is the reading this paragraph asked for, and S2's bar is met on
-it. The flag is still not built: what it costs is mostly `tests/ct-asm.js`
+it. The flag was still not built then (it is now, `d835d40`): what it costs is mostly `tests/ct-asm.js`
 reading every level it accepts (§6), and whether a gain on one benchmark of
 three is worth that is the owner's decision.
 

@@ -50,7 +50,7 @@ import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
-import { runtimeChecks } from "./ct-asm-runtime.js"
+import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
 import {
@@ -4477,6 +4477,89 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
   )
 }
 
+// #628: P-256's fixed-base comb (`p256BaseMult`, which `p256PublicKey` and
+// `p256Sign` use) against its variable-base window (`p256ScalarMult` on G, which
+// `p256Verify` uses), byte for byte, on Wycheproof's scalars, RFC 6979 A.2.5's,
+// the edges and a seeded corpus of 10,000. Neither multiply is exported, so the
+// program reaches them through a test-only seam: this copies std/crypto/p256.ts
+// with `tests/link/crypto_p256_agree/seam.ts.in` appended beside the program,
+// as `./p256`, and the two fixture directories it imports beside that. The
+// program's header says what it runs; its expected.out ends in a checksum of
+// every comb output. Natively, and as a `--profile wasi` module under Node.
+// Node runs it with `--single-threaded-gc`: its default concurrent marker
+// segfaults this long, allocation-heavy wasm run intermittently, at or just
+// before exit, after every line has printed, and the flag is the whole
+// difference (six of six crashed without it, none with it, Node 22).
+if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
+  const agreeDir = path.join(buildDir, "p256-agree")
+  const programDir = path.join(agreeDir, "crypto_p256_agree")
+  fs.rmSync(agreeDir, { recursive: true, force: true })
+  fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
+  fs.mkdirSync(programDir, { recursive: true })
+  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
+    recursive: true,
+  })
+  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
+  fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
+  fs.writeFileSync(
+    path.join(programDir, "p256.ts"),
+    fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
+      fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "seam.ts.in"), "utf8")
+  )
+  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
+  const entry = path.join(programDir, "main.ts")
+  if (only !== "wasi") {
+    const exe = path.join(agreeDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  }
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasm = path.join(agreeDir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", path.join(agreeDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "--single-threaded-gc", "examples/wasi-host.mjs", wasm], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : built
+    check(
+      `p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: p256 agree: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_agree is not run`
+    )
+  }
+}
+
+// The comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs
+// computes from SEC 2's G, limb for limb: a hand edit to one entry would put a
+// wrong point in every key and signature that reads it, and only the scalars
+// whose digits name that entry would show it.
+if (!only || "p256 gen-p256-table".includes(only)) {
+  const r = spawnSync("node", ["scripts/gen-p256-table.mjs", "--check"], { cwd: root, encoding: "utf8" })
+  check(
+    "p256: the comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs generates",
+    r.status === 0 && r.stdout === "gen-p256-table: 3840 limbs, as generated\n",
+    shown(r)
+  )
+}
+
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
 // `std/threads.ts`'s own message. The link loop above compares stdout and the
 // exit code only, so the wording is pinned here, on stderr, the way
@@ -4787,6 +4870,15 @@ if (!only || "par_alloc".includes(only)) {
 // destination and update a lock's data or send on a channel; and
 // `std_random`, whose generators answer the same bits both ways because
 // `nish:unsafe` names every wrap.
+//
+// And the atomics: `thread_atomic_tasks`, whose named, arrow and void tasks
+// update one `AtomicI32` and one `AtomicI64` with commuting operations and a
+// `compareExchange` loop, and `par_atomic`, whose four data-parallel bodies
+// each make an atomic update their one shared write. Every update commutes,
+// so spawn order, iteration order and the pool's threads print the same.
+// `thread_sibling_disjoint_mutex`, `_mutex_types` and `_atomics` are the
+// sibling scopes of one `using` whose tasks reach locks or atomics each made
+// in a `const` of its own, of one type or of two, which share nothing.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4828,6 +4920,12 @@ for (const name of [
   "thread_private_prefixed_names",
   "thread_task_arrow",
   "thread_task_void",
+  "thread_atomic_tasks",
+  "thread_atomic_unreached",
+  "thread_sibling_disjoint_mutex",
+  "thread_sibling_disjoint_mutex_types",
+  "thread_sibling_disjoint_atomics",
+  "par_atomic",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -4858,6 +4956,52 @@ for (const name of [
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
   )
+}
+
+// examples/histogram-atomic.ts, the Atomics section's measured program: its
+// four modes (local counts and one atomic add per bin, an atomic add per value,
+// a `Mutex` per value, one thread) print the same three lines, checksum 635830,
+// natively and under Node, which runs each task at its `spawn`.
+if (!only || "histogram-atomic".includes(only)) {
+  const exe = path.join(buildDir, "histogram-atomic")
+  const linked = spawnSync(NISH, ["examples/histogram-atomic.ts", "--link", exe], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const want =
+    "4 rounds of 4 shards of 2000000 values into 256 bins\n" +
+    "counted in the bins 32000000\n" +
+    "checksum of every round's bins: 635830\n"
+  for (const mode of ["", "--per-value", "--lock", "--single"]) {
+    const args = mode.length > 0 ? [mode] : []
+    const native = linked.status === 0 ? spawnSync(exe, args, { encoding: "utf8" }) : null
+    const node = spawnSync(
+      "node",
+      [
+        "--experimental-strip-types",
+        "--js-explicit-resource-management",
+        "--no-warnings",
+        "--import",
+        path.join(root, "runtime", "nish.mjs"),
+        "-e",
+        `process.argv.unshift("histogram-atomic"); const m = await import("./examples/histogram-atomic.ts"); process.exit(m.main());`,
+        "--",
+        ...args,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `examples/histogram-atomic.ts ${mode || "(local counts)"}: native and Node print checksum 635830`,
+      native !== null &&
+        native.status === 0 &&
+        native.stdout === want &&
+        node.status === 0 &&
+        node.stdout === want,
+      native === null
+        ? linked.stderr
+        : `native exit ${native.status}\n${native.stdout}${native.stderr}--- node exit ${node.status}\n${node.stdout}${node.stderr}`
+    )
+  }
 }
 
 // #618: a private function named after a libm function, called with a constant,
@@ -5014,8 +5158,12 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // and `thread_channel_kinds` the widening and narrowing of each scalar type,
 // which a 32-bit target could get wrong where a 64-bit one does not.
 // `thread_channel_ctor_reads` is the carrier whose constructor reads and
-// updates its own fields (#567).
+// updates its own fields (#567). `thread_atomic_tasks` and `par_atomic` pin that
+// an atomic's seq_cst `atomicrmw`, `cmpxchg`, `load atomic` and `store atomic`
+// lower for wasm32, a module without shared memory, where its tasks run in turn.
 for (const name of [
+  "thread_atomic_tasks",
+  "par_atomic",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
@@ -5049,7 +5197,7 @@ for (const name of [
     )
   } else {
     skip(
-      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the channel is not run`
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the fixture is not run`
     )
   }
 }
@@ -6425,12 +6573,20 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
     // reading the `.ll` an earlier run wrote.
     fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
-    /** `clang -O2 -S` of `ll` for `triple`. */
-    const clangAsm = (ll, triple) =>
-      spawnSync("clang", ["-O2", "-S", "-Wno-override-module", `--target=${triple}`, ll, "-o", "-"], {
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-      })
+    /** `clang -O2 -S` of `ll` for `triple`, with `flags` (a level's `-march=`) added. */
+    const clangAsm = (ll, triple, flags = []) =>
+      spawnSync(
+        "clang",
+        ["-O2", "-S", "-Wno-override-module", `--target=${triple}`, ...flags, ll, "-o", "-"],
+        {
+          encoding: "utf8",
+          maxBuffer: 64 * 1024 * 1024,
+        }
+      )
+    // Each fixture is read at the baseline on both targets, and on x86-64 again at
+    // the one level `--cpu` accepts (docs/LANGUAGE.md, "The CPU level"), since a
+    // program linked with `--cpu x86-64-v3` runs that assembly instead (CT-16).
+    const readTargets = [...CT_TARGETS, ctAtLevel("x86-64-v3")]
     /** Whether `cc` failed because clang was built without the target it was asked for. */
     const noTarget = (cc) => cc.status !== 0 && /unknown target|No available targets/i.test(cc.stderr)
     // The promise is read on both targets, so a clang that lacks one fails here
@@ -6457,18 +6613,19 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
         check(`ct_asm: ${name} compiles`, false, built.stderr)
         continue
       }
-      for (const target of CT_TARGETS) {
-        if (typeof targeted.get(target.name) === "string") {
+      for (const target of readTargets) {
+        const at = ctTargetName(target)
+        if (typeof targeted.get(at) === "string") {
           continue
         }
-        const cc = clangAsm(ll, target.triple)
+        const cc = clangAsm(ll, target.triple, target.flags)
         if (noTarget(cc)) {
-          targeted.set(target.name, cc.stderr.trim())
+          targeted.set(at, cc.stderr.trim())
           continue
         }
-        targeted.set(target.name, null)
+        targeted.set(at, null)
         if (cc.status !== 0) {
-          check(`ct_asm: ${name} compiles to ${target.name} assembly`, false, cc.stderr)
+          check(`ct_asm: ${name} compiles to ${at} assembly`, false, cc.stderr)
           continue
         }
         const lines = cc.stdout.split("\n")
@@ -6479,22 +6636,22 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
           const found = body === null ? [] : ctViolations(body, spec, target)
           const kinds = [...new Set(found.map((v) => v.kind))]
           check(
-            `ct_asm: ${name} ${spec.name} on ${target.name}: ${spec.promise}`,
+            `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}`,
             body !== null && (spec.expect === null ? found.length === 0 : kinds.includes(spec.expect)),
             body === null
-              ? `no symbol ${spec.name} in ${name}'s ${target.name} assembly: a check that read nothing proves nothing`
+              ? `no symbol ${spec.name} in ${name}'s ${at} assembly: a check that read nothing proves nothing`
               : `${found.map((v) => `${v.kind}: ${v.line}`).join("\n") || "no violation found"}\n---\n${body.join("\n")}`
           )
         }
       }
     }
 
-    for (const target of CT_TARGETS) {
+    for (const target of readTargets) {
       check(
-        `ct_asm: clang targets ${target.name} (${target.triple}), so that half of the check runs`,
-        targeted.get(target.name) === null,
-        targeted.has(target.name)
-          ? `clang -O2 --target=${target.triple}: ${targeted.get(target.name)}\n` +
+        `ct_asm: clang targets ${ctTargetName(target)} (${target.triple}), so that ${target.level === undefined ? "half" : "level"} of the check runs`,
+        targeted.get(ctTargetName(target)) === null,
+        targeted.has(ctTargetName(target))
+          ? `clang -O2 --target=${target.triple}: ${targeted.get(ctTargetName(target))}\n` +
               "the constant-time fixtures are read on both targets; a clang without this one is a toolchain to fix, not a check to skip"
           : "no fixture compiled, so clang was never asked"
       )
@@ -9957,7 +10114,8 @@ if (!only || "ct_asm constant time assembly runtime-aes".includes(only)) {
   if (!HAS_CLANG) {
     skip("ct_asm: no clang to compile runtime-aes.c to assembly")
   } else {
-    for (const r of runtimeChecks(root)) {
+    // x86-64 is read again at the one `--cpu` level, as the fixtures are (CT-16).
+    for (const r of [...runtimeChecks(root), ...runtimeChecks(root, "x86-64-v3")]) {
       const promises = {
         exports: "exports exactly the kernels read here and nish_aes_hw",
         kernel: "no branch on a secret, call, secret-indexed access or secret-dependent latency",
@@ -16475,6 +16633,164 @@ if (!only || "runtime-cache".includes(only)) {
           r.status === 2 &&
             r.stderr.includes(mode === "--runtime-objects" ? "--runtime-objects" : "--runtime-from"),
           r.stderr
+        )
+      }
+    }
+  }
+}
+
+// ---- WP38 S2: the CPU level ---------------------------------------------------------
+// `--cpu x86-64-v3` (docs/LANGUAGE.md, "The CPU level") compiles the module and
+// the runtime for one level above the baseline, and nothing else: every other
+// level is refused, and so is a target that is not x86-64. The IR does not move,
+// each unit build.sh compiles and the link carry the level, the runtime cache
+// keeps the two builds apart, and on a CPU with AVX2 the binary prints what the
+// baseline one prints. That last check is gated on /proc/cpuinfo, so CI greps
+// its PASS line where the instructions are known to exist.
+if (!only || "cpu-level".includes(only)) {
+  const cpuDir = path.join(buildDir, "cpu-level")
+  fs.rmSync(cpuDir, { recursive: true, force: true })
+  fs.mkdirSync(cpuDir, { recursive: true })
+  const nish = (args, env = {}) =>
+    spawnSync(NISH, args, { cwd: root, encoding: "utf8", env: { ...process.env, ...env } })
+  const refusals = [
+    ["`native`", ["--cpu", "native"], "unknown cpu level `native`"],
+    ["`x86-64-v4`", ["--cpu", "x86-64-v4"], "unknown cpu level `x86-64-v4`"],
+    ["`armv8.2-a`", ["--cpu", "armv8.2-a"], "unknown cpu level `armv8.2-a`"],
+    ["a missing level", ["--cpu"], "--cpu needs a level"],
+    ["--profile wasi", ["--cpu", "x86-64-v3", "--profile", "wasi"], "cannot be used with --profile wasi"],
+    [
+      "--target aarch64-unknown-linux-gnu",
+      ["--cpu", "x86-64-v3", "--target", "aarch64-unknown-linux-gnu"],
+      "the target is aarch64-unknown-linux-gnu",
+    ],
+  ]
+  for (const [what, flags, says] of refusals) {
+    const r = nish(["examples/hello.ts", "-o", path.join(cpuDir, "refused.ll"), ...flags])
+    check(
+      `cpu level: --cpu with ${what} is refused with exit 2 and one line`,
+      r.status === 2 &&
+        r.stdout === "" &&
+        r.stderr.split("\n").filter((l) => l.length > 0).length === 1 &&
+        r.stderr.includes(says),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+  const runRefused = nish(["run", "--cpu", "native", "examples/hello.ts"])
+  check(
+    "cpu level: nish run --cpu native is refused with exit 2 before anything runs",
+    runRefused.status === 2 &&
+      runRefused.stdout === "" &&
+      runRefused.stderr.includes("unknown cpu level `native`"),
+    `${runRefused.status}: ${runRefused.stderr}`
+  )
+  for (const [what, flags, says] of [
+    ["`native`", ["--cpu", "native"], "--cpu takes x86-64-v3, not 'native'"],
+    ["a missing level", ["--cpu"], "--cpu needs a level"],
+    ["the wasm profile", ["--profile", "wasm", "--cpu", "x86-64-v3"], "the wasm profile does not take it"],
+    ["the wasi profile", ["--profile", "wasi", "--cpu", "x86-64-v3"], "the wasi profile does not take it"],
+  ]) {
+    const r = spawnSync(
+      "bash",
+      ["scripts/build.sh", "nothing.ll", "-o", path.join(cpuDir, "refused"), ...flags],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
+    check(
+      `cpu level: build.sh --cpu with ${what} is refused with exit 2`,
+      r.status === 2 && r.stderr.includes(says),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+
+  if (process.arch !== "x64") {
+    skip("cpu level: the level is x86-64's, so this host refuses it and links nothing at it")
+  } else {
+    const baseIr = nish(["examples/hello.ts", "-o", path.join(cpuDir, "base.ll")])
+    const levelIr = nish(["examples/hello.ts", "-o", path.join(cpuDir, "level.ll"), "--cpu", "x86-64-v3"])
+    check(
+      "cpu level: --cpu x86-64-v3 changes no byte of the IR",
+      baseIr.status === 0 &&
+        levelIr.status === 0 &&
+        fs.readFileSync(path.join(cpuDir, "base.ll"), "utf8") ===
+          fs.readFileSync(path.join(cpuDir, "level.ll"), "utf8"),
+      baseIr.stderr + levelIr.stderr
+    )
+    if (!HAS_CLANG) {
+      skip("cpu level: clang not on PATH, so nothing can be linked at the level")
+    } else {
+      const tools = path.join(cpuDir, "tools")
+      fs.mkdirSync(tools, { recursive: true })
+      const ccLog = path.join(cpuDir, "cc.log")
+      fs.writeFileSync(path.join(tools, "cc-args"), `#!/bin/sh\necho "$*" >> '${ccLog}'\nexec clang "$@"\n`, {
+        mode: 0o755,
+      })
+      const cache = path.join(cpuDir, "cache")
+      const env = { XDG_CACHE_HOME: cache, CC: "cc-args", PATH: `${tools}:${process.env.PATH}` }
+      const entries = (kind) => {
+        const dir = path.join(cache, "nish", kind)
+        return fs.existsSync(dir) ? fs.readdirSync(dir).length : 0
+      }
+      // Each clang line a link made, but the `--version` probes the driver asks.
+      const ccLines = () => {
+        const lines = fs.existsSync(ccLog) ? fs.readFileSync(ccLog, "utf8").split("\n") : []
+        fs.rmSync(ccLog, { force: true })
+        return lines.filter((l) => l.length > 0 && l !== "--version")
+      }
+      const base = nish(["examples/hello.ts", "--link", path.join(cpuDir, "hello-base")], env)
+      const baseLines = ccLines()
+      const level = nish(
+        ["examples/hello.ts", "--link", path.join(cpuDir, "hello-v3"), "--cpu", "x86-64-v3"],
+        env
+      )
+      const levelLines = ccLines()
+      const marched = (l) => l.includes("-march=x86-64-v3") && l.includes("-ffp-contract=off")
+      check(
+        "cpu level: the baseline link passes no -march to any clang line",
+        base.status === 0 && baseLines.length > 0 && !baseLines.some((l) => l.includes("-march")),
+        base.stderr + baseLines.join("\n")
+      )
+      check(
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all seven runtime units, the module and the link",
+        level.status === 0 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 7 &&
+          levelLines.some((l) => !/ -c /.test(l)) &&
+          levelLines.every(marched),
+        level.stderr + levelLines.join("\n")
+      )
+      check(
+        "cpu level: the runtime cache keeps the level in its own entry beside the baseline's",
+        entries("runtime") === 2,
+        `${entries("runtime")} runtime entries`
+      )
+      const flags = fs.existsSync("/proc/cpuinfo")
+        ? (fs.readFileSync("/proc/cpuinfo", "utf8").match(/^flags\s*:.*$/m) ?? [""])[0]
+        : ""
+      if (!/\bavx2\b/.test(flags)) {
+        skip("cpu level: this CPU has no avx2 in /proc/cpuinfo, so an x86-64-v3 binary cannot run here")
+      } else {
+        const ranBase = spawnSync(path.join(cpuDir, "hello-base"), [], { encoding: "utf8" })
+        const ranLevel = spawnSync(path.join(cpuDir, "hello-v3"), [], { encoding: "utf8" })
+        check(
+          "cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints",
+          ranBase.status === 0 &&
+            ranLevel.status === 0 &&
+            ranBase.stdout === "hello from Nish\n" &&
+            ranLevel.stdout === ranBase.stdout,
+          `${ranBase.status} ${ranLevel.status}: ${JSON.stringify(ranLevel.stdout)} ${ranLevel.stderr}`
+        )
+        const runBase = nish(["run", "examples/hello.ts"], env)
+        const runLevel = nish(["run", "--cpu", "x86-64-v3", "examples/hello.ts"], env)
+        check(
+          "cpu level: nish run with and without --cpu x86-64-v3 prints the same and caches two binaries",
+          runBase.status === 0 &&
+            runLevel.status === 0 &&
+            runLevel.stdout === runBase.stdout &&
+            runBase.stdout === "hello from Nish\n" &&
+            entries("run") === 2,
+          `${runBase.stderr}${runLevel.stderr}${entries("run")} run entries`
         )
       }
     }

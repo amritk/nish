@@ -111,6 +111,7 @@ import {
   PAR_TASK,
   ParallelCall,
   ROLE_CONSTRUCTOR,
+  STRUCT_CLASS,
   ScopeChannels,
   StructInfo,
   StructInstantiation,
@@ -1429,6 +1430,8 @@ class VariableUses {
   locals: Local[]
   freshArray: boolean[]
   freshLiteral: boolean[]
+  /** A `const` bound to a `new`: an object no other binding held when it was made. */
+  freshNew: boolean[]
   handedOn: boolean[]
   destination: boolean[]
 
@@ -1436,6 +1439,7 @@ class VariableUses {
     this.locals = []
     this.freshArray = []
     this.freshLiteral = []
+    this.freshNew = []
     this.handedOn = []
     this.destination = []
   }
@@ -1452,6 +1456,7 @@ class VariableUses {
     this.locals.push(local)
     this.freshArray.push(false)
     this.freshLiteral.push(false)
+    this.freshNew.push(false)
     this.handedOn.push(false)
     this.destination.push(false)
     return this.locals.length - 1
@@ -1461,6 +1466,12 @@ class VariableUses {
   isDestinationShaped(local: Local | null): boolean {
     const at = this.indexOf(local)
     return at >= 0 && this.freshArray[at] && !this.handedOn[at]
+  }
+
+  /** A `const` bound to a `new`, whose object no other binding of this function's names. */
+  isFreshNew(local: Local | null): boolean {
+    const at = this.indexOf(local)
+    return at >= 0 && this.freshNew[at]
   }
 
   /** A `const` bound to a fresh literal, never handed on and never a destination: nothing but this function reaches it. */
@@ -1555,6 +1566,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
         const at = uses.add(local)
         uses.freshArray[at] = constant && isFreshArray(decl.children[2])
         uses.freshLiteral[at] = constant && isFreshLiteral(decl.children[2])
+        uses.freshNew[at] = constant && unwrapParens(decl.children[2]).kind === N_NEW
       }
     }
   }
@@ -1803,6 +1815,12 @@ const regionCallMessage = (
   }
   if (isSpawnEntry(sig)) {
     return regionWriteMessage(state, "A task of another scope, whose join stores its answer,")
+  }
+  // An atomic's method writes only its own word, and whether a task reaches
+  // that word is `regionAtomicMessageFor`'s to judge, by the types the tasks
+  // hold: an atomic none of them reaches is the parent's alone.
+  if (isAtomicMethod(sig)) {
+    return ""
   }
   return writesThroughMessage(program, table, facts, node, sig, state)
 }
@@ -2056,6 +2074,9 @@ const findRegions = (
           }
           j = j + 1
         }
+        if (locals.length > 1) {
+          checkSiblingScopes(program, table, facts, uses, node, i, locals, out)
+        }
       }
       i = i + 1
     }
@@ -2064,6 +2085,247 @@ const findRegions = (
     findRegions(program, table, facts, uses, child, out)
   }
 }
+
+/**
+ * R7 across the scopes one `using` statement opens, `using s = scope(), t =
+ * scope()`: natively they join one after the other, the last declared first,
+ * so every task of `t` runs before any of `s`, while under Node each runs
+ * where it is spawned. Tasks of two of them may therefore share no lock, no
+ * atomic and no destination, whichever is spawned first. What a task shares
+ * is judged by what it reaches: a `Mutex` or an atomic it is handed as a
+ * `const` bound to a `new` is that binding's object alone, and one it reaches
+ * any other way is every object of its type.
+ */
+const checkSiblingScopes = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  uses: VariableUses,
+  block: Node,
+  at: i32,
+  locals: Local[],
+  out: ScopeFinding[]
+): void => {
+  const spawns: SiblingSpawn[] = []
+  let k = at + 1
+  while (k < block.children.length) {
+    collectSiblingSpawns(program, table, facts, uses, block.children[k], locals, spawns)
+    k = k + 1
+  }
+  let j = 0
+  while (j < spawns.length) {
+    let i = 0
+    let message = ""
+    while (i < j && message.length === 0) {
+      if (spawns[i].scope !== spawns[j].scope) {
+        message = siblingShareMessage(spawns[i], spawns[j])
+      }
+      i = i + 1
+    }
+    if (message.length > 0) {
+      out.push(new ScopeFinding(spawns[j].node, message))
+    }
+    j = j + 1
+  }
+}
+
+/**
+ * A lock or an atomic a task reaches, for `checkSiblingScopes`: `local` when
+ * it is that `const`'s own object, `null` when it is any object of `type`,
+ * and `path` how the task reaches it.
+ */
+class SiblingReach {
+  local: Local | null
+  path: string
+  type: i32
+  atomic: boolean
+
+  constructor(atomic: boolean, local: Local | null, type: i32, path: string) {
+    this.atomic = atomic
+    this.local = local
+    this.type = type
+    this.path = path
+  }
+
+  /** Whether `other` may be the same object. */
+  meets(other: SiblingReach): boolean {
+    if (this.atomic !== other.atomic || this.type !== other.type) {
+      return false
+    }
+    const mine = this.local
+    const theirs = other.local
+    return mine === null || theirs === null || mine === theirs
+  }
+}
+
+/** One `spawn` on a scope of a `using` that opens several: its scope, destination, and the locks and atomics its task reaches. */
+class SiblingSpawn {
+  node: Node
+  scope: Local
+  destination: Local | null
+  reaches: SiblingReach[]
+
+  constructor(node: Node, scope: Local, destination: Local | null) {
+    this.node = node
+    this.scope = scope
+    this.destination = destination
+    this.reaches = []
+  }
+}
+
+/** Every `spawn` under `node` on one of `locals`' scopes, with what its task reaches. */
+const collectSiblingSpawns = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  uses: VariableUses,
+  node: Node,
+  locals: Local[],
+  out: SiblingSpawn[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  const callee = spawnCallee(program, node)
+  const receiver: Local | null = callee === null ? null : spawnReceiver(program, node)
+  if (callee !== null && receiver !== null && locals.indexOf(receiver) >= 0) {
+    const spawn = new SiblingSpawn(node, receiver, spawnDestination(program, node))
+    // A task that takes no lock shares none, and one that reaches no atomic method no atomic.
+    const locks = takesLock(facts, callee)
+    const atomics = reachesAtomic(facts, callee.name, new StringSet())
+    const arg = taskArgTypeOf(callee)
+    if (arg >= 0) {
+      const args = node.children[1].children
+      const local: Local | null = args.length > 1 ? namedLocal(program, args[1]) : null
+      const root = local === null ? "arg" : local.name
+      siblingReaches(program, table, uses, arg, local, root, locks, atomics, spawn.reaches)
+    }
+    for (const slot of capturesOf(callee)) {
+      const local = sourceLocal(slot.arrow.captures[slot.index])
+      const name = slot.arrow.captures[slot.index].name
+      siblingReaches(program, table, uses, slot.type(), local, name, locks, atomics, spawn.reaches)
+    }
+    out.push(spawn)
+  }
+  for (const child of node.children) {
+    collectSiblingSpawns(program, table, facts, uses, child, locals, out)
+  }
+}
+
+/** What a task input of `type`, read from `local` and named `root`, reaches: pushed onto `out`. */
+const siblingReaches = (
+  program: CheckedProgram,
+  table: TypeTable,
+  uses: VariableUses,
+  type: i32,
+  local: Local | null,
+  root: string,
+  locks: boolean,
+  atomics: boolean,
+  out: SiblingReach[]
+): void => {
+  const info = classLayoutOf(program, table, type)
+  let own: Local | null = null
+  if (local !== null && uses.isFreshNew(local)) {
+    own = local
+  }
+  if (own !== null && isAtomicClass(info)) {
+    if (atomics) {
+      out.push(new SiblingReach(true, own, type, own.name))
+    }
+    return
+  }
+  if (own !== null && info !== null && isThreadsClass(info, MUTEX)) {
+    if (locks) {
+      out.push(new SiblingReach(false, own, type, own.name))
+    }
+    // What its data holds is reached through the lock, as any field is.
+    for (const field of info.fields) {
+      heldReaches(
+        program,
+        table,
+        field.type,
+        `${own.name}.${field.name}`,
+        locks,
+        atomics,
+        new StringSet(),
+        out
+      )
+    }
+    return
+  }
+  heldReaches(program, table, type, root, locks, atomics, new StringSet(), out)
+}
+
+/** Every `Mutex` and atomic a value of `type` reaches, by type: `heldPath`'s walk, collecting. */
+const heldReaches = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  root: string,
+  locks: boolean,
+  atomics: boolean,
+  seen: StringSet,
+  out: SiblingReach[]
+): void => {
+  const kind = table.kindOf(type)
+  if (kind === K_NULLABLE) {
+    heldReaches(program, table, table.refOf(type), root, locks, atomics, seen, out)
+    return
+  }
+  if (kind === K_ARRAY) {
+    heldReaches(program, table, table.refOf(type), `${root}[i]`, locks, atomics, seen, out)
+    return
+  }
+  if (kind === K_RESULT) {
+    heldReaches(program, table, table.okOf(type), `${root}.value`, locks, atomics, seen, out)
+    heldReaches(program, table, table.errOf(type), `${root}.error`, locks, atomics, seen, out)
+    return
+  }
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return
+  }
+  if (isAtomicClass(info)) {
+    if (atomics) {
+      out.push(new SiblingReach(true, null, type, root))
+    }
+    return
+  }
+  if (isThreadsClass(info, MUTEX) && locks) {
+    out.push(new SiblingReach(false, null, type, root))
+  }
+  if (!seen.add(info.name)) {
+    return
+  }
+  for (const field of info.fields) {
+    heldReaches(program, table, field.type, `${root}.${field.name}`, locks, atomics, seen, out)
+  }
+}
+
+/** The refusal of `later`, a `spawn` on a scope sibling to `earlier`'s, when their tasks share something, or "". */
+const siblingShareMessage = (earlier: SiblingSpawn, later: SiblingSpawn): string => {
+  const destination = later.destination
+  const shared = earlier.destination
+  if (destination !== null && shared !== null && destination === shared) {
+    return siblingMessage(later, earlier, `the destination \`${destination.name}\``)
+  }
+  for (const reach of later.reaches) {
+    for (const other of earlier.reaches) {
+      if (reach.meets(other)) {
+        const what = reach.atomic ? "an atomic" : "a `Mutex`"
+        return siblingMessage(later, earlier, `${what} through \`${reach.path}\``)
+      }
+    }
+  }
+  return ""
+}
+
+const siblingMessage = (later: SiblingSpawn, earlier: SiblingSpawn, what: string): string =>
+  `This \`spawn\` on \`${later.scope.name}\` hands its task ${what}, which a task of \`${earlier.scope.name}\` ` +
+  "also reaches: the scopes one `using` statement opens join one after the other natively, the last declared " +
+  "first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no " +
+  "atomic and no destination; open the scopes in `using` statements of their own"
 
 /** The destination rule and every region of one function's body. */
 const checkBody = (
@@ -2161,6 +2423,52 @@ export const isChannelReader = (sig: FunctionSig): boolean => isChannelMethod(si
 export const isLockMethod = (sig: FunctionSig): boolean =>
   isThreadsClass(sig.owner, MUTEX) && sig.decl.kind === N_METHOD && sig.decl.children[0].text === "lock"
 
+// ---- Atomics: `AtomicI32` and `AtomicI64` ------------------------------------------------
+//
+// An atomic is a class of one scalar whose methods the emitter writes as one
+// sequentially consistent instruction each (`emitAtomicBody`). It reaches a
+// task as a `Mutex` does, by its argument or a capture, and R7 holds of it as
+// of a lock; an atomic method's write is not a shared one, so a task and a
+// data-parallel body may make it beside the guarded store and the send.
+
+/** The two classes `nish/threads` declares for atomics. */
+const ATOMIC_I32: string = "AtomicI32"
+const ATOMIC_I64: string = "AtomicI64"
+
+/**
+ * Mark `info` as an atomic when it is `AtomicI32` or `AtomicI64` and `program`
+ * is `nish/threads` itself, as the class is collected. The package is part of
+ * the test, as `isThreadsModule`'s is: a root-package `std/threads.ts` that
+ * declares an `AtomicI32` declares an ordinary class, whose bodies run as they
+ * are written.
+ */
+export const markAtomicClass = (program: CheckedProgram, info: StructInfo): void => {
+  if (
+    info.kind === STRUCT_CLASS &&
+    (info.name === ATOMIC_I32 || info.name === ATOMIC_I64) &&
+    isThreadsModule(program)
+  ) {
+    info.atomic = true
+  }
+}
+
+/** Whether `info` is `nish/threads`'s `AtomicI32` or `AtomicI64`. */
+const isAtomicClass = (info: StructInfo | null): boolean => info !== null && info.atomic
+
+/** Whether `type` is an `AtomicI32` or an `AtomicI64`. */
+const isAtomicType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+  isAtomicClass(classLayoutOf(program, table, type))
+
+/** Whether `type` is a class `nish/threads` declares, an atomic included. */
+const isThreadsObjectType = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  const info = classLayoutOf(program, table, type)
+  return info !== null && (isAtomicClass(info) || isThreadsLayout(info))
+}
+
+/** Whether `sig` is a method of an atomic, whose body the emitter writes. */
+export const isAtomicMethod = (sig: FunctionSig): boolean =>
+  isAtomicClass(sig.owner) && sig.decl.kind === N_METHOD
+
 /** Whether `node` is a call of a `Mutex`'s `lock()`. */
 export const isLockCall = (program: CheckedProgram, node: Node): boolean => {
   if (node.kind !== N_CALL) {
@@ -2204,6 +2512,16 @@ const mutexMemberMessage = (name: string): string =>
   `\`${name}\` is not a member a program may name: the data a \`Mutex\` owns is reachable only through ` +
   "the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock"
 
+const atomicMemberMessage = (name: string): string =>
+  `\`${name}\` is not a member a program may name: an atomic is read and updated only by calling its ` +
+  "methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race " +
+  "with the update a task makes at the same moment"
+
+const threadsLiteralMessage = (table: TypeTable, type: i32): string =>
+  `\`${table.typeName(type)}\` is a class of \`nish/threads\`, and its objects are made only as the module ` +
+  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
+  "An object literal would be a plain record under Node, with none of the methods the class is used through"
+
 const lockNotUsingMessage = (): string =>
   "`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released " +
   "when the block that declares it ends, so a guard bound any other way would be one nobody releases"
@@ -2237,6 +2555,11 @@ const regionLockMessage = (state: RegionState, what: string, path: string): stri
   `${what} locks a \`Mutex\` a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
   "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
   "so the parent locks what they share only before the statement that holds the first `spawn` or after the join"
+
+const regionAtomicMessage = (state: RegionState, what: string, path: string): string =>
+  `${what} reaches an atomic a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
+  "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
+  "so the parent touches what they share only before the statement that holds the first `spawn` or after the join"
 
 const taskCaptureMutexMessage = (table: TypeTable, name: string, type: i32, path: string): string =>
   `The task's arrow reads \`${name}\`, which is \`${table.typeName(type)}\` and reaches a \`Mutex\` through ` +
@@ -2338,6 +2661,28 @@ const reachesWait = (
   return false
 }
 
+/** Whether the function `name` is an atomic method or calls one, directly or through any callee. */
+const reachesAtomic = (facts: FactsTable, name: string, seen: StringSet): boolean => {
+  if (!seen.add(name)) {
+    return false
+  }
+  const own = facts.get(name)
+  if (own === null) {
+    return false
+  }
+  if (own.atomic) {
+    return true
+  }
+  let c = 0
+  while (c < own.callees.size()) {
+    if (reachesAtomic(facts, own.callees.at(c), seen)) {
+      return true
+    }
+    c = c + 1
+  }
+  return false
+}
+
 /** Whether a call of `fn` takes a lock, directly or through any callee. */
 const takesLock = (facts: FactsTable, fn: FunctionSig): boolean =>
   reachesWait(facts, fn.name, true, "", new StringSet())
@@ -2359,30 +2704,47 @@ const mutexPath = (
   want: i32,
   root: string,
   seen: StringSet
+): string => heldPath(table, program, type, want, false, root, seen)
+
+/**
+ * `mutexPath`, or with `atomics` the same walk to an `AtomicI32` or an
+ * `AtomicI64` — `want`, or any when `want` is -1.
+ */
+const heldPath = (
+  table: TypeTable,
+  program: CheckedProgram,
+  type: i32,
+  want: i32,
+  atomics: boolean,
+  root: string,
+  seen: StringSet
 ): string => {
   const kind = table.kindOf(type)
   if (kind === K_NULLABLE) {
-    return mutexPath(table, program, table.refOf(type), want, root, seen)
+    return heldPath(table, program, table.refOf(type), want, atomics, root, seen)
   }
   if (kind === K_ARRAY) {
-    return mutexPath(table, program, table.refOf(type), want, `${root}[i]`, seen)
+    return heldPath(table, program, table.refOf(type), want, atomics, `${root}[i]`, seen)
   }
   if (kind === K_RESULT) {
-    const ok = mutexPath(table, program, table.okOf(type), want, `${root}.value`, seen)
-    return ok.length > 0 ? ok : mutexPath(table, program, table.errOf(type), want, `${root}.error`, seen)
+    const ok = heldPath(table, program, table.okOf(type), want, atomics, `${root}.value`, seen)
+    return ok.length > 0
+      ? ok
+      : heldPath(table, program, table.errOf(type), want, atomics, `${root}.error`, seen)
   }
   const info = classLayoutOf(program, table, type)
   if (info === null) {
     return ""
   }
-  if (isThreadsClass(info, MUTEX) && (want < 0 || type === want)) {
+  const held = atomics ? isAtomicClass(info) : isThreadsClass(info, MUTEX)
+  if (held && (want < 0 || type === want)) {
     return root
   }
   if (!seen.add(info.name)) {
     return ""
   }
   for (const field of info.fields) {
-    const path = mutexPath(table, program, field.type, want, `${root}.${field.name}`, seen)
+    const path = heldPath(table, program, field.type, want, atomics, `${root}.${field.name}`, seen)
     if (path.length > 0) {
       return path
     }
@@ -2495,6 +2857,14 @@ const walkMutexes = (
   } else if (node.kind === N_MEMBER && isMutexType(program, table, program.nodeTypes[node.children[0].id])) {
     if (!(node.text === "lock" && called)) {
       out.push(new ScopeFinding(node, mutexMemberMessage(node.text)))
+      return
+    }
+  } else if (node.kind === N_OBJECT && isThreadsObjectType(program, table, type)) {
+    out.push(new ScopeFinding(node, threadsLiteralMessage(table, type)))
+    return
+  } else if (node.kind === N_MEMBER && isAtomicType(program, table, program.nodeTypes[node.children[0].id])) {
+    if (!called) {
+      out.push(new ScopeFinding(node, atomicMemberMessage(node.text)))
       return
     }
   } else if (isLockCall(program, node)) {
@@ -2695,7 +3065,7 @@ const regionLockMessageFor = (
     want = program.nodeTypes[unwrapParens(node.children[0].children[0]).id]
     what = "This `lock()`"
   } else if (!takesLock(facts, callee)) {
-    return ""
+    return regionAtomicMessageFor(program, table, facts, node, callee, state)
   }
   let k = 0
   while (k < state.taskArgs.length && k < state.taskArgRoots.length) {
@@ -2703,6 +3073,47 @@ const regionLockMessageFor = (
     k = k + 1
     if (path.length > 0) {
       return regionLockMessage(state, what, path)
+    }
+  }
+  return regionAtomicMessageFor(program, table, facts, node, callee, state)
+}
+
+/**
+ * R7 for atomics: the refusal of `node`, a call of `callee` in `state`'s
+ * region, when it updates or reads an atomic a task of the scope can reach —
+ * a method of an atomic of a type a task's argument reaches, or a call that
+ * reaches any atomic method when a task reaches any atomic — or "".
+ */
+const regionAtomicMessageFor = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  node: Node,
+  callee: FunctionSig,
+  state: RegionState
+): string => {
+  let want = -1
+  let what = lockCallName(node, callee)
+  if (isAtomicMethod(callee)) {
+    want = program.nodeTypes[unwrapParens(node.children[0].children[0]).id]
+    what = `This \`${callee.decl.children[0].text}()\``
+  } else if (!reachesAtomic(facts, callee.name, new StringSet())) {
+    return ""
+  }
+  let k = 0
+  while (k < state.taskArgs.length && k < state.taskArgRoots.length) {
+    const path = heldPath(
+      table,
+      program,
+      state.taskArgs[k],
+      want,
+      true,
+      state.taskArgRoots[k],
+      new StringSet()
+    )
+    k = k + 1
+    if (path.length > 0) {
+      return regionAtomicMessage(state, what, path)
     }
   }
   return ""

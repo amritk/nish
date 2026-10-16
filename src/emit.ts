@@ -103,6 +103,7 @@ import {
 } from "./emit-map"
 import {
   closeBlockScopes,
+  emitAtomicBody,
   emitChannelSendBody,
   emitLockBody,
   emitLockReleases,
@@ -114,7 +115,7 @@ import {
   isSpawnTaskCall,
   openScope,
 } from "./emit-parallel"
-import { CaptureSlot, capturesOf, isChannelSend, isLockMethod } from "./parallel"
+import { CaptureSlot, capturesOf, isAtomicMethod, isChannelSend, isLockMethod } from "./parallel"
 import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -562,6 +563,8 @@ export class Emitter {
       emitLockBody(this, sig) // WP29 P3
     } else if (isChannelSend(sig)) {
       emitChannelSendBody(this, sig) // WP29 P3
+    } else if (isAtomicMethod(sig)) {
+      emitAtomicBody(this, sig)
     } else if (body.kind === N_BLOCK) {
       this.emitBlock(body)
     } else {
