@@ -547,9 +547,11 @@ export class FunctionFacts {
    * needs to know whether two calls can run at once.
    *
    * Why each is safe to leave out:
-   *   - A panic (`nish_panic_index`, `_slice`, `_div`) prints to fd 2 and
-   *     `_exit`s (runtime/runtime.c): no user memory is written, and no caller
-   *     runs again to observe any.
+   *   - A panic (`nish_panic` for `panic`, `expect` and a range entry,
+   *     `nish_panic_index`, `_slice`, `_div`, `_overflow`) claims the process,
+   *     prints to fd 2 and `_exit`s (runtime/runtime.c): no user memory is
+   *     written, no caller runs again to observe any, and when two threads
+   *     panic at once only the first prints and exits (`nish_panic_claim`).
    *   - A `throw` lowers to `llvm.trap`, which writes nothing and never returns.
    *   - An arena allocation writes the arena's bump state and the fresh block.
    *     The block is unreachable until the function hands it out, and the bump
@@ -574,9 +576,9 @@ export class FunctionFacts {
    */
   writesPastParams: boolean
   /**
-   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`
-   * reached other than as the tail of a `new Array` whose length is checked,
-   * which prints to fd 2 and `_exit`s as every panic does
+   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`,
+   * which `console.log`, `console.error`, `write`, `writeError` and
+   * `process.exit` call. A panic calls `nish_panic` instead
    * (`FunctionFacts.sharedWrite`).
    */
   writesOutput: boolean

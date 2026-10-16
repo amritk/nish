@@ -21,13 +21,12 @@ declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noundef i64 @nish_arena_used() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
-declare void @nish_exit(i32 noundef) #5
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare extern_weak void @nish_panic_overflow(i32 noundef) #6
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare i32 @llvm.fptosi.sat.i32.f64(double) #1
 declare i64 @llvm.fptosi.sat.i64.f64(double) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
@@ -35,7 +34,7 @@ declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #1
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -483,8 +482,7 @@ ovf.ok.1:
   br i1 %13, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.6 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.6 to i8*))
   unreachable
 
 len.ok:
@@ -783,8 +781,7 @@ entry:
   br i1 %5, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.6 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.6 to i8*))
   unreachable
 
 len.ok:
@@ -979,8 +976,7 @@ lor.end:
   br i1 %8, label %if.then, label %if.end
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.7 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [28 x i8] }* @.str.7 to i8*))
   unreachable
 
 if.end:
@@ -1070,8 +1066,7 @@ lor.end:
   br i1 %19, label %if.then.1, label %if.end.1
 
 if.then.1:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.8 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.8 to i8*))
   unreachable
 
 if.end.1:
@@ -1471,8 +1466,7 @@ if.end.1:
   br label %while.cond
 
 while.end:
-  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.9 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.9 to i8*))
   unreachable
 
 ovf.fail:
@@ -1624,9 +1618,8 @@ attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind readonly }
 attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

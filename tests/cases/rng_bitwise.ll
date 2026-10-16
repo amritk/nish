@@ -9,10 +9,9 @@ declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_exit(i32 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 
 define internal void @Flags.set(%struct.Flags* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %n) #0 {
 entry:
@@ -25,8 +24,7 @@ entry:
   br i1 %5, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -39,8 +37,7 @@ rng.ok:
   br i1 %10, label %rng.ok.1, label %rng.fail.1
 
 rng.fail.1:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.1:
@@ -53,8 +50,7 @@ rng.ok.1:
   br i1 %15, label %rng.ok.2, label %rng.fail.2
 
 rng.fail.2:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.2:
@@ -80,8 +76,7 @@ entry:
   br i1 %2, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -92,8 +87,7 @@ rng.ok:
   br i1 %5, label %rng.ok.1, label %rng.fail.1
 
 rng.fail.1:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.1:
@@ -106,8 +100,7 @@ rng.ok.1:
   br i1 %10, label %rng.ok.2, label %rng.fail.2
 
 rng.fail.2:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.2:
@@ -120,8 +113,7 @@ rng.ok.2:
   br i1 %15, label %rng.ok.3, label %rng.fail.3
 
 rng.fail.3:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.3:
@@ -134,8 +126,7 @@ rng.ok.3:
   br i1 %20, label %rng.ok.4, label %rng.fail.4
 
 rng.fail.4:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.4:
@@ -170,8 +161,7 @@ rng.ok.4:
   br i1 %38, label %rng.ok.5, label %rng.fail.5
 
 rng.fail.5:
-  call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.1 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [44 x i8] }* @.str.1 to i8*))
   unreachable
 
 rng.ok.5:
@@ -189,8 +179,7 @@ rng.ok.5:
   br i1 %48, label %rng.ok.6, label %rng.fail.6
 
 rng.fail.6:
-  call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.1 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [44 x i8] }* @.str.1 to i8*))
   unreachable
 
 rng.ok.6:
@@ -235,7 +224,7 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
+attributes #2 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

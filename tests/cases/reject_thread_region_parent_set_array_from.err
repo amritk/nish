@@ -1,0 +1,2 @@
+reject_thread_region_parent_set_array_from.ts:26:15
+Unknown builtin `Array.from`

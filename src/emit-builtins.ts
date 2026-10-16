@@ -337,7 +337,7 @@ const emitStreamWrite = (emitter: Emitter, expr: Node, fd: i32): string => {
 /**
  * `panic(message)`: the message and a newline on stderr, then exit 1 — the
  * same observable ending as the index panic, so a program has one failure mode
- * rather than two. `nish_exit` is `noreturn`, which is what makes the
+ * rather than two. `nish_panic` is `noreturn`, which is what makes the
  * `unreachable` legal and lets a non-void function end with a panic.
  */
 const emitPanic = (emitter: Emitter, expr: Node): string => {
@@ -349,12 +349,12 @@ const emitPanic = (emitter: Emitter, expr: Node): string => {
  * The ending `panic`, `r.expect(message)` and a failed range entry share: the
  * message and a newline on stderr, then exit 1. It is spelled once so the
  * three cannot drift apart, and `panicTailCallees` is what `src/attributes.ts`
- * is told it calls. No runtime symbol is added for it, so the core runtime's
- * budget does not move (WP31 §6).
+ * is told it calls. One runtime call, `nish_panic`, rather than a write and an
+ * exit, because the runtime has to own both: when two threads panic at once
+ * only the first may print, and only its exit may run.
  */
 export const emitPanicTail = (emitter: Emitter, message: string): void => {
-  emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${message}, i32 2, i1 true)`)
-  emitter.fn.emit(`call void ${emitter.useRuntime("nish_exit")}(i32 1)`)
+  emitter.fn.emit(`call void ${emitter.useRuntime("nish_panic")}(i8* ${message})`)
   emitter.fn.emit("unreachable")
 }
 
@@ -371,8 +371,7 @@ export const emitRangedStore = (emitter: Emitter, expr: Node, value: string): vo
 
 /** The runtime symbols `emitPanicTail` calls, for the attribute pass. */
 export const panicTailCallees = (out: string[]): void => {
-  out.push("nish_write")
-  out.push("nish_exit")
+  out.push("nish_panic")
 }
 
 /**

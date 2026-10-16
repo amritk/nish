@@ -133,7 +133,9 @@ void nish_panic_div(_Bool by_zero) { (void)by_zero; __builtin_trap(); }
 void nish_panic_overflow(uint32_t op) { (void)op; __builtin_trap(); }
 void nish_exit(int32_t code) { (void)code; __builtin_trap(); }
 /* A panic's message (`panic`, `expect`, a failed range entry) has no stderr to
- * go to here; the `nish_exit` that follows it is the trap. An exported function
- * with a ranged parameter checks it on entry (WP31 §9), so this is what lets
- * such a module link; the loader throws a RangeError before the call reaches it. */
+ * go to here, so `nish_panic` is the trap. An exported function with a ranged
+ * parameter checks it on entry (WP31 §9), so this is what lets such a module
+ * link; the loader throws a RangeError before the call reaches it. */
+void nish_panic(const void *s) { (void)s; __builtin_trap(); }
+/* Output has nowhere to go either. */
 void nish_write(const void *s, int32_t fd, _Bool newline) { (void)s; (void)fd; (void)newline; }

@@ -3,14 +3,13 @@
 @.str.0 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<0, 9>\00" }, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
-declare void @nish_exit(i32 noundef) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare i64 @llvm.smin.i64(i64, i64) #4
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #1
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare i64 @llvm.smin.i64(i64, i64) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
 
 define void @put(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %v) #0 {
 entry:
@@ -19,8 +18,7 @@ entry:
   br i1 %0, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [43 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [43 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -195,10 +193,8 @@ ovf.fail:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
