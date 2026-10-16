@@ -544,6 +544,10 @@ the straight-line multiplies this profile says retire most instructions a
 cycle. So both conditions may be missed, and a missed one is recorded as
 missed.
 
+#### K5: P-256, the result
+
+Being measured on `main` at `6e11fa6`, against a build of `a22a056`, by the method of the baseline above.
+
 ## 6. Decisions for the owner
 
 | | Question | Recommendation |
