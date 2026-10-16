@@ -1,0 +1,2 @@
+reject_thread_region_parent_table_set.ts:26:5
+`Map<string, i32>.set` writes memory a task of `s` may read, before the scope joins
