@@ -24,10 +24,10 @@ connection past its handshake allocates nothing that outlives a record, and
 neither does a KeyUpdate; a per-connection cap bounds how many a client may
 ask for. On the carrier's path `TlsServer`'s traffic secrets, its handshake
 secret and the caller's ephemeral key are wiped once the record layer has
-what it needs from them, which narrows TLS-1 for TLS over TCP. Two findings
-are open: TLS-2 (Low), the AES key schedule zeroed by ordinary stores; and
-TLS-4 (Low), no timeout in the carrier. TLS-3, the memory each handshake
-left, is closed.
+what it needs from them, which narrows TLS-1 for TLS over TCP. T2 left two
+findings open: TLS-2 (Low), the AES key schedule zeroed by ordinary stores;
+and TLS-4 (Low), no timeout in the carrier. TLS-3, the memory each handshake
+left, is closed. Open now are TLS-1, TLS-2 and TLS-4; TLS-5 is closed (below).
 
 **N9's result.** A handshake keeps its state in its slot: `TlsServer`'s
 buffers, transcript, secrets and HKDF scratch are made once and `restart`ed
@@ -483,14 +483,18 @@ interop server does not.
   reject 0-RTT, and take no other action that assumes the ClientHello is
   fresh. This server rejects 0-RTT always and assumes no ClientHello fresh,
   so the check could change nothing, and the server does not make it; its own
-  issue time, in the sealed state, is what expiry is measured from. A session whose server name is longer than 255 bytes is issued no
-  ticket.
+  issue time, in the sealed state, is what expiry is measured from. A session
+  whose server name is longer than 255 bytes is issued no ticket.
 - **The AEAD.** ChaCha20-Poly1305 (`nish/crypto/chacha20poly1305`) takes its
   key as raw bytes, so it runs inside `expose` with no expanded key schedule
   left in a field, which an AES ticket key would leave (TLS-2).
 - **Expiry.** A ticket opens only when the time now is no earlier than its
   issue time, no later than issue time plus lifetime, and no later than 24
-  hours after the full handshake its chain started from. A resumed connection
+  hours after the full handshake its chain started from. The sealed fields
+  are not trusted for more than the server would have written: a ticket whose
+  sealed lifetime is longer than the server's own (7200 s), or whose chain
+  start is after its issue time, fails to open, since only a holder of the
+  ticket key can seal such a ticket and this server never does. A resumed connection
   issues a ticket that carries the chain's start forward, so resumption cannot
   extend a certificate-authenticated session's keying material for ever
   (§4.6.1 RECOMMENDS a limit); a client resuming every hour pays one full
@@ -500,7 +504,9 @@ interop server does not.
   604,800 cap.
 
 To be pinned by `net_tls_ticket` (round trip, a flipped bit in each region,
-expiry at each bound, retired and unknown key ids, the chain bound; a key past
+expiry at each bound, retired and unknown key ids, the chain bound; a ticket
+sealed under a live key with a lifetime over 7200 s, or a chain start after
+its issue time, failing to open; a key past
 its issue window refused by `tlsTicketSeal` and past 14 hours by
 `tlsTicketOpen`; the seal cap, brought forward to 2 as `recordLimit` is for
 KeyUpdate; `tlsTicketKeyDue` at the window's end and at the cap; and the
@@ -519,7 +525,9 @@ check is a group in `tests/wipes/tls.js`, the TLS area's file in the harness
 ### Anti-replay
 
 Tickets are single-use in each process (§8.1). `TlsTicketStrikes` is a strike
-register of ticket ids, each kept until its ticket expires: an open-addressed
+register of ticket ids, each kept until its ticket expires or one server
+lifetime (7200 s) after it was recorded, whichever is sooner, so no entry
+outlives `now` + 7200 s at its recording whatever its ticket says: an open-addressed
 table made once at the capacity the program gives (65,536 ids by default; a
 12-byte id and an 8-byte expiry each, so about 1.3 MB), whose expired entries
 are reused, and which never grows. The program owns it and lends it to the
@@ -542,6 +550,10 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   gets a full handshake — and no key, since finishing the handshake needs the
   client's x25519 private key. A ticket already recorded is passed over like
   one that does not open.
+- **The entry's life is the server's.** A strike entry needs to outlive only
+  the window in which its ticket could open again, and the server, not the
+  ticket, bounds that window at one lifetime. So the sizing below, capacity
+  over one server lifetime, holds for any ticket, a forged one included.
 - **One call, no gap.** Opening the identities, checking the register,
   verifying the selected binder and recording its id happen in one call, the
   ticket hand-off for one ClientHello, which returns only once the id is
@@ -572,7 +584,8 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   finishes: each id is recorded once its binder verifies, so it fills the
   register at the speed it can send ClientHellos, and keeps it full until the
   program rotates the key away and its recorded entries expire, at most 2
-  hours later, or the key passes its 14 hours. It gains no more than that: it
+  hours later (no entry lives past one server lifetime, above, and a forged
+  lifetime or chain start fails to open), or the key passes its 14 hours. It gains no more than that: it
   can already resume, and impersonate the server to clients that do. While it lasts every client resumes no session and pays a full
   handshake, as it would on a server without tickets: a cost in CPU, never a
   key, a forged ticket or a ticket accepted twice. The design accepts that
@@ -612,7 +625,9 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   one byte, 0, unique among the one ticket a connection gets (§4.6.1).
 
 To be pinned by `net_tls_ticket` (replay refused; the register full refusing
-and counting each refusal, and taking ids again once entries expire) and
+and counting each refusal, and taking ids again once entries expire; a ticket
+sealed with a lifetime of a week, recorded, still frees its entry 7200 s
+after recording) and
 `net_tls_resume` (each row of the fallback and abort table below, rows 17 and
 18 included).
 
@@ -730,7 +745,7 @@ stage's tests cite this table by row.
 | --- | --- | --- | --- |
 | 1 | an identity that opens, unexpired, unrecorded, under the chosen suite's hash and this ClientHello's server name, with a binder that verifies, and `psk_dhe_ke` | resumes: ServerHello with `pre_shared_key` naming it and a `key_share`, then EncryptedExtensions and Finished, no Certificate or CertificateVerify; records its id | §2.2, §4.2.9, §4.2.11 |
 | 2 | no identity that opens (tampered, truncated, an unknown or retired key id, a key past 14 hours) | full handshake | §4.2.11 (unknown PSKs SHOULD be ignored) |
-| 3 | an identity that opens but has expired, by lifetime or by the 24-hour chain bound, or is dated in the future | full handshake | §4.6.1 (a server MAY treat a ticket as valid for less) |
+| 3 | an identity that opens but has expired, by lifetime or by the 24-hour chain bound, is dated in the future, or carries a lifetime over the server's or a chain start after its issue time | full handshake | §4.6.1 (a server MAY treat a ticket as valid for less) |
 | 4 | an identity whose suite's hash is not the chosen suite's | passed over; full handshake if none other qualifies | §4.2.11, §4.6.1 (same KDF hash) |
 | 5 | an identity issued for another server name | passed over; full handshake if none other qualifies | §4.6.1 (declining every other name keeps the reported name the session's) |
 | 6 | an identity already recorded | passed over; full handshake if none other qualifies | §8.1 |
