@@ -595,9 +595,10 @@ What is not P-256 moves from handshake to handshake on either build. Over the
 three, `std/net/tls*` was 98,557 to 123,281 Ir on `main`
 and 87,505 to 132,815 on `a22a056`, and everything else 158,531 to 195,574
 and 136,180 to 214,059: the ranges overlap, so the comb did not move them. The
-baseline's `b515c1b` run, 13,783,045 Ir, had `std/net/tls*` at 143,448, inside
-that spread, and everything else at 292,365, above it. What moved the latter
-between `b515c1b` and `a22a056` was not measured. Against `b515c1b` the
+baseline's `b515c1b` run, 13,783,045 Ir, had `std/net/tls*` at 143,448 and
+everything else at 292,365, both above either build's spread here. Its first
+handshake is 55,943 Ir above `a22a056`'s in `std/net/tls*` and 156,185 above
+in everything else, and that gap was not measured further. Against `b515c1b` the
 handshake reads 1.89x fewer, and the 1.86x above, measured against the tree the
 comb landed on, replaces that figure.
 
