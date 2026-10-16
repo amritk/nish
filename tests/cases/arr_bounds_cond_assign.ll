@@ -33,7 +33,7 @@ slow:
   ret i8* %grown
 }
 
-define internal noundef i32 @read(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %start, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %short, i32 noundef %i) #0 {
+define internal noundef i32 @read$(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %start, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %short, i32 noundef %i) #0 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   store %struct.nish_array* %start, %struct.nish_array** %xs.addr, align 8
@@ -118,7 +118,7 @@ entry:
   %16 = bitcast i8* %14 to i32*
   %17 = getelementptr inbounds i32, i32* %16, i64 0
   store i32 7, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !13
-  %18 = call i32 @read(%struct.nish_array* %1, %struct.nish_array* %11, i32 2)
+  %18 = call i32 @read$(%struct.nish_array* %1, %struct.nish_array* %11, i32 2)
   %19 = call i8* @nish_str_from_i32(i32 %18)
   call void @nish_print(i8* %19)
   ret i32 0

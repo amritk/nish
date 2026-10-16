@@ -2,7 +2,7 @@ declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 
-define internal noundef i32 @abs(i32 noundef %x) #0 {
+define internal noundef i32 @abs$(i32 noundef %x) #0 {
 entry:
   %0 = icmp slt i32 %x, 0
   br i1 %0, label %if.then, label %if.end
@@ -45,7 +45,7 @@ if.end:
 
 define noundef i32 @test() #0 {
 entry:
-  %0 = call i32 @abs(i32 -4)
+  %0 = call i32 @abs$(i32 -4)
   %1 = call i32 @pick(i1 true, i32 10, i32 20)
   %2 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %0, i32 %1)
   %3 = extractvalue { i32, i1 } %2, 0
