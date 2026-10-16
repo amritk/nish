@@ -159,7 +159,7 @@ void nish_print(const nish_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
 void nish_write(const nish_str *s, int32_t fd, bool newline);
 /* `panic(message)`, `expect` and a failed range entry: the message and a
-   newline on stderr, then `_exit(1)`. Only the first panic of a process prints;
+   newline on stderr, then `exit(1)`. Only the first panic of a process prints;
    a thread that panics after it parks until that exit (`nish_panic_claim`). */
 __attribute__((noreturn)) void nish_panic(const nish_str *s);
 /* Called by every panic path before it prints: answers for the first caller
@@ -179,7 +179,8 @@ nish_str *nish_str_from_i64(int64_t v);
 nish_str *nish_str_from_u64(uint64_t v);
 
 /* Process and file I/O (WP7). `nish_exit` never returns; the file functions
- * print a message to stderr and exit(1) on a fatal error.
+ * print a message to stderr and `_exit(1)` on a fatal error, the first panic
+ * of a process only (`nish_panic_claim`).
  *
  * Every function here that takes a path, a name or an argument vector refuses
  * one holding a NUL, answering as it answers a path that does not exist: the

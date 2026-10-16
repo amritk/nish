@@ -36,8 +36,14 @@
  * owns the message and the exit together and only the first of several panicking threads
  * prints. Measured 3,622 on 2026-10-12 with clang 18 on linux-x64. The claim that parks a
  * second panic is compiled only into the threads build below; here it is empty.
+ *
+ * Raised by 34, to 3,656, in the same change, for retrying `write` on `EINTR` in
+ * `nish_write`, the one place a panic's message is written: a C host may install a signal
+ * handler without `SA_RESTART`, and the loop used to stop there and lose the rest of the
+ * message. Measured 3,656 against 3,622 on 2026-10-16 with clang 18 on linux-x64; calling
+ * `exit` rather than `_exit` after the claim measured the same.
  */
-const RUNTIME_TEXT_BUDGET = 3622
+const RUNTIME_TEXT_BUDGET = 3656
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -87,8 +93,13 @@ const RUNTIME_OS_TEXT_BUDGET = 1536
  * It is deliberately a *separate* ceiling rather than a raised shared one. Making the core
  * budget 3,840 to cover both would give the default build 360 bytes of room it has no
  * business having, and the point of the split was that a number should mean one thing.
+ *
+ * Raised by 20, to 3,860, by #611: the first-panic claim (measured 3,826 with it, under the
+ * old 3,840) and then the `EINTR` retry in `nish_write` (34 bytes, as above), measured
+ * 3,860 on 2026-10-16 with clang 18 on linux-x64. The raise is what was measured and no
+ * more, as `nish_wipe`'s was.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3840
+const RUNTIME_THREADS_TEXT_BUDGET = 3860
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across

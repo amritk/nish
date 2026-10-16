@@ -18,6 +18,7 @@
  * both use `-flto`, and the cold paths that lost the inlining are cold.
  */
 #define _POSIX_C_SOURCE 200809L
+#include <errno.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stddef.h>
@@ -85,13 +86,15 @@ _Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena layout is ABI")
    `nish_panic_claim` before it prints. Two tasks of a scope, or two workers of
    a parallel map, can fail at once, and without the claim both messages would
    reach stderr interleaved and both threads would race to the exit. The first
-   to claim prints its whole message and `_exit`s; any later one parks until
+   to claim prints its whole message and exits; any later one parks until
    that exit ends the process, so exactly one message is printed and the exit
-   code is the first panic's. `_exit` rather than `exit`: atexit handlers run
-   by two threads at once are undefined behaviour, and a panic has nothing to
-   flush. Only a threads build (`-DNISH_THREADS`) can have two threads panic,
-   so only it pays for the claim; everywhere else it is the empty inline
-   function nish.h declares. Under wasi with threads, the trap is the
+   code is the first panic's. How each path exits is unchanged by the claim:
+   `panic`, `expect` and a failed range entry (`nish_panic`) call `exit(1)`, as
+   they did through `nish_exit`, so atexit handlers run and stdio is flushed;
+   a failed check and out of memory call `_exit(1)`, as they always have. Only
+   one thread can reach either exit, because the claim comes first. Only a
+   threads build (`-DNISH_THREADS`) can have two threads panic, so only it
+   pays for the claim; everywhere else it is an empty inline function. Under wasi with threads, the trap is the
    defensive answer: no host there gives a parked thread a way to wait. */
 #ifdef NISH_THREADS
 static int nish_panicked;
@@ -313,25 +316,28 @@ int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) { return nish_
    does the same. So the bytes are written until all of them are out, or until
    a write fails (docs/security/runtime.md, RT-11). A failure still ends the
    output, `EAGAIN` on a non-blocking stdout included, since spinning on it
-   would burn a core. `EINTR` is not retried here: it needs a handler
-   installed without `SA_RESTART`, and the only one this runtime installs
-   (runtime-host.c) has it, so an interrupted write either restarts in the
-   kernel or comes back short. The newline needs no loop: one byte is never
-   written in part. */
+   would burn a core. `EINTR` is retried: the only handler this runtime
+   installs (runtime-host.c) has `SA_RESTART`, but a C host may install one
+   without it, and this is the one place a panic's message is written. The
+   newline needs no loop: one byte is never written in part. */
 void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
   uint64_t done = 0;
   ssize_t k;
-  while (done < s->len && (k = write(fd, s->data + done, s->len - done)) > 0) done += k;
+  while (done < s->len) {
+    k = write(fd, s->data + done, s->len - done);
+    if (k > 0) done += k;
+    else if (k == 0 || errno != EINTR) break;
+  }
   if (newline) (void)!write(fd, "\n", 1);
 }
 /* console.log(s) */
 void nish_print(const nish_str *s) { nish_write(s, 1, 1); }
 /* `panic(message)`, `r.expect(message)` and a failed range entry: the message
-   and a newline on stderr, then exit 1, the first panic only. */
-void nish_panic(const nish_str *s) {
+   and a newline on stderr, then `exit(1)`, the first panic only. */
+__attribute__((noreturn)) void nish_panic(const nish_str *s) {
   nish_panic_claim();
   nish_write(s, 2, 1);
-  _exit(1);
+  exit(1);
 }
 
 /* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the

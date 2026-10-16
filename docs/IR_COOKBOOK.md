@@ -2001,8 +2001,8 @@ export const seen = (s: Set<i32>, x: i32): boolean => s.has(x)
 
 @.str.0 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 
 define noundef zeroext i1 @seen(%struct.Set$i32* noundef nonnull readonly align 8 dereferenceable(48) nocapture %s, i32 noundef %x) #0 {
@@ -2225,9 +2225,7 @@ ovf.fail:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
+attributes #2 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
@@ -2296,15 +2294,15 @@ export const known = (m: Map<string, i32>, w: string): i32 => {
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare extern_weak void @nish_panic_overflow(i32 noundef) #6
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -3606,9 +3604,8 @@ attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -3677,10 +3674,10 @@ export const total = (m: Map<i32, i32>): i32 => {
 
 @.str.0 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
 
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
-declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @total(%struct.Map$i32$i32* noundef nonnull align 8 dereferenceable(56) nocapture %m) #0 {
 entry:
@@ -3870,10 +3867,8 @@ if.end:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -3946,15 +3941,15 @@ export const firstTime = (seen: Set<string>, w: string): boolean => {
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare extern_weak void @nish_panic_overflow(i32 noundef) #6
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -5505,9 +5500,8 @@ attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -5585,15 +5579,15 @@ export const presize = (ids: Map<string, i32>, n: i32): void => {
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #4
-declare void @nish_panic_index(i64 noundef, i64 noundef) #6
-declare extern_weak void @nish_panic_overflow(i32 noundef) #6
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -6947,9 +6941,8 @@ attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
 attributes #4 = { nounwind willreturn }
-attributes #5 = { noreturn nounwind }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
@@ -8312,8 +8305,8 @@ const firstByte = (buf: u8[], n: i32): u8 => getByte(buf, n)
 @.str.0 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"value out of range: expected integer<-128, 127>\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"value out of range: expected integer<0, 255>\00" }, align 8
 
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #1
 
 define internal noundef i8 @getByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %i) #0 {
 entry:
@@ -8366,9 +8359,7 @@ rng.ok:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
-attributes #3 = { nounwind noreturn cold }
+attributes #1 = { nounwind noreturn cold }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -8519,10 +8510,10 @@ export const weekly = (n: i32): i32 => pick(n, n)
 ```llvm
 @.str.0 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<1, 7>\00" }, align 8
 
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
 
 define noundef i32 @pick(i32 noundef %base, i32 noundef %day) #0 {
 entry:
@@ -8562,10 +8553,8 @@ entry:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end type-ranged-export -->
 
@@ -12022,10 +12011,10 @@ class Perm {
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -12138,10 +12127,8 @@ bounds.ok.1:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -12505,10 +12492,10 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
-declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -12626,10 +12613,9 @@ ovf.fail:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -14073,9 +14059,9 @@ const len = (xs: number[]): number => xs.length
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -14135,9 +14121,8 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind willreturn }
-attributes #4 = { noreturn nounwind }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -16179,13 +16164,13 @@ declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly n
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
-declare i64 @llvm.smin.i64(i64, i64) #5
-declare i64 @llvm.smax.i64(i64, i64) #5
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare i64 @llvm.smin.i64(i64, i64) #4
+declare i64 @llvm.smax.i64(i64, i64) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -16404,10 +16389,9 @@ ovf.fail:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -18022,7 +18006,7 @@ attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { noreturn nounwind }
+attributes #4 = { nounwind noreturn cold }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
@@ -18564,8 +18548,8 @@ declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 
 define internal void @report(i8* noundef nonnull noalias readonly align 8 nocapture %problem) #0 {
 entry:
@@ -18601,7 +18585,7 @@ if.else:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
-attributes #2 = { noreturn nounwind }
+attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end builtin-streams -->
 
@@ -18694,9 +18678,9 @@ export const main = (): number => {
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8) #0
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
 entry:
@@ -18766,7 +18750,7 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
+attributes #3 = { nounwind noreturn cold }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
@@ -18820,11 +18804,11 @@ declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #1
 declare zeroext i1 @nish_is_dir(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noundef nonnull align 8 i8* @nish_platform() #3
-declare noundef nonnull align 8 i8* @nish_arch() #3
+declare noundef nonnull align 8 i8* @nish_platform() #2
+declare noundef nonnull align 8 i8* @nish_arch() #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -18871,8 +18855,8 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
-attributes #3 = { nounwind willreturn readnone }
+attributes #2 = { nounwind willreturn readnone }
+attributes #3 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end builtin-host -->
 
@@ -18932,14 +18916,14 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_monotonic_nanos() #2
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
-declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #5
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -19038,10 +19022,9 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
@@ -19907,6 +19890,7 @@ declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef) #3
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #7
 declare void @nish_panic_index(i64 noundef, i64 noundef) #7
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #7
 declare void @nish_panic_div(i1 noundef zeroext) #7

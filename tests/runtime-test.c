@@ -1490,6 +1490,21 @@ static void test_security(void) {
   close(out[0]);
   sec_check(have == 13 && memcmp(line, "hello, world\n", 13) == 0, "RT-11", "console.log lost the rest of a short write");
 
+  /* RT-11, revised (#611): a write that a signal interrupts before it moves a
+     byte is retried, so a panic's message is not cut off by a handler a C host
+     installed without `SA_RESTART`. The loop stopped there and sent nothing. */
+  sec_check(pipe(out) == 0, "RT-11", "the pipe could not be made");
+  sec_write_eintr = 1;
+  sec_write_max = 4;
+  nish_write(lit("interrupted"), out[1], 1);
+  sec_write_max = 0;
+  close(out[1]);
+  have = 0;
+  while ((n_read = read(out[0], line + have, sizeof line - (size_t)have)) > 0) have += n_read;
+  close(out[0]);
+  sec_check(sec_write_eintr == 0 && have == 12 && memcmp(line, "interrupted\n", 12) == 0, "RT-11",
+            "nish_write took an interrupted write for a failure");
+
   /* RT-12: the descriptors the file reads and writes open are close-on-exec,
      so a child another thread spawns meanwhile does not inherit them. */
   snprintf(path, sizeof path, "%s/cloexec.txt", dir);
