@@ -7,9 +7,11 @@
 // and at `reset`. Each runs under the three
 // suites, against the test client of `net_quic_conn`. `tests/wipes/quic.js`
 // compiles this program to count the same wipes after `opt -O2`.
+import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { AesKey } from "nish/crypto/aes";
-import { QuicKeys, QuicKeysSlot, quicKeyUpdateSecret, quicKeysUpdate } from "nish/net/quic-packet";
+import { QuicKeys, QuicKeysSlot, quicKeyUpdateSecret, quicKeys, quicKeysUpdate, quicKeysWipe } from "nish/net/quic-packet";
+import { quicKeyUpdateCopy, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import {
   QUIC_CONN_ENTROPY_SIZE,
@@ -288,7 +290,7 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
   const conn: QuicConnection = p.conn;
   const c: QcClient = p.client;
   const keys: QuicKeys | null = c.appWrite;
-  const next: u8[] | null = quicKeyUpdateSecret(qcAead(suite), c.appWriteSecret);
+  const next: u8[] | null = quicKeyUpdateCopy(qcAead(suite), c.appWriteSecret);
   if (!p.connected || keys === null || next === null) {
     t.ok(`${name}: the client updates its keys`, false);
     return;
@@ -303,7 +305,7 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
   for (const b of qwPacketKey(oldRead, suite)) {
     readKey.push(b);
   }
-  const updated: QuicKeys | null = quicKeysUpdate(keys, next);
+  const updated: QuicKeys | null = quicKeysUpdateOf(keys, next);
   qcExchange(conn, c, qcShortWith(c, updated, true, c.appPn, fromHex("01")));
   c.appPn = c.appPn + n64(1);
   t.ok(`${name}: the server follows the client's key update`, conn.keyUpdates === 1 && conn.writePhase && conn.state === QUIC_STATE_CONNECTED);
@@ -326,6 +328,74 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
   }
   t.ok(`${name}: then its slot holds the next generation instead`, conn.otherIsNext && !same && !qwZero(qwPacketKey(oldRead, suite)));
   qwRelease(t, name, conn, suite);
+};
+
+/** Whether every array `keys` holds is zero: the packet key, IV and header-protection key, and both schedules where the suite has them. */
+const qwKeysZero = (keys: QuicKeys): boolean => {
+  const packetAes: AesKey | null = keys.packetAes;
+  const hpAes: AesKey | null = keys.hpAes;
+  return (
+    qwZero(keys.key) &&
+    qwZero(keys.iv) &&
+    qwZero(keys.hp) &&
+    (packetAes === null || qwZeroAes(packetAes)) &&
+    (hpAes === null || qwZeroAes(hpAes))
+  );
+};
+
+/** Whether the packet key, IV and header-protection key `keys` holds are all nonzero, and both schedules where the suite has them. */
+const qwKeysHeld = (keys: QuicKeys): boolean => {
+  const packetAes: AesKey | null = keys.packetAes;
+  const hpAes: AesKey | null = keys.hpAes;
+  return (
+    !qwZero(keys.key) &&
+    !qwZero(keys.iv) &&
+    !qwZero(keys.hp) &&
+    (packetAes === null || !qwZeroAes(packetAes)) &&
+    (hpAes === null || !qwZeroAes(hpAes))
+  );
+};
+
+/** A fresh traffic secret of `length` bytes, none of them zero. */
+const qwTraffic = (length: i32): u8[] => {
+  const out: u8[] = new Array<u8>(length);
+  for (let k: i32 = 0; k < length; k++) {
+    out[k] = toU8(k + 1);
+  }
+  return out;
+};
+
+/**
+ * The one-shot derivations a program outside a connection calls: `quicKeys`
+ * and `quicKeyUpdateSecret` from a held traffic secret, `quicKeysUpdate` from
+ * the held next one, and `quicKeysWipe` of each generation reading every
+ * array back as zero, the header-protection key the two share included.
+ */
+const qwOneShot = (t: Suite, name: string, suite: i32): void => {
+  const aead: i32 = qcAead(suite);
+  const traffic: Secret<u8[]> = secret(qwTraffic(suite === TLS_AES_256_GCM_SHA384 ? 48 : 32));
+  const keys: QuicKeys | null = quicKeys(aead, traffic);
+  const next: Secret<u8[]> | null = quicKeyUpdateSecret(aead, traffic);
+  wipe(traffic);
+  if (next === null) {
+    t.ok(`${name}, one-shot: quicKeys and quicKeyUpdateSecret derive from a held secret`, false);
+    return;
+  }
+  const updated: QuicKeys | null = keys === null ? null : quicKeysUpdate(keys, next);
+  wipe(next);
+  if (keys === null || updated === null) {
+    t.ok(`${name}, one-shot: quicKeys and quicKeyUpdateSecret derive from a held secret`, false);
+    return;
+  }
+  t.ok(`${name}, one-shot: quicKeys and quicKeysUpdate derive from held secrets`, qwKeysHeld(keys) && qwKeysHeld(updated));
+  quicKeysWipe(updated);
+  t.ok(`${name}, one-shot: quicKeysWipe zeroes the next generation's key, IV, header-protection key and schedules`, qwKeysZero(updated));
+  t.ok(
+    `${name}, one-shot: the header-protection key the two share reads zero in the first, its packet key still held`,
+    qwZero(keys.hp) && !qwZero(keys.key) && !qwZero(keys.iv)
+  );
+  quicKeysWipe(keys);
+  t.ok(`${name}, one-shot: and quicKeysWipe of the first generation zeroes the rest`, qwKeysZero(keys));
 };
 
 /**
@@ -415,6 +485,7 @@ export const quicWipeChecks = (): i32 => {
   for (let k: i32 = 0; k < toI32(suites.length) && k < toI32(names.length); k++) {
     qwDiscard(t, names[k], suites[k]);
     qwKeyUpdate(t, names[k], suites[k]);
+    qwOneShot(t, names[k], suites[k]);
     qwClose(t, names[k], suites[k]);
     qwCloseLate(t, names[k], suites[k]);
     qwFail(t, names[k], suites[k]);

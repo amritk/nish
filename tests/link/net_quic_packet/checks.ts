@@ -25,9 +25,6 @@ import {
   QuicPacket,
   quicDecryptPacket,
   quicInitialSecrets,
-  quicKeys,
-  quicKeyUpdateSecret,
-  quicKeysUpdate,
   quicLongHeader,
   quicOpenPacket,
   quicPacketNumberDecode,
@@ -43,8 +40,9 @@ import {
   quicVarintPush,
   quicVarintPushSized,
   quicVarintRead,
-  quicVarintSize
+  quicVarintSize,
 } from "nish/net/quic-packet";
+import { quicKeyUpdateCopy, quicKeysOf, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { bytesOf, hexOf, hexOrNull, joined, zeros } from "./bytes";
 import { a2Packet, a2Payload, a3Packet, a3Payload, a4Retry } from "./vectors";
 
@@ -62,7 +60,7 @@ export const a5Packet = (): u8[] => bytesOf("4cfe4189655e5cd55c41f69080575d7999c
 
 /** The keys for `secret`, or keys that fail every operation when `quicKeys` refuses. */
 export const keysOf = (aead: i32, secret: u8[]): QuicKeys => {
-  const keys: QuicKeys | null = quicKeys(aead, secret);
+  const keys: QuicKeys | null = quicKeysOf(aead, secret);
   if (keys !== null) {
     return keys;
   }
@@ -201,7 +199,7 @@ const keyChecks = (t: Suite): void => {
   t.eqStr("A.5 hp", hexOf(chacha.hp), "25a282b9e82f06f21f488917a4fc8f1b73573685608597d0efcb076b0ab7a7a4");
   t.eqStr(
     "A.5 ku, the next generation's secret",
-    hexOrNull(quicKeyUpdateSecret(QUIC_AEAD_CHACHA20_POLY1305, a5Secret())),
+    hexOrNull(quicKeyUpdateCopy(QUIC_AEAD_CHACHA20_POLY1305, a5Secret())),
     "1223504755036d556342ee9361d253421a826c9ecdf3c7148684b36b714881f9"
   );
 }
@@ -303,8 +301,8 @@ const shortHeaderChecks = (t: Suite): void => {
  */
 const keyUpdateChecks = (t: Suite): void => {
   const current: QuicKeys = keysOf(QUIC_AEAD_CHACHA20_POLY1305, a5Secret());
-  const ku: u8[] = orEmpty(quicKeyUpdateSecret(QUIC_AEAD_CHACHA20_POLY1305, a5Secret()));
-  const updated: QuicKeys | null = quicKeysUpdate(current, ku);
+  const ku: u8[] = orEmpty(quicKeyUpdateCopy(QUIC_AEAD_CHACHA20_POLY1305, a5Secret()));
+  const updated: QuicKeys | null = quicKeysUpdateOf(current, ku);
   if (updated === null) {
     t.fail("A.5's keys update", "quicKeysUpdate answered null");
     return;
@@ -398,7 +396,7 @@ const aes256Checks = (t: Suite): void => {
   );
   t.eqStr(
     "AES-256-GCM ku, 48 bytes (checked against Python)",
-    hexOrNull(quicKeyUpdateSecret(QUIC_AEAD_AES_256_GCM, secret)),
+    hexOrNull(quicKeyUpdateCopy(QUIC_AEAD_AES_256_GCM, secret)),
     "a1b5bda255f07b68dbe0a0398694d90de1f946e468f687eb19225c9245e1f4e41773f6465cb224e05db0407a9b6747d1"
   );
   const header: u8[] = orEmpty(quicShortHeader(bytesOf("0102030405060708"), false, true, 0x1234, 2));

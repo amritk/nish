@@ -21,13 +21,13 @@ import {
   QuicKeys,
   QuicPacket,
   quicInitialSecrets,
-  quicKeys,
   quicLongHeader,
   quicOpenPacket,
   quicParseHeader,
   quicSealPacket,
   quicShortHeader,
 } from "nish/net/quic-packet";
+import { quicKeysOf } from "../net_quic_common/keys";
 import { QUIC_FRAME_CRYPTO, QuicFrame, quicParseFrame, quicPushCrypto, quicPushPadding } from "nish/net/quic-frame";
 import { QuicTransportParameters } from "nish/net/quic-conn-params";
 import { QuicConnection } from "nish/net/quic";
@@ -129,8 +129,8 @@ export class QcClient {
     this.view = new ClientView();
     const secrets: QuicInitialSecrets | null = quicInitialSecrets(this.odcid);
     if (secrets !== null) {
-      this.initialWrite = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client);
-      this.initialRead = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server);
+      this.initialWrite = quicKeysOf(QUIC_AEAD_AES_128_GCM, secrets.client);
+      this.initialRead = quicKeysOf(QUIC_AEAD_AES_128_GCM, secrets.server);
     }
   }
 }
@@ -247,8 +247,8 @@ export const qcRetried = (c: QcClient, retryScid: u8[], token: u8[]): void => {
   c.token = token;
   const secrets: QuicInitialSecrets | null = quicInitialSecrets(retryScid);
   if (secrets !== null) {
-    c.initialWrite = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.client);
-    c.initialRead = quicKeys(QUIC_AEAD_AES_128_GCM, secrets.server);
+    c.initialWrite = quicKeysOf(QUIC_AEAD_AES_128_GCM, secrets.client);
+    c.initialRead = quicKeysOf(QUIC_AEAD_AES_128_GCM, secrets.server);
   }
 };
 
@@ -368,8 +368,8 @@ export const qcDrain = (conn: QuicConnection, c: QcClient): i32 => {
 export const qcHandshakeKeys = (c: QcClient, serverHello: u8[]): void => {
   const none: u8[] = [];
   c.view = clientFinish(c.hashLength, c.before, serverHello, none, none);
-  c.handshakeWrite = quicKeys(qcAead(c.suite), c.view.clientHandshakeSecret);
-  c.handshakeRead = quicKeys(qcAead(c.suite), c.view.serverHandshakeSecret);
+  c.handshakeWrite = quicKeysOf(qcAead(c.suite), c.view.clientHandshakeSecret);
+  c.handshakeRead = quicKeysOf(qcAead(c.suite), c.view.serverHandshakeSecret);
 };
 
 /**
@@ -397,8 +397,8 @@ export const qcFinish = (c: QcClient, serverHello: u8[]): void => {
   c.appReadSecret = secretCopy(appRead);
   wipe(appWrite);
   wipe(appRead);
-  c.appWrite = quicKeys(qcAead(c.suite), c.appWriteSecret);
-  c.appRead = quicKeys(qcAead(c.suite), c.appReadSecret);
+  c.appWrite = quicKeysOf(qcAead(c.suite), c.appWriteSecret);
+  c.appRead = quicKeysOf(qcAead(c.suite), c.appReadSecret);
 };
 
 /** The client's Finished in a Handshake packet. */

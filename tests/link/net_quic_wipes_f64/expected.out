@@ -12,6 +12,10 @@ PASS  AES-128-GCM: the previous read generation is kept for a probe timeout
 PASS  AES-128-GCM: then its slot holds the next generation instead
 PASS  AES-128-GCM: release() leaves every key and secret zero
 PASS  AES-128-GCM: and every reset token, the encoded transport parameters and the other read generation
+PASS  AES-128-GCM, one-shot: quicKeys and quicKeysUpdate derive from held secrets
+PASS  AES-128-GCM, one-shot: quicKeysWipe zeroes the next generation's key, IV, header-protection key and schedules
+PASS  AES-128-GCM, one-shot: the header-protection key the two share reads zero in the first, its packet key still held
+PASS  AES-128-GCM, one-shot: and quicKeysWipe of the first generation zeroes the rest
 PASS  AES-128-GCM, closed: the CONNECTION_CLOSE goes out
 PASS  AES-128-GCM, closed: the keys are kept through the period, three probe timeouts
 PASS  AES-128-GCM, closed: and at its end every key and secret reads zero
@@ -47,6 +51,10 @@ PASS  AES-256-GCM: the previous read generation is kept for a probe timeout
 PASS  AES-256-GCM: then its slot holds the next generation instead
 PASS  AES-256-GCM: release() leaves every key and secret zero
 PASS  AES-256-GCM: and every reset token, the encoded transport parameters and the other read generation
+PASS  AES-256-GCM, one-shot: quicKeys and quicKeysUpdate derive from held secrets
+PASS  AES-256-GCM, one-shot: quicKeysWipe zeroes the next generation's key, IV, header-protection key and schedules
+PASS  AES-256-GCM, one-shot: the header-protection key the two share reads zero in the first, its packet key still held
+PASS  AES-256-GCM, one-shot: and quicKeysWipe of the first generation zeroes the rest
 PASS  AES-256-GCM, closed: the CONNECTION_CLOSE goes out
 PASS  AES-256-GCM, closed: the keys are kept through the period, three probe timeouts
 PASS  AES-256-GCM, closed: and at its end every key and secret reads zero
@@ -82,6 +90,10 @@ PASS  ChaCha20-Poly1305: the previous read generation is kept for a probe timeou
 PASS  ChaCha20-Poly1305: then its slot holds the next generation instead
 PASS  ChaCha20-Poly1305: release() leaves every key and secret zero
 PASS  ChaCha20-Poly1305: and every reset token, the encoded transport parameters and the other read generation
+PASS  ChaCha20-Poly1305, one-shot: quicKeys and quicKeysUpdate derive from held secrets
+PASS  ChaCha20-Poly1305, one-shot: quicKeysWipe zeroes the next generation's key, IV, header-protection key and schedules
+PASS  ChaCha20-Poly1305, one-shot: the header-protection key the two share reads zero in the first, its packet key still held
+PASS  ChaCha20-Poly1305, one-shot: and quicKeysWipe of the first generation zeroes the rest
 PASS  ChaCha20-Poly1305, closed: the CONNECTION_CLOSE goes out
 PASS  ChaCha20-Poly1305, closed: the keys are kept through the period, three probe timeouts
 PASS  ChaCha20-Poly1305, closed: and at its end every key and secret reads zero
@@ -104,4 +116,4 @@ PASS  ChaCha20-Poly1305, drained: and at its end every key and secret reads zero
 PASS  ChaCha20-Poly1305, drained: in the same state, with nothing more to send or time
 PASS  ChaCha20-Poly1305, idle: past the idle timeout every key and secret reads zero
 PASS  ChaCha20-Poly1305, reset: every key, secret and reset token the connection held reads zero
-quic wipes: 106 passed, 0 failed, 0 skipped
+quic wipes: 118 passed, 0 failed, 0 skipped

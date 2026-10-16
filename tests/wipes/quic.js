@@ -79,4 +79,23 @@ export const wipeChecks = [
       ["nish.QuicConnection.reset", 100],
     ],
   },
+  // The one-shot derivations, which take the traffic secret as a `Secret`
+  // (#430's secret-boundary stage). `quicKeys` 15: the HKDF output of the
+  // key, IV and header-protection key once each is copied out, 3, and the
+  // two AES schedules' `aesKeyInto`, 6 each; `quicKeysUpdate` 8: the key's and
+  // IV's HKDF outputs and the packet key's schedule. The checker refuses to
+  // drop those HKDF wipes (each output is a `Secret`, wiped or returned on
+  // every path), so the count pins only that `opt` keeps them.
+  // `quicKeysWipe` 7: the key, IV and header-protection key, 3, and both AES
+  // schedules, 2 each; deleting its wipe of the key drops it to 6.
+  {
+    name: "quic: the one-shot key derivations' wipes survive opt -O2 (each HKDF output once copied out, and quicKeysWipe's keys and AES schedules)",
+    program: "tests/link/net_quic_wipes/main.ts",
+    modules: QUIC_MODULES,
+    roots: [
+      ["nish.quicKeys", 15],
+      ["nish.quicKeysUpdate", 8],
+      ["nish.quicKeysWipe", 7],
+    ],
+  },
 ]
