@@ -23239,7 +23239,7 @@ function isCReservedSymbol(name: string): boolean -> @isCReservedSymbol [exporte
   escaping: name
   calls: isCLibrarySymbol nish_str_at
   stackSites=0 stackLocals=0
-  callee 70:87 isCLibrarySymbol -> @isCLibrarySymbol
+  callee 87:87 isCLibrarySymbol -> @isCLibrarySymbol
 function isCLibrarySymbol(name: string): boolean -> @isCLibrarySymbol [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -39323,8 +39323,8 @@ function restatedBy(warning: Diagnostic, refused: PanicSite[]): boolean -> @rest
   local 2447:9 text: string (const)
   local 2454:14 site: PanicSite (const)
 function reservedPrefixText(name: string): string -> @reservedPrefixText
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_at nish_str_concat
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at
   stackSites=0 stackLocals=0
 function nameNode(sig: FunctionSig): Node -> @nameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
@@ -39350,27 +39350,27 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
   pointer sig: size=136 writesThrough=false captured=false
   pointer previous: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2513:9 owner: StructInfo | null (const)
-  local 2515:11 member: string (const)
-  local 2519:11 both: string (const)
-  callee 2519:29 TypeTable.typeName -> @TypeTable.typeName
-  local 2525:9 where: string (const)
+  local 2516:9 owner: StructInfo | null (const)
+  local 2518:11 member: string (const)
+  local 2522:11 both: string (const)
+  callee 2522:29 TypeTable.typeName -> @TypeTable.typeName
+  local 2528:9 where: string (const)
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2567:3
+  sharedWrite: 2570:3
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
   pointer ctx: size=216 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2548:9 edits: Edit[] (const)
-  local 2552:9 builtin: string (const)
-  callee 2553:8 exportsAllOf -> @exportsAllOf
-  local 2558:9 text: string (const)
-  local 2559:7 close: i32 (let)
-  callee 2560:74 isQuote -> @isQuote
-  local 2563:9 quote: string (const)
-  callee 2567:14 CheckContext.edit -> @CheckContext.edit
+  local 2551:9 edits: Edit[] (const)
+  local 2555:9 builtin: string (const)
+  callee 2556:8 exportsAllOf -> @exportsAllOf
+  local 2561:9 text: string (const)
+  local 2562:7 close: i32 (let)
+  callee 2563:74 isQuote -> @isQuote
+  local 2566:9 quote: string (const)
+  callee 2570:14 CheckContext.edit -> @CheckContext.edit
 function exportsAllOf(specifier: string, imports: ImportBinding[], decl: Node): boolean -> @exportsAllOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: specifier
@@ -39378,9 +39378,9 @@ function exportsAllOf(specifier: string, imports: ImportBinding[], decl: Node): 
   pointer imports: size=0 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2578:9 listed: string (const)
-  callee 2578:23 nishModuleExports -> @nishModuleExports
-  local 2579:14 other: ImportBinding (const)
+  local 2581:9 listed: string (const)
+  callee 2581:23 nishModuleExports -> @nishModuleExports
+  local 2582:14 other: ImportBinding (const)
 function isQuote(byte: i32): boolean -> @isQuote
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

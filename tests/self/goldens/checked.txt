@@ -5164,7 +5164,7 @@ function test(): i32 -> @test [exported]
   callee 13:10 gcd -> @gcd
 program tests/cases/cf_if.ts
 module tests/cases/cf_if.ts (entry)
-function abs(x: i32): i32 -> @abs
+function abs(x: i32): i32 -> @abs$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   calls: nish_panic_overflow
@@ -5176,9 +5176,9 @@ function pick(flag: boolean, a: i32, b: i32): i32 -> @pick
   local 9:7 r: i32 (let)
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: abs nish_panic_overflow pick
+  calls: abs$ nish_panic_overflow pick
   stackSites=0 stackLocals=0
-  callee 19:10 abs -> @abs
+  callee 19:10 abs -> @abs$
   callee 19:20 pick -> @pick
 program tests/cases/cf_if_else_chain.ts
 module tests/cases/cf_if_else_chain.ts (entry)
@@ -47376,7 +47376,7 @@ function quotient(a: i32, b: i32): i32 -> @quotient
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div
   stackSites=0 stackLocals=0
-function remainder(a: i32, b: i32): i32 -> @remainder
+function remainder(a: i32, b: i32): i32 -> @remainder$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: nish_panic_div
@@ -47398,10 +47398,10 @@ function guarded(a: i32, d: i32): i32 -> @guarded
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: guarded halves nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 quotient ratio remainder share
+  calls: guarded halves nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 quotient ratio remainder$ share
   stackSites=0 stackLocals=0
   callee 33:15 quotient -> @quotient
-  callee 34:15 remainder -> @remainder
+  callee 34:15 remainder -> @remainder$
   callee 35:15 ratio -> @ratio
   callee 36:15 halves -> @halves
   callee 37:21 share -> @share
@@ -88280,7 +88280,7 @@ function sumTo(n: i32): i32 -> @sumTo
   local 3:12 i: i32 (let)
 program docs/cookbook/stmt-if.ts
 module docs/cookbook/stmt-if.ts (entry)
-function abs(x: i32): i32 -> @abs
+function abs(x: i32): i32 -> @abs$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   calls: nish_panic_overflow
@@ -102319,21 +102319,21 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
 program tests/differential/corpus/int_wrap.ts --wrapping
 module tests/differential/corpus/int_wrap.ts (entry)
-function times(a: i32, b: i32): i32 -> @times
+function times(a: i32, b: i32): i32 -> @times$
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 times
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 times$
   stackSites=0 stackLocals=0
   local 7:9 max: i32 (const)
   local 8:9 min: i32 (const)
-  callee 14:15 times -> @times
-  callee 15:15 times -> @times
-  callee 16:15 times -> @times
-  callee 17:15 times -> @times
-  callee 18:15 times -> @times
+  callee 14:15 times -> @times$
+  callee 15:15 times -> @times$
+  callee 16:15 times -> @times$
+  callee 17:15 times -> @times$
+  callee 18:15 times -> @times$
   local 21:7 acc: i32 (let)
   local 22:12 i: i32 (let)
   local 26:7 p: i32 (let)

@@ -1,6 +1,6 @@
 {"functions":[
 {"name":"quotient","symbol":"quotient","module":"tests/cases/panics_divide.ts","line":6,"panics":[{"kind":"divide","line":6,"column":43,"proven":false}]},
-{"name":"remainder","symbol":"remainder","module":"tests/cases/panics_divide.ts","line":8,"panics":[{"kind":"divide","line":10,"column":3,"proven":false}]},
+{"name":"remainder","symbol":"remainder$","module":"tests/cases/panics_divide.ts","line":8,"panics":[{"kind":"divide","line":10,"column":3,"proven":false}]},
 {"name":"ratio","symbol":"ratio","module":"tests/cases/panics_divide.ts","line":14,"panics":[]},
 {"name":"halves","symbol":"halves","module":"tests/cases/panics_divide.ts","line":16,"panics":[{"kind":"overflow","line":16,"column":33,"proven":false},{"kind":"divide","line":16,"column":33,"proven":true},{"kind":"divide","line":16,"column":41,"proven":true}]},
 {"name":"share","symbol":"share","module":"tests/cases/panics_divide.ts","line":18,"panics":[{"kind":"divide","line":20,"column":12,"proven":true}]},

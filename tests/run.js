@@ -20172,6 +20172,9 @@ if (fs.existsSync(threadsLl)) {
 // program's and which the wasi runtime's `_start` calls.
 if (!only || "c-symbols".includes(only)) {
   const LLVM_NM = ["llvm-nm", "llvm-nm-18"].find(has)
+  const LLVM_TLI =
+    ["llvm-tli-checker", "llvm-tli-checker-18"].find(has) ??
+    ["/usr/lib/llvm-18/bin/llvm-tli-checker"].find((f) => fs.existsSync(f))
   const cSymbolsSource = fs.readFileSync(path.join(root, "src", "c-symbols.ts"), "utf8")
   const listed = new Set([...cSymbolsSource.matchAll(/name === "([^"]+)"/g)].map((m) => m[1]))
   const prefixes = [...cSymbolsSource.matchAll(/name\.startsWith\("([^"]+)"\)/g)].map((m) => m[1])
@@ -20288,6 +20291,41 @@ if (!only || "c-symbols".includes(only)) {
         built.error,
         new Set(["add", "scale", "greet", "total", "flag"])
       )
+    }
+    // LLVM treats a function whose name and type are a C library function's
+    // as that function, whatever its linkage, and folds or rewrites its calls:
+    // a private `abs` was called as the C one. `TargetLibraryInfo` is the list
+    // it recognises, and `llvm-tli-checker --dump-tli` prints it per target.
+    // A name only C++ can spell (`??2@YAPAXI@Z`) is not one a program can
+    // declare.
+    if (LLVM_TLI === undefined) {
+      check(
+        "c-symbols: llvm-tli-checker is installed beside clang",
+        false,
+        "neither llvm-tli-checker nor llvm-tli-checker-18 is on PATH"
+      )
+    } else {
+      for (const triple of [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "wasm32-unknown-wasi",
+      ]) {
+        const tli = spawnSync(LLVM_TLI, ["--dump-tli", `--triple=${triple}`], { encoding: "utf8" })
+        const names =
+          tli.status === 0
+            ? [...tli.stdout.matchAll(/^\s*available: '([^']+)'/gm)]
+                .map((m) => m[1])
+                .filter((n) => !n.startsWith("??"))
+            : null
+        holds(
+          `LLVM recognises as a library function on ${triple}`,
+          names !== null && names.length > 0 ? names : null,
+          tli.status === 0 ? "llvm-tli-checker listed no available function" : tli.stderr,
+          none
+        )
+      }
     }
     for (const probe of ["math", "lowered"]) {
       const probeDir = path.join(dir, probe)

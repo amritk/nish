@@ -73,7 +73,7 @@ nullish.end:
   ret %struct.Node* %4
 }
 
-define internal void @link(%struct.Node* noundef nonnull align 8 dereferenceable(16) nocapture %n, i8* noundef nonnull noalias readonly align 8 nocapture %k) #1 {
+define internal void @link$(%struct.Node* noundef nonnull align 8 dereferenceable(16) nocapture %n, i8* noundef nonnull noalias readonly align 8 nocapture %k) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Node, %struct.Node* %n, i32 0, i32 1
   %1 = load %struct.Node*, %struct.Node** %0, align 8, !tbaa !4
@@ -176,9 +176,9 @@ entry:
   call void @Node.constructor(%struct.Node* %1, i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*))
   store %struct.Node* %1, %struct.Node** %root.addr, align 8
   %2 = load %struct.Node*, %struct.Node** %root.addr, align 8
-  call void @link(%struct.Node* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
+  call void @link$(%struct.Node* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*))
   %3 = load %struct.Node*, %struct.Node** %root.addr, align 8
-  call void @link(%struct.Node* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
+  call void @link$(%struct.Node* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*))
   %4 = call %struct.Node* @pick(%struct.Node* null, i8* bitcast ({ i64, [2 x i8] }* @.str.7 to i8*))
   store %struct.Node* %4, %struct.Node** %p.addr, align 8
   %5 = load %struct.Node*, %struct.Node** %root.addr, align 8

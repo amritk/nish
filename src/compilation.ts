@@ -2464,7 +2464,10 @@ const reservedPrefixText = (name: string): string => {
   if (name.startsWith("_")) {
     return "begins with `_`, which C reserves for its library and start-up code"
   }
-  return `begins with \`${name.startsWith("node_api_") ? "node_api_" : "napi_"}\`, which Node-API reserves for its functions`
+  if (name.startsWith("node_api_")) {
+    return "begins with `node_api_`, which Node-API reserves for its functions"
+  }
+  return "begins with `napi_`, which Node-API reserves for its functions"
 }
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
