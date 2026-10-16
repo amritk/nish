@@ -119,7 +119,7 @@ export const emitTemplate = (emitter: Emitter, expr: Node): string => {
 
 /** `s.length`: the header load, then the width the checker recorded for the expression. */
 export const emitStringLength = (emitter: Emitter, expr: Node): string => {
-  const str = emitter.emitExpression(expr.children[0])
+  const str = emitter.emitUncopied(expr.children[0])
   const len = loadStringLength(emitter, str)
   if (emitter.typeOf(expr) === T_F64) {
     return emitter.fn.emitValue(`sitofp i64 ${len} to double`)
