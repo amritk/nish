@@ -954,11 +954,12 @@ export const acceptsSidecars = (
  * result of an external function, every sidecar's or none, and a field of any class or interface the
  * header lays out. A union has no C spelling yet, so the header would write it
  * as `void *` and the host could not tell the variants apart. True when there
- * is none.
+ * is none; otherwise the first is reported.
  */
 const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
+  // Each report ends the walk, so no pass of a loop keeps a message alive
+  // past itself: the first union refused is the one reported.
   const table = compilation.table
-  let ok = true
   for (const fn of fns) {
     const sig = fn.sig
     const at = sigNameNode(sig)
@@ -969,7 +970,7 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolea
         at,
         `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
       )
-      ok = false
+      return false
     }
     let i = 0
     while (i < sig.paramTypes.length && i < sig.paramNames.length) {
@@ -977,7 +978,7 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolea
       if (table.holdsUnion(t)) {
         const what = `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[i]}\` is \`${table.typeName(t)}\``
         reportUnion(compilation, fn.unit, at, what)
-        ok = false
+        return false
       }
       i = i + 1
     }
@@ -995,12 +996,12 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolea
             f.decl,
             `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``
           )
-          ok = false
+          return false
         }
       }
     }
   }
-  return ok
+  return true
 }
 
 const reportUnion = (compilation: Compilation, unit: ModuleUnit, at: Node, what: string): void => {
