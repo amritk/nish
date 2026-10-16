@@ -82,8 +82,10 @@ export const wipeChecks = [
   // The one-shot derivations, which take the traffic secret as a `Secret`
   // (#430's secret-boundary stage). `quicKeys` 15: the HKDF output of the
   // key, IV and header-protection key once each is copied out, 3, and the
-  // two AES schedules' `aesKeyInto`, 6 each; `quicKeysUpdate` 8: the key's and
-  // IV's HKDF outputs and the packet key's schedule. The checker refuses to
+  // two AES schedules' `aesKeyInto`, 6 each; `quicKeysUpdate` 14: the key's
+  // and IV's HKDF outputs, the packet key's schedule, 6, and the schedule of
+  // the header-protection key the new generation copies for its own, `aesKey`
+  // 6. The checker refuses to
   // drop those HKDF wipes (each output is a `Secret`, wiped or returned on
   // every path), so the count pins only that `opt` keeps them.
   // `quicKeysWipe` 7: the key, IV and header-protection key, 3, and both AES
@@ -94,7 +96,7 @@ export const wipeChecks = [
     modules: QUIC_MODULES,
     roots: [
       ["nish.quicKeys", 15],
-      ["nish.quicKeysUpdate", 8],
+      ["nish.quicKeysUpdate", 14],
       ["nish.quicKeysWipe", 7],
     ],
   },

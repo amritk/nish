@@ -5,15 +5,22 @@
  * Initial secrets, AEAD packet protection, header protection and the Retry
  * integrity tag.
  *
- *     import { quicInitialSecrets, quicKeys, quicParseHeader, quicOpenPacket,
+ *     import { quicInitialSecrets, quicKeys, quicKeysWipe, quicParseHeader, quicOpenPacket,
  *              QUIC_AEAD_AES_128_GCM, QUIC_PACKET_OK } from "nish/net/quic-packet";
- *     import { secret } from "nish:secret";
+ *     import { Secret, secret, wipe } from "nish:secret";
  *
  *     const secrets = quicInitialSecrets(clientDcid);            // RFC 9001 §5.2
- *     const keys = quicKeys(QUIC_AEAD_AES_128_GCM, secret(copyOf(secrets.client))); // public, so a copy
+ *     if (secrets === null) { … a DCID over 20 bytes … }
+ *     const client: u8[] = new Array<u8>(secrets.client.length); // public, so a copy
+ *     client.set(secrets.client);
+ *     const held: Secret<u8[]> = secret(client);
+ *     const keys = quicKeys(QUIC_AEAD_AES_128_GCM, held);
+ *     wipe(held);
+ *     if (keys === null) { … }
  *     const header = quicParseHeader(datagram, 0, 8);            // 8: our short-header DCID length
  *     const packet = quicOpenPacket(keys, datagram, header, largestReceived);
  *     if (packet.error === QUIC_PACKET_OK) { … packet.payload holds the frames … }
+ *     quicKeysWipe(keys);                                        // once the level is done
  *
  * The module is sans-IO: bytes in, bytes out, no socket and no clock. It
  * frames and protects packets and stops there, so it knows nothing of frames,
@@ -1106,16 +1113,22 @@ export const quicKeyUpdateSecret = (aead: i32, trafficSecret: Secret<u8[]>): Sec
  * The next generation's keys in a key update (RFC 9001 §6): the packet key
  * and IV derived from `nextSecret`, which `quicKeyUpdateSecret` made from the
  * current secret and the caller still owns, and `keys`' header-protection
- * key kept, expanded as it was, since header protection never changes with
- * the phase. The two generations share that key and its schedule, so
- * `quicKeysWipe` of either zeroes it for both. Answers `null` for keys
- * `quicKeys` did not make or a secret of the wrong length.
+ * key kept, since header protection never changes with the phase. The new
+ * generation holds its own copy of that key and its own schedule, so
+ * `quicKeysWipe` of one generation leaves the other usable. Answers `null`
+ * for keys `quicKeys` did not make or a secret of the wrong length.
  */
 export const quicKeysUpdate = (keys: QuicKeys, nextSecret: Secret<u8[]>): QuicKeys | null => {
   if (!quicPacketKeysUsable(keys) || !quicPacketHeldFits(keys.aead, nextSecret)) {
     return null
   }
-  return quicPacketDerive(keys.aead, nextSecret, keys.hp, keys.hpAes)
+  const hp: u8[] = quicPacketDup(keys.hp)
+  return quicPacketDerive(
+    keys.aead,
+    nextSecret,
+    hp,
+    keys.aead === QUIC_AEAD_CHACHA20_POLY1305 ? null : aesKey(hp)
+  )
 }
 
 /**
@@ -1123,9 +1136,9 @@ export const quicKeysUpdate = (keys: QuicKeys, nextSecret: Secret<u8[]>): QuicKe
  * header-protection key with `secureZero`, and each AES schedule with
  * `aesKeyWipe`, whose volatile stores reach the whole of `roundKeys` (the
  * kernels' powers of H included) and H itself. For the `QuicKeys` that
- * `quicKeys` and `quicKeysUpdate` answer; a slot's keys are `QuicKeysSlot.wipe`'s.
- * Generations `quicKeysUpdate` chained share their header-protection key, so
- * wiping one wipes it for every generation that shares it.
+ * `quicKeys` and `quicKeysUpdate` answer, each of which holds its own
+ * arrays, so wiping one generation leaves the others usable; a slot's keys
+ * are `QuicKeysSlot.wipe`'s.
  */
 export const quicKeysWipe = (keys: QuicKeys): void => {
   secureZero(keys.key)

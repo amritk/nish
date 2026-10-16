@@ -571,13 +571,16 @@ const keyUpdates = (t: Suite): void => {
     shown(lastOpened(live.reader, drain(conn))),
     `${TLS_CONTENT_HANDSHAKE} 24 0 0 1 0`
   );
+  const nextRead: u8[] = nextTrafficCopy(hashLength, oldRead);
+  const nextWrite: u8[] = nextTrafficCopy(hashLength, oldWrite);
   t.ok(
     "both traffic secrets are the next generation, written over the one they replace",
-    live.connected &&
-      bytesHeld(oldRead) > 0 &&
-      equalBytes(conn.readSecret384, nextTrafficCopy(hashLength, oldRead)) &&
-      equalBytes(conn.writeSecret384, nextTrafficCopy(hashLength, oldWrite))
+    live.connected && bytesHeld(oldRead) > 0 && equalBytes(conn.readSecret384, nextRead) && equalBytes(conn.writeSecret384, nextWrite)
   );
+  secureZero(nextRead);
+  secureZero(nextWrite);
+  secureZero(oldRead);
+  secureZero(oldWrite);
   t.eqI32("and the next-secret scratch of both directions reads zero", bytesHeld(conn.readProtection.next) + bytesHeld(conn.writeProtection.next), zero);
   conn.abort();
   t.eqI32("abort after the update leaves every key reading zero", allHeld(conn), zero);

@@ -306,6 +306,7 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
     readKey.push(b);
   }
   const updated: QuicKeys | null = quicKeysUpdateOf(keys, next);
+  secureZero(next);
   qcExchange(conn, c, qcShortWith(c, updated, true, c.appPn, fromHex("01")));
   c.appPn = c.appPn + n64(1);
   t.ok(`${name}: the server follows the client's key update`, conn.keyUpdates === 1 && conn.writePhase && conn.state === QUIC_STATE_CONNECTED);
@@ -322,6 +323,9 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
   c.now = c.now + conn.recovery.probeTimeout() * n64(2);
   qcExchange(conn, c, qcShortWith(c, updated, true, c.appPn, fromHex("01")));
   c.appPn = c.appPn + n64(1);
+  if (updated !== null) {
+    quicKeysWipe(updated);
+  }
   let same: boolean = toI32(readKey.length) === toI32(qwPacketKey(oldRead, suite).length);
   for (let k: i32 = 0; k < toI32(readKey.length) && k < toI32(qwPacketKey(oldRead, suite).length); k++) {
     same = same && readKey[k] === qwPacketKey(oldRead, suite)[k];
@@ -369,7 +373,8 @@ const qwTraffic = (length: i32): u8[] => {
  * The one-shot derivations a program outside a connection calls: `quicKeys`
  * and `quicKeyUpdateSecret` from a held traffic secret, `quicKeysUpdate` from
  * the held next one, and `quicKeysWipe` of each generation reading every
- * array back as zero, the header-protection key the two share included.
+ * array back as zero; each generation holds its own header-protection key and
+ * schedule, so wiping the next leaves the first usable.
  */
 const qwOneShot = (t: Suite, name: string, suite: i32): void => {
   const aead: i32 = qcAead(suite);
@@ -390,12 +395,9 @@ const qwOneShot = (t: Suite, name: string, suite: i32): void => {
   t.ok(`${name}, one-shot: quicKeys and quicKeysUpdate derive from held secrets`, qwKeysHeld(keys) && qwKeysHeld(updated));
   quicKeysWipe(updated);
   t.ok(`${name}, one-shot: quicKeysWipe zeroes the next generation's key, IV, header-protection key and schedules`, qwKeysZero(updated));
-  t.ok(
-    `${name}, one-shot: the header-protection key the two share reads zero in the first, its packet key still held`,
-    qwZero(keys.hp) && !qwZero(keys.key) && !qwZero(keys.iv)
-  );
+  t.ok(`${name}, one-shot: the first generation keeps its own header-protection key and schedules`, qwKeysHeld(keys));
   quicKeysWipe(keys);
-  t.ok(`${name}, one-shot: and quicKeysWipe of the first generation zeroes the rest`, qwKeysZero(keys));
+  t.ok(`${name}, one-shot: and quicKeysWipe of the first generation zeroes it`, qwKeysZero(keys));
 };
 
 /**

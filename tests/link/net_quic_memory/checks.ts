@@ -26,7 +26,7 @@
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { QUIC_STREAM_END } from "nish/net/quic-stream";
-import { QuicKeys, QuicKeysSlot } from "nish/net/quic-packet";
+import { QuicKeys, QuicKeysSlot, quicKeysWipe } from "nish/net/quic-packet";
 import { quicKeyUpdateCopy, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_CONN_DATAGRAM_SIZE, QUIC_STATE_CONNECTED, QuicConnection, QuicServerConfig } from "nish/net/quic";
@@ -286,6 +286,10 @@ const qmRecordSuite = (conn: QuicConnection, suite: i32, b: QmBuffers, pass: QmP
       c.now = c.now + conn.recovery.probeTimeout() * n64(2);
       qmRecord(conn, c, qcShortWith(c, updated, true, c.appPn, fromHex("01")), s, b, pass);
       c.appPn = c.appPn + n64(1);
+      secureZero(next);
+      if (updated !== null) {
+        quicKeysWipe(updated);
+      }
     }
   }
   s.closeAt = c.now;
