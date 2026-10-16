@@ -49,9 +49,13 @@
  * installed and the server's copy is wiped with `secureZero`, as are the
  * handshake secret once the flight is signed and the caller's ephemeral key
  * once the ServerHello is written, or the handshake fails. The two application traffic secrets live
- * on here, for KeyUpdate: each is overwritten in place by the next, and both
- * are wiped, with both directions' keys, by `wipeKeys` when the carrier
- * closes the slot and by `start`. What stays unwiped is TLS-1's and TLS-2's.
+ * on here, for KeyUpdate: each is overwritten in place by the next. Every way
+ * the connection ends wipes what it holds: a failure of any kind (`fail`, the
+ * client's error alert, a truncated stream, `abort`) wipes both directions' keys, both secrets and
+ * everything `TlsServer` still holds once the last alert is sealed; the
+ * server's `close_notify`, once sealed, wipes the write direction, the
+ * client's the read direction, and `close` the resumption master secret; and `wipeKeys`, when the carrier
+ * closes the slot, and `start` wipe the rest. What stays unwiped is TLS-1's.
  *
  * Refusals are alerts, never panics. Written from RFC 8446 §4.6.3, §5, §6
  * and §D.4, not ported from another implementation.
@@ -323,20 +327,31 @@ export class TlsRecordServer {
 
   /** Wipes the two application traffic secrets and both directions' keys. */
   wipeTraffic(): void {
+    this.wipeRead()
+    this.wipeWrite()
+  }
+
+  /** Wipes the client's application traffic secret and the read keys. */
+  wipeRead(): void {
     // The two secret fields point into these four arrays, or at nothing.
     secureZero(this.readSecret256)
     secureZero(this.readSecret384)
+    this.readProtection.clear()
+  }
+
+  /** Wipes the server's application traffic secret and its write keys. */
+  wipeWrite(): void {
     secureZero(this.writeSecret256)
     secureZero(this.writeSecret384)
-    this.readProtection.clear()
     this.writeProtection.clear()
   }
 
   /**
    * Wipes every secret `TlsServer` still holds — the ephemeral key it was
-   * handed, the handshake, traffic and exporter secrets and the expected
-   * Finished — for a connection that has failed or is closed. On the way to
-   * an open connection each is wiped as soon as it has been used; this is
+   * handed, the handshake, traffic, exporter and resumption master secrets
+   * and the expected Finished — for a connection that has failed or is
+   * closed. On the way to an open connection each is wiped as soon as it
+   * has been used; this is
    * for the ways that end early, and for the exporter secret, which a caller
    * may read until the connection ends.
    */
@@ -350,6 +365,7 @@ export class TlsRecordServer {
     secureZero(tls.serverApplicationSecret)
     secureZero(tls.exporterSecret)
     secureZero(tls.expectedClientFinished)
+    tls.wipeResumption()
   }
 
   /** How many bytes `receive` would take now: what the socket should read at most. */
@@ -394,19 +410,21 @@ export class TlsRecordServer {
    * fails, with nothing more sent, though what is already on `output` may
    * still go out. Records still waiting for the caller to read, or for the
    * signature, are handled first, so a `close_notify` among them counts.
+   * Every key the connection holds is wiped, as `fail` wipes them.
    */
   checkTruncation(): void {
     if (this.ended && !this.peerClosed && this.state !== TLS_RECORD_STATE_FAILED && this.reader.next() <= 0) {
       this.state = TLS_RECORD_STATE_FAILED
       this.dropPending()
-      this.wipeHandshake()
+      this.wipeKeys()
     }
   }
 
-  /** The socket failed under the connection: it ends with nothing more sent. */
+  /** The socket failed under the connection: it ends with nothing more sent, and every key it holds wiped. */
   abort(): void {
     this.state = TLS_RECORD_STATE_FAILED
     this.dropOutput()
+    this.wipeKeys()
   }
 
   /** Forgets everything waiting to be sent. */
@@ -600,7 +618,10 @@ export class TlsRecordServer {
     }
     const description: i32 = toI32(this.scratch[1])
     if (description === TLS_ALERT_CLOSE_NOTIFY) {
+      // The client writes nothing after it (§6.1), and nothing after it is
+      // read, so the read keys have opened their last record.
       this.peerClosed = true
+      this.wipeRead()
       return 0
     }
     if (description === TLS_ALERT_USER_CANCELED) {
@@ -609,6 +630,9 @@ export class TlsRecordServer {
     this.peerAlert = description
     this.state = TLS_RECORD_STATE_FAILED
     this.dropOutput()
+    // The client's error alert ends the connection as `fail` does, with
+    // nothing sent back, so every key it held is wiped now.
+    this.wipeKeys()
     return 0
   }
 
@@ -840,9 +864,7 @@ export class TlsRecordServer {
     }
     // After its close_notify the server sends nothing more (§6.1).
     if (this.state === TLS_RECORD_STATE_CLOSED) {
-      if (this.closeDue && this.sendAlert(TLS_ALERT_LEVEL_WARNING, TLS_ALERT_CLOSE_NOTIFY)) {
-        this.closeDue = false
-      }
+      this.sealClose()
       return
     }
     const tls: TlsServer = this.tls
@@ -958,7 +980,9 @@ export class TlsRecordServer {
   /**
    * Fails the connection with `alert`, sent as a fatal alert under whatever
    * the server writes with now, in the clear before its first keys. What
-   * was still owed is dropped: the alert is the last thing the server sends.
+   * was still owed is dropped: the alert is the last thing the server sends,
+   * so once it is sealed every key the connection holds is wiped, the
+   * traffic keys and secrets as well as what `TlsServer` holds.
    */
   fail(alert: i32): void {
     if (this.state === TLS_RECORD_STATE_FAILED) {
@@ -966,7 +990,6 @@ export class TlsRecordServer {
     }
     const closed: boolean = this.state === TLS_RECORD_STATE_CLOSED
     this.dropPending()
-    this.wipeHandshake()
     // Failed first, so a seal that refuses the alert cannot come back here.
     this.state = TLS_RECORD_STATE_FAILED
     this.alert = alert
@@ -974,6 +997,9 @@ export class TlsRecordServer {
     if (!closed) {
       this.sendAlert(TLS_ALERT_LEVEL_FATAL, alert)
     }
+    // After the branch, so that the alert is sealed under the write keys
+    // before they go, and so that `opt` keeps one wipe rather than merging two.
+    this.wipeKeys()
   }
 
   /** Seals an alert record of `level` and `description`; false, sending nothing, when `output` has no room for it. */
@@ -1094,6 +1120,8 @@ export class TlsRecordServer {
    * answers `TLS_RECORD_PIPE` and nothing more is sent. What was still owed
    * of the handshake is dropped; application data already written stays
    * ahead of the alert, which waits for room in `output` when there is none.
+   * The resumption master secret is wiped, since nothing issues a ticket
+   * from it, and the write keys once the `close_notify` is sealed (`sealClose`).
    * Nothing happens once the connection has failed or closed.
    */
   close(): void {
@@ -1101,9 +1129,23 @@ export class TlsRecordServer {
       return
     }
     this.dropPending()
+    this.tls.wipeResumption()
     this.state = TLS_RECORD_STATE_CLOSED
     this.closeDue = true
-    this.pump()
+    this.sealClose()
+  }
+
+  /**
+   * Seals the `close_notify` `close` owes, once `output` has room for it. It
+   * is the last record the server writes (§6.1), so the write keys and the
+   * server's traffic secret are wiped as soon as it is sealed. The read keys
+   * stay: the client may still send until its own `close_notify`.
+   */
+  sealClose(): void {
+    if (this.closeDue && this.sendAlert(TLS_ALERT_LEVEL_WARNING, TLS_ALERT_CLOSE_NOTIFY)) {
+      this.closeDue = false
+      this.wipeWrite()
+    }
   }
 
   /** What the CertificateVerify signs, while `interest` says `TLS_RECORD_SIGN`; `null` otherwise. */
