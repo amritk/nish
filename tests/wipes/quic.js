@@ -43,9 +43,9 @@ export const wipeChecks = [
   // `updateWriteKeys`, 12. The stateless reset token: `quicStatelessResetToken`
   // 14, its HMAC output among them, and `quicConnResetTokenInto` 25, the
   // scratch HMAC's `wipe` and the tag; `deriveConnectionId` 25, the same for
-  // a connection ID. `begin` 2: the entropy once it is copied, and the
-  // failure path's. `establish` 28: the first ID's reset token once it is in
-  // the transport parameters, besides its derivation. `openPacket` 266: the
+  // a connection ID. `begin` 2: both from the one wipe of the entropy once it
+  // is copied, which opt duplicates. `establish` 28: the first ID's reset
+  // token once it is in the transport parameters, besides its derivation. `openPacket` 266: the
   // Initial level's `discard` on the first Handshake packet, besides the
   // derivations and wipes of every level it opens. `quicInitialSecretsInto`
   // 1: the Initial secret once both directions' are expanded. `reset` 101:
