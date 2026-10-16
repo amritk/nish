@@ -1,0 +1,36 @@
+
+// ---- Test seam: appended by tests/run.js ("p256 agree: ...") to a copy of ------
+// std/crypto/p256.ts and never part of the module itself. It exports the two
+// ways this file computes k G, and the ECDH multiply Wycheproof's vectors need,
+// so tests/link/crypto_p256_agree can hold them to each other without the
+// module growing a public API for it.
+
+/** k G by the fixed-base comb (`p256BaseMult`), encoded. */
+export const p256SeamBase = (k: u8[]): u8[] => {
+  const point = new P256ProjectivePoint()
+  p256BaseMult(point, k, new P256PointScratch())
+  return p256EncodePoint(point)
+}
+
+/** k G by the variable-base window (`p256ScalarMult` on G), encoded: the reference. */
+export const p256SeamReference = (k: u8[]): u8[] => {
+  const point = new P256ProjectivePoint()
+  p256ScalarMult(point, k, p256Generator(), new P256PointScratch())
+  return p256EncodePoint(point)
+}
+
+/** The x coordinate of k Q, the ECDH shared secret, or `null` when `pub` does not decode. */
+export const p256SeamShared = (k: u8[], pub: u8[]): u8[] | null => {
+  const q: P256ProjectivePoint | null = p256DecodePoint(pub)
+  if (q === null) {
+    return null
+  }
+  const point = new P256ProjectivePoint()
+  p256ScalarMult(point, k, q, new P256PointScratch())
+  const encoded: u8[] = p256EncodePoint(point)
+  const x: u8[] = new Array<u8>(32)
+  for (let i: i32 = 0; i < 32; i++) {
+    x[i] = encoded[i + 1]
+  }
+  return x
+}

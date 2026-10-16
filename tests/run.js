@@ -4477,6 +4477,89 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
   )
 }
 
+// #628: P-256's fixed-base comb (`p256BaseMult`, which `p256PublicKey` and
+// `p256Sign` use) against its variable-base window (`p256ScalarMult` on G, which
+// `p256Verify` uses), byte for byte, on Wycheproof's scalars, RFC 6979 A.2.5's,
+// the edges and a seeded corpus of 10,000. Neither multiply is exported, so the
+// program reaches them through a test-only seam: this copies std/crypto/p256.ts
+// with `tests/link/crypto_p256_agree/seam.ts.in` appended beside the program,
+// as `./p256`, and the two fixture directories it imports beside that. The
+// program's header says what it runs; its expected.out ends in a checksum of
+// every comb output. Natively, and as a `--profile wasi` module under Node.
+// Node runs it with `--single-threaded-gc`: its default concurrent marker
+// segfaults this long, allocation-heavy wasm run intermittently, at or just
+// before exit, after every line has printed, and the flag is the whole
+// difference (six of six crashed without it, none with it, Node 22).
+if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
+  const agreeDir = path.join(buildDir, "p256-agree")
+  const programDir = path.join(agreeDir, "crypto_p256_agree")
+  fs.rmSync(agreeDir, { recursive: true, force: true })
+  fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
+  fs.mkdirSync(programDir, { recursive: true })
+  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
+    recursive: true,
+  })
+  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
+  fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
+  fs.writeFileSync(
+    path.join(programDir, "p256.ts"),
+    fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
+      fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "seam.ts.in"), "utf8")
+  )
+  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
+  const entry = path.join(programDir, "main.ts")
+  if (only !== "wasi") {
+    const exe = path.join(agreeDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  }
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasm = path.join(agreeDir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", path.join(agreeDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "--single-threaded-gc", "examples/wasi-host.mjs", wasm], {
+            cwd: root,
+            encoding: "utf8",
+          })
+        : built
+    check(
+      `p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: p256 agree: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_agree is not run`
+    )
+  }
+}
+
+// The comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs
+// computes from SEC 2's G, limb for limb: a hand edit to one entry would put a
+// wrong point in every key and signature that reads it, and only the scalars
+// whose digits name that entry would show it.
+if (!only || "p256 gen-p256-table".includes(only)) {
+  const r = spawnSync("node", ["scripts/gen-p256-table.mjs", "--check"], { cwd: root, encoding: "utf8" })
+  check(
+    "p256: the comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs generates",
+    r.status === 0 && r.stdout === "gen-p256-table: 3840 limbs, as generated\n",
+    shown(r)
+  )
+}
+
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
 // `std/threads.ts`'s own message. The link loop above compares stdout and the
 // exit code only, so the wording is pinned here, on stderr, the way
