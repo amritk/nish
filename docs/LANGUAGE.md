@@ -1358,16 +1358,24 @@ and their `.ll` goldens are byte-identical files.
   (`reject_enum_member_type_inferred_let`). So does every place whose type is
   inferred from what is written: a ternary whose arms are both `Kind.Array`,
   an array literal of them (`[a]` is a `Kind.Array[]`), `??` between two
-  `Kind.Array[]`, and each of those passed to a generic function
-  (`tests/cases/enum_member_type_inferred`, `reject_enum_member_type_ternary_let`,
-  `_ternary_const`, `_ternary_generic`, `_array_inferred`, `_array_let`,
-  `_array_generic`, `_nullish`). Two arms or two elements that differ where one
-  is a member type — `c ? a : b` over `Kind.Array` and `Kind.Scalar`, or
-  `c ? a : Kind.Array` — are refused, `` Ternary branches must have the same type, got Kind.Array and Kind.Scalar: an enum member type is not widened to its enum, so annotate the type it holds, e.g. `Kind` ``,
-  and the array literal's message reads the same way: `tsc` types them as a
-  union, or as the member, or as the enum, by whether the constant is fresh,
-  so the variable is annotated instead (`reject_enum_member_type_ternary_mixed`,
-  `_ternary_constant`, `_array_mixed`). An object literal is always annotated,
+  `Kind.Array[]`, each of those passed to a generic function, and an arrow's
+  result, which binds the type parameter it returns: `map([a], (k) => k)` is a
+  `Kind.Array[]` and `apply(a, (k) => k)` a `Kind.Array`, while an arrow that
+  answers the constant, `(k) => Kind.Array`, answers `Kind`, as `tsc` widens
+  it (`tests/cases/enum_member_type_inferred`, `enum_member_type_arrow`,
+  `reject_enum_member_type_ternary_let`, `_ternary_const`, `_ternary_generic`,
+  `_array_inferred`, `_array_let`, `_array_generic`, `_nullish`, `_arrow_map`,
+  `_arrow_apply`). Two arms or two elements that differ where one is a member
+  type, or an array of one — `c ? a : b` over `Kind.Array` and `Kind.Scalar`,
+  `c ? a : k` over a `Kind`, `c ? a : Kind.Array`, `[a, Kind.Array]`, or
+  `[[a], [Kind.Array]]` — are refused, `` Ternary branches must have the same type, got Kind.Array and Kind.Scalar: an enum member type is not widened to its enum, so annotate the type it holds, e.g. `Kind` ``,
+  and the array literal's message reads the same way, naming `Kind[]` for the
+  nested case: `tsc` types them as a union of the members (the enum itself
+  when they are all of its members), or as the member, or as the enum, by
+  whether the constant is fresh, so the variable is annotated instead
+  (`reject_enum_member_type_ternary_mixed`, `_ternary_enum`,
+  `_ternary_constant`, `_ternary_nested`, `_array_mixed`, `_array_constant`,
+  `_array_nested_mixed`). An object literal is always annotated,
   so its fields always have a type to enter. Two member types of one enum are two
   types (`reject_enum_member_type_between`), and a field initializer of a
   member type is held to the same rule (`reject_enum_member_type_field_init`).

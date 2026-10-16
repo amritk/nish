@@ -341,9 +341,10 @@ const isMemberConstant = (ctx: CheckContext, expr: Node, computed: i32, member: 
  * own constant, which is then recorded as the member type. The constant is
  * still the enum's integer to the emitter (`isEnumMember`), so the IR is the
  * enum's. Anything else, the enum's other members and an enum value that is
- * not a constant among them, is refused here, once, for every kind of slot.
+ * not a constant among them, is refused here, once, for every kind of slot, a
+ * generic call's argument included.
  */
-const enterMember = (ctx: CheckContext, expr: Node, computed: i32, member: i32): i32 => {
+export const enterMember = (ctx: CheckContext, expr: Node, computed: i32, member: i32): i32 => {
   ctx.program.nodeTypes[expr.id] = computed
   if (computed === T_ERROR || computed === member) {
     return computed
@@ -1425,6 +1426,9 @@ const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32
   if (ctx.table.assignable(whenTrue, whenFalse)) {
     return ternaryResult(ctx, expr, whenFalse)
   }
+  if (holdsMember(ctx, whenTrue) || holdsMember(ctx, whenFalse)) {
+    return ctx.errorType(expr, ternaryMembersMessage(ctx, whenTrue, whenFalse))
+  }
   const a = ctx.table.typeName(whenTrue)
   const b = ctx.table.typeName(whenFalse)
   return ctx.errorType(expr, `Ternary branches must have the same type, got ${a} and ${b}`)
@@ -1432,14 +1436,33 @@ const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32
 
 /**
  * Two arms, or two array elements, that differ where one is an enum member
- * type. TypeScript gives them a union, or keeps the member, or widens to the
+ * type or an array of one. TypeScript gives them a union, or keeps the member, or widens to the
  * enum, by rules that turn on whether a constant is fresh, so the language
  * asks for the type instead: `let x: Kind = c ? a : b`.
  */
 export const mixedMemberMessage = (ctx: CheckContext, lead: string, a: i32, b: i32): string => {
-  const enumType = ctx.table.isEnumMemberType(a) ? ctx.table.baseOf(a) : ctx.table.baseOf(b)
+  const enumType = holdsMember(ctx, a) ? widenMember(ctx, a) : widenMember(ctx, b)
   const spelled = `got ${ctx.table.typeName(a)} and ${ctx.table.typeName(b)}`
   return `${lead}, ${spelled}: an enum member type is not widened to its enum, so annotate the type it holds, e.g. \`${ctx.table.typeName(enumType)}\``
+}
+
+/** Whether `type` is an enum member type, or an array of one at any depth. */
+export const holdsMember = (ctx: CheckContext, type: i32): boolean => {
+  if (type < 0) {
+    return false
+  }
+  if (ctx.table.isArray(type)) {
+    return holdsMember(ctx, ctx.table.refOf(type))
+  }
+  return ctx.table.isEnumMemberType(type)
+}
+
+/** `type` with its enum member type read as the enum: `Kind.Array[][]` is `Kind[][]`. */
+const widenMember = (ctx: CheckContext, type: i32): i32 => {
+  if (ctx.table.isArray(type)) {
+    return ctx.table.arrayOf(widenMember(ctx, ctx.table.refOf(type)))
+  }
+  return ctx.table.isEnumMemberType(type) ? ctx.table.baseOf(type) : type
 }
 
 const ternaryMembersMessage = (ctx: CheckContext, a: i32, b: i32): string =>

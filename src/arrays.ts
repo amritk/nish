@@ -14,6 +14,7 @@ import {
   checkBitwiseAssignOperands,
   checkExpression,
   isBitwiseCompound,
+  holdsMember,
   mixedMemberMessage,
   unproven,
   WANT_INFERRED,
@@ -101,7 +102,7 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     }
     if (elem < 0) {
       elem = type
-    } else if (elem !== type && (ctx.table.isEnumMemberType(elem) || ctx.table.isEnumMemberType(type))) {
+    } else if (elem !== type && (holdsMember(ctx, elem) || holdsMember(ctx, type))) {
       ctx.error(
         element,
         mixedMemberMessage(ctx, "Array literal elements must all have the same type", elem, type)

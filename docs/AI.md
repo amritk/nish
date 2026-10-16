@@ -1355,10 +1355,12 @@ export const main = (): i32 => {
   `take: (x: Kind.Array) => Kind.Array`, bind `T` to `Kind` and are refused:
   pass a value already of the member type instead. An unannotated `let`
   keeps the member type of a value already of it, and widens the member's
-  constant to `Kind`, as `tsc` does; so do a ternary, an array literal and
-  `??` (`[a]` is a `Kind.Array[]`). Arms or elements that differ where one is
-  a member type (`c ? a : b`, `[a, Kind.Array]`) are refused: annotate the
-  variable.
+  constant to `Kind`, as `tsc` does; so do a ternary, an array literal, `??`
+  and an arrow's result (`[a]` is a `Kind.Array[]`, and so is
+  `map([a], (k) => k)`; `(k) => Kind.Array` answers `Kind`). Arms or elements
+  that differ where one is a member type or an array of one (`c ? a : b`,
+  `c ? a : k`, `[a, Kind.Array]`, `[[a], [Kind.Array]]`) are refused:
+  annotate the variable.
   `new Array<Kind.Array>(n)` zero-fills, so it is NL2520 unless the member is
   0; build such an array with `[]` and `push`. A `parallelMap`,
   `parallelFrom` or `parallelReduce` body answering one is NL2521: answer

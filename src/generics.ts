@@ -35,7 +35,7 @@ import { CheckContext } from "./context"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
-import { checkExpression, recordMemberEntry, recordRangeEntry, WANT_RANGE } from "./expressions"
+import { checkExpression, enterMember, recordMemberEntry, recordRangeEntry, WANT_RANGE } from "./expressions"
 import { unwrapParens } from "./emit-util"
 import {
   annotationName,
@@ -1499,6 +1499,10 @@ export const checkGenericCall = (
       !recordMemberEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
     ) {
+      if (ctx.table.isEnumMemberType(sig.paramTypes[i + offset])) {
+        enterMember(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset])
+        return T_ERROR
+      }
       const want = ctx.table.typeName(sig.paramTypes[i + offset])
       ctx.error(
         args.children[i],

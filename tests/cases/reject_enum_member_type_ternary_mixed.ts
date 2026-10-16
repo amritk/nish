@@ -1,5 +1,6 @@
-// Two different member types in one ternary are a union in TypeScript, which
-// the language has no type for: the variable is annotated instead.
+// Two different member types in one ternary are their union in TypeScript,
+// which is `Kind` itself for an enum of just these two members: the language
+// asks for that annotation.
 enum Kind {
   Scalar,
   Array,

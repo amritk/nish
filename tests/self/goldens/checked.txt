@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1031 programs, 112238 dump lines.
+# 1032 programs, 112304 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -14796,6 +14796,73 @@ function test(): i32 -> @test [exported]
   callee 47:10 weight -> @weight
   callee 47:27 weight -> @weight
   callee 47:44 weight -> @weight
+program tests/cases/enum_member_type_arrow.ts
+module tests/cases/enum_member_type_arrow.ts (entry)
+function array(): Kind.Array -> @array
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 32:3
+  calls: apply$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow1 apply$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow2 array map$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow0 map$em.p1.en$Kind$en$Kind$fn.11.test$arrow3 nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow
+  stackSites=3 stackLocals=0
+  local 26:9 a: Kind.Array (const)
+  callee 26:25 array -> @array
+  local 27:9 ys: Kind.Array[] (const)
+  callee 27:28 map<Kind.Array, Kind.Array, (k) => ...> -> @map$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow0
+  local 28:7 z: Kind.Array (let)
+  callee 28:11 apply<Kind.Array, Kind.Array, (k) => ...> -> @apply$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow1
+  local 30:9 w: Kind.Array (const)
+  callee 30:25 apply<Kind.Array, Kind.Array, (k) => ...> -> @apply$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow2
+  local 31:9 zs: Kind[] (const)
+  callee 31:14 map<Kind.Array, Kind, (k) => ...> -> @map$em.p1.en$Kind$en$Kind$fn.11.test$arrow3
+  local 33:7 same: i32 (let)
+  local 34:14 k: Kind.Array (const)
+function (k) => ...(k: Kind.Array): Kind.Array -> @test$arrow0
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function (k) => ...(k: Kind.Array): Kind.Array -> @test$arrow1
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function (k) => ...(k: Kind.Array): Kind.Array -> @test$arrow2
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function (k) => ...(k: Kind.Array): Kind -> @test$arrow3
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function map<Kind.Array, Kind.Array, (k) => ...>(xs: Kind.Array[], f: void): Kind.Array[] -> @map$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:5
+  calls: nish_array_grow test$arrow0
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 14:9 out: Kind.Array[] (const)
+  local 15:14 x: Kind.Array (const)
+  callee 16:14 (k) => ... -> @test$arrow0
+function apply<Kind.Array, Kind.Array, (k) => ...>(x: Kind.Array, f: void): Kind.Array -> @apply$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow1 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: test$arrow1
+  stackSites=0 stackLocals=0
+  callee 22:10 (k) => ... -> @test$arrow1
+function apply<Kind.Array, Kind.Array, (k) => ...>(x: Kind.Array, f: void): Kind.Array -> @apply$em.p1.en$Kind$em.p1.en$Kind$fn.11.test$arrow2 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: test$arrow2
+  stackSites=0 stackLocals=0
+  callee 22:10 (k) => ... -> @test$arrow2
+function map<Kind.Array, Kind, (k) => ...>(xs: Kind.Array[], f: void): Kind[] -> @map$em.p1.en$Kind$en$Kind$fn.11.test$arrow3 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:5
+  calls: nish_array_grow test$arrow3
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 14:9 out: Kind[] (const)
+  local 15:14 x: Kind.Array (const)
+  callee 16:14 (k) => ... -> @test$arrow3
 program tests/cases/enum_member_type_generic.ts
 module tests/cases/enum_member_type_generic.ts (entry)
 import getOrInsert from "nish/map" -> generic function getOrInsert

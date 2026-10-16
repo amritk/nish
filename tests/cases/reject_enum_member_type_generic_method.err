@@ -1,1 +1,1 @@
-Argument 2 of `Box<i32>.put<i32>`: expected Kind.Array, got Kind
+Type `Kind.Array` holds only the member `Kind.Array`, got `Kind.Scalar`

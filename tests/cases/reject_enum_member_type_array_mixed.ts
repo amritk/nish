@@ -1,5 +1,6 @@
 // Two different member types in one array literal: TypeScript makes the
-// element type a union, so the language asks for the annotation.
+// element type their union, which is `Kind` itself for an enum of just these
+// two members, and the language asks for that annotation.
 enum Kind {
   Scalar,
   Array,
