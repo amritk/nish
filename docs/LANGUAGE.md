@@ -193,7 +193,8 @@ Type rules:
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
   a `type` alias or a numeric `enum` declared or imported in the module
-  ([Type aliases](#type-aliases), [Enums](#enums)), and the
+  ([Type aliases](#type-aliases), [Enums](#enums)), one of that enum's
+  members as a type, `Kind.If` ([Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
@@ -1312,6 +1313,52 @@ and their `.ll` goldens are byte-identical files.
   other type is `` `case` label is i32 but the discriminant is Kind ``
   (`reject_enum_case_label`), so the integer a member stands for is not a
   label. See [`switch`](#switch).
+- **A member is also a type: `Kind.While` names the type whose one value is
+  that member.** A slot of a member type — a field, a parameter, a return, a
+  local, an element, an object-literal field or a `Result` arm — holds that
+  member and nothing else, which is what lets a `readonly` field record which
+  of an enum's cases its object is, as the tag a later discriminated union
+  reads:
+
+  ```ts
+  class ArrayNode {
+    readonly kind: Kind.While = Kind.While;
+  }
+  ```
+
+  The slot is entered by the member's own constant, or by a value already of
+  that member type; the enum's other members, and any `Kind` value that is not
+  a constant, are
+  `` Type `Kind.Array` holds only the member `Kind.Array`, got `Kind.Scalar` ``
+  (`tests/cases/reject_enum_member_type_other`) and
+  `` …, got a value of type `Kind` `` (`reject_enum_member_type_widened`),
+  because a `Kind` could be any member. Two member types of one enum are two
+  types (`reject_enum_member_type_between`), and a field initializer of a
+  member type is held to the same rule (`reject_enum_member_type_field_init`).
+  The other direction is free: a member type converts to its enum, and a read
+  of a member-typed slot is the enum wherever a value is computed with, so it
+  compares with `===`, switches and passes as a `Kind`, and converts to `i32`
+  no more than a `Kind` does (`reject_enum_member_type_read`). In IR a member
+  type is its enum's `i32`: `tests/cases/enum_member_type` lowers to the same
+  bytes as the program with every member type written `Kind`.
+  - **The qualifier is an enum, local or imported, and the name one of its
+    members.** `import { Kind as K }` spells the exporter's member types
+    `K.Array` (`tests/link/enum_member_type_import`). Anything else before the
+    dot is `` `Point.x` is not a type: only a member of an enum may be named with a dot in a type, and `Point` is not an enum ``
+    (`reject_enum_member_type_not_enum`), a missing member is
+    `` Enum `Kind` has no member `Missing` to name as a type ``
+    (`reject_enum_member_type_unknown`), and type arguments are
+    `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
+    One dot is read; `A.B.C` is a syntax error.
+  - **Two members of one value are one type**, as `tsc` reads them, spelled
+    by the member declared first.
+  - **A field initializer may be a member's constant** when the field is the
+    enum or one of its member types: `readonly kind: Kind = Kind.If` stores the
+    integer before the constructor runs, as a numeric literal would.
+  - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
+    it reads an enum as any of its members, which a member type cannot hold. A
+    member type crosses to C and JavaScript exactly where its enum does, which
+    is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
   (`tests/cases/reject_enum_builtin_name`), for the reason the same rule exists

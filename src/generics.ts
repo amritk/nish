@@ -201,7 +201,7 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
   return ""
 }
 
-/** A key type of §5.1: a string, a scalar, an enum, or a class held by identity. */
+/** A key type of §5.1: a string, a scalar, an enum or its member type, or a class held by identity. */
 const isCollectionKey = (ctx: CheckContext, type: i32): boolean => {
   const table = ctx.table
   if (
@@ -210,7 +210,7 @@ const isCollectionKey = (ctx: CheckContext, type: i32): boolean => {
     type === T_F32 ||
     type === T_F64 ||
     intBits(type) > 0 ||
-    table.isEnum(type)
+    table.enumBase(type) >= 0
   ) {
     return true
   }

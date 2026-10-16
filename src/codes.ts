@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 631
+export const RULE_COUNT: i32 = 634
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -449,6 +449,8 @@ const diagnosticRules = (): string[] => [
   "NL3021",
   "` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into",
   "NL2487",
+  "` is not a type: only a member of an enum may be named with a dot in a type, and `",
+  "NL2506",
   "`; check the nullable side against `null` first, then compare the narrowed values",
   "NL2114",
   ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
@@ -1105,6 +1107,8 @@ const diagnosticRules = (): string[] => [
   "NL2014",
   ": internal compiler error",
   "NL3003",
+  "` holds only the member `",
+  "NL2508",
   "` needs a type annotation",
   "NL2095",
   "`: unsupported modifier `",
@@ -1193,6 +1197,8 @@ const diagnosticRules = (): string[] => [
   "NL2248",
   "` expects f64, got ",
   "NL2062",
+  "` to name as a type",
+  "NL2507",
   "`, which needs the ",
   "NL4004",
   "`Err(...)` expects ",

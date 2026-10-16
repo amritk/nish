@@ -274,6 +274,13 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
     return resolveResult(node, args, argc, ctx)
   }
 
+  // `Kind.Array`, which the parser keeps as the dotted text of the reference.
+  // Nothing declared can spell a dot, so it is answered before every name.
+  const dot = name.indexOf(".")
+  if (dot >= 0) {
+    return resolveEnumMemberType(node, name.substring(0, dot), name.substring(dot + 1), argc, ctx)
+  }
+
   // `integer<Lo, Hi>`, a ranged integer (WP31 §4). It is answered before
   // every declared name and type parameter, which is why the name has been
   // reserved since 0.10.0: `integer` never means anything else.
@@ -390,6 +397,36 @@ const resolveReference = (node: Node, ctx: CheckContext): i32 => {
   }
 
   return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`)
+}
+
+/**
+ * An enum member type, `Kind.Array`: the qualifier names an enum this module
+ * declares or imports, and the name one of its members. Written with type
+ * arguments it is refused as any other reference with arguments it cannot
+ * take is.
+ */
+const resolveEnumMemberType = (
+  node: Node,
+  qualifier: string,
+  member: string,
+  argc: i32,
+  ctx: CheckContext
+): i32 => {
+  const info = ctx.program.enumNamed(qualifier)
+  if (info === null) {
+    return ctx.errorType(
+      node,
+      `\`${qualifier}.${member}\` is not a type: only a member of an enum may be named with a dot in a type, and \`${qualifier}\` is not an enum`
+    )
+  }
+  if (!info.hasMember(member)) {
+    return ctx.errorType(node, `Enum \`${info.name}\` has no member \`${member}\` to name as a type`)
+  }
+  if (argc > 0) {
+    return ctx.errorType(node, `Unsupported type reference \`${ctx.textOf(node)}\` ${SUPPORTED_REFERENCES}`)
+  }
+  const value = info.memberValue(member)
+  return ctx.table.enumMemberOf(info.type, value, info.memberNameOf(value))
 }
 
 /**

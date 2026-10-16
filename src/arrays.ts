@@ -455,8 +455,8 @@ export const checkArrayMethod = (
   // (`reject_push_field_literal`, WP19 §A3).
   // A ranged element is the exception (WP31 §6): the range is a sink the
   // pushed value enters, not a width, so it reaches the argument whatever the
-  // receiver is spelled like.
-  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isRanged(elem) ? elem : -1
+  // receiver is spelled like. An enum member type is one too (`isEntered`).
+  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isEntered(elem) ? elem : -1
   if (name === "push") {
     if (!checkBuiltinArity(ctx, call, "push", args, 1)) {
       return ctx.numberType()

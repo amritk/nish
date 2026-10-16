@@ -28,7 +28,7 @@ import {
   isGenericFunction,
 } from "./generics"
 import { isExported, collectParams } from "./declarations"
-import { checkRangedLiteral } from "./expressions"
+import { checkRangedLiteral, memberSlotMessage } from "./expressions"
 import {
   FLAG_DEFINITE,
   FLAG_OPTIONAL,
@@ -39,6 +39,8 @@ import {
   N_EMPTY,
   N_FALSE,
   N_FIELD,
+  N_IDENT,
+  N_MEMBER,
   N_METHOD,
   N_NULL,
   N_NUMBER,
@@ -443,6 +445,41 @@ const literalInitializerType = (ctx: CheckContext, expr: Node, want: i32): i32 =
   }
 }
 
+/**
+ * An enum member initializer, `readonly kind: Kind.Array = Kind.Array`: the
+ * one initializer that is not a literal, because the member is a constant the
+ * checker folds, and the field stores its integer as it would a number's. The
+ * field is typed with the enum or one of its member types; a member type
+ * holds only its own member.
+ */
+const checkEnumInitializer = (ctx: CheckContext, field: FieldInfo, init: Node, what: string): void => {
+  const receiver = init.children[0]
+  const info = ctx.program.enumNamed(receiver.kind === N_IDENT ? receiver.text : "")
+  if (info === null) {
+    ctx.error(init, `${what}: initializers must be literals (assign other values in the constructor)`)
+    return
+  }
+  if (!info.hasMember(init.text)) {
+    ctx.errorAtProperty(init, `Enum \`${info.name}\` has no member \`${init.text}\``)
+    return
+  }
+  const value = info.memberValue(init.text)
+  field.initializerValue = value
+  const type = field.type
+  if (ctx.table.isEnumMemberType(type) && ctx.table.refOf(type) === info.type) {
+    if (ctx.table.memberValue(type) !== value) {
+      ctx.error(init, memberSlotMessage(ctx, type, `\`${ctx.table.typeName(info.type)}.${init.text}\``))
+    }
+    return
+  }
+  if (!ctx.table.assignable(info.type, type)) {
+    ctx.error(
+      init,
+      `${what} is ${ctx.table.typeName(type)} but its initializer is ${ctx.table.typeName(info.type)}`
+    )
+  }
+}
+
 /** One field of a class or interface, appended to `owner`. */
 const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text
@@ -509,7 +546,10 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   field.readonly = (decl.flags & FLAG_READONLY) !== 0
   field.spelling = annotationSpelling(ctx, true, decl.children[1])
   const initializer = decl.children[2]
-  if (initializer.kind !== N_EMPTY) {
+  if (initializer.kind === N_MEMBER) {
+    checkEnumInitializer(ctx, field, initializer, what)
+    field.initializer = initializer
+  } else if (initializer.kind !== N_EMPTY) {
     const initType = literalInitializerType(ctx, initializer, type)
     if (initType < 0) {
       ctx.error(

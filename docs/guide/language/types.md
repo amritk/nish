@@ -245,3 +245,49 @@ const digit: integer<0, 9> = 12;
 
 The reference's [Types](../../LANGUAGE.md#types) section lists every rule
 for `integer<Lo, Hi>`.
+
+## Enum member types
+
+A member of an [enum](../../LANGUAGE.md#enums) is also a type. Written as an
+annotation, `Kind.Array` is a slot that holds that one member and nothing
+else, which is how a class records which of an enum's cases it is: a
+`readonly` field of the member's type, set to the member.
+
+```ts nish:ok
+enum Kind {
+  Scalar,
+  Array,
+}
+
+class ArrayNode {
+  readonly kind: Kind.Array = Kind.Array;
+  depth: i32 = 1;
+}
+
+const describe = (k: Kind): string => (k === Kind.Array ? "array" : "scalar");
+
+export const main = (): i32 => {
+  const n = new ArrayNode();
+  console.log(describe(n.kind));    // array
+  return 0;
+};
+```
+
+Only the member itself goes into such a slot. Another member is a compile
+error, and so is a plain `Kind` value, because the compiler cannot tell which
+member that holds:
+
+```ts nish:err NL2508
+enum Kind {
+  Scalar,
+  Array,
+}
+
+class ArrayNode {
+  readonly kind: Kind.Array = Kind.Scalar;
+}
+```
+
+Reading the slot gives you a `Kind`, so it compares, switches and passes
+anywhere a `Kind` does. The reference's [Enums](../../LANGUAGE.md#enums)
+section has every rule.

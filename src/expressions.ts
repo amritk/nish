@@ -243,6 +243,9 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (recordRangeEntry(ctx, expr, computed, entry)) {
     return entry
   }
+  if (ctx.table.isEnumMemberType(want)) {
+    return enterMember(ctx, expr, computed, want)
+  }
   const type = readAsBase(ctx, computed, keepsRange)
   if (coercesTo(ctx, type, want)) {
     const target = ctx.table.stripNull(want)
@@ -290,6 +293,41 @@ export const recordRangeEntry = (ctx: CheckContext, node: Node, from: i32, to: i
 }
 
 /** A ranged type read as its base, `i32`, unless the place keeps the range. */
+/**
+ * A value checked into a slot of an enum member type, `Kind.Array`, which
+ * holds that one member: a value already of the member type, or the member's
+ * own constant, which is then recorded as the member type. The constant is
+ * still the enum's integer to the emitter (`isEnumMember`), so the IR is the
+ * enum's. Anything else, the enum's other members and an enum value that is
+ * not a constant among them, is refused here, once, for every kind of slot.
+ */
+const enterMember = (ctx: CheckContext, expr: Node, computed: i32, member: i32): i32 => {
+  ctx.program.nodeTypes[expr.id] = computed
+  if (computed === T_ERROR || computed === member) {
+    return computed
+  }
+  const constant = ctx.program.isEnumMember(ctx.table, expr)
+  if (
+    constant &&
+    computed === ctx.table.refOf(member) &&
+    ctx.program.nodeEnumValues[expr.id] === ctx.table.memberValue(member)
+  ) {
+    ctx.program.nodeTypes[expr.id] = member
+    return member
+  }
+  const got = constant
+    ? `\`${ctx.table.typeName(computed)}.${expr.text}\``
+    : `a value of type \`${ctx.table.typeName(computed)}\``
+  ctx.program.nodeTypes[expr.id] = T_ERROR
+  return ctx.errorType(expr, memberSlotMessage(ctx, member, got))
+}
+
+/** NL2508, for a slot of the member type `member` given `got`, already spelled. */
+export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): string => {
+  const spelled = ctx.table.typeName(member)
+  return `Type \`${spelled}\` holds only the member \`${spelled}\`, got ${got}`
+}
+
 const readAsBase = (ctx: CheckContext, type: i32, keepsRange: boolean): i32 =>
   keepsRange ? type : ctx.table.baseOf(type)
 

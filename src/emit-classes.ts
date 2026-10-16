@@ -42,7 +42,7 @@ import { numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { emitStringLength, emitStringMethodCall } from "./emit-strings"
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
-import { N_FALSE, N_NULL, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
+import { N_FALSE, N_MEMBER, N_NULL, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
 import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID } from "./types"
@@ -140,6 +140,9 @@ export const initializerConstant = (emitter: Emitter, field: FieldInfo): string 
   if (literal.kind === N_TEMPLATE) {
     // A template with no holes is a string literal; its one text part is the value.
     return emitter.stringConstant(literal.children.length > 0 ? literal.children[0].text : "")
+  }
+  if (literal.kind === N_MEMBER) {
+    return `${field.initializerValue}` // `Kind.Array`, folded by the checker
   }
   if (isFloat(field.type)) {
     const value = numericLiteralValue(literal.text)

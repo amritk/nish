@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1019 programs, 102128 dump lines.
+# 1021 programs, 102183 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -14455,6 +14455,46 @@ function test(): i32 -> @test [exported]
   callee 51:17 heaviest -> @heaviest
   callee 51:35 scale -> @scale
   callee 51:55 weight -> @weight
+program tests/cases/enum_member_type.ts
+module tests/cases/enum_member_type.ts (entry)
+struct ScalarNode (interface) size=8 align=4
+  field kind: Kind.Scalar index=0 offset=0 readonly
+  field width: i32 index=1 offset=4
+struct ArrayNode (class) size=8 align=4
+  field kind: Kind.Array index=0 offset=0 readonly initialized
+  field items: i32 index=1 offset=4
+  constructor -> @ArrayNode.constructor
+function ArrayNode.constructor(this: ArrayNode, items: i32): void -> @ArrayNode.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: items
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function weight(k: Kind): i32 -> @weight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function missing(): Kind.Missing -> @missing
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function keep(k: Kind.Array): Kind.Array -> @keep
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: ArrayNode.constructor keep missing nish_panic_overflow weight
+  stackSites=2 stackLocals=2
+  local 42:9 s: ScalarNode (const)
+  local 43:9 a: ArrayNode (const)
+  callee 43:13 new ArrayNode -> @ArrayNode.constructor
+  local 44:9 m: Kind.Missing (const)
+  callee 44:27 missing -> @missing
+  local 45:9 tag: Kind.Array (const)
+  callee 45:15 keep -> @keep
+  local 46:9 same: i32 (const)
+  callee 47:10 weight -> @weight
+  callee 47:27 weight -> @weight
+  callee 47:44 weight -> @weight
 program tests/cases/export_fn.ts
 module tests/cases/export_fn.ts (entry)
 function double(n: i32): i32 -> @double [exported]
@@ -78929,6 +78969,23 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
+program docs/cookbook/decl-enum-member.ts
+module docs/cookbook/decl-enum-member.ts (entry)
+struct Loop (class) size=8 align=4
+  field kind: Kind.While index=0 offset=0 readonly initialized
+  field depth: i32 index=1 offset=4 initialized
+function weight(k: Kind): i32 -> @weight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 weight
+  stackSites=1 stackLocals=1
+  local 24:9 loop: Loop (const)
+  local 25:9 k: Kind.While (const)
+  callee 26:27 weight -> @weight
 program docs/cookbook/decl-enum.ts
 module docs/cookbook/decl-enum.ts (entry)
 function weight(k: Kind): i32 -> @weight

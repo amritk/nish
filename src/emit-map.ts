@@ -146,7 +146,7 @@ const hashOf = (emitter: Emitter, key: i32, value: string): string => {
   if (bits === 64) {
     return fmix64(emitter, value)
   }
-  if (bits === 32 || emitter.table.isEnum(key)) {
+  if (bits === 32 || emitter.table.enumBase(key) >= 0) {
     return fmix32(emitter, value)
   }
   if (bits > 0 || key === T_BOOL) {

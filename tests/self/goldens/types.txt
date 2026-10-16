@@ -55,6 +55,9 @@ type 50 Node[] | null | %struct.nish_array* | 8 00000 0
 type 51 i32[][] | %struct.nish_array* | 8 10000 0
 type 52 Node | null[] | %struct.nish_array* | 8 10000 0
 type 53 i32[][] | null | %struct.nish_array* | 8 00000 0
+type 54 Kind.Scalar | i32 | 4 00000 0
+type 55 Kind.Array | i32 | 4 00000 0
+type 56 Level.High | i32 | 4 00000 0
 assignable 0 0
 assignable 1 1
 assignable 2 2
@@ -129,6 +132,12 @@ assignable 51 51
 assignable 51 53
 assignable 52 52
 assignable 53 53
+assignable 54 13
+assignable 54 54
+assignable 55 13
+assignable 55 55
+assignable 56 14
+assignable 56 56
 intern array 1
 intern struct 1
 intern enum 1
@@ -137,7 +146,11 @@ intern nullable 1
 strip 1
 strip plain 1
 distinct 0
-table size 56
+intern member 1
+member not enum 0
+member mangle em.p1.en$Kind en$Kind
+member base 1
+table size 59
 error name error
 error to i32 1
 error from i32 1
