@@ -2394,9 +2394,12 @@ const checkBody = (
 //   - R2: `m.lock()` is only the initialiser of a `using` declaration, whose
 //     block releases the lock at every exit (`src/emit-parallel.ts`);
 //   - R3 and R4: a guard is only `g.value`, and what is derived from it is
-//     only the base of another access, a scalar read, or a scalar store into
-//     a field or an element that already exists: nothing derived from it
-//     outlives the block, and nothing a task's arena holds is stored into it;
+//     only the base of another access, a scalar or string read, or a scalar or
+//     string store into a field or an element that already exists: nothing
+//     derived from it outlives the block, and nothing a task's arena holds is
+//     stored into it. A string is the one pointer that crosses, by copy: a
+//     store keeps a copy the `Mutex` owns (`nish_guard_keep`), and a read
+//     answers a copy in the reader's arena (`Emitter.guardedRead`);
 //   - R5: inside a guard's block, directly or through any call, no second
 //     lock, no scope, no `spawn` and no data-parallel call, so one lock is
 //     held at a time and nothing is waited on while it is held: a program
@@ -2573,12 +2576,13 @@ const guardUseMessage = (name: string): string =>
 
 const guardDerivedMessage = (table: TypeTable, type: i32): string =>
   `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
-  "element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock"
+  "element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, " +
+  "would outlive the block that holds the lock"
 
 const guardStoreMessage = (table: TypeTable, type: i32): string =>
-  `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\` or ` +
-  "an enum, into a field or an element that already exists: anything else is a pointer, which may point into " +
-  "a task's arena, freed when the task is joined"
+  `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\`, an enum ` +
+  "or a `string`, which the store copies, into a field or an element that already exists: anything else is a " +
+  "pointer, which may point into a task's arena, freed when the task is joined"
 
 const guardMethodMessage = (name: string): string =>
   `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
@@ -2932,7 +2936,8 @@ const walkMutexes = (
       parent.kind === N_MEMBER &&
       above !== null &&
       above.kind === N_CALL &&
-      above.children[0] === parent
+      above.children[0] === parent &&
+      type !== T_STRING
     ) {
       out.push(new ScopeFinding(above, guardMethodMessage(parent.text)))
     } else if (base) {
@@ -2940,10 +2945,10 @@ const walkMutexes = (
     } else if (isStoreTarget(at, parents, depth)) {
       // A store's target has no type of its own in the tables; what is stored is the value's.
       const stored = parent.kind === N_BINARY ? program.nodeTypes[parent.children[1].id] : type
-      if (stored >= 0 && !isScalarArgument(table, stored)) {
+      if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
         out.push(new ScopeFinding(parent, guardStoreMessage(table, stored)))
       }
-    } else if (type >= 0 && !isScalarArgument(table, type)) {
+    } else if (type >= 0 && !isScalarArgument(table, type) && type !== T_STRING) {
       out.push(new ScopeFinding(node, guardDerivedMessage(table, type)))
       return
     }
@@ -3238,7 +3243,7 @@ export const channelCapacityMessage = (): string =>
   "scope's tasks run one at a time and nothing would drain a channel that was full"
 
 const channelElementMessage = (table: TypeTable, type: i32): string =>
-  `A \`Channel\` carries a number, a \`boolean\`, an enum or a \`string\`, and this one would carry ` +
+  "A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry " +
   `\`${table.typeName(type)}\`: a sender's arena is freed when its scope joins, and only a string is copied ` +
   "out of it on the way, so anything else would point into freed memory"
 

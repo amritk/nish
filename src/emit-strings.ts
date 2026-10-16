@@ -150,6 +150,23 @@ const newString = (emitter: Emitter, bytes: string, n: string): string =>
   emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`)
 
 /**
+ * A copy of `str` in the current arena: what a read of a string through a
+ * `Mutex`'s guard answers (WP29 §4.3, R4), since the block the guard's slot
+ * points at is freed by the next store through it.
+ */
+export const copyString = (emitter: Emitter, str: string): string =>
+  newString(emitter, stringData(emitter, str), loadStringLength(emitter, str))
+
+/**
+ * What a store of `value` through a guard puts in the slot that held `old`: a
+ * copy in a block the `Mutex` owns, made by `nish_guard_keep`, which frees
+ * `old` when it is a copy it made (WP29 §4.3, R4). The task that stores may
+ * have made `value` in its arena, which is freed when it is joined.
+ */
+export const guardKeep = (emitter: Emitter, old: string, value: string): string =>
+  emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_guard_keep")}(i8* ${old}, i8* ${value})`)
+
+/**
  * The range check of `s.slice(from, to)`: `0 <= from <= to <= len`, or a cold
  * block that panics and never returns.
  *

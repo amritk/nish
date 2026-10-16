@@ -41,8 +41,8 @@ import {
 import { isAssignmentOperator, isUncheckedAccess, unwrapParens } from "./emit-util"
 import { emitWalk } from "./emit-map"
 import { emitChannelWalk } from "./emit-parallel"
-import { isChannelReader } from "./parallel"
-import { emitSliceCheck } from "./emit-strings"
+import { isChannelReader, isGuardedAccess } from "./parallel"
+import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
 import {
@@ -1232,7 +1232,13 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
   if (expr.text === "=") {
     const value = emitter.emitExpression(expr.children[1])
     emitBoundsCheck(emitter, base, idx, target)
-    storeElement(emitter, elementPointer(emitter, base, elem, idx), elem, value)
+    const at = elementPointer(emitter, base, elem, idx)
+    if (elem === T_STRING && isGuardedAccess(emitter.program, emitter.table, target)) {
+      const old = emitter.fn.emitValue(`load i8*, i8** ${at}${emitter.alignSuffix(elem)}`)
+      storeElement(emitter, at, elem, guardKeep(emitter, old, value))
+      return value
+    }
+    storeElement(emitter, at, elem, value)
     return value
   }
   // The array and the index were evaluated once, above; the check and the GEP

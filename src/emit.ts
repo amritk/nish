@@ -115,8 +115,15 @@ import {
   isSpawnTaskCall,
   openScope,
 } from "./emit-parallel"
-import { CaptureSlot, capturesOf, isAtomicMethod, isChannelSend, isLockMethod } from "./parallel"
-import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
+import {
+  CaptureSlot,
+  capturesOf,
+  isAtomicMethod,
+  isChannelSend,
+  isGuardedAccess,
+  isLockMethod,
+} from "./parallel"
+import { addStringConstant, copyString, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
@@ -183,7 +190,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { resolveTarget, targetHeader } from "./target"
-import { T_VOID, TypeTable } from "./types"
+import { T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -1304,9 +1311,9 @@ export class Emitter {
       case N_NEW:
         return emitNew(this, expr)
       case N_MEMBER:
-        return this.emitMember(expr)
+        return this.guardedRead(expr, this.emitMember(expr))
       case N_INDEX:
-        return emitElementAccess(this, expr)
+        return this.guardedRead(expr, emitElementAccess(this, expr))
       case N_ARRAY:
         return emitArrayLiteral(this, expr)
       case N_OBJECT:
@@ -1354,6 +1361,18 @@ export class Emitter {
 
   emitBinaryExpression(expr: Node): string {
     return isAssignmentOperator(expr.text) ? emitAssignment(this, expr) : emitBinary(this, expr)
+  }
+
+  /**
+   * `value`, the read `expr` made, or its copy in this arena when `expr` reads
+   * a string through a guard (WP29 §4.3, R4): the guard's slot holds a block
+   * the next store through it frees, so the reader keeps a copy of its own.
+   */
+  guardedRead(expr: Node, value: string): string {
+    if (this.typeOf(expr) !== T_STRING || !isGuardedAccess(this.program, this.table, expr)) {
+      return value
+    }
+    return copyString(this, value)
   }
 
   emitMember(expr: Node): string {
