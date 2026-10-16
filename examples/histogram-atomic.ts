@@ -1,20 +1,22 @@
-// A histogram four tasks fill at once, one atomic increment per value
-// (docs/LANGUAGE.md, "Atomics"). Each bin is an `AtomicI32`, and a task adds
-// to the bin a value falls in with `add(1)`, a single indivisible
-// read-modify-write: no lock, no guard, and no increment lost to a race.
+// A histogram four tasks fill at once (docs/LANGUAGE.md, "Atomics"). Each bin
+// is an `AtomicI32`. A task counts its own values into a local `i32[]` that no
+// other core touches, then adds each local count to its bin with one `add`, a
+// single indivisible read-modify-write: 256 atomic adds per task instead of one
+// per value, no lock, and no increment lost to a race.
 //
 // Adding to a bin commutes, so the bins come out the same whatever order the
-// tasks' increments landed in, natively on four threads and under Node, which
-// runs each task at its `spawn`. That is the program's obligation, not the
+// tasks' adds landed in, natively on four threads and under Node, which runs
+// each task at its `spawn`. That is the program's obligation, not the
 // compiler's: an update that does not commute (a `store`, an `exchange`) would
 // leave an answer that depends on the schedule.
 //
 //   nish examples/histogram-atomic.ts --link build/histogram-atomic
-//   ./build/histogram-atomic              four tasks, an AtomicI32 per bin
+//   ./build/histogram-atomic              four tasks, local counts, one add per bin
+//   ./build/histogram-atomic --per-value  four tasks, one atomic add per value
 //   ./build/histogram-atomic --lock       four tasks, one Mutex taken per value
 //   ./build/histogram-atomic --single     one thread, a plain i32 per bin
 //   ./build/histogram-atomic --lock 7     any mode, with its seeds moved by 7
-// All three print the same lines for the same seed. Under Node (`using` needs
+// All four print the same lines for the same seed. Under Node (`using` needs
 // `--js-explicit-resource-management` before Node 24):
 //   node --js-explicit-resource-management --experimental-strip-types \
 //     --import ./runtime/nish.mjs -e 'import("./examples/histogram-atomic.ts").then((m) => m.main())'
@@ -41,11 +43,34 @@ class Shard {
 }
 
 /**
- * Bins a shard by the top eight bits of each value, one atomic increment per
- * value. The values come from Marsaglia's xorshift32, shifts and xors only, so
- * they wrap the same way natively and under Node.
+ * Bins a shard by the top eight bits of each value into a local tally, then
+ * adds the tally to the shared bins, one atomic add per bin. The values come
+ * from Marsaglia's xorshift32, shifts and xors only, so they wrap the same way
+ * natively and under Node.
  */
 const binShard = (s: Shard): i32 => {
+  const local: i32[] = []
+  for (let b: i32 = 0; b < BINS; b++) {
+    local.push(ZERO)
+  }
+  let x: i32 = s.seed
+  for (let i: i32 = 0; i < s.n; i++) {
+    x = x ^ (x << 13)
+    x = x ^ (x >>> 17)
+    x = x ^ (x << 5)
+    const bin: i32 = x >>> 24
+    if (bin < toI32(local.length)) {
+      local[bin] += 1
+    }
+  }
+  for (let b = 0; b < local.length; b++) {
+    s.bins[b].add(local[b])
+  }
+  return s.n
+}
+
+/** The same values, one atomic increment per value: every task contends for the bins. */
+const binPerValue = (s: Shard): i32 => {
   let x: i32 = s.seed
   for (let i: i32 = 0; i < s.n; i++) {
     x = x ^ (x << 13)
@@ -139,10 +164,15 @@ const round = (mode: string, first: i32): i32[] => {
       bins.push(new AtomicI32(0))
     }
     const binned: i32[] = [0, 0, 0, 0]
+    const perValue = mode === "--per-value"
     {
       using s = scope()
       for (let t: i32 = 0; t < TASKS; t++) {
-        s.spawn(binShard, new Shard(first + t, PER_TASK, bins), binned, t)
+        if (perValue) {
+          s.spawn(binPerValue, new Shard(first + t, PER_TASK, bins), binned, t)
+        } else {
+          s.spawn(binShard, new Shard(first + t, PER_TASK, bins), binned, t)
+        }
       }
     }
     for (let b = 0; b < bins.length; b++) {
@@ -158,7 +188,7 @@ export const main = (): i32 => {
   let shift: i32 = 0
   for (let i = 1; i < args.length; i++) {
     const arg = args[i]
-    if (arg === "--lock" || arg === "--single") {
+    if (arg === "--lock" || arg === "--single" || arg === "--per-value") {
       mode = arg
     } else {
       shift = parseInt(arg)

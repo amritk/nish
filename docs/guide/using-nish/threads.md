@@ -392,7 +392,9 @@ export const main = (): i32 => {
 
 When what tasks share is a counter, or one per bin of a histogram, an atomic
 is cheaper than a lock. Each method is one indivisible step, so no update is
-lost when two threads make one at the same moment:
+lost when two threads make one at the same moment. The fast pattern is the one
+below: each task counts into its own local array, then adds each count to the
+shared atomic once, at its end:
 
 ```ts nish:ok
 import { AtomicI32, parallelMapInto, scope } from "nish/threads";
@@ -407,9 +409,15 @@ class Shard {
 }
 
 const binShard = (s: Shard): i32 => {
+  const local: i32[] = [0, 0, 0, 0]; // this task's own counts
   for (const x of s.xs) {
     const bin: i32 = x & 3;
-    s.bins[bin].add(1); // one indivisible increment, no lock
+    if (bin < local.length) {
+      local[bin] += 1;
+    }
+  }
+  for (let b = 0; b < local.length; b++) {
+    s.bins[b].add(local[b]); // one indivisible add per bin, no lock
   }
   return 0;
 };
@@ -447,9 +455,11 @@ export const main = (): i32 => {
   would print differently natively and under Node.
 - **An `AtomicI64` holds an `i64`.** Under Node that is a `bigint`, so pass it
   `i64` values.
-- **It is cheaper than a lock, not free.** Four tasks incrementing the same
-  few counters still wait on each other's cores; when the work allows it, count
-  into a local tally and add it once at the end.
+- **Update it once per batch, not once per value.** An atomic is cheaper than
+  a lock, not free: four tasks incrementing the same few counters wait on each
+  other's cores. Binning 32 million values into 256 bins on four cores
+  (`examples/histogram-atomic.ts`) takes 25 ms with a local tally and one `add`
+  per bin, 75 ms on one thread, and 676 ms with one `add` per value.
 
 ```ts nish:err NL2512
 import { AtomicI32, scope } from "nish/threads";

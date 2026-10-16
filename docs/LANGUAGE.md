@@ -3292,8 +3292,11 @@ refuses anything that could tell the two orders apart.
 An atomic is one integer a scope's tasks, and the bodies of the data-parallel
 forms, update at once without a lock: each method is a single indivisible
 operation on the word, so no update is lost to a race and none waits for
-another. Where a `Mutex` guards a whole value, an atomic guards one counter,
-and a histogram of them takes no lock per value.
+another. Where a `Mutex` guards a whole value, an atomic guards one counter.
+The fast way to use one is the example's: each task counts into a local tally
+no other core touches and adds it to the shared counters once, at its end, so
+the atomics see one update per bin per task rather than one per value
+("Measured", below).
 
 ```typescript
 import { AtomicI32, parallelMapInto, scope } from "nish/threads";
@@ -3308,9 +3311,15 @@ class Shard {
 }
 
 const binShard = (s: Shard): i32 => {
+  const local: i32[] = [0, 0, 0, 0]; // this task's own counts: no core shares them
   for (const x of s.xs) {
     const bin: i32 = x & 3;
-    s.bins[bin].add(1);              // one indivisible increment, no lock
+    if (bin < local.length) {
+      local[bin] += 1;
+    }
+  }
+  for (let b = 0; b < local.length; b++) {
+    s.bins[b].add(local[b]);         // one indivisible add per bin, no lock
   }
   return 0;
 };
@@ -3415,13 +3424,14 @@ does not try to prove it.
 
 **Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
 round into 256 bins, four rounds, on four tasks. On a four-core machine, over
-seven interleaved rounds whose seeds move every round, the medians are: the
-`AtomicI32`-per-bin version 687 ms (a byte-identical copy of it, the noise
-band, 682 ms, its runs 654–705 ms), the same program taking one `Mutex` per
-value 5,462 ms (7.9× slower), and one thread binning into plain counters 77 ms
-(8.9× faster). An increment every task contends for is far cheaper than a
-lock, and still far dearer than a counter no other core touches: batch into a
-local tally, as `examples/histogram.ts` does, when the work allows it.
+seven interleaved rounds whose seeds move every round, the medians are: each
+task counting into a local tally and adding it with one `add` per bin, 25 ms
+(a byte-identical copy of it, the noise band, 23 ms, its runs 22–32 ms); one
+thread binning into plain counters, 75 ms (3.0× slower); one atomic `add` per
+value, 676 ms (27× slower), because every increment contends for a cache line
+another core is writing; and one `Mutex` taken per value, 6,487 ms. An atomic
+is far cheaper than a lock and still far dearer than a counter no other core
+touches: update it once per batch, not once per value.
 
 ### Channels: `Channel<T>`
 

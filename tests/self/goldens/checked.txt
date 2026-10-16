@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1023 programs, 104529 dump lines.
+# 1023 programs, 104567 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -53182,21 +53182,33 @@ function Shard.constructor(this: Shard, seed: i32, n: i32, bins: AtomicI32[]): v
   pointer bins: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function binShard(s: Shard): i32 -> @binShard$
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish.AtomicI32.add nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow
+  pointer s: size=16 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 52:9 local: i32[] (const)
+  local 53:12 b: i32 (let)
+  local 56:7 x: i32 (let)
+  local 57:12 i: i32 (let)
+  local 61:11 bin: i32 (const)
+  local 66:12 b: i32 (let)
+  callee 67:5 AtomicI32.add -> @nish.AtomicI32.add
+function binPerValue(s: Shard): i32 -> @binPerValue$
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.AtomicI32.add nish_panic_index
   pointer s: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 49:7 x: i32 (let)
-  local 50:12 i: i32 (let)
-  local 54:11 bin: i32 (const)
-  callee 55:5 AtomicI32.add -> @nish.AtomicI32.add
+  local 74:7 x: i32 (let)
+  local 75:12 i: i32 (let)
+  local 79:11 bin: i32 (const)
+  callee 80:5 AtomicI32.add -> @nish.AtomicI32.add
 function Hist.constructor(this: Hist): void -> @Hist.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: 67:7
+  sharedWrite: 92:7
   calls: nish_array_grow
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 66:14 b: i32 (let)
+  local 91:14 b: i32 (let)
 function LockedShard.constructor(this: LockedShard, seed: i32, n: i32, hist: Mutex<Hist>): void -> @LockedShard.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: hist n seed
@@ -53208,69 +53220,72 @@ function binLocked(s: LockedShard): i32 -> @binLocked$
   calls: nish.Mutex$$Hist.lock nish_panic_index nish_panic_overflow
   pointer s: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 86:7 x: i32 (let)
-  local 87:12 i: i32 (let)
-  local 91:11 bin: i32 (const)
-  local 92:11 g: MutexGuard<Hist> (const)
-  callee 92:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
+  local 111:7 x: i32 (let)
+  local 112:12 i: i32 (let)
+  local 116:11 bin: i32 (const)
+  local 117:11 g: MutexGuard<Hist> (const)
+  callee 117:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
 function binPlain(seed: i32, n: i32, bins: i32[]): i32 -> @binPlain
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 107:7
+  sharedWrite: 132:7
   escaping: n seed
   calls: nish_panic_overflow
   pointer bins: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 100:7 x: i32 (let)
-  local 101:12 i: i32 (let)
-  local 105:11 bin: i32 (const)
+  local 125:7 x: i32 (let)
+  local 126:12 i: i32 (let)
+  local 130:11 bin: i32 (const)
 function round(mode: string, first: i32): i32[] -> @round$
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 118:7
-  calls: Hist.constructor LockedShard.constructor Shard.constructor binPlain nish.AtomicI32.constructor nish.AtomicI32.load nish.Mutex$$Hist.constructor nish.Mutex$$Hist.lock nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard nish.scope nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq
+  sharedWrite: 143:7
+  calls: Hist.constructor LockedShard.constructor Shard.constructor binPlain nish.AtomicI32.constructor nish.AtomicI32.load nish.Mutex$$Hist.constructor nish.Mutex$$Hist.lock nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard nish.scope nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq
   stackSites=0 stackLocals=0
-  local 115:9 out: i32[] (const)
-  local 117:14 b: i32 (let)
-  local 120:14 t: i32 (let)
-  callee 121:7 binPlain -> @binPlain
-  local 124:11 hist: Mutex<Hist> (const)
-  callee 124:18 new Mutex<Hist> -> @nish.Mutex$$Hist.constructor
-  callee 124:34 new Hist -> @Hist.constructor
-  local 125:11 binned: i32[] (const)
-  local 127:13 s: ThreadScope (const)
-  callee 127:17 scope -> @nish.scope
-  local 128:16 t: i32 (let)
-  callee 129:9 ThreadScope.spawn<LockedShard, i32, binLocked> -> @nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked
-  callee 129:28 new LockedShard -> @LockedShard.constructor
-  local 132:11 g: MutexGuard<Hist> (const)
-  callee 132:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
-  local 133:14 b: i32 (let)
-  local 137:11 bins: AtomicI32[] (const)
-  local 138:14 b: i32 (let)
-  callee 139:17 new AtomicI32 -> @nish.AtomicI32.constructor
-  local 141:11 binned: i32[] (const)
-  local 143:13 s: ThreadScope (const)
-  callee 143:17 scope -> @nish.scope
-  local 144:16 t: i32 (let)
-  callee 145:9 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
-  callee 145:27 new Shard -> @Shard.constructor
-  local 148:14 b: i32 (let)
-  callee 149:16 AtomicI32.load -> @nish.AtomicI32.load
+  local 140:9 out: i32[] (const)
+  local 142:14 b: i32 (let)
+  local 145:14 t: i32 (let)
+  callee 146:7 binPlain -> @binPlain
+  local 149:11 hist: Mutex<Hist> (const)
+  callee 149:18 new Mutex<Hist> -> @nish.Mutex$$Hist.constructor
+  callee 149:34 new Hist -> @Hist.constructor
+  local 150:11 binned: i32[] (const)
+  local 152:13 s: ThreadScope (const)
+  callee 152:17 scope -> @nish.scope
+  local 153:16 t: i32 (let)
+  callee 154:9 ThreadScope.spawn<LockedShard, i32, binLocked> -> @nish.ThreadScope.spawn$$LockedShard$i32$fn.9.binLocked
+  callee 154:28 new LockedShard -> @LockedShard.constructor
+  local 157:11 g: MutexGuard<Hist> (const)
+  callee 157:15 Mutex<Hist>.lock -> @nish.Mutex$$Hist.lock
+  local 158:14 b: i32 (let)
+  local 162:11 bins: AtomicI32[] (const)
+  local 163:14 b: i32 (let)
+  callee 164:17 new AtomicI32 -> @nish.AtomicI32.constructor
+  local 166:11 binned: i32[] (const)
+  local 167:11 perValue: boolean (const)
+  local 169:13 s: ThreadScope (const)
+  callee 169:17 scope -> @nish.scope
+  local 170:16 t: i32 (let)
+  callee 172:11 ThreadScope.spawn<Shard, i32, binPerValue> -> @nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue
+  callee 172:32 new Shard -> @Shard.constructor
+  callee 174:11 ThreadScope.spawn<Shard, i32, binShard> -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard
+  callee 174:29 new Shard -> @Shard.constructor
+  local 178:14 b: i32 (let)
+  callee 179:16 AtomicI32.load -> @nish.AtomicI32.load
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via round$
   calls: llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_eq nish_str_from_i32 round$
   stackSites=0 stackLocals=0
-  local 156:9 args: string[] (const)
-  local 157:7 mode: string (let)
-  local 158:7 shift: i32 (let)
-  local 159:12 i: i32 (let)
-  local 160:11 arg: string (const)
-  local 167:7 total: i32 (let)
-  local 168:7 checksum: i32 (let)
-  local 171:12 r: i32 (let)
-  local 172:11 bins: i32[] (const)
-  callee 172:18 round -> @round$
-  local 173:14 b: i32 (let)
+  local 186:9 args: string[] (const)
+  local 187:7 mode: string (let)
+  local 188:7 shift: i32 (let)
+  local 189:12 i: i32 (let)
+  local 190:11 arg: string (const)
+  local 197:7 total: i32 (let)
+  local 198:7 checksum: i32 (let)
+  local 201:12 r: i32 (let)
+  local 202:11 bins: i32[] (const)
+  callee 202:18 round -> @round$
+  local 203:14 b: i32 (let)
 module std/threads.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingSub from "nish:unsafe" -> builtin wrappingSub
@@ -53453,6 +53468,19 @@ function ThreadScope.spawn<LockedShard, i32, binLocked>(this: ThreadScope, entry
   callee 296:7 binLocked -> @binLocked$
   callee 300:7 slotOutOfRange -> @nish.slotOutOfRange
   callee 302:5 runTask<LockedShard, i32, binLocked> -> @nish.runTask$$LockedShard$i32$fn.9.binLocked
+function ThreadScope.spawn<Shard, i32, binPerValue>(this: ThreadScope, entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$$Shard$i32$fn.11.binPerValue [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.runTask$$Shard$i32$fn.11.binPerValue
+  escaping: arg at dst entry this
+  calls: binPerValue$ nish.runTask$$Shard$i32$fn.11.binPerValue nish.slotOutOfRange nish.slotWritten nish_scope_spawn
+  pointer this: size=4 writesThrough=true captured=true
+  pointer arg: size=16 writesThrough=true captured=true passedTo=binPerValue$#0 nish.runTask$$Shard$i32$fn.11.binPerValue#1
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.runTask$$Shard$i32$fn.11.binPerValue#2
+  stackSites=0 stackLocals=0
+  callee 293:10 slotWritten -> @nish.slotWritten
+  callee 296:7 binPerValue -> @binPerValue$
+  callee 300:7 slotOutOfRange -> @nish.slotOutOfRange
+  callee 302:5 runTask<Shard, i32, binPerValue> -> @nish.runTask$$Shard$i32$fn.11.binPerValue
 function ThreadScope.spawn<Shard, i32, binShard>(this: ThreadScope, entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.ThreadScope.spawn$$Shard$i32$fn.8.binShard [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.runTask$$Shard$i32$fn.8.binShard
@@ -53476,6 +53504,16 @@ function runTask<LockedShard, i32, binLocked>(entry: void, arg: LockedShard, dst
   stackSites=0 stackLocals=0
   callee 247:3 storeResult<i32> -> @nish.storeResult$i32
   callee 247:24 binLocked -> @binLocked$
+function runTask<Shard, i32, binPerValue>(entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.runTask$$Shard$i32$fn.11.binPerValue [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.storeResult$i32
+  escaping: at
+  calls: binPerValue$ nish.storeResult$i32
+  pointer arg: size=16 writesThrough=false captured=false passedTo=binPerValue$#0
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.storeResult$i32#0
+  stackSites=0 stackLocals=0
+  callee 247:3 storeResult<i32> -> @nish.storeResult$i32
+  callee 247:24 binPerValue -> @binPerValue$
 function runTask<Shard, i32, binShard>(entry: void, arg: Shard, dst: i32[], at: i32): void -> @nish.runTask$$Shard$i32$fn.8.binShard [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.storeResult$i32
