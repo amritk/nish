@@ -201,7 +201,7 @@ own source until the seed compiles it, which is the next release.
    `runtime/runtime.c`. Any struct layout change touches `src/runtime.ts` and
    `runtime.c` in the same commit and extends a layout test. Keep each file
    within its budget — every `.text*` section summed, at `-Oz`, under the
-   `*_TEXT_BUDGET` constant `tests/runtime-budgets.js` holds for it (3,606 bytes for
+   `*_TEXT_BUDGET` constant `tests/runtime-budgets.js` holds for it (3,684 bytes for
    `runtime.c` and 1,536 for `runtime-os.c` today; §2 of the master plan, and
    [wp7-runtime.md](wp7-runtime.md) for each measurement, why the ceilings are
    separate and why each moved). `node tests/run.js budget` measures every
