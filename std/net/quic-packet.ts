@@ -48,18 +48,21 @@
  * carries its own Length, and `QuicHeader.end` is where the next packet in the
  * datagram starts. A short header has none, so it runs to the datagram's end.
  *
- * **Secrets are not wiped.** `QuicKeys` holds a packet key, an IV and a
- * header-protection key, and `quicKeys`, `quicKeyUpdateSecret` and the seal
- * and open functions hold traffic secrets and keys in arena memory until that
- * memory is reused. `nish/crypto`'s signers and X25519 now hold their keys as
- * a `Secret` from `nish:secret` and wipe them (ECC-2, X509-7); this module
- * does not yet, and `docs/security/quic.md` records that as QUIC-1. The
- * Initial keys are not secret, because anyone who reads the client's first
- * DCID can derive them (RFC 9001 §5.2); the Handshake and 1-RTT keys are.
- * A connection slot derives into a `QuicKeysSlot` instead (`quicKeysInto`,
+ * **Secrets.** `QuicKeys` holds a packet key, an IV and a header-protection
+ * key, and `quicKeys`, `quicKeysUpdate` and `quicKeyUpdateSecret` hold
+ * traffic secrets and keys in arena memory until that memory is reused.
+ * `nish/crypto`'s signers and X25519 now hold their keys as a `Secret` from
+ * `nish:secret` and wipe them (ECC-2, X509-7); these three do not yet, and
+ * `docs/security/quic.md` records that as QUIC-1. The Initial keys are not
+ * secret, because anyone who reads the client's first DCID can derive them
+ * (RFC 9001 §5.2); the Handshake and 1-RTT keys are. A connection slot
+ * derives into a `QuicKeysSlot` instead (`quicKeysInto`,
  * `quicKeysUpdateInto`, `quicKeyUpdateSecretInto`, `quicInitialSecretsInto`):
- * its keys live in arrays the slot owns, which `QuicKeysSlot.wipe` zeroes,
- * and the derivation's own temporaries go with its arena block.
+ * its keys live in arrays the slot owns, which `QuicKeysSlot.wipe` zeroes
+ * with stores no optimiser removes, AES schedules included, and the
+ * derivation's own temporaries go with its arena block. Sealing and opening
+ * a packet wipe the nonce, which gives the IV away, and the
+ * header-protection mask once each is used (QUIC-2).
  *
  * **Constant time.** The AEADs and the header-protection masks are
  * `nish/crypto/aes` and `nish/crypto/chacha20poly1305`, with their guarantees.
@@ -77,7 +80,16 @@
  * private functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
-import { aesGcmOpen, aesGcmSeal, aesHeaderMask, aesKey, aesKeyInto, AesKey } from "nish/crypto/aes"
+import { wipe } from "nish:secret"
+import {
+  aesGcmOpen,
+  aesGcmSeal,
+  aesHeaderMask,
+  aesKey,
+  aesKeyInto,
+  aesKeyWipe,
+  AesKey,
+} from "nish/crypto/aes"
 import { chacha20HeaderMask, chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import { timingSafeEqual } from "nish/crypto/ct"
 import {
@@ -1095,8 +1107,8 @@ export class QuicKeysSlot {
 
   /**
    * Zeroes every key the slot holds: the keys and the IV with `secureZero`,
-   * the AES schedules' `u64` words with ordinary stores, which stand because
-   * the schedules stay reachable for the next derivation to fill.
+   * and each AES schedule with `aesKeyWipe`, whose volatile stores reach the
+   * whole of `roundKeys` (the kernels' powers of H included) and H itself.
    */
   wipe(): void {
     secureZero(this.key16)
@@ -1104,21 +1116,11 @@ export class QuicKeysSlot {
     secureZero(this.hp16)
     secureZero(this.hp32)
     secureZero(this.keys.iv)
-    quicPacketClearAes(this.packet128)
-    quicPacketClearAes(this.packet256)
-    quicPacketClearAes(this.hp128)
-    quicPacketClearAes(this.hp256)
+    aesKeyWipe(this.packet128)
+    aesKeyWipe(this.packet256)
+    aesKeyWipe(this.hp128)
+    aesKeyWipe(this.hp256)
   }
-}
-
-/** Zeroes an AES key schedule and its GCM hash key with ordinary stores (see `QuicKeysSlot.wipe`). */
-const quicPacketClearAes = (key: AesKey): void => {
-  const words: u64[] = key.roundKeys
-  for (let k: i32 = 0; k < toI32(words.length); k += 1) {
-    words[k] = 0
-  }
-  key.h[0] = 0
-  key.h[1] = 0
 }
 
 /** Points `slot.keys` at the arrays `aead` needs: the packet key and its schedule, and the header-protection ones. */
@@ -1376,12 +1378,17 @@ export const quicSealInPlace = (
   const payloadAt: i32 = start + headerLength
   {
     using _scope = arena()
+    // The nonce is the IV with a public number XORed in, so it gives the IV
+    // away, and the mask is the header-protection key's keystream: both are
+    // wiped once used, before the arena block takes them back.
+    const nonce: u8[] = quicPacketNonce(keys, packetNumber)
     const sealed: u8[] | null = quicPacketSeal(
       keys,
-      quicPacketNonce(keys, packetNumber),
+      nonce,
       quicPacketSlice(buf, start, payloadAt),
       quicPacketSlice(buf, payloadAt, payloadAt + payloadLength)
     )
+    wipe(nonce)
     if (sealed === null || payloadAt + toI32(sealed.length) > toI32(buf.length)) {
       return -1
     }
@@ -1391,14 +1398,21 @@ export const quicSealInPlace = (
       keys,
       quicPacketSlice(buf, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
     )
-    if (mask === null || toI32(mask.length) < 5) {
+    if (mask === null) {
       return -1
     }
-    buf[start] = toU8(first ^ (toI32(mask[0]) & quicPacketProtectedBits(first)))
-    for (let k: i32 = 0; k < pnLength && k + 1 < toI32(mask.length); k += 1) {
-      if (pnOffset + k >= 0 && pnOffset + k < toI32(buf.length)) {
-        buf[pnOffset + k] = buf[pnOffset + k] ^ mask[k + 1]
+    const masked: boolean = toI32(mask.length) >= 5
+    if (masked) {
+      buf[start] = toU8(first ^ (toI32(mask[0]) & quicPacketProtectedBits(first)))
+      for (let k: i32 = 0; k < pnLength && k + 1 < toI32(mask.length); k += 1) {
+        if (pnOffset + k >= 0 && pnOffset + k < toI32(buf.length)) {
+          buf[pnOffset + k] = buf[pnOffset + k] ^ mask[k + 1]
+        }
       }
+    }
+    wipe(mask)
+    if (!masked) {
+      return -1
     }
   }
   return end
@@ -1487,13 +1501,16 @@ export const quicUnprotectHeader = (
     keys,
     quicPacketSlice(datagram, sampleAt, sampleAt + QUIC_SAMPLE_SIZE)
   )
-  if (mask === null || toI32(mask.length) < 5) {
+  if (mask === null) {
     packet.error = QUIC_ERR_KEYS
     return []
   }
+  const usable: boolean = toI32(mask.length) >= 5
   const protectedFirst: i32 = toI32(datagram[header.start])
   const long: boolean = (protectedFirst & 0x80) !== 0
-  const first: i32 = protectedFirst ^ (toI32(mask[0]) & quicPacketProtectedBits(protectedFirst))
+  const first: i32 = usable
+    ? protectedFirst ^ (toI32(mask[0]) & quicPacketProtectedBits(protectedFirst))
+    : protectedFirst
   const pnLength: i32 = (first & 3) + 1
   // The sample check above put 20 bytes after `pnOffset` inside the packet,
   // so the packet number's at most 4 are there too.
@@ -1507,6 +1524,13 @@ export const quicUnprotectHeader = (
       clear[at] = b
       truncated = (truncated << 8) | toI64(b)
     }
+  }
+  // The mask is the header-protection key's keystream: wiped once used, on
+  // the one path every mask takes, so that `-O2` counts this wipe alone.
+  wipe(mask)
+  if (!usable) {
+    packet.error = QUIC_ERR_KEYS
+    return []
   }
   packet.firstByte = first
   packet.pnLength = pnLength
@@ -1562,12 +1586,15 @@ export const quicDecryptPayload = (
     return null
   }
   const payloadStart: i32 = header.start + toI32(clear.length)
+  // The nonce gives the IV away (see `quicSealInPlace`): wiped once used.
+  const nonce: u8[] = quicPacketNonce(keys, packet.packetNumber)
   const plain: u8[] | null = quicPacketOpen(
     keys,
-    quicPacketNonce(keys, packet.packetNumber),
+    nonce,
     clear,
     quicPacketSlice(datagram, payloadStart, header.end)
   )
+  wipe(nonce)
   if (plain === null) {
     packet.error = QUIC_ERR_DECRYPT
     return null
