@@ -1,0 +1,74 @@
+PASS  AES-128-GCM: the open connection holds both directions' keys, the resumption and exporter secrets
+PASS  AES-128-GCM: a record whose tag does not verify fails the connection
+PASS  AES-128-GCM: the fatal bad_record_mac is sealed under the write keys before they go
+PASS  AES-128-GCM: after fail the read direction and the client's traffic secret read zero
+PASS  AES-128-GCM: and the write direction and the server's
+PASS  AES-128-GCM: and every secret TlsServer holds, the resumption master secret included
+PASS  AES-128-GCM: a stream cut off without close_notify fails the connection
+PASS  AES-128-GCM: and every key the slot and its TlsServer hold reads zero
+PASS  AES-128-GCM: abort fails the connection
+PASS  AES-128-GCM: and every key reads zero after it too
+PASS  AES-256-GCM: the open connection holds both directions' keys, the resumption and exporter secrets
+PASS  AES-256-GCM: a record whose tag does not verify fails the connection
+PASS  AES-256-GCM: the fatal bad_record_mac is sealed under the write keys before they go
+PASS  AES-256-GCM: after fail the read direction and the client's traffic secret read zero
+PASS  AES-256-GCM: and the write direction and the server's
+PASS  AES-256-GCM: and every secret TlsServer holds, the resumption master secret included
+PASS  AES-256-GCM: a stream cut off without close_notify fails the connection
+PASS  AES-256-GCM: and every key the slot and its TlsServer hold reads zero
+PASS  AES-256-GCM: abort fails the connection
+PASS  AES-256-GCM: and every key reads zero after it too
+PASS  ChaCha20-Poly1305: the open connection holds both directions' keys, the resumption and exporter secrets
+PASS  ChaCha20-Poly1305: a record whose tag does not verify fails the connection
+PASS  ChaCha20-Poly1305: the fatal bad_record_mac is sealed under the write keys before they go
+PASS  ChaCha20-Poly1305: after fail the read direction and the client's traffic secret read zero
+PASS  ChaCha20-Poly1305: and the write direction and the server's
+PASS  ChaCha20-Poly1305: and every secret TlsServer holds, the resumption master secret included
+PASS  ChaCha20-Poly1305: a stream cut off without close_notify fails the connection
+PASS  ChaCha20-Poly1305: and every key the slot and its TlsServer hold reads zero
+PASS  ChaCha20-Poly1305: abort fails the connection
+PASS  ChaCha20-Poly1305: and every key reads zero after it too
+PASS  AES-128-GCM: before close the connection holds everything
+PASS  AES-128-GCM: close wipes the resumption master secret at once
+PASS  AES-128-GCM: the close_notify is sealed under the write keys
+PASS  AES-128-GCM: and then the write direction and the server's traffic secret read zero
+PASS  AES-128-GCM: while the read direction still holds its keys
+PASS  AES-128-GCM: and still opens what the client sends after the server's close_notify
+PASS  AES-128-GCM: the client's close_notify ends its side
+PASS  AES-128-GCM: and the carrier's slot close wipes every key that was left
+PASS  AES-256-GCM: before close the connection holds everything
+PASS  AES-256-GCM: close wipes the resumption master secret at once
+PASS  AES-256-GCM: the close_notify is sealed under the write keys
+PASS  AES-256-GCM: and then the write direction and the server's traffic secret read zero
+PASS  AES-256-GCM: while the read direction still holds its keys
+PASS  AES-256-GCM: and still opens what the client sends after the server's close_notify
+PASS  AES-256-GCM: the client's close_notify ends its side
+PASS  AES-256-GCM: and the carrier's slot close wipes every key that was left
+PASS  ChaCha20-Poly1305: before close the connection holds everything
+PASS  ChaCha20-Poly1305: close wipes the resumption master secret at once
+PASS  ChaCha20-Poly1305: the close_notify is sealed under the write keys
+PASS  ChaCha20-Poly1305: and then the write direction and the server's traffic secret read zero
+PASS  ChaCha20-Poly1305: while the read direction still holds its keys
+PASS  ChaCha20-Poly1305: and still opens what the client sends after the server's close_notify
+PASS  ChaCha20-Poly1305: the client's close_notify ends its side
+PASS  ChaCha20-Poly1305: and the carrier's slot close wipes every key that was left
+PASS  a close with the output full leaves its close_notify owed
+PASS  and the write keys held until it is sealed
+PASS  but the resumption master secret wiped already
+PASS  once there is room the close_notify follows the data, under the same keys
+PASS  and then the write direction reads zero
+PASS  TlsTcpServer accepts a loopback connection
+PASS  the slot holds both directions' keys and the resumption master secret once its handshake is done
+PASS  TlsTcpServer.close frees the slot
+PASS  and leaves every key of the slot and its TlsServer zero
+PASS  AES-128-GCM: restart and start, for the slot's next connection
+PASS  AES-128-GCM: every secret array of both hashes reads zero, the CertificateVerify input's too
+PASS  AES-128-GCM: and both directions read zero
+PASS  AES-256-GCM: restart and start, for the slot's next connection
+PASS  AES-256-GCM: every secret array of both hashes reads zero, the CertificateVerify input's too
+PASS  AES-256-GCM: and both directions read zero
+PASS  after a handshake the exchange's words read zero, the handshake secret's and the ephemeral key's
+PASS  an all-zero x25519 share is refused with illegal_parameter
+PASS  and the exchange's words read zero after the refusal too
+PASS  with every other key the refused connection held
+tls wipes: 73 passed, 0 failed, 0 skipped

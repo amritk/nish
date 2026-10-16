@@ -56,8 +56,9 @@
  * `Secret` may not be a field, and the handshake, traffic and exporter secrets
  * its carrier reads — is wiped by its carrier, and by `restart` before the
  * next connection uses the arrays. The resumption master secret, which no
- * carrier reads yet, is wiped by `fail` and `restart` alone (CLAUDE.md
- * §Security; TLS-1 in `docs/security/tls.md`).
+ * carrier reads yet, is wiped by `fail` and `restart`, and by its carrier
+ * when the connection ends (`wipeResumption`; CLAUDE.md §Security; TLS-1 in
+ * `docs/security/tls.md`).
  *
  * **Memory.** A `TlsServer` keeps its state in buffers it allocates once —
  * the messages in and out, the transcript, the secrets, the HKDF scratch —
@@ -430,9 +431,9 @@ const tlsSecretAt = (level: i32, handshake: u8[], application: u8[]): u8[] | nul
  * `tests/link/net_tls_memory` would notice.
  *
  * The words hold secrets — the private key and the handshake secret — in
- * fields, where `secureZero` cannot reach, so each is zeroed by an ordinary
- * store as soon as it has been read, which stands because the words stay
- * reachable from their `TlsServer` (TLS-1 in `docs/security/tls.md`).
+ * fields, where `secureZero` cannot reach, so `exchangeKeys` wipes the whole
+ * record with `wipe`, a volatile store, once it has unpacked the answers, on
+ * the failure path too (TLS-1 in `docs/security/tls.md`).
  */
 class TlsExchangeWords {
   key0: u64 = 0
@@ -480,7 +481,7 @@ const tlsWordInto = (b: u8[], at: i32, v: u64): void => {
 /**
  * The exchange of RFC 8446 §7.4.2 on `w`: the server's public key and the
  * handshake secret from the ephemeral key and the client's share, both
- * written back as words, the key's words zeroed once read. Answers 0,
+ * written back as words; the caller wipes the words. Answers 0,
  * `illegal_parameter` for a share whose shared secret is all zeros (§7.4.2,
  * RFC 7748 §6.1), or `internal_error` when the exchange answers nothing. The
  * copy of the key and the ECDHE secret are `Secret`s wiped on every path, and
@@ -495,10 +496,6 @@ const tlsExchange = (w: TlsExchangeWords): i32 => {
   tlsWordInto(raw, 8, w.key1)
   tlsWordInto(raw, 16, w.key2)
   tlsWordInto(raw, 24, w.key3)
-  w.key0 = toU64(0)
-  w.key1 = toU64(0)
-  w.key2 = toU64(0)
-  w.key3 = toU64(0)
   const share: u8[] = new Array<u8>(X25519_SIZE)
   tlsWordInto(share, 0, w.share0)
   tlsWordInto(share, 8, w.share1)
@@ -661,7 +658,8 @@ export class TlsServer {
    * `resumption_master_secret` (RFC 8446 §7.1), known once the client's
    * Finished is accepted: what a NewSessionTicket's PSK would be derived
    * from. Nothing here issues tickets, so it is held for the caller and wiped
-   * by `fail` and `restart` (TLS-1).
+   * by `fail`, `restart` and the carrier's `wipeResumption` when the
+   * connection ends (TLS-1).
    */
   resumptionSecret: u8[]
   /** The CertificateVerify input while `state` is `TLS_STATE_WAIT_SIGNATURE`. */
@@ -782,10 +780,20 @@ export class TlsServer {
 
   /** Fails the handshake with `alert` and answers it, wiping the resumption master secret `sign` derived ahead. */
   fail(alert: i32): i32 {
-    secureZero(this.secretArray(TLS_SECRET_RESUMPTION))
+    this.wipeResumption()
     this.state = TLS_STATE_FAILED
     this.alert = alert
     return alert
+  }
+
+  /**
+   * Wipes the resumption master secret with `secureZero`: the array `sign`
+   * derives it into, whether or not `handleFinished` has pointed
+   * `resumptionSecret` at it yet. The carrier calls it when the connection
+   * ends, closed or failed, since nothing issues a ticket from it (TLS-1).
+   */
+  wipeResumption(): void {
+    secureZero(this.secretArray(TLS_SECRET_RESUMPTION))
   }
 
   /** The array secret `index` lives in under the negotiated hash: exactly HashLen bytes (the CertificateVerify input, 98 more). */
@@ -1130,7 +1138,10 @@ export class TlsServer {
    * Runs the x25519 exchange on the caller's ephemeral key and the client's
    * share (`tlsExchange`), outside any arena block since its scope is its
    * own, and unpacks the server's public key and the handshake secret from
-   * the words, zeroing them. The ephemeral key is held as the caller's plain
+   * the words. The words, the ephemeral key's and the handshake secret's
+   * among them, are wiped with one `wipe` after the branch on the alert, so
+   * that a refused exchange leaves them zero too and `opt` has one wipe to
+   * keep rather than two to merge. The ephemeral key is held as the caller's plain
    * bytes, because a `Secret` may not live in a field (NL2430); the record
    * layer wipes them once the ServerHello is written (TLS-1).
    */
@@ -1149,29 +1160,23 @@ export class TlsServer {
     w.share3 = tlsWordAt(share, at + 24)
     w.hashLength = this.hashLength
     const alert: i32 = tlsExchange(w)
-    if (alert !== 0) {
-      return alert
+    if (alert === 0) {
+      const pub: u8[] = this.serverPublic
+      tlsWordInto(pub, 0, w.public0)
+      tlsWordInto(pub, 8, w.public1)
+      tlsWordInto(pub, 16, w.public2)
+      tlsWordInto(pub, 24, w.public3)
+      this.handshakeSecret = this.secretArray(TLS_SECRET_HANDSHAKE)
+      const handshake: u8[] = this.handshakeSecret
+      tlsWordInto(handshake, 0, w.secret0)
+      tlsWordInto(handshake, 8, w.secret1)
+      tlsWordInto(handshake, 16, w.secret2)
+      tlsWordInto(handshake, 24, w.secret3)
+      tlsWordInto(handshake, 32, w.secret4)
+      tlsWordInto(handshake, 40, w.secret5)
     }
-    const pub: u8[] = this.serverPublic
-    tlsWordInto(pub, 0, w.public0)
-    tlsWordInto(pub, 8, w.public1)
-    tlsWordInto(pub, 16, w.public2)
-    tlsWordInto(pub, 24, w.public3)
-    this.handshakeSecret = this.secretArray(TLS_SECRET_HANDSHAKE)
-    const handshake: u8[] = this.handshakeSecret
-    tlsWordInto(handshake, 0, w.secret0)
-    tlsWordInto(handshake, 8, w.secret1)
-    tlsWordInto(handshake, 16, w.secret2)
-    tlsWordInto(handshake, 24, w.secret3)
-    tlsWordInto(handshake, 32, w.secret4)
-    tlsWordInto(handshake, 40, w.secret5)
-    w.secret0 = toU64(0)
-    w.secret1 = toU64(0)
-    w.secret2 = toU64(0)
-    w.secret3 = toU64(0)
-    w.secret4 = toU64(0)
-    w.secret5 = toU64(0)
-    return 0
+    wipe(w)
+    return alert
   }
 
   /**
