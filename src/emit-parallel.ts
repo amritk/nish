@@ -884,10 +884,13 @@ const countSenders = (
   }
 }
 
-/** A scalar of LLVM type `type` widened into a channel's `i64` slot. */
+/** A scalar, or a string's address, of LLVM type `type` widened into a channel's `i64` slot. */
 const widenToSlot = (fn: IRFunction, type: string, value: string): string => {
   if (type === "i64") {
     return value
+  }
+  if (type.endsWith("*")) {
+    return fn.emitValue(`ptrtoint ${type} ${value} to i64`)
   }
   if (type === "double") {
     return fn.emitValue(`bitcast double ${value} to i64`)
@@ -899,10 +902,13 @@ const widenToSlot = (fn: IRFunction, type: string, value: string): string => {
   return fn.emitValue(`zext ${type} ${value} to i64`)
 }
 
-/** A channel's `i64` slot narrowed back to the scalar of LLVM type `type` it was widened from. */
+/** A channel's `i64` slot narrowed back to the value of LLVM type `type` it was widened from. */
 const narrowFromSlot = (fn: IRFunction, type: string, raw: string): string => {
   if (type === "i64") {
     return raw
+  }
+  if (type.endsWith("*")) {
+    return fn.emitValue(`inttoptr i64 ${raw} to ${type}`)
   }
   if (type === "double") {
     return fn.emitValue(`bitcast i64 ${raw} to double`)
@@ -922,7 +928,16 @@ export const emitChannelSendBody = (emitter: Emitter, sig: FunctionSig): void =>
   }
   const fn = emitter.fn
   const state = channelStateIn(emitter, fn, owner.type, "%this")
-  const raw = widenToSlot(fn, emitter.llvm(sig.paramTypes[1]), paramValue(sig.paramNames[1]))
+  const type = emitter.llvm(sig.paramTypes[1])
+  let value = paramValue(sig.paramNames[1])
+  if (sig.paramTypes[1] === T_STRING) {
+    // A string crosses by copy: one the sender's arena holds moves to a
+    // malloc'd block the receive copies out of (`nish_cross_out` with a mark
+    // of 0, which counts the whole arena); a literal, or a string an older
+    // arena holds, travels as it is.
+    value = crossOut(emitter, fn, type, value, 0, "0")
+  }
+  const raw = widenToSlot(fn, type, value)
   fn.emit(`call void ${emitter.useRuntime("nish_channel_send")}(i64* ${state}, i64 ${raw})`)
   fn.emit("ret void")
 }
@@ -967,7 +982,10 @@ export const emitChannelWalk = (emitter: Emitter, stmt: Node): void => {
 
   fn.placeBlock(bodyBlock)
   const bits = fn.emitValue(`load i64, i64* ${raw}${emitter.align8()}`)
-  const value = narrowFromSlot(fn, ty, bits)
+  let value = narrowFromSlot(fn, ty, bits)
+  if (elem === T_STRING) {
+    value = crossIn(emitter, fn, ty, value, 0) // into this thread's arena, and the block freed
+  }
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`)
   emitter.loops.push(new LoopTarget(endBlock, recvBlock))
   emitter.emitStatement(stmt.children[2])

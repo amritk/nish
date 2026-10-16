@@ -3169,7 +3169,8 @@ const regionAtomicMessageFor = (
 // from waiting on something that never comes (docs/wp29-thread-surface.md
 // §4.4, C1–C7):
 //
-//   - C1: what it carries is a number, a `boolean` or an enum;
+//   - C1: what it carries is a number, a `boolean`, an enum or a `string`,
+//     which a send copies out of the sender's arena and the receive copies in;
 //   - C2: `new Channel` is a `const` declared beside its scope, and a channel
 //     is used only as the receiver of `send`, the iterable of a `for...of`, an
 //     argument to a parameter declared a `Channel`, or a field its class's
@@ -3237,8 +3238,9 @@ export const channelCapacityMessage = (): string =>
   "scope's tasks run one at a time and nothing would drain a channel that was full"
 
 const channelElementMessage = (table: TypeTable, type: i32): string =>
-  `A \`Channel\` carries a number, a \`boolean\` or an enum, and this one would carry \`${table.typeName(type)}\`: ` +
-  "a sender's arena is freed when its scope joins, so anything else would point into freed memory"
+  `A \`Channel\` carries a number, a \`boolean\`, an enum or a \`string\`, and this one would carry ` +
+  `\`${table.typeName(type)}\`: a sender's arena is freed when its scope joins, and only a string is copied ` +
+  "out of it on the way, so anything else would point into freed memory"
 
 const channelDeclareMessage = (what: string): string => `${what}${CHANNEL_DECLARE_TAIL}`
 
@@ -3704,7 +3706,7 @@ const channelUseFinding = (
   const type = program.nodeTypes[node.id]
   if (node.kind === N_NEW) {
     const element = channelElement(program, table, type)
-    if (element >= 0 && !isScalarArgument(table, element)) {
+    if (element >= 0 && !isScalarArgument(table, element) && element !== T_STRING) {
       return channelElementMessage(table, element)
     }
     const declared =
