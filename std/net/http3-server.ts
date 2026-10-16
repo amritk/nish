@@ -19,6 +19,8 @@
  *       slot = server.ready();
  *     }
  *     server.flush(now);                         // what every touched slot has to send
+ *     // at shutdown:
+ *     server.stop();                             // releases every slot, wipes the static keys
  *
  * **Routing.** A datagram goes to the slot that owns its first packet's
  * Destination Connection ID, found through a hash index of every slot's
@@ -445,7 +447,9 @@ export class Http3Server {
    * `quicConfig` on the UDP socket `fd`. `listenerEntropy` is the
    * listener's `QUIC_LISTENER_ENTROPY_SIZE` random bytes, whose first eight
    * also key the connection-ID index (wiped in the caller's array, as the
-   * listener does). Every slot's connections are made here.
+   * listener does). Every slot's connections are made here. From here on
+   * `quicConfig`'s `statelessResetKey` and `retryTokenKey` are the server's:
+   * `stop` wipes them, so the configuration is this server's alone.
    */
   constructor(quicConfig: QuicServerConfig, config: Http3Config, fd: i32, size: i32, listenerEntropy: u8[]) {
     if (size < 1 || size > 65536) {
@@ -868,6 +872,37 @@ export class Http3Server {
       this.free[this.freeCount] = slot
       this.freeCount = this.freeCount + 1
     }
+  }
+
+  /**
+   * Stops the server for good and wipes the keys it holds: every slot's
+   * connection is released (`QuicConnection.release`, which sends nothing),
+   * the listener is released, and the configuration's `statelessResetKey`
+   * and `retryTokenKey`, the index's salt, the connections' entropy scratch
+   * and the listener's last answer (a Retry's or a reset's token) are
+   * zeroed. From then on every datagram is dropped and no connection is
+   * accepted. The configuration's two keys are the server's once it is made
+   * with them: a program that keeps a copy of either, to start the next
+   * server with, wipes its own copy. The keys are zeroed in place, so give
+   * each server a `QuicServerConfig` of its own: any other listener,
+   * connection or server made with the same one would go on MACing Retry
+   * tokens and deriving stateless reset tokens under an all-zero key, which
+   * anyone can forge.
+   */
+  stop(): void {
+    for (let slot: i32 = 0; slot < toI32(this.quics.length); slot++) {
+      if (this.holds(slot)) {
+        this.release(slot)
+      } else {
+        this.quics[slot].release()
+      }
+    }
+    this.listener.release()
+    secureZero(this.quicConfig.statelessResetKey)
+    secureZero(this.quicConfig.retryTokenKey)
+    secureZero(this.index.salt)
+    secureZero(this.entropy)
+    this.answer.wipe()
   }
 
   /** Runs the timers due by `now`, and marks each slot it ran for `flush`. */

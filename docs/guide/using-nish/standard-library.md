@@ -825,7 +825,15 @@ never read a socket or a clock themselves, so you drive them from your own
 loop over [`nish:net`](../../LANGUAGE.md#builtin-modules-nish). The ones
 that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 `Http1Server` and `Http1TlsServer` pools), `nish/net/http2-tls` and
-`nish/net/http3-server`; like `nish:net` itself, they are native only. The
+`nish/net/http3-server`; like `nish:net` itself, they are native only. When
+an `Http3Server` shuts down, call its `stop()`: it releases every connection
+and wipes the stateless reset and Retry token keys of the `QuicServerConfig`
+it was made with, so keep no other copy of them, or wipe yours with
+[`secureZero`](../../LANGUAGE.md#wiping-a-secret-securezero) too. It zeroes
+those keys in place, so give each server a `QuicServerConfig` of its own: once
+one server stops, any other listener, connection or server made with the same
+configuration would sign its Retry tokens and stateless resets with a key of
+zeros, which anyone can forge. The
 HTTP/1.1 and WebSocket modules were written with a security record of their
 own ([docs/security/http1.md](../../security/http1.md)) rather than audited
 after the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
