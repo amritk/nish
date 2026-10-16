@@ -30,7 +30,8 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
-| [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
+| [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
+| [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509, base64url |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket |
@@ -653,10 +654,43 @@ c 1
 
 `Map` itself is described in [Maps and sets](../language/maps-and-sets.md).
 
+## `nish/random`
+
+`new Rng(seed)` makes a generator of pseudo-random numbers from an `i32`
+seed: the same seed always answers the same sequence, natively and under
+Node. `nextI32()` answers the next 32 bits as an `i32`, and `nextF64()` a
+number in [0, 1). Every seed works, 0 included, and nearby seeds answer
+unrelated sequences, so a task or a parallel body can seed its own from its
+index. It is not for keys or passwords: those come from
+`crypto.getRandomValues`.
+
+```ts nish:ok
+import { Rng } from "nish/random";
+
+export const main = (): i32 => {
+  const r = new Rng(2024);
+  let inside: i32 = 0;
+  for (let i: i32 = 0; i < 1000; i++) {
+    const x = r.nextF64();
+    const y = r.nextF64();
+    if (x * x + y * y < 1.0) {
+      inside = inside + 1;
+    }
+  }
+  console.log(`${inside > 700 && inside < 870}`); // true: about 785 of 1000
+  return 0;
+};
+```
+
+A generator is an ordinary object you step, so a task or a parallel body that
+makes its own may use it freely; one shared between tasks would be a write
+they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
+in the reference.
+
 ## `nish/threads`
 
-Running work on several threads: `parallelMapInto` and `parallelReduce` for
-one function over an array, `scope()` for a few different tasks at once, and
+Running work on several threads: `parallelMapInto`, `parallelMap`,
+`parallelFrom` and `parallelReduce` for one function over an array, `scope()` for a few different tasks at once, and
 `Mutex<T>` and `Channel<T>` for sharing between them. Importing the module is
 all it takes to build a threaded program. It has a page of its own,
 [Threads](threads.md).
@@ -688,8 +722,44 @@ export const main = (): i32 => {
 ```
 
 Printing a `Secret`, putting it in a template, or handing it to any builtin is
-a compile error. The rules are in
-[Secrets](../../LANGUAGE.md#secrets-nishsecret).
+a compile error.
+
+`secret(v)` takes a value nothing else holds: a literal, a call that makes a
+new array or record, or a local that is the only name for its value. A second
+name made before the move would read the key outside the `Secret`, and zeros
+once it is wiped, so the compiler refuses it and says where it was made:
+
+```ts nish:err NL2512
+import { Secret, secret, wipe } from "nish:secret";
+
+export const main = (): i32 => {
+  const raw: u8[] = [1, 2, 3];
+  const alias = raw; // a second name for the same bytes
+  const key: Secret<u8[]> = secret(raw);
+  wipe(key);
+  return toI32(alias[0]);
+};
+```
+
+Storing the array in a field or an element, pushing it, or handing it to a
+function that keeps it is a second name too. To keep the plain bytes as well,
+copy them first, and move the copy in:
+
+```ts nish:ok
+import { Secret, secret, wipe } from "nish:secret";
+
+export const main = (): i32 => {
+  const raw: u8[] = [1, 2, 3];
+  const copy: u8[] = new Array<u8>(raw.length);
+  copy.set(raw);
+  const key: Secret<u8[]> = secret(copy); // `copy` is the only name for its bytes
+  wipe(key);
+  console.log(`${raw[0]}`); // 1: `raw` is its own array
+  return 0;
+};
+```
+
+The rules are in [Secrets](../../LANGUAGE.md#secrets-nishsecret).
 
 ## `nish/crypto`
 

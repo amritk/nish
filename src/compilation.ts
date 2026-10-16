@@ -159,11 +159,12 @@ import {
   channelSummaries,
   taskMutexMessageFor,
   taskArgumentMessage,
-  taskArrowMessage,
+  isVoidSpawn,
+  voidTaskResultMessage,
   threadsModuleName,
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
-import { exposeMessages } from "./secret"
+import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
 import { splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
@@ -1710,14 +1711,33 @@ export class Compilation {
    * no I/O and no C, keeps nothing of the value, writes nothing it is handed,
    * and declares a result that holds no `Secret` (`exposeMessages`). Those are
    * questions about the function's whole closure, so they are asked of the
-   * same facts the parallel rules read, at the call that ran it.
+   * same facts the parallel rules read, at the call that ran it. So are the
+   * questions a `secret(v)` left (`SecretNeed`): whether a callee answers a
+   * value nothing else holds, and whether one keeps what it is handed.
    */
   checkSecrets(facts: FactsTable): void {
+    const programs: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      programs.push(unit.checker.program)
+    }
+    const fresh = new FreshResults(programs, this.table, facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.exposeCalls) {
         for (const message of exposeMessages(this.table, facts, this.runtime, call.sig)) {
           this.sink.report(program.source, call.node.start, call.node.end, message)
+        }
+      }
+      // One refusal per `secret(v)`: the first question its value fails.
+      const refused: Node[] = []
+      for (const need of program.secretNeeds) {
+        if (refused.indexOf(need.site) >= 0) {
+          continue
+        }
+        const message = secretNeedMessage(fresh, need)
+        if (message.length > 0) {
+          this.sink.report(program.source, need.site.start, need.site.end, message)
+          refused.push(need.site)
         }
       }
     }
@@ -1753,10 +1773,14 @@ export class Compilation {
           continue
         }
         const messages: string[] = []
-        messages.push(fn.lifted ? taskArrowMessage() : "")
         messages.push(taskArgumentMessage(this.table, call.sig))
         messages.push(taskMutexMessageFor(this.table, program, call.sig))
-        messages.push(resultMessage(this.table, call.sig, fn, fn.returnType))
+        // A task with no destination answers nothing; one with a destination answers a scalar.
+        messages.push(
+          isVoidSpawn(call.sig)
+            ? voidTaskResultMessage(this.table, fn)
+            : resultMessage(this.table, call.sig, fn, fn.returnType)
+        )
         messages.push(sharedWriteMessage(call.sig, fn, facts))
         messages.push(arenaMessage(call.sig, fn, facts))
         for (const message of messages) {

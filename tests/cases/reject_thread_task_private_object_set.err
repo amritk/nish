@@ -1,0 +1,1 @@
+`work` writes memory its caller can see through `Set<Box>.add`
