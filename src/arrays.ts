@@ -88,7 +88,10 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
   let secretAt: Node | null = null
   let secretType = -1
   for (const element of expr.children) {
-    const type = unproven(ctx, checkExpression(ctx, element, scope, hint))
+    const checked = unproven(ctx, checkExpression(ctx, element, scope, hint))
+    // A smaller union enters the element union as the same pointer, as it
+    // enters every other sink of that union (`unionWithin`).
+    const type = hint >= 0 && ctx.table.unionWithin(checked, hint) ? hint : checked
     if (type === T_ERROR) {
       continue
     }

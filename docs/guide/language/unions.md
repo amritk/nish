@@ -60,15 +60,26 @@ class Line {
 type Thing = Point | Line;
 ```
 
+The tag is `readonly`, so a variant keeps the tag it was built with. A class
+that implements an interface variant is not a variant itself: convert it to
+the interface first, `const r: Ring = new Band()`.
+
 Any other union, such as `i32 | string`, is refused, as before. `T | null`
 still works, and so does `Shape | null`.
 
 ## Where a union goes
 
 A union is the type of a local, a parameter, a field, a return value or an
-array element. A variant converts into it wherever one is expected: a
+array element, and `Shape | null` of any of those. An alias may name another
+union: with `type Round = Circle | Square`, `type Shape = Round | Tri` holds
+all three. A variant converts into it wherever one is expected: a
 `new Circle()` passed to a `Shape` parameter, returned from a function that
-answers `Shape`, or written into a `Shape[]` literal.
+answers `Shape`, or written into a `Shape[]` literal; so does a `Round` where
+a `Shape` is wanted.
+
+A union crosses modules like any exported type, but not a C header or a N-API
+bridge: a sidecar has no C spelling for it yet, so an exported signature or
+field that holds one is refused.
 
 A union is not a type argument, so `Box<Shape>`, `Map<string, Shape>`,
 `Set<Shape>` and `Result<Shape, string>` are refused, and so is a call to a
@@ -107,8 +118,10 @@ export const main = (): i32 => {
 
 The tag is the one member a union has in this version. `s.kind` reads it, and
 it compares, switches and passes as the enum. Any other field or method of a
-variant needs the variant itself; reading it through the union is an error,
-and so is writing to the union's fields.
+variant is an error through the union, and so is writing to the union's
+fields, even one every variant has. This version has no way to get the
+variant back out of a union yet: keep the variant's own value where you need
+its other fields.
 
 ```ts nish:err NL2528
 enum Kind {
@@ -134,6 +147,14 @@ const radius = (s: Shape): i32 => s.r;
 Give the tag a type when you store it, `const k: Kind = s.kind`. TypeScript
 would infer the union of the variants' tags, `Kind.Circle | Kind.Square`,
 which is not a type Nish has in this version.
+
+TypeScript also narrows by a test of the tag: after
+`if (s.kind === Kind.Circle) { return 1; }` it knows `s` is not a `Circle`,
+and a second `s.kind === Kind.Circle` is an error there. This version does
+not narrow yet, so it compiles that second test, which is always `false`,
+and the same holds for a tag stored in `const k: Kind`. Do not write a test
+the code above it has already ruled out; the version that adds narrowing
+will refuse it, as TypeScript does.
 
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case

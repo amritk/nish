@@ -316,6 +316,8 @@ export class DebugInfo {
       // Only the arm the discriminant selects is meaningful; the other is
       // whatever the construction left there (WP16 does not zero it).
       ref = this.pointerTo(this.resultComposite(resultLayout(this.table, type)))
+    } else if (this.table.isUnion(type)) {
+      ref = this.pointerTo(this.unionComposite(type))
     } else {
       ref = this.module.addMetadata(basicType(type, this.table.json))
     }
@@ -467,6 +469,24 @@ export class DebugInfo {
     this.module.setMetadata(
       ref,
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(layout.name)}, file: ${this.file}, size: ${layout.size * 8}, align: ${layout.align * 8}, elements: ${elements})`
+    )
+    return ref
+  }
+
+  /**
+   * A discriminated union is a pointer to one of its variants, and what every
+   * variant shares is the tag at offset 0: so a debugger is shown a structure
+   * named as the type is spelled with that one member, and `p u->kind` names
+   * the variant.
+   */
+  unionComposite(type: i32): string {
+    const ref = this.module.reserveMetadata()
+    const tag = this.table.tagEnumOf(type)
+    const member = this.member(this.table.tagNameOf(type), ref, this.typeRef(tag), 32, 0, "", 0)
+    const elements = this.module.addMetadata(`!{${member}}`)
+    this.module.setMetadata(
+      ref,
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(this.table.typeName(type))}, file: ${this.file}, size: 32, align: 32, elements: ${elements})`
     )
     return ref
   }

@@ -841,11 +841,11 @@ const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalF
 
 /**
  * What a sidecar refuses to describe, reported into the compilation's sink;
- * true when there is nothing to refuse. `cDeclared` is the functions a header
- * or an N-API shim -- the two files that declare C prototypes -- will declare,
- * and is empty when neither was asked for.
+ * true when there is nothing to refuse. `fns` is every external function,
+ * and `cDeclared` the ones a header or an N-API shim -- the two files that
+ * declare C prototypes -- will declare, empty when neither was asked for.
  *
- * Two refusals, both about a name a host would reach for:
+ * Three refusals, the first two about a name a host would reach for:
  *
  *   - **An exported generic that this program never instantiates**
  *     (`docs/wp18-generics.md` §8, message 9). It has no symbol, so every
@@ -854,8 +854,13 @@ const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalF
  *     only its exports are described (`externalFunctions`).
  *   - **Two functions with one C identifier** (`cNameClashes`), which a header
  *     would declare twice and which would not compile.
+ *   - **A discriminated union** in a signature or a field (`refuseUnions`).
  */
-export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFunction[]): boolean => {
+export const acceptsSidecars = (
+  compilation: Compilation,
+  fns: ExternalFunction[],
+  cDeclared: ExternalFunction[]
+): boolean => {
   let ok = true
   for (const unit of compilation.modules) {
     const program = unit.checker.program
@@ -920,6 +925,9 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
       }
     }
   }
+  if (!refuseUnions(compilation, fns)) {
+    ok = false
+  }
   // The clashes come in pairs, and the test on the second of each is what
   // proves both reads.
   const clashes = cNameClashes(compilation.table, cDeclared)
@@ -939,6 +947,59 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
     i = i + 2
   }
   return ok
+}
+
+/**
+ * Refuses a discriminated union in what a sidecar describes: a parameter or
+ * result of an external function, every sidecar's or none, and a field of any class or interface the
+ * header lays out. A union has no C spelling yet, so the header would write it
+ * as `void *` and the host could not tell the variants apart. True when there
+ * is none.
+ */
+const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
+  const table = compilation.table
+  let ok = true
+  for (const fn of fns) {
+    const sig = fn.sig
+    const at = sigNameNode(sig)
+    if (table.holdsUnion(sig.returnType)) {
+      reportUnion(compilation, fn.unit, at, `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``)
+      ok = false
+    }
+    let i = 0
+    while (i < sig.paramTypes.length && i < sig.paramNames.length) {
+      const t = sig.paramTypes[i]
+      if (table.holdsUnion(t)) {
+        const what = `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[i]}\` is \`${table.typeName(t)}\``
+        reportUnion(compilation, fn.unit, at, what)
+        ok = false
+      }
+      i = i + 1
+    }
+  }
+  for (const unit of compilation.modules) {
+    for (const info of unit.checker.program.structList) {
+      if (info.origin !== unit.source) {
+        continue
+      }
+      for (const f of info.fields) {
+        if (table.holdsUnion(f.type)) {
+          reportUnion(compilation, unit, f.decl, `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``)
+          ok = false
+        }
+      }
+    }
+  }
+  return ok
+}
+
+const reportUnion = (compilation: Compilation, unit: ModuleUnit, at: Node, what: string): void => {
+  compilation.sink.report(
+    unit.source,
+    at.start,
+    at.end,
+    `${what}, which holds a union no sidecar can describe: a union has no C spelling in this version`
+  )
 }
 
 const reportUninstantiated = (

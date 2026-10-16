@@ -22,6 +22,7 @@ import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./consta
 import { deferInstantiation, instantiateWritten } from "./generics"
 import {
   FLAG_DEFAULT,
+  FLAG_READONLY,
   FLAG_STATIC,
   N_FIELD,
   N_IDENT,
@@ -659,6 +660,14 @@ const variantTagOf = (ctx: CheckContext, at: Node, variant: i32, info: StructInf
       `\`${ctx.table.typeName(variant)}\` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as \`readonly kind: Kind.Circle = Kind.Circle\``
     )
   }
+  if (!variantTagReadonly(info)) {
+    // Stricter than tsc, which accepts a mutable tag: a tag fixed once the
+    // variant is built is what lets the union tell its variants apart.
+    return ctx.errorType(
+      at,
+      `\`${ctx.table.typeName(variant)}\` cannot be a union variant: its tag \`${variantTagName(info)}\` must be \`readonly\`, because the union tells its variants apart by it`
+    )
+  }
   return tag
 }
 
@@ -762,6 +771,15 @@ const variantTagName = (info: StructInfo): string => {
   }
   const field = firstField(info)
   return field === null ? "" : field.children[0].text
+}
+
+/** Whether a variant's tag, its first field, is declared `readonly`. */
+const variantTagReadonly = (info: StructInfo): boolean => {
+  if (info.collected) {
+    return info.fields.length > 0 && info.fields[0].readonly
+  }
+  const field = firstField(info)
+  return field !== null && (field.flags & FLAG_READONLY) !== 0
 }
 
 /**

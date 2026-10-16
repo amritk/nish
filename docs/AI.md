@@ -1446,20 +1446,29 @@ export const main = (): i32 => {
   its tag**, of one enum member type: `readonly kind: Kind.Circle =
   Kind.Circle`. All variants of a union take their tags from one enum, under
   one field name, with different members; a union names at least two. Each
-  broken rule has its code (NL2522–NL2527). Any other union is still NL1053.
+  broken rule has its code (NL2522–NL2527); a tag that is not `readonly` is
+  NL2535. Any other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
-  (`Shape | null`). A variant converts into it wherever the union is
+  (`Shape | null`). An alias may name another union, which is flattened. A
+  variant, or a smaller union, converts into it wherever the union is
   expected — argument, `return`, `push`, an annotated array literal, a
-  ternary arm or `??` default whose other side is the union.
+  ternary arm or `??` default whose other side is the union. A class that
+  implements an interface variant converts to that interface first. A union
+  crosses modules but not a sidecar (NL4009).
 - **The tag is the only member** (NL2528 for anything else, even a field every
   variant has). It reads as the enum: `const k: Kind = s.kind` — annotate it,
-  `const k = s.kind` is NL2530. A union is read-only (NL2529). Comparing the
-  tag with a member no variant has is NL2531, a `case` for one NL2532.
-- **Not yet:** narrowing by `if`/`switch`, union type arguments
-  (`Box<Shape>`, `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding
-  `T` to a union: NL2533), unions as `Map`/`Set` keys, covariant arrays
-  (`Circle[]` is not `Shape[]`), and inferred unions (an unannotated ternary
-  or array of two variants).
+  `const k = s.kind` is NL2530. A union is read-only, even for a field every
+  variant has (NL2529). Comparing the tag with a member no variant has is
+  NL2531, a `case` for one NL2532.
+- **Not yet:** narrowing by `if`/`switch`. Until it lands, a second test of a
+  tag already ruled out (`if (s.kind === Kind.A) { return }` then
+  `s.kind === Kind.A`) compiles here and is TS2367 in `tsc`: do not write
+  one.
+- **Refused by design:** union type arguments (`Box<Shape>`,
+  `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
+  union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
+  is not `Shape[]`), and inferred unions (an unannotated ternary or array of
+  two variants).
 - **Declare what you store.** A store of a value that is only some of the
   variants into a union slot is NL2534, because `tsc` would narrow the slot
   from there on. Declare the slot as the variant, or store a value of the

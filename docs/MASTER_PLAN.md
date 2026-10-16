@@ -126,7 +126,8 @@ rule here.
 
 Everything dynamic is refused before the checker runs, each with a message
 and a `reject_*` case: `any`, `unknown`, `symbol`, `bigint`, `undefined` as a
-type or value, union types other than `T | null`, `eval`, `Function`, `Proxy`,
+type or value, union types other than `T | null` and discriminated unions of
+tagged classes and interfaces, `eval`, `Function`, `Proxy`,
 `Reflect`, `Symbol`, `globalThis`, `arguments`, `with`, `delete`, `typeof`,
 `instanceof`, `in`, `for...in`, `==`/`!=`, comma expressions, `void expr`,
 `var`, `try`/`catch`/`finally` and `throw` (a failure is a `Result<T, E>`,

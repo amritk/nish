@@ -1,4 +1,4 @@
-// A union is read-only: its tag is assigned, if at all, on the variant.
+// A union is read-only, even where every variant has the field: write to the variant itself.
 enum Kind {
   Circle,
   Square,
@@ -13,6 +13,7 @@ class Circle {
 class Square {
   readonly kind: Kind.Square = Kind.Square;
   side: i32 = 2;
+  x: i32 = 0;
 }
 
 type Shape = Circle | Square;
@@ -20,9 +21,10 @@ type Shape = Circle | Square;
 const pick = (n: i32): Shape => (n > 0 ? new Circle() : new Square());
 
 class Spot {
-  kind: Kind.Tri = Kind.Tri;
+  readonly kind: Kind.Tri = Kind.Tri;
+  x: i32 = 0;
 }
 
 const reset = (s: Spot | Square): void => {
-  s.kind = Kind.Tri;
+  s.x = 1;
 };

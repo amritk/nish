@@ -722,12 +722,18 @@ and each has its own code:
   `type R = Ring<i32>` named in a union is
   `` `Ring<i32>` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself ``
   (NL2522, `reject_union_generic_variant`). A generic type spelled with its
-  arguments inside the union, and a scalar member, get the general refusal,
+  arguments inside the union, `Circle | Ring<i32>`, and a member that is a
+  scalar, an enum or an alias of one get the general refusal,
   `` Union types other than `T | null` are forbidden in Nish (values have one fixed layout) ``
-  (NL1053, `reject_union_untagged_scalar`, `reject_union_type`).
+  (NL1053, `reject_union_inline_generic`, `reject_union_untagged_scalar`,
+  `reject_union_enum_alias_member`, `reject_union_scalar_alias_member`,
+  `reject_union_type`).
 - Its first field is of one enum member type: otherwise
   `` `Point` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as `readonly kind: Kind.Circle = Kind.Circle` ``
   (NL2523, `reject_union_untagged`, `reject_paren_union_type`).
+- The tag is `readonly`: otherwise
+  `` `Circle` cannot be a union variant: its tag `kind` must be `readonly`, because the union tells its variants apart by it ``
+  (NL2535, `reject_union_mutable_tag`).
 - All the tags come from one enum (NL2524, `reject_union_mixed_enums`), the
   tag field has one name in every variant (NL2525, `reject_union_tag_names`),
   and no two variants share a tag (NL2526, `reject_union_duplicate_tag`).
@@ -736,24 +742,37 @@ and each has its own code:
   (`reject_union_one_variant`).
 
 **Where a union goes.** A union is the type of a local, a parameter, a
-field, a return, an array element (`Shape[]`, `Shape[][]`), or of any of
-those made nullable. A value of a variant converts to the union wherever the
-union is expected: an argument, a `return`, an array literal under a
-`Shape[]` annotation, a `push`, a ternary arm or a `??` default whose other
-side is the union. Equality on two unions compares the pointers, as on any
-object.
+field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
+spelled in place, `(Circle | Square)[]`), or of any of those made nullable.
+An alias may name another union, which is flattened: with `type Round =
+Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
+of a variant, or of a union whose variants are all the wider union's,
+converts to the union wherever the union is expected: an argument, a
+`return`, an array literal under a `Shape[]` annotation, a `push`, a ternary
+arm or a `??` default whose other side is the union
+(`tests/cases/union_forms`). Equality on two unions compares the pointers, as
+on any object.
 
 **Reading.** The tag is the one member a union has (NL2528 for any other
 field or method, `reject_union_member_field`, `reject_union_method_call`,
 even when every variant has it). It reads as the enum, `Kind`, so it compares,
 switches and is passed as one. A union is read-only: a write through it is
-NL2529 (`reject_union_assign_tag`).
+NL2529, even to a field every variant has (`reject_union_assign_tag`).
 
 **Comparisons that cannot be true.** As in `tsc`, comparing the tag with a
 member no variant has is an error: `s.kind === Kind.Tri` when no variant is
 tagged `Kind.Tri` is NL2531 (`reject_union_disjoint_compare`), and
 `case Kind.Tri:` in a `switch (s.kind)` is NL2532
 (`reject_union_disjoint_case`).
+
+**Accepted here, refused by TypeScript.** One gap runs the other way, and
+the next stage, narrowing by the tag, closes it. `tsc` narrows a union by a
+test of its tag, so after `if (u.kind === Kind.A) { return 1; }` it knows
+`u.kind` is not `Kind.A`, and a second `u.kind === Kind.A`, in a ternary, a
+nested ternary or another `if`, is TS2367. This version does not narrow, so
+it accepts that comparison and evaluates it, to `false`. The tag stored in
+a local first, `const k: Kind = u.kind`, carries the same gap, which any
+local of an enum type already has: `tsc` narrows `k` by the same test.
 
 **Stricter than TypeScript.** Each of these programs is accepted by
 `tsc --strict` and refused here; each refusal is pinned:
@@ -785,23 +804,52 @@ tagged `Kind.Tri` is NL2531 (`reject_union_disjoint_compare`), and
   local initialised from the tag without an annotation, `const k = s.kind`
   or the tag in a `for…of`, is NL2530, because `tsc` would infer the union
   of the tags' member types, which this version does not have
-  (`reject_union_inferred_tag`, `reject_union_forof_tag`). Annotate it as
-  the enum: `const k: Kind = s.kind`.
+  (`reject_union_inferred_tag`, `reject_union_forof_tag`). So is the tag as
+  an element of an unannotated array literal, an arm of an unannotated
+  ternary, or the result of an arrow that binds a type parameter
+  (`reject_union_tag_array`, `reject_union_tag_ternary`,
+  `reject_union_tag_arrow`). An annotation as the enum, `const k: Kind =
+  s.kind`, is accepted, with the narrowing gap above.
 - **No covariant arrays.** A `Circle[]` is not a `Shape[]`, since a push
   through the wider type would put a `Square` among the circles; build the
   array as a `Shape[]` (`reject_union_covariant_array`).
-- **No object literal of a union.** `const s: Shape = { kind: ... }` has no
-  one class to build (`reject_union_object_literal`); annotate it as the
-  interface it is.
-- **No `new` of the union** (`reject_union_new`), and no `new
-  Array<Shape>(n)`, which would fill the array with a zero no variant is
-  (`reject_union_new_array`).
+- **No object literal of a union.** An object literal where a union is
+  wanted, `area({ kind: Kind.Tri, base: 2 })` for a `Circle | Tri`
+  parameter, has no one class to build (`reject_union_object_literal`):
+  build it into a local annotated as the interface, `const t: Tri = { ... }`,
+  and pass that.
+- **No `new Array<Shape>(n)`**, which would fill the array with a zero no
+  variant is (`reject_union_new_array`).
+- **No class for its interface variant.** A class that implements an
+  interface variant is not itself a variant, so `tsc` accepts a `Band
+  implements Ring` where `Circle | Ring` is wanted and this version does not
+  (`reject_union_implements_variant`): convert it to the interface first,
+  `const r: Ring = new Band()`.
+- **A readonly tag.** `tsc` accepts a variant whose tag can be reassigned;
+  this version asks for `readonly` (NL2535, `reject_union_mutable_tag`).
+- **No write through the union.** `tsc` accepts `s.x = 1` when every variant
+  has `x`; this version refuses every write through a union (NL2529,
+  `reject_union_assign_tag`).
 
-A value of any other type where a union is wanted is the existing refusal of
-its position (`reject_union_field_other`, `reject_union_return_other`,
-`reject_union_method_arg`, `reject_union_ctor_arg`,
-`reject_union_array_other`, `reject_union_ternary_other`,
-`reject_union_nullish_other`).
+A union is not a class either, so `new Shape()` names no constructor, as in
+`tsc` (`reject_union_new`). A value of any other type where a union is
+wanted is the existing refusal of its position (`reject_union_into_init`,
+`reject_union_into_assign`, `reject_union_into_arg`,
+`reject_union_into_push`, `reject_union_into_index`,
+`reject_union_into_nullable`, `reject_union_field_other`,
+`reject_union_return_other`, `reject_union_method_arg`,
+`reject_union_ctor_arg`, `reject_union_array_other`,
+`reject_union_ternary_other`, `reject_union_nullish_other`). A smaller union
+stored where a larger one is declared narrows it in `tsc`, as a variant
+does, and is NL2534 too (`reject_union_narrow_subunion`).
+
+**Across a sidecar.** A union has no C spelling yet, so a function exported
+through `--emit-header` or `--emit-napi` whose parameter or return holds a
+union, or a field of an exported struct that does, is
+`` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
+(NL4009, `reject_union_export_param`, `reject_union_export_return`,
+`reject_union_export_field`, `reject_union_export_array_field`). Unions
+cross Nish modules freely (`tests/link/union_export`).
 
 ## Result and error handling
 
@@ -2255,7 +2303,10 @@ export const main = (): i32 => {
   to one, which only a method's `.`-joined name can still cause —
   `Point.shifted` beside a function `Point_shifted`:
   `` `Point.shifted` and `Point_shifted` are both `Point_shifted` in C, so a header that declared both would not compile: rename one of them ``
-  (NL4008, `tests/cases/reject_interop_generic_clash`).
+  (NL4008, `tests/cases/reject_interop_generic_clash`). They also refuse a
+  signature or an exported struct field that holds a
+  [discriminated union](#discriminated-unions), which has no C spelling yet
+  (NL4009, `tests/cases/reject_union_export_param`).
 - **A template may be exported and instantiated from another module, and each
   instantiation is defined exactly once**, in the module that declares the
   template. Everywhere else it is a `declare` carrying that definition's

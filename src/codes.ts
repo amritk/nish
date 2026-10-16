@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 661
+export const RULE_COUNT: i32 = 663
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -439,6 +439,8 @@ const diagnosticRules = (): string[] => [
   "NL2038",
   "` is not supported yet: its result is `V | undefined`, and this version cannot narrow one",
   "NL2357",
+  "`, which holds a union no sidecar can describe: a union has no C spelling in this version",
+  "NL4009",
   "`process.argv` requires a `main` entry point (this program has no `export function main`)",
   "NL2149",
   "`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)",
@@ -545,6 +547,8 @@ const diagnosticRules = (): string[] => [
   "NL3014",
   "` values; compare each with `null` and then compare the narrowed values",
   "NL2108",
+  "` must be `readonly`, because the union tells its variants apart by it",
+  "NL2535",
   "`: import `Secret`, `secret`, `expose`, `exposeWith` and `wipe` from `",
   "NL2453",
   "`main` must return void or an i32 number (the process exit code), not ",
