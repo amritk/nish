@@ -217,6 +217,7 @@ compatible only when their types are identical.
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | aliases of `i32[]`, `f32[]`, `f64[]`, `i64[]` | not distinct types; fixed length, so no `push` or `pop` (NL2415): declare `f64[]` to grow one |
 | `class C`, `interface I` | a struct, fields in declaration order | no header, no vtable |
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
+| `K.M` | an enum member type: the one member `K.M`, as `i32` | holds only that member; a read is a `K` |
 | `T \| null` | `T` a class, interface, array, or string | a scalar can never be nullable |
 | `Result<T, E>` | the only way to report failure | `E` may not be `void` |
 | `void` | return type only | |
@@ -1341,6 +1342,60 @@ export const main = (): i32 => {
   point: `Kind` and `i32` never convert in either direction. Members must be
   numeric literals. `===` and `!==` are the **only** operators — no arithmetic,
   no bitwise, so **bit flags stay `i32` module constants**.
+- **A member is also a type.** `Kind.While` as an annotation is a slot that
+  holds exactly that member — the shape of a tag field that says which case
+  its object is. Only the member's own constant (or a value already of that
+  member type) enters it; any other member, or a `Kind` value, is NL2519. A
+  member type converts to its enum, and a read of one *is* the enum, so it
+  compares, switches and passes as a `Kind`. The IR is the enum's `i32`. A
+  generic call takes the member's constant where the member type is wanted
+  (`fold(xs, Kind.Array)` with `xs: Kind.Array[]`), parenthesised or not.
+  It binds a type parameter only from the arguments, so `id(Kind.Array)`
+  into a `Kind.Array` slot, and `apply(take, Kind.Array)` with
+  `take: (x: Kind.Array) => Kind.Array`, bind `T` to `Kind` and are refused:
+  pass a value already of the member type instead. An unannotated `let`
+  keeps the member type of a value already of it, and widens the member's
+  constant to `Kind`, as `tsc` does; so do a ternary, an array literal, `??`
+  and an arrow's result (`[a]` is a `Kind.Array[]`, and so is
+  `map([a], (k) => k)`; `(k) => Kind.Array` answers `Kind`). Arms or elements
+  that differ where one is a member type or an array of one (`c ? a : b`,
+  `c ? a : k`, `[a, Kind.Array]`, `[[a], [Kind.Array]]`) are refused:
+  annotate the variable.
+  `new Array<Kind.Array>(n)` zero-fills, so it is NL2520 unless the member is
+  0; build such an array with `[]` and `push`. A `parallelMap`,
+  `parallelFrom` or `parallelReduce` body answering one is NL2521: answer
+  `Kind` instead.
+
+```ts nish:ok
+enum Kind {
+  Scalar,
+  Array,
+}
+
+class ArrayNode {
+  readonly kind: Kind.Array = Kind.Array;
+  size: i32 = 0;
+}
+
+const isArray = (k: Kind): boolean => k === Kind.Array;
+
+export const main = (): i32 => {
+  const n = new ArrayNode();
+  return isArray(n.kind) ? 0 : 1;
+};
+```
+
+```ts nish:err NL2519
+enum Kind {
+  Scalar,
+  Array,
+}
+
+const pick = (k: Kind): Kind.Array => k; // a `Kind` could be any member
+
+export const main = (): i32 => (pick(Kind.Array) === Kind.Array ? 0 : 1);
+```
+
 - **Both can be exported.** `export enum Kind` is imported like a function,
   `import { Kind } from "./kinds"` (renamed with `as` if you like), and in the
   importer it *is* the exporter's `Kind`: the members fold to the exporter's

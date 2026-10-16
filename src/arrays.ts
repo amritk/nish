@@ -10,7 +10,15 @@ import {
 import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
 import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
-import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
+import {
+  checkBitwiseAssignOperands,
+  checkExpression,
+  isBitwiseCompound,
+  holdsMember,
+  mixedMemberMessage,
+  unproven,
+  WANT_INFERRED,
+} from "./expressions"
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
 import { genericCallSpelling, indexOfName } from "./generics"
 import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
@@ -70,7 +78,9 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     }
     return want
   }
-  const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : -1
+  // With no array type to read, the element type is inferred, which keeps an
+  // enum member type as an unannotated `let` does: `[a]` is a `Kind.Array[]`.
+  const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : WANT_INFERRED
   let elem = -1
   // `nish:secret`: the first element that holds a `Secret`, refused after the
   // loop so the message is built once (an element outlives its function).
@@ -92,6 +102,11 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     }
     if (elem < 0) {
       elem = type
+    } else if (elem !== type && (holdsMember(ctx, elem) || holdsMember(ctx, type))) {
+      ctx.error(
+        element,
+        mixedMemberMessage(ctx, "Array literal elements must all have the same type", elem, type)
+      )
     } else if (elem !== type) {
       const a = ctx.table.typeName(elem)
       ctx.error(
@@ -457,8 +472,8 @@ export const checkArrayMethod = (
   // (`reject_push_field_literal`, WP19 §A3).
   // A ranged element is the exception (WP31 §6): the range is a sink the
   // pushed value enters, not a width, so it reaches the argument whatever the
-  // receiver is spelled like.
-  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isRanged(elem) ? elem : -1
+  // receiver is spelled like. An enum member type is one too (`isEntered`).
+  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isEntered(elem) ? elem : -1
   if (name === "push") {
     if (!checkBuiltinArity(ctx, call, "push", args, 1)) {
       return ctx.numberType()
@@ -694,6 +709,15 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
     return ctx.errorType(
       expr,
       `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is outside the range; build it with \`[]\` and \`push\` instead`
+    )
+  }
+  // A member type holds one value, so a zero is one of its values only when
+  // the member is 0: a zero-filled `Kind.Array[]` would hold `Kind.Scalar`.
+  if (ctx.table.isEnumMemberType(elem) && ctx.table.memberValue(elem) !== 0) {
+    const spelled = ctx.table.typeName(elem)
+    return ctx.errorType(
+      expr,
+      `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is not the member \`${spelled}\`; build it with \`[]\` and \`push\` instead`
     )
   }
   if (args.children.length !== 1) {

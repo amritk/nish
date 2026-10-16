@@ -1,0 +1,1 @@
+Array literal elements must all have the same type, got Kind.Array and Kind.Scalar: an enum member type is not widened to its enum, so annotate the type it holds, e.g. `Kind`

@@ -143,7 +143,8 @@ export const checkResultConstructor = (ctx: CheckContext, call: Node, scope: Sco
   // WP31 §6: a ranged payload is the exception, because a range is a sink the
   // value enters rather than a width a literal might take: it is passed down
   // so a literal is checked against it and anything else enters it checked.
-  const got = checkExpression(ctx, args.children[0], scope, ctx.table.isRanged(payload) ? payload : -1)
+  // An enum member payload is passed down for the same reason (`isEntered`).
+  const got = checkExpression(ctx, args.children[0], scope, ctx.table.isEntered(payload) ? payload : -1)
   if (!ctx.table.assignable(got, payload)) {
     ctx.error(
       args.children[0],
@@ -277,8 +278,8 @@ const checkUnwrapOr = (ctx: CheckContext, call: Node, args: Node, receiver: i32,
   // is refused. Threading `ok` down here made stage1 accept it, which
   // `tests/run.js --parity` found (WP19 G1) and
   // `reject_res_unwrap_or_f64` pins.
-  // A ranged `ok` is passed down, for `checkResultConstructor`'s reason (WP31 §6).
-  const got = checkExpression(ctx, args.children[0], scope, ctx.table.isRanged(ok) ? ok : -1)
+  // A ranged or enum member `ok` is passed down, for `checkResultConstructor`'s reason (WP31 §6).
+  const got = checkExpression(ctx, args.children[0], scope, ctx.table.isEntered(ok) ? ok : -1)
   if (!ctx.table.assignable(got, ok)) {
     ctx.error(
       args.children[0],

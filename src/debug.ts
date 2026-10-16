@@ -139,12 +139,12 @@ const bitsOf = (type: i32): i32 => {
 }
 
 /**
- * `bitsOf` for a type id that may be an enum (WP23) or a range (WP31): both are
- * an `i32`, and `bitsOf` knows neither, because each is a kind of the table
- * rather than a scalar id.
+ * `bitsOf` for a type id that may be an enum (WP23), one of its member types or a
+ * range (WP31): each is an `i32`, and `bitsOf` knows none of them, because each is a
+ * kind of the table rather than a scalar id.
  */
 const bitsOfIn = (table: TypeTable, type: i32): i32 =>
-  table.isEnum(type) || table.isRanged(type) ? 32 : bitsOf(type)
+  table.enumBase(type) >= 0 || table.isRanged(type) ? 32 : bitsOf(type)
 
 /**
  * A metadata string literal: backslash and double quote escaped, as stage0's `src/`
@@ -257,6 +257,11 @@ export class DebugInfo {
       return "null"
     }
     if (this.table.isNullable(type)) {
+      return this.typeRef(this.table.refOf(type))
+    }
+    // An enum member type is its enum to a debugger, which then prints the
+    // member's name from the enumeration.
+    if (this.table.isEnumMemberType(type)) {
       return this.typeRef(this.table.refOf(type))
     }
     if (type === T_CPTR) {

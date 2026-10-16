@@ -590,6 +590,11 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
   if (table.isRanged(t)) {
     return table.typeName(t)
   }
+  // An enum member type crosses exactly where its enum does, which is
+  // nowhere, and reads as written in the comment above a skipped declaration.
+  if (table.isEnumMemberType(t)) {
+    return table.typeName(t)
+  }
   switch (table.kindOf(t)) {
     case T_I32:
       return "number"

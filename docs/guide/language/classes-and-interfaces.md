@@ -176,5 +176,6 @@ class Dog extends Animal {
 
 There is no `instanceof` and no downcast either: a value's type is the one
 it was declared with. Where a function needs to tell kinds of thing apart,
-store the kind in a field — a numeric `enum` is the usual choice — and
-`switch` on it.
+store the kind in a field — a numeric `enum` is the usual choice, and a
+`readonly` field of an [enum member type](types.md#enum-member-types) fixes
+it for every object of a class — and `switch` on it.

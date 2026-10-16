@@ -245,3 +245,109 @@ const digit: integer<0, 9> = 12;
 
 The reference's [Types](../../LANGUAGE.md#types) section lists every rule
 for `integer<Lo, Hi>`.
+
+## Enum member types
+
+A member of an [enum](../../LANGUAGE.md#enums) is also a type. Written as an
+annotation, `Kind.Array` is a slot that holds that one member and nothing
+else, which is how a class records which of an enum's cases it is: a
+`readonly` field of the member's type, set to the member.
+
+```ts nish:ok
+enum Kind {
+  Scalar,
+  Array,
+}
+
+class ArrayNode {
+  readonly kind: Kind.Array = Kind.Array;
+  depth: i32 = 1;
+}
+
+const describe = (k: Kind): string => (k === Kind.Array ? "array" : "scalar");
+
+export const main = (): i32 => {
+  const n = new ArrayNode();
+  console.log(describe(n.kind));    // array
+  return 0;
+};
+```
+
+Only the member itself goes into such a slot. Another member is a compile
+error, and so is a plain `Kind` value, because the compiler cannot tell which
+member that holds:
+
+```ts nish:err NL2519
+enum Kind {
+  Scalar,
+  Array,
+}
+
+class ArrayNode {
+  readonly kind: Kind.Array = Kind.Scalar;
+}
+```
+
+Reading the slot gives you a `Kind`, so it compares, switches and passes
+anywhere a `Kind` does.
+
+A `let` with no annotation follows TypeScript. Start it from a value that
+already has the member type and it keeps that type. Start it from the
+member's constant and it is a `Kind`, so it can take another member later:
+
+```ts nish:err NL2519
+enum Kind {
+  Scalar,
+  Array,
+}
+
+const keep = (k: Kind.Array): Kind.Array => k;
+
+export const main = (): i32 => {
+  let held = keep(Kind.Array); // a Kind.Array
+  held = Kind.Scalar;
+  let any = Kind.Array; // a Kind
+  any = Kind.Scalar;
+  return any === held ? 0 : 1;
+};
+```
+
+The same goes for the other places a type is worked out from what you
+wrote. `c ? a : a` is a `Kind.Array` when `a` is, `[a]` is a `Kind.Array[]`,
+and so is `xs ?? [a]`. An arrow's result counts too: `map([a], (k) => k)` is a
+`Kind.Array[]`, while `map([a], (k) => Kind.Array)` is a `Kind[]`, because an
+arrow that answers the constant answers a `Kind`, as in TypeScript.
+
+When the two arms of a ternary, or two elements of an array literal, differ
+and one of them is a member type, such as `c ? a : b` with `b` a
+`Kind.Scalar`, or `c ? a : k` with `k` a `Kind`, the compiler asks you to
+annotate the variable (`let x: Kind = c ? a : b`). TypeScript would work out
+a type by rules of its own: the union of the members, which for `Kind`'s two
+members is `Kind` itself, or the member, or the enum. Writing the type says
+which one you meant.
+
+A generic function takes the member's constant where its type parameter is
+already bound to the member type, as in `fold(xs, Kind.Array)` with `xs` a
+`Kind.Array[]`. It works out the type parameter from the arguments only, so
+`id(Kind.Array)` is a `Kind` even where a `Kind.Array` is wanted, and so is
+`apply(take, Kind.Array)` when `take` takes a `Kind.Array`. Both are refused.
+TypeScript accepts them. Pass a value that already has the member type
+instead: `id(a)`.
+
+An array of a member type is built with `[]` and `push`. `new Array<T>(n)`
+fills its slots with 0, which here is `Kind.Scalar`, so the compiler refuses
+it for any member but the one whose value is 0:
+
+```ts nish:err NL2520
+enum Kind {
+  Scalar,
+  Array,
+}
+
+export const main = (): i32 => {
+  const tags = new Array<Kind.Array>(4);
+  return tags.length;
+};
+```
+
+The reference's [Enums](../../LANGUAGE.md#enums) section has every rule.

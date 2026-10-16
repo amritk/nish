@@ -682,8 +682,9 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
     seen.push(prop.text)
     const value = prop.children[0]
     // A ranged field is the exception (WP31 §6): the range is a sink the value
-    // enters, not a width a literal might take, so it always reaches the value.
-    const context = takesDeclaredContext(value) || ctx.table.isRanged(field.type) ? field.type : -1
+    // enters, not a width a literal might take, so it always reaches the value,
+    // and so is an enum member type's (`isEntered`).
+    const context = takesDeclaredContext(value) || ctx.table.isEntered(field.type) ? field.type : -1
     const got = checkExpression(ctx, value, scope, context)
     if (got !== T_ERROR && !ctx.table.assignable(got, field.type)) {
       const spelled = ctx.table.typeName(field.type)
