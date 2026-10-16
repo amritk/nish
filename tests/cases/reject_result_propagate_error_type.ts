@@ -13,7 +13,7 @@ function open(path: string): Result<i32, IoError> {
   return Ok(3);
 }
 
-export function read(path: string): Result<i32, string> {
+export function readFile(path: string): Result<i32, string> {
   const fd = open(path).orReturn();
   return Ok(fd);
 }

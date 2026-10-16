@@ -208,7 +208,7 @@ function main(): i32 -> @nish_main [exported entry]
   local 12:9 i: i32 (const)
 program tests/cases/arr_bounds_cond_assign.ts
 module tests/cases/arr_bounds_cond_assign.ts (entry)
-function read(start: i32[], short: i32[], i: i32): i32 -> @read
+function read(start: i32[], short: i32[], i: i32): i32 -> @read$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i short start
   calls: nish_panic_index
@@ -219,9 +219,9 @@ function read(start: i32[], short: i32[], i: i32): i32 -> @read
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_print nish_str_from_i32 read
+  calls: nish_print nish_str_from_i32 read$
   stackSites=0 stackLocals=0
-  callee 13:18 read -> @read
+  callee 13:18 read -> @read$
 program tests/cases/arr_bounds_cond_effect.ts
 module tests/cases/arr_bounds_cond_effect.ts (entry)
 function drain(ys: i32[]): i32 -> @drain
@@ -230,7 +230,7 @@ function drain(ys: i32[]): i32 -> @drain
   calls: nish_panic_index
   pointer ys: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function read(xs: i32[], i: i32): i32 -> @read
+function read(xs: i32[], i: i32): i32 -> @read$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via drain
   escaping: i
@@ -241,9 +241,9 @@ function read(xs: i32[], i: i32): i32 -> @read
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 read
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 read$
   stackSites=1 stackLocals=0
-  callee 20:18 read -> @read
+  callee 20:18 read -> @read$
 program tests/cases/arr_bounds_continue_do.ts
 module tests/cases/arr_bounds_continue_do.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -2573,7 +2573,7 @@ function Holder.trim(this: Holder): boolean -> @Holder.trim [method]
   sharedWrite: 14:7
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function read(h: Holder, i: i32): f64 -> @read
+function read(h: Holder, i: i32): f64 -> @read$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Holder.trim
   escaping: i
@@ -2583,10 +2583,10 @@ function read(h: Holder, i: i32): f64 -> @read
   callee 21:43 Holder.trim -> @Holder.trim
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via read
-  calls: Holder.constructor llvm.fptosi.sat.i32.f64 read
+  sharedWrite: via read$
+  calls: Holder.constructor llvm.fptosi.sat.i32.f64 read$
   stackSites=1 stackLocals=0
-  callee 27:38 read -> @read
+  callee 27:38 read -> @read$
   callee 27:43 new Holder -> @Holder.constructor
 program tests/cases/arr_path_cond_generic.ts
 module tests/cases/arr_path_cond_generic.ts (entry)
@@ -2639,7 +2639,7 @@ function Holder.shrink(this: Holder): boolean -> @Holder.shrink [method]
   sharedWrite: 13:7
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function read(h: Holder, i: i32): i32 -> @read
+function read(h: Holder, i: i32): i32 -> @read$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Holder.shrink
   escaping: i
@@ -2650,9 +2650,9 @@ function read(h: Holder, i: i32): i32 -> @read
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Holder.constructor nish_print nish_str_from_i32 read
+  calls: Holder.constructor nish_print nish_str_from_i32 read$
   stackSites=1 stackLocals=0
-  callee 27:18 read -> @read
+  callee 27:18 read -> @read$
   callee 27:23 new Holder -> @Holder.constructor
 program tests/cases/arr_path_cond_root.ts
 module tests/cases/arr_path_cond_root.ts (entry)
@@ -2665,7 +2665,7 @@ function Holder.constructor(this: Holder, xs: i32[]): void -> @Holder.constructo
   pointer this: size=8 writesThrough=true captured=false
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function read(a: Holder, b: Holder, i: i32): i32 -> @read
+function read(a: Holder, b: Holder, i: i32): i32 -> @read$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b i
   calls: nish_panic_index
@@ -2676,9 +2676,9 @@ function read(a: Holder, b: Holder, i: i32): i32 -> @read
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Holder.constructor nish_alloc_struct nish_print nish_str_from_i32 read
+  calls: Holder.constructor nish_alloc_struct nish_print nish_str_from_i32 read$
   stackSites=0 stackLocals=0
-  callee 20:18 read -> @read
+  callee 20:18 read -> @read$
   callee 20:23 new Holder -> @Holder.constructor
   callee 20:55 new Holder -> @Holder.constructor
 program tests/cases/arr_path_cond_store.ts
@@ -2692,7 +2692,7 @@ function Holder.constructor(this: Holder, xs: i32[]): void -> @Holder.constructo
   pointer this: size=8 writesThrough=true captured=false
   pointer xs: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function read(h: Holder, short: i32[], i: i32): i32 -> @read
+function read(h: Holder, short: i32[], i: i32): i32 -> @read$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 12:37
   escaping: i short
@@ -2703,9 +2703,9 @@ function read(h: Holder, short: i32[], i: i32): i32 -> @read
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Holder.constructor nish_print nish_str_from_i32 read
+  calls: Holder.constructor nish_print nish_str_from_i32 read$
   stackSites=1 stackLocals=0
-  callee 19:18 read -> @read
+  callee 19:18 read -> @read$
   callee 19:23 new Holder -> @Holder.constructor
 program tests/cases/arr_path_cond_string.ts
 module tests/cases/arr_path_cond_string.ts (entry)
@@ -2754,7 +2754,7 @@ function Holder.trim(this: Holder): boolean -> @Holder.trim [method]
   sharedWrite: 12:7
   pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function read(h: Holder, i: i32): i32 -> @read
+function read(h: Holder, i: i32): i32 -> @read$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Holder.trim
   escaping: i
@@ -2765,9 +2765,9 @@ function read(h: Holder, i: i32): i32 -> @read
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Holder.constructor nish_print nish_str_from_i32 read
+  calls: Holder.constructor nish_print nish_str_from_i32 read$
   stackSites=1 stackLocals=0
-  callee 21:18 read -> @read
+  callee 21:18 read -> @read$
   callee 21:23 new Holder -> @Holder.constructor
 program tests/cases/arr_path_cond_while.ts
 module tests/cases/arr_path_cond_while.ts (entry)
@@ -5027,7 +5027,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee 14:15 total -> @total
 program tests/cases/caps_signal.ts
 module tests/cases/caps_signal.ts (entry)
-function listen(): i32 -> @listen
+function listen(): i32 -> @listen$
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_signal_fd
   calls: nish_signal_fd
@@ -5035,9 +5035,9 @@ function listen(): i32 -> @listen
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: listen nish_print
+  calls: listen$ nish_print
   stackSites=0 stackLocals=0
-  callee 7:15 listen -> @listen
+  callee 7:15 listen -> @listen$
 program tests/cases/cf_break_continue.ts
 module tests/cases/cf_break_continue.ts (entry)
 function firstMultipleOver(n: i32, limit: i32): i32 -> @firstMultipleOver
@@ -5164,7 +5164,7 @@ function test(): i32 -> @test [exported]
   callee 13:10 gcd -> @gcd
 program tests/cases/cf_if.ts
 module tests/cases/cf_if.ts (entry)
-function abs(x: i32): i32 -> @abs
+function abs(x: i32): i32 -> @abs$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   calls: nish_panic_overflow
@@ -5176,9 +5176,9 @@ function pick(flag: boolean, a: i32, b: i32): i32 -> @pick
   local 9:7 r: i32 (let)
 function test(): i32 -> @test [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: abs nish_panic_overflow pick
+  calls: abs$ nish_panic_overflow pick
   stackSites=0 stackLocals=0
-  callee 19:10 abs -> @abs
+  callee 19:10 abs -> @abs$
   callee 19:20 pick -> @pick
 program tests/cases/cf_if_else_chain.ts
 module tests/cases/cf_if_else_chain.ts (entry)
@@ -14306,19 +14306,19 @@ function reset(xs: i32[]): void -> @reset
   pointer xs: size=0 writesThrough=true captured=false passedTo=fill#0
   stackSites=0 stackLocals=0
   callee 12:3 fill -> @fill
-function log(n: i32): void -> @log
+function log(n: i32): void -> @log$
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
 function run(): i32 -> @run [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via log
-  calls: log reset
+  sharedWrite: via log$
+  calls: log$ reset
   stackSites=1 stackLocals=1
   local 20:9 xs: i32[] (const)
   callee 21:3 reset -> @reset
-  callee 22:3 log -> @log
+  callee 22:3 log -> @log$
 program tests/cases/dump_shared_write_field.ts
 module tests/cases/dump_shared_write_field.ts (entry)
 struct Counter (class) size=4 align=4
@@ -46015,7 +46015,7 @@ function receive(fd: i32, buf: u8[], off: i32, len: i32, from: u8[], meta: i32[]
   pointer meta: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local 15:7 n: i32 (let)
-function send(fd: i32, data: readonly u8[], to: readonly u8[]): i32 -> @send
+function send(fd: i32, data: readonly u8[], to: readonly u8[]): i32 -> @send$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_udp_send_to
   calls: nish_panic_slice nish_udp_send_to
@@ -46025,7 +46025,7 @@ function send(fd: i32, data: readonly u8[], to: readonly u8[]): i32 -> @send
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_udp_bind
-  calls: nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic_index nish_panic_overflow nish_panic_slice nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_tcp_accept nish_udp_bind nish_udp_recv_from nish_udp_send_to receive send
+  calls: nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic_index nish_panic_overflow nish_panic_slice nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 nish_tcp_accept nish_udp_bind nish_udp_recv_from nish_udp_send_to receive send$
   stackSites=7 stackLocals=7
   local 26:9 a: i32 (const)
   local 27:9 b: i32 (const)
@@ -46034,17 +46034,17 @@ function main(): i32 -> @nish_main [exported entry]
   local 32:9 meta: i32[] (const)
   local 33:9 buf: u8[] (const)
   local 34:9 data: u8[] (const)
-  callee 37:15 send -> @send
+  callee 37:15 send -> @send$
   callee 38:15 receive -> @receive
   local 40:9 port: i32 (const)
-  callee 42:15 send -> @send
+  callee 42:15 send -> @send$
   callee 43:15 receive -> @receive
   local 45:9 short: u8[] (const)
   local 46:9 one: i32[] (const)
   local 57:9 shared: i32 (const)
   local 58:9 again: i32 (const)
   local 61:9 both: i32 (const)
-  callee 62:15 send -> @send
+  callee 62:15 send -> @send$
   callee 63:15 receive -> @receive
 program tests/cases/net_udp_echo.ts
 module tests/cases/net_udp_echo.ts (entry)
@@ -46310,7 +46310,7 @@ function pick(n: Node | null, k: string): Node -> @pick
   pointer n: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee 13:56 new Node -> @Node.constructor
-function link(n: Node, k: string): void -> @link
+function link(n: Node, k: string): void -> @link$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 16:3
   calls: Node.constructor nish_alloc_struct nish_str_concat
@@ -46325,13 +46325,13 @@ function churn(): i32 -> @churn
   local 21:12 i: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via link
-  calls: Node.constructor churn link nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pick
+  sharedWrite: via link$
+  calls: Node.constructor churn link$ nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pick
   stackSites=0 stackLocals=0
   local 28:9 root: Node (const)
   callee 28:16 new Node -> @Node.constructor
-  callee 29:3 link -> @link
-  callee 30:3 link -> @link
+  callee 29:3 link -> @link$
+  callee 30:3 link -> @link$
   local 31:9 p: Node (const)
   callee 31:13 pick -> @pick
   local 32:9 q: Node (const)
@@ -47376,7 +47376,7 @@ function quotient(a: i32, b: i32): i32 -> @quotient
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div
   stackSites=0 stackLocals=0
-function remainder(a: i32, b: i32): i32 -> @remainder
+function remainder(a: i32, b: i32): i32 -> @remainder$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: nish_panic_div
@@ -47398,10 +47398,10 @@ function guarded(a: i32, d: i32): i32 -> @guarded
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: guarded halves nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 quotient ratio remainder share
+  calls: guarded halves nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32 quotient ratio remainder$ share
   stackSites=0 stackLocals=0
   callee 33:15 quotient -> @quotient
-  callee 34:15 remainder -> @remainder
+  callee 34:15 remainder -> @remainder$
   callee 35:15 ratio -> @ratio
   callee 36:15 halves -> @halves
   callee 37:21 share -> @share
@@ -78636,7 +78636,7 @@ module docs/cookbook/builtin-net-udp.ts (entry)
 import udpBind from "nish:net" -> builtin udpBind
 import udpRecvFrom from "nish:net" -> builtin udpRecvFrom
 import udpSendTo from "nish:net" -> builtin udpSendTo
-function bind(port: i32): i32 -> @bind [exported]
+function bindPort(port: i32): i32 -> @bindPort [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_udp_bind
   calls: nish_udp_bind
@@ -78655,7 +78655,7 @@ module docs/cookbook/builtin-net.ts (entry)
 import netRead from "nish:net" -> builtin netRead
 import netWrite from "nish:net" -> builtin netWrite
 import tcpListen from "nish:net" -> builtin tcpListen
-function listen(port: i32): i32 -> @listen [exported]
+function listenOn(port: i32): i32 -> @listenOn [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_tcp_listen
   calls: nish_tcp_listen
@@ -88347,7 +88347,7 @@ function sumTo(n: i32): i32 -> @sumTo
   local 3:12 i: i32 (let)
 program docs/cookbook/stmt-if.ts
 module docs/cookbook/stmt-if.ts (entry)
-function abs(x: i32): i32 -> @abs
+function abs(x: i32): i32 -> @abs$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x
   calls: nish_panic_overflow
@@ -108375,21 +108375,21 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
 program tests/differential/corpus/int_wrap.ts --wrapping
 module tests/differential/corpus/int_wrap.ts (entry)
-function times(a: i32, b: i32): i32 -> @times
+function times(a: i32, b: i32): i32 -> @times$
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 times
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 times$
   stackSites=0 stackLocals=0
   local 7:9 max: i32 (const)
   local 8:9 min: i32 (const)
-  callee 14:15 times -> @times
-  callee 15:15 times -> @times
-  callee 16:15 times -> @times
-  callee 17:15 times -> @times
-  callee 18:15 times -> @times
+  callee 14:15 times -> @times$
+  callee 15:15 times -> @times$
+  callee 16:15 times -> @times$
+  callee 17:15 times -> @times$
+  callee 18:15 times -> @times$
   local 21:7 acc: i32 (let)
   local 22:12 i: i32 (let)
   local 26:7 p: i32 (let)
