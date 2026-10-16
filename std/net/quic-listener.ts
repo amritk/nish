@@ -95,9 +95,10 @@
  * byte for byte.
  *
  * **Secrets.** The seed lives in the listener and the static keys in the
- * caller's `QuicServerConfig`, for the server's lifetime, as plain bytes,
- * since a `Secret` may not be a field (NL2430); QUIC-5 in
- * `docs/security/quic.md` records it, with #430.
+ * `QuicServerConfig`, for the server's lifetime, as plain bytes, since a
+ * `Secret` may not be a field (NL2430). `release()` wipes the listener's own,
+ * and `Http3Server.stop` the configuration's with them; QUIC-5 in
+ * `docs/security/quic.md` records what is left.
  *
  * Written from RFC 9000, in this module's own structure; nothing here is
  * ported from another implementation. Private names carry the
@@ -212,12 +213,38 @@ export class QuicListenerAnswer {
   retryScid: u8[]
   kind: i32 = 0
   retried: boolean = false
+  room: i32 = 0
 
   constructor(room: i32) {
-    this.reply = quicListenerRoom(room > 0 ? room : 0)
+    this.room = room > 0 ? room : 0
+    this.reply = quicListenerRoom(this.room)
     this.originalDcid = quicListenerRoom(QUIC_MAX_CID_LENGTH)
     this.retryScid = quicListenerRoom(QUIC_MAX_CID_LENGTH)
   }
+
+  /**
+   * Zeroes the last answer: `reply` across its whole room and each ID across
+   * its 20 bytes, so a Retry's token, a stateless reset's token and the IDs
+   * leave no copy beyond the arrays' lengths either. Each is left that long
+   * and all zero, `kind` a drop. An answer whose reply grew past its room
+   * keeps what lies beyond the longest length it is wiped at; one made with
+   * `QUIC_LISTENER_ANSWER_SIZE` never grows.
+   */
+  wipe(): void {
+    quicListenerWipeRoom(this.reply, this.room)
+    quicListenerWipeRoom(this.originalDcid, QUIC_MAX_CID_LENGTH)
+    quicListenerWipeRoom(this.retryScid, QUIC_MAX_CID_LENGTH)
+    this.kind = QUIC_LISTEN_DROP
+    this.retried = false
+  }
+}
+
+/** Grows `bytes` to at least `room` in the room it already has and zeroes all of it. */
+const quicListenerWipeRoom = (bytes: u8[], room: i32): void => {
+  if (toI32(bytes.length) < room) {
+    quicListenerResize(bytes, room)
+  }
+  secureZero(bytes)
 }
 
 /** An empty array with room for `size` bytes, so pushing up to that many allocates nothing. */
@@ -363,6 +390,30 @@ export class QuicListener {
       config.retryTokenLifetime >= 1 &&
       config.retryTokenLifetime <= QUIC_LISTENER_MAX_TOKEN_LIFETIME
     secureZero(entropy)
+  }
+
+  /**
+   * Ends the listener: wipes the seed and the generator's unused bytes, the
+   * tag and the HMAC and HKDF scratch, the INVALID_TOKEN close's Initial
+   * secrets and key slots, and `handle`'s spare answer, which holds the last
+   * one; `handle` and `handleWindow` then drop every datagram they are
+   * handed. The other methods still run, under the zeroed seed, and are the
+   * caller's not to call. What `handle` returned is the caller's to wipe. The
+   * configuration's keys are not the listener's to wipe: `Http3Server.stop`
+   * wipes them with the rest of the server.
+   */
+  release(): void {
+    this.usable = false
+    secureZero(this.seed)
+    secureZero(this.pool)
+    this.poolHead = QUIC_LISTENER_POOL
+    secureZero(this.tag)
+    this.kdf.wipe()
+    secureZero(this.initialClient)
+    secureZero(this.initialServer)
+    this.readSlot.wipe()
+    this.writeSlot.wipe()
+    this.spare.wipe()
   }
 
   /**

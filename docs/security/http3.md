@@ -38,7 +38,7 @@ closed in the carrier.
 | --- | --- |
 | `std/net/http3-frame.ts` | `h3ReadFrameHeader`, `h3ReadSettings` and `Http3Settings` (`take`, `unknown`), `h3ReadIdPayload`, `h3ReadVarint`, the writers (`h3PutVarint`, `h3PutFrameHeader`, `h3PutSettings`, `h3PutIdFrame`), `h3ReservedHttp2Frame`, `h3Greased` |
 | `std/net/http3.ts` | `Http3Connection`: `next`, `step`, `open`, `start`, `ownStream`, `uniStep`, `typed`, `controlStep`, `controlFrame`, `requestStep`, `requestFrame`, `fieldSection`, `copyFields`, `copyOf`, `ended`, `abandon`, `streamError`, `answerTooLarge`, `writable`, `drain`, `arm`, `writeHead`, `respond`, `writeTrailers`, `writeData`, `reset`, `goaway`, `restart` |
-| `std/net/http3-server.ts` | `Http3Server` (`receive`, `datagram`, `unowned`, `worthListening`, `takeAnswer`, `serve`, `refile`, `flush`, `release`, `tick`, `timeout`), `Http3CidIndex`, `Http3Wheel` |
+| `std/net/http3-server.ts` | `Http3Server` (`receive`, `datagram`, `unowned`, `worthListening`, `takeAnswer`, `serve`, `refile`, `flush`, `release`, `tick`, `timeout`, `stop`), `Http3CidIndex`, `Http3Wheel` |
 | `std/net/quic-listener.ts` | `QuicListener.handleWindow` and what it answers with (`versionNegotiation`, `retry`, `retryTag`, `tokenMac`, `tokenValid`, `invalidToken`, `opens`, `statelessReset`, `randomByte`, `refill`), `QuicListenerAnswer`: for H3-3 only; the listener's rules are QUIC-4 and QUIC-5's in `docs/security/quic.md` |
 
 Out of scope: QPACK's decoder and encoder (`nish/net/qpack`), the field model
@@ -252,7 +252,8 @@ HTTP/3 holds no key material: the packet keys are QUIC's and TLS's
 as a `Secret` on each `receive` and keeps nothing of it; its per-connection
 entropy is wiped by `QuicConnection` as soon as it is copied. The
 connection-ID index keeps eight bytes of the listener's entropy as its salt
-for the server's life, unwiped, beside the listener's own seed (QUIC-5). What
+for the server's life, and `Http3Server.stop` wipes it with the listener's
+seed and the configuration's static keys (QUIC-5). What
 the connection holds is application data — request field sections in
 `section`, the decoder's buffer and the field copies, bodies in `data` — which
 may carry credentials (`cookie`, `authorization`). None of it is wiped: each
