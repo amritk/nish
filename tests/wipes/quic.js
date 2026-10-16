@@ -27,10 +27,12 @@ export const wipeChecks = [
   // previous read generation's key and IV, its schedule 2, and `aesKeyInto`
   // 6). Discarding a level, `discard` 23: the read and write keys' key, IV
   // and header-protection key, 6, their packet schedules, 4, and one slot's
-  // `wipe` in the loop over the space's slots, 13. `wipeAll` 95: three
-  // `discard`s, the previous generation's packet schedule 2, and 24 wipes of
-  // its own (a loop's one call site counted once), `TlsServer`'s resumption
-  // secret among them; `release` is `wipeAll`. `runClocks` 200: `wipeAll` at the idle timeout and again at
+  // `wipe` in the loop over the space's slots, 13. `wipeAll` 94: three
+  // `discard`s, the previous generation's packet schedule 2, and 23 wipes of
+  // its own (a loop's one call site counted once); `TlsServer`'s resumption
+  // master secret it leaves to `wipeResumption`, in `nish/net/tls`, which this
+  // group does not run through `opt` (`tls.js` counts it, `net_quic_wipes`
+  // reads it back); `release` is `wipeAll`. `runClocks` 198: `wipeAll` at the idle timeout and again at
   // the end of the closing or draining period, each copy counted, and
   // `prepareNextReadKeys` once a key update's previous keys have had their
   // probe timeout. `afterTls` 134: once the handshake is confirmed, the
@@ -48,8 +50,8 @@ export const wipeChecks = [
   // token once it is in the transport parameters, besides its derivation. `openPacket` 266: the
   // Initial level's `discard` on the first Handshake packet, besides the
   // derivations and wipes of every level it opens. `quicInitialSecretsInto`
-  // 1: the Initial secret once both directions' are expanded. `reset` 101:
-  // `wipeAll`, 95, and `begin`'s wipes of the next connection's entropy.
+  // 1: the Initial secret once both directions' are expanded. `reset` 100:
+  // `wipeAll`, 94, and `begin`'s wipes of the next connection's entropy.
   {
     name: "quic: the wipes survive opt -O2 (a key slot's keys and AES schedules, each packet's nonce and mask, a key update's replaced generation, a discarded level and its handshake secrets, the reset tokens, connection IDs and entropy once used, and every key at release, reset, the idle timeout and the end of the closing or draining period)",
     program: "tests/link/net_quic_wipes/main.ts",
@@ -62,9 +64,9 @@ export const wipeChecks = [
       ["nish.QuicConnection.updateWriteKeys", 12],
       ["nish.QuicConnection.prepareNextReadKeys", 10],
       ["nish.QuicConnection.discard", 23],
-      ["nish.QuicConnection.wipeAll", 95],
-      ["nish.QuicConnection.release", 95],
-      ["nish.QuicConnection.runClocks", 200],
+      ["nish.QuicConnection.wipeAll", 94],
+      ["nish.QuicConnection.release", 94],
+      ["nish.QuicConnection.runClocks", 198],
       ["nish.QuicConnection.afterTls", 134],
       ["nish.QuicConnection.applyPhase", 13],
       ["nish.quicStatelessResetToken", 14],
@@ -74,7 +76,7 @@ export const wipeChecks = [
       ["nish.QuicConnection.establish", 28],
       ["nish.QuicConnection.openPacket", 266],
       ["nish.quicInitialSecretsInto", 1],
-      ["nish.QuicConnection.reset", 101],
+      ["nish.QuicConnection.reset", 100],
     ],
   },
 ]

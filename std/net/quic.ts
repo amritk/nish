@@ -3634,7 +3634,7 @@ export class QuicConnection {
       secureZero(tls.clientApplicationSecret)
       secureZero(tls.serverApplicationSecret)
       secureZero(tls.exporterSecret)
-      secureZero(tls.resumptionSecret)
+      tls.wipeResumption()
     }
   }
 }
