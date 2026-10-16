@@ -133,6 +133,14 @@ export const main = (): i32 => {
 };
 ```
 
+That copy has a cost, and the caller pays its last part alone, one string at
+a time, after every thread has finished. When the work per element is small,
+a `parallelMap` that answers strings is no faster than a plain loop today. A
+million `` `n${x % 1000}` `` strings took about 185–223 ms on 4 threads, against
+about 215 ms for the sequential loop. Timings swing widely between runs, so
+measure your own case. Reach for the threads when each element does real work,
+or when the answer is a number.
+
 ## Reading the function's constants
 
 An arrow passed to one of these four forms may read the `const` locals and the

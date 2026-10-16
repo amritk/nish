@@ -2653,6 +2653,15 @@ from the whole-program facts, and each rule is reported there:
   `parallelMap` and `parallelFrom` allocate their result before the region, so
   theirs is refused there, before `std/threads.ts` is instantiated
   (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
+  The copy back is serial: the caller copies every string or array into its
+  own arena after the join, one at a time. When each element's work is cheap,
+  a map that answers strings is therefore no faster than the sequential loop
+  today. 1M strings of `` `n${x % 1000}` ``, at about 43 ns of work each, took
+  185–223 ms on 4 threads, against about 215 ms sequentially (one earlier run
+  read 279 ms). Copy-out on the workers costs about 25–50 ns a string and
+  copy-in on the caller about 10–20 ns, and the figures vary widely from run
+  to run on the same machine. A map whose per-element work outweighs the copy
+  does gain from the threads.
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
