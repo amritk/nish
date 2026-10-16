@@ -5180,7 +5180,7 @@ export const main = (): i32 => {
 | Export | Meaning | Test |
 | --- | --- | --- |
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
-| `secret(v)` | `v` wrapped; a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable` |
+| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
 | `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
 | `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
@@ -5248,9 +5248,65 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   function made it, and `k` is not read again (NL2446, `reject_secret_moved_out`),
   but a parameter, an element of an array literal or an arm of a ternary is a
   second name for one key (NL2444, `reject_secret_copy_param`).
-- `secret(v)` moves `v`: a local handed in is not read again (NL2445,
-  `reject_secret_moved`), and a parameter, a field or an element, whose owner
-  keeps the plain bytes, is refused (NL2447, `reject_secret_unmovable`).
+- `secret(v)` takes a value nothing else holds, and moves it, because a
+  second name for the bytes would read the key outside the `Secret`, and
+  zeros once `wipe` has run. A local handed in is not read again (NL2445,
+  `reject_secret_moved`), and neither is the local in either arm of
+  `secret(c ? a : b)`. A parameter, a field or an element, whose owner keeps
+  the plain bytes, is refused (NL2447, `reject_secret_unmovable`). Everything
+  else is judged where it is written:
+  - an array or object literal, `null`, and a ternary of fresh values are
+    fresh, and so is a `new` whose constructor keeps no `this`;
+  - a call is fresh when its callee answers a fresh value, judged over the
+    callee's own body by this same rule, through every depth of calls (a
+    recursive one included); `expose` and `exposeWith` answer what the
+    function they run answers, and `r.orReturn()`, `r.expect(m)` and
+    `r.unwrapOr(d)` what `r` carries in its `Ok` (`d` too, which may not be a
+    local here, since the move does not reach it). A method of a value,
+    `rows.pop()`, may answer what the value holds;
+  - a local is fresh when it is the sole reference to its value: every value
+    it is given is fresh (another local is not, because that local still
+    names it), it is not a `for...of` binding, which names an element, and no
+    other use of it leaves a second name. Reading an integer element or field,
+    `.length`, an array method on it, `===`, iterating over it, `wipe`, and
+    handing it to a builtin, or to a function or method the whole-program
+    facts say keeps nothing of it, are all such uses. An initialiser, an
+    assignment's value, a field or element store, a literal's element, a
+    ternary arm, either side of `??`, the argument of `Ok` or `Err`, an
+    assignment to it used as a value (`alias = raw = [1]`, `xs.push(raw =
+    [1])`; one whose value is dropped, as a statement or in a `for` header,
+    is not), a later declarator of the same statement, a `return`, an argument of a method of
+    another value (`rows.push(raw)`, `m.set(k, raw)`), a read by an arrow
+    that captures it (a data-parallel body or a spawned task), and a function or constructor
+    that keeps it each leave one.
+
+  Each is `` `secret` takes a value nothing else holds, and `raw` has a second
+  reference: `const alias = raw` (line 6) ``, naming the reference and its
+  line, or the callee and its parameter that keep it (NL2512,
+  `reject_secret_alias_const`, `reject_secret_alias_let`,
+  `reject_secret_alias_reassigned`, `reject_secret_alias_assign_chain`,
+  `_assign_init`, `_assign_push`, `_assign_field`, `_assign_kept`,
+  `_assign_helper`, `_assign_parents`, `_assign_constructor`,
+  `_assign_source`, `reject_secret_alias_declarators`,
+  `reject_secret_alias_field`, `reject_secret_alias_element`,
+  `reject_secret_alias_param`,
+  `reject_secret_alias_return`, `reject_secret_alias_mutual`,
+  `reject_secret_alias_ternary`, `reject_secret_alias_nullish`,
+  `reject_secret_alias_ok`, `reject_secret_alias_err`,
+  `reject_secret_alias_unwrap_or`, `reject_secret_alias_unwrap_helper`,
+  `reject_secret_alias_unwrap_local`, `reject_secret_alias_constructor`,
+  `reject_secret_alias_receiver`, `reject_secret_alias_pop`,
+  `reject_secret_alias_for_of`, and `reject_secret_alias_capture_map`,
+  `_from`, `_map_into`, `_reduce` and `_spawn`, and
+  `reject_secret_alias_spawn_arg` and `_spawn_with` for a task's argument,
+  which the scope keeps until the task has run). Pass a fresh value instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
+  copy.set(raw)`, then `secret(copy)`. A declarator that reads `raw` after
+  `secret(raw)` in the same statement is a moved read, NL2445
+  (`reject_secret_alias_declarator_moved`). The rule refuses some programs
+  that are safe, each with the reference named: a data-parallel arrow that
+  reads the local before the move, a `Result` local copied into another
+  (`reject_secret_alias_result_copy`), and a `let` given another local even
+  after the move (`reject_secret_alias_reassigned_after`).
 - A `Secret` parameter is borrowed. The callee may read it through `expose`,
   hand it on, wipe it or return it, and owes nothing: the caller wipes what it
   made.
@@ -7485,8 +7541,10 @@ by the caller.
   `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
   BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
   and every other value are a usage error (exit 2, one line), and so is the
-  flag with `--profile wasi` or with a `--target` that is not x86-64 (a host
-  that is not x86-64 refuses it the same way). `scripts/build.sh --cpu
+  flag with `--profile wasi` or with a `--target` that is not x86-64. Without
+  `--target` the host's triple is the one checked, so a host that is not
+  x86-64 refuses it the same way; an x86-64 `--target` on such a host is not
+  refused, and fails at the link as a toolchain error. `scripts/build.sh --cpu
   x86-64-v3` is the same build, and refuses the `wasm` and `wasi` profiles.
 - **It changes the link and nothing else.** The IR is byte for byte the IR
   without it, so the flag changes no operation's meaning; and

@@ -97,7 +97,7 @@ those gaps was hiding a leak in code checked today.
 ## Seeded violations
 
 `tests/cases/ct_asm_refused` now holds one function for each rule, and
-`tests/run.js` checks each on x86-64 and on aarch64 (16 checks):
+`tests/run.js` checks each on x86-64, on x86-64 at `x86-64-v3` and on aarch64 (24 checks):
 
 | function | rule | expected kind | what it compiles to |
 | --- | --- | --- | --- |
@@ -391,7 +391,7 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 
 | property | pinned by |
 | --- | --- |
-| Every rule the assembly check enforces refuses a real violation, on both targets | `ct_asm: ct_asm_refused <fn> on x86-64 / aarch64` (16 checks in `npm test`) |
+| Every rule the assembly check enforces refuses a real violation, on both targets | `ct_asm: ct_asm_refused <fn> on x86-64 / x86-64 at x86-64-v3 / aarch64` (24 checks in `npm test`) |
 | No seed can be deleted, or its `expect=`/`via=` loosened, silently | `SEEDED` in `tests/ct-asm.js`, checked when the module loads |
 | A followed call's leak is found inside the callee, not in inlined code | `via=leakyRow` on `callsLeak` and `tailLeak`; `CALL_CORNERS` `leakVia` / `leakElsewhere` |
 | A chain of calls deeper than `CALL_DEPTH` is refused, not followed for ever | `CALL_CORNERS` `deep` |
@@ -401,9 +401,9 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | Each refusal check is named for the kind it expects (CT-14) | `EXPECT_KINDS` and each spec's `promise` in `tests/ct-asm.js` |
 | Both targets are read, or the run fails (CT-15) | `ct_asm: clang targets x86-64 / aarch64` |
 | The timing harness can see a leak it is shown | the control in `tests/ct-timing.js`; a quiet control is exit 2 |
-| Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, the `kernel` promise "no branch on a secret, call, secret-indexed access or secret-dependent latency" (8 checks) |
-| The unit exports no function the reading leaves out, so a fifth kernel cannot go unread | the same, the `exports` promise "exports exactly the kernels read here and nish_aes_hw" (2 checks); and `exportMisses` in `tests/ct-asm-runtime.js`, which runs at load and requires a sixth `.globl` to be named unread and a missing kernel to be named missing |
-| The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the `leak` promise `refused for ${r.expect}` (4 checks, `tests/simd/aes-leaky.c`) |
+| Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, the `kernel` promise "no branch on a secret, call, secret-indexed access or secret-dependent latency" (12 checks: both targets, and x86-64 at `x86-64-v3`) |
+| The unit exports no function the reading leaves out, so a fifth kernel cannot go unread | the same, the `exports` promise "exports exactly the kernels read here and nish_aes_hw" (3 checks); and `exportMisses` in `tests/ct-asm-runtime.js`, which runs at load and requires a sixth `.globl` to be named unread and a missing kernel to be named missing |
+| The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the `leak` promise `refused for ${r.expect}` (6 checks, `tests/simd/aes-leaky.c`) |
 | The runtime check's joins and per-instruction flags read loops as they run | `CORNERS` in `tests/ct-asm-runtime.js`, checked when the module loads |
 | A destination-reading vector instruction keeps its destination's taint (CT-17) | `AUDIT_CORNERS` in `tests/ct-asm.js` |
 | The lowered branch runs the kernel and the walker to the same bytes, end to end, and the kernel where the CPU has it (WP38 S5, at `c29cd40`) | `aes kernel: ${program} prints the same bytes with NISH_AES unset and with NISH_AES=soft, and they are its expected.out`, `aes kernel: ${program} under NISH_AES=soft calls no kernel` and `aes kernel: ${program} with NISH_AES unset calls all four kernels, which /proc/cpuinfo says this CPU runs`, each for `crypto_aes` and `crypto_aes_agree` |
