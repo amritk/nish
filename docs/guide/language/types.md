@@ -291,6 +291,27 @@ class ArrayNode {
 Reading the slot gives you a `Kind`, so it compares, switches and passes
 anywhere a `Kind` does.
 
+A `let` with no annotation follows TypeScript. Start it from a value that
+already has the member type and it keeps that type. Start it from the
+member's constant and it is a `Kind`, so it can take another member later:
+
+```ts nish:err NL2514
+enum Kind {
+  Scalar,
+  Array,
+}
+
+const keep = (k: Kind.Array): Kind.Array => k;
+
+export const main = (): i32 => {
+  let held = keep(Kind.Array); // a Kind.Array
+  held = Kind.Scalar;
+  let any = Kind.Array; // a Kind
+  any = Kind.Scalar;
+  return any === held ? 0 : 1;
+};
+```
+
 An array of a member type is built with `[]` and `push`. `new Array<T>(n)`
 fills its slots with 0, which here is `Kind.Scalar`, so the compiler refuses
 it for any member but the one whose value is 0:

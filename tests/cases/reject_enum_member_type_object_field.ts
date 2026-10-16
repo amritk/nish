@@ -4,7 +4,6 @@ enum Kind {
   Array,
 }
 
-
 interface ArrayNode {
   readonly kind: Kind.Array;
   items: i32;

@@ -4,7 +4,6 @@ enum Kind {
   Array,
 }
 
-
 const make = (): Result<Kind.Array, string> => Ok(Kind.Scalar);
 
 export const test = (): number => (make().unwrapOr(Kind.Array) === Kind.Array ? 1 : 0);

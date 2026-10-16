@@ -35,7 +35,7 @@ import { CheckContext } from "./context"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
-import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
+import { checkExpression, recordMemberEntry, recordRangeEntry, WANT_RANGE } from "./expressions"
 import {
   annotationName,
   annotationSpelling,
@@ -1358,15 +1358,20 @@ export const checkGenericCall = (
   const bindings = new StringMap()
   let argTypes: i32[] = []
   // Which arguments are checked after the others: a function argument, and a
-  // literal that takes its type from what the others bind.
+  // literal that takes its type from what the others bind. An enum member's
+  // constant is one of those literals, so `first(Kind.Array, xs)` over a
+  // `Kind.Array[]` binds `T` to the member type, and the constant is the enum
+  // only where nothing else binds it; it is known only once it is checked.
   const later: boolean[] = []
   let i = 0
   while (i < args.children.length && i < parameters.children.length) {
     const deferred =
       (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i])
-    later.push(deferred)
     // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
-    argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE))
+    const type = deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE)
+    const constant = !deferred && type !== T_ERROR && ctx.program.isEnumMember(ctx.table, args.children[i])
+    later.push(deferred || constant)
+    argTypes.push(constant ? T_VOID : type)
     i = i + 1
   }
   i = 0
@@ -1489,6 +1494,7 @@ export const checkGenericCall = (
       !sig.isCompileTime(i + offset) &&
       argTypes[i] !== T_ERROR &&
       !recordRangeEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
+      !recordMemberEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
     ) {
       const want = ctx.table.typeName(sig.paramTypes[i + offset])

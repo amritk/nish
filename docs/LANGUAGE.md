@@ -1337,7 +1337,15 @@ and their `.ll` goldens are byte-identical files.
   write, an array literal, an object-literal field, `Ok`, `unwrapOr`'s
   default, a ternary arm and a `return` (`reject_enum_member_type_argument`,
   `_assign`, `_field_assign`, `_push`, `_element_write`, `_array_literal`,
-  `_object_field`, `_ok`, `_unwrap_or`, `_ternary`, `_return`). Two member types of one enum are two
+  `_object_field`, `_ok`, `_unwrap_or`, `_ternary`, `_return`), and so is an
+  argument of a generic call, whether the member type binds a type parameter
+  (`fold(xs, Kind.Array)` with `xs: Kind.Array[]`), sits in a concrete
+  parameter beside one, or is `getOrInsert`'s value
+  (`tests/cases/enum_member_type_generic`, `reject_enum_member_type_generic`).
+  An unannotated `let` keeps the member type of a value already of it, as
+  `tsc`'s does, and widens a member constant to its enum: `let w = keep(a)`
+  holds only `Kind.Array`, `let w = Kind.Array` any `Kind`
+  (`reject_enum_member_type_inferred_let`). Two member types of one enum are two
   types (`reject_enum_member_type_between`), and a field initializer of a
   member type is held to the same rule (`reject_enum_member_type_field_init`).
   The other direction is free: a member type converts to its enum, and a read
@@ -1374,7 +1382,9 @@ and their `.ll` goldens are byte-identical files.
     `parallelMap`, `parallelFrom` and `parallelReduce` templates zero-fill the
     array their workers write, so a body answering such a member type is
     refused at the call, `` … answers the member type `Kind.Array`, and `parallelMap` zero-fills the array its workers write, which a `Kind.Array` cannot hold; declare the body to answer `Kind` ``
-    (NL2516, `reject_enum_member_type_parallel`).
+    (NL2516, `reject_enum_member_type_parallel`, `_parallel_from`,
+    `_parallel_reduce`); a body answering the member at 0 runs in all three
+    (`tests/link/enum_member_type_parallel`).
   - **A field initializer may be a member's constant** when the field is the
     enum or one of its member types: `readonly kind: Kind = Kind.If` stores the
     integer before the constructor runs, as a numeric literal would

@@ -4,7 +4,6 @@ enum Kind {
   Array,
 }
 
-
 class ArrayNode {
   kind: Kind.Array = Kind.Array;
 }

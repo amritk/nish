@@ -4,7 +4,6 @@ enum Kind {
   Array,
 }
 
-
 const pick = (b: boolean): Kind.Array => (b ? Kind.Array : Kind.Scalar);
 
 export const test = (): number => (pick(true) === Kind.Array ? 1 : 0);

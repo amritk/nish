@@ -4,7 +4,6 @@ enum Kind {
   Array,
 }
 
-
 const tag = (): Kind.Array => {
   return Kind.Scalar;
 };

@@ -230,7 +230,7 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   const entry = ctx.table.isRanged(want) ? want : -1
   const keepsRange = welcome || want === WANT_RANGE || entry >= 0
   let inner = welcome && expr.kind !== N_PAREN ? -1 : want
-  if (want === WANT_RANGE && expr.kind !== N_PAREN) {
+  if ((want === WANT_RANGE || want === WANT_INFERRED) && expr.kind !== N_PAREN) {
     inner = -1
   } else if (entry >= 0 && !takesRangeContext(expr)) {
     inner = -1
@@ -251,7 +251,8 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (ctx.table.isEnumMemberType(want)) {
     return enterMember(ctx, expr, computed, want)
   }
-  const type = readAsBase(ctx, computed, keepsRange)
+  const keepsMember = want === WANT_INFERRED && ctx.table.isEnumMemberType(computed)
+  const type = readAsBase(ctx, computed, keepsRange || keepsMember)
   if (coercesTo(ctx, type, want)) {
     const target = ctx.table.stripNull(want)
     ctx.program.nodeCoercions[expr.id] = type
@@ -269,6 +270,15 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
  * that reads `want < 0` as "no contextual type" reads it the same way.
  */
 export const WANT_RANGE: i32 = -3
+
+/**
+ * The `want` of an unannotated `let`'s initialiser. A range is read as its
+ * base there, as everywhere a value may change, but an enum member type is
+ * kept: TypeScript widens only a fresh literal, so `let w = acc` is a
+ * `Kind.Array` when `acc` is one, and `w` may go back into a `Kind.Array`
+ * slot. The member's constant, `Kind.Array` itself, is still the enum `Kind`.
+ */
+export const WANT_INFERRED: i32 = -4
 
 /**
  * The expressions a ranged `want` reaches, because they spell a value rather
@@ -298,6 +308,25 @@ export const recordRangeEntry = (ctx: CheckContext, node: Node, from: i32, to: i
 }
 
 /**
+ * `recordRangeEntry`'s counterpart for a sink of an enum member type: whether
+ * `node` is that member's own constant, which is then recorded as the member
+ * type, as `enterMember` records it when the sink is known first.
+ */
+export const recordMemberEntry = (ctx: CheckContext, node: Node, from: i32, to: i32): boolean => {
+  if (!ctx.table.isEnumMemberType(to) || !isMemberConstant(ctx, node, from, to)) {
+    return false
+  }
+  ctx.program.nodeTypes[node.id] = to
+  return true
+}
+
+/** Whether `expr`, of type `computed`, is the constant of the member type `member`. */
+const isMemberConstant = (ctx: CheckContext, expr: Node, computed: i32, member: i32): boolean =>
+  computed === ctx.table.refOf(member) &&
+  ctx.program.isEnumMember(ctx.table, expr) &&
+  ctx.program.nodeEnumValues[expr.id] === ctx.table.memberValue(member)
+
+/**
  * A value checked into a slot of an enum member type, `Kind.Array`, which
  * holds that one member: a value already of the member type, or the member's
  * own constant, which is then recorded as the member type. The constant is
@@ -310,15 +339,11 @@ const enterMember = (ctx: CheckContext, expr: Node, computed: i32, member: i32):
   if (computed === T_ERROR || computed === member) {
     return computed
   }
-  const constant = ctx.program.isEnumMember(ctx.table, expr)
-  if (
-    constant &&
-    computed === ctx.table.refOf(member) &&
-    ctx.program.nodeEnumValues[expr.id] === ctx.table.memberValue(member)
-  ) {
+  if (isMemberConstant(ctx, expr, computed, member)) {
     ctx.program.nodeTypes[expr.id] = member
     return member
   }
+  const constant = ctx.program.isEnumMember(ctx.table, expr)
   const got = constant
     ? `\`${ctx.table.typeName(computed)}.${expr.text}\``
     : `a value of type \`${ctx.table.typeName(computed)}\``

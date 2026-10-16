@@ -4,7 +4,6 @@ enum Kind {
   Array,
 }
 
-
 const make = (): Result<Kind.Array, string> => Ok(Kind.Array);
 
 export const test = (): number => {

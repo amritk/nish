@@ -4,7 +4,6 @@ enum Kind {
   Array,
 }
 
-
 export const test = (): number => {
   const a: Kind.Array[] = [];
   a.push(Kind.Scalar);
