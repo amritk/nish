@@ -2192,7 +2192,9 @@ export class Compilation {
         if (!isCReservedSymbol(sig.name)) {
           continue
         }
-        const what = isCLibrarySymbol(sig.name) ? `is the C library's \`${sig.name}\`` : reservedPrefixText(sig.name)
+        const what = isCLibrarySymbol(sig.name)
+          ? `is the C library's \`${sig.name}\``
+          : reservedPrefixText(sig.name)
         const why = sig.exported
           ? "an exported function of the program's own package keeps its name as its symbol"
           : "`--no-strict-exports` keeps every function's name as its symbol"

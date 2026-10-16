@@ -21,6 +21,7 @@
     "tests/cases/**",
     "tests/link/**",
     "tests/wordings/**",
+    "tests/c-symbols/**",
     "tests/fix/**",
     "tests/parser/**",
     "tests/lexer/**",

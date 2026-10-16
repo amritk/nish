@@ -20278,7 +20278,12 @@ if (!only || "c-symbols".includes(only)) {
               { cwd: mathDir, encoding: "utf8" }
             )
           : null
-      const error = mathIr.status !== 0 ? mathIr.stderr : link.status !== 0 ? link.stderr : null
+      let error = null
+      if (mathIr.status !== 0) {
+        error = mathIr.stderr
+      } else if (link.status !== 0) {
+        error = link.stderr
+      }
       const objects = [exe]
       if (error === null && fs.existsSync(`${exe}.lto.o`)) {
         objects.push(`${exe}.lto.o`)
