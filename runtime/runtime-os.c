@@ -11,8 +11,8 @@
  * wrapper raised the ceiling over the arena and the string functions as well,
  * and the number a reader saw for "the runtime" moved for a reason that had
  * nothing to do with it. Each file now carries its own measured ceiling in
- * tests/run.js; docs/wp7-runtime.md §"Runtime additions and budget" has both
- * rows and the reasoning.
+ * tests/runtime-budgets.js; docs/wp7-runtime.md §"Runtime additions and budget"
+ * has both rows and the reasoning.
  *
  * What a linked binary pays is unchanged: `-ffunction-sections
  * -Wl,--gc-sections` drops every function no program calls, whichever

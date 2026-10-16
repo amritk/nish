@@ -5,9 +5,9 @@
  * place when `nish_aes_hw` says this machine can run it.
  *
  * A translation unit of its own for the reason runtime-simd.c is one: each file
- * carries its own measured `.text*` ceiling in tests/run.js, and this one would
- * not fit in what runtime-simd.c has left (RUNTIME_AES_TEXT_BUDGET says how
- * much it needs). It also keeps byte search and AES apart, so a program that
+ * carries its own measured `.text*` ceiling in tests/runtime-budgets.js, and this
+ * one would not fit in what runtime-simd.c has left (RUNTIME_AES_TEXT_BUDGET says
+ * how much it needs). It also keeps byte search and AES apart, so a program that
  * searches text links no AES and one that speaks TLS no byte search. Section GC
  * means a program that never calls a kernel links none of this file.
  *
