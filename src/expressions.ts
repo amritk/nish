@@ -292,7 +292,6 @@ export const recordRangeEntry = (ctx: CheckContext, node: Node, from: i32, to: i
   return true
 }
 
-/** A ranged type read as its base, `i32`, unless the place keeps the range. */
 /**
  * A value checked into a slot of an enum member type, `Kind.Array`, which
  * holds that one member: a value already of the member type, or the member's
@@ -328,6 +327,10 @@ export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): 
   return `Type \`${spelled}\` holds only the member \`${spelled}\`, got ${got}`
 }
 
+/**
+ * A ranged type read as its base, `i32`, and an enum member type as its enum,
+ * unless the place keeps the range.
+ */
 const readAsBase = (ctx: CheckContext, type: i32, keepsRange: boolean): i32 =>
   keepsRange ? type : ctx.table.baseOf(type)
 

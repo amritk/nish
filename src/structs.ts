@@ -800,7 +800,9 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
       // against `Container$i32` rather than a comparison between two
       // uninstantiated field lists — which would need a type variable, and a
       // type parameter is never a type in this implementation.
-      if (iface.kind !== N_TYPE_REF) {
+      // `implements a.B` reads as a dotted reference, the shape of an enum
+      // member type, and is the same mistake.
+      if (iface.kind !== N_TYPE_REF || iface.text.indexOf(".") >= 0) {
         // `implements number[]`: stage0 sees a heritage expression that is not
         // an identifier and says this, so stage1 says it where its own grammar
         // puts the same mistake.
