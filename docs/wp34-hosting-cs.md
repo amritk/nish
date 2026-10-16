@@ -392,8 +392,11 @@ land in the `--emit-checked` dump. Of the code the profile reads,
 `std/crypto/p256.ts`, `x25519.ts`, `sha256.ts` and `sha512.ts` are the same at
 `b515c1b` and at the branch's head, after its merges of `main`. #639 has since
 added wipes to `aes.ts`, `chacha20poly1305.ts`, `hkdf.ts`, `hmac.ts` and
-`std/net/tls/record.ts`, which together were under 1% of the handshake below. The build was `build/nish` built from that commit by the 0.18.0
-seed, and the machine was an `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family
+`std/net/tls/record.ts`. In the handshake below their own lines came to
+111,174 Ir, 0.81%: `record.ts` 55,108, `hmac.ts` 28,356, `aes.ts` 15,239 and
+`hkdf.ts` 12,471, with `chacha20poly1305.ts` off this handshake's path, since
+the suite negotiated was AES-256-GCM. The build was `build/nish` built from
+that commit by the 0.18.0 seed, and the machine was an `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family
 6, model 85, stepping 7; 4 vCPUs under KVM), Ubuntu clang 18.1.3. There is no
 `perf` on it, so the profile is valgrind's callgrind, in instructions (Ir), not
 cycles.
@@ -499,14 +502,14 @@ Ir, from this profile:
 | Part of `k·G` | Now | With the table |
 | --- | ---: | ---: |
 | Doublings | 256 × 22,439 = 5,744,384 | none |
-| Additions | 78 × 25,383 = 1,979,874 (full) | 64 × 23,268 = 1,489,140 (mixed, 11/12 of a full one) |
+| Additions | 78 × 25,383 = 1,979,874 (full) | 64 × 25,383 × 11/12 = 1,489,136 (mixed, 11 of a full one's 12 multiplies) |
 | Table reads (`p256TableMove`, 85 Ir a coordinate) | 64 × 16 × 3 = 3,072 moves, 261,120 | 64 × 16 × 2 = 2,048 moves, 174,080 |
-| **`k·G`** | **8,025,428** (the rest is the loop itself) | **about 1,663,220** |
+| **`k·G`** | **8,025,428** (the rest is the loop itself) | **about 1,663,216** |
 
 That is 4.8x fewer for `k·G`. The rest of the signature does not move: the
 two inversions, the hashing and the rest are 1,473,325 Ir, 15.5% of the
-signature today. So the signature comes to about 1,473,325 + 1,663,220 =
-3,136,545 Ir, **about 3.0x** fewer than 9.50 M, and could not pass about 6.4x
+signature today. So the signature comes to about 1,473,325 + 1,663,216 =
+3,136,541 Ir, **about 3.0x** fewer than 9.50 M, and could not pass about 6.4x
 even if `k·G` cost nothing. `p256PublicKey` keeps only the field inversion, so
 it comes to about 3.9x. All of these are ratios of instructions. They are not
 a projection of time: the signature is 69% of the handshake's Ir but about 37%
