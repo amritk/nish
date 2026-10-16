@@ -218,7 +218,7 @@ notice, and each is marked public domain where its constants appear:
 
 - FNV-1a (`src/map.ts`, `src/emit-map.ts`, `std/collections.ts`).
 - MurmurHash3's `fmix32` and `fmix64` finalisers (`src/emit-map.ts`,
-  `std/collections.ts`).
+  `std/collections.ts`, and `fmix32` in `std/random.ts`).
 - xorshift64* in `nish_random` (`runtime/runtime.c`).
 - dudect's cropping schedule, its 100 percentiles and the 10,000-measurement
   gate on its second-order test (`tests/ct-timing/dudect.c`), from

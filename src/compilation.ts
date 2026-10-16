@@ -159,7 +159,8 @@ import {
   channelSummaries,
   taskMutexMessageFor,
   taskArgumentMessage,
-  taskArrowMessage,
+  isVoidSpawn,
+  voidTaskResultMessage,
   threadsModuleName,
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
@@ -1753,10 +1754,14 @@ export class Compilation {
           continue
         }
         const messages: string[] = []
-        messages.push(fn.lifted ? taskArrowMessage() : "")
         messages.push(taskArgumentMessage(this.table, call.sig))
         messages.push(taskMutexMessageFor(this.table, program, call.sig))
-        messages.push(resultMessage(this.table, call.sig, fn, fn.returnType))
+        // A task with no destination answers nothing; one with a destination answers a scalar.
+        messages.push(
+          isVoidSpawn(call.sig)
+            ? voidTaskResultMessage(this.table, fn)
+            : resultMessage(this.table, call.sig, fn, fn.returnType)
+        )
         messages.push(sharedWriteMessage(call.sig, fn, facts))
         messages.push(arenaMessage(call.sig, fn, facts))
         for (const message of messages) {

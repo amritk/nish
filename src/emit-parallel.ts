@@ -40,7 +40,15 @@ import { IRFunction, IRParam, paramValue } from "./ir"
 import { loadLocal } from "./emit-ops"
 import { isArenaCall, unwrapParens } from "./emit-util"
 import { Node } from "./nodes"
-import { isLockCall, isRegionEntry, mapGrain, parallelBodyOf, parallelRoleOf, taskStoreOf } from "./parallel"
+import {
+  capturesOf,
+  isLockCall,
+  isRegionEntry,
+  mapGrain,
+  parallelBodyOf,
+  parallelRoleOf,
+  taskStoreOf,
+} from "./parallel"
 import {
   FieldInfo,
   FunctionSig,
@@ -50,6 +58,7 @@ import {
   PAR_SPAWN,
   PAR_TASK,
   StructInfo,
+  TemplateInfo,
 } from "./program"
 
 /**
@@ -275,9 +284,13 @@ const taskEntryOf = (emitter: Emitter, task: FunctionSig): FunctionSig => {
 }
 
 /**
- * The task in place of `runTask(arg, dst, at)`, whose lowered operands are
- * `types` and `values` (the task itself is a compile-time argument and has
- * none). The receiver is the `spawn` instance's own `this`: the scope.
+ * The task in place of `runTask(arg, dst, at)`, `runWith(arg)` or
+ * `runThunk()`, whose lowered operands are `types` and `values` (the task
+ * itself is a compile-time argument and has none), with the values of an
+ * arrow task's captures after the written ones (`capturesOf`). The receiver
+ * is the `spawn` instance's own `this`: the scope. A task with a destination
+ * keeps its answer in the payload's last field for `<spawn>$finish` to store;
+ * one without has nothing to store, and its `$finish` returns.
  */
 export const emitSpawnTask = (
   emitter: Emitter,
@@ -286,15 +299,28 @@ export const emitSpawnTask = (
   values: string[]
 ): void => {
   const caller = emitter.currentSig
-  if (caller === null || types.length !== 3 || values.length !== 3) {
+  const captured = capturesOf(task).length
+  const stores = storesAnswer(task)
+  const written = types.length - captured
+  if (caller === null || values.length !== types.length || written !== (stores ? 3 : arityOf(task))) {
     process.exit(
-      internalErrorFor(`emitter: \`${task.name}\` is not a task over (arg, dst, at)`, emitter.opts.json)
+      internalErrorFor(
+        `emitter: \`${task.name}\` is not a task over its argument and captures`,
+        emitter.opts.json
+      )
     )
   }
   const body = taskEntryOf(emitter, task)
-  const store = storeOf(emitter, task)
+  const store: FunctionSig | null = stores ? storeOf(emitter, task) : null
   const result = emitter.llvm(body.returnType)
-  const payloadType = `{ ${types[0]}, ${types[1]}, ${types[2]}, ${result} }`
+  const fields: string[] = []
+  for (const type of types) {
+    fields.push(type)
+  }
+  if (store !== null) {
+    fields.push(result)
+  }
+  const payloadType = `{ ${fields.join(", ")} }`
   const fn = emitter.fn
   const slot = fn.emitAlloca("task.payload", payloadType, emitter.opts.optimizeAttributes ? 8 : 0)
   let i = 0
@@ -307,7 +333,8 @@ export const emitSpawnTask = (
     i = i + 1
   }
   // WP29 P3: every channel the task may send on stays open until it returns.
-  countSenders(emitter, fn, caller, values[0], 1)
+  const arg = written > 0 ? values[0] : ""
+  countSenders(emitter, fn, caller, arg, 1)
   const raw = fn.emitValue(`bitcast ${payloadType}* ${slot} to i8*`)
   const scope = fn.emitValue(`bitcast ${emitter.llvm(caller.paramTypes[0])} %this to i8*`)
   const size = `ptrtoint (${payloadType}* getelementptr (${payloadType}, ${payloadType}* null, i32 1) to i64)`
@@ -316,8 +343,43 @@ export const emitSpawnTask = (
   fn.emit(
     `call void ${emitter.useRuntime("nish_scope_spawn")}(i8* ${scope}, void (i8*)* @${run}, void (i8*)* @${finish}, i8* ${raw}, i64 ${size})`
   )
-  emitter.module.addFunction(taskRun(emitter, run, caller, body, payloadType, types[0], result))
+  const inputs = new TaskInputs(payloadType, types, written > 0 ? 1 : 0, written)
+  emitter.module.addFunction(taskRun(emitter, run, caller, body, inputs, result, store !== null))
   emitter.module.addFunction(taskFinish(emitter, finish, store, payloadType, types, result))
+}
+
+/**
+ * What `<spawn>$run` reads out of a task's payload: `entry`'s written
+ * argument when it has one (`args` is 1, at field 0), and the captures, which
+ * follow the `written` operands of the task's call. `types` are every
+ * operand's, in payload order.
+ */
+class TaskInputs {
+  payloadType: string
+  types: string[]
+  args: i32
+  written: i32
+
+  constructor(payloadType: string, types: string[], args: i32, written: i32) {
+    this.payloadType = payloadType
+    this.types = types
+    this.args = args
+    this.written = written
+  }
+}
+
+/** Whether `task` is `runTask`, whose answer the scope stores at the join. */
+const storesAnswer = (task: FunctionSig): boolean => {
+  const instance = task.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  return template !== null && template.sourceName === "runTask"
+}
+
+/** How many operands a task with no destination is called with: `runWith`'s argument, or none for `runThunk`. */
+const arityOf = (task: FunctionSig): i32 => {
+  const instance = task.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  return template !== null && template.sourceName === "runThunk" ? 0 : 1
 }
 
 /** An internal `void <name>(i8* %p)`, the shape of both halves of a task. */
@@ -354,41 +416,70 @@ const loadPayload = (
   return fn.emitValue(`load ${type}, ${type}* ${at}`)
 }
 
-/** `<spawn>$run`: `entry(arg)`, into the payload's last field. It runs on the task's thread. */
+/**
+ * `<spawn>$run`: `entry(arg, captures...)`, its answer into the payload's last
+ * field when the scope will store it. It runs on the task's thread.
+ */
 const taskRun = (
   emitter: Emitter,
   name: string,
   spawn: FunctionSig,
   body: FunctionSig,
-  payloadType: string,
-  argType: string,
-  result: string
+  inputs: TaskInputs,
+  result: string,
+  keeps: boolean
 ): IRFunction => {
   const fn = taskFunction(emitter, name)
+  const payloadType = inputs.payloadType
   const typed = fn.emitValue(`bitcast i8* %p to ${payloadType}*`)
-  const arg = loadPayload(fn, typed, payloadType, 0, argType)
-  const r = fn.emitValue(`call ${result} @${body.name}(${argType} ${arg})`)
-  const at = fn.emitValue(`getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 3`)
-  fn.emit(`store ${result} ${r}, ${result}* ${at}`)
+  const operands: string[] = []
+  let arg = ""
+  if (inputs.args > 0 && inputs.types.length > 0) {
+    arg = loadPayload(fn, typed, payloadType, 0, inputs.types[0])
+    operands.push(`${inputs.types[0]} ${arg}`)
+  }
+  let k = inputs.written
+  while (k < inputs.types.length) {
+    const type = inputs.types[k]
+    operands.push(`${type} ${loadPayload(fn, typed, payloadType, k, type)}`)
+    k = k + 1
+  }
+  const call = `call ${result} @${body.name}(${operands.join(", ")})`
+  if (keeps) {
+    const r = fn.emitValue(call)
+    const at = fn.emitValue(
+      `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${inputs.types.length}`
+    )
+    fn.emit(`store ${result} ${r}, ${result}* ${at}`)
+  } else {
+    fn.emit(call) // a task with no destination answers `void` (`voidTaskResultMessage`)
+  }
   countSenders(emitter, fn, spawn, arg, -1) // WP29 P3: it has sent all it will
   fn.emit("ret void")
   return fn
 }
 
-/** `<spawn>$finish`: `storeResult(dst, at, r)`, on the thread that opened the scope, after the join. */
+/**
+ * `<spawn>$finish`: `storeResult(dst, at, r)`, on the thread that opened the
+ * scope, after the join; for a task with no destination, nothing.
+ */
 const taskFinish = (
   emitter: Emitter,
   name: string,
-  store: FunctionSig,
+  store: FunctionSig | null,
   payloadType: string,
   types: string[],
   result: string
 ): IRFunction => {
   const fn = taskFunction(emitter, name)
+  if (store === null) {
+    fn.emit("ret void")
+    return fn
+  }
   const typed = fn.emitValue(`bitcast i8* %p to ${payloadType}*`)
   const dst = loadPayload(fn, typed, payloadType, 1, types[1])
   const at = loadPayload(fn, typed, payloadType, 2, types[2])
-  const r = loadPayload(fn, typed, payloadType, 3, result)
+  const r = loadPayload(fn, typed, payloadType, types.length, result)
   fn.emit(`call void @${store.name}(${types[1]} ${dst}, ${types[2]} ${at}, ${result} ${r})`)
   fn.emit("ret void")
   return fn
