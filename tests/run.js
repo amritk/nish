@@ -4770,7 +4770,8 @@ if (!only || "par_alloc".includes(only)) {
 // And the forms that answer a new array, `par_map_new` and `par_from`, and the
 // two capture programs, whose bodies read their function's `const` locals:
 // Node's arrows close over them, and natively each one travels as a parameter,
-// so the same values print both ways.
+// so the same values print both ways. `par_map_vector` is the scramble of
+// bench/par-regions.ts over a map, the program the check below vectorises.
 //
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
@@ -4783,6 +4784,7 @@ for (const name of [
   "par_from",
   "par_capture",
   "par_capture_large",
+  "par_map_vector",
   "thread_scope_basic",
   "thread_scope_exit_paths",
   "thread_scope_many_arrays",
@@ -4840,6 +4842,50 @@ for (const name of [
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
   )
+}
+
+// #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
+// length in its loop condition as well as after the call to `f`, so once `f`
+// is inlined `opt -O3` drops the second test, the store is no longer
+// conditional, and the loop vectorises: about 3x on bench/par-regions.ts. With
+// the length tested only after the call the store stays conditional and no
+// vector `shl` is left (0 here, where this finds 16). The modules are linked
+// into one so that `scramble`, defined in the entry, is inlined into the
+// instance of `mapRange` in `threads.ll`, as `--link`'s LTO does.
+if (!only || "par_map_vector".includes(only)) {
+  if (!has("opt") || !has("llvm-link")) {
+    skip("par_map_vector: the vectorisation check needs opt and llvm-link")
+  } else {
+    const work = path.join(buildDir, "par_map_vector") + path.sep
+    fs.rmSync(work, { recursive: true, force: true })
+    const built = spawnSync(NISH, [path.join(linkDir, "par_map_vector", "main.ts"), "-o", work], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const all = path.join(work, "all.ll")
+    const linked =
+      built.status === 0
+        ? spawnSync(
+            "llvm-link",
+            ["-S", path.join(work, "main.ll"), path.join(work, "threads.ll"), "-o", all],
+            {
+              encoding: "utf8",
+            }
+          )
+        : null
+    const o =
+      linked !== null && linked.status === 0
+        ? spawnSync("opt", ["-O3", "-S", "-mtriple=x86_64-unknown-linux-gnu", all], { encoding: "utf8" })
+        : null
+    const shifts = o === null ? 0 : (o.stdout.match(/= shl <\d+ x i32>/g) ?? []).length
+    check(
+      "par_map_vector: opt -O3 vectorises parallelMapInto's element loop (#619)",
+      o !== null && o.status === 0 && shifts > 0,
+      o === null
+        ? `${built.stderr}${linked === null ? "" : linked.stderr}`
+        : `${o.stderr}vector shl: ${shifts}`
+    )
+  }
 }
 
 // WP29 P3, R2: a guard's lock is released at a `return` (and an `orReturn`)
