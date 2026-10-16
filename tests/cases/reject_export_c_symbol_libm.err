@@ -1,0 +1,1 @@
+`sin` is the C library's `sin`: an exported function of the program's own package keeps its name as its symbol

@@ -41,7 +41,7 @@ entry:
   ret void
 }
 
-define internal noundef i32 @read(%struct.Holder* noundef nonnull align 8 dereferenceable(8) nocapture %h, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %short, i32 noundef %i) #1 {
+define internal noundef i32 @read$(%struct.Holder* noundef nonnull align 8 dereferenceable(8) nocapture %h, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) %short, i32 noundef %i) #1 {
 entry:
   %0 = icmp sge i32 %i, 0
   br i1 %0, label %land.rhs.1, label %land.end.1
@@ -135,7 +135,7 @@ entry:
   %19 = bitcast i8* %17 to i32*
   %20 = getelementptr inbounds i32, i32* %19, i64 0
   store i32 7, i32* %20, align 4, !alias.scope !9, !noalias !8, !tbaa !16
-  %21 = call i32 @read(%struct.Holder* %Holder.obj, %struct.nish_array* %14, i32 5)
+  %21 = call i32 @read$(%struct.Holder* %Holder.obj, %struct.nish_array* %14, i32 5)
   %22 = call i8* @nish_str_from_i32(i32 %21)
   call void @nish_print(i8* %22)
   ret i32 0

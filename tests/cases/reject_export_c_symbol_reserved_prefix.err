@@ -1,0 +1,2 @@
+`__libc_start_main` begins with `_`, which C reserves for its library and start-up code
+`__register_atfork` begins with `_`, which C reserves for its library and start-up code
