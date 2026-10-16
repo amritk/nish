@@ -107,13 +107,14 @@ process.env.XDG_CACHE_HOME = suiteCache
  * The C runtime's translation units, as a direct `clang` line has to spell
  * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
  * system calls, `runtime-parallel.c` divides work across threads,
+ * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time and `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same seven:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eight:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -127,6 +128,7 @@ const RUNTIME_C = [
   "runtime/runtime.c",
   "runtime/runtime-os.c",
   "runtime/runtime-parallel.c",
+  "runtime/runtime-cross.c",
   "runtime/runtime-host.c",
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
@@ -4133,6 +4135,7 @@ const INDEX_OF_ANY_REFUSALS = [
  */
 const LINK_READ_LATER = [
   "par_dst_short",
+  "par_map_release",
   "range_export",
   "range_export_dts",
   "range_export_foreign",
@@ -4145,6 +4148,8 @@ const LINK_READ_LATER = [
   "std_json_tokenizer",
   "std_json_typed",
   "std_json_value",
+  "thread_channel_string_many",
+  "thread_task_release",
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
@@ -4389,10 +4394,11 @@ for (const name of linkTests) {
   )
   // The worker pool (docs/wp20-threads.md §8e) at the two sizes a default run on a
   // big machine never sees: no workers, where the caller runs every task in spawn
-  // order, and one. wp29 C6's no-deadlock argument for channels rests on the pool's
-  // queue order at every size, so a threads program prints the same at each.
+  // order, and one; and at eight, more threads than a small runner has cores.
+  // wp29 C6's no-deadlock argument for channels rests on the pool's queue order
+  // at every size, so a threads program prints the same at each.
   if (/^(thread|par)_/.test(name)) {
-    for (const threads of ["1", "2"]) {
+    for (const threads of ["1", "2", "8"]) {
       const sized = await runNative(`link/${name} (NISH_NUM_THREADS=${threads})`, exe, [], {
         env: envWithThreads(threads),
       })
@@ -4582,6 +4588,86 @@ if (!only || "par_dst_short".includes(only)) {
       String(run.stdout).trim() === "before",
     run !== null ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : missing
   )
+}
+
+// A `Channel<string>` send copies in time that grows with the string, not with
+// the sender's arena. `thread_channel_string_many` sends a million strings it
+// also keeps, so its arena grows with the sends: a send that asked whether the
+// arena held the string walked and sorted every chunk of it, and the program
+// took 46.9 s where it now takes 0.5 s. The bound is twenty times the second.
+if (!only || "thread_channel_string_many".includes(only)) {
+  const fixture = linkTests.includes("thread_channel_string_many")
+  const exe = path.join(buildDir, "link", "thread_channel_string_many", "app")
+  const started = Date.now()
+  const run =
+    fixture && fs.existsSync(exe) ? spawnSync(exe, [], { timeout: 120_000, killSignal: "SIGKILL" }) : null
+  const ms = Date.now() - started
+  const missing = fixture
+    ? `no such binary: ${exe}`
+    : "no such fixture: tests/link/thread_channel_string_many"
+  check(
+    "link/thread_channel_string_many: a million Channel<string> sends finish in under 10 s",
+    run !== null && run.status === 0 && String(run.stdout) === "1000000 54792\n" && ms < 10_000,
+    run !== null ? `exit ${run.status}, signal ${run.signal}, after ${ms} ms\nstdout: ${run.stdout}` : missing
+  )
+}
+
+// A task's temporaries are released on the thread that ran it once it has
+// answered, whatever it answers. `thread_task_release` spawns three scopes of
+// 8,000 tasks of some 60 KB each, answering a string, an `i32` and nothing;
+// on one thread, which runs them all on the caller, it peaks at 3 MB, and
+// without the release at 3.5 GB. The bound is 64 MB.
+if (!only || "thread_task_release".includes(only)) {
+  const fixture = linkTests.includes("thread_task_release")
+  const dir = path.join(buildDir, "link", "thread_task_release")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  const run =
+    fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+      ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: "1" } })
+      : null
+  const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+  const missing = fixture
+    ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+    : "no such fixture"
+  check(
+    "link/thread_task_release: 24,000 tasks on one thread peak under 64 MB",
+    kb > 0 && kb < 64 * 1024,
+    run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+  )
+}
+
+// A map's chunk loop keeps each element its body answers and gives back the
+// rest (`nish_cross_keep`). `par_map_release` builds a 2 KB string per element
+// of a million and answers 4 bytes cut from it; it peaks at 64 MB on one thread
+// and 68 MB on eight, and without the keep at 2.1 GB on either. The bound is
+// 256 MB.
+if (!only || "par_map_release".includes(only)) {
+  const fixture = linkTests.includes("par_map_release")
+  const dir = path.join(buildDir, "link", "par_map_release")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/par_map_release: a million 2 KB temporaries on ${threads} thread(s) peak under 256 MB`,
+      kb > 0 && kb < 256 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
 }
 
 // `--unchecked-indexing` and `--wrapping` reach the entry package and nothing else.
@@ -4879,6 +4965,12 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_sibling_disjoint_mutex`, `_mutex_types` and `_atomics` are the
 // sibling scopes of one `using` whose tasks reach locks or atomics each made
 // in a `const` of its own, of one type or of two, which share nothing.
+//
+// And copy-at-join: `thread_task_string`, whose tasks answer strings and
+// scalar arrays; `par_map_string`, whose data-parallel bodies do; and
+// `thread_channel_string` and `thread_mutex_string`, which send strings on
+// channels and store them through guards. Each reads what crossed after
+// `churn()`, and prints only what every task order agrees on.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4926,6 +5018,10 @@ for (const name of [
   "thread_sibling_disjoint_mutex_types",
   "thread_sibling_disjoint_atomics",
   "par_atomic",
+  "thread_task_string",
+  "par_map_string",
+  "thread_channel_string",
+  "thread_mutex_string",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -5161,6 +5257,10 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // updates its own fields (#567). `thread_atomic_tasks` and `par_atomic` pin that
 // an atomic's seq_cst `atomicrmw`, `cmpxchg`, `load atomic` and `store atomic`
 // lower for wasm32, a module without shared memory, where its tasks run in turn.
+// `thread_task_string`, `par_map_string`, `thread_channel_string` and
+// `thread_mutex_string` are the strings and scalar arrays that cross by copy,
+// whose transfer block carries a tag in its pointer's low bit on a 32-bit
+// pointer as on a 64-bit one.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -5170,6 +5270,10 @@ for (const name of [
   "thread_channel_exit_paths",
   "thread_channel_kinds",
   "thread_channel_ctor_reads",
+  "thread_task_string",
+  "par_map_string",
+  "thread_channel_string",
+  "thread_mutex_string",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
@@ -9012,7 +9116,7 @@ if (!only) {
     { cwd: root }
   )
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   )
@@ -16135,7 +16239,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's six translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's eight translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -16185,6 +16289,7 @@ if (!only || "runtime-cache".includes(only)) {
       "runtime.c",
       "runtime-os.c",
       "runtime-parallel.c",
+      "runtime-cross.c",
       "runtime-host.c",
       "runtime-net.c",
       "runtime-simd.c",
@@ -16196,7 +16301,7 @@ if (!only || "runtime-cache".includes(only)) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the seven objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eight objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -16205,7 +16310,7 @@ if (!only || "runtime-cache".includes(only)) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the seven runtime units once",
+      "runtime cache: the miss compiled each of the eight runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -16753,9 +16858,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all seven runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eight runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 7 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 8 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -17207,6 +17312,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-simd.c",
       // And the seventh (WP38 S5): AES-GCM on the CPU's AES instructions.
       "runtime/runtime-aes.c",
+      // And the eighth: the copy-at-join crossings of strings and arrays between
+      // threads, which every parallel construct that answers one calls.
+      "runtime/runtime-cross.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

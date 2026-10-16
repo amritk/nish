@@ -70,6 +70,11 @@ int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
    allocates from compiled code. The asserts below are the contract, checked
    wherever this file is compiled. */
 typedef struct nish_chunk { struct nish_chunk *next; uint64_t cap; } nish_chunk;
+/* runtime-cross.c walks the chunks through a copy of this definition, which
+   asserts the same three facts. */
+_Static_assert(sizeof(nish_chunk) == 16, "runtime-cross.c's nish_xchunk: { next, cap }, the bytes after it");
+_Static_assert(offsetof(nish_chunk, next) == 0, "runtime-cross.c's nish_xchunk: next first");
+_Static_assert(offsetof(nish_chunk, cap) == 8, "runtime-cross.c's nish_xchunk: cap second");
 struct nish_arena { char *buf; uint64_t off; uint64_t cap; nish_chunk *chunks; };
 /* One per thread under -DNISH_THREADS, one per process otherwise; the layout is
    the same either way, which is why nothing else in this file has to know. */

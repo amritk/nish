@@ -1,0 +1,3 @@
+call i8* @nish_cross_keep(i8* 
+, i64 0, i64 %
+, i64 4, i64 %

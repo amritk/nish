@@ -2751,18 +2751,49 @@ from the whole-program facts, and each rule is reported there:
   the arena would see the arena of whichever thread ran the element:
   `` `used` reads or moves the arena, and `parallelMapInto` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
   (`tests/cases/reject_par_arena`).
-- **The result is a number, a `boolean` or an enum** — `U` for a map, `T` for a
-  reduce — because the element's memory is released before the result is
-  stored, and a worker's arena is freed when its thread exits:
-  `` `name` answers `string`, and `parallelMapInto` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
-  (`tests/cases/reject_par_result_type`). A reduce's `T` is its element and
-  its identity as well, so a reduce over strings or objects is refused at the
-  call with the same rule, before `std/threads.ts` is instantiated for it:
+- **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
+  array of numbers, booleans or enums**, because the element's memory is
+  released before the next element runs and a worker's arena is freed when
+  its thread exits. A string or a scalar array crosses by copy-at-join: each
+  chunk copies what it wrote out of its arena into a `malloc`'d transfer block
+  before the arena is reused (`nish_cross_out_range`), and once every chunk has
+  finished the caller copies each block into its own arena and frees it
+  (`nish_cross_in_range`); a result the body did not allocate — a literal, a
+  string it was handed — is not copied at all
+  (`tests/link/par_map_string`: `parallelMap`, `parallelFrom` and
+  `parallelMapInto` into a `string[]`, under `churn()`). Anything else — an
+  array of strings, of arrays or of objects, a `Map`, a `Set`, a class — is
+  `` `name` answers `string[]`, and `parallelMapInto` hands back only a number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies out of the worker's arena: anything else would point into memory the worker frees or reuses ``
+  (NL2348, `tests/cases/reject_par_result_type`; `reject_par_map_result_strings`
+  for `parallelMap`), because its copy would have to follow every element.
+  `parallelMap` and `parallelFrom` allocate their result before the region, so
+  theirs is refused there, before `std/threads.ts` is instantiated
+  (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
+  The copy back is serial: the caller copies every string or array into its
+  own arena after the join, one at a time. When each element's work is cheap,
+  a map that answers strings is therefore slower than the sequential loop
+  today. Five maps of 1M `` `n${x % 1000}` `` strings each took a median of
+  270 ms on 4 threads, against 200 ms for the same loop written sequentially;
+  two byte-identical copies of the threaded binary differed by 11 ms in the
+  same 25 interleaved rounds, and single runs ranged from 249 to 356 ms. A map
+  whose per-element work outweighs the copy does gain from the threads. What
+  the body allocates for an element is released with that element, also when
+  the body stores what it builds into an array literal on the way, which the
+  arena scope above does not cover: the chunk loop marks the arena before each
+  call and keeps only the answer
+  (`nish_cross_keep` copies it out, rewinds to the mark and copies it back).
+  A body that builds a 2 KB string, stores it in an array literal and answers
+  a 4-byte slice of it, over 1M elements, peaks at 64 MB on 1 thread and
+  68 MB on 8, where it used to hold every element's temporaries until its
+  chunk ended and peaked at 2.1 GB (`tests/link/par_map_release`).
+- **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
+  element, the identity and every partial as well as the answer, folded on
+  several threads, so a string would be copied at every combine; a reduce over
+  strings or objects is refused at the call:
   `` `(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
-  (`tests/cases/reject_par_reduce_result_type`, and
-  `reject_par_reduce_result_class` for a class). `parallelMap` and
-  `parallelFrom` allocate their result before the region, so theirs is refused
-  there too (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
+  (NL2348, `tests/cases/reject_par_reduce_result_type`, and
+  `reject_par_reduce_result_class` for a class). Map the strings to numbers
+  first — `parallelReduce(parallelMap(names, (s) => s.length), ...)`.
 - **`dst` is not reachable from an element of `src`.** A function that only
   reads can still read `dst` through its argument while another thread writes
   it, so an array of `dst`'s element type reachable from `T`, through fields,
@@ -3204,11 +3235,23 @@ element's arena, which a task does not share, and each rule is reported at the
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
   data-parallel call inside a task is refused by it too
   (`reject_thread_task_nested_map`).
-- **It answers a number, a `boolean` or an enum**, because a task's thread
-  frees its arena when it exits:
-  `` `label` answers `string`, and `spawn` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
-  (`tests/cases/reject_thread_task_result_type`). What it allocates on the way
-  is freed with its thread.
+- **It answers a number, a `boolean`, an enum, a `string`, or an array of
+  numbers, booleans or enums**, because a task's thread frees its arena when it
+  exits. A string or a scalar array crosses by copy-at-join: the worker copies
+  its answer into a `malloc`'d transfer block before its arena goes
+  (`nish_cross_out`), and the parent, once the scope has joined, copies each
+  block into its own arena and frees it (`nish_cross_in`), so the block lives
+  only between the two and is freed on every path out of the scope. An answer
+  the task did not allocate — a literal, or a string its argument already held
+  — passes through uncopied (`tests/link/thread_task_string`: a built label, a
+  field of a made object, a substring and a slice, a returned fresh array, and
+  a task that also stores into a `Mutex`, all read after `churn()`). Anything
+  else is
+  `` `words` answers `string[]`, and `spawn` hands back only a number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies out of the worker's arena: anything else would point into memory the worker frees or reuses ``
+  (NL2348, `tests/cases/reject_thread_task_result_strings`;
+  `reject_thread_task_result_type` for a class, `reject_thread_task_result_nested`
+  for `i32[][]` and `reject_thread_task_result_map` for a `Map`). What a task
+  allocates on the way is freed with its thread.
 - **It leaves the arena alone**, because the first task runs in the arena of
   the thread that opened the scope:
   `` `wipe` reads or moves the arena, and `spawn` runs it on several threads that each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or `Arena.reset`, nor open a `using a = arena()` block ``
@@ -3318,9 +3361,9 @@ breaks one is refused with that rule's own code:
   of another access.** Passed, bound, stored, returned or walked, a guard is
   `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock ``
   (NL2466, `reject_mutex_guard_passed`), and anything read through it that is
-  not a number, a `boolean` or an enum — `const c = g.value`, `g.value.xs` as a
-  value, a `for...of` over it — is
-  `` This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock ``
+  not a number, a `boolean`, an enum or a `string` — `const c = g.value`,
+  `g.value.xs` as a value, a `for...of` over it — is
+  `` This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock ``
   (NL2467, `reject_mutex_guard_alias`; `reject_mutex_guard_alias_array` for
   `const b = g.value.bins`, which would race a guarded write once the block
   ends; `reject_mutex_guard_return` and `reject_mutex_guard_return_array` for a
@@ -3333,12 +3376,26 @@ breaks one is refused with that rule's own code:
   read and stored directly — `g.value = g.value + 1` on a `Mutex<i32>` — and
   the store reaches the `Mutex` under Node as natively, because the guard is
   the `Mutex`'s own storage rather than a copy (`tests/link/thread_mutex_scalar`).
-- **R4: a store through a guard stores a scalar, and no method is called
-  through it.** A number, a `boolean` or an enum, into a field or an element of
-  an array that already exists:
-  `` This stores `string` through a guard, which stores only a number, a `boolean` or an enum, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined ``
-  (NL2468, `reject_mutex_guard_store`). `push` — which can move the array into
-  the task's arena — and every other method are
+- **R4: a store through a guard stores a scalar or a string, and no method is
+  called through it.** A number, a `boolean`, an enum or a `string`, into a
+  field or an element of an array that already exists:
+  `` This stores `string[]` through a guard, which stores only a number, a `boolean`, an enum or a `string`, which the store copies, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined ``
+  (NL2468, `reject_mutex_guard_store`; `reject_mutex_guard_store_class` for a
+  class). A string stored through a guard is copied into memory the mutex
+  owns: `nish_guard_keep` `malloc`s the copy, records it, and frees the copy
+  the slot held before, if that one was its own; a string read through a guard
+  is copied out into the reader's arena (`.length` excepted, which keeps
+  nothing), so no reader holds the block the next store frees. The block a
+  slot holds when the `Mutex` itself is dropped is not freed — the arena that
+  held the `Mutex` does not say when it goes — and is reported by valgrind as
+  still reachable, one block per guarded string slot
+  (`tests/link/thread_mutex_string`). A program that makes and drops many such
+  `Mutex`es keeps all of them: 100,000, each holding one 850-byte string,
+  peaked at 89 MB against 11 MB for the same loop without the store. The
+  record of those copies is one for the process, behind a lock of its own, so
+  stores through two different `Mutex`es wait on each other while it is held.
+  `push` — which can move the array into the task's arena — and every other
+  method are
   `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined ``
   (NL2469, `reject_mutex_guard_push`). So a `Mutex<i32[]>` or a class with an
   `i32[]` field holds a histogram, sized when it is made.
@@ -3678,10 +3735,19 @@ C2 has one for where a channel is declared, one for how it is used and one for
 a channel inside an arrow, and C6 one for spawn order and one for a task that
 sends and receives:
 
-- **C1: a channel carries a number, a `boolean` or an enum.** A sender's arena
-  is freed when its scope joins, so anything else would be a pointer into it:
-  `` A `Channel` carries a number, a `boolean` or an enum, and this one would carry `string`: a sender's arena is freed when its scope joins, so anything else would point into freed memory ``
-  (NL2475, `tests/cases/reject_channel_element`). An `f64` channel
+- **C1: a channel carries a number, a `boolean`, an enum or a `string`.** A
+  sender's arena is freed when its scope joins, so a string is copied on the
+  way: `send` copies it into a `malloc`'d block the buffer slot holds
+  (`nish_cross_send`, a copy in time that grows with the string alone:
+  `tests/link/thread_channel_string_many` sends a million it also keeps), and
+  `receive`, or a `for...of` step, copies it into the receiver's arena and frees the block (`nish_cross_in`). A string a receiver
+  never takes — the loop that left with `break` — stays in the buffer, which
+  is itself given back only once it has been drained closed, so the two leak
+  together. Anything else would be a pointer into the sender's arena:
+  `` A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry `string[]`: a sender's arena is freed when its scope joins, and only a string is copied out of it on the way, so anything else would point into freed memory ``
+  (NL2475, `tests/cases/reject_channel_element`). A `Channel<string>`
+  pipeline — two producers, a rewriting stage and a consumer that keeps what
+  it receives in an array — matches Node (`tests/link/thread_channel_string`). An `f64` channel
   (`tests/link/thread_channel_two_producers`), a `boolean` one
   (`thread_channel_parent_drain`), and an `i64`, an enum and a `u8` one
   (`thread_channel_kinds`) compile and carry their values exactly.

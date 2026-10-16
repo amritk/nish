@@ -185,8 +185,40 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * small pieces that route a region and a join through the queue. They are this file's
  * subject, and they took a divided region from ~100 us to ~10 us (docs/wp20-threads.md
  * §8e). A program that never divides a region or joins a scope still pays none of it.
+ *
+ * threads-complete's copy-at-join measured **2,665 bytes** on 2026-10-16 with clang
+ * 18.1.3 on linux-x64, 5 more, inside the same ceiling: the copies themselves are
+ * `runtime-cross.c`'s, below.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
+ * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
+ * `nish_cross_in`, which copy a task's or a chunk's `string` or scalar array out of the
+ * arena it was made in and into the one that takes it, their `_range` forms over a map's
+ * slots, `nish_cross_send`, which copies every string a `Channel<string>` sends,
+ * `nish_cross_keep`, which keeps a map's element as its chunk loop rewinds the arena, and
+ * `nish_guard_keep` with the set of the copies a `Mutex` owns.
+ *
+ * Measured **1,170 bytes** on 2026-10-16 with clang 18.1.3 on linux-x64. A copy-out first
+ * collects the arena's spans since the mark and sorts them, so that a map's million
+ * slots each take a binary search rather than a walk of every chunk. Every configuration
+ * defines them, because a task's arena is rewound once it has returned whether it ran on
+ * a thread of its own or on the calling thread at the join. An eighth translation unit
+ * rather than more of `runtime-parallel.c`: folded in, they took that file from 610
+ * bytes to 1,786 against its ceiling of 768, and the rule is a new file with its own
+ * measured ceiling, never a raised one. A program that sends, answers or guards no
+ * string pays none of it. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_CROSS_TEXT_BUDGET = 1280
+/**
+ * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,235 bytes** on
+ * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
+ * `nish_guard_keep` takes over the set of a `Mutex`'s copies, which another thread's
+ * guard may be changing.
+ */
+const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1280
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor
@@ -275,6 +307,13 @@ export const RUNTIME_BUDGETS = [
     "runtime/runtime-parallel.c",
     RUNTIME_PARALLEL_THREADS_TEXT_BUDGET,
     "RUNTIME_PARALLEL_THREADS_TEXT_BUDGET",
+    ["-DNISH_THREADS=1"],
+  ],
+  ["runtime/runtime-cross.c", RUNTIME_CROSS_TEXT_BUDGET, "RUNTIME_CROSS_TEXT_BUDGET", []],
+  [
+    "runtime/runtime-cross.c",
+    RUNTIME_CROSS_THREADS_TEXT_BUDGET,
+    "RUNTIME_CROSS_THREADS_TEXT_BUDGET",
     ["-DNISH_THREADS=1"],
   ],
   ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],

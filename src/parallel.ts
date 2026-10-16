@@ -34,6 +34,9 @@
 //     is exempt.
 //   - **The result is a number, a `boolean` or an enum**, for the arena reason
 //     above: anything else would be a pointer into memory freed at the join.
+//     A map's result may also be a `string` or an array of those scalars,
+//     which the join copies out of the worker's arena (`crossesByCopy`); a
+//     reduce's stays scalar, because its partials are combined in the worker.
 //   - **A reduce's operator is associative and its identity is one.** The
 //     blocks are folded from the identity and then combined, which is a left
 //     fold only when both hold. An arrow whose body is one operator on its two
@@ -489,7 +492,13 @@ export const allocationWarning = (
   facts: FactsTable
 ): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
-  if (own === null || !own.allocates) {
+  // A string or a scalar array answered across threads has to be allocated,
+  // so the advice below cannot be taken: building it is the work. Each
+  // element's call is still bracketed (`elementKeepSize` in
+  // emit-parallel.ts), and `nish_cross_keep` gives back what the body bumped
+  // beyond the answer; the facts cannot tell those temporaries from the
+  // answer itself, so the warning stays off for every such body.
+  if (own === null || !own.allocates || crossesByCopy(table, type)) {
     return ""
   }
   return (
@@ -510,9 +519,45 @@ const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, typ
   )
 }
 
-/** A result the join could hand back: a number, a `boolean` or an enum, and nothing that points. */
+/**
+ * A value that crosses from one thread's arena to another's by being copied
+ * (`crossingSize` in emit-parallel.ts, runtime/runtime-cross.c's copy at
+ * join): a string, or an array whose elements are numbers, booleans or enums,
+ * which holds no pointer, so one flat copy is the whole value. An array of
+ * strings, of arrays or of objects is not one: its copy would have to follow
+ * every element, and is refused rather than made deep.
+ */
+export const crossesByCopy = (table: TypeTable, type: i32): boolean =>
+  type === T_STRING || (table.isArray(type) && isScalarArgument(table, table.refOf(type)))
+
+/** The refusal of a task answering `type`, which is not a scalar, a string or an array of scalars. */
+const crossingWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32): string => {
+  if (isScalarArgument(table, type) || crossesByCopy(table, type)) {
+    return ""
+  }
+  return (
+    `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsic}\` hands back only a ` +
+    "number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies " +
+    "out of the worker's arena: anything else would point into memory the worker frees or reuses"
+  )
+}
+
+/**
+ * A result the join could hand back. A reduce's `T` is its partials and its
+ * identity as well as its answer, folded on several threads, so it stays a
+ * number, a `boolean` or an enum; a map's or a `parallelFrom`'s element may
+ * also be a value the join copies (`crossesByCopy`): each chunk copies what
+ * it wrote out of its arena before the arena is reused, and the caller copies
+ * it into its own once every chunk has finished.
+ */
 export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
-  resultWording(table, intrinsicName(sig), fn, type)
+  parallelRoleOf(sig) === PAR_REDUCE
+    ? resultWording(table, intrinsicName(sig), fn, type)
+    : crossingWording(table, intrinsicName(sig), fn, type)
+
+/** A task's result: a scalar, or a value the join copies (`crossesByCopy`). */
+export const taskResultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
+  crossingWording(table, intrinsicName(sig), fn, type)
 
 /**
  * The same rule, asked before `template` is instantiated rather than once the
@@ -554,7 +599,9 @@ export const reduceElementMessage = (
       `the array its workers write, which a \`${spelled}\` cannot hold; declare the body to answer \`${table.typeName(table.enumBase(result))}\``
     )
   }
-  return resultWording(table, intrinsic, functions[0], result)
+  return role === PAR_REDUCE
+    ? resultWording(table, intrinsic, functions[0], result)
+    : crossingWording(table, intrinsic, functions[0], result)
 }
 
 /**
@@ -1134,7 +1181,8 @@ export const mapGrain = (fn: FunctionSig): i32 => {
 // (runtime/runtime-parallel.c). While they run, the thread that opened the
 // scope is inside the join and runs nothing else; each task may write nothing
 // another can see (`sharedWriteMessage`, the rule a data-parallel body is held
-// to) and answers a number, a `boolean` or an enum; and each answer is stored
+// to) and answers a number, a `boolean`, an enum, a `string` or an array of
+// scalars, the last two copied out of its arena; and each answer is stored
 // into `dst[at]` by the thread that opened the scope, after the last task has
 // finished. So any argument may be handed to a task — nothing writes it while
 // the tasks read it. What the parent may do between its spawns is limited for
@@ -2363,9 +2411,12 @@ const checkBody = (
 //   - R2: `m.lock()` is only the initialiser of a `using` declaration, whose
 //     block releases the lock at every exit (`src/emit-parallel.ts`);
 //   - R3 and R4: a guard is only `g.value`, and what is derived from it is
-//     only the base of another access, a scalar read, or a scalar store into
-//     a field or an element that already exists: nothing derived from it
-//     outlives the block, and nothing a task's arena holds is stored into it;
+//     only the base of another access, a scalar or string read, or a scalar or
+//     string store into a field or an element that already exists: nothing
+//     derived from it outlives the block, and nothing a task's arena holds is
+//     stored into it. A string is the one pointer that crosses, by copy: a
+//     store keeps a copy the `Mutex` owns (`nish_guard_keep`), and a read
+//     answers a copy in the reader's arena (`Emitter.guardedRead`);
 //   - R5: inside a guard's block, directly or through any call, no second
 //     lock, no scope, no `spawn` and no data-parallel call, so one lock is
 //     held at a time and nothing is waited on while it is held: a program
@@ -2492,7 +2543,10 @@ export const isLockCall = (program: CheckedProgram, node: Node): boolean => {
  * Whether `node` is `g.value` or an access through it — `g.value.f`,
  * `g.value.xs[i]` — for a guard `g`: what R3 and R4 hold to their rules, and
  * the one shared memory a task may write (R6). A guard is only ever a `using`
- * binding named as `g.value` (R3), so its type is the whole test.
+ * binding named as `g.value` (R3), so its type is the whole test — save for
+ * `this.value` inside `MutexGuard` itself, the constructor's store of the
+ * data `new Mutex` was given, which is no guard's access: the field holds
+ * nothing yet, so a string store there must not take it for a copy to free.
  */
 export const isGuardedAccess = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const e = unwrapParens(node)
@@ -2501,7 +2555,7 @@ export const isGuardedAccess = (program: CheckedProgram, table: TypeTable, node:
   }
   const base = unwrapParens(e.children[0])
   if (e.kind === N_MEMBER && e.text === "value" && isGuardType(program, table, program.nodeTypes[base.id])) {
-    return true
+    return base.kind !== N_THIS
   }
   return isGuardedAccess(program, table, base)
 }
@@ -2542,12 +2596,13 @@ const guardUseMessage = (name: string): string =>
 
 const guardDerivedMessage = (table: TypeTable, type: i32): string =>
   `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
-  "element read or store: a value that is not a number, a `boolean` or an enum would outlive the block that holds the lock"
+  "element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, " +
+  "would outlive the block that holds the lock"
 
 const guardStoreMessage = (table: TypeTable, type: i32): string =>
-  `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\` or ` +
-  "an enum, into a field or an element that already exists: anything else is a pointer, which may point into " +
-  "a task's arena, freed when the task is joined"
+  `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\`, an enum ` +
+  "or a `string`, which the store copies, into a field or an element that already exists: anything else is a " +
+  "pointer, which may point into a task's arena, freed when the task is joined"
 
 const guardMethodMessage = (name: string): string =>
   `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
@@ -2901,7 +2956,8 @@ const walkMutexes = (
       parent.kind === N_MEMBER &&
       above !== null &&
       above.kind === N_CALL &&
-      above.children[0] === parent
+      above.children[0] === parent &&
+      type !== T_STRING
     ) {
       out.push(new ScopeFinding(above, guardMethodMessage(parent.text)))
     } else if (base) {
@@ -2909,10 +2965,10 @@ const walkMutexes = (
     } else if (isStoreTarget(at, parents, depth)) {
       // A store's target has no type of its own in the tables; what is stored is the value's.
       const stored = parent.kind === N_BINARY ? program.nodeTypes[parent.children[1].id] : type
-      if (stored >= 0 && !isScalarArgument(table, stored)) {
+      if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
         out.push(new ScopeFinding(parent, guardStoreMessage(table, stored)))
       }
-    } else if (type >= 0 && !isScalarArgument(table, type)) {
+    } else if (type >= 0 && !isScalarArgument(table, type) && type !== T_STRING) {
       out.push(new ScopeFinding(node, guardDerivedMessage(table, type)))
       return
     }
@@ -3138,7 +3194,8 @@ const regionAtomicMessageFor = (
 // from waiting on something that never comes (docs/wp29-thread-surface.md
 // §4.4, C1–C7):
 //
-//   - C1: what it carries is a number, a `boolean` or an enum;
+//   - C1: what it carries is a number, a `boolean`, an enum or a `string`,
+//     which a send copies out of the sender's arena and the receive copies in;
 //   - C2: `new Channel` is a `const` declared beside its scope, and a channel
 //     is used only as the receiver of `send`, the iterable of a `for...of`, an
 //     argument to a parameter declared a `Channel`, or a field its class's
@@ -3206,8 +3263,9 @@ export const channelCapacityMessage = (): string =>
   "scope's tasks run one at a time and nothing would drain a channel that was full"
 
 const channelElementMessage = (table: TypeTable, type: i32): string =>
-  `A \`Channel\` carries a number, a \`boolean\` or an enum, and this one would carry \`${table.typeName(type)}\`: ` +
-  "a sender's arena is freed when its scope joins, so anything else would point into freed memory"
+  "A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry " +
+  `\`${table.typeName(type)}\`: a sender's arena is freed when its scope joins, and only a string is copied ` +
+  "out of it on the way, so anything else would point into freed memory"
 
 const channelDeclareMessage = (what: string): string => `${what}${CHANNEL_DECLARE_TAIL}`
 
@@ -3673,7 +3731,7 @@ const channelUseFinding = (
   const type = program.nodeTypes[node.id]
   if (node.kind === N_NEW) {
     const element = channelElement(program, table, type)
-    if (element >= 0 && !isScalarArgument(table, element)) {
+    if (element >= 0 && !isScalarArgument(table, element) && element !== T_STRING) {
       return channelElementMessage(table, element)
     }
     const declared =

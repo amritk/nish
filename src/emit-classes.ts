@@ -39,9 +39,10 @@ import {
   isBitwiseAssignment,
 } from "./emit-ops"
 import { numericLiteralValue, parseIntegerLiteral } from "./constants"
-import { emitStringLength, emitStringMethodCall } from "./emit-strings"
+import { emitStringLength, emitStringMethodCall, guardKeep } from "./emit-strings"
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
+import { isGuardedAccess } from "./parallel"
 import { N_FALSE, N_MEMBER, N_NULL, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
@@ -346,6 +347,14 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   const receiver = emitter.emitExpression(target.children[0])
   if (expr.text === "=") {
     const value = emitter.emitExpression(expr.children[1])
+    if (
+      emitter.table.stripNull(field.type) === T_STRING &&
+      isGuardedAccess(emitter.program, emitter.table, target)
+    ) {
+      const old = loadField(emitter, info, receiver, field)
+      storeField(emitter, info, receiver, field, guardKeep(emitter, old, value))
+      return value
+    }
     storeField(emitter, info, receiver, field, value)
     return value
   }

@@ -17,6 +17,7 @@ declare noundef i32 @produce$(%struct.Pipe* noundef nonnull readonly align 8 der
 declare noundef i32 @consume$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
@@ -354,13 +355,15 @@ entry:
   %0 = bitcast i8* %p to { %struct.Pipe*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Pipe*, %struct.Pipe** %1
-  %3 = call i32 @produce$(%struct.Pipe* %2)
-  %4 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
-  %5 = getelementptr inbounds %struct.Pipe, %struct.Pipe* %2, i32 0, i32 0
-  %6 = load %struct.Channel$i32*, %struct.Channel$i32** %5
-  %7 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %6, i32 0, i32 2
-  call void @nish_channel_count(i64* %7, i64 -1)
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @produce$(%struct.Pipe* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
+  %6 = getelementptr inbounds %struct.Pipe, %struct.Pipe* %2, i32 0, i32 0
+  %7 = load %struct.Channel$i32*, %struct.Channel$i32** %6
+  %8 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %7, i32 0, i32 2
+  call void @nish_channel_count(i64* %8, i64 -1)
   ret void
 }
 
@@ -432,9 +435,11 @@ entry:
   %0 = bitcast i8* %p to { %struct.Pipe*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Pipe*, %struct.Pipe** %1
-  %3 = call i32 @consume$(%struct.Pipe* %2)
-  %4 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @consume$(%struct.Pipe* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 

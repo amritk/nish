@@ -554,8 +554,11 @@ void nish_panic_overflow(uint32_t op);
  * the language surface above it will:
  *   - chunks run concurrently, so a body may read what the caller owns and may
  *     write only through storage the caller lent it and no two chunks share;
- *   - a body's result may not point into the arena, because a worker's arena is
- *     rewound after each chunk while chunk 0's is the caller's own. */
+ *   - nothing a body leaves in the arena outlives its chunk, because a worker's
+ *     arena is rewound after each chunk while chunk 0's is the caller's own: a
+ *     string or an array of scalars a chunk answers is copied out first
+ *     (`nish_cross_out_range`, below), and the compiler rewinds the caller's
+ *     arena after its chunks as the pool rewinds a worker's. */
 typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
 /* The CPUs a region may divide over: the fewest of those online, those the
  * affinity mask allows, the cgroup v2 `cpu.max` quota rounded up, and
@@ -611,13 +614,17 @@ void nish_scope_join(void *scope);
  * first try takes it. */
 void nish_mutex_wait(int32_t *word);
 
-/* ---- A channel of scalars (wp29 stage P3), runtime/runtime-parallel.c ----
+/* ---- A channel of scalars or strings (wp29 stage P3), runtime/runtime-parallel.c ----
  *
  * A `Channel` object holds one `int64_t` word, `state`, and each function here
  * takes its address: 0 before first use, then the address of a buffer, a lock
  * and a count this file keeps outside every arena, then 1 once the receiver
  * has drained it closed and it has been given back. A value is one 8-byte
- * slot; the compiler widens a scalar into it and narrows it back.
+ * slot; the compiler widens a scalar into it and narrows it back, and a
+ * string travels as the block `nish_cross_send` copied it into, which the
+ * receiver's `nish_cross_in` frees. A string still in the buffer when the
+ * receiver stops early (a `break`) is given back with the buffer unread, so
+ * its block leaks.
  *
  * `nish_channel_send` appends and never waits: the channel is unbounded.
  * `nish_channel_count` moves the count that keeps it open, which starts at 1:
@@ -634,6 +641,42 @@ void nish_mutex_wait(int32_t *word);
 void nish_channel_send(int64_t *state, int64_t value);
 void nish_channel_count(int64_t *state, int64_t delta);
 int32_t nish_channel_receive(int64_t *state, int64_t *out);
+
+/* ---- Copy at join: a string or a scalar array crosses threads ----
+ * runtime/runtime-cross.c
+ *
+ * A task's or a chunk's arena is rewound once its job is done, so a string or
+ * an array of scalars it answers or sends is copied out of it.
+ * `nish_cross_out(v, esize, mark)` runs on the thread that made `v`: when `v`
+ * was bumped in that thread's arena since `mark` (0: at any time) it answers a
+ * copy in a block of its own, outside every arena, with its low bit set; any
+ * other value, a literal or one an outer frame made, is answered as it is.
+ * `nish_cross_send(s)` is a channel send's: it copies every string `s`, so a
+ * send costs the string's length and not a walk of the sender's arena.
+ * `nish_cross_keep(v, esize, mark)` is a map element's: it copies `v` out,
+ * rewinds the arena to `mark`, the position before the body was called, and
+ * copies it back in, so a chunk keeps one element's temporaries at a time.
+ * `nish_cross_in(p, esize)` runs on the thread that takes the value: a tagged
+ * `p` is copied into that thread's arena and its block freed, so each block
+ * is freed by the one `cross_in` its value meets. `esize` is 0 for a string
+ * and the element size of an array whose elements hold no pointer. The
+ * `_range` forms do the same to each of a chunk's slots of `dst`, `[lo, hi)`,
+ * and then to its first `n`.
+ *
+ * `nish_guard_keep(old, s)` is a guard's string store (`g.value = s`): it
+ * answers a copy of `s` that the `Mutex` owns, outside every arena, and frees
+ * `old`, the string the slot held, when it is such a copy. `old` is null for a
+ * `string | null` slot that held none; `s` is never null, since the checker
+ * stores only a `string` through a guard. A copy still held
+ * when its `Mutex` is dropped stays until the process ends: one block per
+ * string slot, not one per store. */
+void *nish_cross_out(void *v, uint64_t esize, uint64_t mark);
+void *nish_cross_send(void *s);
+void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark);
+void *nish_cross_in(void *p, uint64_t esize);
+void nish_cross_out_range(nish_array *dst, int64_t lo, int64_t hi, uint64_t esize, uint64_t mark);
+void nish_cross_in_range(nish_array *dst, int64_t n, uint64_t esize);
+void *nish_guard_keep(void *old, const void *s);
 
 #ifdef __cplusplus
 }

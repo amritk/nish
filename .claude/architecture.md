@@ -55,14 +55,15 @@ Compilation                                                            src/compi
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
 - **The runtime has a budget per translation unit.** Every `.text*` section of
-  `clang -Oz -c <file>`, summed, for each of the runtime's five translation
-  units:
+  `clang -Oz -c <file>`, summed, for each of the runtime's translation units
+  (`tests/runtime-budgets.js` holds every one; these are the main ones):
 
   | Unit | What it holds | Today | Ceiling |
   | --- | --- | --- | --- |
   | `runtime/runtime.c` | the core every program touches, a closed set | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
   | `runtime/runtime-os.c` | the syscall wrappers: files, directories, processes, the environment | 1,530 | 1,536 |
   | `runtime/runtime-parallel.c` | dividing a range of work across threads | 286 (905 threaded) | 320 (1,024) |
+  | `runtime/runtime-cross.c` | the copies of a task's, a map's, a channel's or a guard's strings and arrays across arenas, and a map element kept as its chunk rewinds | 1,170 (1,235 threaded) | 1,280 (1,280) |
   | `runtime/runtime-host.c` | the wall clock, entropy, file times, signals | 764 | 768 |
   | `runtime/runtime-net.c` | the sockets of `nish:net`: addresses, non-blocking TCP and UDP, the readiness loop | 2,303 | 2,304 |
 
