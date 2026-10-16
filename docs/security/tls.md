@@ -513,12 +513,15 @@ KeyUpdate; `tlsTicketKeyDue` at the window's end and at the cap; and the
 caller's rotation turn run three times, with a ticket under the previous key
 opening until the turn after and failing to open then) and by a `tests/run.js`
 wipe-count check after `opt -O2`, in the manner of `tests/wipes/crypto.js`'s
-groups: its roots are the test's rotation turn (the `wipe` of
-the previous key), `tlsTicketKeyDraw`, `tlsTicketOpen` and `tlsTicketSeal`
-(the one `secureZero` of the plaintext in each), and
+groups: its roots are the test's rotation turn, with one `wipe`, of
+the previous key, and `tlsTicketOpen` and `tlsTicketSeal`, with one
+`secureZero` each, of the plaintext; and
 each wipe is shown counted on its own by deleting it and watching its root's
-count drop. Each of open and seal wipes its plaintext once, at a point every
-path reaches — after the branch on the tag and on the parse, as
+count drop. `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
+`Secret` (NL2445) and has nothing of its own to wipe. The count shows that each
+wipe exists and survives `opt -O2`; it matches calls, not paths, so that the
+wipe is reached on every path is for review to check. Each of open and seal
+wipes its plaintext once, at a point every path reaches — after the branch on the tag and on the parse, as
 `chacha20Poly1305Open` wipes its state once after its branch — not once on
 each path: `opt -O2` merges a wipe placed on each of two paths into one
 store, and the count could then not see either go missing
@@ -769,7 +772,13 @@ As TLS-1 records for the other secrets:
   `tlsExchange` as words in `TlsExchangeWords` beside the ephemeral key, so
   the class stays numbers and the exchange keeps its own scope (TLS-3); each
   word is zeroed by an ordinary store as soon as it is read, and the salt's
-  bytes are wiped with `secureZero` once they are words. A full handshake
+  bytes are wiped with `secureZero` once they are words. `tlsExchange` reads
+  and zeroes the salt's words at its top, beside the key's and before any of
+  its returns (an `internal_error`, or `illegal_parameter` for a low-order
+  share), so no path leaves them in `TlsExchangeWords`. The extract needs the
+  salt as bytes, and the function `exposeWith` runs cannot wipe its argument
+  (NL2450), so `tlsExchange` wipes the array it rebuilds from the words with
+  `secureZero` after the extract, on every path. A full handshake
   keeps the constant.
 - **Issuing.** The resumption PSK for a NewSessionTicket is derived, sealed
   and wiped with `secureZero` before the record carrying it is sent; once its
@@ -788,8 +797,10 @@ To be pinned by the wipe-count check under Ticket keys (the one
 after its branch, seen in the IR, since no object keeps the plaintext for a
 test to read) and `net_tls_resume` (the PSK, the PSK early secret, the binder
 key, the salt's bytes and its words in `TlsExchangeWords`, and the resumption
-master secret zero after a resumed handshake, and the same arrays zero after a
-row 4 to 8 fallback, after row 9 and after row 17; 0 bytes per resumed
+master secret zero after a resumed handshake, and the same arrays zero after
+row 2, after row 3 (an expired ticket), after a row 4 to 8 fallback, after row
+9 and after row 17; a resumed ClientHello whose x25519 share is low-order,
+after which the salt's words in `TlsExchangeWords` and its bytes are zero; 0 bytes per resumed
 handshake through a reused slot).
 
 ### Fallback and abort table
@@ -841,7 +852,10 @@ ticket it saw is still unspent; the design accepts that. Over QUIC, rows 1 to
 connections never open a ticket, and rows 10 to 15 hold as over TCP, the
 codec being shared. Of row 16, the first half holds over QUIC (the extension
 is ignored); the second does not apply, since QUIC carries no TLS records and
-its 0-RTT packets are the QUIC record's (`quic.md`), not this one's. A ClientHello with no `pre_shared_key` is handled as today.
+its 0-RTT packets are the QUIC record's (`quic.md`), not this one's. A ClientHello with no `pre_shared_key` is handled as today,
+but for `psk_key_exchange_modes`: the codec reads it from every ClientHello to
+decide issuance, so a malformed one is row 13's `decode_error` with or without
+`pre_shared_key`.
 
 To be pinned by `net_tls_psk_wire` (rows 10 to 13 as codec refusals, RFC
 8448 §3's NewSessionTicket and §4's resumption PSK, early secret and binder
