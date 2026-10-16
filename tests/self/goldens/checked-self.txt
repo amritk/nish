@@ -24198,11 +24198,11 @@ struct RegionState (class) size=48 align=8
   method isDestination -> @RegionState.isDestination
   method addDestination -> @RegionState.addDestination
   method live -> @RegionState.live
-struct SiblingReach (class) size=32 align=8
-  field atomic: boolean index=0 offset=0
-  field local: Local | null index=1 offset=8
+struct SiblingReach (class) size=24 align=8
+  field local: Local | null index=0 offset=0
+  field path: string index=1 offset=8
   field type: i32 index=2 offset=16
-  field path: string index=3 offset=24
+  field atomic: boolean index=3 offset=20
   constructor -> @SiblingReach.constructor
   method meets -> @SiblingReach.meets
 struct SiblingSpawn (class) size=32 align=8
@@ -25439,13 +25439,13 @@ function checkSiblingScopes(program: CheckedProgram, table: TypeTable, facts: Fa
 function SiblingReach.constructor(this: SiblingReach, atomic: boolean, local: Local | null, type: i32, path: string): void -> @SiblingReach.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: atomic local path type
-  pointer this: size=32 writesThrough=true captured=false
+  pointer this: size=24 writesThrough=true captured=false
   pointer local: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function SiblingReach.meets(this: SiblingReach, other: SiblingReach): boolean -> @SiblingReach.meets [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=32 writesThrough=false captured=false
-  pointer other: size=32 writesThrough=false captured=false
+  pointer this: size=24 writesThrough=false captured=false
+  pointer other: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 2155:11 mine: Local | null (const)
   local 2156:11 theirs: Local | null (const)

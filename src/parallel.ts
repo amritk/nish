@@ -2135,10 +2135,10 @@ const checkSiblingScopes = (
  * and `path` how the task reaches it.
  */
 class SiblingReach {
-  atomic: boolean
   local: Local | null
-  type: i32
   path: string
+  type: i32
+  atomic: boolean
 
   constructor(atomic: boolean, local: Local | null, type: i32, path: string) {
     this.atomic = atomic
