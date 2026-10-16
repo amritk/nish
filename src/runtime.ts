@@ -954,6 +954,15 @@ export class RuntimeTable {
     this.addWrites(
       WRITES_NOTHING,
       new RuntimeFunction(
+        "nish_cross_keep",
+        "declare i8* @nish_cross_keep(i8* noundef, i64 noundef, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
         "nish_cross_out_range",
         "declare void @nish_cross_out_range(i8* noundef nonnull, i64 noundef, i64 noundef, i64 noundef, i64 noundef)",
         attrs1("nounwind"),

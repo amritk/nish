@@ -4636,6 +4636,36 @@ if (!only || "thread_task_release".includes(only)) {
   )
 }
 
+// A map's chunk loop keeps each element its body answers and gives back the
+// rest (`nish_cross_keep`). `par_map_release` builds a 2 KB string per element
+// of a million and answers 4 bytes cut from it; it peaks at 64 MB on one thread
+// and 68 MB on eight, and without the keep at 2.1 GB on either. The bound is
+// 256 MB.
+if (!only || "par_map_release".includes(only)) {
+  const fixture = linkTests.includes("par_map_release")
+  const dir = path.join(buildDir, "link", "par_map_release")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/par_map_release: a million 2 KB temporaries on ${threads} thread(s) peak under 256 MB`,
+      kb > 0 && kb < 256 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
 // `--unchecked-indexing` and `--wrapping` reach the entry package and nothing else.
 // The link loop above built `tests/link/unsafe_flag_scope` under both flags (its
 // `args`); here it is compiled again without them, and every module but the entry's
@@ -16267,7 +16297,7 @@ if (!only || "runtime-cache".includes(only)) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the seven objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eight objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -16276,7 +16306,7 @@ if (!only || "runtime-cache".includes(only)) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the seven runtime units once",
+      "runtime cache: the miss compiled each of the eight runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -16824,9 +16854,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all seven runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eight runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 7 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 8 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")

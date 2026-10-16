@@ -20463,6 +20463,7 @@ declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef non
 declare i8* @nish_cross_out(i8* noundef, i64 noundef, i64 noundef) #3
 declare noundef nonnull i8* @nish_cross_send(i8* noundef nonnull) #3
 declare i8* @nish_cross_in(i8* noundef, i64 noundef) #3
+declare i8* @nish_cross_keep(i8* noundef, i64 noundef, i64 noundef) #3
 declare void @nish_cross_out_range(i8* noundef nonnull, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #3
 declare void @nish_cross_in_range(i8* noundef nonnull, i64 noundef, i64 noundef) #3
 declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #3

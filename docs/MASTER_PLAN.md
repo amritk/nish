@@ -90,7 +90,7 @@ Design rules that every WP must respect:
   | `runtime.c` | 3,684 (3,885 with `-DNISH_THREADS=1`) (2026-10-16) | 3,684 (3,885) |
   | `runtime-os.c` | 1,530 | 1,536 |
   | `runtime-parallel.c` | 610 (2,665 threaded) (2026-10-16) | 768 (2,816) |
-  | `runtime-cross.c` | 1,127 (1,192 threaded) (2026-10-16) | 1,280 (1,280) |
+  | `runtime-cross.c` | 1,170 (1,235 threaded) (2026-10-16) | 1,280 (1,280) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 675 (2026-10-09) | 768 |

@@ -109,10 +109,12 @@ import {
   emitLockReleases,
   emitParallelRegion,
   emitScopeJoins,
+  elementKeepSize,
   emitSpawnTask,
   holdsLock,
   isParallelRegionCall,
   isSpawnTaskCall,
+  keepElement,
   openScope,
 } from "./emit-parallel"
 import {
@@ -1533,7 +1535,13 @@ export class Emitter {
       aesSeam === AES_SEAM_NONE ? null : this.emitAesKernelArm(aesSeam, operands)
     // WP9: the mark goes after the arguments, so only the callee's own bumps
     // are inside the bracket (`beginReclaim`).
-    const mark = this.beginReclaim(sig)
+    // Where that does not apply, a map's or a `parallelFrom`'s chunk loop
+    // keeps each element its body answers and gives back the rest
+    // (`elementKeepSize`).
+    const reclaim = this.beginReclaim(sig)
+    const keepSize = tail || reclaim.length > 0 ? -1 : elementKeepSize(this, this.currentSig, sig)
+    const mark =
+      keepSize >= 0 ? this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`) : reclaim
     const marker = tail ? "tail " : ""
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
@@ -1548,6 +1556,15 @@ export class Emitter {
     // caller's own object, which is what every other construct reads.
     if (this.table.resultByValue(sig.returnType)) {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
+    }
+    if (keepSize >= 0) {
+      return keepElement(
+        this,
+        this.llvmAbi(sig.returnType, calleePrivate),
+        this.fn.emitValue(call),
+        keepSize,
+        mark
+      )
     }
     return this.endReclaim(mark, this.fn.emitValue(call))
   }

@@ -196,10 +196,11 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
  * `nish_cross_in`, which copy a task's or a chunk's `string` or scalar array out of the
  * arena it was made in and into the one that takes it, their `_range` forms over a map's
- * slots, `nish_cross_send`, which copies every string a `Channel<string>` sends, and
+ * slots, `nish_cross_send`, which copies every string a `Channel<string>` sends,
+ * `nish_cross_keep`, which keeps a map's element as its chunk loop rewinds the arena, and
  * `nish_guard_keep` with the set of the copies a `Mutex` owns.
  *
- * Measured **1,127 bytes** on 2026-10-16 with clang 18.1.3 on linux-x64. A copy-out first
+ * Measured **1,170 bytes** on 2026-10-16 with clang 18.1.3 on linux-x64. A copy-out first
  * collects the arena's spans since the mark and sorts them, so that a map's million
  * slots each take a binary search rather than a walk of every chunk. Every configuration
  * defines them, because a task's arena is rewound once it has returned whether it ran on
@@ -212,7 +213,7 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
  */
 const RUNTIME_CROSS_TEXT_BUDGET = 1280
 /**
- * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,192 bytes** on
+ * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,235 bytes** on
  * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
  * `nish_guard_keep` takes over the set of a `Mutex`'s copies, which another thread's
  * guard may be changing.

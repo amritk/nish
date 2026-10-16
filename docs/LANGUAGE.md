@@ -2657,13 +2657,19 @@ from the whole-program facts, and each rule is reported there:
   own arena after the join, one at a time. When each element's work is cheap,
   a map that answers strings is therefore slower than the sequential loop
   today. Five maps of 1M `` `n${x % 1000}` `` strings each took a median of
-  280 ms on 4 threads, against 200 ms for the same loop written sequentially;
-  two byte-identical copies of the threaded binary differed by 6 ms in the same
-  25 interleaved rounds, and single runs ranged from 246 to 332 ms. A map
+  270 ms on 4 threads, against 200 ms for the same loop written sequentially;
+  two byte-identical copies of the threaded binary differed by 11 ms in the
+  same 25 interleaved rounds, and single runs ranged from 249 to 356 ms. A map
   whose per-element work outweighs the copy does gain from the threads. What
-  the body allocates for an element that answers a string is released with
-  its chunk rather than with the element: a body that builds a 2 KB string and
-  answers an 8-byte slice of it, over 1M elements, peaked at 78 MB.
+  the body allocates for an element is released with that element, also when
+  the body stores what it builds into an array literal on the way, which the
+  arena scope above does not cover: the chunk loop marks the arena before each
+  call and keeps only the answer
+  (`nish_cross_keep` copies it out, rewinds to the mark and copies it back).
+  A body that builds a 2 KB string, stores it in an array literal and answers
+  a 4-byte slice of it, over 1M elements, peaks at 64 MB on 1 thread and
+  68 MB on 8, where it used to hold every element's temporaries until its
+  chunk ended and peaked at 2.1 GB (`tests/link/par_map_release`).
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over

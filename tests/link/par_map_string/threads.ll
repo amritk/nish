@@ -31,6 +31,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #1
+declare i8* @nish_cross_keep(i8* noundef, i64 noundef, i64 noundef) #1
 declare void @nish_cross_out_range(i8* noundef nonnull, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #1
 declare void @nish_cross_in_range(i8* noundef nonnull, i64 noundef, i64 noundef) #1
 declare double @llvm.floor.f64(double) #0
@@ -1146,29 +1147,33 @@ land.end:
 
 for.body:
   %13 = load i32, i32* %i.addr, align 4
-  %14 = call %struct.nish_array* @nish_main$arrow5(i32 %13)
-  store %struct.nish_array* %14, %struct.nish_array** %y.addr, align 8
-  %15 = load i32, i32* %i.addr, align 4
-  %16 = trunc i64 %1 to i32
-  %17 = icmp slt i32 %15, %16
-  br i1 %17, label %if.then, label %if.end
+  %14 = call i64 @nish_arena_mark()
+  %15 = call %struct.nish_array* @nish_main$arrow5(i32 %13)
+  %16 = bitcast %struct.nish_array* %15 to i8*
+  %17 = call i8* @nish_cross_keep(i8* %16, i64 1, i64 %14)
+  %18 = bitcast i8* %17 to %struct.nish_array*
+  store %struct.nish_array* %18, %struct.nish_array** %y.addr, align 8
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = trunc i64 %1 to i32
+  %21 = icmp slt i32 %19, %20
+  br i1 %21, label %if.then, label %if.end
 
 if.then:
-  %18 = load i32, i32* %i.addr, align 4
-  %19 = sext i32 %18 to i64
-  %20 = load %struct.nish_array*, %struct.nish_array** %y.addr, align 8
-  %21 = bitcast i8* %3 to %struct.nish_array**
-  %22 = getelementptr inbounds %struct.nish_array*, %struct.nish_array** %21, i64 %19
-  store %struct.nish_array* %20, %struct.nish_array** %22, align 8, !alias.scope !14, !noalias !13, !tbaa !24
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = sext i32 %22 to i64
+  %24 = load %struct.nish_array*, %struct.nish_array** %y.addr, align 8
+  %25 = bitcast i8* %3 to %struct.nish_array**
+  %26 = getelementptr inbounds %struct.nish_array*, %struct.nish_array** %25, i64 %23
+  store %struct.nish_array* %24, %struct.nish_array** %26, align 8, !alias.scope !14, !noalias !13, !tbaa !24
   br label %if.end
 
 if.end:
   br label %for.inc
 
 for.inc:
-  %23 = load i32, i32* %i.addr, align 4
-  %24 = add nsw i32 %23, 1
-  store i32 %24, i32* %i.addr, align 4
+  %27 = load i32, i32* %i.addr, align 4
+  %28 = add nsw i32 %27, 1
+  store i32 %28, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
@@ -1545,29 +1550,31 @@ for.body:
   %23 = bitcast i8* %3 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 %22
   %25 = load i32, i32* %24, align 4, !alias.scope !14, !noalias !13, !tbaa !22
-  %26 = call i8* @nish_main$arrow1(i32 %25, i8* %cap.0)
-  store i8* %26, i8** %y.addr, align 8
-  %27 = load i32, i32* %i.addr, align 4
-  %28 = trunc i64 %5 to i32
-  %29 = icmp slt i32 %27, %28
-  br i1 %29, label %if.then, label %if.end
+  %26 = call i64 @nish_arena_mark()
+  %27 = call i8* @nish_main$arrow1(i32 %25, i8* %cap.0)
+  %28 = call i8* @nish_cross_keep(i8* %27, i64 0, i64 %26)
+  store i8* %28, i8** %y.addr, align 8
+  %29 = load i32, i32* %i.addr, align 4
+  %30 = trunc i64 %5 to i32
+  %31 = icmp slt i32 %29, %30
+  br i1 %31, label %if.then, label %if.end
 
 if.then:
-  %30 = load i32, i32* %i.addr, align 4
-  %31 = sext i32 %30 to i64
-  %32 = load i8*, i8** %y.addr, align 8
-  %33 = bitcast i8* %7 to i8**
-  %34 = getelementptr inbounds i8*, i8** %33, i64 %31
-  store i8* %32, i8** %34, align 8, !alias.scope !14, !noalias !13, !tbaa !24
+  %32 = load i32, i32* %i.addr, align 4
+  %33 = sext i32 %32 to i64
+  %34 = load i8*, i8** %y.addr, align 8
+  %35 = bitcast i8* %7 to i8**
+  %36 = getelementptr inbounds i8*, i8** %35, i64 %33
+  store i8* %34, i8** %36, align 8, !alias.scope !14, !noalias !13, !tbaa !24
   br label %if.end
 
 if.end:
   br label %for.inc
 
 for.inc:
-  %35 = load i32, i32* %i.addr, align 4
-  %36 = add nsw i32 %35, 1
-  store i32 %36, i32* %i.addr, align 4
+  %37 = load i32, i32* %i.addr, align 4
+  %38 = add nsw i32 %37, 1
+  store i32 %38, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
@@ -1715,29 +1722,33 @@ for.body:
   %23 = bitcast i8* %3 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 %22
   %25 = load i32, i32* %24, align 4, !alias.scope !14, !noalias !13, !tbaa !22
-  %26 = call %struct.nish_array* @nish_main$arrow4(i32 %25)
-  store %struct.nish_array* %26, %struct.nish_array** %y.addr, align 8
-  %27 = load i32, i32* %i.addr, align 4
-  %28 = trunc i64 %5 to i32
-  %29 = icmp slt i32 %27, %28
-  br i1 %29, label %if.then, label %if.end
+  %26 = call i64 @nish_arena_mark()
+  %27 = call %struct.nish_array* @nish_main$arrow4(i32 %25)
+  %28 = bitcast %struct.nish_array* %27 to i8*
+  %29 = call i8* @nish_cross_keep(i8* %28, i64 4, i64 %26)
+  %30 = bitcast i8* %29 to %struct.nish_array*
+  store %struct.nish_array* %30, %struct.nish_array** %y.addr, align 8
+  %31 = load i32, i32* %i.addr, align 4
+  %32 = trunc i64 %5 to i32
+  %33 = icmp slt i32 %31, %32
+  br i1 %33, label %if.then, label %if.end
 
 if.then:
-  %30 = load i32, i32* %i.addr, align 4
-  %31 = sext i32 %30 to i64
-  %32 = load %struct.nish_array*, %struct.nish_array** %y.addr, align 8
-  %33 = bitcast i8* %7 to %struct.nish_array**
-  %34 = getelementptr inbounds %struct.nish_array*, %struct.nish_array** %33, i64 %31
-  store %struct.nish_array* %32, %struct.nish_array** %34, align 8, !alias.scope !14, !noalias !13, !tbaa !24
+  %34 = load i32, i32* %i.addr, align 4
+  %35 = sext i32 %34 to i64
+  %36 = load %struct.nish_array*, %struct.nish_array** %y.addr, align 8
+  %37 = bitcast i8* %7 to %struct.nish_array**
+  %38 = getelementptr inbounds %struct.nish_array*, %struct.nish_array** %37, i64 %35
+  store %struct.nish_array* %36, %struct.nish_array** %38, align 8, !alias.scope !14, !noalias !13, !tbaa !24
   br label %if.end
 
 if.end:
   br label %for.inc
 
 for.inc:
-  %35 = load i32, i32* %i.addr, align 4
-  %36 = add nsw i32 %35, 1
-  store i32 %36, i32* %i.addr, align 4
+  %39 = load i32, i32* %i.addr, align 4
+  %40 = add nsw i32 %39, 1
+  store i32 %40, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:

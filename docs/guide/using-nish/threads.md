@@ -136,9 +136,9 @@ export const main = (): i32 => {
 That copy has a cost, and the caller pays its last part alone, one string at
 a time, after every thread has finished. When the work per element is small,
 a `parallelMap` that answers strings is slower than a plain loop today. Five
-maps of a million `` `n${x % 1000}` `` strings took a median of 280 ms on 4
-threads, against 200 ms for the sequential loop. Single runs ranged from 246
-to 332 ms, so measure your own case. Reach for the threads when each element does real work,
+maps of a million `` `n${x % 1000}` `` strings took a median of 270 ms on 4
+threads, against 200 ms for the sequential loop. Single runs ranged from 249
+to 356 ms, so measure your own case. Reach for the threads when each element does real work,
 or when the answer is a number.
 
 ## Reading the function's constants

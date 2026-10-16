@@ -503,6 +503,49 @@ const crossOut = (
   return type === "i8*" ? out : fn.emitValue(`bitcast i8* ${out} to ${type}`)
 }
 
+/**
+ * The `esize` of the element the call to `callee` answers inside a map's
+ * or a `parallelFrom`'s chunk loop (`mapRange` and `fromRange` in
+ * `std/threads.ts`), when the call is to the loop's body and the element is a
+ * string or a scalar array; -1 for every other call. The emitter brackets
+ * such a call with a mark and `nish_cross_keep`, so the chunk keeps each
+ * element and gives back what the body bumped to make it: without the
+ * bracket, a body that builds a 2 KB string to answer a short one held all of
+ * a chunk's 2 KB strings until the chunk's own release, 2.1 GB over a million
+ * elements. A reduce's body (`reduceBlocks`) answers a scalar, so it has none.
+ */
+export const elementKeepSize = (emitter: Emitter, caller: FunctionSig | null, callee: FunctionSig): i32 => {
+  if (caller === null) {
+    return -1
+  }
+  const body = parallelBodyOf(caller)
+  const instance = caller.instance
+  if (parallelRoleOf(caller) !== PAR_CHUNK || body === null || body !== callee || instance === null) {
+    return -1
+  }
+  const template = instance.template
+  if (template === null || template.sourceName === "reduceBlocks") {
+    return -1
+  }
+  return crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1])
+}
+
+/** The element a chunk loop's body call answered, `value` of LLVM type `type`, kept as the arena rewinds to `mark`. */
+export const keepElement = (
+  emitter: Emitter,
+  type: string,
+  value: string,
+  size: i32,
+  mark: string
+): string => {
+  const fn = emitter.fn
+  const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)
+  const kept = fn.emitValue(
+    `call i8* ${emitter.useRuntime("nish_cross_keep")}(i8* ${raw}, i64 ${size}, i64 ${mark})`
+  )
+  return type === "i8*" ? kept : fn.emitValue(`bitcast i8* ${kept} to ${type}`)
+}
+
 /** `value`, of LLVM type `type`, through `nish_cross_in(value, size)`. */
 const crossIn = (emitter: Emitter, fn: IRFunction, type: string, value: string, size: i32): string => {
   const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)

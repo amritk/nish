@@ -653,6 +653,9 @@ int32_t nish_channel_receive(int64_t *state, int64_t *out);
  * other value, a literal or one an outer frame made, is answered as it is.
  * `nish_cross_send(s)` is a channel send's: it copies every string `s`, so a
  * send costs the string's length and not a walk of the sender's arena.
+ * `nish_cross_keep(v, esize, mark)` is a map element's: it copies `v` out,
+ * rewinds the arena to `mark`, the position before the body was called, and
+ * copies it back in, so a chunk keeps one element's temporaries at a time.
  * `nish_cross_in(p, esize)` runs on the thread that takes the value: a tagged
  * `p` is copied into that thread's arena and its block freed, so each block
  * is freed by the one `cross_in` its value meets. `esize` is 0 for a string
@@ -669,6 +672,7 @@ int32_t nish_channel_receive(int64_t *state, int64_t *out);
  * string slot, not one per store. */
 void *nish_cross_out(void *v, uint64_t esize, uint64_t mark);
 void *nish_cross_send(void *s);
+void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark);
 void *nish_cross_in(void *p, uint64_t esize);
 void nish_cross_out_range(nish_array *dst, int64_t lo, int64_t hi, uint64_t esize, uint64_t mark);
 void nish_cross_in_range(nish_array *dst, int64_t n, uint64_t esize);

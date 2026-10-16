@@ -149,6 +149,18 @@ void *nish_cross_out(void *v, uint64_t esize, uint64_t mark) {
 
 void *nish_cross_send(void *s) { return nish_cross_copy(s, 0); }
 
+/* A map's or a `parallelFrom`'s element, kept as its chunk loop rewinds the
+ * arena to `mark`, the bump position before the body was called: everything
+ * else the body bumped is dead once it has answered, so a chunk holds one
+ * element's temporaries at a time rather than all of its elements'. A value
+ * made since `mark` goes out to a block of its own and back in below `mark`;
+ * one made before it is answered as it is. */
+void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark) {
+  v = nish_cross_out(v, esize, mark);
+  nish_arena_release(mark);
+  return nish_cross_in(v, esize);
+}
+
 void *nish_cross_in(void *p, uint64_t esize) {
   if (!((uintptr_t)p & 1)) return p;
   void *b = (void *)((uintptr_t)p & ~(uintptr_t)1);
