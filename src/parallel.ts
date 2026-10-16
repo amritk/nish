@@ -492,8 +492,12 @@ export const allocationWarning = (
   facts: FactsTable
 ): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
-  // A string or a scalar array answered across threads has to be allocated:
-  // building it is the work, and no element scope recycles it.
+  // A string or a scalar array answered across threads has to be allocated,
+  // so the advice below cannot be taken: building it is the work. Each
+  // element's call is still bracketed (`elementKeepSize` in
+  // emit-parallel.ts), and `nish_cross_keep` gives back what the body bumped
+  // beyond the answer; the facts cannot tell those temporaries from the
+  // answer itself, so the warning stays off for every such body.
   if (own === null || !own.allocates || crossesByCopy(table, type)) {
     return ""
   }

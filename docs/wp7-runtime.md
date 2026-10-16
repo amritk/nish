@@ -7,7 +7,7 @@ strings, and the `wasi` build profile. Later work superseded several parts:
 
 - signed overflow, `i64` included, is a checked panic by default (#426);
 - the shortest-digits search was replaced by a port of Ryu;
-- the runtime grew from one translation unit to seven, each with its own
+- the runtime grew from one translation unit to eight, each with its own
   measured budget (below).
 
 The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",

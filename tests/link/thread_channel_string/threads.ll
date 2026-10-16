@@ -363,13 +363,15 @@ entry:
   %0 = bitcast i8* %p to { %struct.Source*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Source*, %struct.nish_array*, i32, i32 }, { %struct.Source*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Source*, %struct.Source** %1
-  %3 = call i32 @produce$(%struct.Source* %2)
-  %4 = getelementptr inbounds { %struct.Source*, %struct.nish_array*, i32, i32 }, { %struct.Source*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
-  %5 = getelementptr inbounds %struct.Source, %struct.Source* %2, i32 0, i32 0
-  %6 = load %struct.Channel$str*, %struct.Channel$str** %5
-  %7 = getelementptr inbounds %struct.Channel$str, %struct.Channel$str* %6, i32 0, i32 2
-  call void @nish_channel_count(i64* %7, i64 -1)
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @produce$(%struct.Source* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Source*, %struct.nish_array*, i32, i32 }, { %struct.Source*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
+  %6 = getelementptr inbounds %struct.Source, %struct.Source* %2, i32 0, i32 0
+  %7 = load %struct.Channel$str*, %struct.Channel$str** %6
+  %8 = getelementptr inbounds %struct.Channel$str, %struct.Channel$str* %7, i32 0, i32 2
+  call void @nish_channel_count(i64* %8, i64 -1)
   ret void
 }
 
@@ -441,13 +443,15 @@ entry:
   %0 = bitcast i8* %p to { %struct.Stage*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Stage*, %struct.nish_array*, i32, i32 }, { %struct.Stage*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Stage*, %struct.Stage** %1
-  %3 = call i32 @rewrite$(%struct.Stage* %2)
-  %4 = getelementptr inbounds { %struct.Stage*, %struct.nish_array*, i32, i32 }, { %struct.Stage*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
-  %5 = getelementptr inbounds %struct.Stage, %struct.Stage* %2, i32 0, i32 1
-  %6 = load %struct.Channel$str*, %struct.Channel$str** %5
-  %7 = getelementptr inbounds %struct.Channel$str, %struct.Channel$str* %6, i32 0, i32 2
-  call void @nish_channel_count(i64* %7, i64 -1)
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @rewrite$(%struct.Stage* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Stage*, %struct.nish_array*, i32, i32 }, { %struct.Stage*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
+  %6 = getelementptr inbounds %struct.Stage, %struct.Stage* %2, i32 0, i32 1
+  %7 = load %struct.Channel$str*, %struct.Channel$str** %6
+  %8 = getelementptr inbounds %struct.Channel$str, %struct.Channel$str* %7, i32 0, i32 2
+  call void @nish_channel_count(i64* %8, i64 -1)
   ret void
 }
 

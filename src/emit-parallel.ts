@@ -582,25 +582,27 @@ const taskRun = (
     k = k + 1
   }
   const call = `call ${result} @${body.name}(${operands.join(", ")})`
+  // What the task bumps is rewound once it has answered, on whichever thread
+  // ran it, whatever it answers: a worker's arena is also reset by the pool,
+  // but the caller's, which runs the lead task and every task it drains, is
+  // not (as in `chunkTrampoline`). A task's answer is a scalar or a value
+  // that crosses by copy (`taskResultMessage`), so nothing it answers is left
+  // pointing into what is rewound.
+  const mark = fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
   if (keeps) {
     // A string or an array the task made leaves its arena before the arena
     // is rewound; one that is older than the task, its parent's, does not.
     const size = crossingSize(emitter, body.returnType)
-    const mark = size < 0 ? "" : fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
     const answer = fn.emitValue(call)
     const r = size < 0 ? answer : crossOut(emitter, fn, result, answer, size, mark)
-    if (size >= 0) {
-      // What the task bumped is rewound here, on whichever thread ran it: a
-      // worker's arena is also reset by the pool, but the caller's, which runs
-      // the lead task and every task it drains, is not (as in `chunkTrampoline`).
-      fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
-    }
+    fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
     const at = fn.emitValue(
       `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${inputs.types.length}`
     )
     fn.emit(`store ${result} ${r}, ${result}* ${at}`)
   } else {
     fn.emit(call) // a task with no destination answers `void` (`voidTaskResultMessage`)
+    fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
   }
   countSenders(emitter, fn, spawn, arg, -1) // WP29 P3: it has sent all it will
   fn.emit("ret void")

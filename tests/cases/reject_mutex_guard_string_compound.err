@@ -1,0 +1,1 @@
+reject_mutex_guard_string_compound.ts:28:3: error: Operator `+=` requires two operands of the same numeric type, got string and string

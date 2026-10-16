@@ -18,6 +18,7 @@ declare noundef i32 @nish_main$arrow0(i32 noundef, %struct.AtomicI32* noundef no
 declare void @undo$(%struct.Shard* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
@@ -268,9 +269,11 @@ entry:
   %0 = bitcast i8* %p to { %struct.Shard*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Shard*, %struct.Shard** %1
-  %3 = call i32 @count$(%struct.Shard* %2)
-  %4 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @count$(%struct.Shard* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Shard*, %struct.nish_array*, i32, i32 }, { %struct.Shard*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 
@@ -340,9 +343,11 @@ entry:
   %2 = load i32, i32* %1
   %3 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.AtomicI32*, i32 }, { i32, %struct.nish_array*, i32, %struct.AtomicI32*, i32 }* %0, i32 0, i32 3
   %4 = load %struct.AtomicI32*, %struct.AtomicI32** %3
-  %5 = call i32 @nish_main$arrow0(i32 %2, %struct.AtomicI32* %4)
-  %6 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.AtomicI32*, i32 }, { i32, %struct.nish_array*, i32, %struct.AtomicI32*, i32 }* %0, i32 0, i32 4
-  store i32 %5, i32* %6
+  %5 = call i64 @nish_arena_mark()
+  %6 = call i32 @nish_main$arrow0(i32 %2, %struct.AtomicI32* %4)
+  call void @nish_arena_release(i64 %5)
+  %7 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.AtomicI32*, i32 }, { i32, %struct.nish_array*, i32, %struct.AtomicI32*, i32 }* %0, i32 0, i32 4
+  store i32 %6, i32* %7
   ret void
 }
 
@@ -412,7 +417,9 @@ entry:
   %0 = bitcast i8* %p to { %struct.Shard* }*
   %1 = getelementptr inbounds { %struct.Shard* }, { %struct.Shard* }* %0, i32 0, i32 0
   %2 = load %struct.Shard*, %struct.Shard** %1
+  %3 = call i64 @nish_arena_mark()
   call void @undo$(%struct.Shard* %2)
+  call void @nish_arena_release(i64 %3)
   ret void
 }
 

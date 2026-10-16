@@ -4609,10 +4609,11 @@ if (!only || "thread_channel_string_many".includes(only)) {
   )
 }
 
-// A task's temporaries are released on the thread that ran it once its answer
-// is copied out. `thread_task_release` spawns 8,000 tasks of some 60 KB each;
-// on one thread, which runs them all on the caller, it peaks at 11 MB, and
-// without the release at 1.87 GB. The bound is 64 MB.
+// A task's temporaries are released on the thread that ran it once it has
+// answered, whatever it answers. `thread_task_release` spawns three scopes of
+// 8,000 tasks of some 60 KB each, answering a string, an `i32` and nothing;
+// on one thread, which runs them all on the caller, it peaks at 3 MB, and
+// without the release at 3.5 GB. The bound is 64 MB.
 if (!only || "thread_task_release".includes(only)) {
   const fixture = linkTests.includes("thread_task_release")
   const dir = path.join(buildDir, "link", "thread_task_release")
@@ -4630,7 +4631,7 @@ if (!only || "thread_task_release".includes(only)) {
     ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
     : "no such fixture"
   check(
-    "link/thread_task_release: 8,000 tasks on one thread peak under 64 MB",
+    "link/thread_task_release: 24,000 tasks on one thread peak under 64 MB",
     kb > 0 && kb < 64 * 1024,
     run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
   )
@@ -16235,7 +16236,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's six translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's eight translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
