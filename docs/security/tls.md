@@ -628,7 +628,7 @@ its root shows only that the wipes survive `opt -O2`. Two more, under
 (both directions' keys, IVs and AES schedules; the traffic, handshake,
 exporter and resumption secrets; the exchange's words)`), whose counts move:
 `nish.TlsServer.exchangeKeys`, which counts `tlsExchange`'s wipes and gains
-one, and `nish.TlsServer.sign`, whose master-secret wipe moves to a new root
+two, and `nish.TlsServer.sign`, whose master-secret wipe moves to a new root
 beside it, the master-secret step `TlsServer.masterSecretStep`, run once the
 server Finished is sent. `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
 `Secret` (NL2445) and has nothing of its own to wipe. The count shows that each
@@ -883,8 +883,12 @@ As TLS-1 records for the other secrets:
   `expose`, since Expand-Label may panic with a computed message, which a
   function run inside `expose` may not reach (NL2448). It reaches
   `tlsExchange` as words in `TlsExchangeWords` beside the ephemeral key, so
-  the class stays numbers and the exchange keeps its own scope (TLS-3), and
-  the salt's bytes are wiped with `secureZero` once they are words. The words
+  the class stays numbers and the exchange keeps its own scope (TLS-3).
+  `exchangeKeys` writes the salt's words, beside the key's
+  (`std/net/tls.ts:1155-1163` at 4bbb392), and on a resumed handshake then
+  wipes the derived salt's bytes with `secureZero`, before it calls
+  `tlsExchange`; a full handshake's salt is the public constant, whose array
+  is not wiped. The words
   need no wipe of their own: since #652 `exchangeKeys` wipes the whole of
   `TlsExchangeWords` with one `wipe`, a volatile store, after the branch on
   the exchange's alert, so a refused exchange leaves it zero too (4bbb392),
@@ -946,11 +950,14 @@ As TLS-1 records for the other secrets:
 
 To be pinned by the wipe-count check under Ticket keys, seen in the IR since
 no object keeps these arrays for a test to read (the two `secureZero`s of
-`tlsTicketOpen` and the one of `tlsTicketSeal`; `nish.TlsServer.exchangeKeys`,
-one more than its 5 at 4bbb392 for the `secureZero` of `tlsExchange`'s salt
-array; and the master-secret step `TlsServer.masterSecretStep`, pinned at its
-total, the master secret's `secureZero` among it, with what moves to it out
-of `nish.TlsServer.sign`'s 5 at 4bbb392),
+`tlsTicketOpen` and the one of `tlsTicketSeal`; `nish.TlsServer.exchangeKeys`
+at 7, two more than its 5 at 4bbb392: its own `secureZero` of the derived
+salt's bytes and the `secureZero` of `tlsExchange`'s rebuilt salt array, each
+shown counted on its own by deleting it; and the master-secret step
+`TlsServer.masterSecretStep`, pinned at its total, with the master secret's
+`secureZero` shown counted on its own by deleting it, as the open and seal
+wipes are, and `nish.TlsServer.sign` lowered by what moves out of its 5 at
+4bbb392, so that `sign` and `masterSecretStep` together count at least 5),
 and by `net_tls_resume` (the PSK, the PSK early secret, the
 binder key, the salt's bytes and its words in `TlsExchangeWords`, the
 handshake secret and the resumption master secret zero after a resumed
