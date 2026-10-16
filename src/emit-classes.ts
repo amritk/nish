@@ -43,7 +43,6 @@ import { emitStringLength, emitStringMethodCall } from "./emit-strings"
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { N_FALSE, N_NULL, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
-import { capturesOf } from "./parallel"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
 import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID } from "./types"
@@ -289,8 +288,8 @@ const emitCall = (
     i = i + 1
   }
   // WP29: an arrow task's captures, after everything written (`capturesOf`).
-  for (const slot of capturesOf(callee)) {
-    operands.push(`${emitter.llvmAbi(slot.type(), calleePrivate)} ${emitter.captureValue(slot)}`)
+  for (const operand of emitter.captureOperands(callee, calleePrivate)) {
+    operands.push(operand)
   }
   // WP9: after the receiver and the arguments, so the bracket holds only what
   // the method itself allocates (`Emitter.beginReclaim`).

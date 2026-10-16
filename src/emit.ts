@@ -1571,6 +1571,24 @@ export class Emitter {
    * captures are parameters of its signature already, and for every function
    * that was given no capturing arrow.
    */
+  /**
+   * WP29: the typed operands for the captures a call of `sig` passes after
+   * its written arguments, each `<type> <value>` (`captureValue`), for a
+   * method call, which builds its operands itself (`emitCall` in
+   * `src/emit-classes.ts`).
+   */
+  captureOperands(sig: FunctionSig, isPrivate: boolean): string[] {
+    const types = this.captureParamTypes(sig, isPrivate)
+    const slots = capturesOf(sig)
+    const out: string[] = []
+    let k = 0
+    while (k < types.length && k < slots.length) {
+      out.push(`${types[k]} ${this.captureValue(slots[k])}`)
+      k = k + 1
+    }
+    return out
+  }
+
   captureParamTypes(sig: FunctionSig, isPrivate: boolean): string[] {
     const out: string[] = []
     if (sig.lifted) {
