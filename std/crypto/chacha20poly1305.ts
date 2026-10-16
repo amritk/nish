@@ -722,12 +722,14 @@ export const chacha20Poly1305Open = (key: u8[], nonce: u8[], aad: u8[], sealed: 
   const match: u32 = chacha20Poly1305TagMatch(tag, sealed, len)
   wipe(polyKey)
   wipe(tag)
-  if (match === 0) {
-    wipe(state)
-    return null
+  let plaintext: u8[] | null = null
+  if (match !== 0) {
+    const opened: u8[] = new Array<u8>(len)
+    chacha20XorInto(state, sealed, 0, len, opened, 0)
+    plaintext = opened
   }
-  const plaintext: u8[] = new Array<u8>(len)
-  chacha20XorInto(state, sealed, 0, len, plaintext, 0)
+  // One wipe both paths reach, rather than one on each, so that each is a
+  // store of its own the -O2 count can see go missing.
   wipe(state)
   return plaintext
 }

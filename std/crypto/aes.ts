@@ -941,7 +941,8 @@ const ghashLengths = (y: u64[], key: AesKey, aadLength: i32, textLength: i32): v
 /**
  * The pre-counter block J0 (SP 800-38D §7.1 step 2): a 12-byte IV followed by
  * the 32-bit counter 1, or for any other length GHASH of the IV padded to a
- * block and followed by its length in bits.
+ * block and followed by its length in bits. That GHASH, with the IV, says
+ * something of H, so the GHASH state is wiped here and the caller wipes J0.
  */
 const aesGcmJ0 = (key: AesKey, iv: u8[]): u8[] => {
   const length: i32 = toI32(iv.length)
@@ -956,6 +957,8 @@ const aesGcmJ0 = (key: AesKey, iv: u8[]): u8[] => {
   ghashLengths(y, key, 0, length)
   aesStore64(j0, 0, y[0])
   aesStore64(j0, 8, y[1])
+  // GHASH of the IV under H: with the IV, it says something of H.
+  wipe(y)
   return j0
 }
 
@@ -1091,6 +1094,7 @@ export const aesGcmSeal = (key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u
   aesGcmTag(tag, key, j0, aad, out, length)
   aesStore64(out, length, tag[0])
   aesStore64(out, length + 8, tag[1])
+  wipe(j0)
   return out
 }
 
@@ -1127,10 +1131,14 @@ export const aesGcmOpen = (key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[]
   // has it (for one from `aesKey` the chance is 2^-128), and such a key opens
   // nothing. H is secret, so this is folded into the mask, not branched on.
   const hashKeySet: u64 = ~ctEq(key.h[0] | key.h[1], toU64(0))
-  if ((same & hashKeySet) === toU64(0)) {
-    return null
+  wipe(tag)
+  let out: u8[] | null = null
+  if ((same & hashKeySet) !== toU64(0)) {
+    const opened: u8[] = new Array<u8>(length)
+    aesGcmCtr(key, j0, sealed, opened, length)
+    out = opened
   }
-  const out: u8[] = new Array<u8>(length)
-  aesGcmCtr(key, j0, sealed, out, length)
+  // One wipe both paths reach, so the -O2 count sees it go missing.
+  wipe(j0)
   return out
 }

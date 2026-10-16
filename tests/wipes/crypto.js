@@ -64,16 +64,20 @@ export const wipeChecks = [
   // encrypts one block 2. GCTR wipes its last batch of keystream and its
   // bitsliced state, 2, counted at `aesGcmCtr` because `opt` inlines the
   // seam's body into its one caller; the tag wipes E(K, J0)'s block besides
-  // the block's 2, 3; so seal and open 5 (open runs GCTR only once the tag
-  // has verified). On a CPU with the AES instructions the seams call
-  // the runtime's kernels instead, and the counts are the bitsliced arm's,
-  // which the branch keeps. ChaCha20-Poly1305: a keystream block, 1, wiped
+  // the block's 2, 3; J0 for an IV that is not 12 bytes wipes its GHASH
+  // state, 1; so seal 7 (J0's 1, GCTR's 2, the tag's 3 and J0 itself) and
+  // open 8 (the same, and the tag it compared; it runs GCTR only once the tag
+  // has verified, and wipes J0 once, after the branch, on both paths). On a
+  // CPU with the AES instructions the seams call the runtime's kernels
+  // instead, and the counts are the bitsliced arm's, which the branch keeps. ChaCha20-Poly1305: a keystream block, 1, wiped
   // by every run of the keystream; Poly1305's `r` and accumulator, 2; so the
   // one-shot functions 2 (the keystream and the state, or `r` and `h`), seal 6
   // (the state, the Poly1305 key, the tag's `r` and `h`, and two runs of the
-  // keystream) and open 7 (the same, and the tag it compared; its state is
-  // wiped on the refusal path and the success path alike, which `opt` sinks
-  // into one store in the block both reach).
+  // keystream) and open 7 (the same, and the tag it compared). Open wipes its
+  // state once, after the branch on the tag, rather than once on each path:
+  // `opt` merges two such wipes into one store, and the count could not then
+  // see either go missing. Each wipe of seal, open and J0, AES's and
+  // ChaCha20-Poly1305's, was deleted in turn to show its root's count drop.
   {
     name: "crypto: the wipes survive opt -O2 (AES's key schedule, H and working copies; ChaCha20-Poly1305's state, keystream, Poly1305 key and accumulators)",
     program: "tests/link/crypto_aes_wipes/main.ts",
@@ -85,8 +89,9 @@ export const wipeChecks = [
       ["nish.aesEncryptBlock", 2],
       ["nish.aesHeaderMask", 2],
       ["nish.aesGcmCtr", 2],
-      ["nish.aesGcmSeal", 5],
-      ["nish.aesGcmOpen", 5],
+      ["nish.aesGcmJ0", 1],
+      ["nish.aesGcmSeal", 7],
+      ["nish.aesGcmOpen", 8],
       ["nish.chacha20XorInto", 1],
       ["nish.chacha20Block", 2],
       ["nish.chacha20", 2],
