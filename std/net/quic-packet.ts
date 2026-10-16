@@ -1117,8 +1117,8 @@ const quicPacketClearAes = (key: AesKey): void => {
   for (let k: i32 = 0; k < toI32(words.length); k += 1) {
     words[k] = 0
   }
-  key.hHi = 0
-  key.hLo = 0
+  key.h[0] = 0
+  key.h[1] = 0
 }
 
 /** Points `slot.keys` at the arrays `aead` needs: the packet key and its schedule, and the header-protection ones. */

@@ -388,8 +388,11 @@ on top. Besides this note and the bench (`bench/p256.ts`, `bench/p256.mjs`,
 the P-256 section of `bench/README.md`), the branch changes only
 `tests/self/goldens/checked.txt`, regenerated: `bench` is one of
 `tests/self/corpus.js`'s `CORPUS_DIRS`, so the new program and its imports
-land in the `--emit-checked` dump. `std/crypto/` and `std/net/` are the same at
-`b515c1b` and at the branch's head, after its merges of `main`. The build was `build/nish` built from that commit by the 0.18.0
+land in the `--emit-checked` dump. Of the code the profile reads,
+`std/crypto/p256.ts`, `x25519.ts`, `sha256.ts` and `sha512.ts` are the same at
+`b515c1b` and at the branch's head, after its merges of `main`. #639 has since
+added wipes to `aes.ts`, `chacha20poly1305.ts`, `hkdf.ts`, `hmac.ts` and
+`std/net/tls/record.ts`, which together were under 1% of the handshake below. The build was `build/nish` built from that commit by the 0.18.0
 seed, and the machine was an `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family
 6, model 85, stepping 7; 4 vCPUs under KVM), Ubuntu clang 18.1.3. There is no
 `perf` on it, so the profile is valgrind's callgrind, in instructions (Ir), not
