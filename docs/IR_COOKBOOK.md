@@ -2223,6 +2223,218 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end thread-channel -->
 
+### `nish/threads`: a string or a scalar array crosses by copy
+
+A task's arena is rewound once the task has returned, so a `string` or an
+array of numbers, booleans or enums it answers is copied out of that arena
+before it goes (runtime/runtime-parallel.c, docs/LANGUAGE.md, "Scopes"). The
+copy is two calls in the `spawn` instance in `nish/threads`' module. The
+task's `$run`, on the worker, marks the arena before it calls the task and
+hands the answer to `nish_cross_out` with that mark; `esize` is 0 for a
+string, else the element size. A value bumped since the mark comes back as a
+malloc'd copy with its low bit set; a literal, or a value from an outer frame,
+comes back as it is:
+
+```llvm
+%3 = call i64 @nish_arena_mark()
+%4 = call i8* @label$(i32 %2)
+%5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+```
+
+The task's `$finish`, on the thread that opened the scope and after the join,
+hands the stored word to `nish_cross_in`, which copies a tagged block into
+that thread's arena and frees it, before the answer is stored into `dst[at]`:
+
+```llvm
+%7 = call i8* @nish_cross_in(i8* %6, i64 0)
+call void @nish.storeResult$str(%struct.nish_array* %2, i32 %4, i8* %7)
+```
+
+A map does the same to each chunk's slots of its result with
+`nish_cross_out_range` and `nish_cross_in_range`; a channel copies a string
+out at `send` and in at the receive; a guard stores a string with
+`nish_guard_keep`, a copy its `Mutex` owns. Nothing is copied deeply: a
+`string[]` element, a nested array, a class, `Map` and `Set` stay refused. The
+caller's module, below, is the plain `spawn` calls and the reads after the
+join.
+
+<!-- cookbook:begin thread-cross -->
+```ts
+import { scope } from "nish/threads"
+
+const label = (n: i32): string => `task-${n}`
+
+export const total = (): i32 => {
+  const out: string[] = ["", ""]
+  {
+    using s = scope()
+    s.spawn(label, 1, out, 0)
+    s.spawn(label, 22, out, 1)
+  }
+  return out[0].length + out[1].length
+}
+```
+
+```llvm
+%struct.ThreadScope = type { i32 }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"task-\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+
+declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
+declare void @nish.ThreadScope.spawn$i32$str$fn.5.label(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), i32 noundef, %struct.nish_array* noundef nonnull align 8 dereferenceable(24), i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare void @nish_scope_join(i8* noundef nonnull) #0
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define hidden noundef nonnull align 8 i8* @label$(i32 noundef %n) #0 {
+entry:
+  %0 = call i8* @nish_str_from_i32(i32 %n)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8* %0)
+  ret i8* %1
+}
+
+define noundef i32 @total() #0 {
+entry:
+  %out.addr = alloca %struct.nish_array*, align 8
+  %s.addr = alloca %struct.ThreadScope*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 2, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 2, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %4 = call i8* @nish_alloc_struct(i64 16)
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %6 = bitcast i8* %4 to i8**
+  %7 = getelementptr inbounds i8*, i8** %6, i64 0
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %7, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %8 = getelementptr inbounds i8*, i8** %6, i64 1
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %8, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %1, %struct.nish_array** %out.addr, align 8
+  %9 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %9, %struct.ThreadScope** %s.addr, align 8
+  %10 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %11 = bitcast %struct.ThreadScope* %10 to i8*
+  %12 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %13 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  call void @nish.ThreadScope.spawn$i32$str$fn.5.label(%struct.ThreadScope* %12, i32 1, %struct.nish_array* %13, i32 0)
+  %14 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %15 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  call void @nish.ThreadScope.spawn$i32$str$fn.5.label(%struct.ThreadScope* %14, i32 22, %struct.nish_array* %15, i32 1)
+  call void @nish_scope_join(i8* %11)
+  %16 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 0
+  %18 = load i64, i64* %17, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %19 = icmp ult i64 0, %18
+  br i1 %19, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %18)
+  unreachable
+
+bounds.ok:
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 2
+  %21 = load i8*, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %22 = bitcast i8* %21 to i8**
+  %23 = getelementptr inbounds i8*, i8** %22, i64 0
+  %24 = load i8*, i8** %23, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %25 = bitcast i8* %24 to i64*
+  %26 = load i64, i64* %25, align 8
+  %27 = trunc i64 %26 to i32
+  %28 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 0
+  %30 = load i64, i64* %29, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %31 = icmp ult i64 1, %30
+  br i1 %31, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @nish_panic_index(i64 1, i64 %30)
+  unreachable
+
+bounds.ok.1:
+  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %28, i64 0, i32 2
+  %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %34 = bitcast i8* %33 to i8**
+  %35 = getelementptr inbounds i8*, i8** %34, i64 1
+  %36 = load i8*, i8** %35, align 8, !alias.scope !4, !noalias !3, !tbaa !14
+  %37 = bitcast i8* %36 to i64*
+  %38 = load i64, i64* %37, align 8
+  %39 = trunc i64 %38 to i32
+  %40 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %27, i32 %39)
+  %41 = extractvalue { i32, i1 } %40, 0
+  %42 = extractvalue { i32, i1 } %40, 1
+  br i1 %42, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %41
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element ptr", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end thread-cross -->
+
 ### `nish/random`: a seeded generator
 
 `new Rng(seed)` is an ordinary object of one `i32` field, here on the stack
@@ -20248,6 +20460,11 @@ declare void @nish_mutex_wait(i32* noundef nonnull) #3
 declare void @nish_channel_send(i64* noundef nonnull, i64 noundef) #3
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #3
 declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #3
+declare i8* @nish_cross_out(i8* noundef, i64 noundef, i64 noundef) #3
+declare i8* @nish_cross_in(i8* noundef, i64 noundef) #3
+declare void @nish_cross_out_range(i8* noundef nonnull, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #3
+declare void @nish_cross_in_range(i8* noundef nonnull, i64 noundef, i64 noundef) #3
+declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
 declare i32 @nish_aes_hw() #8
 declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2

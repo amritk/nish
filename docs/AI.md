@@ -885,8 +885,11 @@ export const main = (): i32 => {
   NL9012: each element pays for building it and for the release. Storing an
   allocation into another object (NL2352) and touching `Arena` (NL2351) are
   refused, because either would make that release unsound.
-- **The result is a number, a `boolean` or an enum.** A string or an object
-  made on another thread would be freed with it.
+- **A map's result is a number, a `boolean`, an enum, a `string` or an array
+  of numbers, booleans or enums**: a string or a scalar array is copied out of
+  the worker's arena at the join. An array of strings, a nested array, a class,
+  a `Map` or a `Set` is refused (NL2348). **A reduce's `T` stays a number, a
+  `boolean` or an enum**: map strings to numbers first.
 - **`dst` may not be reachable from an element of `src`**: mapping `Row[]` into
   `f64[]` is refused when `Row` holds an `f64[]`, because it could be `dst`.
 - **A reduce's `f` is associative and `identity` is its identity** — `0` for
@@ -944,7 +947,8 @@ export const main = (): i32 => {
 - **The task is a named top-level function**, not an arrow, and it follows the
   data-parallel rules: it writes nothing anybody else can see but what it
   writes through a `Mutex`'s guard or sends on a `Channel` (below), answers a number,
-  a `boolean` or an enum, and leaves `Arena` alone. A task cannot open a scope
+  a `boolean`, an enum, a `string` or an array of numbers, booleans or enums
+  (copied out of its arena at the join), and leaves `Arena` alone. A task cannot open a scope
   of its own or call `parallelMapInto`.
 - **Any argument will do** — an array, an object — because nothing writes
   memory while the tasks run. There is no thread count: one task, one thread.
@@ -1010,8 +1014,8 @@ export const main = (): i32 => {
 ```
 
 - **Only `g.value`, and only as the base of a field or element access.** Read
-  a number, a `boolean` or an enum through it, or store one into a field or an
-  element that already exists (for a `Mutex<i32>`, `g.value = g.value + 1`).
+  a number, a `boolean`, an enum or a `string` through it, or store one into a
+  field or an element that already exists (a string is copied each way) (for a `Mutex<i32>`, `g.value = g.value + 1`).
   Don't bind `g`, `g.value` or an array it holds, don't pass them, and call no
   method through them (no `push`).
 - **Make the data fresh all the way down**: `new Mutex<Hist>(new Hist())`, not
@@ -1098,8 +1102,8 @@ export const main = (): i32 => {
 };
 ```
 
-- **It carries a number, a `boolean` or an enum**, never a string, an array or
-  an object.
+- **It carries a number, a `boolean`, an enum or a `string`** (copied in by
+  `send`, out by the receive), never an array or an object.
 - **Declare it as a `const` right before its scope** — in the block that holds
   `using s = scope()`, or in the block around the scope's block — and hand it
   to tasks only as the task's argument or a field of the object you build for

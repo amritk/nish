@@ -34,6 +34,9 @@
 //     is exempt.
 //   - **The result is a number, a `boolean` or an enum**, for the arena reason
 //     above: anything else would be a pointer into memory freed at the join.
+//     A map's result may also be a `string` or an array of those scalars,
+//     which the join copies out of the worker's arena (`crossesByCopy`); a
+//     reduce's stays scalar, because its partials are combined in the worker.
 //   - **A reduce's operator is associative and its identity is one.** The
 //     blocks are folded from the identity and then combined, which is a left
 //     fold only when both hold. An arrow whose body is one operator on its two
@@ -1165,7 +1168,8 @@ export const mapGrain = (fn: FunctionSig): i32 => {
 // (runtime/runtime-parallel.c). While they run, the thread that opened the
 // scope is inside the join and runs nothing else; each task may write nothing
 // another can see (`sharedWriteMessage`, the rule a data-parallel body is held
-// to) and answers a number, a `boolean` or an enum; and each answer is stored
+// to) and answers a number, a `boolean`, an enum, a `string` or an array of
+// scalars, the last two copied out of its arena; and each answer is stored
 // into `dst[at]` by the thread that opened the scope, after the last task has
 // finished. So any argument may be handed to a task — nothing writes it while
 // the tasks read it. What the parent may do between its spawns is limited for

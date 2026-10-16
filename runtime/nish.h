@@ -611,13 +611,17 @@ void nish_scope_join(void *scope);
  * first try takes it. */
 void nish_mutex_wait(int32_t *word);
 
-/* ---- A channel of scalars (wp29 stage P3), runtime/runtime-parallel.c ----
+/* ---- A channel of scalars or strings (wp29 stage P3), runtime/runtime-parallel.c ----
  *
  * A `Channel` object holds one `int64_t` word, `state`, and each function here
  * takes its address: 0 before first use, then the address of a buffer, a lock
  * and a count this file keeps outside every arena, then 1 once the receiver
  * has drained it closed and it has been given back. A value is one 8-byte
- * slot; the compiler widens a scalar into it and narrows it back.
+ * slot; the compiler widens a scalar into it and narrows it back, and a
+ * string travels as the block `nish_cross_out` copied it into, which the
+ * receiver's `nish_cross_in` frees. A string still in the buffer when the
+ * receiver stops early (a `break`) is given back with the buffer unread, so
+ * its block leaks.
  *
  * `nish_channel_send` appends and never waits: the channel is unbounded.
  * `nish_channel_count` moves the count that keeps it open, which starts at 1:
