@@ -489,7 +489,9 @@ export const allocationWarning = (
   facts: FactsTable
 ): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
-  if (own === null || !own.allocates) {
+  // A string or a scalar array answered across threads has to be allocated:
+  // building it is the work, and no element scope recycles it.
+  if (own === null || !own.allocates || crossesByCopy(table, type)) {
     return ""
   }
   return (
@@ -529,13 +531,22 @@ const crossingWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, t
   return (
     `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsic}\` hands back only a ` +
     "number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies " +
-    "out of the worker's arena: anything else would point into memory freed when the task ends"
+    "out of the worker's arena: anything else would point into memory the worker frees or reuses"
   )
 }
 
-/** A result the join could hand back: a number, a `boolean` or an enum, and nothing that points. */
+/**
+ * A result the join could hand back. A reduce's `T` is its partials and its
+ * identity as well as its answer, folded on several threads, so it stays a
+ * number, a `boolean` or an enum; a map's or a `parallelFrom`'s element may
+ * also be a value the join copies (`crossesByCopy`): each chunk copies what
+ * it wrote out of its arena before the arena is reused, and the caller copies
+ * it into its own once every chunk has finished.
+ */
 export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
-  resultWording(table, intrinsicName(sig), fn, type)
+  parallelRoleOf(sig) === PAR_REDUCE
+    ? resultWording(table, intrinsicName(sig), fn, type)
+    : crossingWording(table, intrinsicName(sig), fn, type)
 
 /** A task's result: a scalar, or a value the join copies (`crossesByCopy`). */
 export const taskResultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
@@ -571,7 +582,10 @@ export const reduceElementMessage = (
   } else if (role === PAR_FROM) {
     intrinsic = "parallelFrom"
   }
-  return resultWording(table, intrinsic, functions[0], typeArgs[typeArgs.length - 1])
+  const result = typeArgs[typeArgs.length - 1]
+  return role === PAR_REDUCE
+    ? resultWording(table, intrinsic, functions[0], result)
+    : crossingWording(table, intrinsic, functions[0], result)
 }
 
 /**

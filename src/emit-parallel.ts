@@ -173,9 +173,42 @@ export const emitParallelRegion = (
   fn.emit(
     `call void ${emitter.useRuntime("nish_parallel_range")}(void (i64, i64, i8*)* @${trampoline}, i8* ${raw}, i64 ${len}, i64 ${grain})`
   )
+  const crossing = regionCrossing(emitter, caller)
+  if (crossing.size >= 0) {
+    // Every chunk left its elements in a malloc'd block of their own
+    // (`chunkTrampoline`); each comes into this thread's arena here.
+    const dst = fn.emitValue(`bitcast ${fieldTypes[crossing.field]} ${fieldValues[crossing.field]} to i8*`)
+    fn.emit(`call void ${emitter.useRuntime("nish_cross_in_range")}(i8* ${dst}, i64 ${len}, i64 ${crossing.size})`)
+  }
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(doneBlock)
-  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured))
+  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured, crossing))
+}
+
+/**
+ * Where a region's elements cross by copy: `size` is the element's
+ * `crossingSize`, -1 when it is a scalar, which needs no copy, and `field` is
+ * the context field of the chunk's `dst` — `mapRange(src, dst, ...)` and
+ * `fromRange(dst, ...)` in `std/threads.ts`. A reduce's partials are scalars
+ * (`resultMessage`), so a reduce never crosses.
+ */
+class RegionCrossing {
+  size: i32
+  field: i32
+  constructor(size: i32, field: i32) {
+    this.size = size
+    this.field = field
+  }
+}
+
+const regionCrossing = (emitter: Emitter, caller: FunctionSig): RegionCrossing => {
+  const role = parallelRoleOf(caller)
+  const instance = caller.instance
+  if ((role !== PAR_MAP && role !== PAR_FROM) || instance === null || instance.typeArgs.length === 0) {
+    return new RegionCrossing(-1, 0)
+  }
+  const size = crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1])
+  return new RegionCrossing(size, role === PAR_MAP ? 1 : 0)
 }
 
 /**
@@ -191,7 +224,8 @@ const chunkTrampoline = (
   chunk: FunctionSig,
   ctxType: string,
   fieldTypes: string[],
-  captured: i32
+  captured: i32,
+  crossing: RegionCrossing
 ): IRFunction => {
   const optimize = emitter.opts.optimizeAttributes
   const attrs: string[] = []
@@ -234,7 +268,19 @@ const chunkTrampoline = (
   for (const operand of tail) {
     operands.push(operand)
   }
+  // An element that crosses by copy was made in this thread's arena, which
+  // the next chunk or job reuses: the chunk's elements move to malloc'd
+  // blocks, and with them out, everything else the chunk allocated is a
+  // temporary its arena gives back.
+  const mark = crossing.size < 0 ? "" : fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
   fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
+  if (crossing.size >= 0) {
+    const dst = fn.emitValue(`bitcast ${operands[crossing.field]} to i8*`)
+    fn.emit(
+      `call void ${emitter.useRuntime("nish_cross_out_range")}(i8* ${dst}, i64 %lo, i64 %hi, i64 ${crossing.size}, i64 ${mark})`
+    )
+    fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
+  }
   fn.emit("ret void")
   return fn
 }
