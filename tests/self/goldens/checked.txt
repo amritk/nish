@@ -58293,53 +58293,53 @@ function quicPacketExpandLabel(aead: i32, secret: u8[], label: string, length: i
   calls: nish.hkdfExpandLabelSha256 nish.hkdfExpandLabelSha384
   pointer secret: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelSha384#0 nish.hkdfExpandLabelSha256#0
   stackSites=2 stackLocals=0
-  callee 306:7 hkdfExpandLabelSha384 -> @nish.hkdfExpandLabelSha384
-  callee 307:7 hkdfExpandLabelSha256 -> @nish.hkdfExpandLabelSha256
+  callee 314:7 hkdfExpandLabelSha384 -> @nish.hkdfExpandLabelSha384
+  callee 315:7 hkdfExpandLabelSha256 -> @nish.hkdfExpandLabelSha256
 function quicPacketSlice(bytes: u8[], from: i32, to: i32): u8[] -> @nish.quicPacketSlice
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 323:7
+  sharedWrite: 331:7
   escaping: from to
   calls: nish_panic nish_panic_index nish_panic_overflow
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 315:9 length: i32 (const)
-  local 316:9 start: i32 (const)
-  local 317:9 stop: i32 (const)
-  local 318:9 size: i32 (const)
-  local 319:9 out: u8[] (const)
-  local 320:9 outLength: i32 (const)
-  local 321:12 k: i32 (let)
+  local 323:9 length: i32 (const)
+  local 324:9 start: i32 (const)
+  local 325:9 stop: i32 (const)
+  local 326:9 size: i32 (const)
+  local 327:9 out: u8[] (const)
+  local 328:9 outLength: i32 (const)
+  local 329:12 k: i32 (let)
 function quicPacketAppend(out: u8[], bytes: u8[]): void -> @nish.quicPacketAppend
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 332:5
+  sharedWrite: 340:5
   calls: nish_array_grow
   pointer out: size=0 writesThrough=true captured=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 331:14 b: u8 (const)
+  local 339:14 b: u8 (const)
 function quicVarintSize(value: i64): i32 -> @nish.quicVarintSize [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function quicVarintPut(buf: u8[], at: i32, value: i64, size: i32): i32 -> @nish.quicVarintPut [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 386:7
+  sharedWrite: 394:7
   escaping: value
   calls: nish.quicVarintSize nish_panic_index nish_panic_overflow
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 364:9 needed: i32 (const)
-  callee 364:23 quicVarintSize -> @nish.quicVarintSize
-  local 369:7 prefix: i32 (let)
-  local 379:12 k: i32 (let)
-  local 380:11 shift: i64 (const)
-  local 381:9 b: i32 (let)
+  local 372:9 needed: i32 (const)
+  callee 372:23 quicVarintSize -> @nish.quicVarintSize
+  local 377:7 prefix: i32 (let)
+  local 387:12 k: i32 (let)
+  local 388:11 shift: i64 (const)
+  local 389:9 b: i32 (let)
 function quicPacketGrow(out: u8[], count: i32): void -> @nish.quicPacketGrow [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 398:5
+  sharedWrite: 406:5
   calls: nish_array_grow
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 397:12 k: i32 (let)
+  local 405:12 k: i32 (let)
 function quicVarintPushSized(out: u8[], value: i64, size: i32): boolean -> @nish.quicVarintPushSized [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPacketGrow
@@ -58347,11 +58347,11 @@ function quicVarintPushSized(out: u8[], value: i64, size: i32): boolean -> @nish
   calls: nish.quicPacketGrow nish.quicVarintPut nish.quicVarintSize
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.quicPacketGrow#0 nish.quicVarintPut#0
   stackSites=0 stackLocals=0
-  local 408:9 needed: i32 (const)
-  callee 408:23 quicVarintSize -> @nish.quicVarintSize
-  local 412:9 at: i32 (const)
-  callee 413:3 quicPacketGrow -> @nish.quicPacketGrow
-  callee 414:10 quicVarintPut -> @nish.quicVarintPut
+  local 416:9 needed: i32 (const)
+  callee 416:23 quicVarintSize -> @nish.quicVarintSize
+  local 420:9 at: i32 (const)
+  callee 421:3 quicPacketGrow -> @nish.quicPacketGrow
+  callee 422:10 quicVarintPut -> @nish.quicVarintPut
 function quicVarintPush(out: u8[], value: i64): boolean -> @nish.quicVarintPush [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicVarintPushSized
@@ -58359,8 +58359,8 @@ function quicVarintPush(out: u8[], value: i64): boolean -> @nish.quicVarintPush 
   calls: nish.quicVarintPushSized nish.quicVarintSize
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.quicVarintPushSized#0
   stackSites=0 stackLocals=0
-  callee 423:3 quicVarintPushSized -> @nish.quicVarintPushSized
-  callee 423:35 quicVarintSize -> @nish.quicVarintSize
+  callee 431:3 quicVarintPushSized -> @nish.quicVarintPushSized
+  callee 431:35 quicVarintSize -> @nish.quicVarintSize
 function quicVarintLength(bytes: u8[], at: i32): i32 -> @nish.quicVarintLength [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -58372,25 +58372,25 @@ function quicVarintRead(bytes: u8[], at: i32, end: i32): i64 -> @nish.quicVarint
   calls: nish.quicVarintLength nish_panic_index nish_panic_overflow
   pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.quicVarintLength#0
   stackSites=0 stackLocals=0
-  local 444:9 size: i32 (const)
-  callee 444:21 quicVarintLength -> @nish.quicVarintLength
-  local 448:7 value: i64 (let)
-  local 449:12 k: i32 (let)
+  local 452:9 size: i32 (const)
+  callee 452:21 quicVarintLength -> @nish.quicVarintLength
+  local 456:7 value: i64 (let)
+  local 457:12 k: i32 (let)
 function quicPacketNumberLength(fullPn: i64, largestAcked: i64): i32 -> @nish.quicPacketNumberLength [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 469:9 unacked: i64 (const)
-  local 470:12 n: i32 (let)
-  local 471:11 half: i64 (const)
+  local 477:9 unacked: i64 (const)
+  local 478:12 n: i32 (let)
+  local 479:11 half: i64 (const)
 function quicPacketNumberDecode(largestPn: i64, truncatedPn: i64, pnLength: i32): i64 -> @nish.quicPacketNumberDecode [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 490:9 window: i64 (const)
-  local 494:9 expected: i64 (const)
-  local 495:9 halfWindow: i64 (const)
-  local 496:9 candidate: i64 (const)
+  local 498:9 window: i64 (const)
+  local 502:9 expected: i64 (const)
+  local 503:9 halfWindow: i64 (const)
+  local 504:9 candidate: i64 (const)
 function quicPacketCidFits(cid: u8[]): boolean -> @nish.quicPacketCidFits
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer cid: size=0 writesThrough=false captured=false
@@ -58401,15 +58401,15 @@ function quicPacketCidWindowFits(cid: u8[], length: i32): boolean -> @nish.quicP
   stackSites=0 stackLocals=0
 function quicPacketCopy(buf: u8[], at: i32, bytes: u8[], from: i32, length: i32): void -> @nish.quicPacketCopy [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 524:7
+  sharedWrite: 532:7
   calls: nish_panic_index nish_panic_overflow
   pointer buf: size=0 writesThrough=true captured=false
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 522:12 k: i32 (let)
+  local 530:12 k: i32 (let)
 function quicPacketPutByte(buf: u8[], at: i32, value: i32): void -> @nish.quicPacketPutByte
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 532:5
+  sharedWrite: 540:5
   escaping: at
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -58422,30 +58422,30 @@ function quicPacketPutLongPrefix(buf: u8[], at: i32, first: i32, dcid: u8[], dci
   pointer dcid: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
   pointer scid: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
-  local 551:9 version: i32 (const)
-  callee 552:3 quicPacketPutByte -> @nish.quicPacketPutByte
-  callee 553:3 quicPacketPutByte -> @nish.quicPacketPutByte
-  callee 554:3 quicPacketPutByte -> @nish.quicPacketPutByte
-  callee 555:3 quicPacketPutByte -> @nish.quicPacketPutByte
-  callee 556:3 quicPacketPutByte -> @nish.quicPacketPutByte
-  callee 557:3 quicPacketPutByte -> @nish.quicPacketPutByte
-  callee 558:3 quicPacketCopy -> @nish.quicPacketCopy
-  local 559:9 scidAt: i32 (const)
+  local 559:9 version: i32 (const)
   callee 560:3 quicPacketPutByte -> @nish.quicPacketPutByte
-  callee 561:3 quicPacketCopy -> @nish.quicPacketCopy
+  callee 561:3 quicPacketPutByte -> @nish.quicPacketPutByte
+  callee 562:3 quicPacketPutByte -> @nish.quicPacketPutByte
+  callee 563:3 quicPacketPutByte -> @nish.quicPacketPutByte
+  callee 564:3 quicPacketPutByte -> @nish.quicPacketPutByte
+  callee 565:3 quicPacketPutByte -> @nish.quicPacketPutByte
+  callee 566:3 quicPacketCopy -> @nish.quicPacketCopy
+  local 567:9 scidAt: i32 (const)
+  callee 568:3 quicPacketPutByte -> @nish.quicPacketPutByte
+  callee 569:3 quicPacketCopy -> @nish.quicPacketCopy
 function quicPacketPutNumber(buf: u8[], at: i32, packetNumber: i64, pnLength: i32): i32 -> @nish.quicPacketPutNumber
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 569:7
+  sharedWrite: 577:7
   calls: nish_panic_index nish_panic_overflow
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 567:12 k: i32 (let)
+  local 575:12 k: i32 (let)
 function quicLongHeaderSize(type: i32, dcidLength: i32, scidLength: i32, tokenLength: i32, packetNumber: i64, pnLength: i32, payloadLength: i32): i32 -> @nish.quicLongHeaderSize [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.quicVarintSize nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 605:9 token: i32 (const)
-  callee 605:53 quicVarintSize -> @nish.quicVarintSize
+  local 613:9 token: i32 (const)
+  callee 613:53 quicVarintSize -> @nish.quicVarintSize
 function quicPutLongHeader(buf: u8[], at: i32, type: i32, dcid: u8[], dcidLength: i32, scid: u8[], scidLength: i32, token: u8[], packetNumber: i64, pnLength: i32, payloadLength: i32): i32 -> @nish.quicPutLongHeader [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPacketPutLongPrefix
@@ -58456,18 +58456,18 @@ function quicPutLongHeader(buf: u8[], at: i32, type: i32, dcid: u8[], dcidLength
   pointer scid: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCidWindowFits#0 nish.quicPacketPutLongPrefix#5
   pointer token: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
-  local 629:9 tokenLength: i32 (const)
-  local 630:9 size: i32 (const)
-  callee 630:21 quicLongHeaderSize -> @nish.quicLongHeaderSize
-  callee 641:6 quicPacketCidWindowFits -> @nish.quicPacketCidWindowFits
-  callee 642:6 quicPacketCidWindowFits -> @nish.quicPacketCidWindowFits
-  local 648:7 cursor: i32 (let)
-  callee 648:21 quicPacketPutLongPrefix -> @nish.quicPacketPutLongPrefix
-  callee 658:14 quicVarintPut -> @nish.quicVarintPut
-  callee 658:61 quicVarintSize -> @nish.quicVarintSize
-  callee 659:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee 662:12 quicVarintPut -> @nish.quicVarintPut
-  callee 663:10 quicPacketPutNumber -> @nish.quicPacketPutNumber
+  local 637:9 tokenLength: i32 (const)
+  local 638:9 size: i32 (const)
+  callee 638:21 quicLongHeaderSize -> @nish.quicLongHeaderSize
+  callee 649:6 quicPacketCidWindowFits -> @nish.quicPacketCidWindowFits
+  callee 650:6 quicPacketCidWindowFits -> @nish.quicPacketCidWindowFits
+  local 656:7 cursor: i32 (let)
+  callee 656:21 quicPacketPutLongPrefix -> @nish.quicPacketPutLongPrefix
+  callee 666:14 quicVarintPut -> @nish.quicVarintPut
+  callee 666:61 quicVarintSize -> @nish.quicVarintSize
+  callee 667:5 quicPacketCopy -> @nish.quicPacketCopy
+  callee 670:12 quicVarintPut -> @nish.quicVarintPut
+  callee 671:10 quicPacketPutNumber -> @nish.quicPacketPutNumber
 function quicLongHeader(type: i32, dcid: u8[], scid: u8[], token: u8[], packetNumber: i64, pnLength: i32, payloadLength: i32): u8[] | null -> @nish.quicLongHeader [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPutLongHeader
@@ -58477,26 +58477,26 @@ function quicLongHeader(type: i32, dcid: u8[], scid: u8[], token: u8[], packetNu
   pointer scid: size=0 writesThrough=false captured=false passedTo=nish.quicPutLongHeader#5
   pointer token: size=0 writesThrough=false captured=false passedTo=nish.quicPutLongHeader#7
   stackSites=0 stackLocals=0
-  local 690:9 dcidLength: i32 (const)
-  local 691:9 scidLength: i32 (const)
-  local 692:9 size: i32 (const)
-  callee 692:21 quicLongHeaderSize -> @nish.quicLongHeaderSize
-  local 704:9 out: u8[] (const)
-  callee 706:5 quicPutLongHeader -> @nish.quicPutLongHeader
+  local 698:9 dcidLength: i32 (const)
+  local 699:9 scidLength: i32 (const)
+  local 700:9 size: i32 (const)
+  callee 700:21 quicLongHeaderSize -> @nish.quicLongHeaderSize
+  local 712:9 out: u8[] (const)
+  callee 714:5 quicPutLongHeader -> @nish.quicPutLongHeader
 function quicPutShortHeader(buf: u8[], at: i32, dcid: u8[], dcidLength: i32, spin: boolean, keyPhase: boolean, packetNumber: i64, pnLength: i32): i32 -> @nish.quicPutShortHeader [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 755:3
+  sharedWrite: 763:3
   escaping: at dcidLength packetNumber pnLength
   calls: nish.quicPacketCidWindowFits nish.quicPacketCopy nish.quicPacketPutNumber nish_panic_index nish_panic_overflow
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.quicPacketCopy#0 nish.quicPacketPutNumber#0
   pointer dcid: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCidWindowFits#0 nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
-  local 741:9 size: i32 (const)
-  callee 743:6 quicPacketCidWindowFits -> @nish.quicPacketCidWindowFits
-  local 753:9 spinBit: i32 (const)
-  local 754:9 keyPhaseBit: i32 (const)
-  callee 756:3 quicPacketCopy -> @nish.quicPacketCopy
-  callee 757:10 quicPacketPutNumber -> @nish.quicPacketPutNumber
+  local 749:9 size: i32 (const)
+  callee 751:6 quicPacketCidWindowFits -> @nish.quicPacketCidWindowFits
+  local 761:9 spinBit: i32 (const)
+  local 762:9 keyPhaseBit: i32 (const)
+  callee 764:3 quicPacketCopy -> @nish.quicPacketCopy
+  callee 765:10 quicPacketPutNumber -> @nish.quicPacketPutNumber
 function quicShortHeader(dcid: u8[], spin: boolean, keyPhase: boolean, packetNumber: i64, pnLength: i32): u8[] | null -> @nish.quicShortHeader [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPutShortHeader
@@ -58504,13 +58504,13 @@ function quicShortHeader(dcid: u8[], spin: boolean, keyPhase: boolean, packetNum
   calls: nish.quicPacketCidFits nish.quicPutShortHeader nish_panic nish_panic_overflow
   pointer dcid: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCidFits#0 nish.quicPutShortHeader#2
   stackSites=0 stackLocals=0
-  local 774:9 dcidLength: i32 (const)
-  callee 775:8 quicPacketCidFits -> @nish.quicPacketCidFits
-  local 778:9 out: u8[] (const)
-  callee 779:7 quicPutShortHeader -> @nish.quicPutShortHeader
+  local 782:9 dcidLength: i32 (const)
+  callee 783:8 quicPacketCidFits -> @nish.quicPacketCidFits
+  local 786:9 out: u8[] (const)
+  callee 787:7 quicPutShortHeader -> @nish.quicPutShortHeader
 function quicPacketRefuse(header: QuicHeader, error: i32): i32 -> @nish.quicPacketRefuse
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 787:3
+  sharedWrite: 795:3
   escaping: error
   pointer header: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -58520,73 +58520,73 @@ function quicPacketCidLength(bytes: u8[], at: i32, end: i32): i32 -> @nish.quicP
   calls: nish_panic_overflow
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 799:9 length: i32 (const)
+  local 807:9 length: i32 (const)
 function quicParseHeaderInto(header: QuicHeader, datagram: u8[], at: i32, limit: i32, shortDcidLength: i32): i32 -> @nish.quicParseHeaderInto [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 822:3
+  sharedWrite: 830:3
   escaping: at limit shortDcidLength
   calls: nish.quicPacketCidLength nish.quicPacketRefuse nish.quicVarintLength nish.quicVarintRead nish_panic_index nish_panic_overflow
   pointer header: size=88 writesThrough=true captured=false passedTo=nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0 nish.quicPacketRefuse#0
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCidLength#0 nish.quicPacketCidLength#0 nish.quicVarintRead#0 nish.quicVarintLength#0 nish.quicVarintRead#0 nish.quicVarintLength#0
   stackSites=0 stackLocals=0
-  local 821:9 end: i32 (const)
-  callee 835:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  local 837:9 first: i32 (const)
-  callee 841:14 quicPacketRefuse -> @nish.quicPacketRefuse
-  callee 844:14 quicPacketRefuse -> @nish.quicPacketRefuse
-  callee 852:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  local 854:7 version: i64 (let)
-  local 855:12 k: i32 (let)
-  local 861:9 dcidLength: i32 (const)
-  callee 861:27 quicPacketCidLength -> @nish.quicPacketCidLength
-  callee 863:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  local 867:9 afterDcid: i32 (const)
-  local 868:9 scidLength: i32 (const)
-  callee 868:27 quicPacketCidLength -> @nish.quicPacketCidLength
-  callee 870:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  local 874:7 cursor: i32 (let)
-  callee 876:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  callee 879:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  callee 882:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  local 884:9 type: i32 (const)
-  callee 890:14 quicPacketRefuse -> @nish.quicPacketRefuse
-  local 898:11 tokenLength: i64 (const)
-  callee 898:30 quicVarintRead -> @nish.quicVarintRead
-  callee 900:14 quicPacketRefuse -> @nish.quicPacketRefuse
-  callee 902:15 quicVarintLength -> @nish.quicVarintLength
-  callee 904:14 quicPacketRefuse -> @nish.quicPacketRefuse
-  local 910:9 length: i64 (const)
-  callee 910:23 quicVarintRead -> @nish.quicVarintRead
-  callee 912:12 quicPacketRefuse -> @nish.quicPacketRefuse
-  callee 914:13 quicVarintLength -> @nish.quicVarintLength
-  callee 916:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 829:9 end: i32 (const)
+  callee 843:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 845:9 first: i32 (const)
+  callee 849:14 quicPacketRefuse -> @nish.quicPacketRefuse
+  callee 852:14 quicPacketRefuse -> @nish.quicPacketRefuse
+  callee 860:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 862:7 version: i64 (let)
+  local 863:12 k: i32 (let)
+  local 869:9 dcidLength: i32 (const)
+  callee 869:27 quicPacketCidLength -> @nish.quicPacketCidLength
+  callee 871:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 875:9 afterDcid: i32 (const)
+  local 876:9 scidLength: i32 (const)
+  callee 876:27 quicPacketCidLength -> @nish.quicPacketCidLength
+  callee 878:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 882:7 cursor: i32 (let)
+  callee 884:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  callee 887:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  callee 890:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 892:9 type: i32 (const)
+  callee 898:14 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 906:11 tokenLength: i64 (const)
+  callee 906:30 quicVarintRead -> @nish.quicVarintRead
+  callee 908:14 quicPacketRefuse -> @nish.quicPacketRefuse
+  callee 910:15 quicVarintLength -> @nish.quicVarintLength
+  callee 912:14 quicPacketRefuse -> @nish.quicPacketRefuse
+  local 918:9 length: i64 (const)
+  callee 918:23 quicVarintRead -> @nish.quicVarintRead
+  callee 920:12 quicPacketRefuse -> @nish.quicPacketRefuse
+  callee 922:13 quicVarintLength -> @nish.quicVarintLength
+  callee 924:12 quicPacketRefuse -> @nish.quicPacketRefuse
 function quicParseHeader(datagram: u8[], at: i32, shortDcidLength: i32): QuicHeader -> @nish.quicParseHeader [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=88
-  sharedWrite: 938:3
+  sharedWrite: 946:3
   escaping: at shortDcidLength
   calls: nish.QuicHeader.constructor nish.quicPacketSlice nish.quicParseHeaderInto nish_alloc_struct nish_panic_overflow
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicParseHeaderInto#1 nish.quicPacketSlice#0 nish.quicPacketSlice#0 nish.quicPacketSlice#0 nish.quicPacketSlice#0
   stackSites=0 stackLocals=0
-  local 936:9 header: QuicHeader (const)
-  callee 936:30 new QuicHeader -> @nish.QuicHeader.constructor
-  callee 937:3 quicParseHeaderInto -> @nish.quicParseHeaderInto
-  callee 938:17 quicPacketSlice -> @nish.quicPacketSlice
-  callee 939:17 quicPacketSlice -> @nish.quicPacketSlice
-  callee 940:18 quicPacketSlice -> @nish.quicPacketSlice
-  callee 942:23 quicPacketSlice -> @nish.quicPacketSlice
+  local 944:9 header: QuicHeader (const)
+  callee 944:30 new QuicHeader -> @nish.QuicHeader.constructor
+  callee 945:3 quicParseHeaderInto -> @nish.quicParseHeaderInto
+  callee 946:17 quicPacketSlice -> @nish.quicPacketSlice
+  callee 947:17 quicPacketSlice -> @nish.quicPacketSlice
+  callee 948:18 quicPacketSlice -> @nish.quicPacketSlice
+  callee 950:23 quicPacketSlice -> @nish.quicPacketSlice
 function quicInitialSecrets(dcid: u8[]): QuicInitialSecrets | null -> @nish.quicInitialSecrets [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExtractSha256
   calls: nish.QuicInitialSecrets.constructor nish.hkdfExtractSha256 nish.quicPacketCidFits nish.quicPacketExpandLabel nish.quicPacketInitialSalt nish_alloc_struct
   pointer dcid: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCidFits#0 nish.hkdfExtractSha256#1
   stackSites=0 stackLocals=0
-  callee 954:8 quicPacketCidFits -> @nish.quicPacketCidFits
-  local 957:9 initial: u8[] (const)
-  callee 957:25 hkdfExtractSha256 -> @nish.hkdfExtractSha256
-  callee 957:43 quicPacketInitialSalt -> @nish.quicPacketInitialSalt
-  callee 958:10 new QuicInitialSecrets -> @nish.QuicInitialSecrets.constructor
-  callee 959:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
-  callee 960:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
+  callee 962:8 quicPacketCidFits -> @nish.quicPacketCidFits
+  local 965:9 initial: u8[] (const)
+  callee 965:25 hkdfExtractSha256 -> @nish.hkdfExtractSha256
+  callee 965:43 quicPacketInitialSalt -> @nish.quicPacketInitialSalt
+  callee 966:10 new QuicInitialSecrets -> @nish.QuicInitialSecrets.constructor
+  callee 967:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
+  callee 968:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
 function quicPacketKeyLength(aead: i32): i32 -> @nish.quicPacketKeyLength
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -58599,30 +58599,30 @@ function quicPacketSecretFits(aead: i32, secret: u8[]): boolean -> @nish.quicPac
   calls: nish.quicPacketKeyLength nish.quicPacketSecretLength
   pointer secret: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 980:3 quicPacketKeyLength -> @nish.quicPacketKeyLength
-  callee 980:63 quicPacketSecretLength -> @nish.quicPacketSecretLength
+  callee 988:3 quicPacketKeyLength -> @nish.quicPacketKeyLength
+  callee 988:63 quicPacketSecretLength -> @nish.quicPacketSecretLength
 function quicPacketKeysUsable(keys: QuicKeys): boolean -> @nish.quicPacketKeysUsable
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.quicPacketKeyLength
   pointer keys: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 990:9 keyLength: i32 (const)
-  callee 990:26 quicPacketKeyLength -> @nish.quicPacketKeyLength
+  local 998:9 keyLength: i32 (const)
+  callee 998:26 quicPacketKeyLength -> @nish.quicPacketKeyLength
 function quicPacketDerive(aead: i32, secret: u8[], hp: u8[], hpAes: AesKey | null): QuicKeys -> @nish.quicPacketDerive
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
-  sharedWrite: 1014:3
+  sharedWrite: 1022:3
   escaping: aead hpAes
   calls: nish.QuicKeys.constructor nish.aesKey nish.quicPacketExpandLabel nish.quicPacketKeyLength nish_alloc_struct
   pointer secret: size=0 writesThrough=false captured=false passedTo=nish.quicPacketExpandLabel#1 nish.quicPacketExpandLabel#1
   pointer hp: size=0 writesThrough=true captured=true passedTo=nish.QuicKeys.constructor#4
   pointer hpAes: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1008:9 keys: QuicKeys (const)
-  callee 1008:26 new QuicKeys -> @nish.QuicKeys.constructor
-  callee 1010:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
-  callee 1010:53 quicPacketKeyLength -> @nish.quicPacketKeyLength
-  callee 1011:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
-  callee 1016:22 aesKey -> @nish.aesKey
+  local 1016:9 keys: QuicKeys (const)
+  callee 1016:26 new QuicKeys -> @nish.QuicKeys.constructor
+  callee 1018:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
+  callee 1018:53 quicPacketKeyLength -> @nish.quicPacketKeyLength
+  callee 1019:5 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
+  callee 1024:22 aesKey -> @nish.aesKey
 function quicKeys(aead: i32, secret: u8[]): QuicKeys | null -> @nish.quicKeys [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPacketExpandLabel
@@ -58630,12 +58630,12 @@ function quicKeys(aead: i32, secret: u8[]): QuicKeys | null -> @nish.quicKeys [e
   calls: nish.aesKey nish.quicPacketDerive nish.quicPacketExpandLabel nish.quicPacketKeyLength nish.quicPacketSecretFits
   pointer secret: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSecretFits#1 nish.quicPacketExpandLabel#1 nish.quicPacketDerive#1
   stackSites=0 stackLocals=0
-  callee 1029:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
-  local 1032:9 hp: u8[] (const)
-  callee 1032:20 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
-  callee 1032:67 quicPacketKeyLength -> @nish.quicPacketKeyLength
-  callee 1033:10 quicPacketDerive -> @nish.quicPacketDerive
-  callee 1033:91 aesKey -> @nish.aesKey
+  callee 1037:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
+  local 1040:9 hp: u8[] (const)
+  callee 1040:20 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
+  callee 1040:67 quicPacketKeyLength -> @nish.quicPacketKeyLength
+  callee 1041:10 quicPacketDerive -> @nish.quicPacketDerive
+  callee 1041:91 aesKey -> @nish.aesKey
 function quicKeyUpdateSecret(aead: i32, secret: u8[]): u8[] | null -> @nish.quicKeyUpdateSecret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPacketExpandLabel
@@ -58643,9 +58643,9 @@ function quicKeyUpdateSecret(aead: i32, secret: u8[]): u8[] | null -> @nish.quic
   calls: nish.quicPacketExpandLabel nish.quicPacketSecretFits nish.quicPacketSecretLength
   pointer secret: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSecretFits#1 nish.quicPacketExpandLabel#1
   stackSites=0 stackLocals=0
-  callee 1044:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
-  callee 1047:10 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
-  callee 1047:57 quicPacketSecretLength -> @nish.quicPacketSecretLength
+  callee 1052:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
+  callee 1055:10 quicPacketExpandLabel -> @nish.quicPacketExpandLabel
+  callee 1055:57 quicPacketSecretLength -> @nish.quicPacketSecretLength
 function quicKeysUpdate(keys: QuicKeys, nextSecret: u8[]): QuicKeys | null -> @nish.quicKeysUpdate [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPacketDerive
@@ -58653,39 +58653,39 @@ function quicKeysUpdate(keys: QuicKeys, nextSecret: u8[]): QuicKeys | null -> @n
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicPacketKeysUsable#0
   pointer nextSecret: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSecretFits#1 nish.quicPacketDerive#1
   stackSites=0 stackLocals=0
-  callee 1058:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
-  callee 1058:39 quicPacketSecretFits -> @nish.quicPacketSecretFits
-  callee 1061:10 quicPacketDerive -> @nish.quicPacketDerive
+  callee 1066:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
+  callee 1066:39 quicPacketSecretFits -> @nish.quicPacketSecretFits
+  callee 1069:10 quicPacketDerive -> @nish.quicPacketDerive
 function QuicKeysSlot.constructor(this: QuicKeysSlot): void -> @nish.QuicKeysSlot.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.AesKey.constructor nish.QuicKeys.constructor nish_alloc_struct nish_panic
   pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 1093:17 new QuicKeys -> @nish.QuicKeys.constructor
-  callee 1094:22 new AesKey -> @nish.AesKey.constructor
-  callee 1095:22 new AesKey -> @nish.AesKey.constructor
-  callee 1096:18 new AesKey -> @nish.AesKey.constructor
-  callee 1097:18 new AesKey -> @nish.AesKey.constructor
+  callee 1101:17 new QuicKeys -> @nish.QuicKeys.constructor
+  callee 1102:22 new AesKey -> @nish.AesKey.constructor
+  callee 1103:22 new AesKey -> @nish.AesKey.constructor
+  callee 1104:18 new AesKey -> @nish.AesKey.constructor
+  callee 1105:18 new AesKey -> @nish.AesKey.constructor
 function QuicKeysSlot.wipe(this: QuicKeysSlot): void -> @nish.QuicKeysSlot.wipe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1106:5
+  sharedWrite: 1114:5
   calls: nish.aesKeyWipe nish_wipe
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1111:5 aesKeyWipe -> @nish.aesKeyWipe
-  callee 1112:5 aesKeyWipe -> @nish.aesKeyWipe
-  callee 1113:5 aesKeyWipe -> @nish.aesKeyWipe
-  callee 1114:5 aesKeyWipe -> @nish.aesKeyWipe
+  callee 1119:5 aesKeyWipe -> @nish.aesKeyWipe
+  callee 1120:5 aesKeyWipe -> @nish.aesKeyWipe
+  callee 1121:5 aesKeyWipe -> @nish.aesKeyWipe
+  callee 1122:5 aesKeyWipe -> @nish.aesKeyWipe
 function quicPacketPoint(slot: QuicKeysSlot, aead: i32): void -> @nish.quicPacketPoint
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1122:3
+  sharedWrite: 1130:3
   escaping: aead
   calls: nish.quicPacketKeyLength
   pointer slot: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1120:9 keys: QuicKeys (const)
-  local 1121:9 wide: boolean (const)
-  callee 1121:25 quicPacketKeyLength -> @nish.quicPacketKeyLength
+  local 1128:9 keys: QuicKeys (const)
+  local 1129:9 wide: boolean (const)
+  callee 1129:25 quicPacketKeyLength -> @nish.quicPacketKeyLength
 function quicPacketDeriveInto(kdf: HkdfScratch, keys: QuicKeys, secret: u8[]): void -> @nish.quicPacketDeriveInto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
@@ -58694,16 +58694,16 @@ function quicPacketDeriveInto(kdf: HkdfScratch, keys: QuicKeys, secret: u8[]): v
   pointer keys: size=48 writesThrough=false captured=false
   pointer secret: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#2 nish.hkdfExpandLabelInto#2
   stackSites=1 stackLocals=1
-  local 1140:9 aead: i32 (const)
-  local 1141:9 hashLength: i32 (const)
-  callee 1141:27 quicPacketSecretLength -> @nish.quicPacketSecretLength
-  local 1142:9 _scope: i64 (const)
-  local 1143:9 none: u8[] (const)
-  callee 1144:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
-  callee 1144:85 quicPacketKeyLength -> @nish.quicPacketKeyLength
-  callee 1145:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
-  local 1146:9 packetAes: AesKey | null (const)
-  callee 1148:5 aesKeyInto -> @nish.aesKeyInto
+  local 1148:9 aead: i32 (const)
+  local 1149:9 hashLength: i32 (const)
+  callee 1149:27 quicPacketSecretLength -> @nish.quicPacketSecretLength
+  local 1150:9 _scope: i64 (const)
+  local 1151:9 none: u8[] (const)
+  callee 1152:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  callee 1152:85 quicPacketKeyLength -> @nish.quicPacketKeyLength
+  callee 1153:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  local 1154:9 packetAes: AesKey | null (const)
+  callee 1156:5 aesKeyInto -> @nish.aesKeyInto
 function quicKeysInto(kdf: HkdfScratch, slot: QuicKeysSlot, aead: i32, secret: u8[]): QuicKeys | null -> @nish.quicKeysInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPacketPoint
@@ -58713,31 +58713,31 @@ function quicKeysInto(kdf: HkdfScratch, slot: QuicKeysSlot, aead: i32, secret: u
   pointer slot: size=72 writesThrough=false captured=false passedTo=nish.quicPacketPoint#0
   pointer secret: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSecretFits#1 nish.quicPacketDeriveInto#2 nish.hkdfExpandLabelInto#2
   stackSites=1 stackLocals=1
-  callee 1165:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
-  callee 1168:3 quicPacketPoint -> @nish.quicPacketPoint
-  local 1169:9 keys: QuicKeys (const)
-  callee 1170:3 quicPacketDeriveInto -> @nish.quicPacketDeriveInto
-  local 1172:11 _scope: i64 (const)
-  local 1173:11 none: u8[] (const)
-  callee 1174:5 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
-  callee 1176:7 quicPacketSecretLength -> @nish.quicPacketSecretLength
-  callee 1184:7 quicPacketKeyLength -> @nish.quicPacketKeyLength
-  local 1186:11 hpAes: AesKey | null (const)
-  callee 1188:7 aesKeyInto -> @nish.aesKeyInto
+  callee 1173:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
+  callee 1176:3 quicPacketPoint -> @nish.quicPacketPoint
+  local 1177:9 keys: QuicKeys (const)
+  callee 1178:3 quicPacketDeriveInto -> @nish.quicPacketDeriveInto
+  local 1180:11 _scope: i64 (const)
+  local 1181:11 none: u8[] (const)
+  callee 1182:5 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  callee 1184:7 quicPacketSecretLength -> @nish.quicPacketSecretLength
+  callee 1192:7 quicPacketKeyLength -> @nish.quicPacketKeyLength
+  local 1194:11 hpAes: AesKey | null (const)
+  callee 1196:7 aesKeyInto -> @nish.aesKeyInto
 function quicKeysUpdateInto(kdf: HkdfScratch, slot: QuicKeysSlot, keys: QuicKeys, nextSecret: u8[]): QuicKeys | null -> @nish.quicKeysUpdateInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1211:3
+  sharedWrite: 1219:3
   calls: nish.quicPacketDeriveInto nish.quicPacketKeysUsable nish.quicPacketPoint nish.quicPacketSecretFits
   pointer kdf: size=40 writesThrough=false captured=false passedTo=nish.quicPacketDeriveInto#0
   pointer slot: size=72 writesThrough=false captured=false passedTo=nish.quicPacketPoint#0
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicPacketKeysUsable#0
   pointer nextSecret: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSecretFits#1 nish.quicPacketDeriveInto#2
   stackSites=0 stackLocals=0
-  callee 1206:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
-  callee 1206:39 quicPacketSecretFits -> @nish.quicPacketSecretFits
-  callee 1209:3 quicPacketPoint -> @nish.quicPacketPoint
-  local 1210:9 next: QuicKeys (const)
-  callee 1213:3 quicPacketDeriveInto -> @nish.quicPacketDeriveInto
+  callee 1214:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
+  callee 1214:39 quicPacketSecretFits -> @nish.quicPacketSecretFits
+  callee 1217:3 quicPacketPoint -> @nish.quicPacketPoint
+  local 1218:9 next: QuicKeys (const)
+  callee 1221:3 quicPacketDeriveInto -> @nish.quicPacketDeriveInto
 function quicKeyUpdateSecretInto(kdf: HkdfScratch, aead: i32, secret: u8[], out: u8[]): boolean -> @nish.quicKeyUpdateSecretInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
@@ -58747,12 +58747,12 @@ function quicKeyUpdateSecretInto(kdf: HkdfScratch, aead: i32, secret: u8[], out:
   pointer secret: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSecretFits#1 nish.hkdfExpandLabelInto#2
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfExpandLabelInto#7
   stackSites=1 stackLocals=1
-  local 1223:9 length: i32 (const)
-  callee 1223:23 quicPacketSecretLength -> @nish.quicPacketSecretLength
-  callee 1224:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
-  local 1227:9 _scope: i64 (const)
-  local 1228:9 none: u8[] (const)
-  callee 1229:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  local 1231:9 length: i32 (const)
+  callee 1231:23 quicPacketSecretLength -> @nish.quicPacketSecretLength
+  callee 1232:8 quicPacketSecretFits -> @nish.quicPacketSecretFits
+  local 1235:9 _scope: i64 (const)
+  local 1236:9 none: u8[] (const)
+  callee 1237:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
 function quicInitialSecretsInto(kdf: HkdfScratch, buf: u8[], at: i32, length: i32, client: u8[], server: u8[]): boolean -> @nish.quicInitialSecretsInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
@@ -58763,14 +58763,14 @@ function quicInitialSecretsInto(kdf: HkdfScratch, buf: u8[], at: i32, length: i3
   pointer client: size=0 writesThrough=true captured=false passedTo=nish.hkdfExpandLabelInto#7
   pointer server: size=0 writesThrough=true captured=false passedTo=nish.hkdfExpandLabelInto#7
   stackSites=2 stackLocals=2
-  local 1257:9 _scope: i64 (const)
-  local 1258:9 none: u8[] (const)
-  local 1259:9 initial: u8[] (const)
-  callee 1260:3 hkdfExtractInto -> @nish.hkdfExtractInto
-  callee 1260:28 quicPacketInitialSalt -> @nish.quicPacketInitialSalt
-  callee 1260:53 quicPacketSlice -> @nish.quicPacketSlice
-  callee 1261:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
-  callee 1262:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  local 1265:9 _scope: i64 (const)
+  local 1266:9 none: u8[] (const)
+  local 1267:9 initial: u8[] (const)
+  callee 1268:3 hkdfExtractInto -> @nish.hkdfExtractInto
+  callee 1268:28 quicPacketInitialSalt -> @nish.quicPacketInitialSalt
+  callee 1268:53 quicPacketSlice -> @nish.quicPacketSlice
+  callee 1269:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  callee 1270:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
 function quicPacketProtectedBits(first: i32): i32 -> @nish.quicPacketProtectedBits
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -58779,15 +58779,15 @@ function quicPacketReservedBits(first: i32): i32 -> @nish.quicPacketReservedBits
   stackSites=0 stackLocals=0
 function quicPacketNonce(keys: QuicKeys, packetNumber: i64): u8[] -> @nish.quicPacketNonce
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1281:5
+  sharedWrite: 1289:5
   calls: nish_panic
   pointer keys: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1275:9 nonce: u8[] (const)
-  local 1276:9 nonceLength: i32 (const)
-  local 1277:12 k: i32 (let)
-  local 1279:11 pn: i64 (const)
-  local 1280:11 iv: i32 (const)
+  local 1283:9 nonce: u8[] (const)
+  local 1284:9 nonceLength: i32 (const)
+  local 1285:12 k: i32 (let)
+  local 1287:11 pn: i64 (const)
+  local 1288:11 iv: i32 (const)
 function quicPacketMask(keys: QuicKeys, sample: u8[]): u8[] | null -> @nish.quicPacketMask
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20HeaderMask
@@ -58795,9 +58795,9 @@ function quicPacketMask(keys: QuicKeys, sample: u8[]): u8[] | null -> @nish.quic
   pointer keys: size=48 writesThrough=false captured=false
   pointer sample: size=0 writesThrough=false captured=false passedTo=nish.chacha20HeaderMask#1 nish.aesHeaderMask#1
   stackSites=0 stackLocals=0
-  callee 1289:12 chacha20HeaderMask -> @nish.chacha20HeaderMask
-  local 1291:9 hpAes: AesKey | null (const)
-  callee 1293:12 aesHeaderMask -> @nish.aesHeaderMask
+  callee 1297:12 chacha20HeaderMask -> @nish.chacha20HeaderMask
+  local 1299:9 hpAes: AesKey | null (const)
+  callee 1301:12 aesHeaderMask -> @nish.aesHeaderMask
 function quicPacketSeal(keys: QuicKeys, nonce: u8[], aad: u8[], plaintext: u8[]): u8[] | null -> @nish.quicPacketSeal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Seal
@@ -58807,9 +58807,9 @@ function quicPacketSeal(keys: QuicKeys, nonce: u8[], aad: u8[], plaintext: u8[])
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Seal#2 nish.aesGcmSeal#2
   pointer plaintext: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Seal#3 nish.aesGcmSeal#3
   stackSites=0 stackLocals=0
-  callee 1301:12 chacha20Poly1305Seal -> @nish.chacha20Poly1305Seal
-  local 1303:9 packetAes: AesKey | null (const)
-  callee 1305:12 aesGcmSeal -> @nish.aesGcmSeal
+  callee 1309:12 chacha20Poly1305Seal -> @nish.chacha20Poly1305Seal
+  local 1311:9 packetAes: AesKey | null (const)
+  callee 1313:12 aesGcmSeal -> @nish.aesGcmSeal
 function quicPacketOpen(keys: QuicKeys, nonce: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.quicPacketOpen
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.chacha20Poly1305Open
@@ -58819,58 +58819,58 @@ function quicPacketOpen(keys: QuicKeys, nonce: u8[], aad: u8[], sealed: u8[]): u
   pointer aad: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Open#2 nish.aesGcmOpen#2
   pointer sealed: size=0 writesThrough=false captured=false passedTo=nish.chacha20Poly1305Open#3 nish.aesGcmOpen#3
   stackSites=0 stackLocals=0
-  callee 1313:12 chacha20Poly1305Open -> @nish.chacha20Poly1305Open
-  local 1315:9 packetAes: AesKey | null (const)
-  callee 1317:12 aesGcmOpen -> @nish.aesGcmOpen
+  callee 1321:12 chacha20Poly1305Open -> @nish.chacha20Poly1305Open
+  local 1323:9 packetAes: AesKey | null (const)
+  callee 1325:12 aesGcmOpen -> @nish.aesGcmOpen
 function quicSealInPlace(keys: QuicKeys, buf: u8[], start: i32, headerLength: i32, payloadLength: i32, packetNumber: i64): i32 -> @nish.quicSealInPlace [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 1387:5
+  sharedWrite: 1395:5
   escaping: packetNumber start
   calls: nish.quicPacketKeysUsable nish.quicPacketMask nish.quicPacketNonce nish.quicPacketProtectedBits nish.quicPacketSeal nish.quicPacketSlice nish.quicVarintRead nish.wipe$arr.u8 nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_panic_slice
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicPacketKeysUsable#0 nish.quicPacketNonce#0 nish.quicPacketSeal#0 nish.quicPacketMask#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.quicVarintRead#0 nish.quicPacketSlice#0 nish.quicPacketSlice#0 nish.quicPacketSlice#0
   stackSites=0 stackLocals=0
-  local 1342:9 end: i32 (const)
-  local 1346:9 first: i32 (const)
-  local 1347:9 pnLength: i32 (const)
-  local 1348:9 pnOffset: i32 (const)
-  callee 1350:6 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
-  local 1358:12 k: i32 (let)
-  local 1359:11 want: i32 (const)
-  callee 1366:5 quicVarintRead -> @nish.quicVarintRead
-  local 1370:9 payloadAt: i32 (const)
-  local 1372:11 _scope: i64 (const)
-  local 1376:11 nonce: u8[] (const)
-  callee 1376:25 quicPacketNonce -> @nish.quicPacketNonce
-  local 1377:11 sealed: u8[] | null (const)
-  callee 1377:33 quicPacketSeal -> @nish.quicPacketSeal
-  callee 1380:7 quicPacketSlice -> @nish.quicPacketSlice
-  callee 1381:7 quicPacketSlice -> @nish.quicPacketSlice
-  callee 1383:5 wipe<u8[]> -> @nish.wipe$arr.u8
-  local 1388:11 sampleAt: i32 (const)
-  local 1389:11 mask: u8[] | null (const)
-  callee 1389:31 quicPacketMask -> @nish.quicPacketMask
-  callee 1391:7 quicPacketSlice -> @nish.quicPacketSlice
-  local 1396:11 masked: boolean (const)
-  callee 1398:51 quicPacketProtectedBits -> @nish.quicPacketProtectedBits
-  local 1399:16 k: i32 (let)
-  callee 1405:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 1350:9 end: i32 (const)
+  local 1354:9 first: i32 (const)
+  local 1355:9 pnLength: i32 (const)
+  local 1356:9 pnOffset: i32 (const)
+  callee 1358:6 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
+  local 1366:12 k: i32 (let)
+  local 1367:11 want: i32 (const)
+  callee 1374:5 quicVarintRead -> @nish.quicVarintRead
+  local 1378:9 payloadAt: i32 (const)
+  local 1380:11 _scope: i64 (const)
+  local 1384:11 nonce: u8[] (const)
+  callee 1384:25 quicPacketNonce -> @nish.quicPacketNonce
+  local 1385:11 sealed: u8[] | null (const)
+  callee 1385:33 quicPacketSeal -> @nish.quicPacketSeal
+  callee 1388:7 quicPacketSlice -> @nish.quicPacketSlice
+  callee 1389:7 quicPacketSlice -> @nish.quicPacketSlice
+  callee 1391:5 wipe<u8[]> -> @nish.wipe$arr.u8
+  local 1396:11 sampleAt: i32 (const)
+  local 1397:11 mask: u8[] | null (const)
+  callee 1397:31 quicPacketMask -> @nish.quicPacketMask
+  callee 1399:7 quicPacketSlice -> @nish.quicPacketSlice
+  local 1404:11 masked: boolean (const)
+  callee 1406:51 quicPacketProtectedBits -> @nish.quicPacketProtectedBits
+  local 1407:16 k: i32 (let)
+  callee 1413:5 wipe<u8[]> -> @nish.wipe$arr.u8
 function quicSealPacket(keys: QuicKeys, header: u8[], packetNumber: i64, payload: u8[]): u8[] | null -> @nish.quicSealPacket [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1439:3
+  sharedWrite: 1447:3
   escaping: packetNumber
   calls: nish.quicSealInPlace nish_panic nish_panic_overflow nish_panic_slice
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicSealInPlace#0
   pointer header: size=0 writesThrough=false captured=false
   pointer payload: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1436:9 headerLength: i32 (const)
-  local 1437:9 payloadLength: i32 (const)
-  local 1438:9 packet: u8[] (const)
-  callee 1441:7 quicSealInPlace -> @nish.quicSealInPlace
+  local 1444:9 headerLength: i32 (const)
+  local 1445:9 payloadLength: i32 (const)
+  local 1446:9 packet: u8[] (const)
+  callee 1449:7 quicSealInPlace -> @nish.quicSealInPlace
 function quicUnprotectHeader(keys: QuicKeys, datagram: u8[], header: QuicHeader, largestPn: i64, packet: QuicPacket): u8[] -> @nish.quicUnprotectHeader [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1463:3
+  sharedWrite: 1471:3
   escaping: largestPn
   calls: nish.quicPacketKeysUsable nish.quicPacketMask nish.quicPacketNumberDecode nish.quicPacketProtectedBits nish.quicPacketSlice nish.wipe$arr.u8 nish_panic_index nish_panic_overflow
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicPacketKeysUsable#0 nish.quicPacketMask#0
@@ -58878,42 +58878,42 @@ function quicUnprotectHeader(keys: QuicKeys, datagram: u8[], header: QuicHeader,
   pointer header: size=88 writesThrough=false captured=false
   pointer packet: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1468:9 datagramLength: i32 (const)
-  callee 1477:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
-  local 1481:9 pnOffset: i32 (const)
-  local 1482:9 sampleAt: i32 (const)
-  local 1492:9 mask: u8[] | null (const)
-  callee 1492:29 quicPacketMask -> @nish.quicPacketMask
-  callee 1494:5 quicPacketSlice -> @nish.quicPacketSlice
-  local 1500:9 usable: boolean (const)
-  local 1501:9 protectedFirst: i32 (const)
-  local 1502:9 long: boolean (const)
-  local 1503:9 first: i32 (const)
-  callee 1504:42 quicPacketProtectedBits -> @nish.quicPacketProtectedBits
-  local 1506:9 pnLength: i32 (const)
-  local 1509:9 clear: u8[] (const)
-  callee 1509:23 quicPacketSlice -> @nish.quicPacketSlice
-  local 1511:7 truncated: i64 (let)
-  local 1512:12 k: i32 (let)
-  local 1513:11 at: i32 (const)
-  local 1515:13 b: u8 (const)
-  callee 1522:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 1529:25 quicPacketNumberDecode -> @nish.quicPacketNumberDecode
+  local 1476:9 datagramLength: i32 (const)
+  callee 1485:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
+  local 1489:9 pnOffset: i32 (const)
+  local 1490:9 sampleAt: i32 (const)
+  local 1500:9 mask: u8[] | null (const)
+  callee 1500:29 quicPacketMask -> @nish.quicPacketMask
+  callee 1502:5 quicPacketSlice -> @nish.quicPacketSlice
+  local 1508:9 usable: boolean (const)
+  local 1509:9 protectedFirst: i32 (const)
+  local 1510:9 long: boolean (const)
+  local 1511:9 first: i32 (const)
+  callee 1512:42 quicPacketProtectedBits -> @nish.quicPacketProtectedBits
+  local 1514:9 pnLength: i32 (const)
+  local 1517:9 clear: u8[] (const)
+  callee 1517:23 quicPacketSlice -> @nish.quicPacketSlice
+  local 1519:7 truncated: i64 (let)
+  local 1520:12 k: i32 (let)
+  local 1521:11 at: i32 (const)
+  local 1523:13 b: u8 (const)
+  callee 1530:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 1537:25 quicPacketNumberDecode -> @nish.quicPacketNumberDecode
 function quicRemoveHeaderProtection(keys: QuicKeys, datagram: u8[], header: QuicHeader, largestPn: i64): QuicPacket -> @nish.quicRemoveHeaderProtection [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: 1555:3
+  sharedWrite: 1563:3
   escaping: largestPn
   calls: nish.QuicPacket.constructor nish.quicUnprotectHeader nish_alloc_struct
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicUnprotectHeader#0
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicUnprotectHeader#1
   pointer header: size=88 writesThrough=false captured=false passedTo=nish.quicUnprotectHeader#2
   stackSites=0 stackLocals=0
-  local 1554:9 packet: QuicPacket (const)
-  callee 1554:30 new QuicPacket -> @nish.QuicPacket.constructor
-  callee 1555:19 quicUnprotectHeader -> @nish.quicUnprotectHeader
+  local 1562:9 packet: QuicPacket (const)
+  callee 1562:30 new QuicPacket -> @nish.QuicPacket.constructor
+  callee 1563:19 quicUnprotectHeader -> @nish.quicUnprotectHeader
 function quicDecryptPayload(keys: QuicKeys, datagram: u8[], header: QuicHeader, clear: u8[], packet: QuicPacket): u8[] | null -> @nish.quicDecryptPayload [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1577:5
+  sharedWrite: 1585:5
   calls: nish.quicPacketKeysUsable nish.quicPacketNonce nish.quicPacketOpen nish.quicPacketReservedBits nish.quicPacketSlice nish.wipe$arr.u8 nish_panic_overflow
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicPacketKeysUsable#0 nish.quicPacketNonce#0 nish.quicPacketOpen#0
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSlice#0
@@ -58921,26 +58921,26 @@ function quicDecryptPayload(keys: QuicKeys, datagram: u8[], header: QuicHeader, 
   pointer clear: size=0 writesThrough=false captured=false passedTo=nish.quicPacketOpen#2
   pointer packet: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 1576:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
-  local 1580:9 payloadStart: i32 (const)
-  local 1582:9 nonce: u8[] (const)
-  callee 1582:23 quicPacketNonce -> @nish.quicPacketNonce
-  local 1583:9 plain: u8[] | null (const)
-  callee 1583:30 quicPacketOpen -> @nish.quicPacketOpen
-  callee 1583:65 quicPacketSlice -> @nish.quicPacketSlice
-  callee 1584:3 wipe<u8[]> -> @nish.wipe$arr.u8
-  callee 1589:27 quicPacketReservedBits -> @nish.quicPacketReservedBits
+  callee 1584:8 quicPacketKeysUsable -> @nish.quicPacketKeysUsable
+  local 1588:9 payloadStart: i32 (const)
+  local 1590:9 nonce: u8[] (const)
+  callee 1590:23 quicPacketNonce -> @nish.quicPacketNonce
+  local 1591:9 plain: u8[] | null (const)
+  callee 1591:30 quicPacketOpen -> @nish.quicPacketOpen
+  callee 1595:5 quicPacketSlice -> @nish.quicPacketSlice
+  callee 1597:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee 1602:27 quicPacketReservedBits -> @nish.quicPacketReservedBits
 function quicDecryptPacket(keys: QuicKeys, datagram: u8[], header: QuicHeader, packet: QuicPacket): boolean -> @nish.quicDecryptPacket [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1615:3
+  sharedWrite: 1628:3
   calls: nish.quicDecryptPayload
   pointer keys: size=48 writesThrough=false captured=false passedTo=nish.quicDecryptPayload#0
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicDecryptPayload#1
   pointer header: size=88 writesThrough=false captured=false passedTo=nish.quicDecryptPayload#2
   pointer packet: size=40 writesThrough=true captured=false passedTo=nish.quicDecryptPayload#4
   stackSites=0 stackLocals=0
-  local 1611:9 plain: u8[] | null (const)
-  callee 1611:30 quicDecryptPayload -> @nish.quicDecryptPayload
+  local 1624:9 plain: u8[] | null (const)
+  callee 1624:30 quicDecryptPayload -> @nish.quicDecryptPayload
 function quicOpenPacket(keys: QuicKeys, datagram: u8[], header: QuicHeader, largestPn: i64): QuicPacket -> @nish.quicOpenPacket [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via nish.quicRemoveHeaderProtection
@@ -58950,9 +58950,9 @@ function quicOpenPacket(keys: QuicKeys, datagram: u8[], header: QuicHeader, larg
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicRemoveHeaderProtection#1 nish.quicDecryptPacket#1
   pointer header: size=88 writesThrough=false captured=false passedTo=nish.quicRemoveHeaderProtection#2 nish.quicDecryptPacket#2
   stackSites=0 stackLocals=0
-  local 1632:9 packet: QuicPacket (const)
-  callee 1632:30 quicRemoveHeaderProtection -> @nish.quicRemoveHeaderProtection
-  callee 1633:3 quicDecryptPacket -> @nish.quicDecryptPacket
+  local 1645:9 packet: QuicPacket (const)
+  callee 1645:30 quicRemoveHeaderProtection -> @nish.quicRemoveHeaderProtection
+  callee 1646:3 quicDecryptPacket -> @nish.quicDecryptPacket
 function quicRetryIntegrityTag(odcid: u8[], retryWithoutTag: u8[]): u8[] | null -> @nish.quicRetryIntegrityTag [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.aesKey
@@ -58960,15 +58960,15 @@ function quicRetryIntegrityTag(odcid: u8[], retryWithoutTag: u8[]): u8[] | null 
   pointer odcid: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCidFits#0 nish.quicPacketAppend#1
   pointer retryWithoutTag: size=0 writesThrough=false captured=false passedTo=nish.quicPacketAppend#1
   stackSites=2 stackLocals=1
-  local 1645:9 key: AesKey | null (const)
-  callee 1645:30 aesKey -> @nish.aesKey
-  callee 1645:37 quicPacketRetryKey -> @nish.quicPacketRetryKey
-  callee 1646:24 quicPacketCidFits -> @nish.quicPacketCidFits
-  local 1649:9 pseudo: u8[] (const)
-  callee 1651:3 quicPacketAppend -> @nish.quicPacketAppend
-  callee 1652:3 quicPacketAppend -> @nish.quicPacketAppend
-  callee 1653:10 aesGcmSeal -> @nish.aesGcmSeal
-  callee 1653:26 quicPacketRetryNonce -> @nish.quicPacketRetryNonce
+  local 1658:9 key: AesKey | null (const)
+  callee 1658:30 aesKey -> @nish.aesKey
+  callee 1658:37 quicPacketRetryKey -> @nish.quicPacketRetryKey
+  callee 1659:24 quicPacketCidFits -> @nish.quicPacketCidFits
+  local 1662:9 pseudo: u8[] (const)
+  callee 1664:3 quicPacketAppend -> @nish.quicPacketAppend
+  callee 1665:3 quicPacketAppend -> @nish.quicPacketAppend
+  callee 1666:10 aesGcmSeal -> @nish.aesGcmSeal
+  callee 1666:26 quicPacketRetryNonce -> @nish.quicPacketRetryNonce
 function quicRetryPacket(dcid: u8[], scid: u8[], token: u8[], odcid: u8[], unused: i32): u8[] | null -> @nish.quicRetryPacket [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicPacketPutLongPrefix
@@ -58978,16 +58978,16 @@ function quicRetryPacket(dcid: u8[], scid: u8[], token: u8[], odcid: u8[], unuse
   pointer token: size=0 writesThrough=false captured=false passedTo=nish.quicPacketAppend#1
   pointer odcid: size=0 writesThrough=false captured=false passedTo=nish.quicRetryIntegrityTag#0
   stackSites=0 stackLocals=0
-  callee 1673:6 quicPacketCidFits -> @nish.quicPacketCidFits
-  callee 1674:6 quicPacketCidFits -> @nish.quicPacketCidFits
-  local 1681:9 dcidLength: i32 (const)
-  local 1682:9 scidLength: i32 (const)
-  local 1683:9 out: u8[] (const)
-  callee 1684:3 quicPacketPutLongPrefix -> @nish.quicPacketPutLongPrefix
-  callee 1685:3 quicPacketAppend -> @nish.quicPacketAppend
-  local 1686:9 tag: u8[] | null (const)
-  callee 1686:28 quicRetryIntegrityTag -> @nish.quicRetryIntegrityTag
-  callee 1690:3 quicPacketAppend -> @nish.quicPacketAppend
+  callee 1686:6 quicPacketCidFits -> @nish.quicPacketCidFits
+  callee 1687:6 quicPacketCidFits -> @nish.quicPacketCidFits
+  local 1694:9 dcidLength: i32 (const)
+  local 1695:9 scidLength: i32 (const)
+  local 1696:9 out: u8[] (const)
+  callee 1697:3 quicPacketPutLongPrefix -> @nish.quicPacketPutLongPrefix
+  callee 1698:3 quicPacketAppend -> @nish.quicPacketAppend
+  local 1699:9 tag: u8[] | null (const)
+  callee 1699:28 quicRetryIntegrityTag -> @nish.quicRetryIntegrityTag
+  callee 1703:3 quicPacketAppend -> @nish.quicPacketAppend
 function quicRetryVerify(odcid: u8[], datagram: u8[], header: QuicHeader): boolean -> @nish.quicRetryVerify [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.quicRetryIntegrityTag
@@ -58996,10 +58996,10 @@ function quicRetryVerify(odcid: u8[], datagram: u8[], header: QuicHeader): boole
   pointer datagram: size=0 writesThrough=false captured=false passedTo=nish.quicPacketSlice#0
   pointer header: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1704:9 tag: u8[] | null (const)
-  callee 1704:28 quicRetryIntegrityTag -> @nish.quicRetryIntegrityTag
-  callee 1706:5 quicPacketSlice -> @nish.quicPacketSlice
-  callee 1711:10 timingSafeEqual -> @nish.timingSafeEqual
+  local 1717:9 tag: u8[] | null (const)
+  callee 1717:28 quicRetryIntegrityTag -> @nish.quicRetryIntegrityTag
+  callee 1719:5 quicPacketSlice -> @nish.quicPacketSlice
+  callee 1724:10 timingSafeEqual -> @nish.timingSafeEqual
 module std/crypto/chacha20poly1305.ts [package nish]
 import wipe from "nish:secret" -> generic function wipe
 const CHACHA20_KEY_SIZE: i32 = 32 [exported]
