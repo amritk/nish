@@ -242,8 +242,13 @@ export const witnessChain = (
  * Write the whole report for a compilation that has checked to `file`. It runs
  * the attribute fixpoint if nothing has yet (`analyze` is memoised, so the emit
  * that follows does not run it again). The caller has made the directory.
+ *
+ * `cpu` is the `--cpu` level, or the empty string for the baseline. A level
+ * adds a `"cpu"` key after `"entry"`, so a reader of the report knows the
+ * binary needs that CPU; a baseline report has no key and stays byte for byte
+ * what it was before the flag existed (docs/LANGUAGE.md, "The CPU level").
  */
-export const writeCapabilityReport = (compilation: Compilation, file: string): void => {
+export const writeCapabilityReport = (compilation: Compilation, file: string, cpu: string): void => {
   const facts = compilation.analyze()
   const root = dirname(compilation.entry().path)
   const modules = compilation.modules
@@ -289,6 +294,11 @@ export const writeCapabilityReport = (compilation: Compilation, file: string): v
   out.push('  "entry": ')
   out.push(jsonQuote(modulePath(compilation, root, compilation.entry())))
   out.push(",\n")
+  if (cpu.length > 0) {
+    out.push('  "cpu": ')
+    out.push(jsonQuote(cpu))
+    out.push(",\n")
+  }
   out.push(`  "deterministic": ${isDeterministic(program) ? "true" : "false"},\n`)
   out.push('  "capabilities": [')
   pushNames(out, program)

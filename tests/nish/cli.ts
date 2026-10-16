@@ -104,6 +104,7 @@ const advertisedFlags = (): string[] => [
   "--emit-arena",
   "--target",
   "--profile",
+  "--cpu",
   "--warn-portability",
   "--fix",
   "--emit-capabilities",
@@ -727,6 +728,25 @@ const checkCapabilities = (t: Suite, cli: Cli, env: boolean): void => {
   t.eqBool("and byte for byte, the trailing newline included", got === want && got.endsWith("}\n"), true);
   t.eqStr("its version is 1", jsonFieldOr(got, "version"), "1");
   t.eqStr("its entry is named from its own directory", jsonFieldOr(got, "entry"), "caps_generic.ts");
+
+  // `--cpu` adds one key after `entry` and moves nothing else; a baseline
+  // report, the golden above, has none (docs/LANGUAGE.md, "The CPU level").
+  // The level is x86-64's, so another host refuses the flag before a report.
+  if (process.arch === "x64") {
+    const leveled = `${WORK}/caps-cpu.json`;
+    removeTree(leveled);
+    const atLevel = cli.plain("caps_cpu", [source, "-o", `${WORK}/caps.ll`, "--cpu", "x86-64-v3", "--emit-capabilities", leveled]);
+    t.eqI32("--emit-capabilities with --cpu x86-64-v3 exits 0", atLevel.status, 0);
+    const entryLine = '  "entry": "caps_generic.ts",\n';
+    const cut: i32 = toI32(want.indexOf(entryLine)) + entryLine.length;
+    t.eqStr(
+      "and the report is the golden with a `cpu` key after `entry`",
+      readOrEmpty(leveled),
+      `${want.substring(0, cut)}  "cpu": "x86-64-v3",\n${want.substring(cut)}`
+    );
+  } else {
+    t.skip("--emit-capabilities with --cpu x86-64-v3", "the level is x86-64's, and this host is not");
+  }
 
   const pure = cli.plain("caps_line_pure", ["tests/cases/caps_pure.ts", "-o", `${WORK}/caps.ll`, "--capabilities"]);
   t.eqStr(

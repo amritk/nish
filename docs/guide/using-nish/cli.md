@@ -75,6 +75,13 @@ likely to add to it:
   link-time optimisation and a stripped binary; `size` optimises for bytes;
   `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
   module instead of a native binary.
+- **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
+  CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
+  tight loops faster. It is the one level `nish` accepts; anything else, and
+  the flag with `--profile wasi` or a non-x86-64 `--target`, is refused with
+  exit 2. What your program computes does not change. A binary built with it
+  **crashes with `SIGILL` on a CPU without AVX2**, so use it only for binaries
+  that stay on machines you know; ship anything else without it.
 - **`-g`** — DWARF debug info, so `gdb` and `lldb` step through your `.ts`
   source.
 - **`--number-mode f64`** — makes a bare `number` a 64-bit float rather than

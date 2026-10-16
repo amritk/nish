@@ -5010,9 +5010,9 @@ choice (WP34 N6).
   integer divide (`div`/`idiv`, `udiv`/`sdiv`) or a floating divide or square
   root whose operand a secret reaches (the `latency` kind, seeded by
   `ct_asm_refused`'s `secretDivide`). It reads what `clang -O2` emits for the
-  baseline CPU of each target and nothing else, so a build with another
-  profile or `-march` is not what was read, and instructions from ISA
-  extensions beyond the baseline never reach it
+  baseline CPU of each target, and for x86-64 at `x86-64-v3`, the one level
+  [`--cpu`](#the-cpu-level) offers, and nothing else, so a build with another
+  profile or `-march` is not what was read
   ([docs/security/ct-verification.md](security/ct-verification.md), CT-2, CT-16).
   It reads only the functions a fixture names, so a module function that is
   not one — every loop in `std/crypto`, for instance — rests on review; that
@@ -7533,6 +7533,34 @@ by the caller.
   It reaches the entry package's modules only
   ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 - **`--no-stack-alloc`**: see *Memory model* above.
+
+### The CPU level
+
+- **`--cpu x86-64-v3`** links the program for one CPU level above the
+  baseline: the module and the runtime are both compiled, and linked, with
+  `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
+  BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
+  and every other value are a usage error (exit 2, one line), and so is the
+  flag with `--profile wasi` or with a `--target` that is not x86-64. Without
+  `--target` the host's triple is the one checked, so a host that is not
+  x86-64 refuses it the same way; an x86-64 `--target` on such a host is not
+  refused, and fails at the link as a toolchain error. `scripts/build.sh --cpu
+  x86-64-v3` is the same build, and refuses the `wasm` and `wasi` profiles.
+- **It changes the link and nothing else.** The IR is byte for byte the IR
+  without it, so the flag changes no operation's meaning; and
+  `-ffp-contract=off` keeps the code generator from contracting a multiply and
+  an add into one fused, once-rounded instruction the source did not write, so
+  a float prints the same at either level. `nish run` takes it too, and both
+  caches key on it: a run or a link at the level never reuses the baseline's
+  binary or runtime objects. `--emit-capabilities` adds a `"cpu"` key after
+  `"entry"`; a baseline report has none.
+- **A release binary stays baseline.** A binary linked with the flag stops
+  with `SIGILL` on a CPU without AVX2, so it is for programs that run on
+  machines whose CPU is known. The `nish` the project releases is built
+  without it. The constant-time check reads the runtime and the
+  `nish:crypto-ct` fixtures at this level as well as at the baseline
+  ([CT-16](security/ct-verification.md)); a level it does not read is not
+  offered (`tests/run.js`, the `cpu level` section).
 
 ### Diagnostics and debugging flags
 
