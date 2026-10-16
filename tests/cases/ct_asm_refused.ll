@@ -4,6 +4,8 @@ declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #1
 declare void @nish_panic_div(i1 noundef zeroext) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
 
 define noundef i32 @naiveEqual(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b) #0 {
 entry:
@@ -333,10 +335,68 @@ div.ok:
   ret i32 %2
 }
 
+define void @leakyBaseRead(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %out, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %table, i32 noundef %c, i32 noundef %digit) #2 {
+entry:
+  %at.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %0 = mul i32 %c, 240
+  %1 = and i32 %digit, 15
+  %2 = sub i32 %1, 1
+  %3 = and i32 %2, 15
+  %4 = call { i32, i1 } @llvm.smul.with.overflow.i32(i32 %3, i32 16)
+  %5 = extractvalue { i32, i1 } %4, 0
+  %6 = extractvalue { i32, i1 } %4, 1
+  br i1 %6, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %7 = add i32 %0, %5
+  store i32 %7, i32* %at.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %out, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %table, i64 0, i32 2
+  %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  br label %for.cond
+
+for.cond:
+  %12 = load i32, i32* %i.addr, align 4
+  %13 = icmp slt i32 %12, 16
+  br i1 %13, label %for.body, label %for.end
+
+for.body:
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = sext i32 %14 to i64
+  %16 = load i32, i32* %at.addr, align 4
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add i32 %16, %17
+  %19 = sext i32 %18 to i64
+  %20 = bitcast i8* %11 to i32*
+  %21 = getelementptr inbounds i32, i32* %20, i64 %19
+  %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %23 = bitcast i8* %9 to i32*
+  %24 = getelementptr inbounds i32, i32* %23, i64 %15
+  store i32 %22, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  br label %for.inc
+
+for.inc:
+  %25 = load i32, i32* %i.addr, align 4
+  %26 = add nsw i32 %25, 1
+  store i32 %26, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 2)
+  unreachable
+}
+
 attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind }
 attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

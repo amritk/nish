@@ -86,8 +86,8 @@ Three rules hold across the modules:
 - **Constant time by construction, and verified where the check reaches.** No
   module branches on, or indexes by, a secret: comparisons OR the differences
   into one word and test it once, the ladder swaps with a mask and always runs
-  255 steps, AES reads no table, P-256's window reads all sixteen entries and
-  keeps one by mask, and base64url maps characters by arithmetic on range masks
+  255 steps, AES reads no table, P-256's comb and window read every entry of
+  a table and keep one by mask, and base64url maps characters by arithmetic on range masks
   rather than a table. Every branch is on a length, a loop counter or a bit
   position. WP34 N6 checks that the machine code kept that shape:
   `tests/ct-asm.js` disassembles golden fixtures on x86-64 and aarch64 and
@@ -122,8 +122,11 @@ Three rules hold across the modules:
     subtract, its scalar multiply and its conditional move; the sixteen-entry
     table read by a secret digit; the complete doubling and addition; and one
     window step of the scalar multiplication (four doublings, the table read
-    and an addition), the check following each call into the field functions.
-    The 64-window loop, the table build, the inversions, the encodings and
+    and an addition); and the fixed-base comb that multiplies G for a public
+    key or a signature: its digit, the fifteen-entry read of the precomputed
+    table, the mixed addition, the masked keep, and one whole comb step. The
+    check follows each call into the field functions. The 64-window and
+    4-row loops, the window's table build, the inversions, the encodings and
     RFC 6979's nonce derivation remain discipline.
 
   The SHA-2 hashes and HKDF are additions, rotations and xors that branch

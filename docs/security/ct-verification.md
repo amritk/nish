@@ -287,13 +287,14 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
   `ghashMultiply` and `aesGcmTagMask` are read as copies.)
 - **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FiatSelectznz`,
   `p256FiatScalarAdd`, `p256FieldInvert`, `p256ScalarInvert`,
-  `p256ScalarMult`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
+  `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
   `p256SubBorrow`, `p256Below`, `p256ReduceOnce`, `p256AffineX`,
   `p256EncodePoint`, `p256DigestScalar`, `p256NonceKey`, `p256SignScalar`,
   `p256PublicKey`, `p256Sign`, `p256SignSha256`. (The field and scalar
   multiplies, add, subtract and conditional move, the point doubling and
   addition, the table move and select, and one window step are read as copies
-  or reshaped copies.) `p256Verify` handles only public data.
+  or reshaped copies, as are the comb's digit, fifteen-entry select, mixed
+  addition, masked keep and one comb step.) `p256Verify` handles only public data.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
 
