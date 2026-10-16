@@ -30,7 +30,7 @@ import { isCReservedSymbol } from "./c-symbols"
 import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./json-typed"
 import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
-import { rejectForeignPointer } from "./annotations"
+import { rejectForeignPointer, unionArgumentMessage } from "./annotations"
 import { CheckContext } from "./context"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
@@ -979,6 +979,12 @@ const instantiateStructHere = (
       return null
     }
   }
+  for (const arg of args) {
+    if (ctx.table.holdsUnion(arg)) {
+      site.asker.error(at, unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, args)))
+      return null
+    }
+  }
   adoptArgumentLayouts(ctx, args, site)
   // WP18 G6: before the tuple is looked up, so every request is held to the
   // constraint where it was written, not only the first one to name the tuple.
@@ -1467,6 +1473,14 @@ export const checkGenericCall = (
   const refused = reduceElementMessage(ctx.table, template, functions, tuple)
   if (refused.length > 0) {
     return ctx.errorType(expr, refused)
+  }
+  for (const bound of tuple) {
+    if (ctx.table.holdsUnion(bound)) {
+      return ctx.errorType(
+        expr,
+        unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, tuple))
+      )
+    }
   }
   // `nish:secret`: what `secret` may wrap and what `wipe` can zero, said at the
   // argument rather than inside the instance the call would have made.

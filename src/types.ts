@@ -276,10 +276,13 @@ export class TypeTable {
   json: boolean
   /** The variant ids of each union, ascending; a union's `refs` entry indexes this. */
   unions: i32[][]
+  /** Each union's tags, parallel to `unions`. */
+  unionTags: i32[][]
 
   constructor() {
     this.json = false
     this.unions = []
+    this.unionTags = []
     this.kinds = []
     this.refs = []
     this.names = []
@@ -455,20 +458,26 @@ export class TypeTable {
 
   /**
    * The union of `variants`, interned by its variant set, so `A | B` and
-   * `B | A` are one id. `tagEnum` is the enum every variant's tag is a member
-   * of and `tagName` the field that holds it, which the resolver has checked
+   * `B | A` are one id. `tags` are the variants' tags, as member types,
+   * `tagEnum` is the enum every one is a member of and `tagName` the field
+   * that holds it, which the resolver has checked
    * agree. Two or more distinct struct ids, the caller's to ensure.
    */
-  unionOf(variants: i32[], tagEnum: i32, tagName: string): i32 {
+  unionOf(variants: i32[], tags: i32[], tagEnum: i32, tagName: string): i32 {
     const sorted: i32[] = []
+    const sortedTags: i32[] = []
     let i = 0
     while (i < variants.length) {
       sorted.push(variants[i])
+      sortedTags.push(tags[i])
       let at = sorted.length - 1
       while (at > 0 && sorted[at - 1] > sorted[at]) {
         const swap = sorted[at - 1]
         sorted[at - 1] = sorted[at]
         sorted[at] = swap
+        const swapTag = sortedTags[at - 1]
+        sortedTags[at - 1] = sortedTags[at]
+        sortedTags[at] = swapTag
         at = at - 1
       }
       i = i + 1
@@ -484,6 +493,7 @@ export class TypeTable {
       return existing
     }
     this.unions.push(sorted)
+    this.unionTags.push(sortedTags)
     const id = this.intern(K_UNION, this.unions.length - 1, tagName)
     this.errs[id] = tagEnum
     this.index.set(key, id)
@@ -498,6 +508,11 @@ export class TypeTable {
   /** A union's variant ids, ascending. */
   variantsOf(type: i32): i32[] {
     return this.unions[this.refs[type]]
+  }
+
+  /** A union's variants' tags, as enum member types, in `variantsOf`'s order. */
+  tagsOf(type: i32): i32[] {
+    return this.unionTags[this.refs[type]]
   }
 
   /** The enum a union's tag is a member of. */
@@ -742,6 +757,12 @@ export class TypeTable {
     return out
   }
 
+  /** An array's element as its type spells it: a union in parentheses, `(A | B)[]`. */
+  elementName(element: i32): string {
+    const name = this.typeName(element)
+    return this.isUnion(this.stripNull(element)) ? `(${name})` : name
+  }
+
   /** The variant names joined as the source joins them, ascending by id. */
   unionName(type: i32): string {
     const variants = this.variantsOf(type)
@@ -813,6 +834,28 @@ export class TypeTable {
     }
     if (kind === K_RESULT) {
       return this.holdsSecret(this.refs[type]) || this.holdsSecret(this.errs[type])
+    }
+    return false
+  }
+
+  /**
+   * A union anywhere in `type`: itself, an element, a nullable's value or a
+   * `Result` arm. What a type argument may not hold (docs/LANGUAGE.md,
+   * Discriminated unions).
+   */
+  holdsUnion(type: i32): boolean {
+    if (type < 0) {
+      return false
+    }
+    const kind = this.kinds[type]
+    if (kind === K_UNION) {
+      return true
+    }
+    if (kind === K_ARRAY || kind === K_NULLABLE || kind === K_MAYBE) {
+      return this.holdsUnion(this.refs[type])
+    }
+    if (kind === K_RESULT) {
+      return this.holdsUnion(this.refs[type]) || this.holdsUnion(this.errs[type])
     }
     return false
   }
@@ -967,8 +1010,8 @@ export class TypeTable {
         return "boolean"
       case K_ARRAY:
         return this.readonlys[type]
-          ? `readonly ${this.typeName(this.refs[type])}[]`
-          : `${this.typeName(this.refs[type])}[]`
+          ? `readonly ${this.elementName(this.refs[type])}[]`
+          : `${this.elementName(this.refs[type])}[]`
       case K_STRUCT:
         return this.displays[type].length > 0 ? this.displays[type] : this.names[type]
       case K_ENUM:

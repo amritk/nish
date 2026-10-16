@@ -595,6 +595,10 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
   if (table.isEnumMemberType(t)) {
     return table.typeName(t)
   }
+  // A discriminated union crosses nowhere either, and reads as written.
+  if (table.isUnion(t)) {
+    return table.typeName(t)
+  }
   switch (table.kindOf(t)) {
     case T_I32:
       return "number"

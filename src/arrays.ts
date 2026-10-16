@@ -16,6 +16,7 @@ import {
   isBitwiseCompound,
   holdsMember,
   mixedMemberMessage,
+  refuseNarrowingStore,
   unproven,
   WANT_INFERRED,
 } from "./expressions"
@@ -188,6 +189,9 @@ export const checkIndexAssignment = (ctx: CheckContext, expr: Node, scope: Scope
       const base = ctx.program.nodeTypes[expr.children[0].children[0].id]
       const spelled = base < 0 ? ctx.table.typeName(ctx.table.arrayOf(elem)) : ctx.table.typeName(base)
       return ctx.errorType(value, `Cannot assign ${ctx.table.typeName(rhs)} to an element of ${spelled}`)
+    }
+    if (refuseNarrowingStore(ctx, value, elem, "The element")) {
+      return T_ERROR
     }
     return elem
   }

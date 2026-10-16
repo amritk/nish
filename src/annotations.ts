@@ -527,6 +527,12 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
     return ctx.errorType(node, secretContainerMessage(spelled))
   }
+  if (ctx.table.holdsUnion(ok) || ctx.table.holdsUnion(err)) {
+    return ctx.errorType(
+      node,
+      unionArgumentMessage(`Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`)
+    )
+  }
   if (err === T_VOID) {
     return ctx.errorType(
       args.children[1],
@@ -537,6 +543,16 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
 }
 
 const UNION_REFUSED: string = "Union types other than `T | null` are forbidden in "
+
+/**
+ * A union where a type argument would carry it: `Box<Shape>`, `Map<string,
+ * Shape>`, `Result<Shape, string>`, or a type parameter a call binds to one.
+ * Narrower than TypeScript, which allows all of them (docs/LANGUAGE.md,
+ * Discriminated unions).
+ */
+export const unionArgumentMessage = (spelled: string): string =>
+  `\`${spelled}\` cannot take a union as a type argument: in this version a union is the type of a local, ` +
+  "a parameter, a field, a return value or an array element, and not of a generic's, a `Map`'s, a `Set`'s or a `Result`'s type argument"
 
 /**
  * `T | null`, or a discriminated union of tagged classes and interfaces,
@@ -649,7 +665,7 @@ const resolveUnion = (node: Node, ctx: CheckContext): i32 => {
       `A union needs two different variants: this one names only \`${ctx.table.typeName(distinct[0])}\`, so write that type itself`
     )
   }
-  const union = ctx.table.unionOf(distinct, tagEnum, tagName)
+  const union = ctx.table.unionOf(distinct, tags, tagEnum, tagName)
   return nulls === 1 ? ctx.table.nullableOf(union) : union
 }
 

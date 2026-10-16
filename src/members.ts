@@ -209,7 +209,7 @@ const checkUnionTag = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
     ctx.errorAtProperty(expr, unionMemberMessage(ctx, receiver, expr.text))
     return T_ERROR
   }
-  ctx.program.memberSets.set(`${expr.id}`, receiver)
+  ctx.program.memberSets[expr.id] = receiver
   return ctx.table.tagEnumOf(receiver)
 }
 
