@@ -4744,6 +4744,8 @@ if (!only || "par_alloc".includes(only)) {
 // spawn order and join order print the same.
 // `thread_no_strict_hidden_task` (#618) is a private `read` handed to two
 // spawns under `--no-strict-exports`: hidden, so `@read$`, and accepted.
+// `thread_private_prefixed_names` holds private `_` and `napi_` names, spelled
+// apart and accepted, whose tasks store only their own answers.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4779,6 +4781,7 @@ for (const name of [
   "thread_scope_region_param_lookup",
   "thread_scope_libc_named_tasks",
   "thread_no_strict_hidden_task",
+  "thread_private_prefixed_names",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -20134,6 +20137,7 @@ if (fs.existsSync(threadsLl)) {
 // runtime's own `nish_` names (NL2202 reserves them) and `main`, which is the
 // program's and which the wasi runtime's `_start` calls.
 if (!only || "c-symbols".includes(only)) {
+  const LLVM_NM = ["llvm-nm", "llvm-nm-18"].find(has)
   const cSymbolsSource = fs.readFileSync(path.join(root, "src", "c-symbols.ts"), "utf8")
   const listed = new Set([...cSymbolsSource.matchAll(/name === "([^"]+)"/g)].map((m) => m[1]))
   const prefixes = [...cSymbolsSource.matchAll(/name\.startsWith\("([^"]+)"\)/g)].map((m) => m[1])
@@ -20141,7 +20145,7 @@ if (!only || "c-symbols".includes(only)) {
   const exempt = (name) => name.startsWith("nish_") || name === "main"
   // A dynamic import is printed with its version (`write@GLIBC_2.2.5`).
   const symbolsIn = (flags, objects) => {
-    const nm = spawnSync("llvm-nm", [...flags, "-j", ...objects], { encoding: "utf8" })
+    const nm = spawnSync(LLVM_NM, [...flags, "-j", ...objects], { encoding: "utf8" })
     return nm.status === 0
       ? nm.stdout
           .split("\n")
@@ -20163,8 +20167,12 @@ if (!only || "c-symbols".includes(only)) {
     )
   }
   const none = new Set()
-  if (!HAS_CLANG || !has("llvm-nm")) {
-    skip("c-symbols: the symbols are read with clang and llvm-nm, and one is missing")
+  if (!HAS_CLANG) {
+    skip("c-symbols: the symbols are read with clang and llvm-nm, and clang is missing")
+  } else if (LLVM_NM === undefined) {
+    // With clang there, a missing llvm-nm is a broken toolchain rather than a
+    // degraded run: CI installs llvm-18 and links llvm-nm beside llvm-as.
+    check("c-symbols: llvm-nm is installed beside clang", false, "neither llvm-nm nor llvm-nm-18 is on PATH")
   } else {
     const dir = path.join(buildDir, "c-symbols")
     fs.mkdirSync(dir, { recursive: true })
@@ -20173,7 +20181,7 @@ if (!only || "c-symbols".includes(only)) {
       fs.mkdirSync(outDir, { recursive: true })
       const objects = []
       for (const src of sources) {
-        const obj = path.join(outDir, path.basename(src).replace(/\.c$/, ".o"))
+        const obj = path.join(outDir, path.basename(src).replace(/\.(c|ll)$/, ".o"))
         const cc = spawnSync("clang", [...flags, "-c", src, "-o", obj], { cwd: root, encoding: "utf8" })
         if (cc.status !== 0) {
           return { objects, error: `could not compile ${src} with ${flags.join(" ")}:\n${cc.stderr}` }
@@ -20247,53 +20255,80 @@ if (!only || "c-symbols".includes(only)) {
         new Set(["add", "scale", "greet", "total", "flag"])
       )
     }
-    const mathDir = path.join(dir, "math")
-    fs.mkdirSync(mathDir, { recursive: true })
-    const mathLl = path.join(mathDir, "math.ll")
-    const mathIr = spawnSync(NISH, [path.join(root, "tests", "c-symbols", "math.ts"), "-o", mathLl], {
-      cwd: root,
-      encoding: "utf8",
-    })
-    for (const [level, flags] of [
-      ["-O0", ["-O0"]],
-      ["-Oz with LTO", ["-Oz", "-flto"]],
-      ["-O3 with LTO", ["-O3", "-flto"]],
-    ]) {
-      const exe = path.join(mathDir, `math${flags[0]}`)
-      const link =
-        mathIr.status === 0
-          ? spawnSync(
-              "clang",
-              [
-                ...flags,
-                "-Wno-override-module",
-                mathLl,
-                ...RUNTIME_C.map((f) => path.join(root, f)),
-                "-lm",
-                "-fuse-ld=lld",
-                "-Wl,--save-temps",
-                "-o",
-                exe,
-              ],
-              { cwd: mathDir, encoding: "utf8" }
-            )
-          : null
-      let error = null
-      if (mathIr.status !== 0) {
-        error = mathIr.stderr
-      } else if (link.status !== 0) {
-        error = link.stderr
+    for (const probe of ["math", "lowered"]) {
+      const probeDir = path.join(dir, probe)
+      fs.mkdirSync(probeDir, { recursive: true })
+      const probeTs = path.join(root, "tests", "c-symbols", `${probe}.ts`)
+      const probeLl = path.join(probeDir, `${probe}.ll`)
+      const probeIr = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root, encoding: "utf8" })
+      for (const [level, flags] of [
+        ["-O0", ["-O0"]],
+        ["-Oz with LTO", ["-Oz", "-flto"]],
+        ["-O3 with LTO", ["-O3", "-flto"]],
+      ]) {
+        const exe = path.join(probeDir, `${probe}${flags[0]}`)
+        const link =
+          probeIr.status === 0
+            ? spawnSync(
+                "clang",
+                [
+                  ...flags,
+                  "-Wno-override-module",
+                  probeLl,
+                  ...RUNTIME_C.map((f) => path.join(root, f)),
+                  "-lm",
+                  "-fuse-ld=lld",
+                  "-Wl,--save-temps",
+                  "-o",
+                  exe,
+                ],
+                { cwd: probeDir, encoding: "utf8" }
+              )
+            : null
+        let error = null
+        if (probeIr.status !== 0) {
+          error = probeIr.stderr
+        } else if (link.status !== 0) {
+          error = link.stderr
+        }
+        const objects = [exe]
+        if (error === null && fs.existsSync(`${exe}.lto.o`)) {
+          objects.push(`${exe}.lto.o`)
+        }
+        holds(
+          `tests/c-symbols/${probe}.ts linked at ${level} leaves undefined`,
+          error === null ? symbolsIn(["-u"], objects) : null,
+          error,
+          none
+        )
       }
-      const objects = [exe]
-      if (error === null && fs.existsSync(`${exe}.lto.o`)) {
-        objects.push(`${exe}.lto.o`)
+      // wasm32-wasi: the `wasi` profile links at -Oz without LTO and strips
+      // the module, so the program's own object is what holds its libcalls.
+      if (WASI_SYSROOT !== undefined) {
+        const wasiDir = path.join(probeDir, "wasi")
+        fs.rmSync(wasiDir, { recursive: true, force: true })
+        const wasiIr = spawnSync(NISH, [probeTs, "-o", `${wasiDir}${path.sep}`, "--profile", "wasi"], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const built =
+          wasiIr.status === 0
+            ? compileUnits(
+                fs
+                  .readdirSync(wasiDir)
+                  .filter((f) => f.endsWith(".ll"))
+                  .map((f) => path.join(wasiDir, f)),
+                ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, "-Oz", "-Wno-override-module"],
+                `${probe}-wasi-obj`
+              )
+            : { objects: [], error: `--profile wasi failed:\n${wasiIr.stderr}` }
+        holds(
+          `tests/c-symbols/${probe}.ts compiled for wasm32-wasi leaves undefined`,
+          built.error === null ? symbolsIn(["-u"], built.objects) : null,
+          built.error,
+          none
+        )
       }
-      holds(
-        `tests/c-symbols/math.ts linked at ${level} leaves undefined`,
-        error === null ? symbolsIn(["-u"], objects) : null,
-        error,
-        none
-      )
     }
   }
 }

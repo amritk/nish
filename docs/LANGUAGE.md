@@ -1445,9 +1445,10 @@ and their `.ll` goldens are byte-identical files.
   every `Math` builtin and `%` on a float in `double` and in `float`, with
   the ones LLVM rewrites them into, the `memcpy` family and the rest of the C
   allocator. `tests/run.js` reads them back with `llvm-nm` from the runtime's
-  objects, `runtime-wasm.c`, the N-API shim and a program that calls every
-  `Math` builtin linked at three optimisation levels, and fails on a name the
-  file does not reserve ("c-symbols: ..."). A function whose symbol is not its
+  objects, `runtime-wasm.c`, the N-API shim, and two programs — one that calls
+  every `Math` builtin, one that multiplies `i64`s, copies arrays and prints
+  strings — linked at three optimisation levels and compiled for wasm32, and
+  fails on a name the file does not reserve ("c-symbols: ..."). A function whose symbol is not its
   ABI is spelled apart instead of refused: an `internal` one whose name is
   reserved takes a `$` at the end of its symbol (`@floor$`), because LLVM
   folds a call to a function it knows by name as the C library's, and a

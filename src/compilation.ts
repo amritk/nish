@@ -2189,6 +2189,12 @@ export class Compilation {
         if (!sig.definedIn(unit.source) || sig.foreign() || sig.owner !== null || sig.instance !== null) {
           continue
         }
+        // Only a symbol that is still the name as written is refused: one
+        // `spellCSymbolsApart` renamed (`_helper$`, a hidden `read$`) or a
+        // lifted arrow's (`_h$arrow0`) is not the C name, however it begins.
+        if (sig.name !== sig.sourceName || (!sig.exported && this.opts.strictExports)) {
+          continue
+        }
         if (!isCReservedSymbol(sig.name)) {
           continue
         }

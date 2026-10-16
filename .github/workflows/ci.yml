@@ -206,11 +206,11 @@ jobs:
             wasi-libc libclang-rt-18-dev-wasm32
           # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
           # plain names through a private bin dir placed ahead of /usr/bin so the
-          # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `opt`,
+          # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `llvm-nm`, `opt`,
           # `ld.lld` and `wasm-ld` regardless of what the runner image ships.
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -228,7 +228,7 @@ jobs:
 
       - name: Toolchain versions
         run: |
-          for tool in clang llc llvm-as opt ld.lld wasm-ld; do
+          for tool in clang llc llvm-as llvm-nm opt ld.lld wasm-ld; do
             printf '%-8s ' "$tool"; command -v "$tool"
           done
           clang --version | head -n 1
@@ -531,7 +531,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -672,7 +672,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -769,7 +769,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -838,7 +838,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"

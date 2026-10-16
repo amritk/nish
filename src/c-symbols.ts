@@ -46,9 +46,12 @@
 //
 // `tests/run.js` holds the list to the toolchain ("c-symbols: ..."): every
 // symbol `llvm-nm -u` finds in the runtime's objects, in `runtime-wasm.c`, in
-// the N-API shim, and in a program that calls every `Math` builtin linked at
-// `-O0`, `-Oz` and `-O3` with LTO (its LTO object and its executable both),
-// is reserved here, or the suite fails. The exceptions are the runtime's own
+// the N-API shim, and in two programs -- `tests/c-symbols/math.ts`, which calls
+// every `Math` builtin and `%` on a float, and `lowered.ts`, which multiplies
+// and divides `i64`s, copies and fills arrays and builds and prints strings --
+// each linked at `-O0`, `-Oz` and `-O3` with LTO (its LTO object and its
+// executable both) and compiled for wasm32-wasi, is reserved here, or the
+// suite fails. The exceptions are the runtime's own
 // `nish_` names (NL2202 reserves them) and `main`.
 //
 // `main` is not reserved. The entry module's `main` is emitted as `@nish_main`
