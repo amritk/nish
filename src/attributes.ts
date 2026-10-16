@@ -2371,8 +2371,8 @@ class FactCollector {
    * the walk asks about any store into one. Every reference is classified as
    * a parameter's is (`classifyUse`), which already sees through a ternary,
    * a `??` and an inline element's address; anything it calls an escape —
-   * returned, stored, pushed, aliased, a task's argument — makes the array
-   * shared. An argument of a user function is kept for the fixpoint, which
+   * stored, pushed, aliased, a task's argument — makes the array shared, but
+   * a `return` of it does not (`isReturned`). An argument of a user function is kept for the fixpoint, which
    * asks whether that callee keeps it.
    */
   findPrivateArrays(node: Node): void {
@@ -2389,6 +2389,32 @@ class FactCollector {
     }
     for (const child of node.children) {
       this.findPrivateArrays(child)
+    }
+  }
+
+  /**
+   * Whether `ref` is what this function returns, directly or through a
+   * parenthesis, a ternary arm or a `??`. A returned array is no caller's
+   * while the call runs, so stores into it before the `return` write
+   * nothing shared: a task or a map body may fill one and answer it
+   * (copy-at-join). The caller holds the answer as a call result, memory it
+   * does not know, so its own writes into it stay shared ones.
+   */
+  isReturned(ref: Node): boolean {
+    let node = ref
+    for (;;) {
+      const parent = this.unit.parents.parentOf(node)
+      if (parent === null) {
+        return false
+      }
+      if (parent.kind === N_RETURN) {
+        return true
+      }
+      const arm = parent.kind === N_CONDITIONAL && parent.children[0] !== node
+      if (parent.kind !== N_PAREN && !arm && !(parent.kind === N_BINARY && parent.text === "??")) {
+        return false
+      }
+      node = parent
     }
   }
 
@@ -2411,6 +2437,9 @@ class FactCollector {
     const sites: Node[] = []
     for (const ref of refs) {
       const found = classifyUse(this.unit, table, ref)
+      if (found.kind === USE_ESCAPE && this.isReturned(ref)) {
+        continue
+      }
       if (found.kind === USE_ESCAPE || (found.kind === USE_ARGUMENT && found.callee === null)) {
         return
       }

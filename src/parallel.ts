@@ -510,9 +510,36 @@ const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, typ
   )
 }
 
+/**
+ * A value that crosses from one thread's arena to another's by being copied
+ * (`crossingSize` in emit-parallel.ts, runtime/runtime-parallel.c's copy at
+ * join): a string, or an array whose elements are numbers, booleans or enums,
+ * which holds no pointer, so one flat copy is the whole value. An array of
+ * strings, of arrays or of objects is not one: its copy would have to follow
+ * every element, and is refused rather than made deep.
+ */
+export const crossesByCopy = (table: TypeTable, type: i32): boolean =>
+  type === T_STRING || (table.isArray(type) && isScalarArgument(table, table.refOf(type)))
+
+/** The refusal of a task answering `type`, which is not a scalar, a string or an array of scalars. */
+const crossingWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32): string => {
+  if (isScalarArgument(table, type) || crossesByCopy(table, type)) {
+    return ""
+  }
+  return (
+    `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsic}\` hands back only a ` +
+    "number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies " +
+    "out of the worker's arena: anything else would point into memory freed when the task ends"
+  )
+}
+
 /** A result the join could hand back: a number, a `boolean` or an enum, and nothing that points. */
 export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
   resultWording(table, intrinsicName(sig), fn, type)
+
+/** A task's result: a scalar, or a value the join copies (`crossesByCopy`). */
+export const taskResultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
+  crossingWording(table, intrinsicName(sig), fn, type)
 
 /**
  * The same rule, asked before `template` is instantiated rather than once the

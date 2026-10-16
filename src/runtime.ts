@@ -915,6 +915,60 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // Copy at join (runtime/runtime-parallel.c): a string or a scalar array a
+    // task or a chunk answers, or a channel carries, leaves the arena that made
+    // it through `nish_cross_out` and enters the taker's through
+    // `nish_cross_in`, which frees the block between. Each allocates, or frees,
+    // or both, and the range forms rewrite the slots of the array they are
+    // handed, so LLVM must not move them; but only the compiler calls them, on
+    // the value a task, a chunk, a channel or a guard is already moving, so none
+    // is a shared write a task's rules would refuse. None waits; the guard's
+    // store takes a lock of its own for the moment it holds it.
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_cross_out",
+        "declare i8* @nish_cross_out(i8* noundef, i64 noundef, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_cross_in",
+        "declare i8* @nish_cross_in(i8* noundef, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_cross_out_range",
+        "declare void @nish_cross_out_range(i8* noundef nonnull, i64 noundef, i64 noundef, i64 noundef, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_cross_in_range",
+        "declare void @nish_cross_in_range(i8* noundef nonnull, i64 noundef, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_guard_keep",
+        "declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // The partitioner's own question, declared because it is part of the ABI
     // nish.h publishes. It caches the answer in a word of its own, which no
     // program can observe.

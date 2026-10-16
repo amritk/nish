@@ -34,6 +34,7 @@
 // source, and a function without one may call one that has one.
 
 import { Emitter, LoopTarget } from "./emit"
+import { isScalarArgument } from "./escape"
 import { loadField, structFieldPointer, structInfoOf } from "./emit-classes"
 import { internalErrorFor } from "./ice"
 import { IRFunction, IRParam, paramValue } from "./ir"
@@ -59,7 +60,9 @@ import {
   PAR_TASK,
   StructInfo,
   TemplateInfo,
+  elementStride,
 } from "./program"
+import { T_STRING } from "./types"
 
 /**
  * The grain the region in `caller` is divided at: for a map, the one its body
@@ -345,7 +348,7 @@ export const emitSpawnTask = (
   )
   const inputs = new TaskInputs(payloadType, types, written > 0 ? 1 : 0, written)
   emitter.module.addFunction(taskRun(emitter, run, caller, body, inputs, result, store !== null))
-  emitter.module.addFunction(taskFinish(emitter, finish, store, payloadType, types, result))
+  emitter.module.addFunction(taskFinish(emitter, finish, store, payloadType, types, result, body.returnType))
 }
 
 /**
@@ -417,6 +420,40 @@ const loadPayload = (
 }
 
 /**
+ * How a value of `type` crosses from one thread's arena to another's
+ * (`nish_cross_out` and `nish_cross_in`, runtime/runtime-parallel.c): 0 for a
+ * string, an element's size for an array of numbers, booleans or enums, and
+ * -1 for a scalar, which crosses as it is. The checker admits nothing else
+ * across (`crossesByCopy` in parallel.ts).
+ */
+export const crossingSize = (emitter: Emitter, type: i32): i32 => {
+  const table = emitter.table
+  if (type === T_STRING) {
+    return 0
+  }
+  if (table.isArray(type) && isScalarArgument(table, table.refOf(type))) {
+    return elementStride(emitter.program, table, table.refOf(type))
+  }
+  return -1
+}
+
+/** `value`, of LLVM type `type`, through `nish_cross_out(value, size, mark)`. */
+const crossOut = (emitter: Emitter, fn: IRFunction, type: string, value: string, size: i32, mark: string): string => {
+  const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)
+  const out = fn.emitValue(
+    `call i8* ${emitter.useRuntime("nish_cross_out")}(i8* ${raw}, i64 ${size}, i64 ${mark})`
+  )
+  return type === "i8*" ? out : fn.emitValue(`bitcast i8* ${out} to ${type}`)
+}
+
+/** `value`, of LLVM type `type`, through `nish_cross_in(value, size)`. */
+const crossIn = (emitter: Emitter, fn: IRFunction, type: string, value: string, size: i32): string => {
+  const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)
+  const back = fn.emitValue(`call i8* ${emitter.useRuntime("nish_cross_in")}(i8* ${raw}, i64 ${size})`)
+  return type === "i8*" ? back : fn.emitValue(`bitcast i8* ${back} to ${type}`)
+}
+
+/**
  * `<spawn>$run`: `entry(arg, captures...)`, its answer into the payload's last
  * field when the scope will store it. It runs on the task's thread.
  */
@@ -446,7 +483,12 @@ const taskRun = (
   }
   const call = `call ${result} @${body.name}(${operands.join(", ")})`
   if (keeps) {
-    const r = fn.emitValue(call)
+    // A string or an array the task made leaves its arena before the arena
+    // is rewound; one that is older than the task, its parent's, does not.
+    const size = crossingSize(emitter, body.returnType)
+    const mark = size < 0 ? "" : fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
+    const answer = fn.emitValue(call)
+    const r = size < 0 ? answer : crossOut(emitter, fn, result, answer, size, mark)
     const at = fn.emitValue(
       `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${inputs.types.length}`
     )
@@ -469,7 +511,8 @@ const taskFinish = (
   store: FunctionSig | null,
   payloadType: string,
   types: string[],
-  result: string
+  result: string,
+  answer: i32
 ): IRFunction => {
   const fn = taskFunction(emitter, name)
   if (store === null) {
@@ -479,7 +522,9 @@ const taskFinish = (
   const typed = fn.emitValue(`bitcast i8* %p to ${payloadType}*`)
   const dst = loadPayload(fn, typed, payloadType, 1, types[1])
   const at = loadPayload(fn, typed, payloadType, 2, types[2])
-  const r = loadPayload(fn, typed, payloadType, types.length, result)
+  const loaded = loadPayload(fn, typed, payloadType, types.length, result)
+  const size = crossingSize(emitter, answer)
+  const r = size < 0 ? loaded : crossIn(emitter, fn, result, loaded, size)
   fn.emit(`call void @${store.name}(${types[1]} ${dst}, ${types[2]} ${at}, ${result} ${r})`)
   fn.emit("ret void")
   return fn
