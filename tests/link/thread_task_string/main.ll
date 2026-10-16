@@ -1497,22 +1497,18 @@ bounds.ok.21:
   %450 = load %struct.Log*, %struct.Log** %449, align 8, !tbaa !35
   %451 = getelementptr inbounds %struct.Log, %struct.Log* %450, i32 0, i32 0
   %452 = load i8*, i8** %451, align 8, !tbaa !29
-  %453 = getelementptr inbounds i8, i8* %452, i64 8
-  %454 = bitcast i8* %452 to i64*
-  %455 = load i64, i64* %454, align 8
-  %456 = call i8* @nish_str_new(i8* %453, i64 %455)
-  %457 = bitcast i8* %456 to i64*
-  %458 = load i64, i64* %457, align 8
-  %459 = trunc i64 %458 to i32
-  store i32 %459, i32* %last.addr, align 4
+  %453 = bitcast i8* %452 to i64*
+  %454 = load i64, i64* %453, align 8
+  %455 = trunc i64 %454 to i32
+  store i32 %455, i32* %last.addr, align 4
   store atomic i32 0, i32* %442 release, align 4
-  %460 = load i32, i32* %count.addr, align 4
-  %461 = call i8* @nish_str_from_i32(i32 %460)
-  %462 = call i8* @nish_str_concat(i8* %461, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
-  %463 = load i32, i32* %last.addr, align 4
-  %464 = call i8* @nish_str_from_i32(i32 %463)
-  %465 = call i8* @nish_str_concat(i8* %462, i8* %464)
-  call void @nish_print(i8* %465)
+  %456 = load i32, i32* %count.addr, align 4
+  %457 = call i8* @nish_str_from_i32(i32 %456)
+  %458 = call i8* @nish_str_concat(i8* %457, i8* bitcast ({ i64, [2 x i8] }* @.str.8 to i8*))
+  %459 = load i32, i32* %last.addr, align 4
+  %460 = call i8* @nish_str_from_i32(i32 %459)
+  %461 = call i8* @nish_str_concat(i8* %458, i8* %460)
+  call void @nish_print(i8* %461)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

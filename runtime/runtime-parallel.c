@@ -722,17 +722,55 @@ int32_t nish_channel_receive(int64_t *state, int64_t *out) {
  * the whole value. A panic ends the process, and every block with it. */
 typedef struct nish_xchunk { struct nish_xchunk *next; uint64_t cap; } nish_xchunk; /* runtime.c's `nish_chunk` */
 
-/* Whether `p` was bumped in this thread's arena since `mark`. The chunks are
- * newest first, so one that holds `p` before the one that holds `mark` is
- * newer than the mark. */
-static int nish_arena_since(uint64_t mark, uintptr_t p) {
-  for (const nish_xchunk *c = (const nish_xchunk *)nish_arena.chunks; c; c = c->next) {
+/* What of this thread's arena was bumped since `mark`: the chunks are newest
+ * first, so each one before the chunk that holds `mark` is new from its base,
+ * and that one from `mark`. The spans go into `out[2i]`, `out[2i+1]` (start,
+ * end) and their count is answered; `cap` 0 only counts them. */
+static int64_t nish_arena_spans(uint64_t mark, uintptr_t *out, int64_t cap) {
+  int64_t n = 0;
+  for (const nish_xchunk *c = (const nish_xchunk *)nish_arena.chunks; c; c = c->next, n++) {
     uintptr_t base = (uintptr_t)(c + 1), end = base + c->cap;
     int marked = mark >= base && mark <= end;
-    if (p >= base && p < end) return !marked || p >= mark;
-    if (marked) return 0;
+    if (n < cap) {
+      out[2 * n] = marked ? (uintptr_t)mark : base;
+      out[2 * n + 1] = end;
+    }
+    if (marked) return n + 1;
   }
-  return 0;
+  return n;
+}
+
+static void *nish_cross_block(uint64_t size);
+
+/* Whether `p` lies in one of `n` spans sorted by start: a binary search, so a
+ * map's range of slots costs one walk of the chunks and a log per slot. A
+ * walk per slot was quadratic in the size of a map's result, its chunks being
+ * 64 KB. */
+static int nish_in_spans(const uintptr_t *sp, int64_t n, uintptr_t p) {
+  int64_t lo = 0, hi = n;
+  while (lo < hi) {
+    int64_t mid = (lo + hi) / 2;
+    if (sp[2 * mid] <= p) lo = mid + 1; else hi = mid;
+  }
+  return lo > 0 && p < sp[2 * lo - 1];
+}
+
+/* The spans since `mark`, sorted by start, in a block the caller frees. */
+static uintptr_t *nish_sorted_spans(uint64_t mark, int64_t *n) {
+  *n = nish_arena_spans(mark, 0, 0);
+  uintptr_t *sp = (uintptr_t *)nish_cross_block((uint64_t)(*n ? *n : 1) * 2 * sizeof(uintptr_t));
+  nish_arena_spans(mark, sp, *n);
+  for (int64_t i = 1; i < *n; i++) {
+    uintptr_t s0 = sp[2 * i], s1 = sp[2 * i + 1];
+    int64_t j = i;
+    for (; j > 0 && sp[2 * (j - 1)] > s0; j--) {
+      sp[2 * j] = sp[2 * (j - 1)];
+      sp[2 * j + 1] = sp[2 * (j - 1) + 1];
+    }
+    sp[2 * j] = s0;
+    sp[2 * j + 1] = s1;
+  }
+  return sp;
 }
 
 static void *nish_cross_block(uint64_t size) {
@@ -741,8 +779,8 @@ static void *nish_cross_block(uint64_t size) {
   return b;
 }
 
-void *nish_cross_out(void *v, uint64_t esize, uint64_t mark) {
-  if (!v || !nish_arena_since(mark, (uintptr_t)v)) return v;
+static void *nish_cross_copy(void *v, uint64_t esize, const uintptr_t *sp, int64_t n) {
+  if (!v || !nish_in_spans(sp, n, (uintptr_t)v)) return v;
   void *b;
   if (esize == 0) {
     const nish_str *s = (const nish_str *)v;
@@ -757,6 +795,14 @@ void *nish_cross_out(void *v, uint64_t esize, uint64_t mark) {
     b = c;
   }
   return (void *)((uintptr_t)b | 1);
+}
+
+void *nish_cross_out(void *v, uint64_t esize, uint64_t mark) {
+  int64_t n;
+  uintptr_t *sp = nish_sorted_spans(mark, &n);
+  void *r = nish_cross_copy(v, esize, sp, n);
+  free(sp);
+  return r;
 }
 
 void *nish_cross_in(void *p, uint64_t esize) {
@@ -780,7 +826,10 @@ void *nish_cross_in(void *p, uint64_t esize) {
  * the first `n` in. Each slot holds a pointer. */
 void nish_cross_out_range(nish_array *dst, int64_t lo, int64_t hi, uint64_t esize, uint64_t mark) {
   void **d = (void **)dst->data;
-  for (int64_t i = lo; i < hi; i++) d[i] = nish_cross_out(d[i], esize, mark);
+  int64_t n;
+  uintptr_t *sp = nish_sorted_spans(mark, &n);
+  for (int64_t i = lo; i < hi; i++) d[i] = nish_cross_copy(d[i], esize, sp, n);
+  free(sp);
 }
 
 void nish_cross_in_range(nish_array *dst, int64_t n, uint64_t esize) {
