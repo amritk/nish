@@ -516,6 +516,39 @@ nominal clock, taken from its model name or from `--ghz`, and not counted.
 the one pinned in the driver. Every build of `std/crypto/aes.ts`, kernel or
 bitsliced, must keep printing that checksum.
 
+## P-256
+
+`p256.ts` times ECDSA over P-256 on the three calls a key's life makes:
+`p256PublicKey` on a new private key, `p256SignSha256` on a 64-byte message,
+which is what a TLS 1.3 server's CertificateVerify costs, and
+`p256VerifySha256`. It is
+[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-baseline)'s baseline, and the
+measure a fixed-base table is judged by. It is not in this suite's tables, and
+it has no twins. `p256.mjs` builds it and drives it:
+
+```bash
+npm run build
+node bench/p256.mjs --check                         # one short run; its checksum against the pinned one
+node bench/p256.mjs --self --runs 16                # the baseline against a copy of itself: the noise band
+node bench/p256.mjs --binary <other build>          # a column for another build of bench/p256.ts
+```
+
+The driver gives each workload a process of its own, and the program times
+the workload's loop alone, so a figure leaves out start-up and the signatures
+a verify reads, which are made before its clock starts. Public-key and sign get
+a new private key or message on every iteration; verify cycles through a ring
+of sixteen signed messages, so consecutive calls differ and each comes round
+again every sixteen. Every answer goes into the printed checksum, verify's
+included, and before its clock verify must refuse each of the sixteen
+signatures once tampered with, so a verify that accepted everything would not
+print the pinned checksum. The columns run in rotating rounds, each going first
+equally often, and the driver stops when two runs of a workload print
+different checksums. It reports each workload's minimum and median time a
+call, in microseconds and calls a second. `--check` runs all three at a 16th of
+the count, in one process, and fails if the checksum differs from the one
+pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
+must keep printing it.
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
