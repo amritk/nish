@@ -1,0 +1,2 @@
+reject_thread_task_process_exit.ts:17:5
+`shout` writes memory its caller can see in the runtime's `nish_exit`, and `spawn` runs it

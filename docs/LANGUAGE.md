@@ -2515,7 +2515,15 @@ from the whole-program facts, and each rule is reported there:
   `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
   runtime's `nish_print`). A bounds check, an integer division, the length
   check of `new Array(n)` and `panic` are not writes: each prints and exits,
-  and nothing runs again to see memory. The instance performs every store
+  and nothing runs again to see memory. When several threads panic at once,
+  the first claims the program: it prints its whole message and exits 1, and
+  every later one waits for that exit without printing, so a failing run
+  prints one message, never two or a mix of them
+  (`tests/link/par_panic_once`, `thread_panic_once`). Output is a write —
+  `console.error` and `process.exit` as much as `console.log`
+  (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
+  `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
+  read (`tests/link/par_map_table_reads`). The instance performs every store
   itself, into slots the partitioner has made disjoint, so a function that
   writes nothing cannot race.
 - **A store into an array only this call reaches is not a shared write.** A
@@ -2903,6 +2911,30 @@ element's arena, which a task does not share, and each rule is reported at the
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
+  tasks of one scope may look keys up in the same table
+  (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
+  `delete`, `clear`, `getOrInsert` — writes it, a walk counts itself into it
+  (`walkOpen`), and what a lookup answers is the table's memory, so each is
+  refused (`reject_thread_task_map_set`, `_map_delete`, `_map_clear`,
+  `_map_get_or_insert`, `_set_add`, `_set_delete`, `_set_clear`,
+  `_map_walk_keys`, `_map_walk_values`, `_set_walk`, `_map_readback_write`).
+  A task may `panic`, as a parallel body may: the first panic of the program
+  prints and exits 1, and a task that panics after it prints nothing. Output
+  stays a write (`reject_thread_task_console_error`,
+  `reject_thread_task_process_exit`), and so does the parent's: between the
+  first `spawn` and the join it may neither change a `Map` or `Set` it holds
+  nor walk one — `for (const k of s)`, `m.keys()`, `m.values()`, or a helper
+  that does (`reject_thread_region_parent_table_set`, `_set_walk`,
+  `_map_keys_walk`, `_map_values_walk`, `_helper_walk`). The rule is
+  conservative: it judges the call by what it writes through its receiver,
+  not by which tables a task holds, so a walk of a table no task can reach is
+  refused too (`reject_thread_region_parent_unreached_walk`), and so is a
+  mutator or a walk called straight on a table made in the block. Proving
+  that no task reaches one table would mean following every pointer each
+  task is handed; the walk moves before the first `spawn`, after the block,
+  or into a helper that makes and fills its own table
+  (`thread_scope_region_own_tables`).
   A store into an array the task allocated and hands to nothing that keeps it
   is not counted, as for a [parallel body](#data-parallelism-nishthreads): a
   sieve may fill its own table, and a helper may fill the array it is handed

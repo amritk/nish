@@ -1,0 +1,3 @@
+reject_thread_task_map_readback_write.ts:40:5
+`touch` writes memory its caller can see at
+reject_thread_task_map_readback_write.ts:29:5, and `spawn` runs it
