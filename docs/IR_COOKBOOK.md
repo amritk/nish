@@ -2227,7 +2227,7 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 A task's arena is rewound once the task has returned, so a `string` or an
 array of numbers, booleans or enums it answers is copied out of that arena
-before it goes (runtime/runtime-parallel.c, docs/LANGUAGE.md, "Scopes"). The
+before it goes (runtime/runtime-parallel.c, docs/LANGUAGE.md, "Scoped tasks"). The
 copy is two calls in the `spawn` instance in `nish/threads`' module. The
 task's `$run`, on the worker, marks the arena before it calls the task and
 hands the answer to `nish_cross_out` with that mark; `esize` is 0 for a

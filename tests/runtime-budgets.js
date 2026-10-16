@@ -144,8 +144,17 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3885
  * 13 more, inside the same ceiling: `nish_pool_disable`, which a Node addon's shim
  * calls whatever the build, and which does nothing in this one. The pool itself is
  * `-DNISH_THREADS` only.
+ *
+ * Raised to 1,536 by threads-complete's copy-at-join, measured **1,445 bytes** on
+ * 2026-10-16 with clang 18.1.3 on linux-x64 (610 before it): `nish_cross_out` and
+ * `nish_cross_in`, which copy a task's or a chunk's `string` or scalar array out of the
+ * arena it was made in and into the one that takes it, their `_range` forms over a map's
+ * slots, and `nish_guard_keep` with the set of the copies a `Mutex` owns. Every
+ * configuration defines them, because a task's arena is rewound once it has returned
+ * whether it ran on a thread of its own or, as here, on the calling thread at the join.
+ * A program that sends, answers or guards no string pays none of it.
  */
-const RUNTIME_PARALLEL_TEXT_BUDGET = 768
+const RUNTIME_PARALLEL_TEXT_BUDGET = 1536
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`, which is the build `--threads`
  * links: the partitioner, the worker trampoline, `pthread_create`/`join` and the
@@ -185,8 +194,14 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * small pieces that route a region and a join through the queue. They are this file's
  * subject, and they took a divided region from ~100 us to ~10 us (docs/wp20-threads.md
  * §8e). A program that never divides a region or joins a scope still pays none of it.
+ *
+ * Raised to 3,584 by threads-complete's copy-at-join, measured **3,548 bytes** on
+ * 2026-10-16 with clang 18.1.3 on linux-x64 (2,665 before it): the same copies as the
+ * fallback's row above, `nish_cross_out`, `nish_cross_in`, their `_range` forms and
+ * `nish_guard_keep`, which in this build also take the lock over the set of a `Mutex`'s
+ * copies.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 3584
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor
