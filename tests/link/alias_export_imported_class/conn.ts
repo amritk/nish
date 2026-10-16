@@ -5,4 +5,4 @@ import { Socket } from "./socket";
 
 export type Conn = Socket | null;
 
-export const open = (fd: i32): Conn => (fd < 0 ? null : new Socket(fd));
+export const openConn = (fd: i32): Conn => (fd < 0 ? null : new Socket(fd));

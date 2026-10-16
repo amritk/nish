@@ -22,9 +22,16 @@ Developer guidelines live in the `.claude/` directory:
 - **architecture.md** — The pipeline, the rules that shape every change, where to read next
 - **licensing.md** — Third-party code: what counts as a copy, the notice it keeps, the licences allowed
 
-> **Agents: read every file in `.claude/` before writing any code.** The rules
-> there are authoritative — if generated code violates them, that is a mistake
-> regardless of whether the user points it out.
+> **Agents: read `orientation.md` first, and each other file in `.claude/`
+> before writing code its subject covers** — `selfhost.md` before touching
+> `src/`, `typescript.md` and `comments.md` before writing TypeScript,
+> `testing.md` before adding or changing a test, `node.md` and `linting.md`
+> before touching scripts, tooling or lint configuration, `licensing.md` before
+> copying code in, `architecture.md` before adding a construct. The rules there
+> are authoritative — if generated code violates them, that is a mistake
+> regardless of whether the user points it out. Reading all of them up front
+> costs some 40k tokens that ride along on every later call of the session, most
+> of them never consulted.
 
 ## Definition of done
 
@@ -150,6 +157,35 @@ the tree for the old location before the PR goes up: the docs, `.claude/`,
 `CLAUDE.md` and source comments. #636 moved the runtime ceilings from
 `tests/run.js` into `tests/runtime-budgets.js`, and the pointers left in its
 docs and in six `runtime/*.c` headers took two more review rounds to find.
+
+## Spending tokens
+
+Every model call re-reads the session's whole context, so what a session costs
+is its context size times its calls. Past sessions spent most of their budget
+re-reading 400k–780k contexts, on wakes that changed nothing.
+`.claude/settings.json` sets `autoCompactWindow` to 200k so a session compacts
+long before the 1M window; the rules below keep the calls down.
+
+- **One deliverable per session.** When a session that has already shipped
+  something is asked for a new, separate one, say so and offer a short handoff
+  for a fresh session rather than building it on the old context. A plan's later
+  stages go to fresh sessions, not to the one that built stage 1.
+- **The full `npm test` runs twice per pull request**: before opening it, and
+  after merging `main` just before it merges. It takes 40–70 minutes. In between,
+  run `node tests/run.js <section>` for what changed, plus `npm run check` and
+  `npm run lint`; CI runs the whole suite on every push.
+- **Wait for a long run without polling.** Commit first, so the stop hook does
+  not wake you about uncommitted work. Start the run once, in the background,
+  with its output in a file, and end the turn: you are woken when it exits. No
+  `sleep` or `until` loops, no re-armed monitors, no scheduled check-ins, and
+  never a second run while one is going — they share `build/`.
+- **Merge `main` when the pull request conflicts, or just before it merges** —
+  not every time `main` moves. Each merge means regenerating the goldens and
+  another full run.
+- **Wide reads go to a subagent.** "Where is X handled", a long log, a file of
+  thousands of lines: hand it to an `Explore` agent with `model: "sonnet"` and
+  keep only its answer. Read files by range (`sed -n`, `grep -n`), and do not
+  re-read one already in context.
 
 ## Security
 
