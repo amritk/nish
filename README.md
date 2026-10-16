@@ -329,6 +329,7 @@ nish run [options] <file.ts> [args ...]
                              (entry module must declare `export const main`)
   --profile speed|size|debug|wasi
                              build profile for --link (default: speed; wasi: a wasm32-wasi module)
+  --cpu x86-64-v3            link module and runtime for x86-64-v3 (AVX2, BMI2, FMA); the one level
   --fix                      apply every machine-applicable fix to the named files, then report
                              what is left (writes no IR)
   --no-strict-exports        every function is an external symbol (default: non-exported

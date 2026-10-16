@@ -90,7 +90,7 @@ import {
 } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--cpu x86-64-v3] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -101,6 +101,14 @@ const PROFILE_NAMES: string = "speed, size, debug, wasi"
 
 const isProfile = (name: string): boolean =>
   name === "speed" || name === "size" || name === "debug" || name === "wasi"
+
+/**
+ * The one CPU level `--cpu` accepts (docs/LANGUAGE.md, "The CPU level"): the
+ * link compiles the program and the runtime for it, and the constant-time
+ * check reads its assembly (CT-16). Every other level, `native` included, is
+ * refused rather than passed to clang unread.
+ */
+const CPU_LEVEL: string = "x86-64-v3"
 
 /**
  * `mkdir -p`: the directory and every parent it needs. `mkdirSync` makes one
@@ -452,6 +460,9 @@ export const main = (): number => {
   let output = ""
   let link = ""
   let profile = runMode ? "debug" : "speed"
+  // `--cpu`: empty for the baseline CPU, else CPU_LEVEL. Driver-level like
+  // the profile: it changes the link, never a byte of the IR.
+  let cpu = ""
   let json = false
   let emitChecked = false
   let emitAst = false
@@ -512,6 +523,17 @@ export const main = (): number => {
         // Refused before anything is compiled, as stage0 refuses it: the
         // recipe is not known and the compile would be spent for nothing.
         console.error(`compile: unknown profile \`${profile}\` (${PROFILE_NAMES})`)
+        return 2
+      }
+    } else if (value === "--cpu") {
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error(`compile: --cpu needs a level; the one accepted is ${CPU_LEVEL}`)
+        return 2
+      }
+      cpu = process.argv[arg]
+      if (cpu !== CPU_LEVEL) {
+        console.error(`compile: unknown cpu level \`${cpu}\`; the one accepted is ${CPU_LEVEL}`)
         return 2
       }
     } else if (value === "--target") {
@@ -697,6 +719,26 @@ export const main = (): number => {
   if (roots.length === 0) {
     console.error(usageText())
     return 2
+  }
+  // After the loop, because `--profile` and `--target` may follow `--cpu`.
+  // The level is an x86-64 one, so a module for another machine, or for
+  // wasm32 under `--profile wasi`, is refused rather than handed to a clang
+  // that would fail on it.
+  if (cpu.length > 0) {
+    if (profile === "wasi") {
+      console.error(`compile: --cpu ${cpu} is an x86-64 level, so it cannot be used with --profile wasi`)
+      return 2
+    }
+    let triple = opts.target
+    if (triple.length === 0) {
+      const host = resolveTarget("host")
+      triple = host === null ? "" : host.triple
+    }
+    if (!triple.startsWith("x86_64-")) {
+      const what = triple.length === 0 ? "this host has no triple" : `the target is ${triple}`
+      console.error(`compile: --cpu ${cpu} is an x86-64 level, and ${what}`)
+      return 2
+    }
   }
   if (runMode) {
     if (notForRun.length > 0 || productFlag.length > 0) {
@@ -927,7 +969,7 @@ export const main = (): number => {
     if (!makeDirectoryFor(capabilitiesFile)) {
       return 1
     }
-    writeCapabilityReport(compilation, capabilitiesFile)
+    writeCapabilityReport(compilation, capabilitiesFile, cpu)
     console.error(`wrote ${capabilitiesFile}`)
   }
   // The panic sites are read off the checked program, as the capabilities are,
@@ -977,6 +1019,7 @@ export const main = (): number => {
       pkg,
       basenameWithout(roots[0], ".ts"),
       profile,
+      cpu,
       opts.debugInfo,
       opts.threads,
       json,
@@ -1014,7 +1057,7 @@ export const main = (): number => {
   if (link.length === 0) {
     return 0
   }
-  return linkProgram(outputs, pkg, link, profile, opts.debugInfo, opts.threads, json, false)
+  return linkProgram(outputs, pkg, link, profile, cpu, opts.debugInfo, opts.threads, json, false)
 }
 
 /** `:`, the byte `$PATH` is cut on. */
@@ -1371,6 +1414,7 @@ const runProgram = (
   pkg: PackageSearch,
   name: string,
   profile: string,
+  cpu: string,
   debugInfo: boolean,
   threads: boolean,
   json: boolean,
@@ -1388,7 +1432,7 @@ const runProgram = (
     return 3
   }
   const file = runBinaryName(name)
-  const key = runCacheKey(emitted, file, pkg.root, profile, debugInfo, threads, cCompiler())
+  const key = runCacheKey(emitted, file, pkg.root, profile, cpu, debugInfo, threads, cCompiler())
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const binary = `${cacheEntry}/${file}`
   const keyFile = `${cacheEntry}/key`
@@ -1402,6 +1446,7 @@ const runProgram = (
       keyFile,
       file,
       profile,
+      cpu,
       debugInfo,
       threads,
       json
@@ -1487,6 +1532,7 @@ const buildIntoCache = (
   keyFile: string,
   name: string,
   profile: string,
+  cpu: string,
   debugInfo: boolean,
   threads: boolean,
   json: boolean
@@ -1522,7 +1568,7 @@ const buildIntoCache = (
     outputs.push(file)
   }
   const built = `${work}/${name}`
-  let status = linkProgram(outputs, pkg, built, profile, debugInfo, threads, json, true)
+  let status = linkProgram(outputs, pkg, built, profile, cpu, debugInfo, threads, json, true)
   if (status === 0) {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
@@ -1555,6 +1601,7 @@ const linkProgram = (
   pkg: PackageSearch,
   link: string,
   profile: string,
+  cpu: string,
   debugInfo: boolean,
   threads: boolean,
   json: boolean,
@@ -1572,7 +1619,7 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
-  const runtime = cachedRuntime(root, quiet ? [] : outputs, profile, debugInfo, threads, json)
+  const runtime = cachedRuntime(root, quiet ? [] : outputs, profile, cpu, debugInfo, threads, json)
   if (runtime === null) {
     return 3
   }
@@ -1597,7 +1644,7 @@ const linkProgram = (
   }
   argv.push("-o")
   argv.push(link)
-  pushRecipeFlags(argv, profile, debugInfo, threads)
+  pushRecipeFlags(argv, profile, cpu, debugInfo, threads)
   const status = spawnSync(argv)
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
@@ -1618,9 +1665,21 @@ const linkProgram = (
  * The flags that pick `scripts/build.sh`'s recipe, the same for the link and
  * for the runtime it compiles alone.
  */
-const pushRecipeFlags = (argv: string[], profile: string, debugInfo: boolean, threads: boolean): void => {
+const pushRecipeFlags = (
+  argv: string[],
+  profile: string,
+  cpu: string,
+  debugInfo: boolean,
+  threads: boolean
+): void => {
   argv.push("--profile")
   argv.push(profile)
+  // `--cpu` reaches every unit build.sh compiles, the program's and the
+  // runtime's, so the two halves of a binary are built for one level.
+  if (cpu.length > 0) {
+    argv.push("--cpu")
+    argv.push(cpu)
+  }
   // `-g` is passed on so runtime.c gets debug info too and build.sh does not
   // strip the binary, which is what keeps the DWARF the IR already carries.
   if (debugInfo) {
@@ -1669,6 +1728,7 @@ const cachedRuntime = (
   root: string,
   outputs: string[],
   profile: string,
+  cpu: string,
   debugInfo: boolean,
   threads: boolean,
   json: boolean
@@ -1701,7 +1761,7 @@ const cachedRuntime = (
   if (answered !== 0 || version === null || runtimeDir === null) {
     return ""
   }
-  const key = runtimeCacheKey(root, runtimeDir, profile, debugInfo, threads, cc, version)
+  const key = runtimeCacheKey(root, runtimeDir, profile, cpu, debugInfo, threads, cc, version)
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const keyFile = `${cacheEntry}/key`
   const stored = readFileSyncOrNull(keyFile)
@@ -1714,7 +1774,7 @@ const cachedRuntime = (
   }
   const script = `${root}/scripts/build.sh`
   const argv: string[] = ["bash", script, `${root}/runtime/runtime.c`, "--runtime-objects", work]
-  pushRecipeFlags(argv, profile, debugInfo, threads)
+  pushRecipeFlags(argv, profile, cpu, debugInfo, threads)
   const status = spawnSync(argv)
   // A compiler that answers 0 and writes no object (`CC=true`, which turns a
   // link into a no-op) leaves nothing to move, and the entry then gets no key:

@@ -206,6 +206,18 @@ const runtimeViolations = (body, secretArgs, target) => {
 }
 
 /**
+ * The x86-64 target read at `march`, the one level `nish --cpu` accepts
+ * (docs/LANGUAGE.md, "The CPU level"): the same model as the baseline, since
+ * `name` picks the steps, with the level in `level` and the flag clang is
+ * given in `flags`. A target without `level` is read at the baseline.
+ */
+export const ctAtLevel = (march) => ({ ...CT_TARGETS[0], level: march, flags: [`-march=${march}`] })
+
+/** How a check names `target`: `x86-64`, or `x86-64 at x86-64-v3` for a level. */
+export const ctTargetName = (target) =>
+  target.level === undefined ? target.name : `${target.name} at ${target.level}`
+
+/**
  * `clang -O2 -S` of `file` for `target`: the listing's lines, or the failure.
  * `-ffreestanding` because a host has its own libc's headers and no other
  * target's, and the kernels already ask for no libc calls (`no_builtin`), so
@@ -214,7 +226,7 @@ const runtimeViolations = (body, secretArgs, target) => {
 const runtimeAsm = (root, file, target) => {
   const cc = spawnSync(
     "clang",
-    ["-O2", "-S", "-ffreestanding", `--target=${target.triple}`, file, "-o", "-"],
+    ["-O2", "-S", "-ffreestanding", `--target=${target.triple}`, ...(target.flags ?? []), file, "-o", "-"],
     {
       cwd: root,
       encoding: "utf8",
@@ -249,8 +261,11 @@ const exportGap = (lines) => {
  * `leak` for each leaky variant refused for its kind (`expect` the words for
  * it). tests/run.js names the checks, so that a record citing one finds it
  * there.
+ *
+ * `march` empty reads both targets at the baseline; a level (`x86-64-v3`)
+ * reads x86-64 alone with `-march=` that level, `target` naming it.
  */
-export const runtimeChecks = (root) => {
+export const runtimeChecks = (root, march = "") => {
   const results = []
   /** `fn` read from `asm` with `secretArgs`: its violations and loop branches, or why there is nothing to read. */
   const read = (asm, fn, secretArgs, target) => {
@@ -267,13 +282,13 @@ export const runtimeChecks = (root) => {
     }
     return { why: null, ...runtimeViolations(body, secretArgs, target) }
   }
-  for (const target of CT_TARGETS) {
+  for (const target of march === "" ? CT_TARGETS : [ctAtLevel(march)]) {
     const real = runtimeAsm(root, "runtime/runtime-aes.c", target)
     const { unread, missing } = exportGap(real.ok ? real.lines : [])
     results.push({
       file: "runtime-aes.c",
       fn: "exports",
-      target: target.name,
+      target: ctTargetName(target),
       kind: "exports",
       expect: null,
       ok: real.ok && unread.length === 0 && missing.length === 0,
@@ -286,7 +301,7 @@ export const runtimeChecks = (root) => {
       results.push({
         file: "runtime-aes.c",
         fn: spec.name,
-        target: target.name,
+        target: ctTargetName(target),
         kind: "kernel",
         expect: null,
         ok: why === null && found.length === 0 && branches > 0,
@@ -299,7 +314,7 @@ export const runtimeChecks = (root) => {
       results.push({
         file: "tests/simd/aes-leaky.c",
         fn,
-        target: target.name,
+        target: ctTargetName(target),
         kind: "leak",
         expect: what,
         ok: why === null && found.some((v) => v.kind === kind),
@@ -486,7 +501,7 @@ if (missedCorners.length > 0) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = path.join(import.meta.dirname, "..")
   let failed = 0
-  for (const r of runtimeChecks(root)) {
+  for (const r of [...runtimeChecks(root), ...runtimeChecks(root, "x86-64-v3")]) {
     console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.file} ${r.fn} on ${r.target}: ${r.expect ?? r.kind}`)
     if (!r.ok) {
       failed++
