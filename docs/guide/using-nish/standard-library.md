@@ -833,7 +833,12 @@ it was made with, so keep no other copy of them, or wipe yours with
 those keys in place, so give each server a `QuicServerConfig` of its own: once
 one server stops, any other listener, connection or server made with the same
 configuration would sign its Retry tokens and stateless resets with a key of
-zeros, which anyone can forge. The
+zeros, which anyone can forge. Every final
+response `Http1Connection` sends carries a `Date` field, formatted at most
+once a second by its `HttpDate` and shared by a pool's slots; set your own
+`date` field and it is sent instead, and call `date.pin(unixMs)` on the server (or a lone connection) in a
+test that compares the bytes. The formatter itself, `httpDateWrite` in
+`nish/net/http-fields`, reads no clock, so a wasm32 build can use it. The
 HTTP/1.1 and WebSocket modules were written with a security record of their
 own ([docs/security/http1.md](../../security/http1.md)) rather than audited
 after the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,

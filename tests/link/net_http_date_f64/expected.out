@@ -1,0 +1,35 @@
+PASS  the epoch
+PASS  the last second of 1999
+PASS  and the first of 2000
+PASS  2000 is a leap year, divisible by 400
+PASS  2024 is one, divisible by 4
+PASS  a time of day
+PASS  2100 is not, divisible by 100: its 28 February
+PASS  is followed by 1 March
+PASS  the last second a four-digit year can name
+PASS  every day from 1970 to 2399 agrees with a calendar counted a day at a time
+PASS  written at an offset, it answers where it ends
+PASS  and the date is there
+PASS  refused, with nothing written: a second before 1970
+PASS  a second past the last one
+PASS  a negative offset
+PASS  an offset one byte short of the room
+PASS  and a buffer one byte short
+PASS  a new date has formatted nothing
+PASS  pin takes an instant
+PASS  current() is the pinned second
+PASS  a thousand calls in that second format it once
+PASS  so does a later instant in the same second
+PASS  the next second is formatted
+PASS  once
+PASS  a clock stepped back is formatted too
+PASS  once more
+PASS  and none of it moved the arena (0 bytes)
+PASS  pin refuses an instant before 1970
+PASS  and one past the last second
+PASS  and changes nothing: the date is the one pinned before
+PASS  it takes the last millisecond of the last second
+PASS  which is that second
+PASS  unpinned, it reads the clock: a date after this test was written
+PASS  formatted once for the change
+http date: 34 passed, 0 failed, 0 skipped

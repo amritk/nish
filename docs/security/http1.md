@@ -25,7 +25,8 @@ and H1-3 (Low), the memory each WebSocket upgrade leaves behind.
 | File | Functions |
 | --- | --- |
 | `std/net/http1.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
-| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`; `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused` |
+| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`; `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `HttpDate` (`current`, `pin`, `unpin`) |
+| `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload` |
 
 Out of scope: TLS (`docs/security/tls.md`, whose TLS-3 and TLS-4 the TLS
@@ -109,6 +110,30 @@ is written. `http1WriteResponseHead` counts the whole head before it writes a
 byte, so `HTTP1_NO_ROOM` and `HTTP1_REFUSED` leave the buffer untouched. A
 response to HEAD, a 204 and a 304 carry no body whatever the program writes; a
 chunked response to HTTP/1.0 goes unframed and ends with the connection.
+
+**One Date, from one clock read a second** (`net_http_date`, `_f64`;
+`net_http1`, `net_http1_server` and their `_f64` twins; added against `main`
+at `99b81d2`, cited by function rather than by line). Every final response,
+an error included, carries a `Date` (RFC 9110 §6.6.1) and a 1xx carries none;
+a program's own `date` field, in any case, is sent instead of the server's, so
+a response never carries two. `http1WriteResponseHead` refuses a date that is
+not field text, so the date cannot split the head, and counts its 37 bytes
+before it writes, so `HTTP1_NO_ROOM` still leaves the buffer untouched. The
+largest head `fail` writes — 431's status line, the date, `Content-Length: 0`
+and `Connection: close` — is 123 bytes, inside the 256 kept for what the
+connection writes itself. `httpDateWrite` agrees with a calendar counted a
+day at a time on every day from 1970 to 2399 and refuses, writing nothing, a
+second it cannot name in four digits or a buffer without the room. `HttpDate`
+formats once a second however often it is read, in either direction of a
+clock step, with `Arena.used()` flat; a pool's slots share one. Tests:
+`link/net_http_date: exits with 0 and stdout matches expected.out`,
+`link/net_http_date_f64: exits with 0 and stdout matches expected.out`,
+`link/net_http1: exits with 0 and stdout matches expected.out`,
+`link/net_http1_f64: exits with 0 and stdout matches expected.out`,
+`link/net_http1_server: exits with 0 and stdout matches expected.out`,
+`link/net_http1_server_f64: exits with 0 and stdout matches expected.out` —
+each the template `link/${name}: exits with ${wantCode} and stdout matches
+expected.out` in `tests/run.js`.
 
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless
