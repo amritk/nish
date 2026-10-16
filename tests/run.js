@@ -5172,6 +5172,10 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // updates its own fields (#567). `thread_atomic_tasks` and `par_atomic` pin that
 // an atomic's seq_cst `atomicrmw`, `cmpxchg`, `load atomic` and `store atomic`
 // lower for wasm32, a module without shared memory, where its tasks run in turn.
+// `thread_task_string`, `par_map_string`, `thread_channel_string` and
+// `thread_mutex_string` are the strings and scalar arrays that cross by copy,
+// whose transfer block carries a tag in its pointer's low bit on a 32-bit
+// pointer as on a 64-bit one.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -5181,6 +5185,10 @@ for (const name of [
   "thread_channel_exit_paths",
   "thread_channel_kinds",
   "thread_channel_ctor_reads",
+  "thread_task_string",
+  "par_map_string",
+  "thread_channel_string",
+  "thread_mutex_string",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
