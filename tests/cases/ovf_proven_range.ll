@@ -1,7 +1,6 @@
 @.str.0 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"value out of range: expected integer<0, 100>\00" }, align 8
 
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
-declare void @nish_exit(i32 noundef) #3
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 
 define noundef i32 @score(i32 noundef %a, i32 noundef %b) #0 {
 entry:
@@ -9,8 +8,7 @@ entry:
   br i1 %0, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -18,8 +16,7 @@ rng.ok:
   br i1 %1, label %rng.ok.1, label %rng.fail.1
 
 rng.fail.1:
-  call void @nish_write(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [45 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.1:
@@ -52,5 +49,4 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
+attributes #2 = { nounwind noreturn cold }

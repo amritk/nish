@@ -6,10 +6,9 @@
 declare void @nish_free_arena() #0
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
-declare void @nish_exit(i32 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
 
 define internal { i1, i32, i32 } @checkPort(i32 noundef %port) #0 {
 entry:
@@ -165,8 +164,7 @@ if.end:
   br i1 %19, label %res.ok, label %res.panic
 
 res.panic:
-  call void @nish_write(i8* bitcast ({ i64, [14 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [14 x i8] }* @.str.0 to i8*))
   unreachable
 
 res.ok:
@@ -287,4 +285,4 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
-attributes #2 = { noreturn nounwind }
+attributes #2 = { nounwind noreturn cold }

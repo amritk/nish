@@ -73,6 +73,7 @@ extern char **environ;
 /* ---- Process and files */
 void nish_exit(int32_t code) { exit(code); }
 static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
+  nish_panic_claim();
   dprintf(2, "nish: cannot %s%.*s\n", what, (int)path->len, path->data);
   _exit(1);
 }

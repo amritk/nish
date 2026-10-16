@@ -2,10 +2,9 @@
 
 @.str.0 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"index out of range\00" }, align 8
 
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
-declare void @nish_exit(i32 noundef) #2
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #1
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
 define internal noundef i32 @sumAt(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %at) #0 {
 entry:
@@ -52,8 +51,7 @@ lor.end:
   br i1 %21, label %if.then, label %if.end
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [19 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [19 x i8] }* @.str.0 to i8*))
   unreachable
 
 if.end:
@@ -128,10 +126,8 @@ entry:
 }
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #1 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
