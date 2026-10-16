@@ -64,8 +64,9 @@ every secret they are given as a `Secret<u8[]>` and answer every secret they
 derive as one: `tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`,
 `tlsDeriveSecret`, `tlsExtract`, `tlsExpandLabel`, `tlsTrafficKey`,
 `tlsTrafficIv` and `tlsNextTrafficSecret` answer `Secret<u8[]>`, and
-`tlsFinishedVerifyData` takes its base key as one. A plain `u8[]` handed to
-any of them is refused by the checker. Each reads a key only inside
+`tlsFinishedVerifyData` takes its base key as one. Each secret parameter is
+typed `Secret<u8[]>`, so the checker refuses a plain array there
+(`reject_secret_tls_plain_key`). Each reads a key only inside
 `exposeWith` and wipes, with `wipe`'s volatile store, what it derives on the
 way: the zero salt and input of the early secret, the "derived" salts, the
 master secret's zero input and `finished_key`; HMAC and HKDF wipe their own
@@ -207,9 +208,9 @@ past that is refused before its bytes are copied, a message announcing more is
 refused from its header, and a byte past the end of a message is refused
 rather than kept.
 
-**The one-shot derivations hold their secrets as `Secret`s.** A plain `u8[]`
-handed to one is refused by the checker (`tests/cases/reject_secret_tls_plain_key`,
-Argument 3 of `tlsHandshakeSecret`). `net_tls_rfc8448`, `net_tls_ext_hrr` and
+**The one-shot derivations hold their secrets as `Secret`s.** Each secret
+parameter is typed `Secret<u8[]>`, so the checker refuses a plain array there
+(`tests/cases/reject_secret_tls_plain_key`, Argument 3 of `tlsHandshakeSecret`). `net_tls_rfc8448`, `net_tls_ext_hrr` and
 `net_tls_ext_refusals` (in `f64` mode `net_tls_rfc8448_f64` and `net_tls_ext_f64`) reproduce every secret, key and IV
 through the `Secret` forms and wipe each one they are answered. The check
 `tls: the one-shot derivations' wipes survive opt -O2 (the early secret's zero salt and input, the derived salts, the master secret's zero input, finished_key)`

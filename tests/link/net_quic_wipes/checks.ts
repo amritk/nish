@@ -330,6 +330,7 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
   for (let k: i32 = 0; k < toI32(readKey.length) && k < toI32(qwPacketKey(oldRead, suite).length); k++) {
     same = same && readKey[k] === qwPacketKey(oldRead, suite)[k];
   }
+  secureZero(readKey);
   t.ok(`${name}: then its slot holds the next generation instead`, conn.otherIsNext && !same && !qwZero(qwPacketKey(oldRead, suite)));
   qwRelease(t, name, conn, suite);
 };
