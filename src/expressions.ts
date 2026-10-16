@@ -33,7 +33,12 @@ import {
   refuseOnce,
 } from "./generics"
 import { CheckContext } from "./context"
-import { captureWriteMessage, thisCaptureMessage } from "./parallel"
+import {
+  captureWriteMessage,
+  taskCaptureWriteMessage,
+  taskThisCaptureMessage,
+  thisCaptureMessage,
+} from "./parallel"
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays"
 import {
   checkBuiltinCall,
@@ -225,7 +230,9 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   const entry = ctx.table.isRanged(want) ? want : -1
   const keepsRange = welcome || want === WANT_RANGE || entry >= 0
   let inner = welcome && expr.kind !== N_PAREN ? -1 : want
-  if (want === WANT_RANGE && expr.kind !== N_PAREN) {
+  if (expr.kind === N_CONDITIONAL && (want === WANT_MAYBE || want === WANT_RANGE || want === WANT_INFERRED)) {
+    inner = WANT_INFERRED
+  } else if ((want === WANT_RANGE || want === WANT_INFERRED) && expr.kind !== N_PAREN) {
     inner = -1
   } else if (entry >= 0 && !takesRangeContext(expr)) {
     inner = -1
@@ -243,7 +250,11 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   if (recordRangeEntry(ctx, expr, computed, entry)) {
     return entry
   }
-  const type = readAsBase(ctx, computed, keepsRange)
+  if (ctx.table.isEnumMemberType(want)) {
+    return enterMember(ctx, expr, computed, want)
+  }
+  const keepsMember = want === WANT_INFERRED && ctx.table.isEnumMemberType(computed)
+  const type = readAsBase(ctx, computed, keepsRange || keepsMember)
   if (coercesTo(ctx, type, want)) {
     const target = ctx.table.stripNull(want)
     ctx.program.nodeCoercions[expr.id] = type
@@ -261,6 +272,15 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
  * that reads `want < 0` as "no contextual type" reads it the same way.
  */
 export const WANT_RANGE: i32 = -3
+
+/**
+ * The `want` of an unannotated `let`'s initialiser. A range is read as its
+ * base there, as everywhere a value may change, but an enum member type is
+ * kept: TypeScript widens only a fresh literal, so `let w = acc` is a
+ * `Kind.Array` when `acc` is one, and `w` may go back into a `Kind.Array`
+ * slot. The member's constant, `Kind.Array` itself, is still the enum `Kind`.
+ */
+export const WANT_INFERRED: i32 = -4
 
 /**
  * The expressions a ranged `want` reaches, because they spell a value rather
@@ -289,7 +309,68 @@ export const recordRangeEntry = (ctx: CheckContext, node: Node, from: i32, to: i
   return true
 }
 
-/** A ranged type read as its base, `i32`, unless the place keeps the range. */
+/**
+ * `recordRangeEntry`'s counterpart for a sink of an enum member type: whether
+ * `node` is that member's own constant, which is then recorded as the member
+ * type, as `enterMember` records it when the sink is known first.
+ */
+export const recordMemberEntry = (ctx: CheckContext, node: Node, from: i32, to: i32): boolean => {
+  if (!ctx.table.isEnumMemberType(to) || !isMemberConstant(ctx, node, from, to)) {
+    return false
+  }
+  ctx.program.nodeTypes[node.id] = to
+  return true
+}
+
+/**
+ * Whether `expr`, of type `computed`, is the constant of the member type
+ * `member`, parenthesised or not: `(Kind.Array)` is the constant too.
+ */
+const isMemberConstant = (ctx: CheckContext, expr: Node, computed: i32, member: i32): boolean => {
+  const bare = unwrapParens(expr)
+  return (
+    computed === ctx.table.refOf(member) &&
+    ctx.program.isEnumMember(ctx.table, bare) &&
+    ctx.program.nodeEnumValues[bare.id] === ctx.table.memberValue(member)
+  )
+}
+
+/**
+ * A value checked into a slot of an enum member type, `Kind.Array`, which
+ * holds that one member: a value already of the member type, or the member's
+ * own constant, which is then recorded as the member type. The constant is
+ * still the enum's integer to the emitter (`isEnumMember`), so the IR is the
+ * enum's. Anything else, the enum's other members and an enum value that is
+ * not a constant among them, is refused here, once, for every kind of slot, a
+ * generic call's argument included.
+ */
+export const enterMember = (ctx: CheckContext, expr: Node, computed: i32, member: i32): i32 => {
+  ctx.program.nodeTypes[expr.id] = computed
+  if (computed === T_ERROR || computed === member) {
+    return computed
+  }
+  if (isMemberConstant(ctx, expr, computed, member)) {
+    ctx.program.nodeTypes[expr.id] = member
+    return member
+  }
+  const constant = ctx.program.isEnumMember(ctx.table, expr)
+  const got = constant
+    ? `\`${ctx.table.typeName(computed)}.${expr.text}\``
+    : `a value of type \`${ctx.table.typeName(computed)}\``
+  ctx.program.nodeTypes[expr.id] = T_ERROR
+  return ctx.errorType(expr, memberSlotMessage(ctx, member, got))
+}
+
+/** NL2519, for a slot of the member type `member` given `got`, already spelled. */
+export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): string => {
+  const spelled = ctx.table.typeName(member)
+  return `Type \`${spelled}\` holds only the member \`${spelled}\`, got ${got}`
+}
+
+/**
+ * A ranged type read as its base, `i32`, and an enum member type as its enum,
+ * unless the place keeps the range.
+ */
 const readAsBase = (ctx: CheckContext, type: i32, keepsRange: boolean): i32 =>
   keepsRange ? type : ctx.table.baseOf(type)
 
@@ -598,7 +679,14 @@ const isCapture = (ctx: CheckContext, local: Local | null): boolean => {
 const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
   const depth = ctx.arrowCaptures.length
   const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
-  refuseOnce(ctx, target, parallel ? captureWriteMessage(target.text) : capturedMessage(target.text))
+  const task = depth > 0 && depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
+  let message = capturedMessage(target.text)
+  if (task) {
+    message = taskCaptureWriteMessage(target.text)
+  } else if (parallel) {
+    message = captureWriteMessage(target.text)
+  }
+  refuseOnce(ctx, target, message)
   return T_ERROR
 }
 
@@ -609,7 +697,14 @@ const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     // data-parallel form is told what it may read instead.
     const depth = ctx.arrowCaptures.length
     const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
-    refuseOnce(ctx, expr, parallel ? thisCaptureMessage() : capturedMessage("this"))
+    const task = depth > 0 && depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
+    let message = capturedMessage("this")
+    if (task) {
+      message = taskThisCaptureMessage()
+    } else if (parallel) {
+      message = thisCaptureMessage()
+    }
+    refuseOnce(ctx, expr, message)
     return T_ERROR
   }
   if (self === null) {
@@ -1322,16 +1417,56 @@ const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32
     return ternaryResult(ctx, expr, whenTrue)
   }
   // `c ? p : null` is `T | null`, which is the one place the arms may differ.
+  if (ctx.table.isEnumMemberType(whenTrue) || ctx.table.isEnumMemberType(whenFalse)) {
+    return ctx.errorType(expr, ternaryMembersMessage(ctx, whenTrue, whenFalse))
+  }
   if (ctx.table.assignable(whenFalse, whenTrue)) {
     return ternaryResult(ctx, expr, whenTrue)
   }
   if (ctx.table.assignable(whenTrue, whenFalse)) {
     return ternaryResult(ctx, expr, whenFalse)
   }
+  if (holdsMember(ctx, whenTrue) || holdsMember(ctx, whenFalse)) {
+    return ctx.errorType(expr, ternaryMembersMessage(ctx, whenTrue, whenFalse))
+  }
   const a = ctx.table.typeName(whenTrue)
   const b = ctx.table.typeName(whenFalse)
   return ctx.errorType(expr, `Ternary branches must have the same type, got ${a} and ${b}`)
 }
+
+/**
+ * Two arms, or two array elements, that differ where one is an enum member
+ * type or an array of one. TypeScript gives them a union, or keeps the member, or widens to the
+ * enum, by rules that turn on whether a constant is fresh, so the language
+ * asks for the type instead: `let x: Kind = c ? a : b`.
+ */
+export const mixedMemberMessage = (ctx: CheckContext, lead: string, a: i32, b: i32): string => {
+  const enumType = holdsMember(ctx, a) ? widenMember(ctx, a) : widenMember(ctx, b)
+  const spelled = `got ${ctx.table.typeName(a)} and ${ctx.table.typeName(b)}`
+  return `${lead}, ${spelled}: an enum member type is not widened to its enum, so annotate the type it holds, e.g. \`${ctx.table.typeName(enumType)}\``
+}
+
+/** Whether `type` is an enum member type, or an array of one at any depth. */
+export const holdsMember = (ctx: CheckContext, type: i32): boolean => {
+  if (type < 0) {
+    return false
+  }
+  if (ctx.table.isArray(type)) {
+    return holdsMember(ctx, ctx.table.refOf(type))
+  }
+  return ctx.table.isEnumMemberType(type)
+}
+
+/** `type` with its enum member type read as the enum: `Kind.Array[][]` is `Kind[][]`. */
+const widenMember = (ctx: CheckContext, type: i32): i32 => {
+  if (ctx.table.isArray(type)) {
+    return ctx.table.arrayOf(widenMember(ctx, ctx.table.refOf(type)))
+  }
+  return ctx.table.isEnumMemberType(type) ? ctx.table.baseOf(type) : type
+}
+
+const ternaryMembersMessage = (ctx: CheckContext, a: i32, b: i32): string =>
+  mixedMemberMessage(ctx, "Ternary branches must have the same type", a, b)
 
 /**
  * The ternary's type, refused when it is `void`. A ternary is an expression and

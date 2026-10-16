@@ -1,0 +1,1 @@
+`value` is not a member a program may name: an atomic is read and updated only by calling its methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race with the update a task makes at the same moment

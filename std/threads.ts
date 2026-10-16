@@ -2,7 +2,7 @@
  * `std/threads` — data parallelism, a scope for heterogeneous tasks, and a
  * lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
  *
- *     import { Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope } from "nish/threads";
+ *     import { AtomicI32, Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope } from "nish/threads";
  *
  *     parallelMapInto(src, dst, (x) => x * 3);
  *     const ys = parallelMap(src, (x) => x * k + b); // k, b: `const` locals, read by the body
@@ -46,6 +46,8 @@
  * parameters and cannot see through a named function.
  */
 
+import { wrappingAdd, wrappingSub } from "nish:unsafe"
+
 /**
  * Elements per block of a reduce: 2^20, about a millisecond of simple work
  * (docs/wp20-threads.md §8e). It decides the blocking, and so the answer's
@@ -61,14 +63,17 @@ const MAX_BLOCKS: i32 = 64
 
 /**
  * Writes `f(src[i])` into `dst[i]` for every `i` in `[lo, hi)`: one thread's
- * share of a map. Each length is read in the loop condition and `dst`'s again
+ * share of a map. Both lengths are read in the loop condition and `dst`'s again
  * after the call, because a call ends every length fact the bounds proof holds
  * (docs/LANGUAGE.md, "Arrays") and this is what keeps both accesses unchecked.
  * The caller has already checked that the range is inside both arrays, so
- * neither test is ever the one that stops the loop.
+ * neither test is ever the one that stops the loop. `dst`'s in the condition
+ * lets the loop vectorise (#619) when `f` inlines with no panic path: LLVM
+ * sees the test after the call repeat one the condition made, drops it, and
+ * the store is unconditional. `fromRange` has the same shape.
  */
 const mapRange = <T, U>(src: T[], dst: U[], f: (x: T) => U, lo: i32, hi: i32): void => {
-  for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(src.length); i++) {
+  for (let i: i32 = lo; i >= 0 && i < hi && i < toI32(src.length) && i < toI32(dst.length); i++) {
     const y = f(src[i])
     if (i < toI32(dst.length)) {
       dst[i] = y
@@ -242,6 +247,31 @@ const runTask = <A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void =>
   storeResult(dst, at, entry(arg))
 
 /**
+ * One task with no destination: `entry(arg)`, whose answer, if it has one,
+ * nothing stores — the checker holds such an entry to `void`. Natively the
+ * compiler files this call as a task as it files `runTask`'s, with no store
+ * at the join; nothing under Node reaches it (see `spawn`).
+ */
+const runWith = <A, R>(entry: (arg: A) => R, arg: A): void => {
+  entry(arg)
+}
+
+/** `runWith` for an entry of no parameters, such as `() => work(xs)`, whose captures are its arguments. */
+const runThunk = <R>(entry: () => R): void => {
+  entry()
+}
+
+/**
+ * Whether a call of `spawn` wrote a destination slot. Natively every call
+ * that reaches `spawn` did, so this is always true there: the compiler gives
+ * `s.spawn(entry, arg)` and `s.spawn(() => ...)` the methods written for
+ * them below, `spawnWith` and `spawnThunk`. Under Node the source runs as
+ * it is written and every form reaches `spawn`, where a slot the call left
+ * out is `undefined`, which is neither below zero nor at or above it.
+ */
+const slotWritten = (at: i32): boolean => at < 0 || at >= 0
+
+/**
  * A scope of tasks, joined when the block that declares it ends
  * (docs/wp29-thread-surface.md §4.2). It is only ever made by `scope()` in a
  * `using` declaration, and only ever used as the receiver of `spawn`
@@ -260,10 +290,38 @@ export class ThreadScope {
    * again when its answer is stored.
    */
   spawn<A, R>(entry: (arg: A) => R, arg: A, dst: R[], at: i32): void {
+    if (!slotWritten(at)) {
+      // Under Node only: `s.spawn(entry, arg)` or `s.spawn(() => ...)`, run
+      // at the spawn with nothing to store (`slotWritten`).
+      entry(arg)
+      return
+    }
     if (at < 0 || at >= toI32(dst.length)) {
       slotOutOfRange(at, toI32(dst.length))
     }
     runTask(entry, arg, dst, at)
+  }
+
+  /**
+   * `s.spawn(entry, arg)` as the compiler reads it: run `entry(arg)` on a
+   * thread of its own when the scope closes, and store nothing. `entry`
+   * answers `void`. Only the compiler names this method (see `slotWritten`):
+   * a scope is only ever the receiver of a `spawn` statement, so `s.spawnWith(...)`
+   * written in a program is refused by that rule (NL2389), as passing the
+   * scope would be.
+   */
+  spawnWith<A, R>(entry: (arg: A) => R, arg: A): void {
+    runWith(entry, arg)
+  }
+
+  /**
+   * `s.spawn(() => work(xs))` as the compiler reads it: run the arrow, whose
+   * captured `const` locals are its arguments, on a thread of its own when the
+   * scope closes, and store nothing. Only the compiler names this method, and
+   * a program that names it is refused as `spawnWith`'s is (NL2389).
+   */
+  spawnThunk<R>(entry: () => R): void {
+    runThunk(entry)
   }
 
   /**
@@ -341,6 +399,172 @@ export class Mutex<T> {
    */
   lock(): MutexGuard<T> {
     return this.guard
+  }
+}
+
+/**
+ * An `i32` that a scope's tasks and a parallel body may update together
+ * (docs/LANGUAGE.md, "Atomics"). Each method is one indivisible operation:
+ * natively the compiler emits each body itself, as a sequentially consistent
+ * `load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on `value`
+ * (docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+ * which is what runs under Node. `add` and `sub` wrap at 32 bits, as the
+ * native instruction does; `add`, `sub`, `min`, `max` and `exchange` answer
+ * the value before the update, and `compareExchange` the value it saw.
+ *
+ * It reaches a task by the routes a `Mutex` does, and a parallel body through
+ * a capture; its value is named only through these methods. Results that do
+ * not depend on the order the updates land in need the updates to commute,
+ * which the checker does not prove.
+ */
+export class AtomicI32 {
+  /** The value; named only by this class's methods, which the compiler emits. */
+  value: i32
+
+  constructor(value: i32) {
+    this.value = value
+  }
+
+  /** The value. */
+  load(): i32 {
+    return this.value
+  }
+
+  /** Sets the value to `value`. */
+  store(value: i32): void {
+    this.value = value
+  }
+
+  /** Adds `delta`, wrapping, and answers the value before. */
+  add(delta: i32): i32 {
+    const old = this.value
+    this.value = wrappingAdd(old, delta)
+    return old
+  }
+
+  /** Subtracts `delta`, wrapping, and answers the value before. */
+  sub(delta: i32): i32 {
+    const old = this.value
+    this.value = wrappingSub(old, delta)
+    return old
+  }
+
+  /** Keeps the smaller of the value and `value`, and answers the value before. */
+  min(value: i32): i32 {
+    const old = this.value
+    if (value < old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Keeps the larger of the value and `value`, and answers the value before. */
+  max(value: i32): i32 {
+    const old = this.value
+    if (value > old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Sets the value to `value` and answers the value before. */
+  exchange(value: i32): i32 {
+    const old = this.value
+    this.value = value
+    return old
+  }
+
+  /** Sets the value to `desired` if it is `expected`, and answers the value it saw. */
+  compareExchange(expected: i32, desired: i32): i32 {
+    const old = this.value
+    if (old === expected) {
+      this.value = desired
+    }
+    return old
+  }
+}
+
+/**
+ * An `i64` that a scope's tasks and a parallel body may update together
+ * (docs/LANGUAGE.md, "Atomics"). Each method is one indivisible operation:
+ * natively the compiler emits each body itself, as a sequentially consistent
+ * `load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on `value`
+ * (docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+ * which is what runs under Node. Node holds it as a `number`, so `add` and
+ * `sub` are `+` and `-` there, and it agrees with native while values stay
+ * within ±2^53; wrapping at 2^63 is native-only, the same limit as every `i64`.
+ * `add`, `sub`, `min`, `max` and `exchange` answer the value before the
+ * update, and `compareExchange` the value it saw.
+ *
+ * It reaches a task by the routes a `Mutex` does, and a parallel body through
+ * a capture; its value is named only through these methods. Results that do
+ * not depend on the order the updates land in need the updates to commute,
+ * which the checker does not prove.
+ */
+export class AtomicI64 {
+  /** The value; named only by this class's methods, which the compiler emits. */
+  value: i64
+
+  constructor(value: i64) {
+    this.value = value
+  }
+
+  /** The value. */
+  load(): i64 {
+    return this.value
+  }
+
+  /** Sets the value to `value`. */
+  store(value: i64): void {
+    this.value = value
+  }
+
+  /** Adds `delta` and answers the value before; natively the sum wraps at 64 bits. */
+  add(delta: i64): i64 {
+    const old = this.value
+    this.value = old + delta
+    return old
+  }
+
+  /** Subtracts `delta` and answers the value before; natively the difference wraps at 64 bits. */
+  sub(delta: i64): i64 {
+    const old = this.value
+    this.value = old - delta
+    return old
+  }
+
+  /** Keeps the smaller of the value and `value`, and answers the value before. */
+  min(value: i64): i64 {
+    const old = this.value
+    if (value < old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Keeps the larger of the value and `value`, and answers the value before. */
+  max(value: i64): i64 {
+    const old = this.value
+    if (value > old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Sets the value to `value` and answers the value before. */
+  exchange(value: i64): i64 {
+    const old = this.value
+    this.value = value
+    return old
+  }
+
+  /** Sets the value to `desired` if it is `expected`, and answers the value it saw. */
+  compareExchange(expected: i64, desired: i64): i64 {
+    const old = this.value
+    if (old === expected) {
+      this.value = desired
+    }
+    return old
   }
 }
 

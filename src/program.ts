@@ -377,6 +377,35 @@ export const capturedReads = (program: CheckedProgram, node: Node, out: Node[]):
 }
 
 /**
+ * `nish:secret`: a question `secret(v)` leaves for the whole-program facts,
+ * because the body that asks it cannot answer it alone: whether `sig`'s
+ * result is a value nothing else holds (`param` is ""), or whether `sig` keeps
+ * the parameter `param` it is handed. `Compilation.checkSecrets` asks it and,
+ * when the answer is no, reports at `site`.
+ */
+export class SecretNeed {
+  /** The argument of the `secret(...)` call, in the module whose `secretNeeds` holds this. */
+  site: Node
+  sig: FunctionSig
+  param: string
+  /** How the diagnostic names the value with the second reference: `` `raw` ``. */
+  what: string
+  /** Where the reference is made, as the diagnostic quotes it, or "" for a result. */
+  via: string
+  /** How to make a copy of the value, as the diagnostic suggests it. */
+  copy: string
+
+  constructor(site: Node, sig: FunctionSig, param: string, what: string, via: string, copy: string) {
+    this.site = site
+    this.sig = sig
+    this.param = param
+    this.what = what
+    this.via = via
+    this.copy = copy
+  }
+}
+
+/**
  * WP29 P3: the channels a scope seals before it joins (`src/emit-parallel.ts`):
  * every `const ch = new Channel<T>()` whose scope it is (C2, C4), by the
  * declarator, whose local the emitter reads where the scope's `using` is.
@@ -754,6 +783,13 @@ export class FieldInfo {
    */
   inlineCapacity: i32
   /**
+   * The integer of an enum member initializer, `kind: Kind = Kind.Array`,
+   * folded when the field is collected. Here rather than in `nodeEnumValues`
+   * because the emitter that stores it may be another module's
+   * (`initializerConstant`).
+   */
+  initializerValue: i32
+  /**
    * WP33 R2: the typed-array name the field is declared with, or `""`, read
    * in the declaring module for the reason `FunctionSig.returnSpelling` is.
    */
@@ -772,6 +808,7 @@ export class FieldInfo {
     this.offset = 0
     this.readonly = false
     this.initializer = null
+    this.initializerValue = 0
     this.decl = decl
     this.inlineCapacity = -1
     this.spelling = ""
@@ -833,6 +870,8 @@ export class StructInfo {
   collected: boolean
   /** `nish/json-typed`'s `JsonNumber`, which typed JSON reads and writes as one number. */
   jsonNumber: boolean
+  /** `nish/threads`'s `AtomicI32` or `AtomicI64`, whose methods the emitter writes (`markAtomicClass`). */
+  atomic: boolean
   /**
    * The (template, type-argument tuple) this layout was monomorphised from, or
    * `null` for a class or interface somebody declared (WP18 G5).
@@ -875,6 +914,7 @@ export class StructInfo {
     this.collected = false
     this.jsonOptions = null
     this.jsonNumber = false
+    this.atomic = false
   }
 
   /** The field called `name` on this struct, or `null`. */
@@ -1037,6 +1077,23 @@ export class EnumInfo {
   /** The integer `name` stands for; the caller has already asked `hasMember`. */
   memberValue(name: string): i32 {
     return this.memberValues[this.members.get(name, 0)]
+  }
+
+  /**
+   * The first member declared with `value`, which is the name its member type
+   * is spelled by: two members of one value are one type, as they are in
+   * `tsc`, and the declaration rather than the annotation read first decides
+   * the spelling, so a diagnostic does not depend on the order of the source.
+   */
+  memberNameOf(value: i32): string {
+    let i = 0
+    while (i < this.memberValues.length) {
+      if (this.memberValues[i] === value) {
+        return this.memberNames[i]
+      }
+      i = i + 1
+    }
+    return ""
   }
 }
 
@@ -1365,6 +1422,8 @@ export class CheckedProgram {
   scopeChannels: ScopeChannels[]
   /** `nish:secret`: every `expose` and `exposeWith` call, judged once the facts are in (`Compilation.checkSecrets`). */
   exposeCalls: ParallelCall[]
+  /** `nish:secret`: what each `secret(v)` asks of the whole-program facts (`Compilation.checkSecrets`). */
+  secretNeeds: SecretNeed[]
   /**
    * Every panic site of the functions this module defines, settled after the
    * whole-program proofs (`resolvePanicSites` in `src/panics.ts`), grouped by
@@ -1557,6 +1616,7 @@ export class CheckedProgram {
     this.parallelCalls = []
     this.panicSites = []
     this.exposeCalls = []
+    this.secretNeeds = []
     this.spawnCalls = []
     this.scopeChannels = []
     this.inlineAssignNodes = []
@@ -1898,7 +1958,8 @@ export class CheckedProgram {
     if (node.kind !== N_MEMBER || this.nodeTypes[node.children[0].id] >= 0) {
       return false
     }
-    return table.isEnum(this.nodeTypes[node.id])
+    // A constant checked into a slot of its member type records that type.
+    return table.enumBase(this.nodeTypes[node.id]) >= 0
   }
 
   /**

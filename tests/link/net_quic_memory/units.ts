@@ -16,13 +16,11 @@ import {
   QuicKeysSlot,
   quicInitialSecrets,
   quicInitialSecretsInto,
-  quicKeyUpdateSecret,
   quicKeyUpdateSecretInto,
-  quicKeys,
   quicKeysInto,
-  quicKeysUpdate,
   quicKeysUpdateInto,
 } from "nish/net/quic-packet";
+import { quicKeyUpdateCopy, quicKeysOf, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { QUIC_ERROR_NO_ERROR, QUIC_ERROR_TRANSPORT_PARAMETER } from "nish/net/quic-frame";
 import {
   QuicTransportParameters,
@@ -38,7 +36,7 @@ const qmSameAes = (a: AesKey | null, b: AesKey | null): boolean => {
   if (a === null || b === null) {
     return a === null && b === null;
   }
-  if (a.rounds !== b.rounds || a.hHi !== b.hHi || a.hLo !== b.hLo || toI32(a.roundKeys.length) !== toI32(b.roundKeys.length)) {
+  if (a.rounds !== b.rounds || a.h[0] !== b.h[0] || a.h[1] !== b.h[1] || toI32(a.roundKeys.length) !== toI32(b.roundKeys.length)) {
     return false;
   }
   for (let k: i32 = 0; k < toI32(a.roundKeys.length) && k < toI32(b.roundKeys.length); k++) {
@@ -81,7 +79,7 @@ const qmZeroAes = (key: AesKey): boolean => {
       return false;
     }
   }
-  return key.hHi === toU64(0) && key.hLo === toU64(0);
+  return key.h[0] === toU64(0) && key.h[1] === toU64(0);
 };
 
 /** RFC 9001 Appendix A.1's client DCID. */
@@ -113,11 +111,11 @@ const keyChecks = (t: Suite): void => {
     longSecret.push(toU8(k * 5 + 1));
   }
   const aes256: QuicKeys | null = quicKeysInto(kdf, slot, QUIC_AEAD_AES_256_GCM, longSecret);
-  t.ok("quicKeysInto under AES-256-GCM is quicKeys, schedules included", qmSameKeys(aes256, quicKeys(QUIC_AEAD_AES_256_GCM, longSecret)));
+  t.ok("quicKeysInto under AES-256-GCM is quicKeys, schedules included", qmSameKeys(aes256, quicKeysOf(QUIC_AEAD_AES_256_GCM, longSecret)));
   const chacha: QuicKeys | null = quicKeysInto(kdf, slot, QUIC_AEAD_CHACHA20_POLY1305, secret32);
-  t.ok("then in the same slot under ChaCha20-Poly1305, with no schedules", qmSameKeys(chacha, quicKeys(QUIC_AEAD_CHACHA20_POLY1305, secret32)));
+  t.ok("then in the same slot under ChaCha20-Poly1305, with no schedules", qmSameKeys(chacha, quicKeysOf(QUIC_AEAD_CHACHA20_POLY1305, secret32)));
   const aes128: QuicKeys | null = quicKeysInto(kdf, slot, QUIC_AEAD_AES_128_GCM, secret32);
-  t.ok("then under AES-128-GCM", qmSameKeys(aes128, quicKeys(QUIC_AEAD_AES_128_GCM, secret32)));
+  t.ok("then under AES-128-GCM", qmSameKeys(aes128, quicKeysOf(QUIC_AEAD_AES_128_GCM, secret32)));
   t.ok("quicKeysInto refuses an AEAD it does not know", quicKeysInto(kdf, slot, n32(9), secret32) === null);
   t.ok("and a secret that is not its hash's length", quicKeysInto(kdf, slot, QUIC_AEAD_AES_256_GCM, secret32) === null);
 
@@ -125,14 +123,14 @@ const keyChecks = (t: Suite): void => {
   const next = new QuicKeysSlot();
   const nextSecret: u8[] = new Array<u8>(32);
   const derived: boolean = quicKeyUpdateSecretInto(kdf, QUIC_AEAD_AES_128_GCM, secret32, nextSecret);
-  const wantSecret: u8[] | null = quicKeyUpdateSecret(QUIC_AEAD_AES_128_GCM, secret32);
+  const wantSecret: u8[] | null = quicKeyUpdateCopy(QUIC_AEAD_AES_128_GCM, secret32);
   t.ok("quicKeyUpdateSecretInto is quicKeyUpdateSecret", derived && wantSecret !== null && sameBytes(nextSecret, wantSecret));
   t.ok("it refuses an output of the wrong length", !quicKeyUpdateSecretInto(kdf, QUIC_AEAD_AES_128_GCM, secret32, new Array<u8>(48)));
   t.ok("and a secret of the wrong length", !quicKeyUpdateSecretInto(kdf, QUIC_AEAD_AES_256_GCM, secret32, new Array<u8>(48)));
-  const keys: QuicKeys | null = quicKeys(QUIC_AEAD_AES_128_GCM, secret32);
+  const keys: QuicKeys | null = quicKeysOf(QUIC_AEAD_AES_128_GCM, secret32);
   if (aes128 !== null && keys !== null) {
     const updated: QuicKeys | null = quicKeysUpdateInto(kdf, next, aes128, nextSecret);
-    t.ok("quicKeysUpdateInto is quicKeysUpdate", qmSameKeys(updated, quicKeysUpdate(keys, nextSecret)));
+    t.ok("quicKeysUpdateInto is quicKeysUpdate", qmSameKeys(updated, quicKeysUpdateOf(keys, nextSecret)));
     t.ok("and shares the header-protection key and its schedule, which every generation keeps", updated !== null && qmSameAes(updated.hpAes, aes128.hpAes) && sameBytes(updated.hp, aes128.hp));
     const forged = new QuicKeys(QUIC_AEAD_AES_128_GCM, new Array<u8>(16), new Array<u8>(12), new Array<u8>(16));
     t.ok("it refuses keys quicKeys did not make", quicKeysUpdateInto(kdf, next, forged, nextSecret) === null);

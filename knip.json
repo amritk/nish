@@ -21,6 +21,7 @@
     "tests/cases/**",
     "tests/link/**",
     "tests/wordings/**",
+    "tests/c-symbols/**",
     "tests/fix/**",
     "tests/parser/**",
     "tests/lexer/**",
@@ -29,6 +30,6 @@
     "tests/differential/arrow-parity/**"
   ],
   "ignoreDependencies": ["nish", "cookbook-pkg"],
-  "ignoreBinaries": ["clang", "llvm-as", "llvm-dwarfdump", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace"],
+  "ignoreBinaries": ["clang", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace"],
   "ignoreExportsUsedInFile": false
 }

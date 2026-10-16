@@ -63,7 +63,7 @@ import {
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
-import { channelCapacityMessage, isChannelClass } from "./parallel"
+import { channelCapacityMessage, isChannelClass, spawnFormFor } from "./parallel"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
 import { Scope } from "./symbols"
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
@@ -343,7 +343,12 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
   if (method === null) {
     // WP18 G8: a generic method is a template on its receiver, and a call of
     // one is a call of a generic function whose first parameter is `this`.
-    const template = info.methodTemplate(access.text)
+    let template = info.methodTemplate(access.text)
+    // WP29 P2: `spawn` without a destination is a method of its own.
+    const form = template === null ? "" : spawnFormFor(template, args.children.length)
+    if (form.length > 0) {
+      template = info.methodTemplate(form)
+    }
     if (template !== null) {
       const type = checkGenericCall(ctx, expr, template, scope)
       const instance = ctx.program.nodeCallees[expr.id]
@@ -677,8 +682,9 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
     seen.push(prop.text)
     const value = prop.children[0]
     // A ranged field is the exception (WP31 §6): the range is a sink the value
-    // enters, not a width a literal might take, so it always reaches the value.
-    const context = takesDeclaredContext(value) || ctx.table.isRanged(field.type) ? field.type : -1
+    // enters, not a width a literal might take, so it always reaches the value,
+    // and so is an enum member type's (`isEntered`).
+    const context = takesDeclaredContext(value) || ctx.table.isEntered(field.type) ? field.type : -1
     const got = checkExpression(ctx, value, scope, context)
     if (got !== T_ERROR && !ctx.table.assignable(got, field.type)) {
       const spelled = ctx.table.typeName(field.type)

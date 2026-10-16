@@ -125,6 +125,7 @@ import {
 } from "./nodes"
 import { Options } from "./options"
 import {
+  isAtomicMethod,
   isChannelReader,
   isChannelSend,
   isGuardedAccess,
@@ -547,9 +548,11 @@ export class FunctionFacts {
    * needs to know whether two calls can run at once.
    *
    * Why each is safe to leave out:
-   *   - A panic (`nish_panic_index`, `_slice`, `_div`) prints to fd 2 and
-   *     `_exit`s (runtime/runtime.c): no user memory is written, and no caller
-   *     runs again to observe any.
+   *   - A panic (`nish_panic` for `panic`, `expect` and a range entry,
+   *     `nish_panic_index`, `_slice`, `_div`, `_overflow`) claims the process,
+   *     prints to fd 2 and `_exit`s (runtime/runtime.c): no user memory is
+   *     written, no caller runs again to observe any, and when two threads
+   *     panic at once only the first prints and exits (`nish_panic_claim`).
    *   - A `throw` lowers to `llvm.trap`, which writes nothing and never returns.
    *   - An arena allocation writes the arena's bump state and the fresh block.
    *     The block is unreachable until the function hands it out, and the bump
@@ -561,6 +564,12 @@ export class FunctionFacts {
    * fact; this one is whole-function and deliberately coarse.
    */
   sharedWrite: boolean
+  /**
+   * The function is a method of an `AtomicI32` or an `AtomicI64`, whose body
+   * the emitter writes as one atomic operation. R7 walks the callees for it
+   * (`reachesAtomic` in `src/parallel.ts`), as it walks them for a lock.
+   */
+  atomic: boolean
   /**
    * `sharedWrite`, less the writes made straight through one of this
    * function's own pointer parameters (`p[i] = v`, `p.f = v`, `p.push(v)`, or
@@ -574,9 +583,9 @@ export class FunctionFacts {
    */
   writesPastParams: boolean
   /**
-   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`
-   * reached other than as the tail of a `new Array` whose length is checked,
-   * which prints to fd 2 and `_exit`s as every panic does
+   * The body itself writes to a stream or exits: `nish_write` or `nish_exit`,
+   * which `console.log`, `console.error`, `write`, `writeError` and
+   * `process.exit` call. A panic calls `nish_panic` instead
    * (`FunctionFacts.sharedWrite`).
    */
   writesOutput: boolean
@@ -803,6 +812,7 @@ export class FunctionFacts {
     this.hasTrap = false
     this.resizesArray = false
     this.sharedWrite = false
+    this.atomic = false
     this.writesPastParams = false
     this.argEdges = []
     this.wholeReaches = []
@@ -3329,6 +3339,12 @@ const collectFacts = (
     return facts
   }
 
+  // An atomic's method, whose body the emitter writes.
+  if (isAtomicMethod(sig)) {
+    markAtomic(facts)
+    return facts
+  }
+
   // WP27 S1: a `declare function` has no body, and `FunctionFacts` starts from
   // the *pure* defaults because purity here is discovered by walking a body and
   // finding nothing impure in it. An absent body is not an empty one: leaving
@@ -3539,6 +3555,27 @@ const markChannelSend = (facts: FunctionFacts): void => {
   facts.contained = true
   facts.returnsScalar = true
   facts.callees.add("nish_channel_send")
+  if (facts.pointerParams.length > 0) {
+    facts.pointerParams[0].writesThrough = true
+  }
+}
+
+/**
+ * An `AtomicI32` or `AtomicI64` method. The source body is Node's, and the
+ * emitter writes one sequentially consistent instruction on `this`'s `value`
+ * (`src/emit-parallel.ts`). Every one of them, `load` included, writes: a
+ * read-only call could be hoisted out of the loop that spins on it, or merged
+ * with the one before it. It allocates nothing, keeps nothing, answers a
+ * scalar and returns. The write is through `this` and is not a shared one: an
+ * atomic update is what a task and a data-parallel body may make beside the
+ * guarded store and the send.
+ */
+const markAtomic = (facts: FunctionFacts): void => {
+  facts.atomic = true
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.contained = true
+  facts.returnsScalar = true
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
   }
@@ -4455,6 +4492,25 @@ const markForeign = (f: FunctionFacts, root: string, steps: string, below: boole
   return changed
 }
 
+/**
+ * Whether a write into `steps` of `f`'s own object `root`, `below` past those
+ * slots too, may land in memory a parameter reaches or in memory of unknown
+ * origin: the question `markForeign` answers by marking, asked without marking.
+ */
+const reachesForeign = (f: FunctionFacts, root: string, steps: string, below: boolean): boolean => {
+  for (const d of f.dirt) {
+    if (!d.active || d.root !== root) {
+      continue
+    }
+    const over = stepsUnder(d.steps, steps, d.below)
+    const under = below && stepsUnder(steps, d.steps, false)
+    if ((over || under) && (d.unknown || d.params.length > 0)) {
+      return true
+    }
+  }
+  return false
+}
+
 /** A write into what `path` names, `deep` past its own slots, made by `f` or by a callee it hands `path` to. */
 const markPath = (f: FunctionFacts, path: MemPath, deep: boolean): boolean => {
   if (path.kind === ROOT_PARAM) {
@@ -4753,6 +4809,21 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
       }
     }
     if (!edgeWrites(facts, edge)) {
+      continue
+    }
+    // WP29: an object this call made itself (`ROOT_OWN`) is memory no caller,
+    // thread or task can see while the call runs, as a private array is, so
+    // `const r = new Rng(seed); r.nextI32()` writes nothing shared. But a
+    // field or an element of it, or anything below its own slots, may be
+    // memory a parameter reaches, or anything (`DirtMark`): `hs.push(box);
+    // hs[0].bump()` writes `box`. Such a write is a shared one, as it would be
+    // through the parameter itself, and not only a `writesReach` of it
+    // (`callWrites`), which is all the parent's region rule reads.
+    if (edge.path.kind === ROOT_OWN) {
+      const deep = target === null || target.writesDeep
+      if (reachesForeign(f, edge.path.name, edge.path.steps, deep) && markPastWrite(f)) {
+        changed = true
+      }
       continue
     }
     const pointer: PointerParamFacts | null = edge.param.length > 0 ? f.pointerParam(edge.param) : null

@@ -10,7 +10,15 @@ import {
 import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
 import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
-import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
+import {
+  checkBitwiseAssignOperands,
+  checkExpression,
+  isBitwiseCompound,
+  holdsMember,
+  mixedMemberMessage,
+  unproven,
+  WANT_INFERRED,
+} from "./expressions"
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
 import { genericCallSpelling, indexOfName } from "./generics"
 import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
@@ -40,12 +48,14 @@ import {
   N_TYPE_READONLY,
   N_TYPE_REF,
   N_TYPE_UNION,
+  N_VAR,
   N_VAR_DECL,
   N_WHILE,
+  FLAG_USING,
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { capturedReads, CheckedProgram, inlineElementStruct } from "./program"
+import { capturedReads, CheckedProgram, inlineElementStruct, Instantiation, PAR_SPAWN } from "./program"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -68,7 +78,9 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     }
     return want
   }
-  const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : -1
+  // With no array type to read, the element type is inferred, which keeps an
+  // enum member type as an unannotated `let` does: `[a]` is a `Kind.Array[]`.
+  const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : WANT_INFERRED
   let elem = -1
   // `nish:secret`: the first element that holds a `Secret`, refused after the
   // loop so the message is built once (an element outlives its function).
@@ -90,6 +102,11 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     }
     if (elem < 0) {
       elem = type
+    } else if (elem !== type && (holdsMember(ctx, elem) || holdsMember(ctx, type))) {
+      ctx.error(
+        element,
+        mixedMemberMessage(ctx, "Array literal elements must all have the same type", elem, type)
+      )
     } else if (elem !== type) {
       const a = ctx.table.typeName(elem)
       ctx.error(
@@ -455,8 +472,8 @@ export const checkArrayMethod = (
   // (`reject_push_field_literal`, WP19 §A3).
   // A ranged element is the exception (WP31 §6): the range is a sink the
   // pushed value enters, not a width, so it reaches the argument whatever the
-  // receiver is spelled like.
-  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isRanged(elem) ? elem : -1
+  // receiver is spelled like. An enum member type is one too (`isEntered`).
+  const elemContext = access.children[0].kind === N_IDENT || ctx.table.isEntered(elem) ? elem : -1
   if (name === "push") {
     if (!checkBuiltinArity(ctx, call, "push", args, 1)) {
       return ctx.numberType()
@@ -692,6 +709,15 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
     return ctx.errorType(
       expr,
       `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is outside the range; build it with \`[]\` and \`push\` instead`
+    )
+  }
+  // A member type holds one value, so a zero is one of its values only when
+  // the member is 0: a zero-filled `Kind.Array[]` would hold `Kind.Scalar`.
+  if (ctx.table.isEnumMemberType(elem) && ctx.table.memberValue(elem) !== 0) {
+    const spelled = ctx.table.typeName(elem)
+    return ctx.errorType(
+      expr,
+      `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is not the member \`${spelled}\`; build it with \`[]\` and \`push\` instead`
     )
   }
   if (args.children.length !== 1) {
@@ -930,6 +956,15 @@ class RefWalk {
    * must not widen.
    */
   aliased: StringSet
+  /**
+   * WP29 P2: each name a scope's task was handed, as its argument or as a
+   * capture of its arrow, beside the scope it was filed on. The task reads it
+   * when the scope joins, at the end of the block that declared the scope, so
+   * it is read again there (`readHeld`): a `push` between the `spawn` and the
+   * join may have moved the element it refers to.
+   */
+  held: Node[]
+  heldScopes: Local[]
 
   constructor(
     program: CheckedProgram,
@@ -945,6 +980,60 @@ class RefWalk {
     this.reported = false
     this.overwrites = overwrites
     this.aliased = aliased
+    this.held = []
+    this.heldScopes = []
+  }
+
+  /** A `spawn` at `node`: hold every name its task reads until its scope joins. */
+  holdTaskInputs(node: Node): void {
+    const callee = this.program.nodeCallees[node.id]
+    const instance: Instantiation | null = callee === null ? null : callee.instance
+    const member = node.children[0]
+    if (instance === null || instance.parallel !== PAR_SPAWN || member.kind !== N_MEMBER) {
+      return
+    }
+    const receiver = unwrapParens(member.children[0])
+    const scope: Local | null =
+      receiver.kind === N_IDENT ? sourceLocal(this.program.nodeLocals[receiver.id]) : null
+    if (scope === null) {
+      return
+    }
+    const args = node.children[1].children
+    const names: Node[] = []
+    let k = 0
+    while (k < args.length) {
+      const arg = args[k]
+      if (arg.kind === N_ARROW) {
+        capturedReads(this.program, arg, names)
+      } else if (k === 1) {
+        namesUnder(arg, names)
+      }
+      k = k + 1
+    }
+    for (const name of names) {
+      this.held.push(name)
+      this.heldScopes.push(scope)
+    }
+  }
+
+  /** The end of `block`: every held name of a scope it declared is read by that scope's join, here. */
+  readHeld(block: Node): void {
+    const keptNames: Node[] = []
+    const keptScopes: Local[] = []
+    let i = 0
+    while (i < this.held.length && i < this.heldScopes.length) {
+      const name = this.held[i]
+      const scope = this.heldScopes[i]
+      if (declaresUsing(this.program, block, scope)) {
+        this.visitIdentifier(name)
+      } else {
+        keptNames.push(name)
+        keptScopes.push(scope)
+      }
+      i = i + 1
+    }
+    this.held = keptNames
+    this.heldScopes = keptScopes
   }
 
   report(node: Node, message: string): void {
@@ -1022,6 +1111,9 @@ class RefWalk {
     if (node.kind === N_BLOCK || node.kind === N_CASE || node.kind === N_DEFAULT) {
       const depth = this.live.length
       this.visitChildren(node)
+      if (this.held.length > 0) {
+        this.readHeld(node)
+      }
       this.dropTo(depth)
       return
     }
@@ -1109,6 +1201,7 @@ class RefWalk {
 
   visitCall(node: Node): void {
     this.visitChildren(node)
+    this.holdTaskInputs(node)
     const found: Mutation[] = []
     collectMutations(this.program, this.table, node, found)
     for (const m of found) {
@@ -1152,6 +1245,34 @@ class RefWalk {
       this.live.push(ref)
     }
   }
+}
+
+/** Every identifier under `node`, outside an arrow, in source order. */
+const namesUnder = (node: Node, out: Node[]): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (node.kind === N_IDENT) {
+    out.push(node)
+  }
+  for (const child of node.children) {
+    namesUnder(child, out)
+  }
+}
+
+/** Whether `block` has a `using` statement that declares `scope`. */
+const declaresUsing = (program: CheckedProgram, block: Node, scope: Local): boolean => {
+  for (const stmt of block.children) {
+    if (stmt.kind === N_VAR && (stmt.flags & FLAG_USING) !== 0) {
+      for (const decl of stmt.children[0].children) {
+        const local = program.nodeLocals[decl.id]
+        if (local !== null && local === scope) {
+          return true
+        }
+      }
+    }
+  }
+  return false
 }
 
 /**

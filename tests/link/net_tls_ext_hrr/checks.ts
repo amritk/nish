@@ -33,6 +33,8 @@ import {
   tlsEarlySecret,
   tlsHandshakeSecret,
 } from "nish/net/tls/schedule";
+import { Secret, secret, wipe } from "nish:secret";
+import { secretHex } from "../net_tls_common/secrets";
 import {
   TLS_LEVEL_HANDSHAKE,
   TLS_LEVEL_INITIAL,
@@ -120,18 +122,27 @@ export const retryChecks = (): i32 => {
     toHex(transcript.hash()),
     toHex(rfc8448RetryHelloHash())
   );
-  const handshake: u8[] = tlsHandshakeSecret(h, tlsEarlySecret(h), rfc8448RetryEcdhe());
-  t.eqStr('RFC 8448 §5: extract secret "handshake"', toHex(handshake), toHex(rfc8448RetryHandshakeSecret()));
+  const early: Secret<u8[]> = tlsEarlySecret(h);
+  const ecdhe: Secret<u8[]> = secret(rfc8448RetryEcdhe());
+  const handshake: Secret<u8[]> = tlsHandshakeSecret(h, early, ecdhe);
+  wipe(early);
+  wipe(ecdhe);
+  t.eqStr('RFC 8448 §5: extract secret "handshake"', secretHex(handshake), toHex(rfc8448RetryHandshakeSecret()));
+  const clientTraffic: Secret<u8[]> = tlsDeriveSecret(h, handshake, "c hs traffic", transcript.hash());
   t.eqStr(
     'RFC 8448 §5: derive secret "tls13 c hs traffic" over that transcript',
-    toHex(tlsDeriveSecret(h, handshake, "c hs traffic", transcript.hash())),
+    secretHex(clientTraffic),
     toHex(rfc8448RetryClientHandshakeTraffic())
   );
+  wipe(clientTraffic);
+  const serverTraffic: Secret<u8[]> = tlsDeriveSecret(h, handshake, "s hs traffic", transcript.hash());
   t.eqStr(
     'RFC 8448 §5: derive secret "tls13 s hs traffic" over that transcript',
-    toHex(tlsDeriveSecret(h, handshake, "s hs traffic", transcript.hash())),
+    secretHex(serverTraffic),
     toHex(rfc8448RetryServerHandshakeTraffic())
   );
+  wipe(serverTraffic);
+  wipe(handshake);
   // A SHA-384 transcript's message_hash says 48: the header carries HashLen.
   const transcript384 = new TlsTranscript(toI32(48));
   transcript384.update(first, zero, toI32(first.length));

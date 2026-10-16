@@ -9,6 +9,8 @@ with rules the compiler checks, instead of raw threads and shared variables:
 - **`scope()`** — a handful of different tasks at once, joined when a block
   ends.
 - **`Mutex<T>`** — one value that a scope's tasks all update.
+- **`AtomicI32` and `AtomicI64`** — one counter that tasks, or a parallel
+  map's function, update without a lock.
 - **`Channel<T>`** — numbers passed from tasks that produce them to one that
   consumes them.
 
@@ -54,7 +56,11 @@ export const main = (): i32 => {
 - **`dst` must be at least as long as `src`**, or the call panics before it
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
-  no `console.log` — and **answers a number, a `boolean` or an enum**. It may
+  and no output: not `console.log`, `console.error`, `write`, `writeError` or
+  `process.exit` — and **answers a number, a `boolean` or an enum**. It may
+  look keys up in a `Map` or `Set` its element reaches (`get`, `has`, `size`),
+  and it may `panic`: if several elements panic at once, only the first
+  prints its message, and the program exits 1. It may
   build strings and arrays on the way to its answer; they are freed after each
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
@@ -131,8 +137,9 @@ export const main = (): i32 => {
   either; bind it, or the field you need, to a `const` (`const self = this`,
   `const k = this.k`).
 - **Only the arrow written at the call.** An arrow inside that arrow reads
-  nothing from outside itself, and an arrow given to any other function, or to
-  `spawn`, still reads only its own parameters.
+  nothing from outside itself, and an arrow given to any other function still
+  reads only its own parameters. An arrow given to `spawn` reads them too, as
+  the next section shows.
 - **Not `dst`.** In `parallelMapInto`, a body may not read an array that could
   be the one being written. A `const` table bound to its own array is fine
   beside a `dst` that is a `const` bound to its own array, as in
@@ -206,21 +213,97 @@ export const main = (): i32 => {
   fresh array (`[0]`, `new Array<i32>(n)`) that you only index; never pass it
   on. Inside the block, don't read a destination, and don't write memory a
   task could read — through a constructor either: `new Bump(counter)` whose
-  constructor writes `counter` is refused like a call that does. An object
+  constructor writes `counter` is refused like a call that does. Don't call a
+  `Map` or `Set` method that changes or walks the table either, even on one
+  no task can reach or one you made in the block: the compiler judges the
+  call, not which tables the tasks hold. Do it before the first `spawn`,
+  after the block, or in a helper that makes and fills its own table. An object
   you make in the block is yours to write, until anything a task reads may
   have got into it: stored in a field or an element, pushed, added to a `Map`
   or a `Set`, put in a literal, or handed to a function that keeps it. A field
   or an element of it counts as much as the object itself. So a `Map`, a
   `Set` or an array you make there is yours to fill and walk, and what you
   read back out of it is yours to write when you put it there fresh.
-- **A task is a named top-level function**, not an arrow, so a debugger or a
-  profiler can name its thread. It follows the rules of a parallel `f` above:
-  it writes nothing another thread can see (except through a `Mutex` or a
-  `Channel`, below), answers a number, a `boolean` or an enum, and opens no
-  scope of its own.
+- **A task follows the rules of a parallel `f` above:** it writes nothing
+  another thread can see (except through a `Mutex` or a `Channel`, below) and
+  prints nothing (`console.log`, `console.error`, `write`, `writeError` and
+  `process.exit` are all refused), answers a number, a `boolean` or an enum
+  when it has a destination, and opens no scope of its own. Looking a key up
+  in a shared `Map` or `Set` (`get`, `has`, `size`) is a read, so tasks may
+  share a table that way; changing it, or walking it with `for...of`, is a
+  write. A task may `panic`: if several threads panic at once, only the first
+  prints its message, and the program exits 1.
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.
+
+### Tasks without a destination, and arrow tasks
+
+A task that only updates something shared has no answer to store, so it needs
+no destination: `s.spawn(entry, arg)` runs `entry(arg)`, and
+`s.spawn(() => work(a, b))` runs an arrow that reads the `const` locals and
+the parameters of the function it is written in. Either one answers `void`.
+
+```ts nish:ok
+import { Mutex, scope } from "nish/threads";
+
+class Tally {
+  total: i32 = 0;
+}
+
+const addAll = (tally: Mutex<Tally>, xs: i32[]): void => {
+  let t: i32 = 0;
+  for (const x of xs) {
+    t = t + x;
+  }
+  using g = tally.lock();
+  g.value.total = g.value.total + t;
+};
+
+export const main = (): i32 => {
+  const tally = new Mutex<Tally>(new Tally());
+  const low: i32[] = [1, 2, 3];
+  const high: i32[] = [40, 50];
+  {
+    using s = scope();
+    s.spawn(() => addAll(tally, low));
+    s.spawn(() => addAll(tally, high));
+  }
+  using g = tally.lock();
+  console.log(`${g.value.total}`); // 96
+  return 0;
+};
+```
+
+- **What the arrow reads is the task's argument.** It is handed to the task
+  when you spawn it, and the task reads it when the block ends, so every rule
+  above holds of it: inside the block, don't write `low` or anything it
+  reaches, by any name, through any function or constructor. A `let` is not
+  read this way, since it could change before the task runs, and neither is
+  `this`: bind them to a `const` first.
+- **A lock, yes; a guard or a channel, no.** An arrow task may read a `Mutex`
+  and lock it, as `addAll` does. Hand a channel to a task as its argument,
+  `s.spawn(produce, new Pipe(ch, 10))`, so the scope can count its senders.
+- **No destination, no answer.** An entry that answers a value with no
+  destination to store it in is refused; give it one with the four-argument
+  form, or make it answer `void`. The arrow's thread is named after the
+  function it is written in, so a debugger still shows where it came from.
+
+```ts nish:err NL2506
+import { scope } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3; // a `let` could change before the task runs
+  const out: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn((n: i32): i32 => n + k, 1, out, 0);
+  }
+  return out[0];
+};
+```
+
+### Where the work runs
 
 The first task runs on the thread that opened the scope, which would otherwise
 wait, and the others go to a pool of worker threads, one per core besides the
@@ -305,6 +388,126 @@ export const main = (): i32 => {
 };
 ```
 
+## Counting without a lock: `AtomicI32` and `AtomicI64`
+
+When what tasks share is a counter, or one per bin of a histogram, an atomic
+is cheaper than a lock. Each method is one indivisible step, so no update is
+lost when two threads make one at the same moment. The fast pattern is the one
+below: each task counts into its own local array, then adds each count to the
+shared atomic once, at its end:
+
+```ts nish:ok
+import { AtomicI32, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32[];
+  constructor(xs: i32[], bins: AtomicI32[]) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  const local: i32[] = [0, 0, 0, 0]; // this task's own counts
+  for (const x of s.xs) {
+    const bin: i32 = x & 3;
+    if (bin < local.length) {
+      local[bin] += 1;
+    }
+  }
+  for (let b = 0; b < local.length; b++) {
+    s.bins[b].add(local[b]); // one indivisible add per bin, no lock
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins: AtomicI32[] = [new AtomicI32(0), new AtomicI32(0), new AtomicI32(0), new AtomicI32(0)];
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const big = new AtomicI32(0);
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => big.max(x)); // a parallel function may update an atomic
+  console.log(`${bins[0].load()} ${bins[1].load()} ${big.load()}`); // 2 2 9
+  return 0;
+};
+```
+
+- **The methods**: `load()`, `store(v)`, `add(n)`, `sub(n)`, `min(v)`,
+  `max(v)`, `exchange(v)` and `compareExchange(expected, desired)`. Each
+  update gives back the value the counter held just before it;
+  `compareExchange` stores `desired` only when the counter holds `expected`,
+  and gives back what it found either way.
+- **Only call its methods.** The number inside is not a field you can read or
+  store.
+- **Don't touch it in the scope's block once the first task is spawned.** Read
+  it before the first `spawn` or after the block, when every task has
+  finished.
+- **Scopes opened by one `using` share nothing.** In
+  `using s = scope(), t = scope()`, `t`'s tasks finish before `s`'s natively,
+  and under Node each runs where it is spawned, so a task of `s` and a task of
+  `t` may not use the same destination array, the same atomic or the same lock.
+  Two counters each made with `new` in a `const` of their own are two counters,
+  and their tasks are fine side by side; one counter reached through a second
+  name or a field counts as any counter of its type. Open scopes that share
+  something in `using` statements of their own.
+- **Make the updates commute.** `add`, `sub`, `min` and `max` give the same
+  total whatever order the threads made them in; a `store`, an `exchange`, or
+  an answer that depends on a value another task is changing does not, and
+  would print differently natively and under Node.
+- **An `AtomicI64` holds an `i64`.** Node holds it as a `number`: it agrees
+  with native while values stay within ±2^53, and wrapping at 2^63 is
+  native-only, the same limit as every `i64`. Pass it `i64` values, not
+  `toI64` of a number, which is a BigInt under Node.
+- **Update it once per batch, not once per value.** An atomic is cheaper than
+  a lock, not free: four tasks incrementing the same few counters wait on each
+  other's cores. Binning 32 million values into 256 bins on four cores
+  (`examples/histogram-atomic.ts`) takes 24 ms with a local tally and one `add`
+  per bin, 77 ms on one thread, and 677 ms with one `add` per value.
+
+```ts nish:err NL2513
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const done: i32[] = [0];
+  let seen: i32 = 0;
+  {
+    using s = scope();
+    s.spawn(bump, a, done, 0);
+    seen = a.load(); // the task may not have run yet
+  }
+  return seen;
+};
+```
+
+```ts nish:err NL2516
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+const peek = (a: AtomicI32): i32 => a.load();
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const bumped: i32[] = [0];
+  const seen: i32[] = [0];
+  {
+    using s = scope(), t = scope(); // t's tasks finish first natively
+    s.spawn(bump, a, bumped, 0);
+    t.spawn(peek, a, seen, 0);
+  }
+  return seen[0];
+};
+```
+
 ## Passing values: `Channel<T>`
 
 A `Channel` carries numbers from the tasks that produce them to one that
@@ -379,5 +582,6 @@ export const main = (): i32 => {
 The full rules, and the code each one is refused with, are in the reference:
 [Data parallelism](../../LANGUAGE.md#data-parallelism-nishthreads),
 [Scoped tasks](../../LANGUAGE.md#scoped-tasks-using-s--scope),
-[`Mutex<T>`](../../LANGUAGE.md#a-lock-that-owns-its-data-mutext) and
+[`Mutex<T>`](../../LANGUAGE.md#a-lock-that-owns-its-data-mutext),
+[Atomics](../../LANGUAGE.md#atomics-atomici32-and-atomici64) and
 [`Channel<T>`](../../LANGUAGE.md#channels-channelt).

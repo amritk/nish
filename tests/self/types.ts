@@ -72,6 +72,13 @@ const buildTypes = (table: TypeTable): i32[] => {
   types.push(table.arrayOf(table.arrayOf(T_I32)))
   types.push(table.arrayOf(table.nullableOf(table.structOf("Node"))))
   types.push(table.nullableOf(table.arrayOf(table.arrayOf(T_I32))))
+
+  // An enum member type is its enum's `i32`, assigns to its own enum and to
+  // nothing else, and nothing but itself assigns to it. Last, so that adding
+  // them moved no index above.
+  types.push(table.enumMemberOf(table.enumOf("Kind"), 0, "Scalar"))
+  types.push(table.enumMemberOf(table.enumOf("Kind"), 1, "Array"))
+  types.push(table.enumMemberOf(table.enumOf("Level"), 1, "High"))
   return types
 }
 
@@ -119,6 +126,13 @@ export const main = (): number => {
   out.push(`strip ${table.stripNull(nullableNode) === table.structOf("Node") ? 1 : 0}`)
   out.push(`strip plain ${table.stripNull(T_I32) === T_I32 ? 1 : 0}`)
   out.push(`distinct ${table.arrayOf(T_I32) === table.arrayOf(T_I64) ? 1 : 0}`)
+  // A member type is keyed by its enum and value, as `tsc` keys an enum
+  // literal type, and never mangles as its enum does.
+  const array = table.enumMemberOf(firstKind, 1, "Array")
+  out.push(`intern member ${table.enumMemberOf(firstKind, 1, "Alias") === array ? 1 : 0}`)
+  out.push(`member not enum ${array === firstKind ? 1 : 0}`)
+  out.push(`member mangle ${table.mangle(array)} ${table.mangle(firstKind)}`)
+  out.push(`member base ${table.baseOf(array) === firstKind ? 1 : 0}`)
   out.push(`table size ${table.size()}`)
 
   // `T_ERROR` has no counterpart in stage0's `src/types.ts`: it is D1's sentinel, and

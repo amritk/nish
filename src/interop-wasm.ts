@@ -76,7 +76,7 @@ export class WasmBridge {
   /**
    * True when some bridged function passes an array, or some function checks a
    * ranged parameter on entry (WP31 §9), so the module must link runtime-wasm.c:
-   * the arena for the one, the panic's `nish_write` and `nish_exit` for the other.
+   * the arena for the one, the panic's `nish_panic` for the other.
    */
   needsRuntime: boolean
 

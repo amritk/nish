@@ -97,7 +97,11 @@ jobs:
   test:
     name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # 25 minutes, up from 15. Shard 1 runs its share of every section plus the
+    # shard-1-only steps (simd, the AES kernels, cpu-level and the rest), and
+    # took 14m49s on main at 6e11fa6b once #663 added about 3 s of clang -O2
+    # to each program that imports p256, so a 15-minute limit cancelled it.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -206,11 +210,11 @@ jobs:
             wasi-libc libclang-rt-18-dev-wasm32
           # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
           # plain names through a private bin dir placed ahead of /usr/bin so the
-          # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `opt`,
+          # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `llvm-nm`, `opt`,
           # `ld.lld` and `wasm-ld` regardless of what the runner image ships.
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-link llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -228,7 +232,7 @@ jobs:
 
       - name: Toolchain versions
         run: |
-          for tool in clang llc llvm-as opt ld.lld wasm-ld; do
+          for tool in clang llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld; do
             printf '%-8s ' "$tool"; command -v "$tool"
           done
           clang --version | head -n 1
@@ -310,6 +314,27 @@ jobs:
           set -o pipefail
           node tests/run.js "aes kernel" | tee "$RUNNER_TEMP/aes-kernel.log"
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/aes-kernel.log"
+
+      # #619: `par_map_vector` links its modules with `llvm-link` and runs `opt
+      # -O3`, and skips without either tool. The line that says the map's loop
+      # vectorised is required here, where both are installed.
+      - name: parallelMapInto's element loop vectorises
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          node tests/run.js par_map_vector | tee "$RUNNER_TEMP/par-map-vector.log"
+          grep -E "^PASS  par_map_vector: opt -O3 vectorises parallelMapInto's element loop" "$RUNNER_TEMP/par-map-vector.log"
+
+      # WP38 S2: the `cpu level` section runs a `--cpu x86-64-v3` binary only
+      # where /proc/cpuinfo names avx2, and skips elsewhere. A runner that masked
+      # it would take the skip and stay green, so the line that says the binary
+      # ran and printed what the baseline prints is required here.
+      - name: A --cpu x86-64-v3 binary runs and prints what the baseline prints
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          node tests/run.js cpu-level | tee "$RUNNER_TEMP/cpu-level.log"
+          grep -E '^PASS  cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints' "$RUNNER_TEMP/cpu-level.log"
 
       #
       # `build/nish` is what the steps after the suite drive: stage1, one
@@ -531,7 +556,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -672,7 +697,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -769,7 +794,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -838,7 +863,7 @@ jobs:
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"

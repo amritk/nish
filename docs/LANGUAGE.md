@@ -193,7 +193,8 @@ Type rules:
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
   a `type` alias or a numeric `enum` declared or imported in the module
-  ([Type aliases](#type-aliases), [Enums](#enums)), and the
+  ([Type aliases](#type-aliases), [Enums](#enums)), one of that enum's
+  members as a type, `Kind.If` ([Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
@@ -1312,6 +1313,121 @@ and their `.ll` goldens are byte-identical files.
   other type is `` `case` label is i32 but the discriminant is Kind ``
   (`reject_enum_case_label`), so the integer a member stands for is not a
   label. See [`switch`](#switch).
+- **A member is also a type: `Kind.While` names the type whose one value is
+  that member.** A slot of a member type — a field, a parameter, a return, a
+  local, an element, an object-literal field or a `Result` arm — holds that
+  member and nothing else, which is what lets a `readonly` field record which
+  of an enum's cases its object is, as the tag a later discriminated union
+  reads:
+
+  ```ts
+  class ArrayNode {
+    readonly kind: Kind.While = Kind.While;
+  }
+  ```
+
+  The slot is entered by the member's own constant, or by a value already of
+  that member type; the enum's other members, and any `Kind` value that is not
+  a constant, are
+  `` Type `Kind.Array` holds only the member `Kind.Array`, got `Kind.Scalar` ``
+  (NL2519, `tests/cases/reject_enum_member_type_other`) and
+  `` …, got a value of type `Kind` `` (`reject_enum_member_type_widened`),
+  because a `Kind` could be any member. Every way into a slot is held to it:
+  a call argument, an assignment to a `let` or a field, a `push`, an element
+  write, an array literal, an object-literal field, `Ok`, `unwrapOr`'s
+  default, a ternary arm and a `return` (`reject_enum_member_type_argument`,
+  `_assign`, `_field_assign`, `_push`, `_element_write`, `_array_literal`,
+  `_object_field`, `_result_ok`, `_unwrap_or`, `_ternary`, `_return`), and so is an
+  argument of a generic call, whether the member type binds a type parameter
+  (`fold(xs, Kind.Array)` with `xs: Kind.Array[]`), sits in a concrete
+  parameter beside one, or is `getOrInsert`'s value
+  (`tests/cases/enum_member_type_generic`, `reject_enum_member_type_generic`,
+  `_fold`, `_get_or_insert`, `_generic_variable`, `_generic_method`,
+  `_class_param`); a parenthesised constant, `(Kind.Array)`, is the constant.
+  Two generic calls `tsc` accepts are refused, because the language binds a
+  type parameter only from the arguments, and binds it from the constant
+  before it reads a function argument: `const y: Kind.Array = id(Kind.Array)`
+  binds `T` to `Kind`, since the slot the call returns into binds nothing
+  (`reject_enum_member_type_generic_return`), and `apply(take, Kind.Array)`
+  binds `T` to `Kind` before `take: (x: Kind.Array) => Kind.Array` is read
+  (`reject_enum_member_type_generic_function_arg`). Pass a value already of
+  the member type, `id(a)` and `apply(take, a)`, and both bind `Kind.Array`.
+  An unannotated `let` keeps the member type of a value already of it, as
+  `tsc`'s does, and widens a member constant to its enum: `let w = keep(a)`
+  holds only `Kind.Array`, `let w = Kind.Array` any `Kind`
+  (`reject_enum_member_type_inferred_let`). So does every place whose type is
+  inferred from what is written: a ternary whose arms are both `Kind.Array`,
+  an array literal of them (`[a]` is a `Kind.Array[]`), `??` between two
+  `Kind.Array[]`, each of those passed to a generic function, and an arrow's
+  result, which binds the type parameter it returns: `map([a], (k) => k)` is a
+  `Kind.Array[]` and `apply(a, (k) => k)` a `Kind.Array`, while an arrow that
+  answers the constant, `(k) => Kind.Array`, answers `Kind`, as `tsc` widens
+  it (`tests/cases/enum_member_type_inferred`, `enum_member_type_arrow`,
+  `reject_enum_member_type_ternary_let`, `_ternary_const`, `_ternary_generic`,
+  `_array_inferred`, `_array_let`, `_array_generic`, `_nullish`, `_arrow_map`,
+  `_arrow_apply`). Two arms or two elements that differ where one is a member
+  type, or an array of one — `c ? a : b` over `Kind.Array` and `Kind.Scalar`,
+  `c ? a : k` over a `Kind`, `c ? a : Kind.Array`, `[a, Kind.Array]`, or
+  `[[a], [Kind.Array]]` — are refused, `` Ternary branches must have the same type, got Kind.Array and Kind.Scalar: an enum member type is not widened to its enum, so annotate the type it holds, e.g. `Kind` ``,
+  and the array literal's message reads the same way, naming `Kind[]` for the
+  nested case: `tsc` types them as a union of the members (the enum itself
+  when they are all of its members), or as the member, or as the enum, by
+  whether the constant is fresh, so the variable is annotated instead
+  (`reject_enum_member_type_ternary_mixed`, `_ternary_enum`,
+  `_ternary_constant`, `_ternary_nested`, `_array_mixed`, `_array_constant`,
+  `_array_nested_mixed`). An object literal is always annotated,
+  so its fields always have a type to enter. Two member types of one enum are two
+  types (`reject_enum_member_type_between`), and a field initializer of a
+  member type is held to the same rule (`reject_enum_member_type_field_init`).
+  The other direction is free: a member type converts to its enum, and a read
+  of a member-typed slot is the enum wherever a value is computed with, so it
+  compares with `===`, switches and passes as a `Kind`, and converts to `i32`
+  no more than a `Kind` does (`reject_enum_member_type_read`). In IR a member
+  type is its enum's `i32`: `tests/cases/enum_member_type` lowers to the same
+  bytes as the program with every member type written `Kind`
+  (`enum_member_type_widened`, whose golden is byte for byte the same).
+  - **The qualifier is an enum, local or imported, and the name one of its
+    members.** `import { Kind as K }` spells the exporter's member types
+    `K.Array` (`tests/link/enum_member_type_import`). Anything else before the
+    dot is `` `Point.x` is not a type: only a member of an enum may be named with a dot in a type, and `Point` is not an enum ``
+    (NL2517, `reject_enum_member_type_not_enum`), a missing member is
+    `` Enum `Kind` has no member `Missing` to name as a type ``
+    (NL2518, `reject_enum_member_type_unknown`), and type arguments are
+    `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
+    One dot is read; `A.B.C` is a syntax error (`reject_enum_member_type_nested`).
+  - **Two members of one value are one type**, as `tsc` reads them, spelled
+    by the member declared first: with `List = 1` beside `Array`, a
+    `Kind.List` slot is reported as `` `Kind.Array` ``
+    (`reject_enum_member_type_same_value`), and `Kind.List` enters a
+    `Kind.Array[]` (`tests/cases/enum_member_type_slots`).
+  - **A member type is a type wherever one is written**: a `type` alias's
+    right-hand side (`type ArrayTag = Kind.Array`), a type argument
+    (`Box<Kind.Array>`, `Map<Kind.Array, i32>`, `Set<Kind.Array>`), an
+    element type and an arrow argument's return type, and a `-g` build
+    describes it as its enum (`enum_member_type_slots`).
+  - **A zero-filled array of a member type holds 0**, so
+    `new Array<Kind.Array>(n)` is
+    `` `new Array<Kind.Array>(n)` would zero-fill with 0, which is not the member `Kind.Array`; build it with `[]` and `push` instead ``
+    (NL2520, `reject_enum_member_type_zero_fill`), and a member whose value
+    is 0, `Kind.Scalar` here, is allowed (`enum_member_type_slots`). The
+    `parallelMap`, `parallelFrom` and `parallelReduce` templates zero-fill the
+    array their workers write, so a body answering such a member type is
+    refused at the call, `` … answers the member type `Kind.Array`, and `parallelMap` zero-fills the array its workers write, which a `Kind.Array` cannot hold; declare the body to answer `Kind` ``
+    (NL2521, `reject_enum_member_type_parallel`, `_parallel_from`,
+    `_parallel_reduce`); a body answering the member at 0 runs in all three
+    (`tests/link/enum_member_type_parallel`).
+  - **A field initializer may be a member's constant** when the field is the
+    enum or one of its member types: `readonly kind: Kind = Kind.If` stores the
+    integer before the constructor runs, as a numeric literal would
+    (`enum_member_type_slots`). Another enum's member, a member the enum does
+    not declare, a member given to a number field and any other dotted
+    initializer are refused (`reject_enum_member_type_field_init_enum`,
+    `_field_init_level`, `_field_init_unknown`, `_field_init_i32`,
+    `_field_init_dotted`).
+  - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
+    it reads an enum as any of its members, which a member type cannot hold. A
+    member type crosses to C and JavaScript exactly where its enum does, which
+    is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
   (`tests/cases/reject_enum_builtin_name`), for the reason the same rule exists
@@ -1417,6 +1533,62 @@ and their `.ll` goldens are byte-identical files.
   the runtime calls it, and it is never assumed anything about. The rule is
   `hostVisible` in `src/visibility.ts`, and `docs/ARCHITECTURE.md` (the
   call-site ranges row of the attribute soundness rules) is why it is sound.
+- **An exported function is not named after a C library function.** A
+  module of the program's own package has no symbol prefix, so an exported
+  function's symbol is its name, in the entry module and in every other
+  module of the package, and under `--no-strict-exports` every function's
+  is. Named `write`, `read`, `free`, `exit`, `sin` or another function the
+  C library defines for the runtime or for the program's own arithmetic, it
+  would be the definition those references reach in the linked program
+  (`console.log` printing nothing, a crash at the first file read, `Math.sin`
+  answering what the program's `sin` returns), so it is
+  `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
+  (`tests/cases/reject_export_c_symbol_const`, `reject_export_c_symbol_function`,
+  `reject_export_c_symbol_libm`, `reject_export_c_symbol_libm_f32`,
+  `tests/link/export_c_symbol_sibling`, `export_c_symbol_sibling_function`;
+  with `--no-strict-exports`, `reject_export_c_symbol_no_strict` and
+  `reject_export_c_symbol_no_strict_exported`). A name that begins with `_`,
+  which C reserves for its library and start-up code (C11 7.1.3), or with
+  `napi_` or `node_api_`, which Node-API reserves, is refused the same way with
+  `` begins with `_`, which C reserves for its library and start-up code `` or
+  `` begins with `napi_`, which Node-API reserves for its functions `` (or
+  `node_api_`)
+  (`reject_export_c_symbol_reserved_prefix`, which pins `__libc_start_main` and
+  `__register_atfork`, each of which crashed; `reject_export_c_symbol_napi_prefix`).
+  The rule is the same in a wasm or an N-API build, where the exported name
+  is the one JavaScript calls: rename the function there too. The names are
+  reserved on every target, whichever target each one binds on: a name only
+  wasi-libc defines (`strdup`, `unlink`) is refused in a native build as well,
+  and no flag lifts the rule. The names and
+  where each comes from are in `src/c-symbols.ts`: the symbols the runtime
+  leaves undefined on every platform it builds for, the libm calls behind
+  every `Math` builtin and `%` on a float in `double` and in `float`, with
+  the ones LLVM rewrites them into, the `memcpy` family, the rest of the C
+  allocator, and, because `--profile wasi` links wasi-libc statically, every
+  name a wasi-libc member that link pulls in defines or references (an
+  exported `sbrk` trapped at start), and every name LLVM's TargetLibraryInfo
+  recognises as a library function on the targets the compiler emits for
+  (`abs`, `atan`, `rename`, `qsort`: LLVM folds or rewrites a call to one of
+  them whatever its definition, so `abs(-3)` answered 3;
+  `reject_export_c_symbol_tli`). `tests/run.js` reads them back with `llvm-nm` from the runtime's
+  objects, `runtime-wasm.c`, the N-API shim, and two programs — one that calls
+  every `Math` builtin, one that multiplies `i64`s, copies arrays and prints
+  strings — linked at three optimisation levels and compiled for wasm32, the
+  wasi-libc members a traced `--profile wasi` link of each pulls in, and
+  fails on a name the file does not reserve ("c-symbols: ..."); it reads the
+  TargetLibraryInfo names with `llvm-tli-checker` for five target triples. A function whose symbol is not its
+  ABI is spelled apart instead of refused: an `internal` one whose name is
+  reserved takes a `$` at the end of its symbol (`@floor$`), because LLVM
+  folds a call to a function it knows by name as the C library's, and a
+  private `floor` called as `floor(1.5)` answered 1
+  (`tests/link/c_symbol_private_libm`), and a `hidden` one, which another
+  module's instantiation calls, takes it whatever its name
+  (#610, under [function parameters](#function-parameters);
+  `tests/link/thread_no_strict_hidden_task`, under `--no-strict-exports`). A
+  method, whose symbol carries its class, and a function of another package,
+  whose symbol carries the package, may have any of these names
+  (`tests/link/export_c_symbol_allowed`). `main` is the entry's alone
+  (`tests/link/main_in_import`), and emitted as `@nish_main`.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
@@ -2513,9 +2685,20 @@ from the whole-program facts, and each rule is reported there:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `parallelMapInto` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``,
   naming the write, or the callee that makes it (`tests/cases/reject_par_shared_write`,
   `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
-  runtime's `nish_print`). A bounds check, an integer division, the length
+  runtime's `nish_print`). A method of an
+  [atomic](#atomics-atomici32-and-atomici64) — `add`, `max` and the rest — is
+  the one shared write a body may make (`tests/link/par_atomic`). A bounds
+  check, an integer division, the length
   check of `new Array(n)` and `panic` are not writes: each prints and exits,
-  and nothing runs again to see memory. The instance performs every store
+  and nothing runs again to see memory. When several threads panic at once,
+  the first claims the program: it prints its whole message and exits 1, and
+  every later one waits for that exit without printing, so a failing run
+  prints one message, never two or a mix of them
+  (`tests/link/par_panic_once`, `thread_panic_once`). Output is a write —
+  `console.error` and `process.exit` as much as `console.log`
+  (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
+  `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
+  read (`tests/link/par_map_table_reads`). The instance performs every store
   itself, into slots the partitioner has made disjoint, so a function that
   writes nothing cannot race.
 - **A store into an array only this call reaches is not a shared write.** A
@@ -2534,6 +2717,25 @@ from the whole-program facts, and each rule is reported there:
   private array's slots hold is not private: a store into `rows[0][0]`, or a
   helper that makes one, writes what `rows[0]` reaches
   (`reject_par_private_helper_deep`).
+- **Nor is a write into an object's own slots, when the object is one this
+  call made.** A `const` bound to the function's own `new` or object literal
+  is memory no caller, thread or task can see while the call runs, so a method
+  or a function that writes only that object's own fields — scalar state such
+  as an `Rng`'s — writes nothing shared: `const r = new Rng(seed);
+  r.nextI32()` is a body's own business (`tests/link/std_random`). That is
+  the whole of what is admitted. A write below the object's own slots, into a
+  field or an element of it, counts as a write into whatever it may hold, and
+  once a constructor, a store, a `push`, a `Map` or a `Set` has put the
+  caller's memory there, or memory of unknown origin, that write is refused
+  as any shared write is: `hs.push(box); hs[0].bump()`, `h.b = box;
+  h.b.bump()`, a constructor that keeps `box`, a method that forwards to a
+  field's method, `o.a.b = box`, and the same with a captured `Rng`
+  (`tests/cases/reject_thread_task_private_object_element`, `_field`,
+  `_ctor_alias`, `_capture`, `_map`, `_set`, `_nested`, `_array_own`,
+  `_forward`, `_forward_store`, `_array_rng`, and
+  `reject_par_private_object_field_rng`, `_array_rng`, `_for_of`, `_held`,
+  `_kept`). Freshness is not followed through a call: an object a helper made
+  and returned is not one this call made.
 - **What the function allocates dies with its element.** A function may build
   strings, arrays and objects on the way to its result. They are given back
   after every element: the function gets an arena scope of its own, so each
@@ -2573,10 +2775,11 @@ from the whole-program facts, and each rule is reported there:
 #### A data-parallel arrow reads its function's `const` locals
 
 An arrow passed to one of the four forms may read the `const` locals and the
-parameters of the function it is written in. Nothing else captures: an arrow
-given to any other function parameter, or to `spawn`, still reads only its own
-parameters and the module's top-level names (`tests/cases/reject_par_capture_not_parallel`,
-`reject_par_capture_spawn`).
+parameters of the function it is written in, and so may an arrow given to a
+scope's `spawn`, by the rules of [scoped tasks](#scoped-tasks-using-s--scope).
+Nothing else captures: an arrow given to any other function parameter still
+reads only its own parameters and the module's top-level names
+(`tests/cases/reject_par_capture_not_parallel`).
 
 ```typescript
 import { parallelMapInto } from "nish/threads";
@@ -2704,12 +2907,69 @@ export const main = (): i32 => {
 
 - **`s.spawn(entry, arg, dst, at)`** runs `entry(arg)` on a thread of its own
   and stores the answer in `dst[at]` (`tests/link/thread_scope_basic`). `entry`
-  is a [function parameter](#function-parameters) and must be a top-level
-  function named at the call; an arrow is
-  `` The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name) ``
-  (`tests/cases/reject_thread_task_arrow`). `at` is checked at the spawn and
+  is a [function parameter](#function-parameters): a top-level function named
+  at the call, or an arrow written there, which may read its function's
+  `const` locals (below). `at` is checked at the spawn and
   again when the answer is stored; out of range is
   `spawn: destination index 3 is out of range for an array of 1 elements` and exit 1.
+- **`s.spawn(entry, arg)` and `s.spawn(() => ...)` have no destination.** The
+  task runs as any other does and its scope stores nothing when it joins, so
+  `entry` answers `void`: it is seen through the guard of a
+  [`Mutex`](#a-lock-that-owns-its-data-mutext) its argument or a capture
+  reaches, or through a [`Channel`](#channels-channelt) it sends on
+  (`tests/link/thread_task_void`, `thread_task_arrow`). A block body is `void`
+  without an annotation. An entry that answers a value is
+  `` `sumOf` answers `i32`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination ``
+  (NL2511, `tests/cases/reject_thread_task_void_result`, and `_arrow` for
+  `() => sumOf(xs)`). TypeScript would spell the three forms as overloads;
+  the checker picks `ThreadScope`'s method by the number of arguments,
+  `spawnWith` for two and `spawnThunk` for one, and under Node every form
+  reaches `spawn`, which runs a task without a slot at once
+  ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
+- **An arrow task reads its function's `const` locals and parameters**, which
+  is the whole spelling of a task that needs more than one value:
+
+  ```typescript
+  {
+    using s = scope();
+    s.spawn(() => binInto(xs0, hist));   // xs0: a `const` array; hist: a `Mutex`
+    s.spawn(() => binInto(xs1, hist));
+  }
+  ```
+
+  Each name the arrow reads is appended to its parameters, as a
+  [data-parallel arrow](#a-data-parallel-arrow-reads-its-functions-const-locals)'s
+  is, and copied into the task's payload at the spawn beside its argument; the
+  task reads it on its own thread when the scope joins. A capture **is the
+  task's argument to every rule of this section**: the parent may not write
+  what it reaches before the join, however it does so — a store, a second name
+  for it, a helper, a `new` whose constructor writes it or keeps `this` in it,
+  in a scope bound by any declarator of its `using`
+  (`tests/cases/reject_thread_task_capture_parent_write`, `_alias`, `_helper`,
+  `_new`, `_this_escape`, `_declarator`); a destination is never captured
+  (`_dst`); the task writes nothing its caller can see except through a guard,
+  a constructor it runs included (`_task_write`, `_task_new`,
+  `_task_this_escape`); a `Mutex` it captures is one the parent may not lock
+  before the join (R7, `_mutex_lock`) and that it may reach only as a capture
+  or a field of one (R8,
+  `` The task's arrow reads `o`, which is `Outer` and reaches a `Mutex` through `o.inner.m`: a captured value is the task's argument, … ``,
+  NL2510, `_mutex_deep`); the parent's `orReturn` before the join is refused
+  (NL2394, `_or_return`); a captured element reference is read at the join,
+  so a `push` that may move its storage before the end of the block is
+  NL2290 (`_stale_record`, `_stale_join`, and
+  `reject_thread_task_arg_stale_join` for a task's argument, read at the join
+  the same way); and an array moved into a `Secret` is not read again
+  (NL2445, `_secret_moved`). A `let` is not captured, since it could change
+  before the task runs (NL2506, `_let`), nor `this` (NL2507, `_this`; a `const
+  self = this` is captured as the reference it is,
+  `tests/link/thread_task_arrow`), and a captured name is never assigned
+  (NL2508, `_assign`). A guard, a channel, a scope, a `Result`, a value that
+  may be absent and a `Secret` are never captured:
+  `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
+  (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
+  captures nothing (NL2501, `_nested`). The arrow is lifted into a function
+  named after the one it is written in and a counter (`main$arrow0`), which
+  is the name a debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
   scope runs every task it was given at once — the first on the thread that
   opened the scope and each other on a thread of its own, so `N` tasks start
@@ -2898,11 +3158,36 @@ element's arena, which a task does not share, and each rule is reported at the
 
 - **The task writes nothing another can see**, except through the guard of a
   [`Mutex`](#a-lock-that-owns-its-data-mutext), the one shared write a task may
-  make, or by a `send` or a receive on a [`Channel`](#channels-channelt), which
-  is not a write the rule counts:
+  make, by a method of an [atomic](#atomics-atomici32-and-atomici64)
+  (`tests/link/thread_atomic_tasks`), or by a `send` or a receive on a
+  [`Channel`](#channels-channelt), neither of which is a write the rule counts:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
+  tasks of one scope may look keys up in the same table
+  (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
+  `delete`, `clear`, `getOrInsert` — writes it, a walk counts itself into it
+  (`walkOpen`), and what a lookup answers is the table's memory, so each is
+  refused (`reject_thread_task_map_set`, `_map_delete`, `_map_clear`,
+  `_map_get_or_insert`, `_set_add`, `_set_delete`, `_set_clear`,
+  `_map_walk_keys`, `_map_walk_values`, `_set_walk`, `_map_readback_write`).
+  A task may `panic`, as a parallel body may: the first panic of the program
+  prints and exits 1, and a task that panics after it prints nothing. Output
+  stays a write (`reject_thread_task_console_error`,
+  `reject_thread_task_process_exit`), and so does the parent's: between the
+  first `spawn` and the join it may neither change a `Map` or `Set` it holds
+  nor walk one — `for (const k of s)`, `m.keys()`, `m.values()`, or a helper
+  that does (`reject_thread_region_parent_table_set`, `_set_walk`,
+  `_map_keys_walk`, `_map_values_walk`, `_helper_walk`). The rule is
+  conservative: it judges the call by what it writes through its receiver,
+  not by which tables a task holds, so a walk of a table no task can reach is
+  refused too (`reject_thread_region_parent_unreached_walk`), and so is a
+  mutator or a walk called straight on a table made in the block. Proving
+  that no task reaches one table would mean following every pointer each
+  task is handed; the walk moves before the first `spawn`, after the block,
+  or into a helper that makes and fills its own table
+  (`thread_scope_region_own_tables`).
   A store into an array the task allocated and hands to nothing that keeps it
   is not counted, as for a [parallel body](#data-parallelism-nishthreads): a
   sieve may fill its own table, and a helper may fill the array it is handed
@@ -2939,7 +3224,8 @@ the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
 
 `parallelFor`, non-scalar results and `scope(n)` are not in this stage
 ([wp29-thread-surface.md](wp29-thread-surface.md) §7); the lock is the next
-section, and [channels](#channels-channelt) the one after it.
+section, [atomics](#atomics-atomici32-and-atomici64) the one after it, and
+[channels](#channels-channelt) the one after that.
 
 ### A lock that owns its data: `Mutex<T>`
 
@@ -3116,6 +3402,194 @@ else is its author's obligation, as an associative operator is for a named
 function given to `parallelReduce`; the checker does not try to prove it. It
 is the one place the lock weakens the scope's promise above, that the checker
 refuses anything that could tell the two orders apart.
+
+### Atomics: `AtomicI32` and `AtomicI64`
+
+An atomic is one integer a scope's tasks, and the bodies of the data-parallel
+forms, update at once without a lock: each method is a single indivisible
+operation on the word, so no update is lost to a race and none waits for
+another. Where a `Mutex` guards a whole value, an atomic guards one counter.
+The fast way to use one is the example's: each task counts into a local tally
+no other core touches and adds it to the shared counters once, at its end, so
+the atomics see one update per bin per task rather than one per value
+("Measured", below).
+
+```typescript
+import { AtomicI32, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32[];
+  constructor(xs: i32[], bins: AtomicI32[]) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  const local: i32[] = [0, 0, 0, 0]; // this task's own counts: no core shares them
+  for (const x of s.xs) {
+    const bin: i32 = x & 3;
+    if (bin < local.length) {
+      local[bin] += 1;
+    }
+  }
+  for (let b = 0; b < local.length; b++) {
+    s.bins[b].add(local[b]);         // one indivisible add per bin, no lock
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins: AtomicI32[] = [new AtomicI32(0), new AtomicI32(0), new AtomicI32(0), new AtomicI32(0)];
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const big = new AtomicI32(0);
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => big.max(x));  // the one shared write a body may make
+  console.log(`${bins[0].load()} ${bins[1].load()} ${big.load()}`); // 2 2 9
+  return 0;
+};
+```
+
+- **The methods.** `load()` and `store(v)`; `add(n)`, `sub(n)`, `min(v)`,
+  `max(v)` and `exchange(v)`, each answering the value the word held before
+  it; and `compareExchange(expected, desired)`, which stores `desired` when the
+  word holds `expected` and answers the value it saw either way, so a loop
+  that retries until the answer is its `expected` builds any other update
+  (`tests/link/thread_atomic_tasks`). `add` and `sub` wrap at the width;
+  `min` and `max` compare signed. `AtomicI64` is the same over `i64`.
+- **Natively each method is one instruction**, sequentially consistent: a
+  `load atomic` or `store atomic ... seq_cst`, an `atomicrmw add`, `sub`,
+  `min`, `max` or `xchg ... seq_cst`, or a `cmpxchg ... seq_cst seq_cst`,
+  aligned to the width (`align 4`, `align 8`), the whole body of the method's
+  instance in `nish/threads`'s module (`tests/link/thread_atomic_tasks`, whose
+  `threads.ll` is the lowering; docs/IR_COOKBOOK.md, "an atomic"). On
+  `wasm32` a scope's tasks and a parallel call's chunks run one after another,
+  and the same IR is lowered for a module without shared memory.
+- **Under Node each method is the plain operation** on an ordinary field,
+  which is exact because Node runs every task at its `spawn` and every parallel
+  body in order. Node holds an `AtomicI64` as a `number`, and it agrees with
+  native while values stay within ±2^53; wrapping at 2^63 is native-only, the
+  same limit as every `i64` ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)), so a
+  program meant to run under Node as well passes it `i64`-typed values, not
+  `toI64` of a number, which is a BigInt there.
+
+Three rules keep every touch of the word indivisible and every program's
+answer the same natively and under Node:
+
+- **R1: an atomic is reached only by calling its methods.** Its word is a
+  field, `value`, that no program may name, read or store:
+  `` `value` is not a member a program may name: an atomic is read and updated only by calling its methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race with the update a task makes at the same moment ``
+  (NL2514, `tests/cases/reject_atomic_member_read`, `reject_atomic_member_store`,
+  and `reject_atomic_member_nested` for `h.a.b.value`). A method named without
+  a call is refused by the rule every class's methods keep, not by NL2514:
+  `` Unknown field `add` on class `AtomicI64` (it is a method; call it) ``
+  (`reject_atomic_member_unbound`). `new AtomicI32(v)` takes a number, so an
+  atomic is fresh when it is made, and `new` is the only way one is made. An
+  object literal of any class of `nish/threads` — an atomic, a `Mutex`, its
+  `MutexGuard`, a `Channel` or a `ThreadScope` — would be a plain record under
+  Node, without the methods, and is refused with
+  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
+  (NL2515, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`,
+  `reject_thread_literal_channel`, `reject_thread_literal_mutex` and
+  `reject_thread_literal_mutex_only`, whose `Mutex` literal is refused by this
+  rule rather than by `new Mutex`'s fresh-value one, and
+  `reject_thread_literal_scope`).
+- **R7: from the statement that holds a scope's first `spawn` to the end of its
+  block, the parent does not touch an atomic the scope's tasks can reach** —
+  with a method, or through any function, method or constructor it calls,
+  or by a data-parallel call that does — `Mutex`'s R7, for the same reason:
+  natively the tasks have not run there, and under Node each has run at its
+  spawn, so a `load()` would answer differently:
+  `` This `load()` reaches an atomic a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join ``
+  (NL2513, `reject_atomic_region_direct`; `reject_atomic_region_capture` for
+  an arrow task that captures it; `reject_atomic_region_field`,
+  `reject_atomic_region_array`, `reject_atomic_region_map` and
+  `reject_atomic_region_generic` for one the task's argument reaches through a
+  field, an element, a `Map`'s value or a generic's field;
+  `reject_atomic_region_call`, `reject_atomic_region_method` and
+  `reject_atomic_region_new` for a function, a method and a constructor that
+  touch it; `reject_atomic_region_this` for one reached through `this` handed
+  out of a constructor; `reject_atomic_region_declarators` for the second
+  declarator of a declaration; `reject_atomic_region_spawn_arg` for a second
+  `spawn`'s argument; `reject_atomic_region_parallel` for a parallel call).
+  It is asked by type, as `Mutex`'s is: an atomic of the type a task's argument
+  or capture reaches, at any depth, so an alias through `?:` or a function's
+  answer is the same atomic (`reject_atomic_region_ternary`,
+  `reject_atomic_region_return`), and so is any other atomic of that type the
+  task cannot in fact reach. An atomic of a type no task reaches is the
+  parent's alone, and its methods are not counted as writes the scope's tasks
+  may read (`tests/link/thread_atomic_unreached`). Before the first `spawn` and
+  after the join the parent touches it freely.
+
+  The scopes of one `using` are judged against each other too: natively they
+  join in reverse order, so a task of `t` in `using s = scope(), t = scope()`
+  runs before every task of `s`, and under Node each runs at its spawn. A
+  `spawn` on one of them whose task shares a destination, an atomic or a lock
+  with a task of another scope of the same statement is refused, naming the
+  other scope and the path it shares:
+  `` This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open the scopes in `using` statements of their own ``
+  (NL2516). A destination is shared when two scopes' spawns name the same
+  array, at the same slot or at different ones
+  (`reject_thread_sibling_destination`, `_slots`, `_arrow` for arrow tasks,
+  `_three` for three declarators; a void task that reaches another scope's
+  destination hands it on, which `_void` pins as refused by the destination
+  rule). An atomic or a lock is told apart by the `const` it was made in by
+  `new`: a task handed that binding, as its argument or a capture, reaches that
+  object and no other, and two such bindings are two objects. Reached any other
+  way — through another binding, a field, an element, a function's answer —
+  it is read as any object of its type, which meets every one
+  (`reject_atomic_sibling_load`, `reject_atomic_sibling_exchange`,
+  `reject_atomic_sibling_arrow`, `reject_atomic_sibling_three`,
+  `reject_thread_mutex_sibling`, `reject_thread_mutex_sibling_alias` for a
+  second name of one lock, `reject_thread_mutex_sibling_field` for one reached
+  through a field). Tasks that take no lock share none, and tasks that call no
+  atomic method share no atomic. Sibling scopes whose tasks reach disjoint
+  locks or atomics, of one type or of two, run as before
+  (`tests/link/thread_sibling_disjoint_mutex`, `_mutex_types`, `_atomics`).
+- **R8: an atomic reaches a task at any depth** — as its argument, a field of
+  it, an element of an `AtomicI32[]`, or a capture — unlike a `Mutex`, which
+  stops one field down: an atomic holds no data a task could keep, so which
+  tasks share it is a question R7 answers by type, without the exact sharing
+  set a lock's R5 needs.
+
+**An atomic update is the one shared write a task or a parallel body may make
+beside a guard.** A task that calls `add` on an atomic its argument reaches
+writes nothing the rule above counts, and neither does the body of
+`parallelMapInto`, `parallelMap`, `parallelFrom` or `parallelReduce`, which
+takes no lock but may update an atomic it captures or an element reaches
+(`tests/link/par_atomic`). Any other write beside it is refused as before
+(`reject_atomic_par_shared_write`). A parallel body answers a number, never
+an atomic (`reject_atomic_par_result`).
+
+**What an atomic program means.** The updates land in some order: natively
+the scheduler's, under Node spawn order and element order. A program prints
+the same both ways when its updates commute exactly — `add` and `sub`, `min`,
+`max`, a count, a histogram — and no task's answer or control flow depends on
+a value it read from a word another task updates. A `store`, an `exchange` or a
+`compareExchange` that wins against another task is order-dependent. A
+`parallelReduce`'s blocks depend on `n` alone, the same on one core or sixty
+four, but natively they run at once and under Node one after another, so what
+a body does to an atomic must not depend on which block reaches it first. That is the
+author's obligation, as it is for a `Mutex`'s critical sections; the checker
+does not try to prove it.
+
+**Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
+round into 256 bins, four rounds, on four tasks. On a four-core machine, over
+seven interleaved rounds whose seeds move every round, the medians are: each
+task counting into a local tally and adding it with one `add` per bin, 24 ms
+(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
+thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
+value, 677 ms (28× slower), because every increment contends for a cache line
+another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
+is far cheaper than a lock and still far dearer than a counter no other core
+touches: update it once per batch, not once per value.
 
 ### Channels: `Channel<T>`
 
@@ -3331,6 +3805,40 @@ for the lock. A task's channel is checked where it can be read, at the
 `spawn`; a parallel body has no way to reach one, because a task calls no
 `parallelMapInto` and a channel is made only beside a scope. `select` stays
 declined (wp29 §9).
+
+### Random numbers: `Rng` in `nish/random`
+
+`new Rng(seed)` is a generator of pseudo-random numbers whose every answer
+depends on its `i32` seed alone, and is the same natively and under Node:
+
+```typescript
+import { Rng } from "nish/random";
+
+export const main = (): i32 => {
+  const r = new Rng(42);
+  const die: i32 = 1 + ((r.nextI32() >>> 1) % 6);
+  const u: f64 = r.nextF64(); // in [0, 1)
+  console.log(`${die} ${u < 1.0}`);
+  return 0;
+};
+```
+
+- **`nextI32()`** answers the next 32 bits as an `i32`, and **`nextF64()`** a
+  double in [0, 1) built from 53 bits of two steps. The state walks a Weyl
+  sequence (an odd increment, wrapping) through all 2^32 values, and each
+  answer is MurmurHash3's 32-bit finaliser of it, so every seed, 0 included,
+  starts a full sequence, and seeds 1, 2 and 3 start unrelated ones. It is not
+  for cryptography: a key comes from `crypto.getRandomValues`.
+- **The same bits under Node** are the point of the design. The two
+  operations that wrap are `wrappingAdd` and `wrappingMul` from
+  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), every shift has a constant count, and
+  `nextF64`'s double is exact, so `tests/link/std_random` prints the same lines
+  both ways.
+- **A parallel body or a task steps an `Rng` it made itself**, which is its
+  own memory (`const r = new Rng(i)`, "Nor is a write into an object's own
+  slots" under [data parallelism](#data-parallelism-nishthreads)); a
+  generator shared by several tasks would be a shared write, and is refused as
+  one. Seed each task's own from its index.
 
 ### Byte search: `indexOfAny` in `nish/text`
 
@@ -4811,9 +5319,9 @@ choice (WP34 N6).
   integer divide (`div`/`idiv`, `udiv`/`sdiv`) or a floating divide or square
   root whose operand a secret reaches (the `latency` kind, seeded by
   `ct_asm_refused`'s `secretDivide`). It reads what `clang -O2` emits for the
-  baseline CPU of each target and nothing else, so a build with another
-  profile or `-march` is not what was read, and instructions from ISA
-  extensions beyond the baseline never reach it
+  baseline CPU of each target, and for x86-64 at `x86-64-v3`, the one level
+  [`--cpu`](#the-cpu-level) offers, and nothing else, so a build with another
+  profile or `-march` is not what was read
   ([docs/security/ct-verification.md](security/ct-verification.md), CT-2, CT-16).
   It reads only the functions a fixture names, so a module function that is
   not one — every loop in `std/crypto`, for instance — rests on review; that
@@ -4981,7 +5489,7 @@ export const main = (): i32 => {
 | Export | Meaning | Test |
 | --- | --- | --- |
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
-| `secret(v)` | `v` wrapped; a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable` |
+| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
 | `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
 | `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
@@ -5049,9 +5557,65 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   function made it, and `k` is not read again (NL2446, `reject_secret_moved_out`),
   but a parameter, an element of an array literal or an arm of a ternary is a
   second name for one key (NL2444, `reject_secret_copy_param`).
-- `secret(v)` moves `v`: a local handed in is not read again (NL2445,
-  `reject_secret_moved`), and a parameter, a field or an element, whose owner
-  keeps the plain bytes, is refused (NL2447, `reject_secret_unmovable`).
+- `secret(v)` takes a value nothing else holds, and moves it, because a
+  second name for the bytes would read the key outside the `Secret`, and
+  zeros once `wipe` has run. A local handed in is not read again (NL2445,
+  `reject_secret_moved`), and neither is the local in either arm of
+  `secret(c ? a : b)`. A parameter, a field or an element, whose owner keeps
+  the plain bytes, is refused (NL2447, `reject_secret_unmovable`). Everything
+  else is judged where it is written:
+  - an array or object literal, `null`, and a ternary of fresh values are
+    fresh, and so is a `new` whose constructor keeps no `this`;
+  - a call is fresh when its callee answers a fresh value, judged over the
+    callee's own body by this same rule, through every depth of calls (a
+    recursive one included); `expose` and `exposeWith` answer what the
+    function they run answers, and `r.orReturn()`, `r.expect(m)` and
+    `r.unwrapOr(d)` what `r` carries in its `Ok` (`d` too, which may not be a
+    local here, since the move does not reach it). A method of a value,
+    `rows.pop()`, may answer what the value holds;
+  - a local is fresh when it is the sole reference to its value: every value
+    it is given is fresh (another local is not, because that local still
+    names it), it is not a `for...of` binding, which names an element, and no
+    other use of it leaves a second name. Reading an integer element or field,
+    `.length`, an array method on it, `===`, iterating over it, `wipe`, and
+    handing it to a builtin, or to a function or method the whole-program
+    facts say keeps nothing of it, are all such uses. An initialiser, an
+    assignment's value, a field or element store, a literal's element, a
+    ternary arm, either side of `??`, the argument of `Ok` or `Err`, an
+    assignment to it used as a value (`alias = raw = [1]`, `xs.push(raw =
+    [1])`; one whose value is dropped, as a statement or in a `for` header,
+    is not), a later declarator of the same statement, a `return`, an argument of a method of
+    another value (`rows.push(raw)`, `m.set(k, raw)`), a read by an arrow
+    that captures it (a data-parallel body or a spawned task), and a function or constructor
+    that keeps it each leave one.
+
+  Each is `` `secret` takes a value nothing else holds, and `raw` has a second
+  reference: `const alias = raw` (line 6) ``, naming the reference and its
+  line, or the callee and its parameter that keep it (NL2512,
+  `reject_secret_alias_const`, `reject_secret_alias_let`,
+  `reject_secret_alias_reassigned`, `reject_secret_alias_assign_chain`,
+  `_assign_init`, `_assign_push`, `_assign_field`, `_assign_kept`,
+  `_assign_helper`, `_assign_parents`, `_assign_constructor`,
+  `_assign_source`, `reject_secret_alias_declarators`,
+  `reject_secret_alias_field`, `reject_secret_alias_element`,
+  `reject_secret_alias_param`,
+  `reject_secret_alias_return`, `reject_secret_alias_mutual`,
+  `reject_secret_alias_ternary`, `reject_secret_alias_nullish`,
+  `reject_secret_alias_ok`, `reject_secret_alias_err`,
+  `reject_secret_alias_unwrap_or`, `reject_secret_alias_unwrap_helper`,
+  `reject_secret_alias_unwrap_local`, `reject_secret_alias_constructor`,
+  `reject_secret_alias_receiver`, `reject_secret_alias_pop`,
+  `reject_secret_alias_for_of`, and `reject_secret_alias_capture_map`,
+  `_from`, `_map_into`, `_reduce` and `_spawn`, and
+  `reject_secret_alias_spawn_arg` and `_spawn_with` for a task's argument,
+  which the scope keeps until the task has run). Pass a fresh value instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
+  copy.set(raw)`, then `secret(copy)`. A declarator that reads `raw` after
+  `secret(raw)` in the same statement is a moved read, NL2445
+  (`reject_secret_alias_declarator_moved`). The rule refuses some programs
+  that are safe, each with the reference named: a data-parallel arrow that
+  reads the local before the move, a `Result` local copied into another
+  (`reject_secret_alias_result_copy`), and a `let` given another local even
+  after the move (`reject_secret_alias_reassigned_after`).
 - A `Secret` parameter is borrowed. The callee may read it through `expose`,
   hand it on, wipe it or return it, and owes nothing: the caller wipes what it
   made.
@@ -7278,6 +7842,34 @@ by the caller.
   It reaches the entry package's modules only
   ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)).
 - **`--no-stack-alloc`**: see *Memory model* above.
+
+### The CPU level
+
+- **`--cpu x86-64-v3`** links the program for one CPU level above the
+  baseline: the module and the runtime are both compiled, and linked, with
+  `-march=x86-64-v3 -ffp-contract=off`, so the code generator may use AVX2,
+  BMI2 and FMA. It is the **one** level: `native`, `x86-64-v4`, `armv8.2-a`
+  and every other value are a usage error (exit 2, one line), and so is the
+  flag with `--profile wasi` or with a `--target` that is not x86-64. Without
+  `--target` the host's triple is the one checked, so a host that is not
+  x86-64 refuses it the same way; an x86-64 `--target` on such a host is not
+  refused, and fails at the link as a toolchain error. `scripts/build.sh --cpu
+  x86-64-v3` is the same build, and refuses the `wasm` and `wasi` profiles.
+- **It changes the link and nothing else.** The IR is byte for byte the IR
+  without it, so the flag changes no operation's meaning; and
+  `-ffp-contract=off` keeps the code generator from contracting a multiply and
+  an add into one fused, once-rounded instruction the source did not write, so
+  a float prints the same at either level. `nish run` takes it too, and both
+  caches key on it: a run or a link at the level never reuses the baseline's
+  binary or runtime objects. `--emit-capabilities` adds a `"cpu"` key after
+  `"entry"`; a baseline report has none.
+- **A release binary stays baseline.** A binary linked with the flag stops
+  with `SIGILL` on a CPU without AVX2, so it is for programs that run on
+  machines whose CPU is known. The `nish` the project releases is built
+  without it. The constant-time check reads the runtime and the
+  `nish:crypto-ct` fixtures at this level as well as at the baseline
+  ([CT-16](security/ct-verification.md)); a level it does not read is not
+  offered (`tests/run.js`, the `cpu level` section).
 
 ### Diagnostics and debugging flags
 

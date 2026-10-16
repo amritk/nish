@@ -196,11 +196,16 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `bench/spectral.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.go` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.rs` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/simd-s3a/mat-vec-vector.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/simd-s3a/mat-vec-scalar.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/simd-s3a/mat-vec-checked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
 | `std/crypto/p256.ts` | fiat-crypto, `fiat-c/src/p256_32.c` (`mul`, `square`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p256_scalar_32.c` (`mul`, `add`, `set_one`), as the `p256Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256FiatMul`, `p256FiatSquare`, `p256FiatScalarMul`, `p256FiatCmovznzU32` and helpers, for the assembly check | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
+| `tests/link/crypto_wycheproof/ecdh_secp256r1.ts` | Wycheproof `testvectors_v1/ecdh_secp256r1_ecpoint_test.json` at `3fa63dd`: all 355 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 484 cases and the 113 group keys of `ecdsa_secp256r1_sha256_test.json`, all 262 cases of `ecdsa_secp256r1_sha256_p1363_test.json`, all 554 cases and the 111 group keys of `ecdsa_secp256r1_sha512_test.json` and all 332 cases of `ecdsa_secp256r1_sha512_p1363_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/hkdf.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 86 cases of `hkdf_sha256_test.json` and all 83 of `hkdf_sha384_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/hmac.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 174 cases each of `hmac_sha256_test.json`, `hmac_sha384_test.json` and `hmac_sha512_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
@@ -218,7 +223,7 @@ notice, and each is marked public domain where its constants appear:
 
 - FNV-1a (`src/map.ts`, `src/emit-map.ts`, `std/collections.ts`).
 - MurmurHash3's `fmix32` and `fmix64` finalisers (`src/emit-map.ts`,
-  `std/collections.ts`).
+  `std/collections.ts`, and `fmix32` in `std/random.ts`).
 - xorshift64* in `nish_random` (`runtime/runtime.c`).
 - dudect's cropping schedule, its 100 percentiles and the 10,000-measurement
   gate on its second-order test (`tests/ct-timing/dudect.c`), from

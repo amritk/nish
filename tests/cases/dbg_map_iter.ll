@@ -18,18 +18,17 @@ declare void @nish_free_arena() #3
 declare noundef i64 @nish_arena_mark() #3
 declare void @nish_arena_release(i64 noundef) #3
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #5
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #3
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
-declare void @nish_exit(i32 noundef) #6
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #3
-declare void @nish_panic_index(i64 noundef, i64 noundef) #7
-declare extern_weak void @nish_panic_overflow(i32 noundef) #7
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #6
+declare void @nish_panic_index(i64 noundef, i64 noundef) #6
+declare extern_weak void @nish_panic_overflow(i32 noundef) #6
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #8 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -433,8 +432,7 @@ ovf.ok.1:
   br i1 %12, label %len.ok, label %len.fail, !dbg !239
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !239
-  call void @nish_exit(i32 1), !dbg !239
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*)), !dbg !239
   unreachable, !dbg !239
 
 len.ok:
@@ -684,8 +682,7 @@ entry:
   br i1 %5, label %len.ok, label %len.fail, !dbg !356
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*), i32 2, i1 true), !dbg !356
-  call void @nish_exit(i32 1), !dbg !356
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.2 to i8*)), !dbg !356
   unreachable, !dbg !356
 
 len.ok:
@@ -850,8 +847,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end, !dbg !435
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*), i32 2, i1 true), !dbg !442
-  call void @nish_exit(i32 1), !dbg !442
+  call void @nish_panic(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*)), !dbg !442
   unreachable, !dbg !442
 
 if.end:
@@ -887,8 +883,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end, !dbg !453
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*), i32 2, i1 true), !dbg !460
-  call void @nish_exit(i32 1), !dbg !460
+  call void @nish_panic(i8* bitcast ({ i64, [28 x i8] }* @.str.3 to i8*)), !dbg !460
   unreachable, !dbg !460
 
 if.end:
@@ -986,8 +981,7 @@ lor.end:
   br i1 %18, label %if.then.1, label %if.end.1, !dbg !507
 
 if.then.1:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.4 to i8*), i32 2, i1 true), !dbg !513
-  call void @nish_exit(i32 1), !dbg !513
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.4 to i8*)), !dbg !513
   unreachable, !dbg !513
 
 if.end.1:
@@ -1418,8 +1412,7 @@ if.end.1:
   br label %while.cond, !dbg !613
 
 while.end:
-  call void @nish_write(i8* bitcast ({ i64, [40 x i8] }* @.str.5 to i8*), i32 2, i1 true), !dbg !668
-  call void @nish_exit(i32 1), !dbg !668
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.5 to i8*)), !dbg !668
   unreachable, !dbg !668
 
 ovf.fail:
@@ -1713,9 +1706,8 @@ attributes #2 = { nounwind readonly }
 attributes #3 = { nounwind willreturn }
 attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #5 = { nounwind willreturn memory(argmem: read) }
-attributes #6 = { noreturn nounwind }
-attributes #7 = { nounwind noreturn cold }
-attributes #8 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #6 = { nounwind noreturn cold }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

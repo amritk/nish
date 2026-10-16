@@ -54,8 +54,9 @@ import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
+import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { emitProgram } from "./emit"
-import { spellHiddenApart } from "./generics"
+import { spellCSymbolsApart } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -158,11 +159,12 @@ import {
   channelSummaries,
   taskMutexMessageFor,
   taskArgumentMessage,
-  taskArrowMessage,
+  isVoidSpawn,
+  voidTaskResultMessage,
   threadsModuleName,
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
-import { exposeMessages } from "./secret"
+import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
 import { splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
@@ -1181,13 +1183,18 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
-    // #610: every body is checked, so a hidden function's diagnostics are
-    // reported and its instantiations keyed; it takes its link symbol now.
+    // #610, #618: every body is checked, so a function's diagnostics are
+    // reported and its instantiations keyed; it takes its link symbol now, and
+    // a function whose symbol is its ABI and is reserved to C is refused.
     const checked: CheckedProgram[] = []
     for (const unit of this.modules) {
       checked.push(unit.checker.program)
     }
-    spellHiddenApart(checked)
+    spellCSymbolsApart(checked, this.opts.strictExports)
+    this.rejectCLibrarySymbols()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     // WP15 §2.4: what every call site proves for its callee's parameters. It
     // needs every body checked, instantiations included, and the attribute
     // analysis below reads the proofs it adds.
@@ -1704,14 +1711,33 @@ export class Compilation {
    * no I/O and no C, keeps nothing of the value, writes nothing it is handed,
    * and declares a result that holds no `Secret` (`exposeMessages`). Those are
    * questions about the function's whole closure, so they are asked of the
-   * same facts the parallel rules read, at the call that ran it.
+   * same facts the parallel rules read, at the call that ran it. So are the
+   * questions a `secret(v)` left (`SecretNeed`): whether a callee answers a
+   * value nothing else holds, and whether one keeps what it is handed.
    */
   checkSecrets(facts: FactsTable): void {
+    const programs: CheckedProgram[] = []
+    for (const unit of this.modules) {
+      programs.push(unit.checker.program)
+    }
+    const fresh = new FreshResults(programs, this.table, facts)
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const call of program.exposeCalls) {
         for (const message of exposeMessages(this.table, facts, this.runtime, call.sig)) {
           this.sink.report(program.source, call.node.start, call.node.end, message)
+        }
+      }
+      // One refusal per `secret(v)`: the first question its value fails.
+      const refused: Node[] = []
+      for (const need of program.secretNeeds) {
+        if (refused.indexOf(need.site) >= 0) {
+          continue
+        }
+        const message = secretNeedMessage(fresh, need)
+        if (message.length > 0) {
+          this.sink.report(program.source, need.site.start, need.site.end, message)
+          refused.push(need.site)
         }
       }
     }
@@ -1747,10 +1773,14 @@ export class Compilation {
           continue
         }
         const messages: string[] = []
-        messages.push(fn.lifted ? taskArrowMessage() : "")
         messages.push(taskArgumentMessage(this.table, call.sig))
         messages.push(taskMutexMessageFor(this.table, program, call.sig))
-        messages.push(resultMessage(this.table, call.sig, fn, fn.returnType))
+        // A task with no destination answers nothing; one with a destination answers a scalar.
+        messages.push(
+          isVoidSpawn(call.sig)
+            ? voidTaskResultMessage(this.table, fn)
+            : resultMessage(this.table, call.sig, fn, fn.returnType)
+        )
         messages.push(sharedWriteMessage(call.sig, fn, facts))
         messages.push(arenaMessage(call.sig, fn, facts))
         for (const message of messages) {
@@ -2163,6 +2193,53 @@ export class Compilation {
   }
 
   /**
+   * A function of the program's own package whose symbol is still its name
+   * once `spellCSymbolsApart` has run, and is reserved to C (#618,
+   * `src/c-symbols.ts`): exported, or any function under
+   * `--no-strict-exports` that no other module's instantiation calls. The
+   * program's own package carries no prefix, so the definition is global in
+   * the executable and the C library's and the runtime's references to the
+   * name would reach it. Its name is its ABI, so it is refused rather than
+   * renamed, as an internal or a hidden function is. A `declare function` is
+   * the C function itself, a method or an instantiation has a `.` or a `$` in
+   * its symbol, and another package's function has its package's prefix.
+   */
+  rejectCLibrarySymbols(): void {
+    for (const unit of this.modules) {
+      if (unit.packageName !== ROOT_PACKAGE) {
+        continue
+      }
+      for (const sig of unit.checker.program.functions) {
+        if (!sig.definedIn(unit.source) || sig.foreign() || sig.owner !== null || sig.instance !== null) {
+          continue
+        }
+        // Only a symbol that is still the name as written is refused: one
+        // `spellCSymbolsApart` renamed (`_helper$`, a hidden `read$`) or a
+        // lifted arrow's (`_h$arrow0`) is not the C name, however it begins.
+        if (sig.name !== sig.sourceName || (!sig.exported && this.opts.strictExports)) {
+          continue
+        }
+        if (!isCReservedSymbol(sig.name)) {
+          continue
+        }
+        const what = isCLibrarySymbol(sig.name)
+          ? `is the C library's \`${sig.name}\``
+          : reservedPrefixText(sig.name)
+        const why = sig.exported
+          ? "an exported function of the program's own package keeps its name as its symbol"
+          : "`--no-strict-exports` keeps every function's name as its symbol"
+        const at = nameNode(sig)
+        this.sink.report(
+          unit.source,
+          at.start,
+          at.end,
+          `\`${sig.sourceName}\` ${what}: ${why}, so the references the C library and the runtime make to that name would reach this function instead; rename it`
+        )
+      }
+    }
+  }
+
+  /**
    * The whole-program attribute fixpoint, computed once per compilation.
    * `emit()` reads it, and so does `--emit-checked`, whose dump prints the
    * facts of every function the way stage0's `src/dump.ts` prints them; running it
@@ -2404,6 +2481,17 @@ const restatedBy = (warning: Diagnostic, refused: PanicSite[]): boolean => {
     }
   }
   return false
+}
+
+/** Which reserved prefix a symbol begins with, and who reserves it, for NL3037. */
+const reservedPrefixText = (name: string): string => {
+  if (name.startsWith("_")) {
+    return "begins with `_`, which C reserves for its library and start-up code"
+  }
+  if (name.startsWith("node_api_")) {
+    return "begins with `node_api_`, which Node-API reserves for its functions"
+  }
+  return "begins with `napi_`, which Node-API reserves for its functions"
 }
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */

@@ -157,27 +157,38 @@ the date, the CPU, the cores, the threads, every compiler's version and the
 commit: a run on a branch names the `main` commit the branch grew from,
 because a squash merge does not keep the branch's own commits.
 
-**Where Nish loses**, and what has been measured of why. Neither is tuned here:
+**Where Nish lost or loses**, and what has been measured of why. par-histogram is not tuned here:
 
-- `par-regions`: the loop each chunk runs, not the pool. `mapRange` in
-  `std/threads.ts` stores each element under `if (i < dst.length)`, though
-  `dstTooShort` has already proved `dst` long enough, and that conditional
-  store keeps LLVM's loop vectoriser off: the Nish binary has no `pslld` or
-  `psrad`, and Rust's vectorised `scramble` has both. A probe that clamped the
-  end of the range once and stored unconditionally took Nish from 602.6 to
-  192.2 ms on one thread (Rust's scope twin: 185.5 ms) and from 176.8 to
-  60.9 ms on four (Rayon: 76.4 ms), and its loop gained `pslld` and `psrad`.
-  The fix is [#619](https://github.com/amritk/nish/issues/619); the table is
-  measured without it.
+- `par-regions` lost to Rayon by 1.9x to 2.2x until
+  [#619](https://github.com/amritk/nish/issues/619), and the cause was the loop
+  each chunk runs, not the pool: `mapRange` in `std/threads.ts` stored each
+  element under `if (i < dst.length)`, and that conditional store kept LLVM's
+  loop vectoriser off (no `pslld` or `psrad` in the binary, where Rust's
+  vectorised `scramble` has both). Testing `dst`'s length in the loop condition
+  as well lets LLVM drop the test after the call, and the loop vectorises when
+  `f` inlines with no panic path. A body that keeps one does not vectorise,
+  before or after #619: an overflow-checked `x + 7`, or a table lookup whose
+  index is not proven, branches to its panic on every element. Timed in 11
+  interleaved rounds after a warm-up, each binary beside a byte-identical
+  copy, par-regions went from 588.9 / 624.0 to 183.3 / 190.6 ms (min /
+  median) on one thread, 3.21x / 3.27x against a noise band of 3.3% / 1.5%,
+  and from 168.8 / 218.6 to 58.0 / 73.7 ms on four, 2.91x / 2.97x against a
+  band of 14.5% / 3.3%. In the table it is ahead of Rayon outside the band on
+  the minimum in every run, and on the median in two runs of three, within the
+  band in the third. `tests/run.js` pins the vector loop ("par_map_vector").
 - `par-histogram`: a contended lock, and the most machine- and load-sensitive
   of the four; read its spread before its reading. What is measured: past 64
   spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
   and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
   System time is not the whole story, though: Rust's futex lock spends about
-  as much (0.46 s), and in the table's runs it comes out about level with
-  Nish, so parking on a futex is not shown to be the cure. The sign is not even stable across machines: the table's
-  runs put Nish behind Go on every median, while a probe on another VM of the
-  same kind found Nish ahead of Go outside the band in four interleaved runs.
+  as much (0.46 s), and in those runs it came out about level with Nish, so
+  parking on a futex is not shown to be the cure. Those figures are from an
+  earlier session, in which Nish's `par` run took about 274 ms; in the table's
+  latest runs it took 96.7 ms and Rust's 259 ms, with no change to either
+  program, so par-histogram moves by 2x and more between sessions on this
+  machine. Even the sign is not stable: the latest runs put Nish ahead of Go
+  on the median in two runs and behind in one, where the runs before them put
+  it behind Go on every median.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
@@ -617,6 +628,38 @@ servers also send a `Date` field, which this one does not yet:
 Go and Node are from an earlier run of the same scenarios (the Nish build
 there was this one's base, at 141,782, 85,096 and 59,784). Bun's `close`
 rows carry about 200,000 wrk read errors a run.
+## P-256
+
+`p256.ts` times ECDSA over P-256 on the three calls a key's life makes:
+`p256PublicKey` on a new private key, `p256SignSha256` on a 64-byte message,
+which is what a TLS 1.3 server's CertificateVerify costs, and
+`p256VerifySha256`. It is
+[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-baseline)'s baseline, and the
+measure a fixed-base table is judged by. It is not in this suite's tables, and
+it has no twins. `p256.mjs` builds it and drives it:
+
+```bash
+npm run build
+node bench/p256.mjs --check                         # one short run; its checksum against the pinned one
+node bench/p256.mjs --self --runs 16                # the baseline against a copy of itself: the noise band
+node bench/p256.mjs --binary <other build>          # a column for another build of bench/p256.ts
+```
+
+The driver gives each workload a process of its own, and the program times
+the workload's loop alone, so a figure leaves out start-up and the signatures
+a verify reads, which are made before its clock starts. Public-key and sign get
+a new private key or message on every iteration; verify cycles through a ring
+of sixteen signed messages, so consecutive calls differ and each comes round
+again every sixteen. Every answer goes into the printed checksum, verify's
+included, and before its clock verify must refuse each of the sixteen
+signatures once tampered with, so a verify that accepted everything would not
+print the pinned checksum. The columns run in rotating rounds, each going first
+equally often, and the driver stops when two runs of a workload print
+different checksums. It reports each workload's minimum and median time a
+call, in microseconds and calls a second. `--check` runs all three at a 16th of
+the count, in one process, and fails if the checksum differs from the one
+pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
+must keep printing it.
 
 ## Other files
 

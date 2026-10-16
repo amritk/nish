@@ -103,6 +103,7 @@ import {
 } from "./emit-map"
 import {
   closeBlockScopes,
+  emitAtomicBody,
   emitChannelSendBody,
   emitLockBody,
   emitLockReleases,
@@ -114,7 +115,7 @@ import {
   isSpawnTaskCall,
   openScope,
 } from "./emit-parallel"
-import { CaptureSlot, capturesOf, isChannelSend, isLockMethod } from "./parallel"
+import { CaptureSlot, capturesOf, isAtomicMethod, isChannelSend, isLockMethod } from "./parallel"
 import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
@@ -562,6 +563,8 @@ export class Emitter {
       emitLockBody(this, sig) // WP29 P3
     } else if (isChannelSend(sig)) {
       emitChannelSendBody(this, sig) // WP29 P3
+    } else if (isAtomicMethod(sig)) {
+      emitAtomicBody(this, sig)
     } else if (body.kind === N_BLOCK) {
       this.emitBlock(body)
     } else {
@@ -1564,7 +1567,24 @@ export class Emitter {
     return this.table.llvmType(type)
   }
 
-  /** WP17: the unpacked object of a by-value `Result` parameter, or "". */
+  /**
+   * WP29: the typed operands for the captures a call of `sig` passes after
+   * its written arguments, each `<type> <value>` (`captureValue`), for a
+   * method call, which builds its operands itself (`emitCall` in
+   * `src/emit-classes.ts`).
+   */
+  captureOperands(sig: FunctionSig, isPrivate: boolean): string[] {
+    const types = this.captureParamTypes(sig, isPrivate)
+    const slots = capturesOf(sig)
+    const out: string[] = []
+    let k = 0
+    while (k < types.length && k < slots.length) {
+      out.push(`${types[k]} ${this.captureValue(slots[k])}`)
+      k = k + 1
+    }
+    return out
+  }
+
   /**
    * WP29: the LLVM types of the parameters `sig` carries for the captures of
    * the arrows it was given, after its own. Empty for an arrow, whose
@@ -1615,6 +1635,7 @@ export class Emitter {
     )
   }
 
+  /** WP17: the unpacked object of a by-value `Result` parameter, or "". */
   paramObject(name: string): string {
     let i = 0
     while (i < this.paramObjectNames.length) {

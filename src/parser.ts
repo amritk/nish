@@ -3193,6 +3193,15 @@ export class Parser {
     const node = this.node(N_TYPE_REF, start, this.end)
     node.text = this.value
     this.advance()
+    // An enum member type, `Kind.Array`: one qualifier and one name, kept as
+    // the dotted text of the reference, which no declared name can spell, so a
+    // resolver that does not know the shape answers "unknown type". Only one
+    // dot is read; `a.b.c` stops at the second, where it fails as before.
+    if (this.at(TOK_DOT) && this.peek() === TOK_IDENT) {
+      this.advance()
+      node.text = `${node.text}.${this.value}`
+      this.advance()
+    }
     const args = this.list()
     if (this.at(TOK_LT)) {
       this.advance()
@@ -4307,7 +4316,8 @@ export class Parser {
         if (nesting === 0) {
           return false
         }
-      } else if (kind !== TOK_IDENT && kind !== TOK_NULL && kind !== TOK_PIPE) {
+      } else if (kind !== TOK_IDENT && kind !== TOK_NULL && kind !== TOK_PIPE && kind !== TOK_DOT) {
+        // `.` spells an enum member type, `(x): Kind.Array => ...`.
         return false
       }
       if (nesting < 0) {

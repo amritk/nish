@@ -25,12 +25,10 @@ declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noundef i64 @nish_arena_used() #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
-declare void @nish_exit(i32 noundef) #3
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare noundef i32 @nish_net_local_port(i32 noundef) #2
 declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
@@ -44,15 +42,16 @@ declare noundef i32 @nish_poll_create() #2
 declare noundef i32 @nish_poll_add(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_modify(i32 noundef, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_poll_wait(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #0
-declare void @nish_panic_index(i64 noundef, i64 noundef) #4
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #4
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
-declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #5
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #5
-declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #5
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #4
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -380,8 +379,7 @@ if.end.4:
   br i1 %29, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*))
   unreachable
 
 len.ok:
@@ -401,8 +399,7 @@ len.ok:
   br i1 %37, label %len.ok.1, label %len.fail.1
 
 len.fail.1:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*))
   unreachable
 
 len.ok.1:
@@ -422,8 +419,7 @@ len.ok.1:
   br i1 %45, label %len.ok.2, label %len.fail.2
 
 len.fail.2:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.0 to i8*))
   unreachable
 
 len.ok.2:
@@ -997,10 +993,9 @@ entry:
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

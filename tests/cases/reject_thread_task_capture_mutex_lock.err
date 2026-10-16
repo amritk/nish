@@ -1,0 +1,1 @@
+This `lock()` locks a `Mutex` a task of `s` can reach through `tally`, before the scope joins

@@ -274,13 +274,16 @@ const addUnitFingerprints = (key: StringBuilder, root: string, units: string[], 
  * the entry module's stem to imply it. `root` is the package
  * root `scripts/build.sh` and `runtime/` are read from; `cc` is the C compiler
  * the script will run (`CC`, or `clang`), since a different compiler is a
- * different binary.
+ * different binary. `cpu` is the `--cpu` level, empty for the baseline, which
+ * the profile line names only when it is set, so a baseline key is the bytes
+ * it was before the flag existed.
  */
 export const runCacheKey = (
   modules: EmittedModule[],
   name: string,
   root: string,
   profile: string,
+  cpu: string,
   debugInfo: boolean,
   threads: boolean,
   cc: string
@@ -288,7 +291,9 @@ export const runCacheKey = (
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add(`run ${name}\n`)
-  key.add(`profile ${profile}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`)
+  key.add(
+    `profile ${profile}${cpu.length > 0 ? ` --cpu ${cpu}` : ""}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`
+  )
   key.add(`cc ${cc}\n`)
   addRecipeFingerprints(key, root)
   for (const module of modules) {
@@ -306,12 +311,15 @@ export const runCacheKey = (
  * machines never hands one another's objects. `runtimeDir` is the runtime's
  * real directory, which `-g` writes into the objects as where their source is.
  * The flags each profile compiles with are `scripts/build.sh`'s, whose bytes
- * are fingerprinted; it reads no variable but `CC` for these profiles.
+ * are fingerprinted; it reads no variable but `CC` for these profiles. A
+ * `--cpu` level is on the profile line, as in `runCacheKey`: objects compiled
+ * for x86-64-v3 are never handed to a baseline link, nor the other way round.
  */
 export const runtimeCacheKey = (
   root: string,
   runtimeDir: string,
   profile: string,
+  cpu: string,
   debugInfo: boolean,
   threads: boolean,
   cc: string,
@@ -320,7 +328,9 @@ export const runtimeCacheKey = (
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
   key.add("runtime-objects\n")
-  key.add(`profile ${profile}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`)
+  key.add(
+    `profile ${profile}${cpu.length > 0 ? ` --cpu ${cpu}` : ""}${debugInfo ? " -g" : ""}${threads ? " --threads" : ""}\n`
+  )
   key.add(`cc ${cc}\n`)
   key.add(`cc-version ${ccVersion.length}\n`)
   key.add(ccVersion)

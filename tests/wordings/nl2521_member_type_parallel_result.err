@@ -1,0 +1,1 @@
+`(x) => ...` answers the member type `Kind.Array`, and `parallelMap` zero-fills the array its workers write, which a `Kind.Array` cannot hold; declare the body to answer `Kind`

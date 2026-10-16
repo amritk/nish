@@ -39,7 +39,10 @@ import {
   TlsServer,
   TlsServerConfig,
 } from "nish/net/tls";
+import { Secret, secret, wipe } from "nish:secret";
+import { copyOf } from "../crypto_x25519/plain";
 import { fromHex, toHex } from "../crypto_x509/hex";
+import { secretHex } from "../net_tls_common/secrets";
 import { clientHello, splitMessages, standardExtensions } from "../net_tls_common/client";
 import {
   rfc8448Certificate,
@@ -123,6 +126,44 @@ export const rfc8448Server = (): TlsServer =>
 const CERTIFICATE_VERIFY_CONTEXT_HEX: string =
   "544c5320312e332c20736572766572204365727469666963617465566572696679";
 
+/** The hex of `suite`'s traffic key from the plain traffic secret `traffic`, every `Secret` wiped. */
+const trafficKeyHex = (suite: i32, traffic: u8[]): string => {
+  const held: Secret<u8[]> = secret(copyOf(traffic));
+  const key: Secret<u8[]> = tlsTrafficKey(suite, held);
+  const hex: string = secretHex(key);
+  wipe(key);
+  wipe(held);
+  return hex;
+};
+
+/** The hex of `suite`'s traffic IV from the plain traffic secret `traffic`, every `Secret` wiped. */
+const trafficIvHex = (suite: i32, traffic: u8[]): string => {
+  const held: Secret<u8[]> = secret(copyOf(traffic));
+  const iv: Secret<u8[]> = tlsTrafficIv(suite, held);
+  const hex: string = secretHex(iv);
+  wipe(iv);
+  wipe(held);
+  return hex;
+};
+
+/** The hex of the `verify_data` the plain handshake traffic secret `traffic` gives `transcriptHash`. */
+const verifyDataHex = (h: i32, traffic: u8[], transcriptHash: u8[]): string => {
+  const held: Secret<u8[]> = secret(copyOf(traffic));
+  const hex: string = toHex(tlsFinishedVerifyData(h, held, transcriptHash));
+  wipe(held);
+  return hex;
+};
+
+/** The hex of `Derive-Secret(secret, label, transcriptHash)` from a plain secret, every `Secret` wiped. */
+const deriveSecretHex = (h: i32, from: u8[], label: string, transcriptHash: u8[]): string => {
+  const held: Secret<u8[]> = secret(copyOf(from));
+  const derived: Secret<u8[]> = tlsDeriveSecret(h, held, label, transcriptHash);
+  const hex: string = secretHex(derived);
+  wipe(derived);
+  wipe(held);
+  return hex;
+};
+
 /**
  * Runs every check and answers the exit code. A function of its own so that
  * `tests/link/net_tls_rfc8448_f64` runs the same checks under
@@ -135,71 +176,83 @@ export const rfc8448Checks = (): i32 => {
   const suite: i32 = TLS_AES_128_GCM_SHA256;
 
   // --- The key schedule, step by step ---------------------------------------
-  const early: u8[] = tlsEarlySecret(h);
-  t.eqStr('{server} extract secret "early"', toHex(early), toHex(rfc8448EarlySecret()));
+  const early: Secret<u8[]> = tlsEarlySecret(h);
+  t.eqStr('{server} extract secret "early"', secretHex(early), toHex(rfc8448EarlySecret()));
+  const derivedForHandshake: Secret<u8[]> = tlsDeriveSecret(h, early, "derived", tlsEmptyHash(h));
   t.eqStr(
     '{server} derive secret for handshake "tls13 derived"',
-    toHex(tlsDeriveSecret(h, early, "derived", tlsEmptyHash(h))),
+    secretHex(derivedForHandshake),
     toHex(rfc8448DerivedForHandshake())
   );
+  wipe(derivedForHandshake);
   t.eqStr(
     "the ECDHE secret from the trace's two x25519 keys",
     toHex(x25519Plain(rfc8448ServerPrivate(), rfc8448ClientPublic())),
     toHex(rfc8448Ecdhe())
   );
-  const handshake: u8[] = tlsHandshakeSecret(h, early, rfc8448Ecdhe());
-  t.eqStr('{server} extract secret "handshake"', toHex(handshake), toHex(rfc8448HandshakeSecret()));
+  const ecdhe: Secret<u8[]> = secret(rfc8448Ecdhe());
+  const handshake: Secret<u8[]> = tlsHandshakeSecret(h, early, ecdhe);
+  wipe(ecdhe);
+  wipe(early);
+  t.eqStr('{server} extract secret "handshake"', secretHex(handshake), toHex(rfc8448HandshakeSecret()));
+  const derivedForMaster: Secret<u8[]> = tlsDeriveSecret(h, handshake, "derived", tlsEmptyHash(h));
   t.eqStr(
     '{server} derive secret for master "tls13 derived"',
-    toHex(tlsDeriveSecret(h, handshake, "derived", tlsEmptyHash(h))),
+    secretHex(derivedForMaster),
     toHex(rfc8448DerivedForMaster())
   );
-  t.eqStr('{server} extract secret "master"', toHex(tlsMasterSecret(h, handshake)), toHex(rfc8448MasterSecret()));
+  wipe(derivedForMaster);
+  const master: Secret<u8[]> = tlsMasterSecret(h, handshake);
+  t.eqStr('{server} extract secret "master"', secretHex(master), toHex(rfc8448MasterSecret()));
+  wipe(master);
+  const clientHandshakeTraffic: Secret<u8[]> = tlsDeriveSecret(h, handshake, "c hs traffic", rfc8448HelloHash());
   t.eqStr(
     '{server} derive secret "tls13 c hs traffic"',
-    toHex(tlsDeriveSecret(h, handshake, "c hs traffic", rfc8448HelloHash())),
+    secretHex(clientHandshakeTraffic),
     toHex(rfc8448ClientHandshakeTraffic())
   );
+  wipe(clientHandshakeTraffic);
+  wipe(handshake);
 
   // --- The traffic keys and IVs ---------------------------------------------
   t.eqStr(
     "server handshake write key",
-    toHex(tlsTrafficKey(suite, rfc8448ServerHandshakeTraffic())),
+    trafficKeyHex(suite, rfc8448ServerHandshakeTraffic()),
     toHex(rfc8448ServerHandshakeKey())
   );
   t.eqStr(
     "server handshake write iv",
-    toHex(tlsTrafficIv(suite, rfc8448ServerHandshakeTraffic())),
+    trafficIvHex(suite, rfc8448ServerHandshakeTraffic()),
     toHex(rfc8448ServerHandshakeIv())
   );
   t.eqStr(
     "client handshake write key",
-    toHex(tlsTrafficKey(suite, rfc8448ClientHandshakeTraffic())),
+    trafficKeyHex(suite, rfc8448ClientHandshakeTraffic()),
     toHex(rfc8448ClientHandshakeKey())
   );
   t.eqStr(
     "client handshake write iv",
-    toHex(tlsTrafficIv(suite, rfc8448ClientHandshakeTraffic())),
+    trafficIvHex(suite, rfc8448ClientHandshakeTraffic()),
     toHex(rfc8448ClientHandshakeIv())
   );
   t.eqStr(
     "server application write key",
-    toHex(tlsTrafficKey(suite, rfc8448ServerApplicationTraffic())),
+    trafficKeyHex(suite, rfc8448ServerApplicationTraffic()),
     toHex(rfc8448ServerApplicationKey())
   );
   t.eqStr(
     "server application write iv",
-    toHex(tlsTrafficIv(suite, rfc8448ServerApplicationTraffic())),
+    trafficIvHex(suite, rfc8448ServerApplicationTraffic()),
     toHex(rfc8448ServerApplicationIv())
   );
   t.eqStr(
     "client application write key",
-    toHex(tlsTrafficKey(suite, rfc8448ClientApplicationTraffic())),
+    trafficKeyHex(suite, rfc8448ClientApplicationTraffic()),
     toHex(rfc8448ClientApplicationKey())
   );
   t.eqStr(
     "client application write iv",
-    toHex(tlsTrafficIv(suite, rfc8448ClientApplicationTraffic())),
+    trafficIvHex(suite, rfc8448ClientApplicationTraffic()),
     toHex(rfc8448ClientApplicationIv())
   );
 
@@ -264,14 +317,14 @@ export const rfc8448Checks = (): i32 => {
   }
   t.eqStr(
     "the server's verify_data, from the schedule over the trace's transcript",
-    toHex(tlsFinishedVerifyData(h, rfc8448ServerHandshakeTraffic(), transcript.hash())),
+    verifyDataHex(h, rfc8448ServerHandshakeTraffic(), transcript.hash()),
     toHex(tail(rfc8448ServerFinished(), 4))
   );
   const serverFinished: u8[] = rfc8448ServerFinished();
   transcript.update(serverFinished, zero, toI32(serverFinished.length));
   t.eqStr(
     "the client's verify_data, likewise",
-    toHex(tlsFinishedVerifyData(h, rfc8448ClientHandshakeTraffic(), transcript.hash())),
+    verifyDataHex(h, rfc8448ClientHandshakeTraffic(), transcript.hash()),
     toHex(tail(rfc8448ClientFinished(), 4))
   );
   t.eqStr(
@@ -306,7 +359,7 @@ export const rfc8448Checks = (): i32 => {
   transcript.update(finished, zero, toI32(finished.length));
   t.eqStr(
     "resumption_master_secret, from the schedule over the trace's transcript",
-    toHex(tlsDeriveSecret(h, rfc8448MasterSecret(), "res master", transcript.hash())),
+    deriveSecretHex(h, rfc8448MasterSecret(), "res master", transcript.hash()),
     toHex(rfc8448ResumptionSecret())
   );
 

@@ -23,7 +23,6 @@ import {
   TLS_CONTENT_HANDSHAKE,
   TlsRecordProtection,
   TlsRecordReader,
-  tlsNextTrafficSecret,
 } from "nish/net/tls/record";
 import {
   TLS_RECORD_DATA,
@@ -82,6 +81,7 @@ import {
   rfc8448ServerFlightRecord,
   rfc8448ServerHelloRecord,
 } from "./records";
+import { nextTrafficCopy } from "../net_tls_common/secrets";
 
 /** `close_notify` as an alert's two bytes. */
 const closeNotify = (): u8[] => [toU8(1), toU8(TLS_ALERT_CLOSE_NOTIFY)];
@@ -396,7 +396,7 @@ export const rfc8448RecordChecks = (): i32 => {
   const s256: u8[] = rfc8448ClientApplicationTraffic();
   t.eqStr(
     "KeyUpdate's next secret over SHA-256, from the trace's client_application_traffic_secret_0",
-    toHex(tlsNextTrafficSecret(32, s256)),
+    toHex(nextTrafficCopy(32, s256)),
     "fcdfcc72725aaee48bf64e4fd8b749cdbdbab39d90da0b26e2245ca6ea167207"
   );
   const s384: u8[] = [];
@@ -405,7 +405,7 @@ export const rfc8448RecordChecks = (): i32 => {
   }
   t.eqStr(
     "KeyUpdate's next secret over SHA-384",
-    toHex(tlsNextTrafficSecret(48, s384)),
+    toHex(nextTrafficCopy(48, s384)),
     "3255a7cd505c9e8030cd35c53a234e9d4a0fbe907003b132feea8e7eb3fafab00aa859605fcdc4d1f4e7f49d221fabad"
   );
   const chacha = protectionFor(TLS_CHACHA20_POLY1305_SHA256, s256);

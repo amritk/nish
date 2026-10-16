@@ -1,0 +1,2 @@
+declare noundef i32 @widen(i32 noundef)
+store i32 5, i32* %0, align 4

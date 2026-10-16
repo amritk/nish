@@ -26,6 +26,7 @@
 //     rule does not see, and they say they are a limit rather than a rule.
 
 import { isNishSourceModule } from "./nish-modules"
+import { isCReservedSymbol } from "./c-symbols"
 import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./json-typed"
 import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
@@ -34,7 +35,8 @@ import { CheckContext } from "./context"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
-import { checkExpression, recordRangeEntry, WANT_RANGE } from "./expressions"
+import { checkExpression, enterMember, recordMemberEntry, recordRangeEntry, WANT_RANGE } from "./expressions"
+import { unwrapParens } from "./emit-util"
 import {
   annotationName,
   annotationSpelling,
@@ -48,11 +50,14 @@ import {
   capturesOf,
   isParallelEntry,
   isSpawnTemplate,
+  isVoidSpawnTemplate,
   letCaptureMessage,
   nestedCaptureMessage,
   parallelRole,
   recordParallelCall,
   reduceElementMessage,
+  taskLetCaptureMessage,
+  taskThisCaptureMessage,
   thisCaptureMessage,
 } from "./parallel"
 import {
@@ -134,6 +139,7 @@ import {
   PAR_MAP,
   PAR_MAP_NEW,
   PAR_REDUCE,
+  PAR_SPAWN,
   ROLE_FUNCTION,
   STRUCT_CLASS,
   StructInfo,
@@ -201,7 +207,7 @@ const collectionArgumentRefusal = (ctx: CheckContext, template: StructTemplateIn
   return ""
 }
 
-/** A key type of §5.1: a string, a scalar, an enum, or a class held by identity. */
+/** A key type of §5.1: a string, a scalar, an enum or its member type, or a class held by identity. */
 const isCollectionKey = (ctx: CheckContext, type: i32): boolean => {
   const table = ctx.table
   if (
@@ -210,7 +216,7 @@ const isCollectionKey = (ctx: CheckContext, type: i32): boolean => {
     type === T_F32 ||
     type === T_F64 ||
     intBits(type) > 0 ||
-    table.isEnum(type)
+    table.enumBase(type) >= 0
   ) {
     return true
   }
@@ -1353,15 +1359,21 @@ export const checkGenericCall = (
   const bindings = new StringMap()
   let argTypes: i32[] = []
   // Which arguments are checked after the others: a function argument, and a
-  // literal that takes its type from what the others bind.
+  // literal that takes its type from what the others bind. An enum member's
+  // constant is one of those literals, so `first(Kind.Array, xs)` over a
+  // `Kind.Array[]` binds `T` to the member type, and the constant is the enum
+  // only where nothing else binds it; it is known only once it is checked.
   const later: boolean[] = []
   let i = 0
   while (i < args.children.length && i < parameters.children.length) {
     const deferred =
       (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i])
-    later.push(deferred)
     // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
-    argTypes.push(deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE))
+    const type = deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE)
+    const constant =
+      !deferred && type !== T_ERROR && ctx.program.isEnumMember(ctx.table, unwrapParens(args.children[i]))
+    later.push(deferred || constant)
+    argTypes.push(constant ? T_VOID : type)
     i = i + 1
   }
   i = 0
@@ -1484,8 +1496,13 @@ export const checkGenericCall = (
       !sig.isCompileTime(i + offset) &&
       argTypes[i] !== T_ERROR &&
       !recordRangeEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
+      !recordMemberEntry(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset]) &&
       !ctx.table.assignable(argTypes[i], sig.paramTypes[i + offset])
     ) {
+      if (ctx.table.isEnumMemberType(sig.paramTypes[i + offset])) {
+        enterMember(ctx, args.children[i], argTypes[i], sig.paramTypes[i + offset])
+        return T_ERROR
+      }
       const want = ctx.table.typeName(sig.paramTypes[i + offset])
       ctx.error(
         args.children[i],
@@ -1649,7 +1666,7 @@ const bindFunctionParameters = (decl: Node, functions: FunctionSig[]): FunctionB
  * calls and another module defines does.
  *
  * Unique across the program is not unique across the link, though: see
- * `spellHiddenApart`, which renames such a function once every body is checked.
+ * `spellCSymbolsApart`, which renames such a function once every body is checked.
  */
 const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
   if (fn.definedIn(home.source)) {
@@ -1663,27 +1680,38 @@ const exposeTo = (home: CheckContext, fn: FunctionSig): void => {
 }
 
 /**
- * Give every `hidden` symbol C could spell one it cannot (#610).
- *
- * A hidden symbol is global in the executable, so one C could spell -- a
- * function of the program's own package, which carries no prefix -- is the
- * definition the runtime's calls into the C library bind to: a task called
- * `read` was called in place of `read(2)` by the pool's first start, and
- * crashed. Such a symbol takes a `$` at its end, which C cannot spell, no
- * declared name holds, and no instantiation or lifted arrow ends with. A
+ * Give a function whose symbol is not its ABI a spelling C cannot reach, when
+ * the one it has C could (#610, #618): a `$` at its end, which C cannot spell,
+ * no declared name holds, and no instantiation or lifted arrow ends with. A
  * package's prefix and a method's owner already put a `.` in the others.
  *
- * It runs once pass 3 has drained, not in `exposeTo`: a diagnostic about the
- * function, reported while bodies are still checked, names it as it was
- * written, and every instantiation it was given to is keyed on the one
- * spelling, whichever side of the exposure it was minted on. Nothing reads a
- * function's symbol between here and the end of checking but that key, and
- * everything after reads the new one.
+ * Two kinds of function are spelled apart. A `hidden` one, which another
+ * module's instantiation calls, is global in the executable, so a task called
+ * `read` was the definition the runtime's own `read(2)` bound to, and the
+ * pool's first start crashed (#610): every hidden one takes the `$`, whatever
+ * its name. An `internal` one -- not exported, and not made public by
+ * `--no-strict-exports` -- binds nothing outside its module, but LLVM knows
+ * the C library's functions by name and folds a call to one, so a private
+ * `floor` called as `floor(1.5)` printed 1: an internal one takes the `$` when
+ * its name is reserved to C (`isCReservedSymbol`). A `declare function` is the
+ * C function itself and keeps its name; an exported function's name is its
+ * ABI, and `rejectCLibrarySymbols` refuses a reserved one.
+ *
+ * It runs once pass 3 has drained, not when a function is exposed: a
+ * diagnostic about the function, reported while bodies are still checked,
+ * names it as it was written, and every instantiation it was given to is
+ * keyed on the one spelling, whichever side of the exposure it was minted on.
+ * Nothing reads a function's symbol between here and the end of checking but
+ * that key, and everything after reads the new one.
  */
-export const spellHiddenApart = (programs: CheckedProgram[]): void => {
+export const spellCSymbolsApart = (programs: CheckedProgram[], strictExports: boolean): void => {
   for (const program of programs) {
     for (const sig of program.functions) {
-      if (sig.hidden && sig.name.indexOf("$") < 0 && sig.name.indexOf(".") < 0) {
+      if (sig.name.indexOf("$") >= 0 || sig.name.indexOf(".") >= 0 || sig.foreign()) {
+        continue
+      }
+      const internal = !sig.exported && strictExports
+      if (sig.hidden || (internal && isCReservedSymbol(sig.name))) {
         sig.name = `${sig.name}$`
       }
     }
@@ -1958,6 +1986,9 @@ const liftArrowArgument = (
     if (returnType === T_ERROR) {
       return null
     }
+  } else if (arrow.children[3].kind === N_BLOCK && isVoidSpawnTemplate(template)) {
+    // A task with no destination answers nothing, so a block body is `void`.
+    returnType = T_VOID
   } else if (arrow.children[3].kind === N_BLOCK) {
     refuseOnce(
       ctx,
@@ -1968,8 +1999,9 @@ const liftArrowArgument = (
     return null
   }
   const role = parallelRole(template)
-  const capture = role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM
-  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, capture)
+  const task = role === PAR_SPAWN
+  const capture = task || role === PAR_MAP || role === PAR_REDUCE || role === PAR_MAP_NEW || role === PAR_FROM
+  const fn = liftArrow(ctx, arrow, resolved, returnType, scope, capture, task)
   if (fn === null) {
     return null
   }
@@ -2013,7 +2045,8 @@ const liftArrow = (
   types: i32[],
   returnType: i32,
   outer: Scope,
-  capture: boolean
+  capture: boolean,
+  task: boolean
 ): FunctionSig | null => {
   // Checked twice in one body (a caller that re-checks an argument): the arrow
   // is lifted once, and the call node's table slot for it says which.
@@ -2072,6 +2105,7 @@ const liftArrow = (
   ctx.arrowFns.push(fn)
   ctx.arrowScopes.push(scope)
   ctx.arrowCaptures.push(capture)
+  ctx.arrowTasks.push(task)
   fn.captureHost = enclosing
   ctx.functionBindings = new FunctionBindings()
   ctx.current = fn
@@ -2090,6 +2124,7 @@ const liftArrow = (
   ctx.arrowFns.pop()
   ctx.arrowScopes.pop()
   ctx.arrowCaptures.pop()
+  ctx.arrowTasks.pop()
   if (fn.poisoned) {
     // The arrow's own diagnostic stands for the call around it.
     ctx.errored = true
@@ -2151,18 +2186,20 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
     refuseOnce(ctx, expr, capturedMessage(name))
     return null
   }
+  // A scope's task is told about itself: it runs when the scope joins.
+  const task = depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
   if (name === "this") {
-    refuseOnce(ctx, expr, thisCaptureMessage())
+    refuseOnce(ctx, expr, task ? taskThisCaptureMessage() : thisCaptureMessage())
     return null
   }
   if (outer.mutable) {
-    refuseOnce(ctx, expr, letCaptureMessage(name))
+    refuseOnce(ctx, expr, task ? taskLetCaptureMessage(name) : letCaptureMessage(name))
     return null
   }
   // A `const` cannot change, so a narrowing in force at the call holds for
   // as long as the body runs: `if (p !== null)` around the call is enough.
   const type = ctx.arrowOuterScopes[0].typeOf(outer)
-  const why = captureTypeMessage(ctx.program, ctx.table, name, type)
+  const why = captureTypeMessage(ctx.program, ctx.table, name, type, task)
   if (why.length > 0) {
     refuseOnce(ctx, expr, why)
     return null

@@ -133,6 +133,16 @@ const K_MAYBE: i32 = 18
  * the range is the checker's, and every write into one is checked.
  */
 const K_RANGED: i32 = 19
+/**
+ * An enum member type, `Kind.Array`: the one value of the enum `refs[type]`
+ * whose integer is `errs[type]`, spelled `names[type]`. It is keyed by the
+ * value, as `tsc` keys an enum literal type, so two members of one value are
+ * one type. In IR, in memory and at the ABI it is the enum, which is an
+ * `i32`; what it adds is the checker's: a slot of this type holds that member
+ * and nothing else, and a read of one is its enum everywhere a value is
+ * computed with (`baseOf`).
+ */
+const K_ENUM_MEMBER: i32 = 20
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -311,7 +321,7 @@ export class TypeTable {
     // has to tell them apart; the suffix is only added for the readonly one so
     // that every key already in the table keeps its spelling.
     const base =
-      kind === K_RESULT || kind === K_RANGED
+      kind === K_RESULT || kind === K_RANGED || kind === K_ENUM_MEMBER
         ? `${kind}:${ref}:${err}:${state}`
         : this.derivedKey(kind, ref, name)
     const key = ro ? `${base}:ro` : base
@@ -386,6 +396,43 @@ export class TypeTable {
     return type >= 0 && this.kinds[type] === K_ENUM
   }
 
+  /**
+   * The member type of the enum `enumType` whose value is `value`; `name` is
+   * the member it is spelled by, which the first request for that value
+   * decides, so the caller passes the first member declared with it.
+   */
+  enumMemberOf(enumType: i32, value: i32, name: string): i32 {
+    return this.internAll(K_ENUM_MEMBER, enumType, name, value, R_UNKNOWN, false)
+  }
+
+  /** Whether `type` is an enum member type; -1, a node with no recorded type, is not. */
+  isEnumMemberType(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_ENUM_MEMBER
+  }
+
+  /**
+   * Whether a slot of `type` is a sink its value is checked into, rather than
+   * a width a literal might take: a range, which a value enters with a check,
+   * and an enum member type, which only its member enters. A sink that passes
+   * no contextual type to a plain value passes one of these down anyway.
+   */
+  isEntered(type: i32): boolean {
+    return this.isRanged(type) || this.isEnumMemberType(type)
+  }
+
+  /** The integer an enum member type holds. */
+  memberValue(type: i32): i32 {
+    return this.errs[type]
+  }
+
+  /** The enum a value of `type` is: the enum itself, or a member type's enum; -1 for anything else. */
+  enumBase(type: i32): i32 {
+    if (this.isEnum(type)) {
+      return type
+    }
+    return this.isEnumMemberType(type) ? this.refs[type] : -1
+  }
+
   /** `T | null`, which is already itself for a `T | null`, as in stage0's `src/types.ts`. */
   nullableOf(inner: i32): i32 {
     if (this.kinds[inner] === K_NULLABLE) {
@@ -450,6 +497,9 @@ export class TypeTable {
    * everything else.
    */
   baseOf(type: i32): i32 {
+    if (this.isEnumMemberType(type)) {
+      return this.refs[type] // a member reads as its enum, as a range reads as `i32`
+    }
     return this.isRanged(type) ? T_I32 : type
   }
 
@@ -554,6 +604,11 @@ export class TypeTable {
       // `Result<i32, string>` share a layout and must not share a layout name.
       case K_ENUM:
         return `en$${this.names[type]}`
+      // The value rather than the member's name, because the value is the
+      // type's identity, and `em.` apart from `en$` so a member type never
+      // shares a symbol with its enum.
+      case K_ENUM_MEMBER:
+        return `em.${signedBound(this.errs[type])}.${this.mangle(this.refs[type])}`
       case K_RESULT:
         return `res.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`
       // WP31 §4: each bound is `p` or `m` and its decimal value, so a run of
@@ -649,6 +704,7 @@ export class TypeTable {
       // WP23: an enum is an `i32`, so it packs exactly as one does — every
       // widening on that path goes through `llvmType`, which already says `i32`.
       kind === K_ENUM ||
+      kind === K_ENUM_MEMBER ||
       kind === K_RANGED
     )
   }
@@ -724,6 +780,8 @@ export class TypeTable {
         return `%struct.${this.names[type]}*`
       case K_ENUM:
         return "i32"
+      case K_ENUM_MEMBER:
+        return "i32"
       case K_RANGED:
         return "i32"
       case K_NULLABLE:
@@ -756,6 +814,8 @@ export class TypeTable {
         return 4
       case K_ENUM:
         return 4 // an i32
+      case K_ENUM_MEMBER:
+        return 4 // its enum's i32
       case K_RANGED:
         return 4 // an i32 (WP31 §5)
       default:
@@ -778,6 +838,8 @@ export class TypeTable {
         return this.displays[type].length > 0 ? this.displays[type] : this.names[type]
       case K_ENUM:
         return this.displays[type].length > 0 ? this.displays[type] : this.names[type]
+      case K_ENUM_MEMBER:
+        return `${this.typeName(this.refs[type])}.${this.names[type]}`
       case K_RANGED:
         return `integer<${this.refs[type]}, ${this.errs[type]}>`
       case K_NULLABLE:
@@ -846,6 +908,12 @@ export class TypeTable {
     // other direction is an entry, which `checkExpression` records where the
     // value is checked into its sink, so it never reaches this question.
     if (to === T_I32 && this.kinds[from] === K_RANGED) {
+      return true
+    }
+    // A member type converts to its enum, the same `i32`. Nothing converts
+    // the other way: a slot of a member type is entered only by that member's
+    // constant, which `checkExpression` records where the slot is known.
+    if (this.kinds[from] === K_ENUM_MEMBER && this.refs[from] === to) {
       return true
     }
     // `state` is a proof about one use site, not part of the type: a `Result`

@@ -101,7 +101,6 @@ import {
   CheckedProgram,
   FieldInfo,
   FunctionSig,
-  Instantiation,
   PAR_CHUNK,
   PAR_FROM,
   PAR_MAP,
@@ -112,17 +111,19 @@ import {
   PAR_TASK,
   ParallelCall,
   ROLE_CONSTRUCTOR,
+  STRUCT_CLASS,
   ScopeChannels,
   StructInfo,
   StructInstantiation,
   TemplateInfo,
   capturedReads,
 } from "./program"
+import { isCollectionStruct } from "./generics"
 import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, TypeTable } from "./types"
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
 const THREAD_SCOPE: string = "ThreadScope"
@@ -176,15 +177,78 @@ const isThreadsModule = (program: CheckedProgram): boolean =>
 export const isThreadsSource = (program: CheckedProgram): boolean =>
   program.source.path === threadsModuleName()
 
-/** Whether `template` is `ThreadScope.spawn` from `nish/threads` (WP29 P2). */
+/**
+ * The methods of `ThreadScope` a `spawn` statement calls: `spawn` itself, with
+ * a destination, and the two the compiler gives the forms without one
+ * (`spawnFormFor`), which the source never names.
+ */
+const isSpawnMethodName = (name: string): boolean =>
+  name === "spawn" || name === SPAWN_WITH || name === SPAWN_THUNK
+
+/** `ThreadScope`'s method for `s.spawn(entry, arg)`, whose task stores nothing. */
+const SPAWN_WITH: string = "spawnWith"
+
+/** `ThreadScope`'s method for `s.spawn(() => ...)`, whose task takes no argument and stores nothing. */
+const SPAWN_THUNK: string = "spawnThunk"
+
+/** Whether `template` is one of `ThreadScope`'s spawn methods from `nish/threads` (WP29 P2). */
 export const isSpawnTemplate = (template: TemplateInfo): boolean => {
   const owner = template.owner
   return (
     owner !== null &&
     owner.name === THREAD_SCOPE &&
-    template.decl.children[0].text === "spawn" &&
+    isSpawnMethodName(template.decl.children[0].text) &&
     isThreadsModule(template.home.program)
   )
+}
+
+/**
+ * The `ThreadScope` method a `spawn` written with `count` arguments calls: the
+ * four-argument form is `spawn` itself, `s.spawn(entry, arg)` is `spawnWith`
+ * and `s.spawn(() => ...)` is `spawnThunk` (docs/LANGUAGE.md, "Scoped tasks").
+ * TypeScript would spell the three as overloads; the language has none, so
+ * the checker picks the method by the count, and under Node, where every form
+ * reaches `spawn`, that method's body tells them apart (`slotWritten` in
+ * `std/threads.ts`). Any other count is `spawn`'s, whose arity refuses it.
+ */
+export const spawnFormFor = (template: TemplateInfo, count: i32): string => {
+  if (!isSpawnTemplate(template) || template.decl.children[0].text !== "spawn") {
+    return ""
+  }
+  if (count === 2) {
+    return SPAWN_WITH
+  }
+  return count === 1 ? SPAWN_THUNK : ""
+}
+
+/** Whether `template` is `spawnWith` or `spawnThunk`, whose task stores nothing. */
+export const isVoidSpawnTemplate = (template: TemplateInfo): boolean => {
+  const name = template.decl.children[0].text
+  return isSpawnTemplate(template) && (name === SPAWN_WITH || name === SPAWN_THUNK)
+}
+
+/** Whether `sig` is a spawn whose task stores nothing: an instance of `spawnWith` or `spawnThunk`. */
+export const isVoidSpawn = (sig: FunctionSig): boolean => {
+  const instance = sig.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  if (template === null || instance === null || instance.parallel !== PAR_SPAWN) {
+    return false
+  }
+  const name = template.decl.children[0].text
+  return name === SPAWN_WITH || name === SPAWN_THUNK
+}
+
+/**
+ * The type of the argument a spawn instance hands its task, or -1 for
+ * `spawnThunk`, whose task takes none: its first type argument is the answer.
+ */
+const taskArgTypeOf = (sig: FunctionSig): i32 => {
+  const instance = sig.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  if (instance === null || template === null || instance.typeArgs.length === 0) {
+    return -1
+  }
+  return template.decl.children[0].text === SPAWN_THUNK ? -1 : instance.typeArgs[0]
 }
 
 /** The `PAR_*` role of an instantiation of `template`. */
@@ -195,7 +259,11 @@ export const parallelRole = (template: TemplateInfo): i32 => {
   if (template.owner !== null || !isThreadsModule(template.home.program)) {
     return PAR_NONE
   }
-  if (template.sourceName === "runTask") {
+  if (
+    template.sourceName === "runTask" ||
+    template.sourceName === "runWith" ||
+    template.sourceName === "runThunk"
+  ) {
     return PAR_TASK
   }
   const name = template.sourceName
@@ -476,7 +544,17 @@ export const reduceElementMessage = (
   } else if (role === PAR_FROM) {
     intrinsic = "parallelFrom"
   }
-  return resultWording(table, intrinsic, functions[0], typeArgs[typeArgs.length - 1])
+  const result = typeArgs[typeArgs.length - 1]
+  // The template's `new Array<U>(n)` zero-fills, which a member type other
+  // than a 0 refuses (NL2520) inside `std/threads.ts`; refused here instead.
+  if (table.isEnumMemberType(result) && table.memberValue(result) !== 0) {
+    const spelled = table.typeName(result)
+    return (
+      `\`${functions[0].sourceName}\` answers the member type \`${spelled}\`, and \`${intrinsic}\` zero-fills ` +
+      `the array its workers write, which a \`${spelled}\` cannot hold; declare the body to answer \`${table.typeName(table.enumBase(result))}\``
+    )
+  }
+  return resultWording(table, intrinsic, functions[0], result)
 }
 
 /**
@@ -746,6 +824,23 @@ export const thisCaptureMessage = (): string =>
   "it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call " +
   "(`const self = this`, `const k = this.k`)"
 
+/** The refusal for a `let` a task's arrow reads. */
+export const taskLetCaptureMessage = (name: string): string =>
+  `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a task's arrow may read only a ` +
+  "`const` or a parameter of that function, which is handed to the task when it is spawned as its argument is " +
+  "and cannot change before it runs; bind the value to a `const` before the `spawn`"
+
+/** The refusal for `this` in a task's arrow. */
+export const taskThisCaptureMessage = (): string =>
+  "The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is " +
+  "written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` " +
+  "(`const self = this`, `const k = this.k`)"
+
+/** The refusal for an assignment to a name a task's arrow captures. */
+export const taskCaptureWriteMessage = (name: string): string =>
+  `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a task reads a captured ` +
+  "value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument"
+
 /** The refusal for an assignment to a captured name. */
 export const captureWriteMessage = (name: string): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a data-parallel body ` +
@@ -760,8 +855,19 @@ const isThreadsLayout = (info: StructInfo): boolean => {
   return info.origin.path === threadsModuleName() && info.name === THREAD_SCOPE
 }
 
-/** Why a value of `type` may not be captured, or "" when it may; `seen` stops a recursive class. */
-const captureObstacle = (program: CheckedProgram, table: TypeTable, type: i32, seen: StringSet): string => {
+/**
+ * Why a value of `type` may not be captured, or "" when it may; `seen` stops a
+ * recursive class. A scope's `task` may capture a `Mutex`, as it may be handed
+ * one as its argument, and R7 and R8 hold of it as of an argument; a guard, a
+ * channel and a scope it may not, since each is shared only by its own rules.
+ */
+const captureObstacle = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  seen: StringSet,
+  task: boolean
+): string => {
   if (table.isMaybe(type)) {
     return "a value that may be absent is read through the test that found it, which the body cannot repeat"
   }
@@ -773,7 +879,7 @@ const captureObstacle = (program: CheckedProgram, table: TypeTable, type: i32, s
     return "a `Result` is read through the test that narrowed it; bind the value it holds to a `const` instead"
   }
   if (kind === K_NULLABLE || kind === K_ARRAY) {
-    return captureObstacle(program, table, table.refOf(type), seen)
+    return captureObstacle(program, table, table.refOf(type), seen, task)
   }
   if (kind !== K_STRUCT) {
     return ""
@@ -787,11 +893,20 @@ const captureObstacle = (program: CheckedProgram, table: TypeTable, type: i32, s
   if (info === null) {
     return "its layout is not known here"
   }
+  if (task && isThreadsClass(info, MUTEX)) {
+    return "" // the lock's data is reached only through its guard, by the task that takes it
+  }
+  if (task && isThreadsLayout(info)) {
+    return (
+      "a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a " +
+      "channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders"
+    )
+  }
   if (isThreadsLayout(info)) {
     return "a scope, a lock, a guard or a channel is shared only by the rules of its own block"
   }
   for (const field of info.fields) {
-    const inner = captureObstacle(program, table, field.type, seen)
+    const inner = captureObstacle(program, table, field.type, seen, task)
     if (inner.length > 0) {
       return inner
     }
@@ -804,11 +919,15 @@ export const captureTypeMessage = (
   program: CheckedProgram,
   table: TypeTable,
   name: string,
-  type: i32
+  type: i32,
+  task: boolean
 ): string => {
-  const why = captureObstacle(program, table, type, new StringSet())
+  const why = captureObstacle(program, table, type, new StringSet(), task)
   if (why.length === 0) {
     return ""
+  }
+  if (task) {
+    return `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and a task cannot capture it: ${why}`
   }
   return (
     `The arrow reads \`${name}\`, which is \`${table.typeName(type)}\`, and a data-parallel body cannot capture it: ` +
@@ -1063,20 +1182,27 @@ const usingPlaceMessage = (): string =>
   "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, " +
   "and a single-statement body is not a block"
 
-/** The task given to `spawn` is an arrow. */
-export const taskArrowMessage = (): string =>
-  "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a " +
-  "unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread " +
-  "(declare the arrow as a `const` of the module and pass its name)"
+/** A task with no destination whose entry answers something, which nothing would store. */
+export const voidTaskResultMessage = (table: TypeTable, fn: FunctionSig): string => {
+  if (fn.returnType === T_VOID) {
+    return ""
+  }
+  const shown = fn.lifted ? "The arrow" : `\`${fn.sourceName}\``
+  return (
+    `${shown} answers \`${table.typeName(fn.returnType)}\`, and a \`spawn\` without a destination stores nothing: ` +
+    "a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope " +
+    "joins, so make the task answer `void` or give it a destination"
+  )
+}
 
 /** The argument of a task is a `Result` the ABI passes as its parts. */
 export const taskArgumentMessage = (table: TypeTable, sig: FunctionSig): string => {
-  const instance = sig.instance
-  if (instance === null || instance.typeArgs.length === 0 || !table.resultByValue(instance.typeArgs[0])) {
+  const arg = taskArgTypeOf(sig)
+  if (arg < 0 || !table.resultByValue(arg)) {
     return ""
   }
   return (
-    `The argument of \`spawn\` is \`${table.typeName(instance.typeArgs[0])}\`, which a task cannot be handed: ` +
+    `The argument of \`spawn\` is \`${table.typeName(arg)}\`, which a task cannot be handed: ` +
     "a `Result` is passed as its parts rather than as one value, so hand the task the value it holds"
   )
 }
@@ -1314,6 +1440,8 @@ class VariableUses {
   locals: Local[]
   freshArray: boolean[]
   freshLiteral: boolean[]
+  /** A `const` bound to a `new`: an object no other binding held when it was made. */
+  freshNew: boolean[]
   handedOn: boolean[]
   destination: boolean[]
 
@@ -1321,6 +1449,7 @@ class VariableUses {
     this.locals = []
     this.freshArray = []
     this.freshLiteral = []
+    this.freshNew = []
     this.handedOn = []
     this.destination = []
   }
@@ -1337,6 +1466,7 @@ class VariableUses {
     this.locals.push(local)
     this.freshArray.push(false)
     this.freshLiteral.push(false)
+    this.freshNew.push(false)
     this.handedOn.push(false)
     this.destination.push(false)
     return this.locals.length - 1
@@ -1346,6 +1476,12 @@ class VariableUses {
   isDestinationShaped(local: Local | null): boolean {
     const at = this.indexOf(local)
     return at >= 0 && this.freshArray[at] && !this.handedOn[at]
+  }
+
+  /** A `const` bound to a `new`, whose object no other binding of this function's names. */
+  isFreshNew(local: Local | null): boolean {
+    const at = this.indexOf(local)
+    return at >= 0 && this.freshNew[at]
   }
 
   /** A `const` bound to a fresh literal, never handed on and never a destination: nothing but this function reaches it. */
@@ -1414,6 +1550,18 @@ const handOnRoot = (program: CheckedProgram, arg: Node, uses: VariableUses): voi
   }
 }
 
+/** Every local an arrow task captures, handed on: the task holds each one until its scope joins. */
+const handOnCaptures = (program: CheckedProgram, arrow: Node, uses: VariableUses): void => {
+  const reads: Node[] = []
+  capturedReads(program, arrow, reads)
+  for (const read of reads) {
+    const local = sourceLocal(program.nodeLocals[read.id])
+    if (local !== null) {
+      uses.handedOn[uses.add(local)] = true
+    }
+  }
+}
+
 /**
  * Record what `node` does with the variables it names. A use of a variable
  * keeps it unhanded only as the base of an index or a member, as the iterable
@@ -1428,6 +1576,7 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
         const at = uses.add(local)
         uses.freshArray[at] = constant && isFreshArray(decl.children[2])
         uses.freshLiteral[at] = constant && isFreshLiteral(decl.children[2])
+        uses.freshNew[at] = constant && unwrapParens(decl.children[2]).kind === N_NEW
       }
     }
   }
@@ -1454,6 +1603,10 @@ const collectUses = (program: CheckedProgram, node: Node, parent: Node | null, u
       const local: Local | null = k === 2 ? namedLocal(program, arg) : null
       if (local !== null) {
         uses.destination[uses.add(local)] = true
+      } else if (arg.kind === N_ARROW) {
+        // An arrow task reads what it captures when the scope joins, as a task
+        // reads its argument, so each one is handed on however the arrow uses it.
+        handOnCaptures(program, arg, uses)
       } else {
         collectUses(program, arg, node.children[1], uses)
         handOnRoot(program, arg, uses)
@@ -1480,14 +1633,23 @@ class RegionState {
   locals: Local[]
   name: string
   destinations: Local[]
-  /** WP29 P3: the argument type of every task of the scope, which is what R7 asks a lock about. */
+  /**
+   * WP29 P3: the argument type of every task of the scope, and of every
+   * `const` an arrow task captures, which is what R7 asks a lock about.
+   */
   taskArgs: i32[]
+  /** Parallel to `taskArgs`: how R7 names each, `arg` or the captured local's name. */
+  taskArgRoots: string[]
+  /** Whether a task of the scope can have been filed by now, with a destination or without one. */
+  started: boolean
 
   constructor(locals: Local[], name: string) {
     this.locals = locals
     this.name = name
     this.destinations = []
     this.taskArgs = []
+    this.taskArgRoots = []
+    this.started = false
   }
 
   owns(local: Local | null): boolean {
@@ -1498,7 +1660,9 @@ class RegionState {
     return local !== null && this.destinations.indexOf(local) >= 0
   }
 
+  /** A `spawn` on the scope has been passed: its destination, if it has one, is `local`. */
   addDestination(local: Local | null): void {
+    this.started = true
     if (local !== null && this.destinations.indexOf(local) < 0) {
       this.destinations.push(local)
     }
@@ -1506,7 +1670,7 @@ class RegionState {
 
   /** Whether a task can have been filed by now: the first `spawn`, or one in a loop around this. */
   live(): boolean {
-    return this.destinations.length > 0
+    return this.started
   }
 }
 
@@ -1543,9 +1707,15 @@ const collectTaskArgs = (program: CheckedProgram, node: Node, state: RegionState
   }
   const callee = spawnCallee(program, node)
   if (callee !== null && state.owns(spawnReceiver(program, node))) {
-    const instance = callee.instance
-    if (instance !== null && instance.typeArgs.length > 0) {
-      state.taskArgs.push(instance.typeArgs[0])
+    // An arrow's captures reach the task as its argument does.
+    const arg = taskArgTypeOf(callee)
+    if (arg >= 0) {
+      state.taskArgs.push(arg)
+      state.taskArgRoots.push("arg")
+    }
+    for (const slot of capturesOf(callee)) {
+      state.taskArgs.push(slot.type())
+      state.taskArgRoots.push(slot.arrow.captures[slot.index].name)
     }
   }
   for (const child of node.children) {
@@ -1656,6 +1826,12 @@ const regionCallMessage = (
   if (isSpawnEntry(sig)) {
     return regionWriteMessage(state, "A task of another scope, whose join stores its answer,")
   }
+  // An atomic's method writes only its own word, and whether a task reaches
+  // that word is `regionAtomicMessageFor`'s to judge, by the types the tasks
+  // hold: an atomic none of them reaches is the parent's alone.
+  if (isAtomicMethod(sig)) {
+    return ""
+  }
   return writesThroughMessage(program, table, facts, node, sig, state)
 }
 
@@ -1699,6 +1875,20 @@ const writesThroughMessage = (
     }
   }
   return ""
+}
+
+/**
+ * The `walkOpen` a `for...of` straight over a `Map` or `Set` calls where the
+ * loop is entered, or null for any other loop. A walk of `m.keys()` or
+ * `m.values()` is a call of its own, which the region judges as one.
+ */
+const walkOpenOf = (program: CheckedProgram, loop: Node): FunctionSig | null => {
+  if (unwrapParens(loop.children[1]).kind === N_CALL) {
+    return null
+  }
+  const read = program.nodeCallees[loop.id]
+  const owner: StructInfo | null = read === null ? null : read.owner
+  return owner === null || !isCollectionStruct(owner) ? null : owner.method("walkOpen")
 }
 
 /** Whether `sig`'s parameter `name` is a `Channel`. */
@@ -1779,6 +1969,11 @@ const walkRegion = (
     message = regionReadMessage(state, unwrapParens(node.children[0]).text)
   } else if (node.kind === N_FOR_OF && state.isDestination(namedLocal(program, node.children[1]))) {
     message = regionReadMessage(state, unwrapParens(node.children[1]).text)
+  } else if (node.kind === N_FOR_OF && walkOpenOf(program, node) !== null) {
+    // A walk of a `Map` or `Set` itself is a call of its `walkOpen`, which
+    // counts the walk into the table, as `s.keys()` in the same place is.
+    const open = walkOpenOf(program, node)
+    message = open === null ? "" : writesThroughMessage(program, table, facts, node, open, state)
   } else if (node.kind === N_CALL) {
     message = regionCallMessage(program, table, facts, node, state, uses)
   } else if (node.kind === N_NEW) {
@@ -1889,6 +2084,9 @@ const findRegions = (
           }
           j = j + 1
         }
+        if (locals.length > 1) {
+          checkSiblingScopes(program, table, facts, uses, node, i, locals, out)
+        }
       }
       i = i + 1
     }
@@ -1897,6 +2095,247 @@ const findRegions = (
     findRegions(program, table, facts, uses, child, out)
   }
 }
+
+/**
+ * R7 across the scopes one `using` statement opens, `using s = scope(), t =
+ * scope()`: natively they join one after the other, the last declared first,
+ * so every task of `t` runs before any of `s`, while under Node each runs
+ * where it is spawned. Tasks of two of them may therefore share no lock, no
+ * atomic and no destination, whichever is spawned first. What a task shares
+ * is judged by what it reaches: a `Mutex` or an atomic it is handed as a
+ * `const` bound to a `new` is that binding's object alone, and one it reaches
+ * any other way is every object of its type.
+ */
+const checkSiblingScopes = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  uses: VariableUses,
+  block: Node,
+  at: i32,
+  locals: Local[],
+  out: ScopeFinding[]
+): void => {
+  const spawns: SiblingSpawn[] = []
+  let k = at + 1
+  while (k < block.children.length) {
+    collectSiblingSpawns(program, table, facts, uses, block.children[k], locals, spawns)
+    k = k + 1
+  }
+  let j = 0
+  while (j < spawns.length) {
+    let i = 0
+    let message = ""
+    while (i < j && message.length === 0) {
+      if (spawns[i].scope !== spawns[j].scope) {
+        message = siblingShareMessage(spawns[i], spawns[j])
+      }
+      i = i + 1
+    }
+    if (message.length > 0) {
+      out.push(new ScopeFinding(spawns[j].node, message))
+    }
+    j = j + 1
+  }
+}
+
+/**
+ * A lock or an atomic a task reaches, for `checkSiblingScopes`: `local` when
+ * it is that `const`'s own object, `null` when it is any object of `type`,
+ * and `path` how the task reaches it.
+ */
+class SiblingReach {
+  local: Local | null
+  path: string
+  type: i32
+  atomic: boolean
+
+  constructor(atomic: boolean, local: Local | null, type: i32, path: string) {
+    this.atomic = atomic
+    this.local = local
+    this.type = type
+    this.path = path
+  }
+
+  /** Whether `other` may be the same object. */
+  meets(other: SiblingReach): boolean {
+    if (this.atomic !== other.atomic || this.type !== other.type) {
+      return false
+    }
+    const mine = this.local
+    const theirs = other.local
+    return mine === null || theirs === null || mine === theirs
+  }
+}
+
+/** One `spawn` on a scope of a `using` that opens several: its scope, destination, and the locks and atomics its task reaches. */
+class SiblingSpawn {
+  node: Node
+  scope: Local
+  destination: Local | null
+  reaches: SiblingReach[]
+
+  constructor(node: Node, scope: Local, destination: Local | null) {
+    this.node = node
+    this.scope = scope
+    this.destination = destination
+    this.reaches = []
+  }
+}
+
+/** Every `spawn` under `node` on one of `locals`' scopes, with what its task reaches. */
+const collectSiblingSpawns = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  uses: VariableUses,
+  node: Node,
+  locals: Local[],
+  out: SiblingSpawn[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  const callee = spawnCallee(program, node)
+  const receiver: Local | null = callee === null ? null : spawnReceiver(program, node)
+  if (callee !== null && receiver !== null && locals.indexOf(receiver) >= 0) {
+    const spawn = new SiblingSpawn(node, receiver, spawnDestination(program, node))
+    // A task that takes no lock shares none, and one that reaches no atomic method no atomic.
+    const locks = takesLock(facts, callee)
+    const atomics = reachesAtomic(facts, callee.name, new StringSet())
+    const arg = taskArgTypeOf(callee)
+    if (arg >= 0) {
+      const args = node.children[1].children
+      const local: Local | null = args.length > 1 ? namedLocal(program, args[1]) : null
+      const root = local === null ? "arg" : local.name
+      siblingReaches(program, table, uses, arg, local, root, locks, atomics, spawn.reaches)
+    }
+    for (const slot of capturesOf(callee)) {
+      const local = sourceLocal(slot.arrow.captures[slot.index])
+      const name = slot.arrow.captures[slot.index].name
+      siblingReaches(program, table, uses, slot.type(), local, name, locks, atomics, spawn.reaches)
+    }
+    out.push(spawn)
+  }
+  for (const child of node.children) {
+    collectSiblingSpawns(program, table, facts, uses, child, locals, out)
+  }
+}
+
+/** What a task input of `type`, read from `local` and named `root`, reaches: pushed onto `out`. */
+const siblingReaches = (
+  program: CheckedProgram,
+  table: TypeTable,
+  uses: VariableUses,
+  type: i32,
+  local: Local | null,
+  root: string,
+  locks: boolean,
+  atomics: boolean,
+  out: SiblingReach[]
+): void => {
+  const info = classLayoutOf(program, table, type)
+  let own: Local | null = null
+  if (local !== null && uses.isFreshNew(local)) {
+    own = local
+  }
+  if (own !== null && isAtomicClass(info)) {
+    if (atomics) {
+      out.push(new SiblingReach(true, own, type, own.name))
+    }
+    return
+  }
+  if (own !== null && info !== null && isThreadsClass(info, MUTEX)) {
+    if (locks) {
+      out.push(new SiblingReach(false, own, type, own.name))
+    }
+    // What its data holds is reached through the lock, as any field is.
+    for (const field of info.fields) {
+      heldReaches(
+        program,
+        table,
+        field.type,
+        `${own.name}.${field.name}`,
+        locks,
+        atomics,
+        new StringSet(),
+        out
+      )
+    }
+    return
+  }
+  heldReaches(program, table, type, root, locks, atomics, new StringSet(), out)
+}
+
+/** Every `Mutex` and atomic a value of `type` reaches, by type: `heldPath`'s walk, collecting. */
+const heldReaches = (
+  program: CheckedProgram,
+  table: TypeTable,
+  type: i32,
+  root: string,
+  locks: boolean,
+  atomics: boolean,
+  seen: StringSet,
+  out: SiblingReach[]
+): void => {
+  const kind = table.kindOf(type)
+  if (kind === K_NULLABLE) {
+    heldReaches(program, table, table.refOf(type), root, locks, atomics, seen, out)
+    return
+  }
+  if (kind === K_ARRAY) {
+    heldReaches(program, table, table.refOf(type), `${root}[i]`, locks, atomics, seen, out)
+    return
+  }
+  if (kind === K_RESULT) {
+    heldReaches(program, table, table.okOf(type), `${root}.value`, locks, atomics, seen, out)
+    heldReaches(program, table, table.errOf(type), `${root}.error`, locks, atomics, seen, out)
+    return
+  }
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return
+  }
+  if (isAtomicClass(info)) {
+    if (atomics) {
+      out.push(new SiblingReach(true, null, type, root))
+    }
+    return
+  }
+  if (isThreadsClass(info, MUTEX) && locks) {
+    out.push(new SiblingReach(false, null, type, root))
+  }
+  if (!seen.add(info.name)) {
+    return
+  }
+  for (const field of info.fields) {
+    heldReaches(program, table, field.type, `${root}.${field.name}`, locks, atomics, seen, out)
+  }
+}
+
+/** The refusal of `later`, a `spawn` on a scope sibling to `earlier`'s, when their tasks share something, or "". */
+const siblingShareMessage = (earlier: SiblingSpawn, later: SiblingSpawn): string => {
+  const destination = later.destination
+  const shared = earlier.destination
+  if (destination !== null && shared !== null && destination === shared) {
+    return siblingMessage(later, earlier, `the destination \`${destination.name}\``)
+  }
+  for (const reach of later.reaches) {
+    for (const other of earlier.reaches) {
+      if (reach.meets(other)) {
+        const what = reach.atomic ? "an atomic" : "a `Mutex`"
+        return siblingMessage(later, earlier, `${what} through \`${reach.path}\``)
+      }
+    }
+  }
+  return ""
+}
+
+const siblingMessage = (later: SiblingSpawn, earlier: SiblingSpawn, what: string): string =>
+  `This \`spawn\` on \`${later.scope.name}\` hands its task ${what}, which a task of \`${earlier.scope.name}\` ` +
+  "also reaches: the scopes one `using` statement opens join one after the other natively, the last declared " +
+  "first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no " +
+  "atomic and no destination; open the scopes in `using` statements of their own"
 
 /** The destination rule and every region of one function's body. */
 const checkBody = (
@@ -1994,6 +2433,52 @@ export const isChannelReader = (sig: FunctionSig): boolean => isChannelMethod(si
 export const isLockMethod = (sig: FunctionSig): boolean =>
   isThreadsClass(sig.owner, MUTEX) && sig.decl.kind === N_METHOD && sig.decl.children[0].text === "lock"
 
+// ---- Atomics: `AtomicI32` and `AtomicI64` ------------------------------------------------
+//
+// An atomic is a class of one scalar whose methods the emitter writes as one
+// sequentially consistent instruction each (`emitAtomicBody`). It reaches a
+// task as a `Mutex` does, by its argument or a capture, and R7 holds of it as
+// of a lock; an atomic method's write is not a shared one, so a task and a
+// data-parallel body may make it beside the guarded store and the send.
+
+/** The two classes `nish/threads` declares for atomics. */
+const ATOMIC_I32: string = "AtomicI32"
+const ATOMIC_I64: string = "AtomicI64"
+
+/**
+ * Mark `info` as an atomic when it is `AtomicI32` or `AtomicI64` and `program`
+ * is `nish/threads` itself, as the class is collected. The package is part of
+ * the test, as `isThreadsModule`'s is: a root-package `std/threads.ts` that
+ * declares an `AtomicI32` declares an ordinary class, whose bodies run as they
+ * are written.
+ */
+export const markAtomicClass = (program: CheckedProgram, info: StructInfo): void => {
+  if (
+    info.kind === STRUCT_CLASS &&
+    (info.name === ATOMIC_I32 || info.name === ATOMIC_I64) &&
+    isThreadsModule(program)
+  ) {
+    info.atomic = true
+  }
+}
+
+/** Whether `info` is `nish/threads`'s `AtomicI32` or `AtomicI64`. */
+const isAtomicClass = (info: StructInfo | null): boolean => info !== null && info.atomic
+
+/** Whether `type` is an `AtomicI32` or an `AtomicI64`. */
+const isAtomicType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
+  isAtomicClass(classLayoutOf(program, table, type))
+
+/** Whether `type` is a class `nish/threads` declares, an atomic included. */
+const isThreadsObjectType = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
+  const info = classLayoutOf(program, table, type)
+  return info !== null && (isAtomicClass(info) || isThreadsLayout(info))
+}
+
+/** Whether `sig` is a method of an atomic, whose body the emitter writes. */
+export const isAtomicMethod = (sig: FunctionSig): boolean =>
+  isAtomicClass(sig.owner) && sig.decl.kind === N_METHOD
+
 /** Whether `node` is a call of a `Mutex`'s `lock()`. */
 export const isLockCall = (program: CheckedProgram, node: Node): boolean => {
   if (node.kind !== N_CALL) {
@@ -2037,6 +2522,16 @@ const mutexMemberMessage = (name: string): string =>
   `\`${name}\` is not a member a program may name: the data a \`Mutex\` owns is reachable only through ` +
   "the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock"
 
+const atomicMemberMessage = (name: string): string =>
+  `\`${name}\` is not a member a program may name: an atomic is read and updated only by calling its ` +
+  "methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race " +
+  "with the update a task makes at the same moment"
+
+const threadsLiteralMessage = (table: TypeTable, type: i32): string =>
+  `\`${table.typeName(type)}\` is a class of \`nish/threads\`, and its objects are made only as the module ` +
+  "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
+  "An object literal would be a plain record under Node, with none of the methods the class is used through"
+
 const lockNotUsingMessage = (): string =>
   "`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released " +
   "when the block that declares it ends, so a guard bound any other way would be one nobody releases"
@@ -2070,6 +2565,16 @@ const regionLockMessage = (state: RegionState, what: string, path: string): stri
   `${what} locks a \`Mutex\` a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
   "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
   "so the parent locks what they share only before the statement that holds the first `spawn` or after the join"
+
+const regionAtomicMessage = (state: RegionState, what: string, path: string): string =>
+  `${what} reaches an atomic a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
+  "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
+  "so the parent touches what they share only before the statement that holds the first `spawn` or after the join"
+
+const taskCaptureMutexMessage = (table: TypeTable, name: string, type: i32, path: string): string =>
+  `The task's arrow reads \`${name}\`, which is \`${table.typeName(type)}\` and reaches a \`Mutex\` through ` +
+  `\`${path}\`: a captured value is the task's argument, and a \`Mutex\` reaches a task as an argument or as a ` +
+  "field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer"
 
 const taskMutexMessage = (table: TypeTable, type: i32, path: string): string =>
   `The argument of \`spawn\` is \`${table.typeName(type)}\`, which reaches a \`Mutex\` through \`${path}\`: ` +
@@ -2166,6 +2671,28 @@ const reachesWait = (
   return false
 }
 
+/** Whether the function `name` is an atomic method or calls one, directly or through any callee. */
+const reachesAtomic = (facts: FactsTable, name: string, seen: StringSet): boolean => {
+  if (!seen.add(name)) {
+    return false
+  }
+  const own = facts.get(name)
+  if (own === null) {
+    return false
+  }
+  if (own.atomic) {
+    return true
+  }
+  let c = 0
+  while (c < own.callees.size()) {
+    if (reachesAtomic(facts, own.callees.at(c), seen)) {
+      return true
+    }
+    c = c + 1
+  }
+  return false
+}
+
 /** Whether a call of `fn` takes a lock, directly or through any callee. */
 const takesLock = (facts: FactsTable, fn: FunctionSig): boolean =>
   reachesWait(facts, fn.name, true, "", new StringSet())
@@ -2187,30 +2714,47 @@ const mutexPath = (
   want: i32,
   root: string,
   seen: StringSet
+): string => heldPath(table, program, type, want, false, root, seen)
+
+/**
+ * `mutexPath`, or with `atomics` the same walk to an `AtomicI32` or an
+ * `AtomicI64` — `want`, or any when `want` is -1.
+ */
+const heldPath = (
+  table: TypeTable,
+  program: CheckedProgram,
+  type: i32,
+  want: i32,
+  atomics: boolean,
+  root: string,
+  seen: StringSet
 ): string => {
   const kind = table.kindOf(type)
   if (kind === K_NULLABLE) {
-    return mutexPath(table, program, table.refOf(type), want, root, seen)
+    return heldPath(table, program, table.refOf(type), want, atomics, root, seen)
   }
   if (kind === K_ARRAY) {
-    return mutexPath(table, program, table.refOf(type), want, `${root}[i]`, seen)
+    return heldPath(table, program, table.refOf(type), want, atomics, `${root}[i]`, seen)
   }
   if (kind === K_RESULT) {
-    const ok = mutexPath(table, program, table.okOf(type), want, `${root}.value`, seen)
-    return ok.length > 0 ? ok : mutexPath(table, program, table.errOf(type), want, `${root}.error`, seen)
+    const ok = heldPath(table, program, table.okOf(type), want, atomics, `${root}.value`, seen)
+    return ok.length > 0
+      ? ok
+      : heldPath(table, program, table.errOf(type), want, atomics, `${root}.error`, seen)
   }
   const info = classLayoutOf(program, table, type)
   if (info === null) {
     return ""
   }
-  if (isThreadsClass(info, MUTEX) && (want < 0 || type === want)) {
+  const held = atomics ? isAtomicClass(info) : isThreadsClass(info, MUTEX)
+  if (held && (want < 0 || type === want)) {
     return root
   }
   if (!seen.add(info.name)) {
     return ""
   }
   for (const field of info.fields) {
-    const path = mutexPath(table, program, field.type, want, `${root}.${field.name}`, seen)
+    const path = heldPath(table, program, field.type, want, atomics, `${root}.${field.name}`, seen)
     if (path.length > 0) {
       return path
     }
@@ -2241,29 +2785,44 @@ const mutexInside = (table: TypeTable, program: CheckedProgram, type: i32, root:
  * the class it is, and no `Mutex`'s data holds another. The refusal, or "".
  */
 export const taskMutexMessageFor = (table: TypeTable, program: CheckedProgram, sig: FunctionSig): string => {
-  const instance = sig.instance
-  if (instance === null || instance.typeArgs.length === 0) {
-    return ""
-  }
-  const arg = instance.typeArgs[0]
-  const info = classLayoutOf(program, table, arg)
-  let path = ""
-  if (info === null) {
-    path = mutexPath(table, program, arg, -1, "arg", new StringSet())
-  } else if (isThreadsClass(info, MUTEX)) {
-    path = mutexInside(table, program, arg, "arg")
-  } else {
-    let k = 0
-    while (k < info.fields.length && path.length === 0) {
-      const field = info.fields[k]
-      const root = `arg.${field.name}`
-      path = isMutexType(program, table, field.type)
-        ? mutexInside(table, program, field.type, root)
-        : mutexPath(table, program, field.type, -1, root, new StringSet())
-      k = k + 1
+  const arg = taskArgTypeOf(sig)
+  if (arg >= 0) {
+    const path = taskMutexPath(table, program, arg, "arg")
+    if (path.length > 0) {
+      return taskMutexMessage(table, arg, path)
     }
   }
-  return path.length === 0 ? "" : taskMutexMessage(table, arg, path)
+  // An arrow's captures are the task's arguments too, each held to the same rule.
+  for (const slot of capturesOf(sig)) {
+    const name = slot.arrow.captures[slot.index].name
+    const path = taskMutexPath(table, program, slot.type(), name)
+    if (path.length > 0) {
+      return taskCaptureMutexMessage(table, name, slot.type(), path)
+    }
+  }
+  return ""
+}
+
+/** R8's path from a task's input of `type`, named `root`, to a `Mutex` deeper than it allows, or "". */
+const taskMutexPath = (table: TypeTable, program: CheckedProgram, type: i32, root: string): string => {
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return mutexPath(table, program, type, -1, root, new StringSet())
+  }
+  if (isThreadsClass(info, MUTEX)) {
+    return mutexInside(table, program, type, root)
+  }
+  let path = ""
+  let k = 0
+  while (k < info.fields.length && path.length === 0) {
+    const field = info.fields[k]
+    const at = `${root}.${field.name}`
+    path = isMutexType(program, table, field.type)
+      ? mutexInside(table, program, field.type, at)
+      : mutexPath(table, program, field.type, -1, at, new StringSet())
+    k = k + 1
+  }
+  return path
 }
 
 /** Whether `node`, at `at` under the first `depth` of `parents`, is a store's target: `x = v`, `x += v`, `x++`. */
@@ -2308,6 +2867,14 @@ const walkMutexes = (
   } else if (node.kind === N_MEMBER && isMutexType(program, table, program.nodeTypes[node.children[0].id])) {
     if (!(node.text === "lock" && called)) {
       out.push(new ScopeFinding(node, mutexMemberMessage(node.text)))
+      return
+    }
+  } else if (node.kind === N_OBJECT && isThreadsObjectType(program, table, type)) {
+    out.push(new ScopeFinding(node, threadsLiteralMessage(table, type)))
+    return
+  } else if (node.kind === N_MEMBER && isAtomicType(program, table, program.nodeTypes[node.children[0].id])) {
+    if (!called) {
+      out.push(new ScopeFinding(node, atomicMemberMessage(node.text)))
       return
     }
   } else if (isLockCall(program, node)) {
@@ -2508,12 +3075,55 @@ const regionLockMessageFor = (
     want = program.nodeTypes[unwrapParens(node.children[0].children[0]).id]
     what = "This `lock()`"
   } else if (!takesLock(facts, callee)) {
-    return ""
+    return regionAtomicMessageFor(program, table, facts, node, callee, state)
   }
-  for (const arg of state.taskArgs) {
-    const path = mutexPath(table, program, arg, want, "arg", new StringSet())
+  let k = 0
+  while (k < state.taskArgs.length && k < state.taskArgRoots.length) {
+    const path = mutexPath(table, program, state.taskArgs[k], want, state.taskArgRoots[k], new StringSet())
+    k = k + 1
     if (path.length > 0) {
       return regionLockMessage(state, what, path)
+    }
+  }
+  return regionAtomicMessageFor(program, table, facts, node, callee, state)
+}
+
+/**
+ * R7 for atomics: the refusal of `node`, a call of `callee` in `state`'s
+ * region, when it updates or reads an atomic a task of the scope can reach —
+ * a method of an atomic of a type a task's argument reaches, or a call that
+ * reaches any atomic method when a task reaches any atomic — or "".
+ */
+const regionAtomicMessageFor = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  node: Node,
+  callee: FunctionSig,
+  state: RegionState
+): string => {
+  let want = -1
+  let what = lockCallName(node, callee)
+  if (isAtomicMethod(callee)) {
+    want = program.nodeTypes[unwrapParens(node.children[0].children[0]).id]
+    what = `This \`${callee.decl.children[0].text}()\``
+  } else if (!reachesAtomic(facts, callee.name, new StringSet())) {
+    return ""
+  }
+  let k = 0
+  while (k < state.taskArgs.length && k < state.taskArgRoots.length) {
+    const path = heldPath(
+      table,
+      program,
+      state.taskArgs[k],
+      want,
+      true,
+      state.taskArgRoots[k],
+      new StringSet()
+    )
+    k = k + 1
+    if (path.length > 0) {
+      return regionAtomicMessage(state, what, path)
     }
   }
   return ""
@@ -3702,12 +4312,8 @@ const holdsChannelDeep = (program: CheckedProgram, table: TypeTable, type: i32):
  */
 const handsNullableChannel = (program: CheckedProgram, table: TypeTable, spawn: Node): boolean => {
   const callee = spawnCallee(program, spawn)
-  const instance: Instantiation | null = callee === null ? null : callee.instance
-  if (instance === null || instance.typeArgs.length === 0) {
-    return false
-  }
-  const arg = instance.typeArgs[0]
-  if (table.isNullable(arg)) {
+  const arg = callee === null ? -1 : taskArgTypeOf(callee)
+  if (arg >= 0 && table.isNullable(arg)) {
     const inner = table.stripNull(arg)
     return isChannelType(program, table, inner) || holdsChannelField(program, table, inner, false)
   }
@@ -3753,10 +4359,10 @@ const recordSenders = (
     }
     const instance = callee.instance
     const entry = parallelBodyOf(callee)
-    if (instance === null || entry === null || instance.typeArgs.length === 0) {
+    const arg = taskArgTypeOf(callee)
+    if (instance === null || entry === null || arg < 0) {
       continue
     }
-    const arg = instance.typeArgs[0]
     const paths: string[] = []
     if (isChannelType(program, table, arg)) {
       paths.push("")

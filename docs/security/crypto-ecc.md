@@ -16,7 +16,7 @@ fixed here, and one lies outside this stage's files and stays open.
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/p256.ts` | `p256PublicKey`, `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`; `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyExposed`, `p256SignSExposed`) and `p256ScalarMultWith` |
+| `std/crypto/p256.ts` | `p256PublicKey`, `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`, and the fixed-base comb that multiplies G for a public key or a signature (`p256BaseMult`, `p256BaseMultWith` and the table `p256BaseTable`, added by #628 after this audit; see below); `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyExposed`, `p256SignSExposed`) and `p256ScalarMultWith`, which #628 replaced with `p256BaseMultWith` |
 | `std/crypto/x25519.ts` | `x25519`, `x25519Base`, and the field (`f25519*`), `f25519Decode` / `f25519Encode`, `f25519Invert` and `x25519Ladder` |
 | `tests/cases/ct_asm_p256.ts`, `tests/cases/ct_asm_x25519.ts` | the copies the constant-time disassembly check holds, compared here with the module functions they mirror |
 
@@ -183,7 +183,7 @@ rerun.
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
 | ECC-1 | Low | `std/crypto/x25519.ts:481` (`x25519`'s doc) | The doc said RFC 7748 §6.1's all-zero check is made by "TLS 1.3 (WP34 T1)". No TLS module exists in the tree: T1 is planned (`docs/wp34-hosting-cs.md`), and nothing calls `x25519` today. A reader could conclude the check is made for them. | **Fixed in this change.** The doc now says nothing in the tree makes the check yet, and that a caller must refuse an all-zero answer itself, with `timingSafeEqual`. Doc only, so there is no failing-first test. The behaviour it describes is pinned by `crypto_x25519`'s "u = 0 answers all zeros, not null" and the six "low-order u … answers all zeros" checks. `std/README.md` says the same thing; see below. |
-| ECC-2 | Low | `std/crypto/p256.ts` (`p256Sign`, `p256SignScalar`), `std/crypto/x25519.ts` (`x25519`) | Secret intermediates are not wiped: the private-key limbs `dM`, the nonce `v` and its Montgomery form, RFC 6979's HMAC key `k`, the table built from G, and X25519's clamped scalar copy and ladder state all stay in arena memory after the call returns. A later memory disclosure could read them. The language has no store that the optimiser is barred from removing, so a wipe written in Nish could be deleted as a dead store and would give false assurance. | **Closed in this change.** The private key reaches both modules as a `Secret<u8[]>` from `nish:secret` (docs/LANGUAGE.md, "Secrets"), so a caller cannot print, compare, branch on or drop it unwiped, and both modules compute on it only inside `expose` / `exposeWith`, whose function the checker holds to reaching no I/O and no C and keeping nothing of the key. Inside, everything the key reaches is zeroed with `wipe` before the call returns — a volatile `llvm.memset` no optimiser removes, pinned under `opt -O2` by `tests/run.js` ("nish:secret: the wipe survives opt -O2", `secret_wipe_o2` and its plain twin). `p256`: the key's limbs in `p256ScalarInRange`, `dM`, the nonce `v` and its Montgomery form `kM`, RFC 6979's `K` and `V` each time the next replaces it, the nonce point and its scratch, the window table and the scalar multiply's accumulator and entry. RFC 6979's HMAC is now written out over `Sha256` (`p256Mac`) so that both key blocks, both hashers' state, block and schedule, and the inner digest are its own to wipe. `x25519`: the clamped scalar copy and all fourteen ladder elements; the shared secret leaves as a `Secret<u8[]>` too. **What is still not reached**, and is recorded rather than claimed: a scalar the compiler keeps in a register or spills to the stack (the ladder's `swap` and `bit`, a limb in flight), which no store in the language can name; a buffer a `push` outgrew, no longer the array's; and `nish/crypto/hmac`'s own instances, which `p256` no longer uses. `crypto_p256`, `crypto_x25519` and their `_f64` twins answer every vector as before, through adapters that hold the key as a `Secret` (`tests/link/crypto_p256/plain.ts`, `crypto_x25519/plain.ts`). **Signing over caller-owned scratch (WP34, #463).** `p256SignSha256` makes its points and hashers with `new`, so it stores allocations of its own and no arena scope may release around it (NL2424): every signature kept them, 9,312 bytes a TLS connection over the carrier (#489). `p256SignSha256Into` signs in a `P256SignScratch` made once and writes `r \|\| s` into the caller's window, inside an arena block of its own, so a signature keeps 0 bytes (`crypto_p256`: fifty signatures, each measured on its own, move neither `Arena.mark()` nor `Arena.used()`), and it answers what `p256SignSha256` answers byte for byte (RFC 6979 A.2.5, and every message length 0 to 199 under four keys). The key is still read only inside `expose` / `exposeWith`, and a function `exposeWith` runs may not write its argument (NL2450), so the three steps that read the key — its range check, RFC 6979 §3.2 steps d and f, and `s = k^-1 (z + r d)` — compute on fresh arrays and `wipe` them (the message holding the key, `dM`, and the HMAC's key block, hash value, schedule and tail), and only their answer leaves: the next `K`, which is copied into the scratch and wiped, and `s`. That is why the path hashes with SHA-256 written out over plain arrays rather than `Sha256` or `HmacSha256Scratch`, whose state such a step would have to write. Before it returns it wipes the scratch's `K`, `V`, `V \|\| 0x00`, `k^-1`, the nonce point and its point scratch, and `p256ScalarMultWith` the table, accumulator and entry, as `p256SignScalar` does. **Not reached, as in `p256Sign`:** the fresh limbs inside `p256ScalarInvert`, `p256FieldInvert` and `p256Below` (which see `k^-1`'s powers, the nonce point's Z and `V - n`). The arena block releases them, which frees but does not zero; `p256Sign` leaves the same values in memory it keeps. |
+| ECC-2 | Low | `std/crypto/p256.ts` (`p256Sign`, `p256SignScalar`), `std/crypto/x25519.ts` (`x25519`) | Secret intermediates are not wiped: the private-key limbs `dM`, the nonce `v` and its Montgomery form, RFC 6979's HMAC key `k`, the table built from G, and X25519's clamped scalar copy and ladder state all stay in arena memory after the call returns. A later memory disclosure could read them. The language has no store that the optimiser is barred from removing, so a wipe written in Nish could be deleted as a dead store and would give false assurance. | **Closed in this change.** The private key reaches both modules as a `Secret<u8[]>` from `nish:secret` (docs/LANGUAGE.md, "Secrets"), so a caller cannot print, compare, branch on or drop it unwiped, and both modules compute on it only inside `expose` / `exposeWith`, whose function the checker holds to reaching no I/O and no C and keeping nothing of the key. Inside, everything the key reaches is zeroed with `wipe` before the call returns — a volatile `llvm.memset` no optimiser removes, pinned under `opt -O2` by `tests/run.js` ("nish:secret: the wipe survives opt -O2", `secret_wipe_o2` and its plain twin). `p256`: the key's limbs in `p256ScalarInRange`, `dM`, the nonce `v` and its Montgomery form `kM`, RFC 6979's `K` and `V` each time the next replaces it, the nonce point and its scratch, and the multiply's accumulator and the comb entry it selected (#628: `p256BaseMultWith` wipes the entry, its callers the scratch and accumulator; the comb's table is a function of G alone and is not wiped; names at `6e11fa6`). RFC 6979's HMAC is now written out over `Sha256` (`p256Mac`) so that both key blocks, both hashers' state, block and schedule, and the inner digest are its own to wipe. `x25519`: the clamped scalar copy and all fourteen ladder elements; the shared secret leaves as a `Secret<u8[]>` too. **What is still not reached**, and is recorded rather than claimed: a scalar the compiler keeps in a register or spills to the stack (the ladder's `swap` and `bit`, a limb in flight), which no store in the language can name; a buffer a `push` outgrew, no longer the array's; and `nish/crypto/hmac`'s own instances, which `p256` no longer uses. `crypto_p256`, `crypto_x25519` and their `_f64` twins answer every vector as before, through adapters that hold the key as a `Secret` (`tests/link/crypto_p256/plain.ts`, `crypto_x25519/plain.ts`). **Signing over caller-owned scratch (WP34, #463).** `p256SignSha256` makes its points and hashers with `new`, so it stores allocations of its own and no arena scope may release around it (NL2424): every signature kept them, 9,312 bytes a TLS connection over the carrier (#489). `p256SignSha256Into` signs in a `P256SignScratch` made once and writes `r \|\| s` into the caller's window, inside an arena block of its own, so a signature keeps 0 bytes (`crypto_p256`: fifty signatures, each measured on its own, move neither `Arena.mark()` nor `Arena.used()`), and it answers what `p256SignSha256` answers byte for byte (RFC 6979 A.2.5, and every message length 0 to 199 under four keys). The key is still read only inside `expose` / `exposeWith`, and a function `exposeWith` runs may not write its argument (NL2450), so the three steps that read the key — its range check, RFC 6979 §3.2 steps d and f, and `s = k^-1 (z + r d)` — compute on fresh arrays and `wipe` them (the message holding the key, `dM`, and the HMAC's key block, hash value, schedule and tail), and only their answer leaves: the next `K`, which is copied into the scratch and wiped, and `s`. That is why the path hashes with SHA-256 written out over plain arrays rather than `Sha256` or `HmacSha256Scratch`, whose state such a step would have to write. Before it returns it wipes the scratch's `K`, `V`, `V \|\| 0x00`, `k^-1`, the nonce point, which is the comb's accumulator, and the comb's point scratch, as `p256SignScalar` does, and `p256BaseMultWith` wipes the entry it selected (#628, replacing `p256ScalarMultWith`, which wiped its window table, accumulator and entry; names at `6e11fa6`). **Not reached, as in `p256Sign`:** the fresh limbs inside `p256ScalarInvert`, `p256FieldInvert` and `p256Below` (which see `k^-1`'s powers, the nonce point's Z and `V - n`). The arena block releases them, which frees but does not zero; `p256Sign` leaves the same values in memory it keeps. |
 | ECC-3 | Low (documentation) | `THIRD_PARTY_NOTICES.md` (the `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` row) | The row says the file holds "all 484 cases and the 113 group keys" of one Wycheproof file. As first written, this change put five files' cases there, ECDSA and X25519, as its header said, so the row no longer said what the file derives from (`.claude/licensing.md`, item 4). `third-party-licence` reads only the file and licence-text columns, so it could not catch this. | **Fixed in this change.** The X25519 cases moved to `tests/link/crypto_wycheproof/x25519.ts`, with the same upstream notice and a row of its own (`x25519_test.json`, 518 cases), and `crypto_x25519/wycheproof.ts` reads them from there. The ECDSA row now names its four files and their case and group-key counts. Layout and documentation only: no value of any vector changed, and `crypto_p256*` and `crypto_x25519*` answer as before. |
 
 ## Properties verified
@@ -285,6 +285,67 @@ by reading, and it remains discipline rather than proof, as the module headers
 say. The one branch on a secret is RFC 6979's retry when a candidate nonce is
 not below n. The RFC prescribes it, it happens about once in 2^32 signatures,
 and it reveals only that a discarded value was large.
+
+**The fixed-base comb** (#663, after this audit; anchors at `6e11fa6`).
+`p256PublicKey` and `p256Sign` now compute k·G with `p256BaseMult`
+(`std/crypto/p256.ts:4662`, over `p256BaseMultWith` at `:4675`): a 4-tooth
+comb over `p256BaseTable` (`:4119`), 240 affine multiples of G that
+`scripts/gen-p256-table.mjs` computes with BigInt, in 4 rows of 16 mixed
+additions with a doubling between rows. `p256Verify` keeps
+`p256ScalarMult`, which is also the comb's reference. The module has no ECDH
+entry point (see above); the ECDH below is the test corpus, Wycheproof's
+`ecdh_secp256r1_ecpoint` private keys multiplied through `p256ScalarMult` in
+`tests/link/crypto_p256_agree`.
+
+- **Agreement.** The comb answers what `p256ScalarMult(G, k)` answers, byte
+  for byte, on RFC 6979 A.2.5's three scalars, 986 edge and per-digit scalars
+  (every one of the table's 240 entries is the only entry read at least
+  once), the `r` and `s` of all 1,104 64-byte signatures of Wycheproof's two
+  P1363 files taken as scalars, the 355 private keys of
+  `ecdh_secp256r1_ecpoint` (330 shared secrets as published, 25 keys
+  refused), and a seeded corpus of 10,000 scalars, 625 of them also signing
+  through both `p256SignSha256` and `p256SignSha256Into`: "p256 agree: the
+  fixed-base comb and the variable-base window give the same bytes for every
+  scalar of tests/link/crypto_p256_agree, natively", and under Node's WASI,
+  "p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints
+  the same expected.out under Node's WASI". The table is what the generator
+  writes: "p256: the comb table in std/crypto/p256.ts is what
+  scripts/gen-p256-table.mjs generates".
+- **What ct_asm reads.** `tests/cases/ct_asm_p256` adds copies of the digit
+  (`p256BaseDigit`, `:4558`), the fifteen-entry read (`p256BaseSelect`,
+  `:4577`), the mixed addition (`p256PointAddMixed`, `:4595`, Renes, Costello
+  and Batina's Algorithm 5), the masked keep (`p256BaseKeep`, `:4643`) and one
+  whole step of the comb (`p256BaseStep`, the body of `p256BaseMultWith`'s
+  inner loop), and its `main` reproduces A.2.5's public key and both `r`s
+  through them. Each passes on x86-64 and aarch64, following its calls into
+  the field functions:
+  `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}`, for `p256BaseDigit`, `p256BaseSelect`,
+  `p256PointAddMixed`, `p256BaseKeep` and `p256BaseStep` with the promise "no
+  branch, call, secret-indexed access or secret-dependent latency". The read
+  it replaces, one entry loaded at the digit's offset, is seeded to fail:
+  `ct_asm_refused`'s `leakyBaseRead`, "refused for a load or store at a secret
+  address" on both targets.
+- **What remains discipline.** The copies compute their offsets with
+  `wrappingAdd` / `wrappingMul` and read with `uncheckedGet`, so they hold no
+  branch at all; the module's own functions do not. Its `p256BaseSelect`
+  computes `(c * 15 + j - 1) * 16` (`:4582`) with checked arithmetic, whose
+  overflow test branches on the public `c` and `j`; `p256BaseDigit` guards
+  its byte index (`:4565`) and `p256BaseKeep` its lengths, on public
+  positions and lengths; and the 4-row and 16-column loops of
+  `p256BaseMultWith`, with its `r < 3` before each doubling (`:4681`), branch
+  on loop counters. None of these is read by ct_asm; each was read here and
+  depends on no bit of the scalar.
+- **The wipe.** `p256BaseMultWith` wipes the selected entry before it
+  returns, and its callers wipe the scratch's sum and the accumulator, as for
+  the window:
+  "crypto: the wipes survive opt -O2 (P-256's selected comb entry in p256BaseMultWith; the scratch and accumulator in p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)",
+  a group of `tests/wipes/crypto.js` that pins `p256BaseMultWith` at 3
+  volatile wipes, `p256PublicKeyExposed` at 18, `p256SignExposed` at 93 and
+  `p256SignSha256Into` at 56. **Not
+  reached:** the digit, the `ctEq` mask and the scalar's byte, which live in
+  registers or spill slots no store in the language names, as ECC-2 records
+  for the ladder's `swap` and `bit`. The table is a function of G alone and
+  is not wiped.
 
 ## Doc corrections for the security-policy stage
 
