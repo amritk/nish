@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1022 programs, 108244 dump lines.
+# 1023 programs, 108259 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -657,6 +657,22 @@ function main(): i32 -> @nish_main [exported entry]
   local 13:9 xs: i32[] (const)
   callee 14:18 pick -> @pick
   callee 15:18 pick -> @pick
+program tests/cases/arr_bounds_offset_other.ts
+module tests/cases/arr_bounds_offset_other.ts (entry)
+function mixed(xs: i32[], ys: i32[]): i32 -> @mixed
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 4:7 s: i32 (let)
+  local 5:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: mixed nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=2 stackLocals=0
+  callee 12:18 mixed -> @mixed
 program tests/cases/arr_bounds_offset_reach.ts
 module tests/cases/arr_bounds_offset_reach.ts (entry)
 function tooFar(xs: i32[]): i32 -> @tooFar
