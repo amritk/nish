@@ -10,8 +10,9 @@
 // ct-check: callsLeak secret=secret expect=load via=leakyRow
 // ct-check: tailLeak secret=secret expect=load via=leakyRow
 // ct-check: secretDivide secret=secret expect=latency
+// ct-check: leakyBaseRead secret=digit expect=load
 
-import { uncheckedGet, uncheckedSet } from "nish:unsafe";
+import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul } from "nish:unsafe";
 
 // The comparison `===` gives: it stops at the first differing byte, so its
 // running time says how many leading bytes matched.
@@ -75,3 +76,13 @@ export const tailLeak = (table: u32[], secret: u32): u32 => leakyRow(table, secr
 // A divide takes as long as its operands say; `| 1` keeps the divisor from
 // being zero, so the divide is the whole of the function, with no check.
 export const secretDivide = (a: u32, secret: u32): u32 => a / (secret | 1);
+
+// The comb table read std/crypto/p256.ts's p256BaseSelect replaces: entry
+// `digit` of sub-table `c` read straight at the offset it names, X and Y. Which
+// cache lines are read says which entry, and so four bits of the scalar.
+export const leakyBaseRead = (out: u32[], table: u32[], c: i32, digit: u32): void => {
+  const at: i32 = wrappingAdd(wrappingMul(c, 240), toI32(((digit & 15) - 1) & 15) * 16);
+  for (let i: i32 = 0; i < 16; i++) {
+    uncheckedSet(out, i, uncheckedGet(table, wrappingAdd(at, i)));
+  }
+};

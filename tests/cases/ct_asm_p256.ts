@@ -12,22 +12,28 @@
 // subtract, its scalar multiply and its conditional move; one table entry's
 // move and the whole sixteen-entry table read; the complete doubling and
 // addition; and one window step of the scalar multiplication — four
-// doublings, the table read of a secret digit and an addition. The check
-// follows each call into its callee in this listing (tests/ct-asm.js), which is
+// doublings, the table read of a secret digit and an addition; and the
+// fixed-base comb of `p256BaseMult` — the digit's four bits read out of the
+// scalar, the fifteen-entry read of a comb sub-table, the complete mixed
+// addition, the move that keeps or discards its sum, and one whole pass of
+// its inner loop, the four composed. The check follows each call into its callee in this listing (tests/ct-asm.js), which is
 // what lets the doubling, the addition and the window step, which call the
 // field functions rather than inline them, be held at all.
 //
-// The doubling, the addition and the table read are copies in a different
+// The doubling, the additions and the table reads are copies in a different
 // shape from the module's, and say so where they are defined: the module
 // passes points and a scratch object, which no parameter the check reads can
 // be, so these take coordinate arrays and keep their temporaries on their own
-// stack; and the table read's sixteen iterations are written out, because a
-// rolled loop is a back-edge. Their field steps are the module's, in order.
+// stack; the table reads' iterations are written out, because a rolled loop
+// is a back-edge; and the comb's offsets wrap rather than check, because an
+// overflow check is a branch. Their field steps are the module's, in order.
 //
 // `main` keeps the copies honest: it runs P-256's scalar multiplication on
 // them — the table built with `p256PointAdd`, 64 `p256WindowStep`s — and
-// requires RFC 6979 A.2.5's public key and the `r` of its two SHA-256
-// signatures (ct_asm_p256.out). tests/link/crypto_p256 holds the module to the
+// again by the comb — its table built from G here, on the copies, not taken
+// from the module, then 64 `p256BaseStep`s — and requires, both ways, RFC 6979
+// A.2.5's public key and the `r` of its two SHA-256 signatures
+// (ct_asm_p256.out). tests/link/crypto_p256 holds the module to the
 // same vectors, so the two agree through the RFC; the field copies are also
 // held to known answers computed from their definitions.
 // ct-check: p256FiatMul secret=contents
@@ -41,8 +47,13 @@
 // ct-check: p256PointDouble secret=contents
 // ct-check: p256PointAdd secret=contents
 // ct-check: p256WindowStep secret=digit,contents
+// ct-check: p256BaseDigit secret=contents
+// ct-check: p256BaseSelect secret=digit,contents
+// ct-check: p256PointAddMixed secret=contents
+// ct-check: p256BaseKeep secret=digit,contents
+// ct-check: p256BaseStep secret=contents
 
-import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
+import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
 /**
  * fiat's `addcarryx_u32`: `arg1 + arg2 + arg3` with `arg1` a carry of 0 or 1.
@@ -3510,6 +3521,159 @@ export const p256WindowStep = (x: u32[], y: u32[], z: u32[], table: u32[], digit
   p256PointAdd(x, y, z, ex, ey, ez)
 }
 
+// ---- The fixed-base comb: p256BaseMult's table read, addition and move -------------
+
+/**
+ * `p256BaseDigit`: bits `i`, `i + 64`, `i + 128` and `i + 192` of the 32
+ * big-endian bytes `k`, as bits 0 to 3. The module guards the byte index
+ * against `k`'s length; here `uncheckedGet` stands in for that, and the
+ * positions wrap rather than check, since they are the caller's loop position.
+ */
+export const p256BaseDigit = (k: u8[], i: i32): u32 => {
+  let digit: u32 = 0
+  for (let b: i32 = 0; b < 4; b++) {
+    const bit: i32 = wrappingAdd(i, 64 * b)
+    const at: i32 = wrappingSub(31, bit >> 3)
+    const byte: u32 = toU32(uncheckedGet(k, at))
+    digit = digit | (((byte >> toU32(bit & 7)) & 1) << toU32(b))
+  }
+  return digit
+}
+
+/** One entry of `p256BaseSelect`'s loop: the entry at `at` moved into the output when `j` is the digit. */
+const p256BaseSelectEntry = (outX: u32[], outY: u32[], table: u32[], at: i32, j: u32, digit: u32): void => {
+  const hit: u32 = ctEq(j, digit) & 1
+  p256TableMove(outX, table, at, hit)
+  p256TableMove(outY, table, wrappingAdd(at, 8), hit)
+}
+
+/**
+ * `p256BaseSelect`: entry `digit` of comb sub-table `c` into `outX` and
+ * `outY`, all fifteen entries read and the digit reaching only `ctEq`. The
+ * module takes a point; this takes its two coordinates. Its fifteen
+ * iterations are written out, and the offsets wrap rather than check, because
+ * a rolled loop and an overflow check are both branches.
+ */
+export const p256BaseSelect = (outX: u32[], outY: u32[], table: u32[], c: i32, digit: u32): void => {
+  for (let j: i32 = 0; j < 8; j++) {
+    uncheckedSet(outX, j, 0);
+    uncheckedSet(outY, j, 0);
+  }
+  const base: i32 = wrappingMul(c, 240)
+  p256BaseSelectEntry(outX, outY, table, base, 1, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 16), 2, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 32), 3, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 48), 4, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 64), 5, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 80), 6, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 96), 7, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 112), 8, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 128), 9, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 144), 10, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 160), 11, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 176), 12, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 192), 13, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 208), 14, digit)
+  p256BaseSelectEntry(outX, outY, table, wrappingAdd(base, 224), 15, digit)
+}
+
+/** `out[at .. at + 8) = a`. */
+const p256CopyTo = (out: u32[], at: i32, a: u32[]): void => {
+  for (let i: i32 = 0; i < 8; i++) {
+    uncheckedSet(out, wrappingAdd(at, i), uncheckedGet(a, i));
+  }
+}
+
+/**
+ * `p256PointAddMixed`, Renes, Costello and Batina's Algorithm 5: `sum` =
+ * (x1 : y1 : z1) + (x2 : y2 : 1). The module writes the sum into its
+ * scratch's `sum` point; this takes the coordinates, keeps its temporaries on
+ * its own stack, and writes the sum's X, Y and Z into the 24 limbs of `sum`,
+ * since eight array parameters would put two of them where x86-64 passes
+ * arguments on the stack. The 36 steps are the module's, in order.
+ */
+export const p256PointAddMixed = (x1: u32[], y1: u32[], z1: u32[], x2: u32[], y2: u32[], sum: u32[]): void => {
+  const x3: u32[] = new Array<u32>(8)
+  const y3: u32[] = new Array<u32>(8)
+  const z3: u32[] = new Array<u32>(8)
+  const t0: u32[] = new Array<u32>(8)
+  const t1: u32[] = new Array<u32>(8)
+  const t2: u32[] = new Array<u32>(8)
+  const t3: u32[] = new Array<u32>(8)
+  const t4: u32[] = new Array<u32>(8)
+  const b: u32[] = new Array<u32>(8)
+  p256CurveB(b)
+  p256FiatMul(t0, x1, x2) // 1
+  p256FiatMul(t1, y1, y2)
+  p256FiatAdd(t3, x2, y2)
+  p256FiatAdd(t4, x1, y1)
+  p256FiatMul(t3, t3, t4) // 5
+  p256FiatAdd(t4, t0, t1)
+  p256FiatSub(t3, t3, t4)
+  p256FiatMul(t4, y2, z1)
+  p256FiatAdd(t4, t4, y1)
+  p256FiatMul(y3, x2, z1) // 10
+  p256FiatAdd(y3, y3, x1)
+  p256FiatMul(z3, b, z1)
+  p256FiatSub(x3, y3, z3)
+  p256FiatAdd(z3, x3, x3)
+  p256FiatAdd(x3, x3, z3) // 15
+  p256FiatSub(z3, t1, x3)
+  p256FiatAdd(x3, t1, x3)
+  p256FiatMul(y3, b, y3)
+  p256FiatAdd(t1, z1, z1)
+  p256FiatAdd(t2, t1, z1) // 20
+  p256FiatSub(y3, y3, t2)
+  p256FiatSub(y3, y3, t0)
+  p256FiatAdd(t1, y3, y3)
+  p256FiatAdd(y3, t1, y3)
+  p256FiatAdd(t1, t0, t0) // 25
+  p256FiatAdd(t0, t1, t0)
+  p256FiatSub(t0, t0, t2)
+  p256FiatMul(t1, t4, y3)
+  p256FiatMul(t2, t0, y3)
+  p256FiatMul(y3, x3, z3) // 30
+  p256FiatAdd(y3, y3, t2)
+  p256FiatMul(x3, t3, x3)
+  p256FiatSub(x3, x3, t1)
+  p256FiatMul(z3, t4, z3)
+  p256FiatMul(t1, t3, t0) // 35
+  p256FiatAdd(z3, z3, t1)
+  p256CopyTo(sum, 0, x3)
+  p256CopyTo(sum, 8, y3)
+  p256CopyTo(sum, 16, z3)
+}
+
+/**
+ * `p256BaseKeep`: `acc = sum[at .. at + 8)` limb by limb when `digit` is not
+ * 0, by fiat's conditional move; the module's `sum` is a coordinate of its
+ * own, this one a coordinate of `p256PointAddMixed`'s 24 limbs.
+ */
+export const p256BaseKeep = (acc: u32[], sum: u32[], at: i32, digit: u32): void => {
+  for (let i: i32 = 0; i < 8; i++) {
+    uncheckedSet(acc, i, p256FiatCmovznzU32(digit, uncheckedGet(acc, i), uncheckedGet(sum, wrappingAdd(at, i))));
+  }
+}
+
+/**
+ * One pass of `p256BaseMult`'s inner loop, digit `i` = r + 4c of row `r` and
+ * sub-table `c` (passed as `i` alone, so the parameters fit in registers): the
+ * digit read out of `k`, the table read, the mixed addition and the move that
+ * keeps the sum or, for a zero digit, discards it. Every one of the 64 passes
+ * is this, whatever the digit.
+ */
+export const p256BaseStep = (x: u32[], y: u32[], z: u32[], table: u32[], k: u8[], i: i32): void => {
+  const ex: u32[] = new Array<u32>(8)
+  const ey: u32[] = new Array<u32>(8)
+  const sum: u32[] = new Array<u32>(24)
+  const digit: u32 = p256BaseDigit(k, i)
+  p256BaseSelect(ex, ey, table, i >> 2, digit)
+  p256PointAddMixed(x, y, z, ex, ey, sum)
+  p256BaseKeep(x, sum, 0, digit)
+  p256BaseKeep(y, sum, 8, digit)
+  p256BaseKeep(z, sum, 16, digit)
+}
+
 // ---- P-256 on the copies, for main ----------------------------------------------
 
 /** Eight little-endian limbs of 64 big-endian hex digits, plain (not Montgomery). */
@@ -3596,6 +3760,11 @@ const baseMult = (k: string): string => {
     const code: i32 = toI32(k.charCodeAt(i))
     p256WindowStep(x, y, z, table, toU32(code <= 57 ? code - 48 : code - 87))
   }
+  return affineHex(x, y, z)
+}
+
+/** The affine x and y of (x : y : z), in the Montgomery domain, as plain hex. */
+const affineHex = (x: u32[], y: u32[], z: u32[]): string => {
   const zInverse: u32[] = new Array<u32>(8)
   invert(zInverse, z)
   p256FiatMul(x, x, zInverse)
@@ -3603,6 +3772,106 @@ const baseMult = (k: string): string => {
   fromMontgomery(x)
   fromMontgomery(y)
   return `${hexOfLimbs(x)} ${hexOfLimbs(y)}`
+}
+
+/** 64 hex digits as 32 big-endian bytes. */
+const bytesOfHex = (text: string): u8[] => {
+  const out: u8[] = new Array<u8>(32)
+  for (let i: i32 = 0; i < 64; i++) {
+    const code: i32 = toI32(text.charCodeAt(i))
+    const nibble: u32 = toU32(code <= 57 ? code - 48 : code - 87)
+    const at: i32 = i >> 1
+    if (at >= 0 && at < 32) {
+      uncheckedSet(out, at, toU8(toU32(uncheckedGet(out, at)) | (nibble << toU32(4 * (1 - (i & 1))))));
+    }
+  }
+  return out
+}
+
+/** `to[at .. at + 8) = from`, or `to = from[at .. at + 8)` when `back`. */
+const p256Slot = (to: u32[], at: i32, from: u32[], back: boolean): void => {
+  for (let i: i32 = 0; i < 8; i++) {
+    if (back) {
+      uncheckedSet(from, i, uncheckedGet(to, at + i));
+    } else {
+      uncheckedSet(to, at + i, uncheckedGet(from, i));
+    }
+  }
+}
+
+/**
+ * The comb table `p256BaseSelect` reads, built from G on the copies rather
+ * than taken from the module: entry `j` of sub-table `c` is
+ * (j_0 + j_1 2^64 + j_2 2^128 + j_3 2^192) 2^(4c) G, affine, in the Montgomery
+ * domain. The table is public, so this branches freely.
+ */
+const combTable = (): u32[] => {
+  const one: string = "00000000fffffffeffffffffffffffffffffffff000000000000000000000001"
+  const px: u32[] = limbsOfHex("6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296")
+  const py: u32[] = limbsOfHex("4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5")
+  const pz: u32[] = limbsOfHex(one)
+  toMontgomery(px)
+  toMontgomery(py)
+  // The teeth 2^(4c + 64b) G, projective, tooth (c, b) at limb (4c + b) * 24.
+  const teeth: u32[] = new Array<u32>(1536)
+  for (let i: i32 = 0; i < 256; i++) {
+    if ((i & 3) === 0) {
+      const at: i32 = (4 * ((i & 63) >> 2) + (i >> 6)) * 24
+      p256Slot(teeth, at, px, false)
+      p256Slot(teeth, at + 8, py, false)
+      p256Slot(teeth, at + 16, pz, false)
+    }
+    p256PointDouble(px, py, pz)
+  }
+  const table: u32[] = new Array<u32>(3840)
+  const tx: u32[] = new Array<u32>(8)
+  const ty: u32[] = new Array<u32>(8)
+  const tz: u32[] = new Array<u32>(8)
+  for (let c: i32 = 0; c < 16; c++) {
+    for (let j: i32 = 1; j < 16; j++) {
+      const x: u32[] = new Array<u32>(8)
+      const y: u32[] = limbsOfHex(one)
+      const z: u32[] = new Array<u32>(8)
+      for (let b: i32 = 0; b < 4; b++) {
+        if (((j >> b) & 1) === 1) {
+          const at: i32 = (4 * c + b) * 24
+          p256Slot(teeth, at, tx, true)
+          p256Slot(teeth, at + 8, ty, true)
+          p256Slot(teeth, at + 16, tz, true)
+          p256PointAdd(x, y, z, tx, ty, tz)
+        }
+      }
+      const zInverse: u32[] = new Array<u32>(8)
+      invert(zInverse, z)
+      p256FiatMul(x, x, zInverse)
+      p256FiatMul(y, y, zInverse)
+      const at: i32 = (15 * c + j - 1) * 16
+      p256Slot(table, at, x, false)
+      p256Slot(table, at + 8, y, false)
+    }
+  }
+  return table
+}
+
+/**
+ * `k * G`'s affine x and y as hex, by `p256BaseMult`'s method on the copies:
+ * four rows from the top, a doubling between rows, and 16 `p256BaseStep`s in
+ * each.
+ */
+const combMult = (table: u32[], k: string): string => {
+  const bytes: u8[] = bytesOfHex(k)
+  const x: u32[] = new Array<u32>(8)
+  const y: u32[] = limbsOfHex("00000000fffffffeffffffffffffffffffffffff000000000000000000000001")
+  const z: u32[] = new Array<u32>(8)
+  for (let r: i32 = 3; r >= 0; r--) {
+    if (r < 3) {
+      p256PointDouble(x, y, z)
+    }
+    for (let c: i32 = 0; c < 16; c++) {
+      p256BaseStep(x, y, z, table, bytes, r + 4 * c)
+    }
+  }
+  return affineHex(x, y, z)
 }
 
 /** `ok` or `FAIL`, the name, and on a failure what came out. */
@@ -3709,6 +3978,22 @@ export const main = (): i32 => {
   failed += report(
     "RFC 6979 A.2.5 SHA-256 \"test\": k G has x = r",
     test.substring(0, 64),
+    "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367"
+  )
+  const table: u32[] = combTable()
+  failed += report(
+    "RFC 6979 A.2.5 public key, by the comb",
+    combMult(table, "c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721"),
+    "60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6 7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299"
+  )
+  failed += report(
+    "RFC 6979 A.2.5 SHA-256 \"sample\", by the comb: k G has x = r",
+    combMult(table, "a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60").substring(0, 64),
+    "efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716"
+  )
+  failed += report(
+    "RFC 6979 A.2.5 SHA-256 \"test\", by the comb: k G has x = r",
+    combMult(table, "d16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0").substring(0, 64),
     "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367"
   )
   return failed
