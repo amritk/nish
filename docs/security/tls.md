@@ -527,7 +527,11 @@ check is a group in `tests/wipes/tls.js`, the TLS area's file in the harness
 Tickets are single-use in each process (§8.1). `TlsTicketStrikes` is a strike
 register of ticket ids, each kept until its ticket expires or one server
 lifetime (7200 s) after it was recorded, whichever is sooner, so no entry
-outlives `now` + 7200 s at its recording whatever its ticket says: an open-addressed
+outlives `now` + 7200 s at its recording whatever its ticket says. The open
+check (row 3) already refuses a ticket that claims more, so the clamp is a
+second bound, held by the register itself: `TlsTicketStrikes.take(id,
+expiresAt, now)` records `min(expiresAt, now + 7200 s)`, whatever it is
+handed. The register is an open-addressed
 table made once at the capacity the program gives (65,536 ids by default; a
 12-byte id and an 8-byte expiry each, so about 1.3 MB), whose expired entries
 are reused, and which never grows. The program owns it and lends it to the
@@ -582,11 +586,19 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   a live key (Forward secrecy and a leaked ticket key, below) seals tickets
   under PSKs of its own choosing, binds ClientHellos to them, and never
   finishes: each id is recorded once its binder verifies, so it fills the
-  register at the speed it can send ClientHellos, and keeps it full until the
-  program rotates the key away and its recorded entries expire, at most 2
-  hours later (no entry lives past one server lifetime, above, and a forged
-  lifetime or chain start fails to open), or the key passes its 14 hours. It gains no more than that: it
-  can already resume, and impersonate the server to clients that do. While it lasts every client resumes no session and pays a full
+  register at the speed it can send ClientHellos, for as long as the key
+  opens tickets. A key opens tickets until the program wipes it, or until 14
+  hours of awake time after its draw, whichever is first; rotating it once
+  does not stop it, since it then opens as the previous key for 2 hours more.
+  A program that believes a key leaked retires it at once rather than waiting
+  out its window: a previous key it wipes on the spot, and a current one it
+  turns twice, which wipes it and leaves two fresh keys. No entry outlives its recording by more than one server
+  lifetime (above), so the register is free of the attacker's entries at most
+  2 hours after the key stops opening: at most about 16 hours of awake time
+  after the key was drawn, if the program never retires it. It gains no more
+  than that: it can already resume, and impersonate the server to clients
+  that do.
+- **While the register is full**, every client resumes no session and pays a full
   handshake, as it would on a server without tickets: a cost in CPU, never a
   key, a forged ticket or a ticket accepted twice. The design accepts that
   rather than bound it per chain or per client: a per-chain allowance only
@@ -625,9 +637,9 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   one byte, 0, unique among the one ticket a connection gets (§4.6.1).
 
 To be pinned by `net_tls_ticket` (replay refused; the register full refusing
-and counting each refusal, and taking ids again once entries expire; a ticket
-sealed with a lifetime of a week, recorded, still frees its entry 7200 s
-after recording) and
+and counting each refusal, and taking ids again once entries expire;
+`TlsTicketStrikes.take` called directly with an expiry a week away, whose
+entry is free again 7200 s after `now`) and
 `net_tls_resume` (each row of the fallback and abort table below, rows 17 and
 18 included).
 
