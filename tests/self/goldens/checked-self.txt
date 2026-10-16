@@ -5828,7 +5828,7 @@ function JsonPlace.constructor(this: JsonPlace, info: StructInfo | null, object:
   escaping: field info object slot type
   pointer this: size=40 writesThrough=true captured=false
   pointer info: size=136 writesThrough=true captured=true
-  pointer field: size=72 writesThrough=true captured=true
+  pointer field: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function jsonLoad(emitter: Emitter, place: JsonPlace): string -> @jsonLoad
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -7047,7 +7047,7 @@ function inlineHeaderPointer(emitter: Emitter, info: StructInfo, receiver: strin
   calls: Emitter.declareType IRFunction.emitValue nish_str_concat nish_str_from_i32
   pointer emitter: size=256 writesThrough=false captured=false passedTo=Emitter.declareType#0
   pointer info: size=136 writesThrough=false captured=false
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 369:3 Emitter.declareType -> @Emitter.declareType
   local 370:9 ty: string (const)
@@ -7058,7 +7058,7 @@ function inlineDataPointer(emitter: Emitter, info: StructInfo, receiver: string,
   calls: Emitter.llvm IRFunction.emitValue TypeTable.refOf nish_str_concat nish_str_from_i32
   pointer emitter: size=256 writesThrough=false captured=false passedTo=Emitter.llvm#0
   pointer info: size=136 writesThrough=false captured=false
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 383:9 ty: string (const)
   local 384:9 slot: string (const)
@@ -7107,7 +7107,7 @@ function emitInlineArrayAssignment(emitter: Emitter, expr: Node, field: FieldInf
   calls: CheckedProgram.inlineAssignLength Emitter.declare Emitter.emitExpression IRFunction.emit IRFunction.emitValue TypeTable.refOf elementAccess elementSize inlineDataPointer inlineHeaderPointer inlineOwnerOf internalErrorFor loadHeaderField nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 slotType storeElement storeHeaderField unwrapParens
   pointer emitter: size=256 writesThrough=false captured=false passedTo=inlineOwnerOf#0 elementSize#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.emitExpression#0 inlineHeaderPointer#0 inlineDataPointer#0 slotType#0 storeElement#0 Emitter.declare#0 elementAccess#0 loadHeaderField#0 Emitter.declare#0 elementAccess#0 storeHeaderField#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckedProgram.inlineAssignLength#1
-  pointer field: size=72 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
+  pointer field: size=64 writesThrough=false captured=false passedTo=inlineHeaderPointer#3 inlineDataPointer#3
   stackSites=1 stackLocals=1
   local 443:9 target: Node (const)
   callee 443:18 unwrapParens -> @unwrapParens
@@ -15654,7 +15654,7 @@ struct Instantiation (class) size=184 align=8 exported
   field channelSenders: string[] index=23 offset=176
   constructor -> @Instantiation.constructor
   method shareTablesOf -> @Instantiation.shareTablesOf
-struct FieldInfo (class) size=72 align=8 exported
+struct FieldInfo (class) size=64 align=8 exported
   field name: string index=0 offset=0
   field type: i32 index=1 offset=8
   field index: i32 index=2 offset=12
@@ -15662,11 +15662,11 @@ struct FieldInfo (class) size=72 align=8 exported
   field readonly: boolean index=4 offset=20
   field jsonOptional: boolean index=5 offset=21
   field initializer: Node | null index=6 offset=24
-  field initializerValue: i32 index=7 offset=32
-  field decl: Node index=8 offset=40
-  field inlineCapacity: i32 index=9 offset=48
-  field spelling: string index=10 offset=56
-  field wireName: string index=11 offset=64
+  field decl: Node index=7 offset=32
+  field inlineCapacity: i32 index=8 offset=40
+  field initializerValue: i32 index=9 offset=44
+  field spelling: string index=10 offset=48
+  field wireName: string index=11 offset=56
   constructor -> @FieldInfo.constructor
   method inline -> @FieldInfo.inline
 struct StructInfo (class) size=136 align=8 exported
@@ -16074,12 +16074,12 @@ function Instantiation.shareTablesOf(this: Instantiation, outer: Instantiation):
 function FieldInfo.constructor(this: FieldInfo, name: string, type: i32, decl: Node): void -> @FieldInfo.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: decl name type
-  pointer this: size=72 writesThrough=true captured=false
+  pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FieldInfo.inline(this: FieldInfo): boolean -> @FieldInfo.inline [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function StructInfo.constructor(this: StructInfo, name: string, kind: i32, type: i32, decl: Node, origin: SourceFile): void -> @StructInfo.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -23390,7 +23390,7 @@ function JsonField.constructor(this: JsonField, field: FieldInfo | null, type: i
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: field kind nullable type
   pointer this: size=56 writesThrough=true captured=false
-  pointer field: size=72 writesThrough=true captured=true
+  pointer field: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function noteJsonOptions(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @noteJsonOptions [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -23577,7 +23577,7 @@ function jsonValueOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   calls: JsonField.constructor TypeTable.isArray TypeTable.isEnum TypeTable.isNullable TypeTable.isReadonlyArray TypeTable.refOf TypeTable.stripNull jsonClassOf jsonMapOf jsonScalar jsonValueOf nish_alloc_struct nish_panic_index
   pointer program: size=624 writesThrough=false captured=false passedTo=jsonClassOf#0 jsonMapOf#0 jsonValueOf#0 jsonClassOf#0
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 TypeTable.isEnum#0 TypeTable.isArray#0 TypeTable.isReadonlyArray#0 TypeTable.refOf#0 TypeTable.isEnum#0 jsonClassOf#1 jsonMapOf#1 jsonValueOf#1 jsonClassOf#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
+  pointer field: size=64 writesThrough=true captured=true passedTo=JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1 JsonField.constructor#1
   stackSites=0 stackLocals=0
   local 496:9 nullable: boolean (const)
   callee 496:20 TypeTable.isNullable -> @TypeTable.isNullable
@@ -23622,7 +23622,7 @@ function jsonFieldOf(program: CheckedProgram, table: TypeTable, field: FieldInfo
   calls: jsonValueOf
   pointer program: size=624 writesThrough=false captured=false passedTo=jsonValueOf#0
   pointer table: size=80 writesThrough=false captured=false passedTo=jsonValueOf#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=jsonValueOf#2
+  pointer field: size=64 writesThrough=true captured=true passedTo=jsonValueOf#2
   stackSites=0 stackLocals=0
   callee 563:3 jsonValueOf -> @jsonValueOf
 function jsonValuesOf(f: JsonField, out: JsonField[]): void -> @jsonValuesOf
@@ -31761,7 +31761,7 @@ function taskFinish(emitter: Emitter, name: string, store: FunctionSig, payloadT
   callee 392:3 IRFunction.emit -> @IRFunction.emit
   callee 393:3 IRFunction.emit -> @IRFunction.emit
 function lockWord(emitter: Emitter, info: StructInfo, name: string): FieldInfo -> @lockWord
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=72
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=64
   sharedWrite: via nish_exit
   escaping: name
   calls: StructInfo.field internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
@@ -32117,7 +32117,7 @@ function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
   pointer emitter: size=256 writesThrough=false captured=false
   pointer info: size=136 writesThrough=false captured=false passedTo=structTypeName#0
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 73:9 ty: string (const)
   callee 73:14 structTypeName -> @structTypeName
@@ -32129,7 +32129,7 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue fieldTbaa nish_str_concat structFieldPointer
   pointer emitter: size=256 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
   pointer info: size=136 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
-  pointer field: size=72 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
+  pointer field: size=64 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local 78:9 ty: string (const)
   callee 78:14 Emitter.llvm -> @Emitter.llvm
@@ -32146,7 +32146,7 @@ function storeField(emitter: Emitter, info: StructInfo, receiver: string, field:
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit fieldTbaa nish_str_concat structFieldPointer
   pointer emitter: size=256 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
   pointer info: size=136 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
-  pointer field: size=72 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
+  pointer field: size=64 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local 91:9 ty: string (const)
   callee 91:14 Emitter.llvm -> @Emitter.llvm
@@ -32185,7 +32185,7 @@ function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @ini
   sharedWrite: via nish_exit
   calls: Emitter.stringConstant floatText internalErrorFor isFloat nish_exit nish_panic_index nish_panic_overflow nish_str_from_i32 nish_str_from_i64 numericLiteralValue parseIntegerLiteral
   pointer emitter: size=256 writesThrough=false captured=false passedTo=Emitter.stringConstant#0 Emitter.stringConstant#0
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 122:9 init: Node | null (const)
   callee 124:18 internalErrorFor -> @internalErrorFor
@@ -32429,7 +32429,7 @@ function fieldLLVMType(emitter: Emitter, field: FieldInfo): string -> @fieldLLVM
   sharedWrite: via Emitter.llvm
   calls: Emitter.llvm FieldInfo.inline TypeTable.refOf nish_str_concat nish_str_from_i32
   pointer emitter: size=256 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0
-  pointer field: size=72 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee 454:8 FieldInfo.inline -> @FieldInfo.inline
   callee 455:12 Emitter.llvm -> @Emitter.llvm
@@ -32537,7 +32537,7 @@ function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string
   calls: Emitter.metadata nish_str_concat nish_str_from_i32 scalarNode structNode
   pointer emitter: size=256 writesThrough=false captured=false passedTo=structNode#0 scalarNode#0 Emitter.metadata#0
   pointer info: size=136 writesThrough=false captured=false passedTo=structNode#1
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 74:9 base: string (const)
   callee 74:16 structNode -> @structNode
@@ -34841,7 +34841,7 @@ function fieldWidth(table: TypeTable, field: FieldInfo): i32 -> @fieldWidth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FieldInfo.inline TypeTable.alignOf TypeTable.refOf nish_panic_overflow roundUpTo
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.alignOf#0 TypeTable.alignOf#0 TypeTable.refOf#0
-  pointer field: size=72 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee 92:8 FieldInfo.inline -> @FieldInfo.inline
   callee 93:12 TypeTable.alignOf -> @TypeTable.alignOf
@@ -34853,7 +34853,7 @@ function fieldAlign(table: TypeTable, field: FieldInfo): i32 -> @fieldAlign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FieldInfo.inline TypeTable.alignOf
   pointer table: size=80 writesThrough=false captured=false passedTo=TypeTable.alignOf#0
-  pointer field: size=72 writesThrough=false captured=false passedTo=FieldInfo.inline#0
+  pointer field: size=64 writesThrough=false captured=false passedTo=FieldInfo.inline#0
   stackSites=0 stackLocals=0
   callee 101:3 FieldInfo.inline -> @FieldInfo.inline
   callee 101:24 TypeTable.alignOf -> @TypeTable.alignOf
@@ -35017,7 +35017,7 @@ function checkEnumInitializer(ctx: CheckContext, field: FieldInfo, init: Node, w
   sharedWrite: 467:3
   calls: CheckContext.error CheckContext.errorAtProperty CheckedProgram.enumNamed EnumInfo.hasMember EnumInfo.memberValue TypeTable.assignable TypeTable.isEnumMemberType TypeTable.memberValue TypeTable.refOf TypeTable.typeName memberSlotMessage nish_panic_index nish_str_concat
   pointer ctx: size=216 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.errorAtProperty#0 CheckContext.error#0 memberSlotMessage#0 CheckContext.error#0
-  pointer field: size=72 writesThrough=true captured=false
+  pointer field: size=64 writesThrough=true captured=false
   pointer init: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1 CheckContext.errorAtProperty#1 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   local 456:9 receiver: Node (const)
@@ -35232,7 +35232,7 @@ function describeField(ctx: CheckContext, field: FieldInfo): string -> @describe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName nish_str_concat
   pointer ctx: size=216 writesThrough=false captured=false
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 905:23 TypeTable.typeName -> @TypeTable.typeName
 function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @noteStructNames [exported]
@@ -40846,7 +40846,7 @@ function Candidate.constructor(this: Candidate, info: StructInfo, field: FieldIn
   escaping: field info
   pointer this: size=64 writesThrough=true captured=false
   pointer info: size=136 writesThrough=true captured=true
-  pointer field: size=72 writesThrough=true captured=true
+  pointer field: size=64 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function FreshReturn.constructor(this: FreshReturn, param: i32, length: i32): void -> @FreshReturn.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
@@ -40882,7 +40882,7 @@ function InlineWalk.add(this: InlineWalk, info: StructInfo, field: FieldInfo): v
   calls: Candidate.constructor StringMap.set nish_alloc_struct nish_array_grow nish_str_concat
   pointer this: size=80 writesThrough=false captured=false
   pointer info: size=136 writesThrough=true captured=true passedTo=Candidate.constructor#1
-  pointer field: size=72 writesThrough=true captured=true passedTo=Candidate.constructor#2
+  pointer field: size=64 writesThrough=true captured=true passedTo=Candidate.constructor#2
   stackSites=0 stackLocals=0
   callee 205:5 StringMap.set -> @StringMap.set
   callee 206:5 StringMap.set -> @StringMap.set
@@ -40908,7 +40908,7 @@ function mayInline(table: TypeTable, program: CheckedProgram, mode: BuildMode, i
   pointer program: size=624 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer mode: size=3 writesThrough=false captured=false passedTo=hostVisible#0
   pointer info: size=136 writesThrough=false captured=false
-  pointer field: size=72 writesThrough=false captured=false
+  pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 245:7 hostVisible -> @hostVisible
   callee 245:51 TypeTable.isArray -> @TypeTable.isArray

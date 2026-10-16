@@ -744,13 +744,6 @@ export class FieldInfo {
   jsonOptional: boolean
   /** `x: number = 0`, stored before the constructor body runs; else `null`. */
   initializer: Node | null
-  /**
-   * The integer of an enum member initializer, `kind: Kind = Kind.Array`,
-   * folded when the field is collected. Here rather than in `nodeEnumValues`
-   * because the emitter that stores it may be another module's
-   * (`initializerConstant`).
-   */
-  initializerValue: i32
   decl: Node
   /**
    * The number of element slots an array field holds inside its object, or -1
@@ -760,6 +753,13 @@ export class FieldInfo {
    * so `index` does not move and `offset` is recomputed.
    */
   inlineCapacity: i32
+  /**
+   * The integer of an enum member initializer, `kind: Kind = Kind.Array`,
+   * folded when the field is collected. Here rather than in `nodeEnumValues`
+   * because the emitter that stores it may be another module's
+   * (`initializerConstant`).
+   */
+  initializerValue: i32
   /**
    * WP33 R2: the typed-array name the field is declared with, or `""`, read
    * in the declaring module for the reason `FunctionSig.returnSpelling` is.
