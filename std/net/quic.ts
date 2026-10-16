@@ -2508,6 +2508,10 @@ export class QuicConnection {
       this.handshakeDonePending = true
       this.state = QUIC_STATE_CONNECTED
       this.discard(this.handshake)
+      // The Handshake level's traffic secrets have nothing left to derive
+      // once it is discarded (TLS wipes the handshake secret itself).
+      secureZero(tls.clientHandshakeSecret)
+      secureZero(tls.serverHandshakeSecret)
       this.topUpConnectionIds()
     }
   }

@@ -29,9 +29,12 @@ export const wipeChecks = [
   // secret among them; `release` is `wipeAll`. `runClocks` 200: `wipeAll` at the idle timeout and again at
   // the end of the closing or draining period, each copy counted, and
   // `prepareNextReadKeys` once a key update's previous keys have had their
-  // probe timeout.
+  // probe timeout. `afterTls` 86: once the handshake is confirmed, the
+  // Handshake level's `discard`, 23, and `TlsServer`'s two handshake traffic
+  // secrets, 2, besides the wipes of the derivations it runs as each level's
+  // keys arrive.
   {
-    name: "quic: the wipes survive opt -O2 (a key slot's keys and AES schedules, each packet's nonce and mask, a key update's replaced generation, a discarded level, and every key at release, the idle timeout and the end of the closing or draining period)",
+    name: "quic: the wipes survive opt -O2 (a key slot's keys and AES schedules, each packet's nonce and mask, a key update's replaced generation, a discarded level and its handshake secrets, and every key at release, the idle timeout and the end of the closing or draining period)",
     program: "tests/link/net_quic_wipes/main.ts",
     modules: QUIC_MODULES,
     roots: [
@@ -45,6 +48,7 @@ export const wipeChecks = [
       ["nish.QuicConnection.wipeAll", 95],
       ["nish.QuicConnection.release", 95],
       ["nish.QuicConnection.runClocks", 200],
+      ["nish.QuicConnection.afterTls", 86],
     ],
   },
 ]

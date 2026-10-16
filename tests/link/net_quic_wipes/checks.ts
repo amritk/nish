@@ -167,6 +167,11 @@ const qwDiscard = (t: Suite, name: string, suite: i32): void => {
   t.ok(`${name}: the handshake completes`, p.connected && conn.state === QUIC_STATE_CONNECTED);
   t.ok(`${name}: the Initial level's slots, schedules included, read zero once it is discarded`, conn.initial.discarded && qwSlotsZero(conn.initial.keySlots));
   t.ok(`${name}: and the Handshake level's, once the handshake is confirmed`, conn.handshake.discarded && qwSlotsZero(conn.handshake.keySlots));
+  const tls: TlsServer | null = conn.tlsSlot;
+  t.ok(
+    `${name}: with TlsServer's handshake traffic secrets`,
+    tls !== null && qwZero(tls.handshakeSecret) && qwZero(tls.clientHandshakeSecret) && qwZero(tls.serverHandshakeSecret)
+  );
   t.ok(`${name}: while the 1-RTT keys are held`, qwHeld(conn, suite));
 };
 

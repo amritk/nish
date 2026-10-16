@@ -1,6 +1,7 @@
 PASS  AES-128-GCM: the handshake completes
 PASS  AES-128-GCM: the Initial level's slots, schedules included, read zero once it is discarded
 PASS  AES-128-GCM: and the Handshake level's, once the handshake is confirmed
+PASS  AES-128-GCM: with TlsServer's handshake traffic secrets
 PASS  AES-128-GCM: while the 1-RTT keys are held
 PASS  AES-128-GCM: the server follows the client's key update
 PASS  AES-128-GCM: the write slot the update replaced reads zero: packet key, IV and its schedule
@@ -24,6 +25,7 @@ PASS  AES-128-GCM, idle: past the idle timeout every key and secret reads zero
 PASS  AES-256-GCM: the handshake completes
 PASS  AES-256-GCM: the Initial level's slots, schedules included, read zero once it is discarded
 PASS  AES-256-GCM: and the Handshake level's, once the handshake is confirmed
+PASS  AES-256-GCM: with TlsServer's handshake traffic secrets
 PASS  AES-256-GCM: while the 1-RTT keys are held
 PASS  AES-256-GCM: the server follows the client's key update
 PASS  AES-256-GCM: the write slot the update replaced reads zero: packet key, IV and its schedule
@@ -47,6 +49,7 @@ PASS  AES-256-GCM, idle: past the idle timeout every key and secret reads zero
 PASS  ChaCha20-Poly1305: the handshake completes
 PASS  ChaCha20-Poly1305: the Initial level's slots, schedules included, read zero once it is discarded
 PASS  ChaCha20-Poly1305: and the Handshake level's, once the handshake is confirmed
+PASS  ChaCha20-Poly1305: with TlsServer's handshake traffic secrets
 PASS  ChaCha20-Poly1305: while the 1-RTT keys are held
 PASS  ChaCha20-Poly1305: the server follows the client's key update
 PASS  ChaCha20-Poly1305: the write slot the update replaced reads zero: packet key, IV and its schedule
@@ -67,4 +70,4 @@ PASS  ChaCha20-Poly1305, drained: the keys are kept through the period, three pr
 PASS  ChaCha20-Poly1305, drained: and at its end every key and secret reads zero
 PASS  ChaCha20-Poly1305, drained: in the same state, with nothing more to send or time
 PASS  ChaCha20-Poly1305, idle: past the idle timeout every key and secret reads zero
-quic wipes: 69 passed, 0 failed, 0 skipped
+quic wipes: 72 passed, 0 failed, 0 skipped
