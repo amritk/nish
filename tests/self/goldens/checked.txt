@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1023 programs, 108279 dump lines.
+# 1023 programs, 108294 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -53673,6 +53673,12 @@ function expose<u8[], u8[], tlsHandshakeFromEcdhe256>(s: Secret<u8[]>, f: void):
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 49:70 tlsHandshakeFromEcdhe256 -> @nish.tlsHandshakeFromEcdhe256
+function wipe<TlsExchangeWords>(_target: TlsExchangeWords): void -> @nish.wipe$$TlsExchangeWords [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via llvm.memset.p0i8.i64
+  calls: llvm.memset.p0i8.i64
+  pointer _target: size=152 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 function expose<u8[], u8[] | null, p256PublicKeyExposed>(s: Secret<u8[]>, f: void): u8[] | null -> @nish.expose$arr.u8$opt.arr.u8$fn.25.nish.p256PublicKeyExposed [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PublicKeyExposed
@@ -62296,6 +62302,7 @@ struct TlsServer (class) size=264 align=8 exported
   constructor -> @nish.TlsServer.constructor
   method restart -> @nish.TlsServer.restart
   method fail -> @nish.TlsServer.fail
+  method wipeResumption -> @nish.TlsServer.wipeResumption
   method secretArray -> @nish.TlsServer.secretArray
   method expectedLevel -> @nish.TlsServer.expectedLevel
   method reserveInput -> @nish.TlsServer.reserveInput
@@ -62321,64 +62328,64 @@ function tlsConfigFits(config: TlsServerConfig): boolean -> @nish.tlsConfigFits
   calls: nish_panic_overflow
   pointer config: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 201:7 certificate: i32 (let)
-  local 202:14 der: u8[] (const)
-  local 203:11 n: i32 (const)
-  local 212:9 extensions: i32 (const)
-  local 214:14 protocol: string (const)
-  local 215:11 n: i32 (const)
+  local 203:7 certificate: i32 (let)
+  local 204:14 der: u8[] (const)
+  local 205:11 n: i32 (const)
+  local 214:9 extensions: i32 (const)
+  local 216:14 protocol: string (const)
+  local 217:11 n: i32 (const)
 function tlsBytesSpell(data: u8[], at: i32, length: i32, text: string): boolean -> @nish.tlsBytesSpell
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 233:9 k: i32 (let)
+  local 235:9 k: i32 (let)
 function tlsDerIntegerLength(rs: u8[], at: i32): i32 -> @nish.tlsDerIntegerLength
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer rs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 255:7 first: i32 (let)
-  local 259:9 top: boolean (const)
+  local 257:7 first: i32 (let)
+  local 261:9 top: boolean (const)
 function tlsDerIntegerInto(out: u8[], to: i32, rs: u8[], at: i32, length: i32): i32 -> @nish.tlsDerIntegerInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 269:3
+  sharedWrite: 271:3
   escaping: to
   calls: nish_panic_index nish_panic_overflow
   pointer out: size=0 writesThrough=true captured=false
   pointer rs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 265:9 end: i32 (const)
-  local 271:12 k: i32 (let)
-  local 273:11 from: i32 (const)
-  local 274:11 j: i32 (const)
+  local 267:9 end: i32 (const)
+  local 273:12 k: i32 (let)
+  local 275:11 from: i32 (const)
+  local 276:11 j: i32 (const)
 function tlsEcdsaDerLength(rs: u8[]): i32 -> @nish.tlsEcdsaDerLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsDerIntegerLength nish_panic_overflow
   pointer rs: size=0 writesThrough=false captured=false passedTo=nish.tlsDerIntegerLength#0 nish.tlsDerIntegerLength#0
   stackSites=0 stackLocals=0
-  callee 284:7 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
-  callee 284:43 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+  callee 286:7 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+  callee 286:43 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
 function tlsEcdsaDerInto(der: u8[], rs: u8[]): void -> @nish.tlsEcdsaDerInto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 291:3
+  sharedWrite: 293:3
   calls: nish.tlsDerIntegerInto nish.tlsDerIntegerLength
   pointer der: size=0 writesThrough=true captured=false passedTo=nish.tlsDerIntegerInto#0 nish.tlsDerIntegerInto#0
   pointer rs: size=0 writesThrough=false captured=false passedTo=nish.tlsDerIntegerLength#0 nish.tlsDerIntegerInto#2 nish.tlsDerIntegerInto#2 nish.tlsDerIntegerLength#0
   stackSites=0 stackLocals=0
-  local 293:9 r: i32 (const)
-  callee 293:18 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
-  callee 294:3 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
-  callee 294:26 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
-  callee 294:78 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+  local 295:9 r: i32 (const)
+  callee 295:18 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
+  callee 296:3 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
+  callee 296:26 tlsDerIntegerInto -> @nish.tlsDerIntegerInto
+  callee 296:78 tlsDerIntegerLength -> @nish.tlsDerIntegerLength
 function tlsEcdsaDerSignature(rs: u8[]): u8[] | null -> @nish.tlsEcdsaDerSignature [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsEcdsaDerInto nish.tlsEcdsaDerLength nish_panic
   pointer rs: size=0 writesThrough=false captured=false passedTo=nish.tlsEcdsaDerLength#0 nish.tlsEcdsaDerInto#1
   stackSites=0 stackLocals=0
-  local 306:9 der: u8[] (const)
-  callee 306:35 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
-  callee 307:3 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
+  local 308:9 der: u8[] (const)
+  callee 308:35 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
+  callee 309:3 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
 function tlsSignEcdsaP256(priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.tlsSignEcdsaP256 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignSha256
@@ -62386,17 +62393,17 @@ function tlsSignEcdsaP256(priv: Secret<u8[]>, content: u8[]): u8[] | null -> @ni
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256SignSha256#0
   pointer content: size=0 writesThrough=false captured=false passedTo=nish.p256SignSha256#1
   stackSites=0 stackLocals=0
-  local 319:9 rs: u8[] | null (const)
-  callee 319:27 p256SignSha256 -> @nish.p256SignSha256
-  callee 323:10 tlsEcdsaDerSignature -> @nish.tlsEcdsaDerSignature
+  local 321:9 rs: u8[] | null (const)
+  callee 321:27 p256SignSha256 -> @nish.p256SignSha256
+  callee 325:10 tlsEcdsaDerSignature -> @nish.tlsEcdsaDerSignature
 function TlsP256Signer.constructor(this: TlsP256Signer): void -> @nish.TlsP256Signer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: 349:7
+  sharedWrite: 351:7
   calls: nish.P256SignScratch.constructor nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 345:20 new P256SignScratch -> @nish.P256SignScratch.constructor
-  local 348:14 length: i32 (let)
+  callee 347:20 new P256SignScratch -> @nish.P256SignScratch.constructor
+  local 350:14 length: i32 (let)
 function TlsP256Signer.sign(this: TlsP256Signer, priv: Secret<u8[]>, content: u8[]): u8[] | null -> @nish.TlsP256Signer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256SignSha256Into
@@ -62405,92 +62412,94 @@ function TlsP256Signer.sign(this: TlsP256Signer, priv: Secret<u8[]>, content: u8
   pointer priv: size=8 writesThrough=false captured=false passedTo=nish.p256SignSha256Into#1
   pointer content: size=0 writesThrough=false captured=false passedTo=nish.p256SignSha256Into#2
   stackSites=0 stackLocals=0
-  callee 361:8 p256SignSha256Into -> @nish.p256SignSha256Into
-  local 365:11 at: i32 (const)
-  callee 365:21 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
-  local 369:11 der: u8[] (const)
-  callee 370:5 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
+  callee 363:8 p256SignSha256Into -> @nish.p256SignSha256Into
+  local 367:11 at: i32 (const)
+  callee 367:21 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
+  local 371:11 der: u8[] (const)
+  callee 372:5 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
 function tlsIsZeroSecret(shared: u8[]): boolean -> @nish.tlsIsZeroSecret
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.timingSafeEqual nish_arena_mark nish_arena_release nish_panic
   pointer shared: size=0 writesThrough=false captured=false passedTo=nish.timingSafeEqual#0
   stackSites=0 stackLocals=0
-  callee 376:52 timingSafeEqual -> @nish.timingSafeEqual
+  callee 378:52 timingSafeEqual -> @nish.timingSafeEqual
 function tlsHexBytes(text: string): u8[] -> @nish.tlsHexBytes
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
   calls: nish.tlsHexInto nish_panic
   stackSites=0 stackLocals=0
-  local 392:9 out: u8[] (const)
-  callee 393:3 tlsHexInto -> @nish.tlsHexInto
+  local 394:9 out: u8[] (const)
+  callee 395:3 tlsHexInto -> @nish.tlsHexInto
 function tlsHandshakeFromEcdhe256(ecdhe: u8[]): u8[] -> @nish.tlsHandshakeFromEcdhe256
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExtractSha256
   calls: nish.hkdfExtractSha256 nish.tlsHexBytes
   pointer ecdhe: size=0 writesThrough=false captured=false passedTo=nish.hkdfExtractSha256#1
   stackSites=0 stackLocals=0
-  callee 399:3 hkdfExtractSha256 -> @nish.hkdfExtractSha256
-  callee 399:21 tlsHexBytes -> @nish.tlsHexBytes
+  callee 401:3 hkdfExtractSha256 -> @nish.hkdfExtractSha256
+  callee 401:21 tlsHexBytes -> @nish.tlsHexBytes
 function tlsHandshakeFromEcdhe384(ecdhe: u8[]): u8[] -> @nish.tlsHandshakeFromEcdhe384
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExtractSha384
   calls: nish.hkdfExtractSha384 nish.tlsHexBytes
   pointer ecdhe: size=0 writesThrough=false captured=false passedTo=nish.hkdfExtractSha384#1
   stackSites=0 stackLocals=0
-  callee 403:3 hkdfExtractSha384 -> @nish.hkdfExtractSha384
-  callee 403:21 tlsHexBytes -> @nish.tlsHexBytes
+  callee 405:3 hkdfExtractSha384 -> @nish.hkdfExtractSha384
+  callee 405:21 tlsHexBytes -> @nish.tlsHexBytes
 function tlsSecretAt(level: i32, handshake: u8[], application: u8[]): u8[] | null -> @nish.tlsSecretAt
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: application handshake
   pointer handshake: size=0 writesThrough=true captured=true
   pointer application: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 407:9 chosen: u8[] (const)
+  local 409:9 chosen: u8[] (const)
 function tlsWordAt(b: u8[], at: i32): u64 -> @nish.tlsWordAt
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 462:7 v: u64 (let)
-  local 463:12 k: i32 (let)
-  local 464:11 byte: u64 (const)
+  local 464:7 v: u64 (let)
+  local 465:12 k: i32 (let)
+  local 466:11 byte: u64 (const)
 function tlsWordInto(b: u8[], at: i32, v: u64): void -> @nish.tlsWordInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 475:7
+  sharedWrite: 477:7
   calls: nish_panic_index
   pointer b: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 472:12 k: i32 (let)
-  local 473:11 shift: i32 (const)
+  local 474:12 k: i32 (let)
+  local 475:11 shift: i32 (const)
 function tlsExchange(w: TlsExchangeWords): i32 -> @nish.tlsExchange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 498:3
+  sharedWrite: 524:3
   calls: nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256 nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384 nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret nish.secret$arr.u8 nish.tlsWordAt nish.tlsWordInto nish.wipe$$Secret$arr.u8 nish.x25519 nish.x25519Base nish_arena_mark nish_arena_release nish_panic nish_wipe
   pointer w: size=152 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 493:9 raw: u8[] (const)
-  callee 494:3 tlsWordInto -> @nish.tlsWordInto
-  callee 495:3 tlsWordInto -> @nish.tlsWordInto
+  local 495:9 raw: u8[] (const)
   callee 496:3 tlsWordInto -> @nish.tlsWordInto
   callee 497:3 tlsWordInto -> @nish.tlsWordInto
-  local 502:9 share: u8[] (const)
+  callee 498:3 tlsWordInto -> @nish.tlsWordInto
+  callee 499:3 tlsWordInto -> @nish.tlsWordInto
+  local 500:9 share: u8[] (const)
+  callee 501:3 tlsWordInto -> @nish.tlsWordInto
+  callee 502:3 tlsWordInto -> @nish.tlsWordInto
   callee 503:3 tlsWordInto -> @nish.tlsWordInto
   callee 504:3 tlsWordInto -> @nish.tlsWordInto
-  callee 505:3 tlsWordInto -> @nish.tlsWordInto
-  callee 506:3 tlsWordInto -> @nish.tlsWordInto
-  local 507:9 key: Secret<u8[]> (const)
-  callee 507:29 secret<u8[]> -> @nish.secret$arr.u8
-  local 508:9 serverPublic: u8[] | null (const)
-  callee 508:37 x25519Base -> @nish.x25519Base
-  local 509:9 shared: Secret<u8[]> | null (const)
-  callee 509:39 x25519 -> @nish.x25519
-  callee 510:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  callee 517:32 expose<u8[], boolean, tlsIsZeroSecret> -> @nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret
-  callee 518:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
-  local 521:9 handshake: u8[] (const)
-  callee 523:9 expose<u8[], u8[], tlsHandshakeFromEcdhe384> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384
-  callee 524:9 expose<u8[], u8[], tlsHandshakeFromEcdhe256> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256
-  callee 525:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local 505:9 key: Secret<u8[]> (const)
+  callee 505:29 secret<u8[]> -> @nish.secret$arr.u8
+  local 506:9 serverPublic: u8[] | null (const)
+  callee 506:37 x25519Base -> @nish.x25519Base
+  local 507:9 shared: Secret<u8[]> | null (const)
+  callee 507:39 x25519 -> @nish.x25519
+  callee 508:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 515:32 expose<u8[], boolean, tlsIsZeroSecret> -> @nish.expose$arr.u8$bool$fn.20.nish.tlsIsZeroSecret
+  callee 516:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  local 519:9 handshake: u8[] (const)
+  callee 521:9 expose<u8[], u8[], tlsHandshakeFromEcdhe384> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe384
+  callee 522:9 expose<u8[], u8[], tlsHandshakeFromEcdhe256> -> @nish.expose$arr.u8$arr.u8$fn.29.nish.tlsHandshakeFromEcdhe256
+  callee 523:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 524:15 tlsWordAt -> @nish.tlsWordAt
+  callee 525:15 tlsWordAt -> @nish.tlsWordAt
   callee 526:15 tlsWordAt -> @nish.tlsWordAt
   callee 527:15 tlsWordAt -> @nish.tlsWordAt
   callee 528:15 tlsWordAt -> @nish.tlsWordAt
@@ -62499,8 +62508,6 @@ function tlsExchange(w: TlsExchangeWords): i32 -> @nish.tlsExchange
   callee 531:15 tlsWordAt -> @nish.tlsWordAt
   callee 532:15 tlsWordAt -> @nish.tlsWordAt
   callee 533:15 tlsWordAt -> @nish.tlsWordAt
-  callee 534:15 tlsWordAt -> @nish.tlsWordAt
-  callee 535:15 tlsWordAt -> @nish.tlsWordAt
 function tlsSecretPool(hashLength: i32): u8[][] -> @nish.tlsSecretPool
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hashLength
@@ -62511,13 +62518,13 @@ function tlsFlightCapacity(config: TlsServerConfig): i32 -> @nish.tlsFlightCapac
   calls: nish.tlsWriteCertificate nish.tlsWriteEncryptedExtensions nish_panic_overflow
   pointer config: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 586:9 none: u8[] (const)
-  local 587:7 longest: string (let)
-  local 588:14 protocol: string (const)
-  local 593:9 extensions: i32 (const)
-  callee 593:27 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
-  local 601:9 certificate: i32 (const)
-  callee 601:28 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  local 584:9 none: u8[] (const)
+  local 585:7 longest: string (let)
+  local 586:14 protocol: string (const)
+  local 591:9 extensions: i32 (const)
+  callee 591:27 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  local 599:9 certificate: i32 (const)
+  callee 599:28 tlsWriteCertificate -> @nish.tlsWriteCertificate
 function TlsServer.constructor(this: TlsServer, config: TlsServerConfig, serverRandom: u8[], ephemeralPrivate: u8[]): void -> @nish.TlsServer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.TlsTranscript.constructor
@@ -62548,66 +62555,73 @@ function TlsServer.restart(this: TlsServer, serverRandom: u8[], ephemeralPrivate
   local 760:14 k: i32 (let)
 function TlsServer.fail(this: TlsServer, alert: i32): i32 -> @nish.TlsServer.fail [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 785:5
+  sharedWrite: 786:5
   escaping: alert
-  calls: nish.TlsServer.secretArray nish_wipe
-  pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.secretArray#0
+  calls: nish.TlsServer.wipeResumption
+  pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.wipeResumption#0
   stackSites=0 stackLocals=0
-  callee 785:16 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 785:5 TlsServer.wipeResumption -> @nish.TlsServer.wipeResumption
+function TlsServer.wipeResumption(this: TlsServer): void -> @nish.TlsServer.wipeResumption [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 798:5
+  calls: nish.TlsServer.secretArray nish_wipe
+  pointer this: size=264 writesThrough=false captured=false passedTo=nish.TlsServer.secretArray#0
+  stackSites=0 stackLocals=0
+  callee 798:16 TlsServer.secretArray -> @nish.TlsServer.secretArray
 function TlsServer.secretArray(this: TlsServer, index: i32): u8[] -> @nish.TlsServer.secretArray [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 793:11 pool: u8[][] (const)
+  local 803:11 pool: u8[][] (const)
 function TlsServer.expectedLevel(this: TlsServer): i32 -> @nish.TlsServer.expectedLevel [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsServer.reserveInput(this: TlsServer, need: i32): void -> @nish.TlsServer.reserveInput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 827:7
+  sharedWrite: 837:7
   calls: nish_panic nish_panic_overflow
   pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 816:11 capacity: i32 (const)
-  local 820:9 size: i32 (let)
-  local 824:11 most: i32 (const)
-  local 825:11 grown: u8[] (const)
-  local 826:14 k: i32 (let)
+  local 826:11 capacity: i32 (const)
+  local 830:9 size: i32 (let)
+  local 834:11 most: i32 (const)
+  local 835:11 grown: u8[] (const)
+  local 836:14 k: i32 (let)
 function TlsServer.reserveOutput(this: TlsServer, level: i32, need: i32): void -> @nish.TlsServer.reserveOutput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 848:7
+  sharedWrite: 858:7
   escaping: need
   calls: nish_panic
   pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 839:11 initial: boolean (const)
-  local 840:11 buffer: u8[] (const)
-  local 841:11 held: i32 (const)
-  local 842:11 capacity: i32 (const)
-  local 846:11 grown: u8[] (const)
-  local 847:14 k: i32 (let)
+  local 849:11 initial: boolean (const)
+  local 850:11 buffer: u8[] (const)
+  local 851:11 held: i32 (const)
+  local 852:11 capacity: i32 (const)
+  local 856:11 grown: u8[] (const)
+  local 857:14 k: i32 (let)
 function TlsServer.receive(this: TlsServer, level: i32, data: u8[], off: i32, len: i32): i32 -> @nish.TlsServer.receive [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 895:7
+  sharedWrite: 905:7
   calls: nish.TlsServer.expectedLevel nish.TlsServer.fail nish.TlsServer.handleMessage nish.TlsServer.reserveInput nish_panic_index nish_panic_overflow
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.expectedLevel#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.reserveInput#0 nish.TlsServer.fail#0 nish.TlsServer.fail#0 nish.TlsServer.handleMessage#0 nish.TlsServer.fail#0
   pointer data: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 876:14 TlsServer.fail -> @nish.TlsServer.fail
-  callee 881:19 TlsServer.expectedLevel -> @nish.TlsServer.expectedLevel
-  callee 882:14 TlsServer.fail -> @nish.TlsServer.fail
-  callee 887:14 TlsServer.fail -> @nish.TlsServer.fail
-  callee 889:5 TlsServer.reserveInput -> @nish.TlsServer.reserveInput
-  local 891:11 k: i32 (let)
-  local 903:11 length: i32 (const)
-  callee 905:14 TlsServer.fail -> @nish.TlsServer.fail
-  local 907:11 whole: i32 (const)
-  callee 912:14 TlsServer.fail -> @nish.TlsServer.fail
-  local 917:11 alert: i32 (const)
-  callee 917:24 TlsServer.handleMessage -> @nish.TlsServer.handleMessage
-  callee 919:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 886:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 891:19 TlsServer.expectedLevel -> @nish.TlsServer.expectedLevel
+  callee 892:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 897:14 TlsServer.fail -> @nish.TlsServer.fail
+  callee 899:5 TlsServer.reserveInput -> @nish.TlsServer.reserveInput
+  local 901:11 k: i32 (let)
+  local 913:11 length: i32 (const)
+  callee 915:14 TlsServer.fail -> @nish.TlsServer.fail
+  local 917:11 whole: i32 (const)
+  callee 922:14 TlsServer.fail -> @nish.TlsServer.fail
+  local 927:11 alert: i32 (const)
+  callee 927:24 TlsServer.handleMessage -> @nish.TlsServer.handleMessage
+  callee 929:14 TlsServer.fail -> @nish.TlsServer.fail
 function TlsServer.handleMessage(this: TlsServer, length: i32): i32 -> @nish.TlsServer.handleMessage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsServer.handleClientHello
@@ -62615,219 +62629,220 @@ function TlsServer.handleMessage(this: TlsServer, length: i32): i32 -> @nish.Tls
   calls: nish.TlsServer.handleClientHello nish.TlsServer.handleFinished nish_panic_index
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.handleClientHello#0 nish.TlsServer.handleFinished#0
   stackSites=0 stackLocals=0
-  local 930:11 type: i32 (const)
-  callee 933:11 TlsServer.handleClientHello -> @nish.TlsServer.handleClientHello
-  callee 936:46 TlsServer.handleFinished -> @nish.TlsServer.handleFinished
+  local 940:11 type: i32 (const)
+  callee 943:11 TlsServer.handleClientHello -> @nish.TlsServer.handleClientHello
+  callee 946:46 TlsServer.handleFinished -> @nish.TlsServer.handleFinished
 function TlsServer.chooseSuite(this: TlsServer, hello: TlsClientHelloView): i32 -> @nish.TlsServer.chooseSuite [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.tlsSuiteHashLength nish_panic_overflow
   pointer this: size=264 writesThrough=false captured=false
   pointer hello: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 945:11 data: u8[] (const)
-  local 946:11 end: i32 (const)
-  local 948:11 k: i32 (let)
-  local 952:13 suite: i32 (const)
-  callee 953:11 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
+  local 955:11 data: u8[] (const)
+  local 956:11 end: i32 (const)
+  local 958:11 k: i32 (let)
+  local 962:13 suite: i32 (const)
+  callee 963:11 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
 function TlsServer.chooseAlpn(this: TlsServer, hello: TlsClientHelloView): i32 -> @nish.TlsServer.chooseAlpn [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 966:5
+  sharedWrite: 976:5
   calls: nish.tlsBytesSpell nish_panic_overflow
   pointer this: size=264 writesThrough=true captured=false
   pointer hello: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 968:13 data: u8[] (const)
-  local 969:13 end: i32 (const)
-  local 970:18 protocol: string (const)
-  local 971:13 at: i32 (let)
-  local 973:17 n: i32 (const)
-  callee 974:15 tlsBytesSpell -> @nish.tlsBytesSpell
+  local 978:13 data: u8[] (const)
+  local 979:13 end: i32 (const)
+  local 980:18 protocol: string (const)
+  local 981:13 at: i32 (let)
+  local 983:17 n: i32 (const)
+  callee 984:15 tlsBytesSpell -> @nish.tlsBytesSpell
 function TlsServer.takeServerName(this: TlsServer, hello: TlsClientHelloView): void -> @nish.TlsServer.takeServerName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 993:7
+  sharedWrite: 1003:7
   calls: nish.tlsBytesSpell nish.tlsWindowString
   pointer this: size=264 writesThrough=true captured=false
   pointer hello: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 996:10 tlsBytesSpell -> @nish.tlsBytesSpell
-  callee 997:29 tlsWindowString -> @nish.tlsWindowString
+  callee 1006:10 tlsBytesSpell -> @nish.tlsBytesSpell
+  callee 1007:29 tlsWindowString -> @nish.tlsWindowString
 function TlsServer.handleClientHello(this: TlsServer, length: i32): i32 -> @nish.TlsServer.handleClientHello [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1058:7
+  sharedWrite: 1068:7
   escaping: length
   calls: nish.TlsServer.chooseAlpn nish.TlsServer.chooseSuite nish.TlsServer.exchangeKeys nish.TlsServer.reserveOutput nish.TlsServer.sent nish.TlsServer.takeServerName nish.TlsServer.writeServerFlight nish.TlsTranscript.reset nish.TlsTranscript.restartWithMessageHash nish.TlsTranscript.update nish.tlsReadClientHello nish.tlsSuiteHashLength nish.tlsWindowHasU16 nish.tlsWriteHelloRetryRequest nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.chooseSuite#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.sent#0 nish.TlsServer.chooseAlpn#0 nish.TlsServer.takeServerName#0 nish.TlsServer.exchangeKeys#0 nish.TlsServer.writeServerFlight#0
   stackSites=1 stackLocals=1
-  local 1011:11 hello: TlsClientHelloView (const)
-  local 1012:11 data: u8[] (const)
-  callee 1013:5 tlsReadClientHello -> @nish.tlsReadClientHello
-  callee 1027:8 tlsWindowHasU16 -> @nish.tlsWindowHasU16
-  local 1034:11 suite: i32 (const)
-  callee 1034:24 TlsServer.chooseSuite -> @nish.TlsServer.chooseSuite
-  callee 1051:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
-  callee 1054:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
-  callee 1059:25 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
-  callee 1060:7 TlsTranscript.reset -> @nish.TlsTranscript.reset
-  callee 1062:5 TlsTranscript.update -> @nish.TlsTranscript.update
-  local 1070:13 none: u8[] (const)
-  callee 1071:7 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 1073:9 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
-  local 1083:13 _scope: i64 (const)
-  callee 1084:7 TlsTranscript.restartWithMessageHash -> @nish.TlsTranscript.restartWithMessageHash
-  local 1085:13 at: i32 (const)
-  local 1086:13 end: i32 (const)
-  callee 1086:24 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
-  callee 1095:7 TlsServer.sent -> @nish.TlsServer.sent
-  local 1101:11 alpnAlert: i32 (const)
-  callee 1101:28 TlsServer.chooseAlpn -> @nish.TlsServer.chooseAlpn
-  callee 1105:5 TlsServer.takeServerName -> @nish.TlsServer.takeServerName
-  local 1108:13 parameters: u8[] (const)
-  local 1113:13 k: i32 (let)
-  local 1121:11 exchangeAlert: i32 (const)
-  callee 1121:32 TlsServer.exchangeKeys -> @nish.TlsServer.exchangeKeys
-  callee 1125:5 TlsServer.writeServerFlight -> @nish.TlsServer.writeServerFlight
+  local 1021:11 hello: TlsClientHelloView (const)
+  local 1022:11 data: u8[] (const)
+  callee 1023:5 tlsReadClientHello -> @nish.tlsReadClientHello
+  callee 1037:8 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  local 1044:11 suite: i32 (const)
+  callee 1044:24 TlsServer.chooseSuite -> @nish.TlsServer.chooseSuite
+  callee 1061:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  callee 1064:10 tlsWindowHasU16 -> @nish.tlsWindowHasU16
+  callee 1069:25 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
+  callee 1070:7 TlsTranscript.reset -> @nish.TlsTranscript.reset
+  callee 1072:5 TlsTranscript.update -> @nish.TlsTranscript.update
+  local 1080:13 none: u8[] (const)
+  callee 1081:7 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1083:9 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  local 1093:13 _scope: i64 (const)
+  callee 1094:7 TlsTranscript.restartWithMessageHash -> @nish.TlsTranscript.restartWithMessageHash
+  local 1095:13 at: i32 (const)
+  local 1096:13 end: i32 (const)
+  callee 1096:24 tlsWriteHelloRetryRequest -> @nish.tlsWriteHelloRetryRequest
+  callee 1105:7 TlsServer.sent -> @nish.TlsServer.sent
+  local 1111:11 alpnAlert: i32 (const)
+  callee 1111:28 TlsServer.chooseAlpn -> @nish.TlsServer.chooseAlpn
+  callee 1115:5 TlsServer.takeServerName -> @nish.TlsServer.takeServerName
+  local 1118:13 parameters: u8[] (const)
+  local 1123:13 k: i32 (let)
+  local 1131:11 exchangeAlert: i32 (const)
+  callee 1131:32 TlsServer.exchangeKeys -> @nish.TlsServer.exchangeKeys
+  callee 1135:5 TlsServer.writeServerFlight -> @nish.TlsServer.writeServerFlight
 function TlsServer.exchangeKeys(this: TlsServer): i32 -> @nish.TlsServer.exchangeKeys [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1142:5
-  calls: nish.TlsServer.secretArray nish.tlsExchange nish.tlsWordAt nish.tlsWordInto nish_panic_overflow
+  sharedWrite: 1155:5
+  calls: nish.TlsServer.secretArray nish.tlsExchange nish.tlsWordAt nish.tlsWordInto nish.wipe$$TlsExchangeWords nish_panic_overflow
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.secretArray#0
   stackSites=0 stackLocals=0
-  local 1138:11 w: TlsExchangeWords (const)
-  local 1139:11 key: u8[] (const)
-  local 1140:11 share: u8[] (const)
-  local 1141:11 at: i32 (const)
-  callee 1142:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1143:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1144:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1145:14 tlsWordAt -> @nish.tlsWordAt
-  callee 1146:16 tlsWordAt -> @nish.tlsWordAt
-  callee 1147:16 tlsWordAt -> @nish.tlsWordAt
-  callee 1148:16 tlsWordAt -> @nish.tlsWordAt
-  callee 1149:16 tlsWordAt -> @nish.tlsWordAt
-  local 1151:11 alert: i32 (const)
-  callee 1151:24 tlsExchange -> @nish.tlsExchange
-  local 1155:11 pub: u8[] (const)
-  callee 1156:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1157:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1158:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1159:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1160:28 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  local 1161:11 handshake: u8[] (const)
-  callee 1162:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1163:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1164:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1165:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1166:5 tlsWordInto -> @nish.tlsWordInto
-  callee 1167:5 tlsWordInto -> @nish.tlsWordInto
+  local 1151:11 w: TlsExchangeWords (const)
+  local 1152:11 key: u8[] (const)
+  local 1153:11 share: u8[] (const)
+  local 1154:11 at: i32 (const)
+  callee 1155:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1156:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1157:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1158:14 tlsWordAt -> @nish.tlsWordAt
+  callee 1159:16 tlsWordAt -> @nish.tlsWordAt
+  callee 1160:16 tlsWordAt -> @nish.tlsWordAt
+  callee 1161:16 tlsWordAt -> @nish.tlsWordAt
+  callee 1162:16 tlsWordAt -> @nish.tlsWordAt
+  local 1164:11 alert: i32 (const)
+  callee 1164:24 tlsExchange -> @nish.tlsExchange
+  local 1166:13 pub: u8[] (const)
+  callee 1167:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1168:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1169:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1170:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1171:30 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  local 1172:13 handshake: u8[] (const)
+  callee 1173:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1174:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1175:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1176:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1177:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1178:7 tlsWordInto -> @nish.tlsWordInto
+  callee 1180:5 wipe<TlsExchangeWords> -> @nish.wipe$$TlsExchangeWords
 function TlsServer.writeServerFlight(this: TlsServer): void -> @nish.TlsServer.writeServerFlight [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1215:5
+  sharedWrite: 1222:5
   calls: nish.TlsServer.reserveOutput nish.TlsServer.secretArray nish.TlsServer.sent nish.TlsTranscript.hashInto nish.tlsDeriveSecretInto nish.tlsWriteCertificate nish.tlsWriteCertificateVerifyContent nish.tlsWriteEncryptedExtensions nish.tlsWriteServerHello nish_arena_release
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.reserveOutput#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0
   stackSites=1 stackLocals=1
-  local 1183:11 hello: TlsClientHelloView (const)
-  local 1184:11 h: i32 (const)
-  local 1188:11 none: u8[] (const)
-  callee 1189:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 1191:7 tlsWriteServerHello -> @nish.tlsWriteServerHello
-  local 1202:11 extensionsEnd: i32 (const)
-  callee 1202:32 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
-  callee 1210:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 1212:7 tlsWriteCertificate -> @nish.tlsWriteCertificate
-  callee 1215:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1216:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1217:23 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  local 1218:11 _scope: i64 (const)
-  local 1219:11 helloAt: i32 (const)
-  local 1220:11 helloEnd: i32 (const)
-  callee 1220:27 tlsWriteServerHello -> @nish.tlsWriteServerHello
-  callee 1230:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1232:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee 1233:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1242:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  local 1252:11 extensionsAt: i32 (const)
-  local 1253:11 written: i32 (const)
-  callee 1253:26 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
-  callee 1261:5 TlsServer.sent -> @nish.TlsServer.sent
-  local 1262:11 certificateEnd: i32 (const)
-  callee 1262:33 tlsWriteCertificate -> @nish.tlsWriteCertificate
-  callee 1267:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1269:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee 1270:5 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
+  local 1190:11 hello: TlsClientHelloView (const)
+  local 1191:11 h: i32 (const)
+  local 1195:11 none: u8[] (const)
+  callee 1196:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1198:7 tlsWriteServerHello -> @nish.tlsWriteServerHello
+  local 1209:11 extensionsEnd: i32 (const)
+  callee 1209:32 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  callee 1217:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1219:7 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  callee 1222:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1223:34 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1224:23 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  local 1225:11 _scope: i64 (const)
+  local 1226:11 helloAt: i32 (const)
+  local 1227:11 helloEnd: i32 (const)
+  callee 1227:27 tlsWriteServerHello -> @nish.tlsWriteServerHello
+  callee 1237:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1239:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee 1240:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1249:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  local 1259:11 extensionsAt: i32 (const)
+  local 1260:11 written: i32 (const)
+  callee 1260:26 tlsWriteEncryptedExtensions -> @nish.tlsWriteEncryptedExtensions
+  callee 1268:5 TlsServer.sent -> @nish.TlsServer.sent
+  local 1269:11 certificateEnd: i32 (const)
+  callee 1269:33 tlsWriteCertificate -> @nish.tlsWriteCertificate
+  callee 1274:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1276:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee 1277:5 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
 function TlsServer.signatureInput(this: TlsServer): u8[] | null -> @nish.TlsServer.signatureInput [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function TlsServer.sign(this: TlsServer, signature: u8[]): i32 -> @nish.TlsServer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1304:5
+  sharedWrite: 1311:5
   calls: nish.TlsServer.fail nish.TlsServer.reserveOutput nish.TlsServer.secretArray nish.TlsServer.sent nish.TlsTranscript.hashInto nish.TlsTranscript.update nish.tlsDeriveSecretInto nish.tlsFinishedVerifyDataInto nish.tlsMasterSecretInto nish.tlsWriteCertificateVerify nish.tlsWriteFinished nish_arena_release nish_panic nish_panic_overflow nish_wipe
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.fail#0 nish.TlsServer.reserveOutput#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.secretArray#0 nish.TlsServer.sent#0 nish.TlsServer.sent#0 nish.TlsServer.secretArray#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteCertificateVerify#3
   stackSites=0 stackLocals=0
-  local 1297:11 signatureLength: i32 (const)
-  callee 1299:14 TlsServer.fail -> @nish.TlsServer.fail
-  local 1301:11 h: i32 (const)
-  callee 1302:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
-  callee 1304:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1305:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1306:27 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  callee 1307:35 TlsServer.secretArray -> @nish.TlsServer.secretArray
-  local 1308:11 _scope: i64 (const)
-  local 1309:11 verifyAt: i32 (const)
-  local 1310:11 verifyEnd: i32 (const)
-  callee 1310:28 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
-  callee 1316:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1317:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee 1319:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
-  local 1328:11 finishedEnd: i32 (const)
-  callee 1328:30 tlsWriteFinished -> @nish.tlsWriteFinished
-  callee 1335:5 TlsServer.sent -> @nish.TlsServer.sent
-  callee 1337:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  local 1338:11 master: u8[] (const)
-  callee 1339:5 tlsMasterSecretInto -> @nish.tlsMasterSecretInto
-  callee 1340:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1349:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1358:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1359:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
-  local 1371:11 clientFinished: u8[] (const)
-  callee 1372:5 tlsWriteFinished -> @nish.tlsWriteFinished
-  callee 1373:5 TlsTranscript.update -> @nish.TlsTranscript.update
-  callee 1374:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  callee 1375:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 1382:7 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  local 1304:11 signatureLength: i32 (const)
+  callee 1306:14 TlsServer.fail -> @nish.TlsServer.fail
+  local 1308:11 h: i32 (const)
+  callee 1309:5 TlsServer.reserveOutput -> @nish.TlsServer.reserveOutput
+  callee 1311:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1312:36 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1313:27 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1314:35 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  local 1315:11 _scope: i64 (const)
+  local 1316:11 verifyAt: i32 (const)
+  local 1317:11 verifyEnd: i32 (const)
+  callee 1317:28 tlsWriteCertificateVerify -> @nish.tlsWriteCertificateVerify
+  callee 1323:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1324:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee 1326:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
+  local 1335:11 finishedEnd: i32 (const)
+  callee 1335:30 tlsWriteFinished -> @nish.tlsWriteFinished
+  callee 1342:5 TlsServer.sent -> @nish.TlsServer.sent
+  callee 1344:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  local 1345:11 master: u8[] (const)
+  callee 1346:5 tlsMasterSecretInto -> @nish.tlsMasterSecretInto
+  callee 1347:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1356:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1365:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1366:5 tlsFinishedVerifyDataInto -> @nish.tlsFinishedVerifyDataInto
+  local 1378:11 clientFinished: u8[] (const)
+  callee 1379:5 tlsWriteFinished -> @nish.tlsWriteFinished
+  callee 1380:5 TlsTranscript.update -> @nish.TlsTranscript.update
+  callee 1381:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  callee 1382:5 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 1389:7 TlsServer.secretArray -> @nish.TlsServer.secretArray
 function TlsServer.handleFinished(this: TlsServer, length: i32): i32 -> @nish.TlsServer.handleFinished [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1406:5
+  sharedWrite: 1413:5
   calls: nish.TlsServer.secretArray nish.timingSafeEqualAt nish_wipe
   pointer this: size=264 writesThrough=true captured=false passedTo=nish.TlsServer.secretArray#0
   stackSites=0 stackLocals=0
-  callee 1403:10 timingSafeEqualAt -> @nish.timingSafeEqualAt
-  callee 1406:29 TlsServer.secretArray -> @nish.TlsServer.secretArray
+  callee 1410:10 timingSafeEqualAt -> @nish.timingSafeEqualAt
+  callee 1413:29 TlsServer.secretArray -> @nish.TlsServer.secretArray
 function TlsServer.sent(this: TlsServer, level: i32, at: i32, end: i32): void -> @nish.TlsServer.sent [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1421:7
+  sharedWrite: 1428:7
   escaping: at end
   calls: nish.TlsTranscript.update nish_panic_overflow
   pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 1420:7 TlsTranscript.update -> @nish.TlsTranscript.update
-  callee 1423:7 TlsTranscript.update -> @nish.TlsTranscript.update
+  callee 1427:7 TlsTranscript.update -> @nish.TlsTranscript.update
+  callee 1430:7 TlsTranscript.update -> @nish.TlsTranscript.update
 function TlsServer.takeOutput(this: TlsServer, level: i32): u8[] -> @nish.TlsServer.takeOutput [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1441:11
+  sharedWrite: 1448:11
   escaping: level
   calls: nish_panic
   pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1436:11 none: u8[] (const)
-  local 1439:15 out: u8[] (const)
-  local 1440:18 k: i32 (let)
-  local 1447:15 out: u8[] (const)
-  local 1448:18 k: i32 (let)
+  local 1443:11 none: u8[] (const)
+  local 1446:15 out: u8[] (const)
+  local 1447:18 k: i32 (let)
+  local 1454:15 out: u8[] (const)
+  local 1455:18 k: i32 (let)
 function TlsServer.clearOutput(this: TlsServer, level: i32): void -> @nish.TlsServer.clearOutput [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1463:7
+  sharedWrite: 1470:7
   pointer this: size=264 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function TlsServer.readSecret(this: TlsServer, level: i32): u8[] | null -> @nish.TlsServer.readSecret [exported method]
@@ -62836,14 +62851,14 @@ function TlsServer.readSecret(this: TlsServer, level: i32): u8[] | null -> @nish
   calls: nish.tlsSecretAt
   pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1475:12 tlsSecretAt -> @nish.tlsSecretAt
+  callee 1482:12 tlsSecretAt -> @nish.tlsSecretAt
 function TlsServer.writeSecret(this: TlsServer, level: i32): u8[] | null -> @nish.TlsServer.writeSecret [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: level
   calls: nish.tlsSecretAt
   pointer this: size=264 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1480:12 tlsSecretAt -> @nish.tlsSecretAt
+  callee 1487:12 tlsSecretAt -> @nish.tlsSecretAt
 module std/crypto/p256.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import expose from "nish:secret" -> generic function expose

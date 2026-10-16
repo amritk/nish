@@ -377,6 +377,35 @@ export const capturedReads = (program: CheckedProgram, node: Node, out: Node[]):
 }
 
 /**
+ * `nish:secret`: a question `secret(v)` leaves for the whole-program facts,
+ * because the body that asks it cannot answer it alone: whether `sig`'s
+ * result is a value nothing else holds (`param` is ""), or whether `sig` keeps
+ * the parameter `param` it is handed. `Compilation.checkSecrets` asks it and,
+ * when the answer is no, reports at `site`.
+ */
+export class SecretNeed {
+  /** The argument of the `secret(...)` call, in the module whose `secretNeeds` holds this. */
+  site: Node
+  sig: FunctionSig
+  param: string
+  /** How the diagnostic names the value with the second reference: `` `raw` ``. */
+  what: string
+  /** Where the reference is made, as the diagnostic quotes it, or "" for a result. */
+  via: string
+  /** How to make a copy of the value, as the diagnostic suggests it. */
+  copy: string
+
+  constructor(site: Node, sig: FunctionSig, param: string, what: string, via: string, copy: string) {
+    this.site = site
+    this.sig = sig
+    this.param = param
+    this.what = what
+    this.via = via
+    this.copy = copy
+  }
+}
+
+/**
  * WP29 P3: the channels a scope seals before it joins (`src/emit-parallel.ts`):
  * every `const ch = new Channel<T>()` whose scope it is (C2, C4), by the
  * declarator, whose local the emitter reads where the scope's `using` is.
@@ -1365,6 +1394,8 @@ export class CheckedProgram {
   scopeChannels: ScopeChannels[]
   /** `nish:secret`: every `expose` and `exposeWith` call, judged once the facts are in (`Compilation.checkSecrets`). */
   exposeCalls: ParallelCall[]
+  /** `nish:secret`: what each `secret(v)` asks of the whole-program facts (`Compilation.checkSecrets`). */
+  secretNeeds: SecretNeed[]
   /**
    * Every panic site of the functions this module defines, settled after the
    * whole-program proofs (`resolvePanicSites` in `src/panics.ts`), grouped by
@@ -1557,6 +1588,7 @@ export class CheckedProgram {
     this.parallelCalls = []
     this.panicSites = []
     this.exposeCalls = []
+    this.secretNeeds = []
     this.spawnCalls = []
     this.scopeChannels = []
     this.inlineAssignNodes = []

@@ -415,6 +415,8 @@ export const memoryChecks = (): i32 => {
   const held: boolean = !allZeroWords(schedule);
   traceConn.wipeKeys();
   t.ok("the slot holds the AES-128 schedule while open, and wipeKeys zeroes it, both directions", held && allZeroWords(schedule) && allZeroWords(traceConn.readProtection.aes128.roundKeys));
+  // `wipeKeys` wiped the key too, and a failed handshake now wipes its keys.
+  refill(slotKey, traceKey);
   traceTls.restart(traceRandom, slotKey);
   traceConn.start(traceTls);
   feed(traceConn, traceHello);
