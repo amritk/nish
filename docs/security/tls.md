@@ -522,7 +522,8 @@ rotation turn's `wipe(previous)` needs no deletion step: the checker enforces
 it, since `previous` cannot be assigned again while the `Secret` it holds is
 neither wiped nor returned (NL2442), so a turn without it does not compile;
 its root shows only that the wipes survive `opt -O2`. The roots under
-Resumption secrets, `tlsExchange` and the post-Finished schedule step, are
+What stays in memory, `tlsExchange` and the master-secret step
+`TlsServer.masterSecretStep` (run once the server Finished is sent), are
 counted the same way. `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
 `Secret` (NL2445) and has nothing of its own to wipe. The count shows that each
 wipe exists and survives `opt -O2`; it matches calls, not paths, so that the
@@ -788,15 +789,31 @@ As TLS-1 records for the other secrets:
   every path reaches: the two early refusals set their alert rather than
   return, the extract runs only when no alert is set, and the wipe follows
   it, before the one return. A wipe before each return instead is one `opt
-  -O2` may merge, as under Ticket keys. A full handshake keeps the constant.
+  -O2` may merge, as under Ticket keys. `tlsExchange` needs no flag to tell
+  the two handshakes apart: the caller always writes the salt's words, the
+  `TLS_DERIVED_SALT_*` constant's on a full handshake and the derived salt's
+  on a resumed one, so `tlsExchange` always rebuilds the array, extracts
+  under it and wipes it, and its one `secureZero` is unconditional. The
+  constant moves out of `tlsHandshakeFromEcdhe256` and
+  `tlsHandshakeFromEcdhe384` (`std/net/tls.ts:399`, `:403` at 394c439),
+  which take the salt instead; wiping a public constant's copy costs one
+  store.
 - **The master secret.** A resumed handshake sends no Certificate or
   CertificateVerify, so it never runs `sign`, where a full handshake derives
   the master secret and wipes it (`tlsMasterSecretInto` to `secureZero(master)`,
   `std/net/tls.ts:1338-1384` at 394c439). That step is split out of `sign`
-  into one function both paths call once the server Finished is sent: it
-  derives the master secret from the handshake secret, the application
-  traffic secrets and the resumption master secret from the master, and
-  wipes the master with `secureZero` before it returns, on every path. The
+  into one method both paths call once the server Finished is sent, the
+  master-secret step `TlsServer.masterSecretStep`. In order, as `sign` does
+  today, it derives the master secret from the handshake secret; the client
+  and server application traffic secrets ("c ap traffic", "s ap traffic") and
+  the exporter secret ("exp master") from the master; and the expected client
+  Finished from the client handshake secret. It then absorbs that Finished
+  into the transcript, since the resumption master secret is taken over the
+  transcript through the client Finished (§7.1), and derives the resumption
+  master secret ("res master") from the master. Last, it sets
+  `TLS_STATE_WAIT_FINISHED`, which the carrier's state-driven wipes of the
+  handshake secrets key on, and wipes the master with `secureZero` before it
+  returns, on every path. The
   handshake secret is wiped as today, by `handleFinished`, `wipeHandshake`
   and `restart`, which a resumed connection reaches as a full one does.
 - **Issuing.** The resumption PSK for a NewSessionTicket is derived, sealed
@@ -815,7 +832,7 @@ To be pinned by the wipe-count check under Ticket keys, seen in the IR since
 no object keeps these arrays for a test to read (the two `secureZero`s of
 `tlsTicketOpen` and the one of `tlsTicketSeal`; `tlsExchange`, with the one
 `secureZero` of its salt array beside the wipes it has today, pinned at its
-total; and the post-Finished schedule step, with the one `secureZero` of the
+total; and the master-secret step `TlsServer.masterSecretStep`, with the one `secureZero` of the
 master secret), and by `net_tls_resume` (the PSK, the PSK early secret, the
 binder key, the salt's bytes and its words in `TlsExchangeWords`, the
 handshake secret and the resumption master secret zero after a resumed
