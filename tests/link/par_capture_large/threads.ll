@@ -116,6 +116,20 @@ entry:
   unreachable
 }
 
+define internal noundef zeroext i1 @nish.slotWritten(i32 noundef %at) #0 {
+entry:
+  %0 = icmp slt i32 %at, 0
+  br i1 %0, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %1 = icmp sge i32 %at, 0
+  br label %lor.end
+
+lor.end:
+  %2 = phi i1 [ true, %entry ], [ %1, %lor.rhs ]
+  ret i1 %2
+}
+
 define noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #2 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 4)
