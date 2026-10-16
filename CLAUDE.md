@@ -244,7 +244,7 @@ Tests: tests/cases/arr_alias_domains
   of itself in the same interleaved rounds — and read every delta against it:
   "faster", or "none faster", is claimed only outside that band (#538).
   Copy a figure from where the repository records it (the comment beside a
-  ceiling in `tests/run.js`, the benchmark's own output) on the head being
+  ceiling in `tests/runtime-budgets.js`, the benchmark's own output) on the head being
   merged, not from the pull request body. #566's entry carried 609 / 1,424
   bytes from an earlier head, while `tests/run.js` recorded 597 / 1,403.
   `Refs:` and `Tests:` link the rule and the golden that pins it.
