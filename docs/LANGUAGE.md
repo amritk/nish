@@ -2923,9 +2923,18 @@ element's arena, which a task does not share, and each rule is reported at the
   prints and exits 1, and a task that panics after it prints nothing. Output
   stays a write (`reject_thread_task_console_error`,
   `reject_thread_task_process_exit`), and so does the parent's: between the
-  first `spawn` and the join it may neither change a table a task reads nor
-  walk one, `for (const k of s)` included (`reject_thread_region_parent_table_set`,
-  `reject_thread_region_parent_set_walk`).
+  first `spawn` and the join it may neither change a `Map` or `Set` it holds
+  nor walk one — `for (const k of s)`, `m.keys()`, `m.values()`, or a helper
+  that does (`reject_thread_region_parent_table_set`, `_set_walk`,
+  `_map_keys_walk`, `_map_values_walk`, `_helper_walk`). The rule is
+  conservative: it judges the call by what it writes through its receiver,
+  not by which tables a task holds, so a walk of a table no task can reach is
+  refused too (`reject_thread_region_parent_unreached_walk`), and so is a
+  mutator or a walk called straight on a table made in the block. Proving
+  that no task reaches one table would mean following every pointer each
+  task is handed; the walk moves before the first `spawn`, after the block,
+  or into a helper that makes and fills its own table
+  (`thread_scope_region_own_tables`).
   A store into an array the task allocated and hands to nothing that keeps it
   is not counted, as for a [parallel body](#data-parallelism-nishthreads): a
   sieve may fill its own table, and a helper may fill the array it is handed

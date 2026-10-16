@@ -963,14 +963,17 @@ static void sec_dirty_stack(void) {
 #include <sys/uio.h>
 
 void nish_write(const nish_str *, int32_t, _Bool);
+__attribute__((noreturn)) void nish_panic_overflow(uint32_t);
 
 static size_t sec_write_max;   /* nonzero: no write takes more bytes than this */
 static int sec_write_eintr;    /* writes left to fail with EINTR */
 static int sec_pread_eintr;    /* preads left to fail with EINTR */
+static int *sec_write_calls;   /* when set, counts every write, across a fork */
 static int sec_watch;          /* record the descriptor flags of each call */
 static int sec_cloexec = -1;   /* FD_CLOEXEC of the last descriptor recorded */
 
 ssize_t write(int fd, const void *buf, size_t n) {
+  if (sec_write_calls) ++*sec_write_calls;
   if (sec_watch) sec_cloexec = fcntl(fd, F_GETFD) & FD_CLOEXEC;
   if (sec_write_eintr > 0) {
     sec_write_eintr--;
@@ -1504,6 +1507,42 @@ static void test_security(void) {
   close(out[0]);
   sec_check(sec_write_eintr == 0 && have == 12 && memcmp(line, "interrupted\n", 12) == 0, "RT-11",
             "nish_write took an interrupted write for a failure");
+
+  /* The newline is its own write, and is retried the same way: an empty
+     message makes it the first write the call makes. */
+  sec_check(pipe(out) == 0, "RT-11", "the pipe could not be made");
+  sec_write_eintr = 1;
+  nish_write(lit(""), out[1], 1);
+  close(out[1]);
+  have = 0;
+  while ((n_read = read(out[0], line + have, sizeof line - (size_t)have)) > 0) have += n_read;
+  close(out[0]);
+  sec_check(sec_write_eintr == 0 && have == 1 && line[0] == '\n', "RT-11", "nish_write lost an interrupted newline");
+
+  /* An arithmetic panic's message (`nish_die`) goes through the same loop. It
+     exits, so it runs in a child whose stderr is the pipe. `fputs` gave up on
+     the interrupted write and printed nothing. libc's own writes do not reach
+     the `write` above, so the count, shared with the child, is what shows the
+     message went through the loop: the interrupted write and the one after. */
+  sec_check(pipe(out) == 0, "RT-11", "the pipe could not be made");
+  sec_write_calls = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  sec_check(sec_write_calls != MAP_FAILED, "RT-11", "the shared count could not be mapped");
+  *sec_write_calls = 0;
+  child = fork();
+  if (child == 0) {
+    dup2(out[1], 2);
+    sec_write_eintr = 1;
+    nish_panic_overflow(0);
+  }
+  close(out[1]);
+  have = 0;
+  while ((n_read = read(out[0], line + have, sizeof line - (size_t)have)) > 0) have += n_read;
+  close(out[0]);
+  sec_check(sec_status(child) == 1 && *sec_write_calls == 2 && have == 29 &&
+                memcmp(line, "attempt to add with overflow\n", 29) == 0,
+            "RT-11", "an arithmetic panic lost its message to an interrupted write");
+  munmap(sec_write_calls, sizeof(int));
+  sec_write_calls = NULL;
 
   /* RT-12: the descriptors the file reads and writes open are close-on-exec,
      so a child another thread spawns meanwhile does not inherit them. */

@@ -210,7 +210,11 @@ export const main = (): i32 => {
   fresh array (`[0]`, `new Array<i32>(n)`) that you only index; never pass it
   on. Inside the block, don't read a destination, and don't write memory a
   task could read — through a constructor either: `new Bump(counter)` whose
-  constructor writes `counter` is refused like a call that does. An object
+  constructor writes `counter` is refused like a call that does. Don't call a
+  `Map` or `Set` method that changes or walks the table either, even on one
+  no task can reach or one you made in the block: the compiler judges the
+  call, not which tables the tasks hold. Do it before the first `spawn`,
+  after the block, or in a helper that makes and fills its own table. An object
   you make in the block is yours to write, until anything a task reads may
   have got into it: stored in a field or an element, pushed, added to a `Map`
   or a `Set`, put in a literal, or handed to a function that keeps it. A field

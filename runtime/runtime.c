@@ -111,13 +111,14 @@ void nish_panic_claim(void) {
 static inline void nish_panic_claim(void) {}
 #endif
 
-/* `fputs` rather than one `write`: libc's own loop finishes a short write,
-   which a bare `write` would cut off (docs/security/runtime.md, RT-11), and
-   stderr is unbuffered, so the message leaves before `_exit`. A C host that
-   gives stderr a buffer of its own would lose it here. */
+/* The message goes out through `nish_write_all`, below, which finishes a
+   short write and retries one a signal interrupts (docs/security/runtime.md,
+   RT-11); it is unbuffered, so the message leaves before `_exit`. It used
+   `fputs`, whose libc loop finishes a short write but gives up on `EINTR`. */
+static void nish_write_all(int fd, const char *p, uint64_t n);
 static NISH_COLD void nish_die(const char *msg) {
   nish_panic_claim();
-  fputs(msg, stderr);
+  nish_write_all(2, msg, strlen(msg));
   _exit(1);
 }
 /* A function rather than a macro around `nish_die`: seven call sites each
@@ -316,19 +317,24 @@ int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) { return nish_
    does the same. So the bytes are written until all of them are out, or until
    a write fails (docs/security/runtime.md, RT-11). A failure still ends the
    output, `EAGAIN` on a non-blocking stdout included, since spinning on it
-   would burn a core. `EINTR` is retried: the only handler this runtime
-   installs (runtime-host.c) has `SA_RESTART`, but a C host may install one
-   without it, and this is the one place a panic's message is written. The
-   newline needs no loop: one byte is never written in part. */
-void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
+   would burn a core. `EINTR` is retried, the newline's included: the only
+   handler this runtime installs (runtime-host.c) has `SA_RESTART`, but a C
+   host may install one without it. `panic`'s message, `expect`'s, and the
+   arithmetic and out-of-memory panics (`nish_die`) are written here. The
+   index and slice panics and the file and entropy failures use `dprintf`, and
+   runtime-parallel.c's out of memory one `write`: neither retries `EINTR`. */
+static void nish_write_all(int fd, const char *p, uint64_t n) {
   uint64_t done = 0;
   ssize_t k;
-  while (done < s->len) {
-    k = write(fd, s->data + done, s->len - done);
+  while (done < n) {
+    k = write(fd, p + done, n - done);
     if (k > 0) done += k;
     else if (k == 0 || errno != EINTR) break;
   }
-  if (newline) (void)!write(fd, "\n", 1);
+}
+void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
+  nish_write_all(fd, s->data, s->len);
+  if (newline) nish_write_all(fd, "\n", 1);
 }
 /* console.log(s) */
 void nish_print(const nish_str *s) { nish_write(s, 1, 1); }

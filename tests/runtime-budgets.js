@@ -42,8 +42,13 @@
  * handler without `SA_RESTART`, and the loop used to stop there and lose the rest of the
  * message. Measured 3,656 against 3,622 on 2026-10-16 with clang 18 on linux-x64; calling
  * `exit` rather than `_exit` after the claim measured the same.
+ *
+ * Raised by 28 more, to 3,684, in the same change: the newline is retried on `EINTR` as
+ * well, and `nish_die`, the arithmetic and out-of-memory panics, writes its message through
+ * the same retrying loop (`nish_write_all`) instead of `fputs`, which gives up on `EINTR`.
+ * Measured 3,684 on 2026-10-16 with clang 18 on linux-x64.
  */
-const RUNTIME_TEXT_BUDGET = 3656
+const RUNTIME_TEXT_BUDGET = 3684
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -96,10 +101,11 @@ const RUNTIME_OS_TEXT_BUDGET = 1536
  *
  * Raised by 20, to 3,860, by #611: the first-panic claim (measured 3,826 with it, under the
  * old 3,840) and then the `EINTR` retry in `nish_write` (34 bytes, as above), measured
- * 3,860 on 2026-10-16 with clang 18 on linux-x64. The raise is what was measured and no
- * more, as `nish_wipe`'s was.
+ * 3,860 on 2026-10-16 with clang 18 on linux-x64, and then 3,885 with the newline's retry
+ * and `nish_die` writing through the same loop (as above). The raise is what was measured
+ * and no more, as `nish_wipe`'s was.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3860
+const RUNTIME_THREADS_TEXT_BUDGET = 3885
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
