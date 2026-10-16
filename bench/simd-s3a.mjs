@@ -6,7 +6,8 @@
 // surface is designed.
 //
 //   npm run build && node bench/simd-s3a.mjs [--runs N] [--only a,b] [--self] [--compiler <nish>]
-//     --runs N    timed rounds per row after one warm-up (default 7, the note's minimum)
+//     --runs N    timed rounds per row after one warm-up (default 7, the note's minimum),
+//                 rounded up to a multiple of the row's columns so each form leads equally
 //     --only a,b  rows to run: mat-vec, depth (default: both)
 //     --self      time a byte-identical copy of the Nish checked binary as a fifth column
 //
@@ -84,11 +85,23 @@ for (let i = 2; i < argv.length; i++) {
 if (!(runs >= 1)) {
   fail("--runs needs a positive count")
 }
+if (only.size === 0) {
+  fail(`--only needs at least one kernel (kernels: ${KERNELS.join(", ")})`)
+}
 for (const name of only) {
   if (!KERNELS.includes(name)) {
     fail(`unknown kernel ${name} (kernels: ${KERNELS.join(", ")})`)
   }
 }
+
+/** Read before anything is timed, so a commit made during a long run is not the one reported. */
+const commit = (() => {
+  try {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim()
+  } catch {
+    return "unknown"
+  }
+})()
 
 fs.mkdirSync(outDir, { recursive: true })
 const rel = (p) => path.relative(root, p)
@@ -106,7 +119,8 @@ const run = (cmd, args, what) => {
 /** The target intrinsics a portable kernel may not reach, by the name LLVM gives their calls. */
 const TARGET_INTRINSIC = /@llvm\.(x86|aarch64)\./
 /** The ways C source reaches them by name, which a host-target IR check would miss on the other target's branch of an #ifdef. */
-const TARGET_SOURCE = /#\s*include\s*<(\w*intrin|arm_neon|arm_sve)\.h>|__builtin_(ia32|neon|aarch64)_/
+const TARGET_SOURCE =
+  /#\s*include\s*[<"](\w*intrin|arm_neon|arm_sve|wasm_simd128|altivec)\.h[>"]|__builtin_(ia32|neon|aarch64)_|__attribute__\s*\(\(\s*target\s*\(/
 
 /** `file`'s LLVM IR at -O2, for `target` (the host's when omitted): the code clang generates, before the backend. */
 const irOf = (file, target = []) =>
@@ -310,13 +324,6 @@ for (const kernel of KERNELS.filter((k) => only.has(k))) {
 
 // ---- Summary ---------------------------------------------------------------------------------
 
-const commit = (() => {
-  try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: root, encoding: "utf8" }).trim()
-  } catch {
-    return "unknown"
-  }
-})()
 const cpu = (() => {
   try {
     const m = fs.readFileSync("/proc/cpuinfo", "utf8").match(/^model name\s*:\s*(.+)$/m)
