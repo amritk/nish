@@ -214,7 +214,7 @@ const checkUnionTag = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
 }
 
 /** Every member of a union but its tag, read, written or called. */
-export const unionMemberMessage = (ctx: CheckContext, union: i32, name: string): string =>
+const unionMemberMessage = (ctx: CheckContext, union: i32, name: string): string =>
   `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\`: its tag \`${ctx.table.tagNameOf(union)}\` is the one member a union has in this version`
 
 /** `Kind.If`: the member's integer, recorded for the emitter, and the enum's type (WP23). */

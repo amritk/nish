@@ -495,25 +495,29 @@ export const refuseNarrowingStore = (ctx: CheckContext, value: Node, slot: i32, 
   if (given.length === 0) {
     return false
   }
+  let missing = false
   for (const variant of ctx.table.variantsOf(union)) {
     if (given.indexOf(variant) < 0) {
-      const named: string[] = []
-      for (const each of given) {
-        const name = ctx.table.typeName(each)
-        if (named.indexOf(name) < 0) {
-          named.push(name)
-        }
-      }
-      const shown = named.join(" | ")
-      ctx.error(
-        value,
-        `${place} is \`${ctx.table.typeName(union)}\` and is given a \`${shown}\`: TypeScript narrows it to \`${shown}\` ` +
-          "from here on, which this version does not track, so declare it as that type or give it a value of the whole union"
-      )
-      return true
+      missing = true
     }
   }
-  return false
+  if (!missing) {
+    return false
+  }
+  const named: string[] = []
+  for (const each of given) {
+    const name = ctx.table.typeName(each)
+    if (named.indexOf(name) < 0) {
+      named.push(name)
+    }
+  }
+  const shown = named.join(" | ")
+  ctx.error(
+    value,
+    `${place} is \`${ctx.table.typeName(union)}\` and is given a \`${shown}\`: TypeScript narrows it to \`${shown}\` ` +
+      "from here on, which this version does not track, so declare it as that type or give it a value of the whole union"
+  )
+  return true
 }
 
 /**

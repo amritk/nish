@@ -597,63 +597,35 @@ const resolveUnion = (node: Node, ctx: CheckContext): i32 => {
   }
   const distinct: i32[] = []
   const tags: i32[] = []
-  let tagEnum = -1
+  let firstVariant = -1
+  let firstTag = -1
   let tagName = ""
-  let first = ""
   let i = 0
-  while (i < variants.length) {
+  while (i < variants.length && i < spelledAt.length) {
     const variant = variants[i]
     const info = ctx.program.struct(ctx.table.nameOf(variant))
-    const name = ctx.table.typeName(variant)
     if (info === null) {
       return ctx.errorType(spelledAt[i], UNION_REFUSED + LANGUAGE + " (values have one fixed layout)")
     }
     if (info.poisoned) {
       return T_ERROR
     }
-    if (info.instance !== null) {
-      return ctx.errorType(
-        spelledAt[i],
-        `\`${name}\` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself`
-      )
+    const tag = variantTagOf(ctx, spelledAt[i], variant, info)
+    if (tag === T_ERROR) {
+      return T_ERROR
     }
-    const tag = variantTag(ctx, info)
-    if (!ctx.table.isEnumMemberType(tag)) {
-      return ctx.errorType(
-        spelledAt[i],
-        `\`${name}\` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as \`readonly kind: Kind.Circle = Kind.Circle\``
-      )
+    if (firstVariant < 0) {
+      firstVariant = variant
+      firstTag = tag
+      tagName = variantTagName(info)
+    } else if (tagsDisagree(ctx, node, firstVariant, firstTag, tagName, variant, tag, variantTagName(info))) {
+      return T_ERROR
     }
-    const field = variantTagName(info)
-    if (tagEnum < 0) {
-      tagEnum = ctx.table.baseOf(tag)
-      tagName = field
-      first = name
-    } else if (ctx.table.baseOf(tag) !== tagEnum) {
-      return ctx.errorType(
-        node,
-        `Union variants must take their tags from one enum: \`${first}.${tagName}\` is a \`${ctx.table.typeName(tagEnum)}\` and \`${name}.${field}\` is a \`${ctx.table.typeName(ctx.table.baseOf(tag))}\``
-      )
-    } else if (field !== tagName) {
-      return ctx.errorType(
-        node,
-        `Union variants must give their tag one name: the first field of \`${first}\` is \`${tagName}\` and the first field of \`${name}\` is \`${field}\``
-      )
-    }
-    let seen = false
-    let j = 0
-    while (j < distinct.length) {
-      if (distinct[j] === variant) {
-        seen = true
-      } else if (ctx.table.memberValue(tags[j]) === ctx.table.memberValue(tag)) {
-        return ctx.errorType(
-          node,
-          `Union variants \`${ctx.table.typeName(distinct[j])}\` and \`${name}\` both have the tag \`${ctx.table.typeName(tag)}\`, so it cannot tell them apart`
-        )
+    if (distinct.indexOf(variant) < 0) {
+      const other = clashingTag(ctx, distinct, tags, tag)
+      if (other >= 0) {
+        return reportTagClash(ctx, node, other, variant, tag)
       }
-      j = j + 1
-    }
-    if (!seen) {
       distinct.push(variant)
       tags.push(tag)
     }
@@ -665,9 +637,83 @@ const resolveUnion = (node: Node, ctx: CheckContext): i32 => {
       `A union needs two different variants: this one names only \`${ctx.table.typeName(distinct[0])}\`, so write that type itself`
     )
   }
-  const union = ctx.table.unionOf(distinct, tags, tagEnum, tagName)
+  const union = ctx.table.unionOf(distinct, tags, ctx.table.baseOf(firstTag), tagName)
   return nulls === 1 ? ctx.table.nullableOf(union) : union
 }
+
+/**
+ * The tag of `variant`, spelled at `at`: a member type, or `T_ERROR` once it
+ * has reported why the class or interface cannot be a variant.
+ */
+const variantTagOf = (ctx: CheckContext, at: Node, variant: i32, info: StructInfo): i32 => {
+  if (info.instance !== null) {
+    return ctx.errorType(
+      at,
+      `\`${ctx.table.typeName(variant)}\` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself`
+    )
+  }
+  const tag = variantTag(ctx, info)
+  if (!ctx.table.isEnumMemberType(tag)) {
+    return ctx.errorType(
+      at,
+      `\`${ctx.table.typeName(variant)}\` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as \`readonly kind: Kind.Circle = Kind.Circle\``
+    )
+  }
+  return tag
+}
+
+/**
+ * Refuses `variant` when its tag, the field `tagName`, comes from another enum
+ * than the first variant's or has another name. True once it has reported.
+ */
+const tagsDisagree = (
+  ctx: CheckContext,
+  node: Node,
+  first: i32,
+  firstTag: i32,
+  firstTagName: string,
+  variant: i32,
+  tag: i32,
+  tagName: string
+): boolean => {
+  const firstName = ctx.table.typeName(first)
+  const name = ctx.table.typeName(variant)
+  const tagEnum = ctx.table.baseOf(firstTag)
+  if (ctx.table.baseOf(tag) !== tagEnum) {
+    ctx.error(
+      node,
+      `Union variants must take their tags from one enum: \`${firstName}.${firstTagName}\` is a \`${ctx.table.typeName(tagEnum)}\` and \`${name}.${tagName}\` is a \`${ctx.table.typeName(ctx.table.baseOf(tag))}\``
+    )
+    return true
+  }
+  if (tagName !== firstTagName) {
+    ctx.error(
+      node,
+      `Union variants must give their tag one name: the first field of \`${firstName}\` is \`${firstTagName}\` and the first field of \`${name}\` is \`${tagName}\``
+    )
+    return true
+  }
+  return false
+}
+
+/** The variant among `distinct` whose tag has `tag`'s value, or -1. */
+const clashingTag = (ctx: CheckContext, distinct: i32[], tags: i32[], tag: i32): i32 => {
+  let j = 0
+  while (j < distinct.length && j < tags.length) {
+    if (ctx.table.memberValue(tags[j]) === ctx.table.memberValue(tag)) {
+      return distinct[j]
+    }
+    j = j + 1
+  }
+  return -1
+}
+
+/** Refuses `variant`, whose tag `tag` is also the tag of the variant `other`. */
+const reportTagClash = (ctx: CheckContext, node: Node, other: i32, variant: i32, tag: i32): i32 =>
+  ctx.errorType(
+    node,
+    `Union variants \`${ctx.table.typeName(other)}\` and \`${ctx.table.typeName(variant)}\` both have the tag \`${ctx.table.typeName(tag)}\`, so it cannot tell them apart`
+  )
 
 /**
  * The field declarations of `info`, in order: a class keeps its members after

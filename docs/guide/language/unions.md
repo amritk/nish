@@ -133,7 +133,7 @@ const radius = (s: Shape): i32 => s.r;
 
 Give the tag a type when you store it, `const k: Kind = s.kind`. TypeScript
 would infer the union of the variants' tags, `Kind.Circle | Kind.Square`,
-which is not a type Nish has.
+which is not a type Nish has in this version.
 
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case

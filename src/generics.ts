@@ -979,11 +979,9 @@ const instantiateStructHere = (
       return null
     }
   }
-  for (const arg of args) {
-    if (ctx.table.holdsUnion(arg)) {
-      site.asker.error(at, unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, args)))
-      return null
-    }
+  if (holdsAnyUnion(ctx.table, args)) {
+    site.asker.error(at, unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, args)))
+    return null
   }
   adoptArgumentLayouts(ctx, args, site)
   // WP18 G6: before the tuple is looked up, so every request is held to the
@@ -1474,13 +1472,11 @@ export const checkGenericCall = (
   if (refused.length > 0) {
     return ctx.errorType(expr, refused)
   }
-  for (const bound of tuple) {
-    if (ctx.table.holdsUnion(bound)) {
-      return ctx.errorType(
-        expr,
-        unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, tuple))
-      )
-    }
+  if (holdsAnyUnion(ctx.table, tuple)) {
+    return ctx.errorType(
+      expr,
+      unionArgumentMessage(instanceDisplayName(ctx.table, template.sourceName, tuple))
+    )
   }
   // `nish:secret`: what `secret` may wrap and what `wipe` can zero, said at the
   // argument rather than inside the instance the call would have made.
@@ -1613,6 +1609,16 @@ export const refuseNestedFunctionTypes = (ctx: CheckContext, decl: Node): boolea
         ctx.error(inner.children[1], functionTypeHereMessage(inner.children[0].text, "a function type"))
         return true
       }
+    }
+  }
+  return false
+}
+
+/** Whether a type argument holds a union, which is not a type argument (docs/LANGUAGE.md, Discriminated unions). */
+const holdsAnyUnion = (table: TypeTable, types: i32[]): boolean => {
+  for (const type of types) {
+    if (table.holdsUnion(type)) {
+      return true
     }
   }
   return false

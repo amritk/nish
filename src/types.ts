@@ -467,11 +467,13 @@ export class TypeTable {
     const sorted: i32[] = []
     const sortedTags: i32[] = []
     let i = 0
-    while (i < variants.length) {
-      sorted.push(variants[i])
-      sortedTags.push(tags[i])
+    while (i < variants.length && i < tags.length) {
+      const variant = variants[i]
+      const tag = tags[i]
+      sorted.push(variant)
+      sortedTags.push(tag)
       let at = sorted.length - 1
-      while (at > 0 && sorted[at - 1] > sorted[at]) {
+      while (at > 0 && at < sortedTags.length && sorted[at - 1] > sorted[at]) {
         const swap = sorted[at - 1]
         sorted[at - 1] = sorted[at]
         sorted[at] = swap
@@ -482,12 +484,11 @@ export class TypeTable {
       }
       i = i + 1
     }
-    let key = `${K_UNION}:u`
-    i = 0
-    while (i < sorted.length) {
-      key = `${key}:${sorted[i]}`
-      i = i + 1
+    const parts: string[] = [`${K_UNION}:u`]
+    for (const variant of sorted) {
+      parts.push(`${variant}`)
     }
+    const key = parts.join(":")
     const existing = this.index.get(key, -1)
     if (existing >= 0) {
       return existing
@@ -748,13 +749,15 @@ export class TypeTable {
 
   unionMangle(type: i32): string {
     const variants = this.variantsOf(type)
-    let out = `un${variants.length}`
-    let i = 0
-    while (i < variants.length) {
-      out = `${out}.${this.mangle(variants[i])}`
-      i = i + 1
+    return `un${variants.length}${this.joinedMangles(variants, 0)}`
+  }
+
+  /** `.` and each variant's mangle from `at` on, recursively so that nothing is written. */
+  joinedMangles(variants: i32[], at: i32): string {
+    if (at < 0 || at >= variants.length) {
+      return ""
     }
-    return out
+    return `.${this.mangle(variants[at])}${this.joinedMangles(variants, at + 1)}`
   }
 
   /** An array's element as its type spells it: a union in parentheses, `(A | B)[]`. */
@@ -765,14 +768,16 @@ export class TypeTable {
 
   /** The variant names joined as the source joins them, ascending by id. */
   unionName(type: i32): string {
-    const variants = this.variantsOf(type)
-    let out = this.typeName(variants[0])
-    let i = 1
-    while (i < variants.length) {
-      out = `${out} | ${this.typeName(variants[i])}`
-      i = i + 1
+    return this.joinedNames(this.variantsOf(type), 0)
+  }
+
+  /** The names from `at` on, joined by ` | `, recursively so that nothing is written. */
+  joinedNames(variants: i32[], at: i32): string {
+    if (at < 0 || at >= variants.length) {
+      return ""
     }
-    return out
+    const head = this.typeName(variants[at])
+    return at + 1 < variants.length ? `${head} | ${this.joinedNames(variants, at + 1)}` : head
   }
 
   /** The LLVM struct name (without the `%struct.` prefix) backing a `Result`. */

@@ -173,6 +173,7 @@ same `i32`).
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, narrowing, and a `??` default: [Nullable types](#nullable-types). |
 | `(x: T) => U`, only on a parameter of a top-level function | none: no LLVM parameter, no value | — | (not representable) | Names a callee chosen at each call and compiled into the instantiation's body as a direct call: [Function parameters](#function-parameters). |
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
+| `A \| B`, each a tagged class or interface | `%union.tagged*` to `%union.tagged = type { i32 }`, the tag every variant begins with | 8 / 8 (pointer) | (not representable) | A variant converts by a `bitcast`; only the tag is read: [Discriminated unions](#discriminated-unions). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`),
@@ -211,8 +212,10 @@ Type rules:
   (`tests/cases/reject_nullable_scalar`). A type may be **parenthesised**, and
   `(T | null)[]` is where it matters: `T | null[]` groups the other way and
   means "a `T`, or an array of `null`". The parentheses only group — the type
-  inside them is the type — so `(A | B)[]` is still refused as a union
-  (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
+  inside them is the type — so `(A | B)[]` is held to the union rules as
+  `A | B` is (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
+  A union of tagged classes and interfaces is a
+  [discriminated union](#discriminated-unions).
 - **No implicit conversion.** `const y: f64 = x` with `x: number` in i32
   mode is `Cannot initialize f64 variable ... with i32` *(CLI only)*;
   `x + n` with `x: i64`, `n: number` is rejected
@@ -670,6 +673,135 @@ value, so nothing is boxed; `null` takes its type from context.
 - **Attributes**: a nullable parameter or return loses `nonnull` and
   `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
   rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+
+### Discriminated unions
+
+A union of two or more **variants**, `type Shape = Circle | Square | Tri`, is a
+pointer to whichever variant it holds, and its first field says which. A
+variant is a class or an interface whose first field is its **tag**: a field
+of an [enum member type](#enums), conventionally
+`readonly kind: Kind.Circle = Kind.Circle` (`tests/cases/union_types`,
+`tests/link/union_export` across modules).
+
+```ts
+enum Kind {
+  Circle,
+  Square,
+}
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 1;
+}
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 2;
+}
+type Shape = Circle | Square;
+const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
+```
+
+**Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
+behind a pointer. Every variant begins with its `i32` tag, so a variant
+pointer is a union pointer by a `bitcast`, and reading the tag is a
+`getelementptr` to field 0 and a load, whichever variant is there:
+
+```llvm
+%4 = bitcast %struct.Circle* %3 to %union.tagged*
+...
+%0 = getelementptr inbounds %union.tagged, %union.tagged* %s, i32 0, i32 0
+%1 = load i32, i32* %0, align 4
+```
+
+`Shape | null` is the same pointer with `null` allowed, as
+[Nullable types](#nullable-types) are.
+
+**What makes a variant.** Each rule is checked where the union is spelled,
+and each has its own code:
+
+- A variant is a class or an interface that is not generic, so
+  `type R = Ring<i32>` named in a union is
+  `` `Ring<i32>` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself ``
+  (NL2522, `reject_union_generic_variant`). A generic type spelled with its
+  arguments inside the union, and a scalar member, get the general refusal,
+  `` Union types other than `T | null` are forbidden in Nish (values have one fixed layout) ``
+  (NL1053, `reject_union_untagged_scalar`, `reject_union_type`).
+- Its first field is of one enum member type: otherwise
+  `` `Point` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as `readonly kind: Kind.Circle = Kind.Circle` ``
+  (NL2523, `reject_union_untagged`, `reject_paren_union_type`).
+- All the tags come from one enum (NL2524, `reject_union_mixed_enums`), the
+  tag field has one name in every variant (NL2525, `reject_union_tag_names`),
+  and no two variants share a tag (NL2526, `reject_union_duplicate_tag`).
+- A union names at least two different variants, after aliases and nested
+  unions are flattened: `Circle | Circle` is NL2527
+  (`reject_union_one_variant`).
+
+**Where a union goes.** A union is the type of a local, a parameter, a
+field, a return, an array element (`Shape[]`, `Shape[][]`), or of any of
+those made nullable. A value of a variant converts to the union wherever the
+union is expected: an argument, a `return`, an array literal under a
+`Shape[]` annotation, a `push`, a ternary arm or a `??` default whose other
+side is the union. Equality on two unions compares the pointers, as on any
+object.
+
+**Reading.** The tag is the one member a union has (NL2528 for any other
+field or method, `reject_union_member_field`, `reject_union_method_call`,
+even when every variant has it). It reads as the enum, `Kind`, so it compares,
+switches and is passed as one. A union is read-only: a write through it is
+NL2529 (`reject_union_assign_tag`).
+
+**Comparisons that cannot be true.** As in `tsc`, comparing the tag with a
+member no variant has is an error: `s.kind === Kind.Tri` when no variant is
+tagged `Kind.Tri` is NL2531 (`reject_union_disjoint_compare`), and
+`case Kind.Tri:` in a `switch (s.kind)` is NL2532
+(`reject_union_disjoint_case`).
+
+**Stricter than TypeScript.** Each of these programs is accepted by
+`tsc --strict` and refused here; each refusal is pinned:
+
+- **No narrowing by assignment.** `tsc` narrows a union-typed slot to the
+  type of the value last stored in it, so after `let s: Shape = new Circle()`
+  it treats `s` as a `Circle`. This version does not track that, so a store
+  of a value that is only some of the variants into a union local, field,
+  element or nullable union is NL2534, and asks for the variant's own type or
+  a value of the whole union (`reject_union_narrow_const`,
+  `reject_union_narrow_assign`, `reject_union_narrow_field`,
+  `reject_union_narrow_element`, `reject_union_narrow_ternary`,
+  `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
+  the whole union, and is stored freely. Passing and returning a variant
+  narrows nothing, and is accepted. Narrowing by `if` and `switch` on the
+  tag is not in this version either.
+- **No union type arguments.** `Box<Shape>`, a generic function or method
+  whose type parameter would bind to a union, `Map<K, Shape>` and
+  `Result<Shape, E>` / `Result<T, Shape>` are NL2533
+  (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
+  `reject_union_generic_method`, `reject_union_map_value`,
+  `reject_union_result_ok`, `reject_union_result_err`). A union is not a
+  `Map` or `Set` key, which is the key rule's refusal
+  (`reject_union_map_key`, `reject_union_set`).
+- **No inferred unions.** A union is never inferred: an unannotated ternary
+  or array literal of two variants is the existing same-type refusal
+  (`reject_union_ternary_inferred`, `reject_union_array_inferred`), an arrow
+  returning one needs its annotation (`reject_union_arrow_result`), and a
+  local initialised from the tag without an annotation, `const k = s.kind`
+  or the tag in a `for…of`, is NL2530, because `tsc` would infer the union
+  of the tags' member types, which this version does not have
+  (`reject_union_inferred_tag`, `reject_union_forof_tag`). Annotate it as
+  the enum: `const k: Kind = s.kind`.
+- **No covariant arrays.** A `Circle[]` is not a `Shape[]`, since a push
+  through the wider type would put a `Square` among the circles; build the
+  array as a `Shape[]` (`reject_union_covariant_array`).
+- **No object literal of a union.** `const s: Shape = { kind: ... }` has no
+  one class to build (`reject_union_object_literal`); annotate it as the
+  interface it is.
+- **No `new` of the union** (`reject_union_new`), and no `new
+  Array<Shape>(n)`, which would fill the array with a zero no variant is
+  (`reject_union_new_array`).
+
+A value of any other type where a union is wanted is the existing refusal of
+its position (`reject_union_field_other`, `reject_union_return_other`,
+`reject_union_method_arg`, `reject_union_ctor_arg`,
+`reject_union_array_other`, `reject_union_ternary_other`,
+`reject_union_nullish_other`).
 
 ## Result and error handling
 
@@ -8621,7 +8753,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `symbol` type | `` `symbol` type is forbidden in Nish (no symbol type) `` | `reject_symbol_type` |
 | `bigint` type | `` `bigint` type is forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_type` |
 | `undefined` type | `` `undefined` is forbidden in Nish; use `null` with a `T \| null` type `` | `reject_union_undefined` (via the union rule) |
-| union types other than `T \| null` / `null \| T` | `` Union types other than `T \| null` are forbidden in Nish (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined` |
+| union types other than `T \| null` / `null \| T` and [discriminated unions](#discriminated-unions) | `` Union types other than `T \| null` are forbidden in Nish (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined`, `reject_union_untagged_scalar` |
 | `Function`, `Symbol`, `Proxy` as type names | `` `Function` type is forbidden in Nish (no dynamic function values) `` (and analogous) | `reject_function_type` |
 | `import("x").T` | `` Dynamic `import()` is forbidden in Nish (modules are resolved at compile time) `` | `reject_dynamic_import` |
 | `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in Nish `` | `reject_as_any`, `reject_as_any_angle` |
