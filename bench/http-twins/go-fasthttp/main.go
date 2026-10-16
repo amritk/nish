@@ -1,0 +1,66 @@
+// The valyala/fasthttp twin of bench/http1-server.ts. GOMAXPROCS=1 gives the Go
+// scheduler one thread to run goroutines on, the one core the Nish server gets.
+//
+//	serve <port> [ignored...]
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net"
+	"os"
+	"runtime"
+	"sync/atomic"
+
+	"github.com/valyala/fasthttp"
+)
+
+var requests atomic.Int64
+
+type message struct {
+	Message string `json:"message"`
+	N       int64  `json:"n"`
+}
+
+func answer(ctx *fasthttp.RequestCtx) {
+	n := requests.Add(1)
+	path := string(ctx.Path())
+	switch {
+	case ctx.IsGet() && path == "/plaintext":
+		ctx.SetContentType("text/plain")
+		ctx.SetBodyString("Hello, World!")
+	case ctx.IsGet() && path == "/json":
+		body, _ := json.Marshal(message{"Hello, World!", n})
+		ctx.SetContentType("application/json")
+		ctx.SetBody(body)
+	case ctx.IsPost() && path == "/json-echo":
+		var order Order
+		if err := json.Unmarshal(ctx.PostBody(), &order); err != nil {
+			ctx.Error("bad request", fasthttp.StatusBadRequest)
+			return
+		}
+		order.Revision++
+		body, _ := json.Marshal(&order)
+		ctx.SetContentType("application/json")
+		ctx.SetBody(body)
+	default:
+		ctx.Error("not found", fasthttp.StatusNotFound)
+	}
+}
+
+func main() {
+	runtime.GOMAXPROCS(1)
+	port := "8080"
+	if len(os.Args) > 1 {
+		port = os.Args[1]
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:"+port)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println("listening", port)
+	err = fasthttp.Serve(ln, answer)
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
+}

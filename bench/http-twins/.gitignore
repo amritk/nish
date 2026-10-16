@@ -1,0 +1,8 @@
+# Build products stay out of git: build.sh writes them under build/http-twins/,
+# and these cover a toolchain run by hand inside the tree.
+node_modules/
+target/
+Cargo.toml
+Cargo.lock
+/go-nethttp/go-nethttp
+/go-fasthttp/go-fasthttp
