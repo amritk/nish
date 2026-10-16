@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1027 programs, 108855 dump lines.
+# 1028 programs, 109209 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -14499,6 +14499,361 @@ function test(): i32 -> @test [exported]
   callee 47:10 weight -> @weight
   callee 47:27 weight -> @weight
   callee 47:44 weight -> @weight
+program tests/cases/enum_member_type_generic.ts
+module tests/cases/enum_member_type_generic.ts (entry)
+import getOrInsert from "nish/map" -> generic function getOrInsert
+import Map from "nish/collections" -> generic class Map
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.Map$str$em.p1.en$Kind.insertAt
+  calls: first$em.p1.en$Kind fold$em.p1.en$Kind nish.Map$str$em.p1.en$Kind.constructor nish.Map$str$em.p1.en$Kind.insertAt nish.Map$str$em.p1.en$Kind.probe nish.Map$str$em.p1.en$Kind.valueAt nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_overflow tag$i32
+  stackSites=1 stackLocals=1
+  local 31:9 xs: Kind.Array[] (const)
+  local 32:9 a: Kind.Array (const)
+  callee 32:25 fold<Kind.Array> -> @fold$em.p1.en$Kind
+  local 33:9 b: Kind.Array (const)
+  callee 33:25 first<Kind.Array> -> @first$em.p1.en$Kind
+  local 34:9 c: Kind.Array (const)
+  callee 34:25 tag<i32> -> @tag$i32
+  local 35:9 m: Map<string, Kind.Array> (const)
+  callee 35:13 new Map<string, Kind.Array> -> @nish.Map$str$em.p1.en$Kind.constructor
+  local 36:9 d: Kind.Array (const)
+  callee 36:25 getOrInsert<string, Kind.Array> -> @nish.getOrInsert$str$em.p1.en$Kind
+  local 37:9 kept: Kind.Array (const)
+  local 38:7 again: Kind.Array (let)
+  local 39:9 e: Kind.Array (const)
+  local 40:7 w: Kind (let)
+  local 42:9 same: i32 (const)
+function fold<Kind.Array>(xs: Kind.Array[], init: Kind.Array): Kind.Array -> @fold$em.p1.en$Kind [instance]
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: init
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 15:7 acc: Kind.Array (let)
+  local 16:14 x: Kind.Array (const)
+function first<Kind.Array>(init: Kind.Array, xs: Kind.Array[]): Kind.Array -> @first$em.p1.en$Kind [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: init
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function tag<i32>(x: i32, k: Kind.Array): Kind.Array -> @tag$i32 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+module std/map.ts [package nish]
+import Map from "nish/collections" -> generic class Map
+function getOrInsert<string, Kind.Array>(m: Map<string, Kind.Array>, key: string, value: Kind.Array): Kind.Array -> @nish.getOrInsert$str$em.p1.en$Kind [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Map$str$em.p1.en$Kind.set
+  escaping: key value
+  calls: nish.Map$str$em.p1.en$Kind.insertAt nish.Map$str$em.p1.en$Kind.probe nish.Map$str$em.p1.en$Kind.set nish.Map$str$em.p1.en$Kind.valueAt
+  pointer m: size=56 writesThrough=true captured=true passedTo=nish.Map$str$em.p1.en$Kind.probe#0 nish.Map$str$em.p1.en$Kind.set#0 nish.Map$str$em.p1.en$Kind.probe#0 nish.Map$str$em.p1.en$Kind.valueAt#0 nish.Map$str$em.p1.en$Kind.insertAt#0
+  stackSites=0 stackLocals=0
+  local 33:9 found: Kind.Array | undefined (const)
+  callee 33:17 Map<string, Kind.Array>.probe -> @nish.Map$str$em.p1.en$Kind.probe
+  callee 37:3 Map<string, Kind.Array>.set -> @nish.Map$str$em.p1.en$Kind.set
+module std/collections.ts [package nish]
+const INDEX_CAP: i32 = 16777215
+const INITIAL_SLOTS: i32 = 8
+struct Map<string, Kind.Array> (class) size=56 align=8 exported
+  field size: i32 index=0 offset=0 initialized
+  field slots: u32[] index=1 offset=8
+  field mask: i32 index=2 offset=16 initialized
+  field live: i32 index=3 offset=20 initialized
+  field entryKeys: string[] index=4 offset=24
+  field entryValues: Kind.Array[] index=5 offset=32
+  field entryHashes: u32[] index=6 offset=40
+  field walks: i32 index=7 offset=48 initialized
+  constructor -> @nish.Map$str$em.p1.en$Kind.constructor
+  method probe -> @nish.Map$str$em.p1.en$Kind.probe
+  method has -> @nish.Map$str$em.p1.en$Kind.has
+  method set -> @nish.Map$str$em.p1.en$Kind.set
+  method delete -> @nish.Map$str$em.p1.en$Kind.delete
+  method clear -> @nish.Map$str$em.p1.en$Kind.clear
+  method walkOpen -> @nish.Map$str$em.p1.en$Kind.walkOpen
+  method walkNext -> @nish.Map$str$em.p1.en$Kind.walkNext
+  method walkClose -> @nish.Map$str$em.p1.en$Kind.walkClose
+  method keyAt -> @nish.Map$str$em.p1.en$Kind.keyAt
+  method valueAt -> @nish.Map$str$em.p1.en$Kind.valueAt
+  method setValueAt -> @nish.Map$str$em.p1.en$Kind.setValueAt
+  method insertAt -> @nish.Map$str$em.p1.en$Kind.insertAt
+  method rebuild -> @nish.Map$str$em.p1.en$Kind.rebuild
+  method reserveSlots -> @nish.Map$str$em.p1.en$Kind.reserveSlots
+function homeBucket(h: u32, mask: i32): i32 -> @nish.homeBucket
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function slotWord(h: u32, index: i32): u32 -> @nish.slotWord
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function foundAt(bucket: i32, index: i32): i64 -> @nish.foundAt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function absentAt(bucket: i32, h: u32): i64 -> @nish.absentAt
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function fileEntry(slots: u32[], mask: i32, h: u32, index: i32): void -> @nish.fileEntry
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 134:7
+  escaping: h index mask
+  calls: nish.homeBucket nish.slotWord
+  pointer slots: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 130:9 word: u32 (const)
+  callee 130:16 slotWord -> @nish.slotWord
+  local 131:7 bucket: i32 (let)
+  callee 131:16 homeBucket -> @nish.homeBucket
+function compactHashes(hashes: u32[]): void -> @nish.compactHashes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 163:7
+  calls: nish_panic_index
+  pointer hashes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 158:9 used: i32 (const)
+  local 159:7 to: i32 (let)
+  local 160:12 from: i32 (let)
+  local 161:11 h: u32 (const)
+function rebuiltSlots(slots: u32[], live: i32, used: i32): u32[] -> @nish.rebuiltSlots
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.clearSlots
+  escaping: slots
+  calls: nish.clearSlots nish_panic nish_panic_overflow
+  pointer slots: size=0 writesThrough=true captured=true passedTo=nish.clearSlots#0
+  stackSites=0 stackLocals=0
+  local 180:9 n: i32 (const)
+  callee 182:5 clearSlots -> @nish.clearSlots
+function refile(slots: u32[], hashes: u32[]): void -> @nish.refile
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.fileEntry
+  calls: nish.fileEntry
+  pointer slots: size=0 writesThrough=true captured=false passedTo=nish.fileEntry#0
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 194:9 mask: i32 (const)
+  local 195:12 i: i32 (let)
+  local 196:11 h: u32 (const)
+  callee 198:7 fileEntry -> @nish.fileEntry
+function killEntry(slots: u32[], hashes: u32[], found: i64): void -> @nish.killEntry
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 212:5
+  pointer slots: size=0 writesThrough=true captured=false
+  pointer hashes: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 209:9 at: i32 (const)
+  local 210:9 bucket: i32 (const)
+function clearSlots(slots: u32[]): void -> @nish.clearSlots
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 226:5
+  pointer slots: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 225:12 i: i32 (let)
+function nextLive(hashes: u32[], from: i32): i32 -> @nish.nextLive
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 238:12 i: i32 (let)
+function fileAppended(slots: u32[], mask: i32, bucket: i32, h: u32, used: i32): void -> @nish.fileAppended
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 260:5
+  escaping: bucket h mask
+  calls: nish.fileEntry nish.slotWord nish_panic_overflow
+  pointer slots: size=0 writesThrough=true captured=false passedTo=nish.fileEntry#0
+  stackSites=0 stackLocals=0
+  callee 260:21 slotWord -> @nish.slotWord
+  callee 262:5 fileEntry -> @nish.fileEntry
+function Map<string, Kind.Array>.constructor(this: Map<string, Kind.Array>): void -> @nish.Map$str$em.p1.en$Kind.constructor [exported constructor instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish_panic
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Map<string, Kind.Array>.probe(this: Map<string, Kind.Array>, key: string): i64 -> @nish.Map$str$em.p1.en$Kind.probe [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: key
+  calls: nish.probeTable$str
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 301:12 probeTable<string> -> @nish.probeTable$str
+function Map<string, Kind.Array>.has(this: Map<string, Kind.Array>, key: string): boolean -> @nish.Map$str$em.p1.en$Kind.has [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: key
+  calls: nish.Map$str$em.p1.en$Kind.probe
+  pointer this: size=56 writesThrough=false captured=false passedTo=nish.Map$str$em.p1.en$Kind.probe#0
+  stackSites=0 stackLocals=0
+  callee 305:12 Map<string, Kind.Array>.probe -> @nish.Map$str$em.p1.en$Kind.probe
+function Map<string, Kind.Array>.set(this: Map<string, Kind.Array>, key: string, value: Kind.Array): Map<string, Kind.Array> -> @nish.Map$str$em.p1.en$Kind.set [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=56
+  sharedWrite: via nish.Map$str$em.p1.en$Kind.setValueAt
+  escaping: key this value
+  calls: nish.Map$str$em.p1.en$Kind.insertAt nish.Map$str$em.p1.en$Kind.probe nish.Map$str$em.p1.en$Kind.setValueAt
+  pointer this: size=56 writesThrough=true captured=true passedTo=nish.Map$str$em.p1.en$Kind.probe#0 nish.Map$str$em.p1.en$Kind.setValueAt#0 nish.Map$str$em.p1.en$Kind.insertAt#0
+  stackSites=0 stackLocals=0
+  local 310:11 found: i64 (const)
+  callee 310:19 Map<string, Kind.Array>.probe -> @nish.Map$str$em.p1.en$Kind.probe
+  callee 312:7 Map<string, Kind.Array>.setValueAt -> @nish.Map$str$em.p1.en$Kind.setValueAt
+  callee 314:7 Map<string, Kind.Array>.insertAt -> @nish.Map$str$em.p1.en$Kind.insertAt
+function Map<string, Kind.Array>.delete(this: Map<string, Kind.Array>, key: string): boolean -> @nish.Map$str$em.p1.en$Kind.delete [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 325:5
+  escaping: key
+  calls: nish.Map$str$em.p1.en$Kind.probe nish.killEntry nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false passedTo=nish.Map$str$em.p1.en$Kind.probe#0
+  stackSites=0 stackLocals=0
+  local 320:11 found: i64 (const)
+  callee 320:19 Map<string, Kind.Array>.probe -> @nish.Map$str$em.p1.en$Kind.probe
+  callee 324:5 killEntry -> @nish.killEntry
+function Map<string, Kind.Array>.clear(this: Map<string, Kind.Array>): void -> @nish.Map$str$em.p1.en$Kind.clear [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 343:5
+  calls: nish.clearSlots nish.truncate$em.p1.en$Kind nish.truncate$str nish.truncate$u32
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 335:5 clearSlots -> @nish.clearSlots
+  callee 337:7 clearSlots -> @nish.clearSlots
+  callee 339:7 truncate<string> -> @nish.truncate$str
+  callee 340:7 truncate<Kind.Array> -> @nish.truncate$em.p1.en$Kind
+  callee 341:7 truncate<u32> -> @nish.truncate$u32
+function Map<string, Kind.Array>.walkOpen(this: Map<string, Kind.Array>): void -> @nish.Map$str$em.p1.en$Kind.walkOpen [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 355:5
+  calls: nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Map<string, Kind.Array>.walkNext(this: Map<string, Kind.Array>, from: i32): i32 -> @nish.Map$str$em.p1.en$Kind.walkNext [exported method instance]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  calls: nish.nextLive
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 359:12 nextLive -> @nish.nextLive
+function Map<string, Kind.Array>.walkClose(this: Map<string, Kind.Array>): void -> @nish.Map$str$em.p1.en$Kind.walkClose [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 363:5
+  calls: nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Map<string, Kind.Array>.keyAt(this: Map<string, Kind.Array>, index: i32): string -> @nish.Map$str$em.p1.en$Kind.keyAt [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: index
+  calls: nish_panic
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Map<string, Kind.Array>.valueAt(this: Map<string, Kind.Array>, index: i32): Kind.Array -> @nish.Map$str$em.p1.en$Kind.valueAt [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: index
+  calls: nish_panic
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Map<string, Kind.Array>.setValueAt(this: Map<string, Kind.Array>, index: i32, value: Kind.Array): void -> @nish.Map$str$em.p1.en$Kind.setValueAt [exported method instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 385:7
+  escaping: index value
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Map<string, Kind.Array>.insertAt(this: Map<string, Kind.Array>, absent: i64, key: string, value: Kind.Array): void -> @nish.Map$str$em.p1.en$Kind.insertAt [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 403:5
+  escaping: key value
+  calls: nish.Map$str$em.p1.en$Kind.rebuild nish.fileAppended nish.storedKey$str nish_array_grow nish_panic nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false passedTo=nish.Map$str$em.p1.en$Kind.rebuild#0 nish.Map$str$em.p1.en$Kind.rebuild#0
+  stackSites=0 stackLocals=0
+  local 391:11 packed: i64 (const)
+  local 392:9 bucket: i32 (let)
+  local 393:11 h: u32 (const)
+  callee 400:7 Map<string, Kind.Array>.rebuild -> @nish.Map$str$em.p1.en$Kind.rebuild
+  callee 403:25 storedKey<string> -> @nish.storedKey$str
+  local 410:11 used: i32 (const)
+  callee 412:7 Map<string, Kind.Array>.rebuild -> @nish.Map$str$em.p1.en$Kind.rebuild
+  callee 414:7 fileAppended -> @nish.fileAppended
+function Map<string, Kind.Array>.rebuild(this: Map<string, Kind.Array>): void -> @nish.Map$str$em.p1.en$Kind.rebuild [exported method instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 432:5
+  calls: nish.compactEntries$em.p1.en$Kind nish.compactEntries$str nish.compactHashes nish.rebuiltSlots nish.refile
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 424:11 used: i32 (const)
+  local 425:11 walking: boolean (const)
+  local 426:11 slots: u32[] (const)
+  callee 426:19 rebuiltSlots -> @nish.rebuiltSlots
+  callee 428:7 compactEntries<string> -> @nish.compactEntries$str
+  callee 429:7 compactEntries<Kind.Array> -> @nish.compactEntries$em.p1.en$Kind
+  callee 430:7 compactHashes -> @nish.compactHashes
+  callee 434:5 refile -> @nish.refile
+function Map<string, Kind.Array>.reserveSlots(this: Map<string, Kind.Array>, n: i32): void -> @nish.Map$str$em.p1.en$Kind.reserveSlots [exported method instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 458:7
+  calls: nish.refile nish_panic nish_panic_overflow
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 450:11 want: i32 (const)
+  local 451:11 have: i32 (const)
+  local 452:9 size: i32 (let)
+  local 457:13 slots: u32[] (const)
+  callee 460:7 refile -> @nish.refile
+function probeTable<string>(slots: u32[], mask: i32, hashes: u32[], keys: string[], key: string): i64 -> @nish.probeTable$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: key mask
+  calls: nish.absentAt nish.foundAt nish.hashKey$str nish.homeBucket nish.sameKey$str nish_panic nish_panic_overflow
+  pointer slots: size=0 writesThrough=false captured=false
+  pointer hashes: size=0 writesThrough=false captured=false
+  pointer keys: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 97:9 h: u32 (const)
+  callee 97:13 hashKey<string> -> @nish.hashKey$str
+  local 98:9 fingerprint: u32 (const)
+  local 99:7 bucket: i32 (let)
+  callee 99:16 homeBucket -> @nish.homeBucket
+  local 103:11 word: u32 (const)
+  callee 105:14 absentAt -> @nish.absentAt
+  local 108:13 at: i32 (const)
+  callee 114:9 sameKey<string> -> @nish.sameKey$str
+  callee 116:16 foundAt -> @nish.foundAt
+function truncate<string>(items: string[]): void -> @nish.truncate$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 249:5
+  pointer items: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function truncate<Kind.Array>(items: Kind.Array[]): void -> @nish.truncate$em.p1.en$Kind [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 249:5
+  pointer items: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function truncate<u32>(items: u32[]): void -> @nish.truncate$u32 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 249:5
+  pointer items: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function storedKey<string>(key: string): string -> @nish.storedKey$str [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: key
+  stackSites=0 stackLocals=0
+function compactEntries<string>(items: string[], hashes: u32[]): void -> @nish.compactEntries$str [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 147:7
+  calls: nish_panic_index
+  pointer items: size=0 writesThrough=true captured=false
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 143:9 used: i32 (const)
+  local 144:7 to: i32 (let)
+  local 145:12 from: i32 (let)
+function compactEntries<Kind.Array>(items: Kind.Array[], hashes: u32[]): void -> @nish.compactEntries$em.p1.en$Kind [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 147:7
+  calls: nish_panic_index
+  pointer items: size=0 writesThrough=true captured=false
+  pointer hashes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 143:9 used: i32 (const)
+  local 144:7 to: i32 (let)
+  local 145:12 from: i32 (let)
+function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
 program tests/cases/enum_member_type_slots.ts
 module tests/cases/enum_member_type_slots.ts (entry)
 import Map from "nish/collections" -> generic class Map
