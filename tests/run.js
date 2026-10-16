@@ -4870,6 +4870,15 @@ if (!only || "par_alloc".includes(only)) {
 // destination and update a lock's data or send on a channel; and
 // `std_random`, whose generators answer the same bits both ways because
 // `nish:unsafe` names every wrap.
+//
+// And the atomics: `thread_atomic_tasks`, whose named, arrow and void tasks
+// update one `AtomicI32` and one `AtomicI64` with commuting operations and a
+// `compareExchange` loop, and `par_atomic`, whose four data-parallel bodies
+// each make an atomic update their one shared write. Every update commutes,
+// so spawn order, iteration order and the pool's threads print the same.
+// `thread_sibling_disjoint_mutex`, `_mutex_types` and `_atomics` are the
+// sibling scopes of one `using` whose tasks reach locks or atomics each made
+// in a `const` of its own, of one type or of two, which share nothing.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4911,6 +4920,12 @@ for (const name of [
   "thread_private_prefixed_names",
   "thread_task_arrow",
   "thread_task_void",
+  "thread_atomic_tasks",
+  "thread_atomic_unreached",
+  "thread_sibling_disjoint_mutex",
+  "thread_sibling_disjoint_mutex_types",
+  "thread_sibling_disjoint_atomics",
+  "par_atomic",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -4941,6 +4956,52 @@ for (const name of [
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
   )
+}
+
+// examples/histogram-atomic.ts, the Atomics section's measured program: its
+// four modes (local counts and one atomic add per bin, an atomic add per value,
+// a `Mutex` per value, one thread) print the same three lines, checksum 635830,
+// natively and under Node, which runs each task at its `spawn`.
+if (!only || "histogram-atomic".includes(only)) {
+  const exe = path.join(buildDir, "histogram-atomic")
+  const linked = spawnSync(NISH, ["examples/histogram-atomic.ts", "--link", exe], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const want =
+    "4 rounds of 4 shards of 2000000 values into 256 bins\n" +
+    "counted in the bins 32000000\n" +
+    "checksum of every round's bins: 635830\n"
+  for (const mode of ["", "--per-value", "--lock", "--single"]) {
+    const args = mode.length > 0 ? [mode] : []
+    const native = linked.status === 0 ? spawnSync(exe, args, { encoding: "utf8" }) : null
+    const node = spawnSync(
+      "node",
+      [
+        "--experimental-strip-types",
+        "--js-explicit-resource-management",
+        "--no-warnings",
+        "--import",
+        path.join(root, "runtime", "nish.mjs"),
+        "-e",
+        `process.argv.unshift("histogram-atomic"); const m = await import("./examples/histogram-atomic.ts"); process.exit(m.main());`,
+        "--",
+        ...args,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `examples/histogram-atomic.ts ${mode || "(local counts)"}: native and Node print checksum 635830`,
+      native !== null &&
+        native.status === 0 &&
+        native.stdout === want &&
+        node.status === 0 &&
+        node.stdout === want,
+      native === null
+        ? linked.stderr
+        : `native exit ${native.status}\n${native.stdout}${native.stderr}--- node exit ${node.status}\n${node.stdout}${node.stderr}`
+    )
+  }
 }
 
 // #618: a private function named after a libm function, called with a constant,
@@ -5097,8 +5158,12 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // and `thread_channel_kinds` the widening and narrowing of each scalar type,
 // which a 32-bit target could get wrong where a 64-bit one does not.
 // `thread_channel_ctor_reads` is the carrier whose constructor reads and
-// updates its own fields (#567).
+// updates its own fields (#567). `thread_atomic_tasks` and `par_atomic` pin that
+// an atomic's seq_cst `atomicrmw`, `cmpxchg`, `load atomic` and `store atomic`
+// lower for wasm32, a module without shared memory, where its tasks run in turn.
 for (const name of [
+  "thread_atomic_tasks",
+  "par_atomic",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
@@ -5132,7 +5197,7 @@ for (const name of [
     )
   } else {
     skip(
-      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the channel is not run`
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the fixture is not run`
     )
   }
 }
