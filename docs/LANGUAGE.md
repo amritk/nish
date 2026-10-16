@@ -3358,9 +3358,11 @@ export const main = (): i32 => {
   and the same IR is lowered for a module without shared memory.
 - **Under Node each method is the plain operation** on an ordinary field,
   which is exact because Node runs every task at its `spawn` and every parallel
-  body in order. An `AtomicI64` is held as a `bigint` there, as every `i64` is
-  ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)), so a program meant to run under
-  Node as well passes it `i64`-typed values, not `toI64` of a number.
+  body in order. Node holds an `AtomicI64` as a `number`, and it agrees with
+  native while values stay within ±2^53; wrapping at 2^63 is native-only, the
+  same limit as every `i64` ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)), so a
+  program meant to run under Node as well passes it `i64`-typed values, not
+  `toI64` of a number, which is a BigInt there.
 
 Three rules keep every touch of the word indivisible and every program's
 answer the same natively and under Node:
@@ -3370,8 +3372,14 @@ answer the same natively and under Node:
   `` `value` is not a member a program may name: an atomic is read and updated only by calling its methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race with the update a task makes at the same moment ``
   (NL2513, `tests/cases/reject_atomic_member_read`, `reject_atomic_member_store`,
   and `reject_atomic_member_nested` for `h.a.b.value`). A method named without
-  a call is not a value (`reject_atomic_member_unbound`). `new AtomicI32(v)`
-  takes a number, so an atomic is fresh when it is made.
+  a call is refused by the rule every class's methods keep, not by NL2513:
+  `` Unknown field `add` on class `AtomicI64` (it is a method; call it) ``
+  (`reject_atomic_member_unbound`). `new AtomicI32(v)` takes a number, so an
+  atomic is fresh when it is made, and `new` is the only way one is made: an
+  object literal of an atomic's type would be a plain record under Node,
+  without the methods,
+  `` An atomic is made only by `new AtomicI32(v)` or `new AtomicI64(v)`: an object literal would be a plain record under Node, with none of the methods every atomic is read and updated through ``
+  (NL2514, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`).
 - **R7: from the statement that holds a scope's first `spawn` to the end of its
   block, the parent does not touch an atomic the scope's tasks can reach** —
   with a method, or through any function, method or constructor it calls,
@@ -3394,8 +3402,21 @@ answer the same natively and under Node:
   or capture reaches, at any depth, so an alias through `?:` or a function's
   answer is the same atomic (`reject_atomic_region_ternary`,
   `reject_atomic_region_return`), and so is any other atomic of that type the
-  task cannot in fact reach. Before the first `spawn` and after the join the
-  parent touches it freely.
+  task cannot in fact reach. An atomic of a type no task reaches is the
+  parent's alone, and its methods are not counted as writes the scope's tasks
+  may read (`tests/link/thread_atomic_unreached`). Before the first `spawn` and
+  after the join the parent touches it freely.
+
+  The scopes of one `using` are judged against each other too: natively they
+  join in reverse order, so a task of `t` in `using s = scope(), t = scope()`
+  runs before every task of `s`, and under Node each runs at its spawn. A
+  `spawn` on one of them whose task reaches an atomic, or takes a lock, that a
+  task of another scope of the same statement can reach is refused with the
+  message above, naming that other scope (`reject_atomic_sibling_load`,
+  `reject_atomic_sibling_exchange`, `reject_atomic_sibling_arrow`,
+  `reject_atomic_sibling_three` for three declarators, and
+  `reject_thread_mutex_sibling` for a `Mutex`). Scopes whose tasks share
+  nothing run as before.
 - **R8: an atomic reaches a task at any depth** — as its argument, a field of
   it, an element of an `AtomicI32[]`, or a capture — unlike a `Mutex`, which
   stops one field down: an atomic holds no data a task could keep, so which
@@ -3416,9 +3437,10 @@ the scheduler's, under Node spawn order and element order. A program prints
 the same both ways when its updates commute exactly — `add` and `sub`, `min`,
 `max`, a count, a histogram — and no task's answer or control flow depends on
 a value it read from a word another task updates. A `store`, an `exchange` or a
-`compareExchange` that wins against another task is order-dependent, and a
-`parallelReduce` body sees partial results whose split depends on the thread
-count, so what it does to an atomic must not depend on the split. That is the
+`compareExchange` that wins against another task is order-dependent. A
+`parallelReduce`'s blocks depend on `n` alone, the same on one core or sixty
+four, but natively they run at once and under Node one after another, so what
+a body does to an atomic must not depend on which block reaches it first. That is the
 author's obligation, as it is for a `Mutex`'s critical sections; the checker
 does not try to prove it.
 

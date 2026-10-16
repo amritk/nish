@@ -1,0 +1,1 @@
+`ThreadScope.spawnThunk<void, () => ...>` reaches an atomic a task of `t` can reach through `b`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join

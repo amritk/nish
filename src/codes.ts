@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 640
+export const RULE_COUNT: i32 = 641
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -161,6 +161,8 @@ const diagnosticRules = (): string[] => [
   "NL2338",
   "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",
   "NL2352",
+  "An atomic is made only by `new AtomicI32(v)` or `new AtomicI64(v)`: an object literal would be a plain record under Node, with none of the methods every atomic is read and updated through",
+  "NL2514",
   " and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`",
   "NL2368",
   "` cannot be a `Secret`: a field of a class or interface outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter",

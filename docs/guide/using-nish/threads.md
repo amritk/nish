@@ -453,8 +453,10 @@ export const main = (): i32 => {
   total whatever order the threads made them in; a `store`, an `exchange`, or
   an answer that depends on a value another task is changing does not, and
   would print differently natively and under Node.
-- **An `AtomicI64` holds an `i64`.** Under Node that is a `bigint`, so pass it
-  `i64` values.
+- **An `AtomicI64` holds an `i64`.** Node holds it as a `number`: it agrees
+  with native while values stay within ±2^53, and wrapping at 2^63 is
+  native-only, the same limit as every `i64`. Pass it `i64` values, not
+  `toI64` of a number, which is a BigInt under Node.
 - **Update it once per batch, not once per value.** An atomic is cheaper than
   a lock, not free: four tasks incrementing the same few counters wait on each
   other's cores. Binning 32 million values into 256 bins on four cores

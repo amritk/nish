@@ -111,6 +111,7 @@ import {
   PAR_TASK,
   ParallelCall,
   ROLE_CONSTRUCTOR,
+  STRUCT_CLASS,
   ScopeChannels,
   StructInfo,
   StructInstantiation,
@@ -1804,6 +1805,12 @@ const regionCallMessage = (
   if (isSpawnEntry(sig)) {
     return regionWriteMessage(state, "A task of another scope, whose join stores its answer,")
   }
+  // An atomic's method writes only its own word, and whether a task reaches
+  // that word is `regionAtomicMessageFor`'s to judge, by the types the tasks
+  // hold: an atomic none of them reaches is the parent's alone.
+  if (isAtomicMethod(sig)) {
+    return ""
+  }
   return writesThroughMessage(program, table, facts, node, sig, state)
 }
 
@@ -2056,12 +2063,77 @@ const findRegions = (
           }
           j = j + 1
         }
+        if (locals.length > 1) {
+          checkSiblingScopes(program, table, facts, node, i, locals, out)
+        }
       }
       i = i + 1
     }
   }
   for (const child of node.children) {
     findRegions(program, table, facts, uses, child, out)
+  }
+}
+
+/**
+ * R7 across the scopes one `using` statement opens, `using s = scope(), t =
+ * scope()`: natively they join one after the other, the last declared first,
+ * so every task of `t` runs before any of `s`, while under Node each runs
+ * where it is spawned. A task of one may therefore share no lock and no
+ * atomic with a task of another, whichever is spawned first: each `spawn` on
+ * one scope is judged as a call in the region of every other, as a `spawn`
+ * on a scope of a later `using` statement is.
+ */
+const checkSiblingScopes = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  block: Node,
+  at: i32,
+  locals: Local[],
+  out: ScopeFinding[]
+): void => {
+  for (const local of locals) {
+    const own: Local[] = [local]
+    const state = new RegionState(own, local.name)
+    let k = at + 1
+    while (k < block.children.length) {
+      collectTaskArgs(program, block.children[k], state)
+      k = k + 1
+    }
+    k = at + 1
+    while (k < block.children.length) {
+      siblingSpawns(program, table, facts, block.children[k], state, locals, out)
+      k = k + 1
+    }
+  }
+}
+
+/** `checkSiblingScopes`'s walk: every `spawn` under `node` on another of `locals`' scopes, judged in `state`'s region. */
+const siblingSpawns = (
+  program: CheckedProgram,
+  table: TypeTable,
+  facts: FactsTable,
+  node: Node,
+  state: RegionState,
+  locals: Local[],
+  out: ScopeFinding[]
+): void => {
+  if (node.kind === N_ARROW) {
+    return
+  }
+  if (spawnCallee(program, node) !== null) {
+    const receiver = spawnReceiver(program, node)
+    if (receiver !== null && !state.owns(receiver) && locals.indexOf(receiver) >= 0) {
+      const message = regionLockMessageFor(program, table, facts, node, state)
+      if (message.length > 0) {
+        out.push(new ScopeFinding(node, message))
+        return
+      }
+    }
+  }
+  for (const child of node.children) {
+    siblingSpawns(program, table, facts, child, state, locals, out)
   }
 }
 
@@ -2173,12 +2245,25 @@ export const isLockMethod = (sig: FunctionSig): boolean =>
 const ATOMIC_I32: string = "AtomicI32"
 const ATOMIC_I64: string = "AtomicI64"
 
+/**
+ * Mark `info` as an atomic when it is `AtomicI32` or `AtomicI64` and `program`
+ * is `nish/threads` itself, as the class is collected. The package is part of
+ * the test, as `isThreadsModule`'s is: a root-package `std/threads.ts` that
+ * declares an `AtomicI32` declares an ordinary class, whose bodies run as they
+ * are written.
+ */
+export const markAtomicClass = (program: CheckedProgram, info: StructInfo): void => {
+  if (
+    info.kind === STRUCT_CLASS &&
+    (info.name === ATOMIC_I32 || info.name === ATOMIC_I64) &&
+    isThreadsModule(program)
+  ) {
+    info.atomic = true
+  }
+}
+
 /** Whether `info` is `nish/threads`'s `AtomicI32` or `AtomicI64`. */
-const isAtomicClass = (info: StructInfo | null): boolean =>
-  info !== null &&
-  info.instance === null &&
-  info.origin.path === threadsModuleName() &&
-  (info.name === ATOMIC_I32 || info.name === ATOMIC_I64)
+const isAtomicClass = (info: StructInfo | null): boolean => info !== null && info.atomic
 
 /** Whether `type` is an `AtomicI32` or an `AtomicI64`. */
 const isAtomicType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
@@ -2235,6 +2320,10 @@ const atomicMemberMessage = (name: string): string =>
   `\`${name}\` is not a member a program may name: an atomic is read and updated only by calling its ` +
   "methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race " +
   "with the update a task makes at the same moment"
+
+const atomicLiteralMessage = (): string =>
+  "An atomic is made only by `new AtomicI32(v)` or `new AtomicI64(v)`: an object literal would be a plain " +
+  "record under Node, with none of the methods every atomic is read and updated through"
 
 const lockNotUsingMessage = (): string =>
   "`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released " +
@@ -2573,6 +2662,8 @@ const walkMutexes = (
       out.push(new ScopeFinding(node, mutexMemberMessage(node.text)))
       return
     }
+  } else if (node.kind === N_OBJECT && isAtomicType(program, table, type)) {
+    out.push(new ScopeFinding(node, atomicLiteralMessage()))
   } else if (node.kind === N_MEMBER && isAtomicType(program, table, program.nodeTypes[node.children[0].id])) {
     if (!called) {
       out.push(new ScopeFinding(node, atomicMemberMessage(node.text)))

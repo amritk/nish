@@ -433,8 +433,9 @@ the instruction is chosen by the width and a generic `T` would admit a word
 **What an atomic program means.** Updates land in the scheduler's order
 natively and in spawn and element order under Node. A program prints the same
 both ways when its updates commute exactly and no answer depends on a value
-read from a word another task updates; a `parallelReduce` body sees partial
-results whose split depends on the thread count. That is the author's
+read from a word another task updates; a `parallelReduce`'s blocks depend on
+`n` alone, but natively they run at once and under Node in order, so a body's
+updates must not depend on which block lands first. That is the author's
 obligation, as it is for the lock's critical sections.
 
 ---

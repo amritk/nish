@@ -490,11 +490,11 @@ export class AtomicI32 {
  * natively the compiler emits each body itself, as a sequentially consistent
  * `load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on `value`
  * (docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
- * which is what runs under Node. Natively `add` and `sub` wrap at 64 bits;
- * under Node an `i64` is a `number`, so they are `+` and `-`, which agree with
- * the native program while the value stays within 2^53. `add`, `sub`, `min`,
- * `max` and `exchange` answer the value before the update, and
- * `compareExchange` the value it saw.
+ * which is what runs under Node. Node holds it as a `number`, so `add` and
+ * `sub` are `+` and `-` there, and it agrees with native while values stay
+ * within ±2^53; wrapping at 2^63 is native-only, the same limit as every `i64`.
+ * `add`, `sub`, `min`, `max` and `exchange` answer the value before the
+ * update, and `compareExchange` the value it saw.
  *
  * It reaches a task by the routes a `Mutex` does, and a parallel body through
  * a capture; its value is named only through these methods. Results that do

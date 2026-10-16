@@ -565,9 +565,25 @@ export const emitAtomicBody = (emitter: Emitter, sig: FunctionSig): void => {
     )
     fn.emit(`ret ${ty} ${fn.emitValue(`extractvalue { ${ty}, i1 } ${pair}, 0`)}`)
   } else {
-    const rmw = op === "exchange" ? "xchg" : op
+    const rmw = atomicRmwOperation(op)
+    if (rmw.length === 0) {
+      process.exit(internalErrorFor(`emitter: \`${sig.name}\` is not an atomic operation`, emitter.opts.json))
+    }
     fn.emit(`ret ${ty} ${fn.emitValue(`atomicrmw ${rmw} ${ty}* ${word}, ${ty} ${first} seq_cst${align}`)}`)
   }
+}
+
+/**
+ * The `atomicrmw` operation an atomic's read-modify-write method `name` is, or
+ * "" when it is none: the list is closed, so a method added to the class
+ * without a lowering is an internal error rather than an instruction LLVM
+ * does not have. `min` and `max` are the signed operations, as both widths are.
+ */
+const atomicRmwOperation = (name: string): string => {
+  if (name === "add" || name === "sub" || name === "min" || name === "max") {
+    return name
+  }
+  return name === "exchange" ? "xchg" : ""
 }
 
 /**

@@ -4835,6 +4835,7 @@ for (const name of [
   "thread_task_arrow",
   "thread_task_void",
   "thread_atomic_tasks",
+  "thread_atomic_unreached",
   "par_atomic",
   "std_random",
 ]) {
@@ -4866,6 +4867,52 @@ for (const name of [
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
   )
+}
+
+// examples/histogram-atomic.ts, the Atomics section's measured program: its
+// four modes (local counts and one atomic add per bin, an atomic add per value,
+// a `Mutex` per value, one thread) print the same three lines, checksum 635830,
+// natively and under Node, which runs each task at its `spawn`.
+if (!only || "histogram-atomic".includes(only)) {
+  const exe = path.join(buildDir, "histogram-atomic")
+  const linked = spawnSync(NISH, ["examples/histogram-atomic.ts", "--link", exe], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const want =
+    "4 rounds of 4 shards of 2000000 values into 256 bins\n" +
+    "counted in the bins 32000000\n" +
+    "checksum of every round's bins: 635830\n"
+  for (const mode of ["", "--per-value", "--lock", "--single"]) {
+    const args = mode.length > 0 ? [mode] : []
+    const native = linked.status === 0 ? spawnSync(exe, args, { encoding: "utf8" }) : null
+    const node = spawnSync(
+      "node",
+      [
+        "--experimental-strip-types",
+        "--js-explicit-resource-management",
+        "--no-warnings",
+        "--import",
+        path.join(root, "runtime", "nish.mjs"),
+        "-e",
+        `process.argv.unshift("histogram-atomic"); const m = await import("./examples/histogram-atomic.ts"); process.exit(m.main());`,
+        "--",
+        ...args,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `examples/histogram-atomic.ts ${mode || "(local counts)"}: native and Node print checksum 635830`,
+      native !== null &&
+        native.status === 0 &&
+        native.stdout === want &&
+        node.status === 0 &&
+        node.stdout === want,
+      native === null
+        ? linked.stderr
+        : `native exit ${native.status}\n${native.stdout}${native.stderr}--- node exit ${node.status}\n${node.stdout}${node.stderr}`
+    )
+  }
 }
 
 // #618: a private function named after a libm function, called with a constant,
