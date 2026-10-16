@@ -30,6 +30,15 @@ export const wipeChecks = [
   // and `restart` 2 (each pool's arrays, in one loop). The carrier's `close`
   // 404 (the record server's `close`, the flush after it and `wipeKeys`).
   //
+  // The handshake's own wipes, each a root of its own: a record's `open` 16
+  // (its nonce, 1, and the AEADs' own wipes), `TlsServer.sign` 5 (the master
+  // secret, 1, and the transcript's), `handleFinished` 1 (the handshake
+  // secret), the record server's `start` 59 (the last connection's traffic
+  // keys, `wipeTraffic`'s 18, and the handshake it begins) and `advance` 397
+  // (the ephemeral key, the handshake and client handshake secrets and the
+  // client's application secret, 1 each, besides the `fail` it can reach).
+  // Deleting any one of these wipes lowers its root's count by its own share.
+  //
   // `fail` calls `sendAlert`, whose seal can call `fail` again, so a root's
   // count depends on which root of this cycle is counted first: the roots are
   // counted in the order below, and each count was read in that order.
@@ -55,6 +64,11 @@ export const wipeChecks = [
       ["nish.TlsServer.wipeResumption", 1],
       ["nish.TlsServer.restart", 2],
       ["nish.TlsTcpServer.close", 404],
+      ["nish.TlsRecordProtection.open", 16],
+      ["nish.TlsServer.sign", 5],
+      ["nish.TlsServer.handleFinished", 1],
+      ["nish.TlsRecordServer.start", 59],
+      ["nish.TlsRecordServer.advance", 397],
     ],
   },
 ]

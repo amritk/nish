@@ -24,14 +24,24 @@
 //   6. The x25519 exchange's words (`TlsExchangeWords`), which carry the
 //      ephemeral key in and the handshake secret out, read zero after a
 //      handshake and after an exchange refused for a low-order share.
+//   7. Midway: waiting for the signature, the ephemeral key already reads
+//      zero; waiting for the client's Finished, the handshake secret and the
+//      client's handshake secret do. An abort at the first point and a
+//      Finished that does not verify at the second leave every key zero.
+//   8. A client's KeyUpdate: both traffic secrets are the next generation,
+//      written over the one they replace, and the next-secret scratch of both
+//      directions reads zero; an abort after it leaves every key zero.
+//
+// Each "holds" precondition reads every array on its own, so a check that
+// later reads zero is not passed by an array that was never filled.
 //
 // `tests/wipes/tls.js` compiles this program to count the same wipes after
 // `opt -O2`, which is what shows they are volatile stores that survive it.
 import { Suite } from "nish/testing";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollWait, tcpConnect, tcpListen } from "nish:net";
 import { Secret, secret, wipe } from "nish:secret";
-import { TLS_STATE_CONNECTED, TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
-import { TLS_ALERT_ILLEGAL_PARAMETER, TLS_GROUP_X25519, TLS_LEGACY_VERSION, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
+import { TLS_STATE_CONNECTED, TLS_STATE_FAILED, TLS_STATE_WAIT_FINISHED, TLS_STATE_WAIT_SIGNATURE, TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
+import { TLS_ALERT_DECRYPT_ERROR, TLS_ALERT_ILLEGAL_PARAMETER, TLS_GROUP_X25519, TLS_LEGACY_VERSION, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
 import { TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256, tlsSuiteHashLength } from "nish/net/tls/schedule";
 import {
   TLS_ALERT_BAD_RECORD_MAC,
@@ -39,15 +49,22 @@ import {
   TLS_CONTENT_APPLICATION_DATA,
   TLS_CONTENT_HANDSHAKE,
   TlsRecordProtection,
+  tlsNextTrafficSecret,
 } from "nish/net/tls/record";
 import { TLS_RECORD_STATE_CLOSED, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_HANDSHAKE, TLS_RECORD_STATE_OPEN, TLS_RECORD_SIGN, TlsRecordServer } from "nish/net/tls/record-server";
 import { TlsTcpServer } from "nish/net/tls-tcp";
 import { leafPrivate, serverPrivate, serverRandom, tcpConfig } from "../net_tls_common/server";
 import { clientHelloRaw, extKeyShare, extSignatureAlgorithms, extSupportedGroups, extSupportedVersions } from "../net_tls_common/client";
-import { Opened, ZERO, ascii, drain, feed, filled, join, openOne, protectionFor, range, readAll, sealOne } from "../net_tls_record_common/bytes";
+import { Opened, ZERO, ascii, drain, feed, filled, join, keyUpdateMessage, openOne, protectionFor, range, readAll, sealOne } from "../net_tls_record_common/bytes";
 import { ClientKeys, clearRecord, clientKeysFor, recordHello, splitRecords } from "../net_tls_record_common/client";
 import { sameBytes } from "../crypto_x509/hex";
 
+/** `TlsServer`'s pool index of the handshake secret. */
+const HANDSHAKE: i32 = 0;
+/** Of the client's handshake traffic secret. */
+const CLIENT_HANDSHAKE: i32 = 1;
+/** Of the client's application traffic secret. */
+const CLIENT_APPLICATION: i32 = 3;
 /** `TlsServer`'s pool index of the CertificateVerify input: public, so no end wipes it but `restart`. */
 const TO_BE_SIGNED: i32 = 7;
 /** Its pool index of the resumption master secret. */
@@ -122,6 +139,9 @@ const exchangeHeld = (tls: TlsServer): i32 => {
   return wordsHeld(words) + (tls.exchange.hashLength !== 0 ? 1 : 0);
 };
 
+/** What the secret array at pool index `k` holds, in either hash. */
+const poolHeld = (tls: TlsServer, k: i32): i32 => bytesHeld(tls.secrets256[k]) + bytesHeld(tls.secrets384[k]);
+
 /** What the secret arrays of both hashes hold, all but the one at `skip` (-1 for none). */
 const poolsHeld = (tls: TlsServer, skip: i32): i32 => {
   let count: i32 = 0;
@@ -150,6 +170,9 @@ class Live {
   /** The client's reader of the server's application records, and its writer of its own. */
   reader: TlsRecordProtection;
   writer: TlsRecordProtection;
+  /** The client's writer of its handshake records, and its Finished message, once the server's flight is read. */
+  handshakeWriter: TlsRecordProtection;
+  finished: u8[];
   /** Both sides reached the end of the handshake. */
   connected: boolean = false;
 
@@ -158,6 +181,8 @@ class Live {
     this.conn = new TlsRecordServer(tls);
     this.reader = new TlsRecordProtection();
     this.writer = new TlsRecordProtection();
+    this.handshakeWriter = new TlsRecordProtection();
+    this.finished = [];
   }
 }
 
@@ -176,19 +201,24 @@ const clientKeysAfter = (suite: i32, hello: u8[], records: u8[][]): ClientKeys =
 const finishedRecord = (suite: i32, keys: ClientKeys): u8[] =>
   sealOne(protectionFor(suite, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO);
 
+/** How far `reach` takes a handshake: the ClientHello fed, the flight signed and drained, or the client's Finished fed. */
+const AT_SIGNATURE: i32 = 0;
+const AT_FINISHED: i32 = 1;
+const AT_CONNECTED: i32 = 2;
+
 /**
  * A handshake under `suite` through a fresh slot, with the record-layer
- * tests' client on the other side: the ServerHello and flight drained, the
- * flight opened, the client's Finished fed, and the client's application
- * keys installed on both of its protections.
+ * tests' client on the other side, as far as `upTo`: the ServerHello and
+ * flight drained, the flight opened, the client's Finished fed, and the
+ * client's application keys installed on both of its protections.
  */
-const connect = (suite: i32): Live => {
+const reach = (suite: i32, upTo: i32): Live => {
   const live = new Live(new TlsServer(tcpConfig([]), serverRandom(), serverPrivate()));
   const conn: TlsRecordServer = live.conn;
   const hello: u8[] = helloFor(suite);
   feed(conn, clearRecord(hello));
   const input: u8[] | null = conn.signatureInput();
-  if (input === null) {
+  if (input === null || upTo === AT_SIGNATURE) {
     return live;
   }
   const leaf: Secret<u8[]> = secret(leafPrivate());
@@ -203,12 +233,20 @@ const connect = (suite: i32): Live => {
     return live;
   }
   const keys: ClientKeys = clientKeysAfter(suite, hello, records);
+  live.handshakeWriter = protectionFor(suite, keys.clientHandshake);
+  live.finished = keys.finished;
+  if (upTo === AT_FINISHED) {
+    return live;
+  }
   feed(conn, finishedRecord(suite, keys));
   live.reader = protectionFor(suite, keys.serverApplication);
   live.writer = protectionFor(suite, keys.clientApplication);
   live.connected = conn.state === TLS_RECORD_STATE_OPEN && live.tls.state === TLS_STATE_CONNECTED;
   return live;
 };
+
+/** A handshake under `suite` through to its end. */
+const connect = (suite: i32): Live => reach(suite, AT_CONNECTED);
 
 /** `type` and then `content` in hex, for one record opened, or the alert that refused it. */
 const shown = (opened: Opened): string => {
@@ -231,20 +269,53 @@ const lastOpened = (reader: TlsRecordProtection, stream: u8[]): Opened => {
   return last;
 };
 
-/** Whether `live` holds keys in both directions, the resumption master secret and the exporter secret, as an open connection does. */
-const holdsEverything = (live: Live): boolean =>
-  live.connected &&
-  readHeld(live.conn) > 0 &&
-  writeHeld(live.conn) > 0 &&
-  resumptionHeld(live.tls) > 0 &&
-  bytesHeld(live.tls.exporterSecret) > 0;
+/**
+ * Whether every array of `p` that `suite` keys is not zero: the key of its
+ * length, the IV, and an AES suite's schedule, round keys and H both.
+ */
+const protectionHoldsEach = (p: TlsRecordProtection, suite: i32): boolean => {
+  const keyHeld: i32 = suite === TLS_AES_128_GCM_SHA256 ? bytesHeld(p.key16) : bytesHeld(p.key32);
+  let scheduleHeld: boolean = true;
+  if (suite === TLS_AES_128_GCM_SHA256) {
+    scheduleHeld = wordsHeld(p.aes128.roundKeys) > 0 && wordsHeld(p.aes128.h) > 0;
+  } else if (suite === TLS_AES_256_GCM_SHA384) {
+    scheduleHeld = wordsHeld(p.aes256.roundKeys) > 0 && wordsHeld(p.aes256.h) > 0;
+  }
+  return keyHeld > 0 && bytesHeld(p.iv) > 0 && scheduleHeld;
+};
+
+/**
+ * Whether `conn` holds, under `suite`, each array an end wipes, every one of
+ * them not zero on its own: both directions' keys, IVs and AES schedules,
+ * both application traffic secrets in the suite's hash, the resumption
+ * master secret and the exporter secret, as an open connection does. A sum
+ * would pass with one array empty, and a wipe of it would then show nothing.
+ */
+const holdsEach = (conn: TlsRecordServer, suite: i32): boolean => {
+  const tls: TlsServer = conn.tls;
+  const wide: boolean = tlsSuiteHashLength(suite) !== 32;
+  const readSecret: u8[] = wide ? conn.readSecret384 : conn.readSecret256;
+  const writeSecret: u8[] = wide ? conn.writeSecret384 : conn.writeSecret256;
+  const resumption: u8[] = wide ? tls.secrets384[RESUMPTION] : tls.secrets256[RESUMPTION];
+  return (
+    protectionHoldsEach(conn.readProtection, suite) &&
+    protectionHoldsEach(conn.writeProtection, suite) &&
+    bytesHeld(readSecret) > 0 &&
+    bytesHeld(writeSecret) > 0 &&
+    bytesHeld(resumption) > 0 &&
+    bytesHeld(tls.exporterSecret) > 0
+  );
+};
+
+/** Whether `live` reached the end of its handshake holding each array an end wipes. */
+const holdsEverything = (live: Live, suite: i32): boolean => live.connected && holdsEach(live.conn, suite);
 
 /** The checks of `fail`, truncation and `abort` under `suite`, named after `name`. */
 const failures = (t: Suite, name: string, suite: i32): void => {
   const zero: i32 = 0;
   // 1. A record whose tag does not verify: bad_record_mac.
   const failed: Live = connect(suite);
-  t.ok(`${name}: the open connection holds both directions' keys, the resumption and exporter secrets`, holdsEverything(failed));
+  t.ok(`${name}: the open connection holds both directions' keys, the resumption and exporter secrets`, holdsEverything(failed, suite));
   const forged: u8[] = sealOne(failed.writer, TLS_CONTENT_APPLICATION_DATA, ascii("forged"), ZERO);
   const last: i32 = toI32(forged.length) - 1;
   forged[last] = toU8(toI32(forged[last]) ^ 1);
@@ -261,7 +332,7 @@ const failures = (t: Suite, name: string, suite: i32): void => {
 
   // The client's own error alert ends the connection the same way, with nothing sent back.
   const alerted: Live = connect(suite);
-  const heldBefore: boolean = holdsEverything(alerted);
+  const heldBefore: boolean = holdsEverything(alerted, suite);
   const decryptError: u8[] = [toU8(2), toU8(51)];
   feed(alerted.conn, sealOne(alerted.writer, TLS_CONTENT_ALERT, decryptError, ZERO));
   t.ok(`${name}: the client's error alert fails the connection`, heldBefore && alerted.conn.state === TLS_RECORD_STATE_FAILED && alerted.conn.peerAlert === 51);
@@ -269,12 +340,12 @@ const failures = (t: Suite, name: string, suite: i32): void => {
 
   // 2. The client's stream cut off without close_notify, and the socket failing.
   const cut: Live = connect(suite);
-  const held: boolean = holdsEverything(cut);
+  const held: boolean = holdsEverything(cut, suite);
   cut.conn.end();
   t.ok(`${name}: a stream cut off without close_notify fails the connection`, held && cut.conn.state === TLS_RECORD_STATE_FAILED);
   t.eqI32(`${name}: and every key the slot and its TlsServer hold reads zero`, allHeld(cut.conn), zero);
   const aborted: Live = connect(suite);
-  const heldToo: boolean = holdsEverything(aborted);
+  const heldToo: boolean = holdsEverything(aborted, suite);
   aborted.conn.abort();
   t.ok(`${name}: abort fails the connection`, heldToo && aborted.conn.state === TLS_RECORD_STATE_FAILED);
   t.eqI32(`${name}: and every key reads zero after it too`, allHeld(aborted.conn), zero);
@@ -285,7 +356,7 @@ const closes = (t: Suite, name: string, suite: i32): void => {
   const zero: i32 = 0;
   const live: Live = connect(suite);
   const conn: TlsRecordServer = live.conn;
-  t.ok(`${name}: before close the connection holds everything`, holdsEverything(live));
+  t.ok(`${name}: before close the connection holds everything`, holdsEverything(live, suite));
   conn.close();
   t.eqI32(`${name}: close wipes the resumption master secret at once`, resumptionHeld(live.tls), zero);
   t.eqStr(`${name}: the close_notify is sealed under the write keys`, shown(lastOpened(live.reader, drain(conn))), `${TLS_CONTENT_ALERT} 1 0`);
@@ -396,6 +467,9 @@ const slotClose = (t: Suite): void => {
     }
   }
   if (!t.ok("TlsTcpServer accepts a loopback connection", slot >= 0 && client >= 0) || slot < 0) {
+    netClose(client);
+    netClose(listener);
+    netClose(loop);
     return;
   }
   pollAdd(loop, server.fd(slot), one, toI32(3));
@@ -426,7 +500,7 @@ const slotClose = (t: Suite): void => {
   }
   t.ok(
     "the slot holds both directions' keys and the resumption master secret once its handshake is done",
-    conn.state === TLS_RECORD_STATE_OPEN && readHeld(conn) > 0 && writeHeld(conn) > 0 && resumptionHeld(conn.tls) > 0
+    conn.state === TLS_RECORD_STATE_OPEN && holdsEach(conn, suite)
   );
   server.close(slot);
   t.ok("TlsTcpServer.close frees the slot", server.busy() === 0);
@@ -436,11 +510,84 @@ const slotClose = (t: Suite): void => {
   netClose(loop);
 };
 
+/**
+ * A handshake that fails before it is done, under AES-256-GCM: aborted while
+ * it waits for the CertificateVerify signature, and refused at the client's
+ * Finished, whose verify data does not match. Each leaves every key the slot
+ * and its `TlsServer` hold zero, the handshake's own included.
+ */
+const midway = (t: Suite): void => {
+  const zero: i32 = 0;
+  const suite: i32 = TLS_AES_256_GCM_SHA384;
+  const waiting: Live = reach(suite, AT_SIGNATURE);
+  t.ok(
+    "waiting for the signature, the slot holds the client's handshake keys and TlsServer the handshake's secrets",
+    waiting.tls.state === TLS_STATE_WAIT_SIGNATURE && readHeld(waiting.conn) > 0 && serverHeld(waiting.tls) > 0
+  );
+  t.eqI32("and the ephemeral key already reads zero, the ServerHello written", bytesHeld(waiting.tls.ephemeralPrivate), zero);
+  waiting.conn.abort();
+  t.ok("abort while waiting for the signature fails the connection", waiting.conn.state === TLS_RECORD_STATE_FAILED);
+  t.eqI32("and every key the slot and its TlsServer hold reads zero after that abort", allHeld(waiting.conn), zero);
+
+  const finishing: Live = reach(suite, AT_FINISHED);
+  t.ok(
+    "waiting for the client's Finished, the slot holds both directions' handshake keys",
+    finishing.tls.state === TLS_STATE_WAIT_FINISHED && readHeld(finishing.conn) > 0 && writeHeld(finishing.conn) > 0
+  );
+  t.eqI32(
+    "and the handshake secret and the client's handshake secret already read zero in TlsServer",
+    poolHeld(finishing.tls, HANDSHAKE) + poolHeld(finishing.tls, CLIENT_HANDSHAKE),
+    zero
+  );
+  const wrong: u8[] = range(finishing.finished, ZERO, toI32(finishing.finished.length));
+  const last: i32 = toI32(wrong.length) - 1;
+  wrong[last] = toU8(toI32(wrong[last]) ^ 1);
+  feed(finishing.conn, sealOne(finishing.handshakeWriter, TLS_CONTENT_HANDSHAKE, wrong, ZERO));
+  t.ok(
+    "a Finished whose verify data does not match fails the handshake with decrypt_error",
+    finishing.tls.state === TLS_STATE_FAILED && finishing.conn.state === TLS_RECORD_STATE_FAILED && finishing.conn.alert === TLS_ALERT_DECRYPT_ERROR
+  );
+  t.eqI32("and every key the slot and its TlsServer hold reads zero after the refused Finished", allHeld(finishing.conn), zero);
+};
+
+/** Whether `a` and `b` are the same length and hold the same bytes. */
+const equalBytes = (a: u8[], b: u8[]): boolean => toI32(a.length) === toI32(b.length) && sameBytes(a, b);
+
+/**
+ * A KeyUpdate from the client that asks for one back, under AES-256-GCM:
+ * both traffic secrets move to the next generation in place, the one they
+ * replace gone, and the next-secret scratch of both directions reads zero.
+ */
+const keyUpdates = (t: Suite): void => {
+  const zero: i32 = 0;
+  const hashLength: i32 = 48;
+  const live: Live = connect(TLS_AES_256_GCM_SHA384);
+  const conn: TlsRecordServer = live.conn;
+  const oldRead: u8[] = range(conn.readSecret384, ZERO, toI32(conn.readSecret384.length));
+  const oldWrite: u8[] = range(conn.writeSecret384, ZERO, toI32(conn.writeSecret384.length));
+  feed(conn, sealOne(live.writer, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(1), ZERO));
+  t.eqStr(
+    "a client's KeyUpdate asking for one back is answered under the old write keys",
+    shown(lastOpened(live.reader, drain(conn))),
+    `${TLS_CONTENT_HANDSHAKE} 24 0 0 1 0`
+  );
+  t.ok(
+    "both traffic secrets are the next generation, written over the one they replace",
+    live.connected &&
+      bytesHeld(oldRead) > 0 &&
+      equalBytes(conn.readSecret384, tlsNextTrafficSecret(hashLength, oldRead)) &&
+      equalBytes(conn.writeSecret384, tlsNextTrafficSecret(hashLength, oldWrite))
+  );
+  t.eqI32("and the next-secret scratch of both directions reads zero", bytesHeld(conn.readProtection.next) + bytesHeld(conn.writeProtection.next), zero);
+  conn.abort();
+  t.eqI32("abort after the update leaves every key reading zero", allHeld(conn), zero);
+};
+
 /** `restart` and `start`, the slot handed its next connection, under `suite`. */
 const restarts = (t: Suite, name: string, suite: i32): void => {
   const zero: i32 = 0;
   const live: Live = connect(suite);
-  const held: boolean = holdsEverything(live);
+  const held: boolean = holdsEverything(live, suite);
   live.tls.restart(serverRandom(), serverPrivate());
   live.conn.start(live.tls);
   const none: i32 = -1;
@@ -464,10 +611,17 @@ export const tlsWipeChecks = (): i32 => {
   slotClose(t);
   restarts(t, "AES-128-GCM", TLS_AES_128_GCM_SHA256);
   restarts(t, "AES-256-GCM", TLS_AES_256_GCM_SHA384);
+  midway(t);
+  keyUpdates(t);
 
   // 6. The exchange's words, after a handshake and after a refused exchange.
   const done: Live = connect(TLS_AES_256_GCM_SHA384);
-  t.ok("after a handshake the exchange's words read zero, the handshake secret's and the ephemeral key's", done.connected && exchangeHeld(done.tls) === 0);
+  t.ok("after a handshake the exchange's words read zero, the handshake secret's and the ephemeral key's", done.connected && exchangeHeld(done.tls) + poolHeld(done.tls, HANDSHAKE) + bytesHeld(done.tls.ephemeralPrivate) === 0);
+  t.eqI32(
+    "and so do the client's handshake and application secrets TlsServer handed over",
+    poolHeld(done.tls, CLIENT_HANDSHAKE) + poolHeld(done.tls, CLIENT_APPLICATION),
+    zero
+  );
   const none: u8[] = [];
   const lowOrder: u8[] = clientHelloRaw(TLS_LEGACY_VERSION, none, [TLS_AES_128_GCM_SHA256], [toU8(0)], [
     extSupportedVersions([TLS_VERSION_13]),

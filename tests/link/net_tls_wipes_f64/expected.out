@@ -79,8 +79,21 @@ PASS  AES-128-GCM: and both directions read zero
 PASS  AES-256-GCM: restart and start, for the slot's next connection
 PASS  AES-256-GCM: every secret array of both hashes reads zero, the CertificateVerify input's too
 PASS  AES-256-GCM: and both directions read zero
+PASS  waiting for the signature, the slot holds the client's handshake keys and TlsServer the handshake's secrets
+PASS  and the ephemeral key already reads zero, the ServerHello written
+PASS  abort while waiting for the signature fails the connection
+PASS  and every key the slot and its TlsServer hold reads zero after that abort
+PASS  waiting for the client's Finished, the slot holds both directions' handshake keys
+PASS  and the handshake secret and the client's handshake secret already read zero in TlsServer
+PASS  a Finished whose verify data does not match fails the handshake with decrypt_error
+PASS  and every key the slot and its TlsServer hold reads zero after the refused Finished
+PASS  a client's KeyUpdate asking for one back is answered under the old write keys
+PASS  both traffic secrets are the next generation, written over the one they replace
+PASS  and the next-secret scratch of both directions reads zero
+PASS  abort after the update leaves every key reading zero
 PASS  after a handshake the exchange's words read zero, the handshake secret's and the ephemeral key's
+PASS  and so do the client's handshake and application secrets TlsServer handed over
 PASS  an all-zero x25519 share is refused with illegal_parameter
 PASS  and the exchange's words read zero after the refusal too
 PASS  with every other key the refused connection held
-tls wipes: 85 passed, 0 failed, 0 skipped
+tls wipes: 98 passed, 0 failed, 0 skipped

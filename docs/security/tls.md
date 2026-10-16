@@ -10,11 +10,12 @@ so that the audit of the protocol stack starts from evidence.
 **Result.** Every refusal is an alert and none is a panic; the client's
 Finished and the ECDHE secret are compared in constant time; RFC 8448 §3 is
 reproduced byte for byte. The ECDHE secret and the copy of the ephemeral key
-it is computed with are `Secret`s, wiped on every path. One Low finding is
-open, as CLAUDE.md §Security requires: the secrets the handshake keeps in
-`TlsServer`'s fields and hands its carrier are not wiped yet. The primitive
-that will wipe them, `secureZero` (#417), is on `main`; `std/` may call it once
-a release ships it.
+it is computed with are `Secret`s, wiped on every path. The secrets the
+handshake keeps in `TlsServer`'s fields and hands its carrier are wiped with
+`secureZero` once the carrier has what it needs from them and at every end of
+the connection (#430's TLS stage, below), so one Low finding is left open, as
+CLAUDE.md §Security requires, and narrowed: TLS-1, the schedule's one-shot
+answers and the secrets an open connection needs.
 
 **T2's result.** Every record the trace prints is reproduced byte for byte,
 and every refusal of the record layer is an alert, never a panic. Records are
@@ -24,10 +25,11 @@ connection past its handshake allocates nothing that outlives a record, and
 neither does a KeyUpdate; a per-connection cap bounds how many a client may
 ask for. On the carrier's path `TlsServer`'s traffic secrets, its handshake
 secret and the caller's ephemeral key are wiped once the record layer has
-what it needs from them, which narrows TLS-1 for TLS over TCP. Two findings
-are open: TLS-2 (Low), the AES key schedule zeroed by ordinary stores; and
-TLS-4 (Low), no timeout in the carrier. TLS-3, the memory each handshake
-left, is closed.
+what it needs from them, which narrows TLS-1 for TLS over TCP. TLS-2 (Low),
+the AES key schedule zeroed by ordinary stores, was open after T2 and is
+closed by #430's TLS stage, which wipes it with `aesKeyWipe` at every end;
+TLS-4 (Low), no timeout in the carrier, is open. TLS-3, the memory each
+handshake left, is closed.
 
 **N9's result.** A handshake keeps its state in its slot: `TlsServer`'s
 buffers, transcript, secrets and HKDF scratch are made once and `restart`ed
@@ -330,14 +332,42 @@ write direction once the `close_notify` is sealed, after the data it waited
 behind when `output` was full, while the read direction still opens what the
 client sends, until the client's own `close_notify` wipes it; the carrier's
 slot close then wipes the rest, and over loopback
-`TlsTcpServer.close` leaves every key of the slot zero. `restart` and `start`
-leave every secret array of both hashes zero, and the exchange's words read
-zero after a handshake and after an exchange refused for a low-order share.
-On `ab9099e`, before the stage, 36 of these 85 checks fail. The check `tls: the
+`TlsTcpServer.close` leaves every key of the slot zero. A program that drives
+`TlsRecordServer` itself, without `TlsTcpServer`, calls `wipeKeys` after the
+connection closes, as the carrier's slot close does: a clean close leaves the
+exporter secret, which is the caller's to read, and the client Finished the
+server expected in `TlsServer` until then. `TlsServer.restart` wipes every
+secret array of both hashes, the CertificateVerify input's too, and
+`TlsRecordServer.start` both directions' keys, IVs and AES schedules and both
+traffic secrets, so that after the two, as a slot is handed its next
+connection, all of them read zero. Before each end every array it wipes is
+read as not zero on its own (the key of the suite's length, the IV, an AES
+suite's round keys and H, both traffic secrets of the suite's hash, the
+resumption and exporter secrets), so that no wipe is shown by an array that
+was empty. A handshake that fails before it is done leaves every key zero
+too, whether aborted while it waits for the CertificateVerify signature or
+refused with `decrypt_error` at a client Finished that does not verify; by
+then the ephemeral key reads zero once the ServerHello is written, and the
+handshake secret and the client's handshake secret once the flight is
+signed. After a KeyUpdate the client asks to be answered, both traffic
+secrets are the next generation written over the one they replace and the
+next-secret scratch of both directions reads zero. The exchange's words, the
+handshake secret and the ephemeral key read zero after a handshake, and so do
+the client's handshake and application secrets `TlsServer` handed over; the
+exchange's words read zero after an exchange refused for a low-order share.
+On `ab9099e`, before the stage, 39 of these 98 checks fail; each wipe the
+read-backs pin was also deleted in turn, on this stage's head, to show at
+least one of them fail. The check `tls: the
 wipes survive opt -O2 (both directions' keys, IVs and AES schedules; the
 traffic, handshake, exporter and resumption secrets; the exchange's words)`
 (`tests/wipes/tls.js`) counts each of those wipes after `opt -O2`, exactly,
-per root, and each was deleted in turn to show its root's count drop.
+per root, and each was deleted in turn to show its root's count drop. Its
+roots include the handshake's own wipes: the nonce `TlsRecordProtection.open`
+wipes, the master secret `TlsServer.sign` wipes, the handshake secret
+`handleFinished` wipes, the last connection's traffic keys
+`TlsRecordServer.start` wipes, and the ephemeral key, the handshake and
+client handshake secrets and the client's application secret
+`TlsRecordServer.advance` wipes.
 
 **The carrier against the world** (the `net_tls_tcp` block of `tests/run.js`):
 openssl s_client completes a handshake under each of the three suites,
