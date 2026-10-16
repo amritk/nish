@@ -20,6 +20,7 @@ declare noundef i32 @rewrite$(%struct.Stage* noundef nonnull readonly align 8 de
 declare noundef nonnull align 8 i8* @consume$(%struct.Sink* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
@@ -30,6 +31,7 @@ declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull,
 declare void @nish_channel_send(i64* noundef nonnull, i64 noundef) #1
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #1
 declare i8* @nish_cross_out(i8* noundef, i64 noundef, i64 noundef) #1
+declare noundef nonnull i8* @nish_cross_send(i8* noundef nonnull) #1
 declare i8* @nish_cross_in(i8* noundef, i64 noundef) #1
 declare double @llvm.floor.f64(double) #0
 declare double @llvm.ceil.f64(double) #0
@@ -295,7 +297,7 @@ entry:
 define void @nish.Channel$str.send(%struct.Channel$str* noundef nonnull align 8 dereferenceable(24) nocapture %this, i8* noundef nonnull noalias readonly align 8 nocapture %x) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Channel$str, %struct.Channel$str* %this, i32 0, i32 2
-  %1 = call i8* @nish_cross_out(i8* %x, i64 0, i64 0)
+  %1 = call i8* @nish_cross_send(i8* %x)
   %2 = ptrtoint i8* %1 to i64
   call void @nish_channel_send(i64* %0, i64 %2)
   ret void
@@ -520,6 +522,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @consume$(%struct.Sink* %2)
   %5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)
   %6 = getelementptr inbounds { %struct.Sink*, %struct.nish_array*, i32, i8* }, { %struct.Sink*, %struct.nish_array*, i32, i8* }* %0, i32 0, i32 3
   store i8* %5, i8** %6
   ret void

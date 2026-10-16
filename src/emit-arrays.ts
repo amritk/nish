@@ -1233,7 +1233,10 @@ export const emitElementAssignment = (emitter: Emitter, expr: Node): string => {
     const value = emitter.emitExpression(expr.children[1])
     emitBoundsCheck(emitter, base, idx, target)
     const at = elementPointer(emitter, base, elem, idx)
-    if (elem === T_STRING && isGuardedAccess(emitter.program, emitter.table, target)) {
+    if (
+      emitter.table.stripNull(elem) === T_STRING &&
+      isGuardedAccess(emitter.program, emitter.table, target)
+    ) {
       const old = emitter.fn.emitValue(`load i8*, i8** ${at}${emitter.alignSuffix(elem)}`)
       storeElement(emitter, at, elem, guardKeep(emitter, old, value))
       return value

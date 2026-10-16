@@ -144,19 +144,8 @@ const RUNTIME_THREADS_TEXT_BUDGET = 3885
  * 13 more, inside the same ceiling: `nish_pool_disable`, which a Node addon's shim
  * calls whatever the build, and which does nothing in this one. The pool itself is
  * `-DNISH_THREADS` only.
- *
- * Raised to 2,048 by threads-complete's copy-at-join, measured **1,786 bytes** on
- * 2026-10-16 with clang 18.1.3 on linux-x64 (610 before it): `nish_cross_out` and
- * `nish_cross_in`, which copy a task's or a chunk's `string` or scalar array out of the
- * arena it was made in and into the one that takes it, their `_range` forms over a map's
- * slots, and `nish_guard_keep` with the set of the copies a `Mutex` owns. A copy-out
- * first collects the arena's spans since the mark and sorts them, so that a map's
- * million slots each take a binary search rather than a walk of every chunk. Every
- * configuration defines them, because a task's arena is rewound once it has returned
- * whether it ran on a thread of its own or, as here, on the calling thread at the join.
- * A program that sends, answers or guards no string pays none of it.
  */
-const RUNTIME_PARALLEL_TEXT_BUDGET = 2048
+const RUNTIME_PARALLEL_TEXT_BUDGET = 768
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`, which is the build `--threads`
  * links: the partitioner, the worker trampoline, `pthread_create`/`join` and the
@@ -197,14 +186,38 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 2048
  * subject, and they took a divided region from ~100 us to ~10 us (docs/wp20-threads.md
  * §8e). A program that never divides a region or joins a scope still pays none of it.
  *
- * Raised to 4,096 by threads-complete's copy-at-join, measured **3,889 bytes** on
- * 2026-10-16 with clang 18.1.3 on linux-x64 (2,665 before it): the same copies as the
- * fallback's row above, `nish_cross_out`, `nish_cross_in`, their `_range` forms over
- * the sorted spans and
- * `nish_guard_keep`, which in this build also take the lock over the set of a `Mutex`'s
- * copies.
+ * threads-complete's copy-at-join measured **2,665 bytes** on 2026-10-16 with clang
+ * 18.1.3 on linux-x64, 5 more, inside the same ceiling: the copies themselves are
+ * `runtime-cross.c`'s, below.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 4096
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
+ * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
+ * `nish_cross_in`, which copy a task's or a chunk's `string` or scalar array out of the
+ * arena it was made in and into the one that takes it, their `_range` forms over a map's
+ * slots, `nish_cross_send`, which copies every string a `Channel<string>` sends, and
+ * `nish_guard_keep` with the set of the copies a `Mutex` owns.
+ *
+ * Measured **1,127 bytes** on 2026-10-16 with clang 18.1.3 on linux-x64. A copy-out first
+ * collects the arena's spans since the mark and sorts them, so that a map's million
+ * slots each take a binary search rather than a walk of every chunk. Every configuration
+ * defines them, because a task's arena is rewound once it has returned whether it ran on
+ * a thread of its own or on the calling thread at the join. An eighth translation unit
+ * rather than more of `runtime-parallel.c`: folded in, they took that file from 610
+ * bytes to 1,786 against its ceiling of 768, and the rule is a new file with its own
+ * measured ceiling, never a raised one. A program that sends, answers or guards no
+ * string pays none of it. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_CROSS_TEXT_BUDGET = 1280
+/**
+ * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,192 bytes** on
+ * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
+ * `nish_guard_keep` takes over the set of a `Mutex`'s copies, which another thread's
+ * guard may be changing.
+ */
+const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1280
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor
@@ -293,6 +306,13 @@ export const RUNTIME_BUDGETS = [
     "runtime/runtime-parallel.c",
     RUNTIME_PARALLEL_THREADS_TEXT_BUDGET,
     "RUNTIME_PARALLEL_THREADS_TEXT_BUDGET",
+    ["-DNISH_THREADS=1"],
+  ],
+  ["runtime/runtime-cross.c", RUNTIME_CROSS_TEXT_BUDGET, "RUNTIME_CROSS_TEXT_BUDGET", []],
+  [
+    "runtime/runtime-cross.c",
+    RUNTIME_CROSS_THREADS_TEXT_BUDGET,
+    "RUNTIME_CROSS_THREADS_TEXT_BUDGET",
     ["-DNISH_THREADS=1"],
   ],
   ["runtime/runtime-host.c", RUNTIME_HOST_TEXT_BUDGET, "RUNTIME_HOST_TEXT_BUDGET", []],

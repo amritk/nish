@@ -6,12 +6,17 @@
 // memory a missed copy would leave a kept string pointing at.
 import { Channel, scope } from "nish/threads";
 
+// Each string is kept, so the loop writes over the whole of what was freed
+// rather than over the one string a rewound iteration reuses.
 const churn = (): i32 => {
+  const kept: string[] = [];
   let t = 0;
   for (let i = 0; i < 4000; i++) {
-    t = t + `jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj${i}`.length;
+    const s = `jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj${i}`;
+    kept.push(s);
+    t = t + s.length;
   }
-  return t;
+  return t + kept.length - 4000;
 };
 
 class Source {

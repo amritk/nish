@@ -161,7 +161,8 @@ export const copyString = (emitter: Emitter, str: string): string =>
  * What a store of `value` through a guard puts in the slot that held `old`: a
  * copy in a block the `Mutex` owns, made by `nish_guard_keep`, which frees
  * `old` when it is a copy it made (WP29 §4.3, R4). The task that stores may
- * have made `value` in its arena, which is freed when it is joined.
+ * have made `value` in its arena, which is freed when it is joined. `old` is
+ * null when the slot is a `string | null` that held none.
  */
 export const guardKeep = (emitter: Emitter, old: string, value: string): string =>
   emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_guard_keep")}(i8* ${old}, i8* ${value})`)

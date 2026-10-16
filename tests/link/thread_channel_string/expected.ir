@@ -1,2 +1,2 @@
-call i8* @nish_cross_out(
+call i8* @nish_cross_send(
 call i8* @nish_cross_in(

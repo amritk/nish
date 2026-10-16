@@ -3,11 +3,12 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is seven translation units and is named as one: an input
+# The C runtime is eight translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
-# threads, <dir>/runtime-host.c, the wall clock, entropy, file times and
+# threads, <dir>/runtime-cross.c, the copies that carry a string or an array
+# from one thread's arena to another's, <dir>/runtime-host.c, the wall clock, entropy, file times and
 # signals, <dir>/runtime-net.c, the sockets of `nish:net`,
 # <dir>/runtime-simd.c, the byte searches that read a vector at a time, and
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions. Each of those
@@ -132,9 +133,9 @@ if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is seven translation units, and a caller names one: whoever passes
+# The runtime is eight translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
-# <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c and
+# <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c and
 # <dir>/runtime-aes.c compiled beside it, on every profile, wasi included:
 # runtime-simd.c takes its scalar path there unless the build adds -msimd128,
 # and runtime-aes.c compiles to an answer of 0 and stubs that nothing calls,
@@ -148,7 +149,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c"
+halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)

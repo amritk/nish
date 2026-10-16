@@ -107,13 +107,14 @@ process.env.XDG_CACHE_HOME = suiteCache
  * The C runtime's translation units, as a direct `clang` line has to spell
  * them: `runtime.c` is the core every program touches, `runtime-os.c` wraps the
  * system calls, `runtime-parallel.c` divides work across threads,
+ * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time and `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same seven:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eight:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -127,6 +128,7 @@ const RUNTIME_C = [
   "runtime/runtime.c",
   "runtime/runtime-os.c",
   "runtime/runtime-parallel.c",
+  "runtime/runtime-cross.c",
   "runtime/runtime-host.c",
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
@@ -4585,6 +4587,55 @@ if (!only || "par_dst_short".includes(only)) {
   )
 }
 
+// A `Channel<string>` send copies in time that grows with the string, not with
+// the sender's arena. `thread_channel_string_many` sends a million strings it
+// also keeps, so its arena grows with the sends: a send that asked whether the
+// arena held the string walked and sorted every chunk of it, and the program
+// took 46.9 s where it now takes 0.5 s. The bound is twenty times the second.
+if (!only || "thread_channel_string_many".includes(only)) {
+  const fixture = linkTests.includes("thread_channel_string_many")
+  const exe = path.join(buildDir, "link", "thread_channel_string_many", "app")
+  const started = Date.now()
+  const run =
+    fixture && fs.existsSync(exe) ? spawnSync(exe, [], { timeout: 120_000, killSignal: "SIGKILL" }) : null
+  const ms = Date.now() - started
+  const missing = fixture
+    ? `no such binary: ${exe}`
+    : "no such fixture: tests/link/thread_channel_string_many"
+  check(
+    "link/thread_channel_string_many: a million Channel<string> sends finish in under 10 s",
+    run !== null && run.status === 0 && String(run.stdout) === "1000000 54792\n" && ms < 10_000,
+    run !== null ? `exit ${run.status}, signal ${run.signal}, after ${ms} ms\nstdout: ${run.stdout}` : missing
+  )
+}
+
+// A task's temporaries are released on the thread that ran it once its answer
+// is copied out. `thread_task_release` spawns 8,000 tasks of some 60 KB each;
+// on one thread, which runs them all on the caller, it peaks at 11 MB, and
+// without the release at 1.87 GB. The bound is 64 MB.
+if (!only || "thread_task_release".includes(only)) {
+  const fixture = linkTests.includes("thread_task_release")
+  const dir = path.join(buildDir, "link", "thread_task_release")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  const run =
+    fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+      ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: "1" } })
+      : null
+  const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+  const missing = fixture
+    ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+    : "no such fixture"
+  check(
+    "link/thread_task_release: 8,000 tasks on one thread peak under 64 MB",
+    kb > 0 && kb < 64 * 1024,
+    run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+  )
+}
+
 // `--unchecked-indexing` and `--wrapping` reach the entry package and nothing else.
 // The link loop above built `tests/link/unsafe_flag_scope` under both flags (its
 // `args`); here it is compiled again without them, and every module but the entry's
@@ -9031,7 +9082,7 @@ if (!only) {
     { cwd: root }
   )
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   )
@@ -16204,6 +16255,7 @@ if (!only || "runtime-cache".includes(only)) {
       "runtime.c",
       "runtime-os.c",
       "runtime-parallel.c",
+      "runtime-cross.c",
       "runtime-host.c",
       "runtime-net.c",
       "runtime-simd.c",
@@ -17226,6 +17278,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-simd.c",
       // And the seventh (WP38 S5): AES-GCM on the CPU's AES instructions.
       "runtime/runtime-aes.c",
+      // And the eighth: the copy-at-join crossings of strings and arrays between
+      // threads, which every parallel construct that answers one calls.
+      "runtime/runtime-cross.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

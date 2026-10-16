@@ -517,7 +517,7 @@ const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, typ
 
 /**
  * A value that crosses from one thread's arena to another's by being copied
- * (`crossingSize` in emit-parallel.ts, runtime/runtime-parallel.c's copy at
+ * (`crossingSize` in emit-parallel.ts, runtime/runtime-cross.c's copy at
  * join): a string, or an array whose elements are numbers, booleans or enums,
  * which holds no pointer, so one flat copy is the whole value. An array of
  * strings, of arrays or of objects is not one: its copy would have to follow

@@ -471,7 +471,7 @@ const loadPayload = (
 
 /**
  * How a value of `type` crosses from one thread's arena to another's
- * (`nish_cross_out` and `nish_cross_in`, runtime/runtime-parallel.c): 0 for a
+ * (`nish_cross_out` and `nish_cross_in`, runtime/runtime-cross.c): 0 for a
  * string, an element's size for an array of numbers, booleans or enums, and
  * -1 for a scalar, which crosses as it is. The checker admits nothing else
  * across (`crossesByCopy` in parallel.ts).
@@ -546,6 +546,12 @@ const taskRun = (
     const mark = size < 0 ? "" : fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
     const answer = fn.emitValue(call)
     const r = size < 0 ? answer : crossOut(emitter, fn, result, answer, size, mark)
+    if (size >= 0) {
+      // What the task bumped is rewound here, on whichever thread ran it: a
+      // worker's arena is also reset by the pool, but the caller's, which runs
+      // the lead task and every task it drains, is not (as in `chunkTrampoline`).
+      fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
+    }
     const at = fn.emitValue(
       `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${inputs.types.length}`
     )
@@ -942,11 +948,11 @@ export const emitChannelSendBody = (emitter: Emitter, sig: FunctionSig): void =>
   const type = emitter.llvm(sig.paramTypes[1])
   let value = paramValue(sig.paramNames[1])
   if (sig.paramTypes[1] === T_STRING) {
-    // A string crosses by copy: one the sender's arena holds moves to a
-    // malloc'd block the receive copies out of (`nish_cross_out` with a mark
-    // of 0, which counts the whole arena); a literal, or a string an older
-    // arena holds, travels as it is.
-    value = crossOut(emitter, fn, type, value, 0, "0")
+    // A string crosses by copy: every one sent moves to a malloc'd block the
+    // receive copies out of. Asking whether the sender's arena holds it would
+    // walk every chunk of that arena on each send, and the arena grows with the
+    // sends; a string is immutable, so a copy of a literal is the same string.
+    value = fn.emitValue(`call i8* ${emitter.useRuntime("nish_cross_send")}(i8* ${value})`)
   }
   const raw = widenToSlot(fn, type, value)
   fn.emit(`call void ${emitter.useRuntime("nish_channel_send")}(i64* ${state}, i64 ${raw})`)

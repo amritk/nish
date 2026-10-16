@@ -342,7 +342,10 @@ export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   const receiver = emitter.emitExpression(target.children[0])
   if (expr.text === "=") {
     const value = emitter.emitExpression(expr.children[1])
-    if (field.type === T_STRING && isGuardedAccess(emitter.program, emitter.table, target)) {
+    if (
+      emitter.table.stripNull(field.type) === T_STRING &&
+      isGuardedAccess(emitter.program, emitter.table, target)
+    ) {
       const old = loadField(emitter, info, receiver, field)
       storeField(emitter, info, receiver, field, guardKeep(emitter, old, value))
       return value

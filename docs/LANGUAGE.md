@@ -2655,13 +2655,15 @@ from the whole-program facts, and each rule is reported there:
   (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
   The copy back is serial: the caller copies every string or array into its
   own arena after the join, one at a time. When each element's work is cheap,
-  a map that answers strings is therefore no faster than the sequential loop
-  today. 1M strings of `` `n${x % 1000}` ``, at about 43 ns of work each, took
-  185–223 ms on 4 threads, against about 215 ms sequentially (one earlier run
-  read 279 ms). Copy-out on the workers costs about 25–50 ns a string and
-  copy-in on the caller about 10–20 ns, and the figures vary widely from run
-  to run on the same machine. A map whose per-element work outweighs the copy
-  does gain from the threads.
+  a map that answers strings is therefore slower than the sequential loop
+  today. Five maps of 1M `` `n${x % 1000}` `` strings each took a median of
+  280 ms on 4 threads, against 200 ms for the same loop written sequentially;
+  two byte-identical copies of the threaded binary differed by 6 ms in the same
+  25 interleaved rounds, and single runs ranged from 246 to 332 ms. A map
+  whose per-element work outweighs the copy does gain from the threads. What
+  the body allocates for an element that answers a string is released with
+  its chunk rather than with the element: a body that builds a 2 KB string and
+  answers an 8-byte slice of it, over 1M elements, peaked at 78 MB.
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
@@ -3265,8 +3267,13 @@ breaks one is refused with that rule's own code:
   slot holds when the `Mutex` itself is dropped is not freed — the arena that
   held the `Mutex` does not say when it goes — and is reported by valgrind as
   still reachable, one block per guarded string slot
-  (`tests/link/thread_mutex_string`). `push` — which can move the array into
-  the task's arena — and every other method are
+  (`tests/link/thread_mutex_string`). A program that makes and drops many such
+  `Mutex`es keeps all of them: 100,000, each holding one 850-byte string,
+  peaked at 89 MB against 11 MB for the same loop without the store. The
+  record of those copies is one for the process, behind a lock of its own, so
+  stores through two different `Mutex`es wait on each other while it is held.
+  `push` — which can move the array into the task's arena — and every other
+  method are
   `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined ``
   (NL2469, `reject_mutex_guard_push`). So a `Mutex<i32[]>` or a class with an
   `i32[]` field holds a histogram, sized when it is made.
@@ -3609,8 +3616,9 @@ sends and receives:
 - **C1: a channel carries a number, a `boolean`, an enum or a `string`.** A
   sender's arena is freed when its scope joins, so a string is copied on the
   way: `send` copies it into a `malloc`'d block the buffer slot holds
-  (`nish_cross_out`), and `receive`, or a `for...of` step, copies it into the
-  receiver's arena and frees the block (`nish_cross_in`). A string a receiver
+  (`nish_cross_send`, a copy in time that grows with the string alone:
+  `tests/link/thread_channel_string_many` sends a million it also keeps), and
+  `receive`, or a `for...of` step, copies it into the receiver's arena and frees the block (`nish_cross_in`). A string a receiver
   never takes — the loop that left with `break` — stays in the buffer, which
   is itself given back only once it has been drained closed, so the two leak
   together. Anything else would be a pointer into the sender's arena:

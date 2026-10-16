@@ -915,7 +915,7 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
-    // Copy at join (runtime/runtime-parallel.c): a string or a scalar array a
+    // Copy at join (runtime/runtime-cross.c): a string or a scalar array a
     // task or a chunk answers, or a channel carries, leaves the arena that made
     // it through `nish_cross_out` and enters the taker's through
     // `nish_cross_in`, which frees the block between. Each allocates, or frees,
@@ -929,6 +929,15 @@ export class RuntimeTable {
       new RuntimeFunction(
         "nish_cross_out",
         "declare i8* @nish_cross_out(i8* noundef, i64 noundef, i64 noundef)",
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      new RuntimeFunction(
+        "nish_cross_send",
+        "declare noundef nonnull i8* @nish_cross_send(i8* noundef nonnull)",
         attrs1("nounwind"),
         EFFECT_WRITE
       )

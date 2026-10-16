@@ -28,6 +28,7 @@ declare noundef i32 @first$(i32 noundef) #1
 declare noundef nonnull align 8 i8* @record$(%struct.Job* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
@@ -321,6 +322,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @label$(i32 %2)
   %5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)
   %6 = getelementptr inbounds { i32, %struct.nish_array*, i32, i8* }, { i32, %struct.nish_array*, i32, i8* }* %0, i32 0, i32 3
   store i8* %5, i8** %6
   ret void
@@ -396,6 +398,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @nameOf$(i32 %2)
   %5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)
   %6 = getelementptr inbounds { i32, %struct.nish_array*, i32, i8* }, { i32, %struct.nish_array*, i32, i8* }* %0, i32 0, i32 3
   store i8* %5, i8** %6
   ret void
@@ -469,6 +472,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @echo$(%struct.Text* %2)
   %5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)
   %6 = getelementptr inbounds { %struct.Text*, %struct.nish_array*, i32, i8* }, { %struct.Text*, %struct.nish_array*, i32, i8* }* %0, i32 0, i32 3
   store i8* %5, i8** %6
   ret void
@@ -542,6 +546,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @middle$(i32 %2)
   %5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)
   %6 = getelementptr inbounds { i32, %struct.nish_array*, i32, i8* }, { i32, %struct.nish_array*, i32, i8* }* %0, i32 0, i32 3
   store i8* %5, i8** %6
   ret void
@@ -617,6 +622,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @tail$(i32 %2)
   %5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)
   %6 = getelementptr inbounds { i32, %struct.nish_array*, i32, i8* }, { i32, %struct.nish_array*, i32, i8* }* %0, i32 0, i32 3
   store i8* %5, i8** %6
   ret void
@@ -694,6 +700,7 @@ entry:
   %5 = bitcast %struct.nish_array* %4 to i8*
   %6 = call i8* @nish_cross_out(i8* %5, i64 4, i64 %3)
   %7 = bitcast i8* %6 to %struct.nish_array*
+  call void @nish_arena_release(i64 %3)
   %8 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array* }, { i32, %struct.nish_array*, i32, %struct.nish_array* }* %0, i32 0, i32 3
   store %struct.nish_array* %7, %struct.nish_array** %8
   ret void
@@ -771,6 +778,7 @@ entry:
   %5 = bitcast %struct.nish_array* %4 to i8*
   %6 = call i8* @nish_cross_out(i8* %5, i64 8, i64 %3)
   %7 = bitcast i8* %6 to %struct.nish_array*
+  call void @nish_arena_release(i64 %3)
   %8 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array* }, { i32, %struct.nish_array*, i32, %struct.nish_array* }* %0, i32 0, i32 3
   store %struct.nish_array* %7, %struct.nish_array** %8
   ret void
@@ -848,6 +856,7 @@ entry:
   %5 = bitcast %struct.nish_array* %4 to i8*
   %6 = call i8* @nish_cross_out(i8* %5, i64 1, i64 %3)
   %7 = bitcast i8* %6 to %struct.nish_array*
+  call void @nish_arena_release(i64 %3)
   %8 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array* }, { i32, %struct.nish_array*, i32, %struct.nish_array* }* %0, i32 0, i32 3
   store %struct.nish_array* %7, %struct.nish_array** %8
   ret void
@@ -993,6 +1002,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @record$(%struct.Job* %2)
   %5 = call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)
   %6 = getelementptr inbounds { %struct.Job*, %struct.nish_array*, i32, i8* }, { %struct.Job*, %struct.nish_array*, i32, i8* }* %0, i32 0, i32 3
   store i8* %5, i8** %6
   ret void

@@ -4,12 +4,17 @@
 // reuses the memory a missed copy would leave the result pointing at.
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 
+// Each string is kept, so the loop writes over the whole of what was freed
+// rather than over the one string a rewound iteration reuses.
 const churn = (): i32 => {
+  const kept: string[] = [];
   let t = 0;
   for (let i = 0; i < 5000; i++) {
-    t = t + `qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq${i}`.length;
+    const s = `qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq${i}`;
+    kept.push(s);
+    t = t + s.length;
   }
-  return t;
+  return t + kept.length - 5000;
 };
 
 const shout = (x: i32): string => `W${x}` + "!";
