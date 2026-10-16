@@ -4135,6 +4135,7 @@ const INDEX_OF_ANY_REFUSALS = [
  */
 const LINK_READ_LATER = [
   "par_dst_short",
+  "par_map_release",
   "range_export",
   "range_export_dts",
   "range_export_foreign",
@@ -4147,6 +4148,8 @@ const LINK_READ_LATER = [
   "std_json_tokenizer",
   "std_json_typed",
   "std_json_value",
+  "thread_channel_string_many",
+  "thread_task_release",
   "unsafe_flag_scope",
 ]
 /** The shard a link program runs in: 1 for those `LINK_READ_LATER` names, the rest dealt to 2..n. */
