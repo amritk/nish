@@ -77,6 +77,7 @@ import {
   capturedReads,
 } from "./program"
 import { RuntimeTable } from "./runtime"
+import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { methodReceiver } from "./emit-util"
 import { isSecretModule } from "./std-modules"
 import { StringBuilder } from "./strings"
@@ -1322,10 +1323,10 @@ const aliasMessage = (what: string, ref: string, copy: string): string =>
   "reference would read the key outside the `Secret`, and zeros once it is wiped, so pass a fresh value " +
   `(\`secret([1, 2, 3])\`, a \`new\`, or a call that makes one) or a copy: ${copy}`
 
-/** The copy `aliasMessage` suggests for the value `name` of `type`. */
+/** The copy `aliasMessage` suggests for the value `name` of `type`, or for one with no name (""). */
 const copyHint = (table: TypeTable, type: i32, name: string): string => {
-  if (type < 0 || type === T_ERROR) {
-    return "a new array or record with every element copied"
+  if (type < 0 || type === T_ERROR || name.length === 0) {
+    return "bind the value to a `const` first, then copy that into a new array or record"
   }
   const plain = table.stripNull(type)
   if (table.isArray(plain)) {
@@ -1391,10 +1392,9 @@ const isStatement = (node: Node): boolean =>
   node.kind === N_SWITCH ||
   node.kind === N_THROW
 
-/** Whether `node` hands on one of its operands as its own value: a ternary arm, or either side of `??`. */
-const passesOn = (node: Node, operand: Node): boolean =>
-  (node.kind === N_CONDITIONAL && node.children[0] !== operand) ||
-  (node.kind === N_BINARY && node.text === "??")
+/** The `Result` methods that answer the `Ok` payload of their receiver: what `Ok(v)` carries comes back out. */
+const answersPayload = (method: string): boolean =>
+  method === "orReturn" || method === "expect" || method === "unwrapOr"
 
 /**
  * One walk over a body for every occurrence of `local`: the declarations and
@@ -1496,9 +1496,11 @@ class ReferenceScan {
   harmless(node: Node): boolean {
     let child = node
     let i = this.ancestors.length - 1
-    while (i >= 0 && (this.ancestors[i].kind === N_PAREN || passesOn(this.ancestors[i], child))) {
-      child = this.ancestors[i]
-      i = i - 1
+    let up = this.handsOn(child, i)
+    while (up > 0) {
+      i = i - up
+      child = this.ancestors[i + 1]
+      up = this.handsOn(child, i)
     }
     if (this.consumed(child, i)) {
       return true
@@ -1531,6 +1533,47 @@ class ReferenceScan {
       default:
         return false
     }
+  }
+
+  /**
+   * How many of the ancestors above `child` (the innermost is at `at`) are
+   * a wrapper whose own value is `child`'s, or 0: parentheses, a ternary arm,
+   * either side of `??`, the argument of `Ok` or `Err` (the `Result` holds
+   * it), and the receiver, or the default, of a `Result` method that answers
+   * the payload (`r.orReturn()`, `r.expect(m)`, `r.unwrapOr(d)`). A use of the
+   * wrapper is then a use of `child`.
+   */
+  handsOn(child: Node, at: i32): i32 {
+    if (at < 0) {
+      return 0
+    }
+    const parent = this.ancestors[at]
+    if (
+      parent.kind === N_PAREN ||
+      (parent.kind === N_CONDITIONAL && parent.children[0] !== child) ||
+      (parent.kind === N_BINARY && parent.text === "??")
+    ) {
+      return 1
+    }
+    if (at < 1) {
+      return 0
+    }
+    const call = this.ancestors[at - 1]
+    if (call.kind !== N_CALL) {
+      return 0
+    }
+    const program = this.judge.program
+    const table = this.judge.table
+    if (parent.kind === N_LIST && call.children[1] === parent) {
+      if (isResultConstructorCall(program, table, call)) {
+        return 2
+      }
+      return resultMethodName(program, table, call) === "unwrapOr" ? 2 : 0
+    }
+    if (parent.kind === N_MEMBER && call.children[0] === parent) {
+      return answersPayload(resultMethodName(program, table, call)) ? 2 : 0
+    }
+    return 0
   }
 
   /**
@@ -1604,12 +1647,17 @@ class ReferenceScan {
     if (sig !== null) {
       return this.keepParameter(sig, index, owner)
     }
-    // A builtin keeps nothing it is handed: it reads it or writes it and
-    // returns. A method of a value is the exception, which stores what it is
-    // handed (`xs.push(raw)`), but for `dst.set(raw)`, which copies elements.
+    // An identifier builtin keeps nothing it is handed but for `Ok` and
+    // `Err`, whose `Result` holds it (`handsOn` follows those, so they never
+    // reach here): the rest — `ctSelect`, `ctEq`, `parseInt`, `parseFloat`,
+    // `Number`, the file, process and environment builtins, `write`,
+    // `panic`, `secureZero`, `arena`, `crypto.getRandomValues`, `nish:net` —
+    // read it or write it and return, or copy it into what they answer. A
+    // method of a value may store what it is handed (`xs.push(raw)`), but
+    // for `dst.set(raw)`, which copies elements.
     const receiver = methodReceiver(owner)
     if (receiver === null) {
-      return true
+      return !isResultConstructorCall(program, this.judge.table, owner)
     }
     const type = program.nodeTypes[receiver.id]
     return (
@@ -1730,6 +1778,20 @@ class FreshJudge {
   call(e: Node): boolean {
     const sig = this.program.nodeCallees[e.id]
     if (sig === null) {
+      // `Ok(v)` carries `v` as the payload a `Result` method answers, and
+      // `Err(e)` carries none; `r.orReturn()` answers what `r` carries.
+      const args = e.children[1].children
+      if (isResultConstructorCall(this.program, this.table, e)) {
+        return e.children[0].text !== "Ok" || args.length === 0 || this.judgeCarried(args[0])
+      }
+      const method = resultMethodName(this.program, this.table, e)
+      const payload = methodReceiver(e)
+      if (answersPayload(method) && payload !== null) {
+        return (
+          this.judgeCarried(payload) &&
+          (method !== "unwrapOr" || args.length === 0 || this.judgeCarried(args[0]))
+        )
+      }
       // An identifier builtin answers memory it allocated; a method of a value
       // (`xs.pop()`) may answer what the value holds.
       const receiver = methodReceiver(e)
@@ -1784,6 +1846,16 @@ class FreshJudge {
   }
 
   /**
+   * A value a `Result` carries to where it is judged: `v` in `Ok(v)`, and the
+   * receiver and default of `r.unwrapOr(d)`. A function's own `return Ok(out)`
+   * is judged as `out` is; at a `secret(...)`, a local there is another name
+   * the move does not reach, as `judgeSource` says.
+   */
+  judgeCarried(value: Node): boolean {
+    return this.mode === FRESH_RETURN ? this.judge(value) : this.judgeSource(value, value)
+  }
+
+  /**
    * A value a local is given: fresh as `judge` says, except that another
    * local is never one, because that local still names the value
    * (`let raw = [1]; raw = other`).
@@ -1822,7 +1894,7 @@ const checkSoleReference = (ctx: CheckContext, body: Node, arg: Node): void => {
   const program = ctx.program
   const named = unwrapSecretNode(arg)
   const judge = new FreshJudge(program, ctx.table, body, FRESH_SITE, "", arg)
-  judge.copy = copyHint(ctx.table, program.nodeTypes[arg.id], named.kind === N_IDENT ? named.text : "v")
+  judge.copy = copyHint(ctx.table, program.nodeTypes[arg.id], named.kind === N_IDENT ? named.text : "")
   judge.subject = `\`${ctx.textOf(arg)}\``
   if (!judge.judge(arg)) {
     ctx.error(arg, aliasMessage(judge.failSubject, judge.failure, judge.copy))

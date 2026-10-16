@@ -5093,8 +5093,10 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   - a call is fresh when its callee answers a fresh value, judged over the
     callee's own body by this same rule, through every depth of calls (a
     recursive one included); `expose` and `exposeWith` answer what the
-    function they run answers. A method of a value, `rows.pop()`, may answer
-    what the value holds;
+    function they run answers, and `r.orReturn()`, `r.expect(m)` and
+    `r.unwrapOr(d)` what `r` carries in its `Ok` (`d` too, which may not be a
+    local here, since the move does not reach it). A method of a value,
+    `rows.pop()`, may answer what the value holds;
   - a local is fresh when it is the sole reference to its value: every value
     it is given is fresh (another local is not, because that local still
     names it), it is not a `for...of` binding, which names an element, and no
@@ -5103,7 +5105,8 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
     handing it to a builtin, or to a function or method the whole-program
     facts say keeps nothing of it, are all such uses. An initialiser, an
     assignment's value, a field or element store, a literal's element, a
-    ternary arm, either side of `??`, a `return`, an argument of a method of
+    ternary arm, either side of `??`, the argument of `Ok` or `Err`, a later
+    declarator of the same statement, a `return`, an argument of a method of
     another value (`rows.push(raw)`, `m.set(k, raw)`), a read by an arrow
     that captures it (a data-parallel body), and a function or constructor
     that keeps it each leave one.
@@ -5112,15 +5115,19 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   reference: `const alias = raw` (line 6) ``, naming the reference and its
   line, or the callee and its parameter that keep it (NL2506,
   `reject_secret_alias_const`, `reject_secret_alias_let`,
-  `reject_secret_alias_reassigned`, `reject_secret_alias_field`,
-  `reject_secret_alias_element`, `reject_secret_alias_param`,
-  `reject_secret_alias_return`, `reject_secret_alias_ternary`,
-  `reject_secret_alias_nullish`, `reject_secret_alias_constructor`,
+  `reject_secret_alias_reassigned`, `reject_secret_alias_declarators`,
+  `reject_secret_alias_field`, `reject_secret_alias_element`,
+  `reject_secret_alias_param`,
+  `reject_secret_alias_return`, `reject_secret_alias_mutual`,
+  `reject_secret_alias_ternary`, `reject_secret_alias_nullish`,
+  `reject_secret_alias_ok`, `reject_secret_alias_err`,
+  `reject_secret_alias_unwrap_or`, `reject_secret_alias_constructor`,
   `reject_secret_alias_receiver`, `reject_secret_alias_pop`,
   `reject_secret_alias_for_of`, and `reject_secret_alias_capture_map`,
-  `_from`, `_map_into` and `_reduce`). Pass a fresh value
-  instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
-  copy.set(raw)`, then `secret(copy)`.
+  `_from`, `_map_into` and `_reduce`). Pass a fresh value instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
+  copy.set(raw)`, then `secret(copy)`. A declarator that reads `raw` after
+  `secret(raw)` in the same statement is a moved read, NL2445
+  (`reject_secret_alias_declarator_moved`).
 - A `Secret` parameter is borrowed. The callee may read it through `expose`,
   hand it on, wipe it or return it, and owes nothing: the caller wipes what it
   made.

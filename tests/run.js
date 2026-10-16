@@ -15135,8 +15135,11 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
 // and each `reject_secret_alias_*` case is one road to a second reference. This
 // proves the rule is what refuses them: a copy of `src/` with the rule taken out
 // (the body walk, the whole-program questions, and the ternary arms of the move)
-// is built by the seed, and it compiles every one of them. Each edit finds its
-// line by exact text, so those lines in `src/secret.ts` stay byte-identical.
+// is built by the seed, and it compiles every one of them but the cases another
+// rule refuses (`secretMoveCases`). Each edit finds its line by exact text, so
+// those lines in `src/secret.ts` stay byte-identical. Then what the rule must go
+// on accepting: a recursive function that answers a literal, a `Result`'s fresh
+// payload, the copy the diagnostic suggests, and every `std/` caller of `secret`.
 if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_secret_alias")) {
   const mutDir = path.join(buildDir, "secret-alias-mutation")
   fs.rmSync(mutDir, { recursive: true, force: true })
@@ -15165,9 +15168,12 @@ if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_s
     "--profile",
     "debug",
   ])
+  // A declarator that reads `raw` after `secret(raw)` in the same statement is
+  // refused by the move itself (NL2445), with or without the sole-reference rule.
+  const secretMoveCases = ["reject_secret_alias_declarator_moved.ts"]
   const aliasCases = fs
     .readdirSync(casesDir)
-    .filter((f) => f.startsWith("reject_secret_alias_") && f.endsWith(".ts"))
+    .filter((f) => f.startsWith("reject_secret_alias_") && f.endsWith(".ts") && !secretMoveCases.includes(f))
     .sort()
   const refused = []
   if (built.status === 0) {
@@ -15189,6 +15195,84 @@ if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_s
     `nish:secret: reverting the sole-reference rule lets every reject_secret_alias_* case compile (${aliasCases.length} cases)`,
     missed.length === 0 && built.status === 0 && aliasCases.length > 0 && refused.length === 0,
     detail
+  )
+
+  const keptDir = path.join(buildDir, "secret-alias-kept")
+  fs.rmSync(keptDir, { recursive: true, force: true })
+  fs.mkdirSync(keptDir, { recursive: true })
+  const kept = [
+    [
+      "a recursive function that answers only a literal",
+      "recursive",
+      'import { Secret, secret, wipe } from "nish:secret";\n' +
+        "const f = (n: i32): u8[] => (n > 0 ? f(n - 1) : [toU8(1)]);\n" +
+        "export const main = (): i32 => {\n" +
+        "  const key: Secret<u8[]> = secret(f(2));\n" +
+        "  wipe(key);\n" +
+        "  return 0;\n" +
+        "};\n",
+    ],
+    [
+      "a fresh payload through `Ok`, `orReturn` and `expect`",
+      "payload",
+      'import { Secret, secret, wipe } from "nish:secret";\n' +
+        "const make = (): Result<u8[], string> => {\n" +
+        "  const out: u8[] = new Array<u8>(32);\n" +
+        "  crypto.getRandomValues(out);\n" +
+        "  return Ok(out);\n" +
+        "};\n" +
+        "const use = (): Result<i32, string> => {\n" +
+        "  const raw: u8[] = make().orReturn();\n" +
+        "  const a: Secret<u8[]> = secret(raw);\n" +
+        "  wipe(a);\n" +
+        '  const b: Secret<u8[]> = secret(make().expect("key"));\n' +
+        "  wipe(b);\n" +
+        "  return Ok(0);\n" +
+        "};\n" +
+        "export const main = (): i32 => (use().ok ? 0 : 1);\n",
+    ],
+    [
+      "the copy the diagnostic suggests",
+      "copy",
+      'import { Secret, secret, wipe } from "nish:secret";\n' +
+        "export const main = (): i32 => {\n" +
+        "  const raw: u8[] = [1, 2, 3];\n" +
+        "  const copy: u8[] = new Array<u8>(raw.length);\n" +
+        "  copy.set(raw);\n" +
+        "  const key: Secret<u8[]> = secret(copy);\n" +
+        "  wipe(key);\n" +
+        "  return toI32(raw[0]);\n" +
+        "};\n",
+    ],
+  ]
+  for (const [what, name, text] of kept) {
+    const source = path.join(keptDir, `${name}.ts`)
+    fs.writeFileSync(source, text)
+    const r = spawnSync(NISH, [source, "-o", path.join(keptDir, `${name}.ll`)], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(`nish:secret: secret(v) still takes ${what}`, r.status === 0, r.stdout + r.stderr)
+  }
+  const callers = [
+    "std/net/tls.ts",
+    "std/crypto/x509-random.ts",
+    "std/crypto/hkdf.ts",
+    "std/crypto/x25519.ts",
+    "std/crypto/x509.ts",
+  ]
+  const callerFailures = []
+  for (const caller of callers) {
+    const out = path.join(keptDir, path.basename(caller, ".ts")) + path.sep
+    const r = spawnSync(NISH, [path.join(root, caller), "-o", out], { cwd: root, encoding: "utf8" })
+    if (r.status !== 0) {
+      callerFailures.push(`${caller}: ${r.stderr}`)
+    }
+  }
+  check(
+    `nish:secret: every std/ caller of secret(v) compiles (${callers.length} modules)`,
+    callerFailures.length === 0,
+    callerFailures.join("\n")
   )
 }
 
