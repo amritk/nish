@@ -1,2 +1,2 @@
-`first` writes memory its caller can see through `build`
+`first` writes memory its caller can see
 `spawn` runs it beside the scope's other tasks

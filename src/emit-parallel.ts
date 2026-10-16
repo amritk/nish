@@ -34,6 +34,7 @@
 // source, and a function without one may call one that has one.
 
 import { Emitter, LoopTarget } from "./emit"
+import { isScalarArgument } from "./escape"
 import { loadField, structFieldPointer, structInfoOf } from "./emit-classes"
 import { internalErrorFor } from "./ice"
 import { IRFunction, IRParam, paramValue } from "./ir"
@@ -59,7 +60,9 @@ import {
   PAR_TASK,
   StructInfo,
   TemplateInfo,
+  elementStride,
 } from "./program"
+import { T_STRING } from "./types"
 
 /**
  * The grain the region in `caller` is divided at: for a map, the one its body
@@ -170,9 +173,46 @@ export const emitParallelRegion = (
   fn.emit(
     `call void ${emitter.useRuntime("nish_parallel_range")}(void (i64, i64, i8*)* @${trampoline}, i8* ${raw}, i64 ${len}, i64 ${grain})`
   )
+  const crossing = regionCrossing(emitter, caller)
+  if (crossing.size >= 0) {
+    // Every chunk left its elements in a malloc'd block of their own
+    // (`chunkTrampoline`); each comes into this thread's arena here.
+    const dst = fn.emitValue(`bitcast ${fieldTypes[crossing.field]} ${fieldValues[crossing.field]} to i8*`)
+    fn.emit(
+      `call void ${emitter.useRuntime("nish_cross_in_range")}(i8* ${dst}, i64 ${len}, i64 ${crossing.size})`
+    )
+  }
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(doneBlock)
-  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured))
+  emitter.module.addFunction(
+    chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured, crossing)
+  )
+}
+
+/**
+ * Where a region's elements cross by copy: `size` is the element's
+ * `crossingSize`, -1 when it is a scalar, which needs no copy, and `field` is
+ * the context field of the chunk's `dst` — `mapRange(src, dst, ...)` and
+ * `fromRange(dst, ...)` in `std/threads.ts`. A reduce's partials are scalars
+ * (`resultMessage`), so a reduce never crosses.
+ */
+class RegionCrossing {
+  size: i32
+  field: i32
+  constructor(size: i32, field: i32) {
+    this.size = size
+    this.field = field
+  }
+}
+
+const regionCrossing = (emitter: Emitter, caller: FunctionSig): RegionCrossing => {
+  const role = parallelRoleOf(caller)
+  const instance = caller.instance
+  if ((role !== PAR_MAP && role !== PAR_FROM) || instance === null || instance.typeArgs.length === 0) {
+    return new RegionCrossing(-1, 0)
+  }
+  const size = crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1])
+  return new RegionCrossing(size, role === PAR_MAP ? 1 : 0)
 }
 
 /**
@@ -188,7 +228,8 @@ const chunkTrampoline = (
   chunk: FunctionSig,
   ctxType: string,
   fieldTypes: string[],
-  captured: i32
+  captured: i32,
+  crossing: RegionCrossing
 ): IRFunction => {
   const optimize = emitter.opts.optimizeAttributes
   const attrs: string[] = []
@@ -231,7 +272,19 @@ const chunkTrampoline = (
   for (const operand of tail) {
     operands.push(operand)
   }
+  // An element that crosses by copy was made in this thread's arena, which
+  // the next chunk or job reuses: the chunk's elements move to malloc'd
+  // blocks, and with them out, everything else the chunk allocated is a
+  // temporary its arena gives back.
+  const mark = crossing.size < 0 ? "" : fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
   fn.emit(`call void @${chunk.name}(${operands.join(", ")})`)
+  if (crossing.size >= 0) {
+    const dst = fn.emitValue(`bitcast ${operands[crossing.field]} to i8*`)
+    fn.emit(
+      `call void ${emitter.useRuntime("nish_cross_out_range")}(i8* ${dst}, i64 %lo, i64 %hi, i64 ${crossing.size}, i64 ${mark})`
+    )
+    fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
+  }
   fn.emit("ret void")
   return fn
 }
@@ -345,7 +398,7 @@ export const emitSpawnTask = (
   )
   const inputs = new TaskInputs(payloadType, types, written > 0 ? 1 : 0, written)
   emitter.module.addFunction(taskRun(emitter, run, caller, body, inputs, result, store !== null))
-  emitter.module.addFunction(taskFinish(emitter, finish, store, payloadType, types, result))
+  emitter.module.addFunction(taskFinish(emitter, finish, store, payloadType, types, result, body.returnType))
 }
 
 /**
@@ -417,6 +470,90 @@ const loadPayload = (
 }
 
 /**
+ * How a value of `type` crosses from one thread's arena to another's
+ * (`nish_cross_out` and `nish_cross_in`, runtime/runtime-cross.c): 0 for a
+ * string, an element's size for an array of numbers, booleans or enums, and
+ * -1 for a scalar, which crosses as it is. The checker admits nothing else
+ * across (`crossesByCopy` in parallel.ts).
+ */
+const crossingSize = (emitter: Emitter, type: i32): i32 => {
+  const table = emitter.table
+  if (type === T_STRING) {
+    return 0
+  }
+  if (table.isArray(type) && isScalarArgument(table, table.refOf(type))) {
+    return elementStride(emitter.program, table, table.refOf(type))
+  }
+  return -1
+}
+
+/** `value`, of LLVM type `type`, through `nish_cross_out(value, size, mark)`. */
+const crossOut = (
+  emitter: Emitter,
+  fn: IRFunction,
+  type: string,
+  value: string,
+  size: i32,
+  mark: string
+): string => {
+  const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)
+  const out = fn.emitValue(
+    `call i8* ${emitter.useRuntime("nish_cross_out")}(i8* ${raw}, i64 ${size}, i64 ${mark})`
+  )
+  return type === "i8*" ? out : fn.emitValue(`bitcast i8* ${out} to ${type}`)
+}
+
+/**
+ * The `esize` of the element the call to `callee` answers inside a map's
+ * or a `parallelFrom`'s chunk loop (`mapRange` and `fromRange` in
+ * `std/threads.ts`), when the call is to the loop's body and the element is a
+ * string or a scalar array; -1 for every other call. The emitter brackets
+ * such a call with a mark and `nish_cross_keep`, so the chunk keeps each
+ * element and gives back what the body bumped to make it: without the
+ * bracket, a body that builds a 2 KB string to answer a short one held all of
+ * a chunk's 2 KB strings until the chunk's own release, 2.1 GB over a million
+ * elements. A reduce's body (`reduceBlocks`) answers a scalar, so it has none.
+ */
+export const elementKeepSize = (emitter: Emitter, caller: FunctionSig | null, callee: FunctionSig): i32 => {
+  if (caller === null) {
+    return -1
+  }
+  const body = parallelBodyOf(caller)
+  const instance = caller.instance
+  if (parallelRoleOf(caller) !== PAR_CHUNK || body === null || body !== callee || instance === null) {
+    return -1
+  }
+  const template = instance.template
+  if (template === null || template.sourceName === "reduceBlocks") {
+    return -1
+  }
+  return crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1])
+}
+
+/** The element a chunk loop's body call answered, `value` of LLVM type `type`, kept as the arena rewinds to `mark`. */
+export const keepElement = (
+  emitter: Emitter,
+  type: string,
+  value: string,
+  size: i32,
+  mark: string
+): string => {
+  const fn = emitter.fn
+  const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)
+  const kept = fn.emitValue(
+    `call i8* ${emitter.useRuntime("nish_cross_keep")}(i8* ${raw}, i64 ${size}, i64 ${mark})`
+  )
+  return type === "i8*" ? kept : fn.emitValue(`bitcast i8* ${kept} to ${type}`)
+}
+
+/** `value`, of LLVM type `type`, through `nish_cross_in(value, size)`. */
+const crossIn = (emitter: Emitter, fn: IRFunction, type: string, value: string, size: i32): string => {
+  const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)
+  const back = fn.emitValue(`call i8* ${emitter.useRuntime("nish_cross_in")}(i8* ${raw}, i64 ${size})`)
+  return type === "i8*" ? back : fn.emitValue(`bitcast i8* ${back} to ${type}`)
+}
+
+/**
  * `<spawn>$run`: `entry(arg, captures...)`, its answer into the payload's last
  * field when the scope will store it. It runs on the task's thread.
  */
@@ -445,14 +582,27 @@ const taskRun = (
     k = k + 1
   }
   const call = `call ${result} @${body.name}(${operands.join(", ")})`
+  // What the task bumps is rewound once it has answered, on whichever thread
+  // ran it, whatever it answers: a worker's arena is also reset by the pool,
+  // but the caller's, which runs the lead task and every task it drains, is
+  // not (as in `chunkTrampoline`). A task's answer is a scalar or a value
+  // that crosses by copy (`taskResultMessage`), so nothing it answers is left
+  // pointing into what is rewound.
+  const mark = fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
   if (keeps) {
-    const r = fn.emitValue(call)
+    // A string or an array the task made leaves its arena before the arena
+    // is rewound; one that is older than the task, its parent's, does not.
+    const size = crossingSize(emitter, body.returnType)
+    const answer = fn.emitValue(call)
+    const r = size < 0 ? answer : crossOut(emitter, fn, result, answer, size, mark)
+    fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
     const at = fn.emitValue(
       `getelementptr inbounds ${payloadType}, ${payloadType}* ${typed}, i32 0, i32 ${inputs.types.length}`
     )
     fn.emit(`store ${result} ${r}, ${result}* ${at}`)
   } else {
     fn.emit(call) // a task with no destination answers `void` (`voidTaskResultMessage`)
+    fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
   }
   countSenders(emitter, fn, spawn, arg, -1) // WP29 P3: it has sent all it will
   fn.emit("ret void")
@@ -469,7 +619,8 @@ const taskFinish = (
   store: FunctionSig | null,
   payloadType: string,
   types: string[],
-  result: string
+  result: string,
+  answer: i32
 ): IRFunction => {
   const fn = taskFunction(emitter, name)
   if (store === null) {
@@ -479,7 +630,9 @@ const taskFinish = (
   const typed = fn.emitValue(`bitcast i8* %p to ${payloadType}*`)
   const dst = loadPayload(fn, typed, payloadType, 1, types[1])
   const at = loadPayload(fn, typed, payloadType, 2, types[2])
-  const r = loadPayload(fn, typed, payloadType, types.length, result)
+  const loaded = loadPayload(fn, typed, payloadType, types.length, result)
+  const size = crossingSize(emitter, answer)
+  const r = size < 0 ? loaded : crossIn(emitter, fn, result, loaded, size)
   fn.emit(`call void @${store.name}(${types[1]} ${dst}, ${types[2]} ${at}, ${result} ${r})`)
   fn.emit("ret void")
   return fn
@@ -793,10 +946,13 @@ const countSenders = (
   }
 }
 
-/** A scalar of LLVM type `type` widened into a channel's `i64` slot. */
+/** A scalar, or a string's address, of LLVM type `type` widened into a channel's `i64` slot. */
 const widenToSlot = (fn: IRFunction, type: string, value: string): string => {
   if (type === "i64") {
     return value
+  }
+  if (type.endsWith("*")) {
+    return fn.emitValue(`ptrtoint ${type} ${value} to i64`)
   }
   if (type === "double") {
     return fn.emitValue(`bitcast double ${value} to i64`)
@@ -808,10 +964,13 @@ const widenToSlot = (fn: IRFunction, type: string, value: string): string => {
   return fn.emitValue(`zext ${type} ${value} to i64`)
 }
 
-/** A channel's `i64` slot narrowed back to the scalar of LLVM type `type` it was widened from. */
+/** A channel's `i64` slot narrowed back to the value of LLVM type `type` it was widened from. */
 const narrowFromSlot = (fn: IRFunction, type: string, raw: string): string => {
   if (type === "i64") {
     return raw
+  }
+  if (type.endsWith("*")) {
+    return fn.emitValue(`inttoptr i64 ${raw} to ${type}`)
   }
   if (type === "double") {
     return fn.emitValue(`bitcast i64 ${raw} to double`)
@@ -831,7 +990,16 @@ export const emitChannelSendBody = (emitter: Emitter, sig: FunctionSig): void =>
   }
   const fn = emitter.fn
   const state = channelStateIn(emitter, fn, owner.type, "%this")
-  const raw = widenToSlot(fn, emitter.llvm(sig.paramTypes[1]), paramValue(sig.paramNames[1]))
+  const type = emitter.llvm(sig.paramTypes[1])
+  let value = paramValue(sig.paramNames[1])
+  if (sig.paramTypes[1] === T_STRING) {
+    // A string crosses by copy: every one sent moves to a malloc'd block the
+    // receive copies out of. Asking whether the sender's arena holds it would
+    // walk every chunk of that arena on each send, and the arena grows with the
+    // sends; a string is immutable, so a copy of a literal is the same string.
+    value = fn.emitValue(`call i8* ${emitter.useRuntime("nish_cross_send")}(i8* ${value})`)
+  }
+  const raw = widenToSlot(fn, type, value)
   fn.emit(`call void ${emitter.useRuntime("nish_channel_send")}(i64* ${state}, i64 ${raw})`)
   fn.emit("ret void")
 }
@@ -876,7 +1044,10 @@ export const emitChannelWalk = (emitter: Emitter, stmt: Node): void => {
 
   fn.placeBlock(bodyBlock)
   const bits = fn.emitValue(`load i64, i64* ${raw}${emitter.align8()}`)
-  const value = narrowFromSlot(fn, ty, bits)
+  let value = narrowFromSlot(fn, ty, bits)
+  if (elem === T_STRING) {
+    value = crossIn(emitter, fn, ty, value, 0) // into this thread's arena, and the block freed
+  }
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`)
   emitter.loops.push(new LoopTarget(endBlock, recvBlock))
   emitter.emitStatement(stmt.children[2])

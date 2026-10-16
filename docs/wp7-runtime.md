@@ -7,7 +7,7 @@ strings, and the `wasi` build profile. Later work superseded several parts:
 
 - signed overflow, `i64` included, is a checked panic by default (#426);
 - the shortest-digits search was replaced by a port of Ryu;
-- the runtime grew from one translation unit to seven, each with its own
+- the runtime grew from one translation unit to eight, each with its own
   measured budget (below).
 
 The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",
@@ -183,6 +183,8 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-net.c` | `nish:net` sockets, UDP, the readiness loop | 2,304 (`NET_TEXT_BUDGET`) | 2,303 |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
+| `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,280 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,170 (2026-10-16) |
+| `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,280 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,235 (2026-10-16) |
 
 **How the ceilings moved.**
 
@@ -207,6 +209,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-12 | `nish_panic` (#611): one call for `panic`'s message and exit, 3,606 → 3,622; its claim, threads build only | core 3,622 |
 | 2026-10-16 | `nish_write` retries `EINTR` (#611), so a panic's message is not cut short by a handler without `SA_RESTART`: core 3,622 → 3,656, threads 3,840 → 3,860 | core 3,656, threads 3,860 |
 | 2026-10-16 | the newline too, and `nish_die` through the same loop rather than `fputs` (#611): core 3,656 → 3,684, threads 3,860 → 3,885 | core 3,684, threads 3,885 |
+| 2026-10-16 | `runtime-cross.c` (1,170 / 1,235), threads-complete's copy-at-join; folded into `runtime-parallel.c` it measured 1,786 / 3,889 | cross 1,280 / 1,280 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -286,6 +289,26 @@ runtime cache holds only the units `src/run-cache.ts` lists, so the pairing and
 that list changed in one commit, the one in which the compiler first called the
 unit (WP38 S5's lowering). A program that never reaches a seam of
 `std/crypto/aes.ts` keeps none of it, by section GC.
+
+### The copy-at-join unit
+
+`runtime/runtime-cross.c` (threads-complete's copy-at-join) holds the copies
+that let a `string` or a scalar array cross from one arena to another: out of a
+task's arena when it returns, or a parallel chunk's when it finishes, and into
+the arena of the thread that takes the answer; every string a
+`Channel<string>` sends; and the copies a `Mutex` owns of the strings stored
+through its guards. A copy-out collects the spans of the arena since the mark
+and sorts them once, so that a map's million slots each take a binary search.
+
+It is an eighth unit rather than more of `runtime-parallel.c`: folded in, the
+copies took that file from 610 bytes to 1,786 against its ceiling of 768, and
+2,665 to 3,889 in the threads build against 2,816. Both configurations define
+them, because a task's arena is rewound once it returns whether it ran on a
+thread of its own or on the calling thread at the join. `runtime.c` does not
+include `nish.h`, so the arena chunk's layout, which both files walk, is pinned
+by the same `_Static_assert`s in each. `scripts/build.sh` pairs the unit and
+`src/run-cache.ts` lists it in one commit, as the AES unit's were. A program
+that answers, sends or guards no string keeps none of it, by section GC.
 
 ### Checked arithmetic
 

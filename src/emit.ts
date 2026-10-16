@@ -109,14 +109,23 @@ import {
   emitLockReleases,
   emitParallelRegion,
   emitScopeJoins,
+  elementKeepSize,
   emitSpawnTask,
   holdsLock,
   isParallelRegionCall,
   isSpawnTaskCall,
+  keepElement,
   openScope,
 } from "./emit-parallel"
-import { CaptureSlot, capturesOf, isAtomicMethod, isChannelSend, isLockMethod } from "./parallel"
-import { addStringConstant, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
+import {
+  CaptureSlot,
+  capturesOf,
+  isAtomicMethod,
+  isChannelSend,
+  isGuardedAccess,
+  isLockMethod,
+} from "./parallel"
+import { addStringConstant, copyString, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
@@ -183,7 +192,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { resolveTarget, targetHeader } from "./target"
-import { T_VOID, TypeTable } from "./types"
+import { T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -245,6 +254,8 @@ export class Emitter {
    * or `-1` for none. See `planTailCall`.
    */
   tailCallId: i32
+  /** The node `emitUncopied` is emitting, whose guarded string read `guardedRead` leaves uncopied; `-1` for none. */
+  uncopied: i32
   /** A scoped pass reads `@nish_arena` itself, so the module declares it even if it allocates nothing. */
   readsArenaGlobal: boolean
   /** Enclosing loops, innermost last. */
@@ -325,6 +336,7 @@ export class Emitter {
     this.current = new FunctionFacts(noNames, 0)
     this.currentSig = null
     this.tailCallId = -1
+    this.uncopied = -1
     this.loops = []
     this.openScopes = []
     this.openScopeLoops = []
@@ -1304,9 +1316,9 @@ export class Emitter {
       case N_NEW:
         return emitNew(this, expr)
       case N_MEMBER:
-        return this.emitMember(expr)
+        return this.guardedRead(expr, this.emitMember(expr))
       case N_INDEX:
-        return emitElementAccess(this, expr)
+        return this.guardedRead(expr, emitElementAccess(this, expr))
       case N_ARRAY:
         return emitArrayLiteral(this, expr)
       case N_OBJECT:
@@ -1354,6 +1366,35 @@ export class Emitter {
 
   emitBinaryExpression(expr: Node): string {
     return isAssignmentOperator(expr.text) ? emitAssignment(this, expr) : emitBinary(this, expr)
+  }
+
+  /**
+   * `value`, the read `expr` made, or its copy in this arena when `expr` reads
+   * a string through a guard (WP29 §4.3, R4): the guard's slot holds a block
+   * the next store through it frees, so the reader keeps a copy of its own.
+   */
+  guardedRead(expr: Node, value: string): string {
+    if (
+      expr.id === this.uncopied ||
+      this.typeOf(expr) !== T_STRING ||
+      !isGuardedAccess(this.program, this.table, expr)
+    ) {
+      return value
+    }
+    return copyString(this, value)
+  }
+
+  /**
+   * `expr` without `guardedRead`'s copy, for a use that is done with the
+   * string before anything can release the lock or store through the guard:
+   * `.length` loads the header and keeps nothing.
+   */
+  emitUncopied(expr: Node): string {
+    const saved = this.uncopied
+    this.uncopied = expr.id
+    const value = this.emitExpression(expr)
+    this.uncopied = saved
+    return value
   }
 
   emitMember(expr: Node): string {
@@ -1494,7 +1535,13 @@ export class Emitter {
       aesSeam === AES_SEAM_NONE ? null : this.emitAesKernelArm(aesSeam, operands)
     // WP9: the mark goes after the arguments, so only the callee's own bumps
     // are inside the bracket (`beginReclaim`).
-    const mark = this.beginReclaim(sig)
+    // Where that does not apply, a map's or a `parallelFrom`'s chunk loop
+    // keeps each element its body answers and gives back the rest
+    // (`elementKeepSize`).
+    const reclaim = this.beginReclaim(sig)
+    const keepSize = tail || reclaim.length > 0 ? -1 : elementKeepSize(this, this.currentSig, sig)
+    const mark =
+      keepSize >= 0 ? this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`) : reclaim
     const marker = tail ? "tail " : ""
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
@@ -1509,6 +1556,15 @@ export class Emitter {
     // caller's own object, which is what every other construct reads.
     if (this.table.resultByValue(sig.returnType)) {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
+    }
+    if (keepSize >= 0) {
+      return keepElement(
+        this,
+        this.llvmAbi(sig.returnType, calleePrivate),
+        this.fn.emitValue(call),
+        keepSize,
+        mark
+      )
     }
     return this.endReclaim(mark, this.fn.emitValue(call))
   }
