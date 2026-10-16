@@ -303,7 +303,7 @@ for (const kernel of KERNELS.filter((k) => only.has(k))) {
   }
   for (const form of ["scalar", "checked", "unchecked"]) {
     const remarks = vectorised(kernel, form)
-    summary.push(`${kernel} ${LABEL[form]} at -O3: ${remarks.length === 0 ? "no loop vectorised" : ""}`)
+    summary.push(`${kernel} ${LABEL[form]} at -O3:${remarks.length === 0 ? " no loop vectorised" : ""}`)
     summary.push(...remarks.map((r) => `  ${r}`))
   }
 }
