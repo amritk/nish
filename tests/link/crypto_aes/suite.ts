@@ -416,8 +416,8 @@ export const runSuite = (): i32 => {
   t.eqStr("a hand-built AesKey with H = 0 opens no forged ciphertext", openWith(handMade, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
   t.eqStr("a hand-built AesKey with H = 0 opens no forged AAD", openWith(handMade, IV, flip(A, 0, 0), handSealed), "null");
   const edited: AesKey = keyOf(K);
-  edited.hHi = toU64(0);
-  edited.hLo = toU64(0);
+  edited.h[0] = toU64(0);
+  edited.h[1] = toU64(0);
   t.eqStr("an AesKey whose H is set to 0 opens no forgery", openWith(edited, IV, A, `${flip(C4, 0, 0)}${handTag}`), "null");
   t.eqStr("an AesKey whose H is not set to 0 still opens", openWith(real, IV, A, `${C4}${T4}`), P60);
   const wrongRounds: AesKey = new AesKey(14, real.roundKeys);

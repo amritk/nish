@@ -72,9 +72,11 @@
  * caller's. A caller that holds its input keying material as a `Secret<u8[]>`
  * (`nish:secret`) derives with `hkdfSha256Secret` or `hkdfSha384Secret`,
  * which run both steps, hand the output back as a `Secret` and wipe the PRK
- * between them, or with the `*Secret` twins of each step:
+ * between them, or with the `*Secret` twins of each step, HKDF-Expand-Label's
+ * among them:
  *
  *     const okm: Secret<u8[]> | null = hkdfSha256Secret(salt, ikm, info, 42);
+ *     const key: Secret<u8[]> = hkdfExpandLabelSha256Secret(prk, "key", context, 16);
  *
  * Written from RFC 5869 and RFC 8446 §7.1, not ported from another
  * implementation.
@@ -373,6 +375,47 @@ export const hkdfExpandLabelSha384 = (prk: u8[], label: string, context: u8[], l
   )
   if (okm === null) {
     panic("hkdfExpandLabelSha384: a secret shorter than 48 bytes")
+  }
+  return okm
+}
+
+/**
+ * `hkdfExpandLabelSha256` on a secret held as a `Secret`: the `length` bytes,
+ * held as one. The label is built outside `expose`, since the label and the
+ * context are not secret, and the PRK is read only inside it. Panics as
+ * `hkdfExpandLabelSha256` does.
+ */
+export const hkdfExpandLabelSha256Secret = (
+  prk: Secret<u8[]>,
+  label: string,
+  context: u8[],
+  length: i32
+): Secret<u8[]> => {
+  const okm: Secret<u8[]> | null = hkdfExpandSha256Secret(
+    prk,
+    hkdfLabel("hkdfExpandLabelSha256Secret", label, context, length),
+    length
+  )
+  if (okm === null) {
+    panic("hkdfExpandLabelSha256Secret: a secret shorter than 32 bytes")
+  }
+  return okm
+}
+
+/** `hkdfExpandLabelSha256Secret` with HMAC-SHA-384: panics as `hkdfExpandLabelSha384` does. */
+export const hkdfExpandLabelSha384Secret = (
+  prk: Secret<u8[]>,
+  label: string,
+  context: u8[],
+  length: i32
+): Secret<u8[]> => {
+  const okm: Secret<u8[]> | null = hkdfExpandSha384Secret(
+    prk,
+    hkdfLabel("hkdfExpandLabelSha384Secret", label, context, length),
+    length
+  )
+  if (okm === null) {
+    panic("hkdfExpandLabelSha384Secret: a secret shorter than 48 bytes")
   }
   return okm
 }
