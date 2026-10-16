@@ -9,6 +9,8 @@ with rules the compiler checks, instead of raw threads and shared variables:
 - **`scope()`** — a handful of different tasks at once, joined when a block
   ends.
 - **`Mutex<T>`** — one value that a scope's tasks all update.
+- **`AtomicI32` and `AtomicI64`** — one counter that tasks, or a parallel
+  map's function, update without a lock.
 - **`Channel<T>`** — numbers passed from tasks that produce them to one that
   consumes them.
 
@@ -386,6 +388,87 @@ export const main = (): i32 => {
 };
 ```
 
+## Counting without a lock: `AtomicI32` and `AtomicI64`
+
+When what tasks share is a counter, or one per bin of a histogram, an atomic
+is cheaper than a lock. Each method is one indivisible step, so no update is
+lost when two threads make one at the same moment:
+
+```ts nish:ok
+import { AtomicI32, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32[];
+  constructor(xs: i32[], bins: AtomicI32[]) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    const bin: i32 = x & 3;
+    s.bins[bin].add(1); // one indivisible increment, no lock
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins: AtomicI32[] = [new AtomicI32(0), new AtomicI32(0), new AtomicI32(0), new AtomicI32(0)];
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const big = new AtomicI32(0);
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => big.max(x)); // a parallel function may update an atomic
+  console.log(`${bins[0].load()} ${bins[1].load()} ${big.load()}`); // 2 2 9
+  return 0;
+};
+```
+
+- **The methods**: `load()`, `store(v)`, `add(n)`, `sub(n)`, `min(v)`,
+  `max(v)`, `exchange(v)` and `compareExchange(expected, desired)`. Each
+  update gives back the value the counter held just before it;
+  `compareExchange` stores `desired` only when the counter holds `expected`,
+  and gives back what it found either way.
+- **Only call its methods.** The number inside is not a field you can read or
+  store.
+- **Don't touch it in the scope's block once the first task is spawned.** Read
+  it before the first `spawn` or after the block, when every task has
+  finished.
+- **Make the updates commute.** `add`, `sub`, `min` and `max` give the same
+  total whatever order the threads made them in; a `store`, an `exchange`, or
+  an answer that depends on a value another task is changing does not, and
+  would print differently natively and under Node.
+- **An `AtomicI64` holds an `i64`.** Under Node that is a `bigint`, so pass it
+  `i64` values.
+- **It is cheaper than a lock, not free.** Four tasks incrementing the same
+  few counters still wait on each other's cores; when the work allows it, count
+  into a local tally and add it once at the end.
+
+```ts nish:err NL2512
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const done: i32[] = [0];
+  let seen: i32 = 0;
+  {
+    using s = scope();
+    s.spawn(bump, a, done, 0);
+    seen = a.load(); // the task may not have run yet
+  }
+  return seen;
+};
+```
+
 ## Passing values: `Channel<T>`
 
 A `Channel` carries numbers from the tasks that produce them to one that
@@ -460,5 +543,6 @@ export const main = (): i32 => {
 The full rules, and the code each one is refused with, are in the reference:
 [Data parallelism](../../LANGUAGE.md#data-parallelism-nishthreads),
 [Scoped tasks](../../LANGUAGE.md#scoped-tasks-using-s--scope),
-[`Mutex<T>`](../../LANGUAGE.md#a-lock-that-owns-its-data-mutext) and
+[`Mutex<T>`](../../LANGUAGE.md#a-lock-that-owns-its-data-mutext),
+[Atomics](../../LANGUAGE.md#atomics-atomici32-and-atomici64) and
 [`Channel<T>`](../../LANGUAGE.md#channels-channelt).

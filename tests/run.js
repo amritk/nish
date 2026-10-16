@@ -4787,6 +4787,12 @@ if (!only || "par_alloc".includes(only)) {
 // destination and update a lock's data or send on a channel; and
 // `std_random`, whose generators answer the same bits both ways because
 // `nish:unsafe` names every wrap.
+//
+// And the atomics: `thread_atomic_tasks`, whose named, arrow and void tasks
+// update one `AtomicI32` and one `AtomicI64` with commuting operations and a
+// `compareExchange` loop, and `par_atomic`, whose four data-parallel bodies
+// each make an atomic update their one shared write. Every update commutes,
+// so spawn order, iteration order and the pool's threads print the same.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4828,6 +4834,8 @@ for (const name of [
   "thread_private_prefixed_names",
   "thread_task_arrow",
   "thread_task_void",
+  "thread_atomic_tasks",
+  "par_atomic",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -5014,8 +5022,12 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // and `thread_channel_kinds` the widening and narrowing of each scalar type,
 // which a 32-bit target could get wrong where a 64-bit one does not.
 // `thread_channel_ctor_reads` is the carrier whose constructor reads and
-// updates its own fields (#567).
+// updates its own fields (#567). `thread_atomic_tasks` and `par_atomic` pin that
+// an atomic's seq_cst `atomicrmw`, `cmpxchg`, `load atomic` and `store atomic`
+// lower for wasm32, a module without shared memory, where its tasks run in turn.
 for (const name of [
+  "thread_atomic_tasks",
+  "par_atomic",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
@@ -5049,7 +5061,7 @@ for (const name of [
     )
   } else {
     skip(
-      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the channel is not run`
+      `skipped: link/${name}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the fixture is not run`
     )
   }
 }

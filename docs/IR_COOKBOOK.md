@@ -1904,6 +1904,98 @@ attributes #3 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end thread-mutex -->
 
+### `nish/threads`: an atomic
+
+`AtomicI32` and `AtomicI64` hold one word, `value`, which no program may name
+(docs/LANGUAGE.md, "Atomics"). Each method is an instance in `nish/threads`'s
+own module whose body the emitter writes in place of the source's plain
+operation, which is what Node runs: the address of the word, and one
+sequentially consistent instruction aligned to the width. The caller's module
+sees an ordinary call:
+
+```llvm
+define noundef i32 @nish.AtomicI32.add(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %delta) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = atomicrmw add i32* %0, i32 %delta seq_cst, align 4
+  ret i32 %1
+}
+```
+
+`load` and `store` are `load atomic` and `store atomic ... seq_cst`; `sub`,
+`min`, `max` and `exchange` are `atomicrmw sub`, `min`, `max` and `xchg`, each
+answering the value the word held before; `compareExchange` is
+`cmpxchg ... seq_cst seq_cst`, answering the first field of its pair, the value
+it saw. `AtomicI64`'s are the same over `i64`, `align 8`. Below, the caller;
+every instance, exactly as emitted, is in
+`tests/link/thread_atomic_tasks/threads.ll`.
+
+<!-- cookbook:begin thread-atomic -->
+```ts
+import { AtomicI32, AtomicI64 } from "nish/threads"
+
+export const tally = (hits: AtomicI32, peak: AtomicI64, k: i32, v: i64): i32 => {
+  const before = hits.add(k)
+  peak.max(v)
+  hits.compareExchange(before + k, 0)
+  return hits.load()
+}
+```
+
+```llvm
+%struct.AtomicI32 = type { i32 }
+%struct.AtomicI64 = type { i64 }
+
+declare void @nish.AtomicI32.constructor(%struct.AtomicI32* noundef nonnull noalias align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.AtomicI32.load(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture) #1
+declare void @nish.AtomicI32.store(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.AtomicI32.add(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.AtomicI32.sub(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.AtomicI32.min(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.AtomicI32.max(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.AtomicI32.exchange(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.AtomicI32.compareExchange(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef, i32 noundef) #1
+declare void @nish.AtomicI64.constructor(%struct.AtomicI64* noundef nonnull noalias align 8 dereferenceable(8) nocapture, i64 noundef) #1
+declare noundef i64 @nish.AtomicI64.load(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture) #1
+declare void @nish.AtomicI64.store(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture, i64 noundef) #1
+declare noundef i64 @nish.AtomicI64.add(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture, i64 noundef) #1
+declare noundef i64 @nish.AtomicI64.sub(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture, i64 noundef) #1
+declare noundef i64 @nish.AtomicI64.min(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture, i64 noundef) #1
+declare noundef i64 @nish.AtomicI64.max(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture, i64 noundef) #1
+declare noundef i64 @nish.AtomicI64.exchange(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture, i64 noundef) #1
+declare noundef i64 @nish.AtomicI64.compareExchange(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture, i64 noundef, i64 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+
+define noundef i32 @tally(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %hits, %struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %peak, i32 noundef %k, i64 noundef %v) #0 {
+entry:
+  %before.addr = alloca i32, align 4
+  %0 = call i32 @nish.AtomicI32.add(%struct.AtomicI32* %hits, i32 %k)
+  store i32 %0, i32* %before.addr, align 4
+  %1 = call i64 @nish.AtomicI64.max(%struct.AtomicI64* %peak, i64 %v)
+  %2 = load i32, i32* %before.addr, align 4
+  %3 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %2, i32 %k)
+  %4 = extractvalue { i32, i1 } %3, 0
+  %5 = extractvalue { i32, i1 } %3, 1
+  br i1 %5, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %6 = call i32 @nish.AtomicI32.compareExchange(%struct.AtomicI32* %hits, i32 %4, i32 0)
+  %7 = call i32 @nish.AtomicI32.load(%struct.AtomicI32* %hits)
+  ret i32 %7
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end thread-atomic -->
+
 ### `nish/threads`: a channel of scalars
 
 A `Channel<T>` holds one `i64` word, `state`, that the runtime owns

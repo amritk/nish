@@ -2,7 +2,7 @@
  * `std/threads` — data parallelism, a scope for heterogeneous tasks, and a
  * lock that owns its data (docs/wp29-thread-surface.md §4.1, §4.2 and §4.3).
  *
- *     import { Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope } from "nish/threads";
+ *     import { AtomicI32, Mutex, parallelFrom, parallelMap, parallelMapInto, parallelReduce, scope } from "nish/threads";
  *
  *     parallelMapInto(src, dst, (x) => x * 3);
  *     const ys = parallelMap(src, (x) => x * k + b); // k, b: `const` locals, read by the body
@@ -45,6 +45,8 @@
  * which the checker enforces for an arrow whose body is one operator on its two
  * parameters and cannot see through a named function.
  */
+
+import { wrappingAdd, wrappingSub } from "nish:unsafe"
 
 /**
  * Elements per block of a reduce: 2^20, about a millisecond of simple work
@@ -397,6 +399,172 @@ export class Mutex<T> {
    */
   lock(): MutexGuard<T> {
     return this.guard
+  }
+}
+
+/**
+ * An `i32` that a scope's tasks and a parallel body may update together
+ * (docs/LANGUAGE.md, "Atomics"). Each method is one indivisible operation:
+ * natively the compiler emits each body itself, as a sequentially consistent
+ * `load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on `value`
+ * (docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+ * which is what runs under Node. `add` and `sub` wrap at 32 bits, as the
+ * native instruction does; `add`, `sub`, `min`, `max` and `exchange` answer
+ * the value before the update, and `compareExchange` the value it saw.
+ *
+ * It reaches a task by the routes a `Mutex` does, and a parallel body through
+ * a capture; its value is named only through these methods. Results that do
+ * not depend on the order the updates land in need the updates to commute,
+ * which the checker does not prove.
+ */
+export class AtomicI32 {
+  /** The value; named only by this class's methods, which the compiler emits. */
+  value: i32
+
+  constructor(value: i32) {
+    this.value = value
+  }
+
+  /** The value. */
+  load(): i32 {
+    return this.value
+  }
+
+  /** Sets the value to `value`. */
+  store(value: i32): void {
+    this.value = value
+  }
+
+  /** Adds `delta`, wrapping, and answers the value before. */
+  add(delta: i32): i32 {
+    const old = this.value
+    this.value = wrappingAdd(old, delta)
+    return old
+  }
+
+  /** Subtracts `delta`, wrapping, and answers the value before. */
+  sub(delta: i32): i32 {
+    const old = this.value
+    this.value = wrappingSub(old, delta)
+    return old
+  }
+
+  /** Keeps the smaller of the value and `value`, and answers the value before. */
+  min(value: i32): i32 {
+    const old = this.value
+    if (value < old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Keeps the larger of the value and `value`, and answers the value before. */
+  max(value: i32): i32 {
+    const old = this.value
+    if (value > old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Sets the value to `value` and answers the value before. */
+  exchange(value: i32): i32 {
+    const old = this.value
+    this.value = value
+    return old
+  }
+
+  /** Sets the value to `desired` if it is `expected`, and answers the value it saw. */
+  compareExchange(expected: i32, desired: i32): i32 {
+    const old = this.value
+    if (old === expected) {
+      this.value = desired
+    }
+    return old
+  }
+}
+
+/**
+ * An `i64` that a scope's tasks and a parallel body may update together
+ * (docs/LANGUAGE.md, "Atomics"). Each method is one indivisible operation:
+ * natively the compiler emits each body itself, as a sequentially consistent
+ * `load atomic`, `store atomic`, `atomicrmw` or `cmpxchg` on `value`
+ * (docs/IR_COOKBOOK.md, "Atomics"), and what is written below is the meaning,
+ * which is what runs under Node. Natively `add` and `sub` wrap at 64 bits;
+ * under Node an `i64` is a `number`, so they are `+` and `-`, which agree with
+ * the native program while the value stays within 2^53. `add`, `sub`, `min`,
+ * `max` and `exchange` answer the value before the update, and
+ * `compareExchange` the value it saw.
+ *
+ * It reaches a task by the routes a `Mutex` does, and a parallel body through
+ * a capture; its value is named only through these methods. Results that do
+ * not depend on the order the updates land in need the updates to commute,
+ * which the checker does not prove.
+ */
+export class AtomicI64 {
+  /** The value; named only by this class's methods, which the compiler emits. */
+  value: i64
+
+  constructor(value: i64) {
+    this.value = value
+  }
+
+  /** The value. */
+  load(): i64 {
+    return this.value
+  }
+
+  /** Sets the value to `value`. */
+  store(value: i64): void {
+    this.value = value
+  }
+
+  /** Adds `delta` and answers the value before; natively the sum wraps at 64 bits. */
+  add(delta: i64): i64 {
+    const old = this.value
+    this.value = old + delta
+    return old
+  }
+
+  /** Subtracts `delta` and answers the value before; natively the difference wraps at 64 bits. */
+  sub(delta: i64): i64 {
+    const old = this.value
+    this.value = old - delta
+    return old
+  }
+
+  /** Keeps the smaller of the value and `value`, and answers the value before. */
+  min(value: i64): i64 {
+    const old = this.value
+    if (value < old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Keeps the larger of the value and `value`, and answers the value before. */
+  max(value: i64): i64 {
+    const old = this.value
+    if (value > old) {
+      this.value = value
+    }
+    return old
+  }
+
+  /** Sets the value to `value` and answers the value before. */
+  exchange(value: i64): i64 {
+    const old = this.value
+    this.value = value
+    return old
+  }
+
+  /** Sets the value to `desired` if it is `expected`, and answers the value it saw. */
+  compareExchange(expected: i64, desired: i64): i64 {
+    const old = this.value
+    if (old === expected) {
+      this.value = desired
+    }
+    return old
   }
 }
 

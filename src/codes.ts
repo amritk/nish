@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 638
+export const RULE_COUNT: i32 = 640
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -89,12 +89,16 @@ const diagnosticRules = (): string[] => [
   "NL2444",
   ": a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned",
   "NL2479",
+  "` is not a member a program may name: an atomic is read and updated only by calling its methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race with the update a task makes at the same moment",
+  "NL2513",
   ": a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope",
   "NL2476",
   " is not written as a literal: typed JSON reads a class's options from its text when it writes the class's code, so `json` is an object literal, `rename` an object literal of string literals and `optional` an array literal of string literals",
   "NL2493",
   ": inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held",
   "NL2470",
+  "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join",
+  "NL2512",
   "`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join",
   "NL2472",
   "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",

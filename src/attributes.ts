@@ -125,6 +125,7 @@ import {
 } from "./nodes"
 import { Options } from "./options"
 import {
+  isAtomicMethod,
   isChannelReader,
   isChannelSend,
   isGuardedAccess,
@@ -564,6 +565,12 @@ export class FunctionFacts {
    */
   sharedWrite: boolean
   /**
+   * The function is a method of an `AtomicI32` or an `AtomicI64`, whose body
+   * the emitter writes as one atomic operation. R7 walks the callees for it
+   * (`reachesAtomic` in `src/parallel.ts`), as it walks them for a lock.
+   */
+  atomic: boolean
+  /**
    * `sharedWrite`, less the writes made straight through one of this
    * function's own pointer parameters (`p[i] = v`, `p.f = v`, `p.push(v)`, or
    * a call that writes a parameter handed on as it is), each of which also
@@ -805,6 +812,7 @@ export class FunctionFacts {
     this.hasTrap = false
     this.resizesArray = false
     this.sharedWrite = false
+    this.atomic = false
     this.writesPastParams = false
     this.argEdges = []
     this.wholeReaches = []
@@ -3331,6 +3339,12 @@ const collectFacts = (
     return facts
   }
 
+  // An atomic's method, whose body the emitter writes.
+  if (isAtomicMethod(sig)) {
+    markAtomic(facts)
+    return facts
+  }
+
   // WP27 S1: a `declare function` has no body, and `FunctionFacts` starts from
   // the *pure* defaults because purity here is discovered by walking a body and
   // finding nothing impure in it. An absent body is not an empty one: leaving
@@ -3541,6 +3555,27 @@ const markChannelSend = (facts: FunctionFacts): void => {
   facts.contained = true
   facts.returnsScalar = true
   facts.callees.add("nish_channel_send")
+  if (facts.pointerParams.length > 0) {
+    facts.pointerParams[0].writesThrough = true
+  }
+}
+
+/**
+ * An `AtomicI32` or `AtomicI64` method. The source body is Node's, and the
+ * emitter writes one sequentially consistent instruction on `this`'s `value`
+ * (`src/emit-parallel.ts`). Every one of them, `load` included, writes: a
+ * read-only call could be hoisted out of the loop that spins on it, or merged
+ * with the one before it. It allocates nothing, keeps nothing, answers a
+ * scalar and returns. The write is through `this` and is not a shared one: an
+ * atomic update is what a task and a data-parallel body may make beside the
+ * guarded store and the send.
+ */
+const markAtomic = (facts: FunctionFacts): void => {
+  facts.atomic = true
+  facts.effect = EFFECT_WRITE
+  facts.readsMemory = true
+  facts.contained = true
+  facts.returnsScalar = true
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
   }

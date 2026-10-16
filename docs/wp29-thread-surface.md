@@ -390,6 +390,52 @@ takes values off it as it walks, which C6 makes correct, because every sender
 has already run. A second loop finds it empty, as natively. `select` stays
 declined (§9).
 
+### 4.5 Stage P3 — atomics
+
+```ts
+import { AtomicI32, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32[];
+  constructor(xs: i32[], bins: AtomicI32[]) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  for (const x of s.xs) {
+    const bin: i32 = x & 3;
+    s.bins[bin].add(1);                             // one indivisible increment
+  }
+  return 0;
+};
+```
+
+**Status: built**, as [LANGUAGE.md](LANGUAGE.md#atomics-atomici32-and-atomici64)
+states it. §9 declined `Atomic<T>` as the *first* escape hatch, to be designed
+after the lock had met real programs; it has, and an atomic is what a
+histogram of counters wanted that a lock per value made 7.9× slower
+(`examples/histogram-atomic.ts`). It is two classes, not a generic, because
+the instruction is chosen by the width and a generic `T` would admit a word
+`atomicrmw` cannot hold.
+
+| | Rule | Why |
+| --- | --- | --- |
+| A1 | `AtomicI32` and `AtomicI64` have `load`, `store`, `add`, `sub`, `min`, `max`, `exchange` and `compareExchange`. Every update answers the value the word held before it; `compareExchange` answers the value it saw. Each is one `seq_cst` instruction aligned to the width; under Node, the plain operation. | Answering the previous value is what `atomicrmw` and `cmpxchg` give for free, and what a loop over `compareExchange` needs to build any other update. Sequential consistency is the one ordering a program cannot misuse; a weaker one is a knob before a measurement. Node runs one task at a time, so the plain operation is exact there. |
+| R1 | The word is reached only by calling a method (NL2513). | A plain read or store of it would race with a task's update. An atomic is made from a number, so it is fresh when it is made, as R1 asks of a `Mutex`. |
+| R7 | From the statement that holds a scope's first `spawn` to the end of its block, the parent does not touch an atomic of a type a task's argument or capture reaches, directly, through any call, `new` included, or through a parallel call (NL2512). | `Mutex`'s R7: natively the tasks run at the join and under Node at each `spawn`, so a `load()` there would print differently. Asked by type, so an alias through `?:` or a function's answer is caught, at the cost of refusing an atomic of that type the tasks cannot in fact reach. |
+| R8 | An atomic reaches a task at any depth: its argument, a field, an element, a capture. | A `Mutex` stops one field down because R5 needs the exact set of locks a task can take. An atomic holds no data a task could keep, and R7 is asked by type, so no exact sharing set is needed. |
+| P1 | An atomic method is the one shared write a data-parallel body may make. A body answers a number, never an atomic. | It is the write the body rule exists to refuse made indivisible. |
+
+**What an atomic program means.** Updates land in the scheduler's order
+natively and in spawn and element order under Node. A program prints the same
+both ways when its updates commute exactly and no answer depends on a value
+read from a word another task updates; a `parallelReduce` body sees partial
+results whose split depends on the thread count. That is the author's
+obligation, as it is for the lock's critical sections.
+
 ---
 
 ## 5. The legality report, tested
@@ -591,8 +637,10 @@ shape, or with a second kind of lock a program chooses.
   without it, and `select` waits for a program that needs it.
 - **A configurable thread pool, or `scope(n)`.** That would be a knob before a
   measurement. The partitioner uses `nish_cpu_count()` and caps at 64 chunks.
-- **`Atomic<T>` as the first escape hatch.** An escape hatch should be
-  designed after the rule it escapes has met real programs (wp20 §6).
+- ~~**`Atomic<T>` as the first escape hatch.**~~ An escape hatch should be
+  designed after the rule it escapes has met real programs (wp20 §6). The lock
+  met them first; `AtomicI32` and `AtomicI64` are now built (§4.5), as two
+  classes rather than a generic.
 - **Decorators (`@parallel`).** Phase 0 forbids them, and they mark
   declarations, not regions.
 - **A task handle stored in a field, an array or a variable.** A scope is only
@@ -629,7 +677,7 @@ export declare class Channel<T> {
   [Symbol.iterator](): Iterator<T>;
 }
 
-/** Spellable, and not proposed (§9). */
+/** Spellable, and not proposed (§9); since built, with more methods (§4.5). */
 export declare class AtomicI32 {
   constructor(value: number);
   add(delta: number): number;
