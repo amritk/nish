@@ -4963,7 +4963,11 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
  */
 export const p256PublicKey = (priv: Secret<u8[]>): u8[] | null => expose(priv, p256PublicKeyExposed)
 
-/** `p256PublicKey` on the plain key, for `expose` to run: the scratch the key's digits steered is wiped. */
+/**
+ * `p256PublicKey` on the plain key, for `expose` to run: the scratch the key's
+ * digits steered is wiped, and so is the projective point, whose Z they steered
+ * too; only its affine encoding, the public key, is kept.
+ */
 const p256PublicKeyExposed = (priv: u8[]): u8[] | null => {
   if (!p256ScalarInRange(priv)) {
     return null
@@ -4972,7 +4976,9 @@ const p256PublicKeyExposed = (priv: u8[]): u8[] | null => {
   const scratch = new P256PointScratch()
   p256BaseMult(point, priv, scratch)
   p256WipeScratch(scratch)
-  return p256EncodePoint(point)
+  const encoded: u8[] = p256EncodePoint(point)
+  p256WipePoint(point)
+  return encoded
 }
 
 /**

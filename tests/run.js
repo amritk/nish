@@ -6461,7 +6461,7 @@ if (!only || "p256 wipe survives -O2 p256BaseMult".includes(only)) {
     }
     const roots = [
       ["nish.p256BaseMultWith", 3],
-      ["nish.p256PublicKeyExposed", 15],
+      ["nish.p256PublicKeyExposed", 18],
       ["nish.p256SignExposed", 93],
       ["nish.p256SignSha256Into", 56],
     ]
