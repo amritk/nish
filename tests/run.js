@@ -6936,6 +6936,7 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
     ["arr_bounds_offset", "tail", 0],
     ["arr_bounds_offset", "passed", 1],
     ["arr_bounds_offset_reach", "tooFar", 1],
+    ["arr_bounds_offset_other", "mixed", 1],
     ["arr_bounds_offset_floor", "pick", 1],
     ["arr_bounds_offset_wrap", "pick", 1],
   ]) {
@@ -6953,6 +6954,7 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
   if (has("clang")) {
     for (const [name, rule, stdout, message] of [
       ["arr_bounds_offset_reach", "a guard that reaches one short", "", "3 >= 3"],
+      ["arr_bounds_offset_other", "a guard on another array's length", "", "2 >= 2"],
       ["arr_bounds_offset_floor", "a sum with no floor under its local", "2", "18446744073709551612 >= 3"],
       ["arr_bounds_offset_wrap", "a sum that wraps under `--wrapping`", "3", "18446744071562067968 >= 3"],
     ]) {
