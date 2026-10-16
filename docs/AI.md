@@ -1517,7 +1517,7 @@ and returns no `Secret` — that return is what leaves. A `Secret` your function
 makes must be `wipe`d or returned **on every path** (each `return`, `break`,
 `orReturn()`), is moved by `const j = k`, and is never read after `wipe`;
 `secret(local)` moves the local too. `secret(v)` takes only a value nothing
-else holds (NL2506): a literal, a `new`, a call that makes one, or a local that
+else holds (NL2512): a literal, a `new`, a call that makes one, or a local that
 is the only name for its value. A second name made before the move — `const
 alias = raw`, a field or element store, `push`, `Ok(raw)`, a ternary arm, a
 function that keeps its parameter, a data-parallel arrow that captures it — is
@@ -1552,13 +1552,13 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2506
+```ts nish:err NL2512
 import { Secret, secret, wipe } from "nish:secret";
 
 export const main = (): i32 => {
   const raw: u8[] = [7, 1, 9];
   const alias = raw; // a second name for the bytes
-  const k: Secret<u8[]> = secret(raw); // NL2506: `raw` has a second reference
+  const k: Secret<u8[]> = secret(raw); // NL2512: `raw` has a second reference
   wipe(k);
   return toI32(alias[0]);
 };

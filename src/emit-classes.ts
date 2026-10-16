@@ -287,6 +287,10 @@ const emitCall = (
     operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${value}`)
     i = i + 1
   }
+  // WP29: an arrow task's captures, after everything written (`capturesOf`).
+  for (const operand of emitter.captureOperands(callee, calleePrivate)) {
+    operands.push(operand)
+  }
   // WP9: after the receiver and the arguments, so the bracket holds only what
   // the method itself allocates (`Emitter.beginReclaim`).
   const mark = emitter.beginReclaim(callee)

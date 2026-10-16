@@ -1,0 +1,1 @@
+The task's arrow reads `o`, which is `Outer` and reaches a `Mutex` through `o.inner.m`

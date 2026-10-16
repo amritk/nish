@@ -4780,6 +4780,13 @@ if (!only || "par_alloc".includes(only)) {
 // spawns under `--no-strict-exports`: hidden, so `@read$`, and accepted.
 // `thread_private_prefixed_names` holds private `_` and `napi_` names, spelled
 // apart and accepted, whose tasks store only their own answers.
+//
+// And the task forms: `thread_task_arrow`, whose arrow tasks read their
+// function's `const` locals, which Node's arrows close over and natively each
+// travel in the task's payload; `thread_task_void`, whose tasks have no
+// destination and update a lock's data or send on a channel; and
+// `std_random`, whose generators answer the same bits both ways because
+// `nish:unsafe` names every wrap.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4819,6 +4826,9 @@ for (const name of [
   "thread_scope_libc_named_tasks",
   "thread_no_strict_hidden_task",
   "thread_private_prefixed_names",
+  "thread_task_arrow",
+  "thread_task_void",
+  "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue

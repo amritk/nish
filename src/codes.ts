@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 633
+export const RULE_COUNT: i32 = 639
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -77,10 +77,14 @@ const diagnosticRules = (): string[] => [
   "NL2477",
   ": a channel has one receiver, either one task spawned outside any loop or the parent in a later statement of the block that has the scope's block as one of its statements, and inside a scope's block the parent receives nothing, so the parent's one wait is the join",
   "NL2480",
+  "`, a `let` of the function it is written in: a task's arrow may read only a `const` or a parameter of that function, which is handed to the task when it is spawned as its argument is and cannot change before it runs; bind the value to a `const` before the `spawn`",
+  "NL2506",
   "The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
   "NL2502",
   "` cannot declare `[Symbol.dispose]`: in this version `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, so a disposal method of any other class would never be called",
   "NL2393",
+  "The arrow reads `this`: a task's arrow may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the task needs of it, to a `const` before the `spawn` (`const self = this`, `const k = this.k`)",
+  "NL2507",
   "` is a `Secret`, and a `Secret` is not copied: two names for one key would leave one of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function made into another (`const j = k`), after which `k` is not read",
   "NL2444",
   ": a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned",
@@ -95,6 +99,8 @@ const diagnosticRules = (): string[] => [
   "NL2472",
   "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",
   "NL3031",
+  "`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination",
+  "NL2511",
   "`arena()` must be the initialiser of a `using` declaration, `using a = arena()`: the arena releases what was allocated after it when the block that declares it ends, and an `arena()` written anywhere else has no block to end",
   "NL2416",
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
@@ -109,6 +115,8 @@ const diagnosticRules = (): string[] => [
   "NL2353",
   "` is not supported: a constraint cannot mention a type parameter, because it is resolved once for the template rather than once per instantiation; name a class or interface, with any type arguments written out",
   "NL2326",
+  "`: a captured value is the task's argument, and a `Mutex` reaches a task as an argument or as a field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer",
+  "NL2510",
   ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
   "NL2323",
   "` cannot hold a `Secret`: an element, a `Result` payload or a type argument outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter",
@@ -153,6 +161,8 @@ const diagnosticRules = (): string[] => [
   "NL2368",
   "` cannot be a `Secret`: a field of a class or interface outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter",
   "NL2430",
+  "`, which belongs to the function it is written in: a task reads a captured value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument",
+  "NL2508",
   " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it",
   "NL2364",
   ": a field read or written as JSON is an `i32`, `u32`, `i64`, `f64`, `boolean`, `string` or a declared class, an array of one of those, or a `string`, a class or an array with `| null`",
@@ -176,7 +186,7 @@ const diagnosticRules = (): string[] => [
   ", outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope",
   "NL2458",
   ". That reference would read the key outside the `Secret`, and zeros once it is wiped, so pass a fresh value (`secret([1, 2, 3])`, a `new`, or a call that makes one) or a copy: ",
-  "NL2506",
+  "NL2512",
   "` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock",
   "NL2464",
   "`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)",
@@ -951,6 +961,8 @@ const diagnosticRules = (): string[] => [
   "NL2045",
   "` requires boolean operands, got ",
   "NL2099",
+  "`, and a task cannot capture it: ",
+  "NL2509",
   "`declare global` is forbidden in ",
   "NL1019",
   "`Math.abs` expects a number, got ",
