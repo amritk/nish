@@ -601,7 +601,7 @@ const emitUnwrapOr = (emitter: Emitter, expr: Node, receiver: i32): string => {
 
 /**
  * `r.expect(message)`: the message on stderr and exit 1, the same ending
- * `panic(message)` and an out-of-range index have. `nish_exit` is `noreturn`,
+ * `panic(message)` and an out-of-range index have. `nish_panic` is `noreturn`,
  * which is what makes the `unreachable` legal.
  */
 const emitExpect = (emitter: Emitter, expr: Node, receiver: i32): string => {

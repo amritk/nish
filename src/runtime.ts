@@ -771,6 +771,17 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `panic(message)`, `r.expect(message)` and a failed range entry: the
+    // message and a newline on stderr, then `_exit(1)`. Like every panic it
+    // claims the process first, so only the first panicking thread prints.
+    const panic = new RuntimeFunction(
+      "nish_panic",
+      `declare void @nish_panic(${STR_NOCAP})`,
+      attrs3("nounwind", "noreturn", "cold"),
+      EFFECT_WRITE
+    )
+    panic.noreturn = true
+    this.addWrites(WRITES_PANIC, panic)
     // Bounds-check failure: prints "index out of range: <idx> >= <len>" and exits 1.
     const panicIndex = new RuntimeFunction(
       "nish_panic_index",

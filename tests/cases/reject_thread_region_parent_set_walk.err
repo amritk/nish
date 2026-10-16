@@ -1,0 +1,2 @@
+reject_thread_region_parent_set_walk.ts:27:5
+`Set<i32>.walkOpen` writes memory a task of `s` may read, before the scope joins

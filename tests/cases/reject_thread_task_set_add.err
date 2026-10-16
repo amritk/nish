@@ -1,0 +1,2 @@
+reject_thread_task_set_add.ts:36:5
+`touch` writes memory its caller can see through `Set<i32>.add`, and `spawn` runs it
