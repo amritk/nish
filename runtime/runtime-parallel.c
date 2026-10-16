@@ -324,7 +324,7 @@ static int nish_pool_ready(void) {
     /* glibc otherwise trims the heap top, or unmaps, every chunk of 128 KB or
      * more an arena release frees, and a task or element that builds a 1 MB
      * temporary then pays a page fault per 4 KB of it on every call: 200 such
-     * tasks took 312 ms at one thread, 47 ms with these. Fixed rather than
+     * tasks took 314 ms at one thread, 48 ms with these. Fixed rather than
      * glibc's sliding threshold, which moves on frees from the main thread
      * only. Set here, once a program first runs work on other threads; a
      * region below its grain, or at one thread, runs as the loop it would have

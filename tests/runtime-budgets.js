@@ -189,16 +189,25 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * threads-complete's copy-at-join measured **2,665 bytes** on 2026-10-16 with clang
  * 18.1.3 on linux-x64, 5 more, inside the same ceiling: the copies themselves are
  * `runtime-cross.c`'s, below.
+ *
+ * threads-complete's adoption measured **2,695 bytes** on 2026-10-16 with clang 18.1.3
+ * on linux-x64, 30 more, inside the same ceiling: the two `mallopt` calls with which
+ * the pool's first start fixes glibc's trim and mmap thresholds, so that an arena's
+ * release no longer hands a task's 1 MB temporary back to the kernel and faults it in
+ * again on the next call (200 such tasks: 314 ms at one thread before, 48 ms after).
+ * Only under glibc: WASI and darwin compile none of it.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
  * `nish_cross_in`, which copy a task's or a chunk's `string` or scalar array out of the
- * arena it was made in and into the one that takes it, their `_range` forms over a map's
- * slots, `nish_cross_send`, which copies every string a `Channel<string>` sends,
- * `nish_cross_keep`, which keeps a map's element as its chunk loop rewinds the arena, and
- * `nish_guard_keep` with the set of the copies a `Mutex` owns.
+ * arena it was made in and into the one that takes it, `nish_cross_send`, which copies
+ * every string a `Channel<string>` sends, `nish_cross_keep`, which moves a map's element
+ * into its chunk's transfer block as the chunk loop rewinds the arena,
+ * `nish_cross_begin`, `_end` and `_adopt`, which open a chunk's transfer list and link
+ * its blocks into the caller's arena, and `nish_guard_keep` with the set of the copies a
+ * `Mutex` owns.
  *
  * Measured **1,170 bytes** on 2026-10-16 with clang 18.1.3 on linux-x64. A copy-out first
  * collects the arena's spans since the mark and sorts them, so that a map's million
@@ -210,6 +219,14 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
  * measured ceiling, never a raised one. A program that sends, answers or guards no
  * string pays none of it. The budget is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
+ *
+ * threads-complete's adoption measured **1,196 bytes** on 2026-10-16 with clang 18.1.3
+ * on linux-x64, 26 more, inside the same ceiling. A map's answers are no longer copied
+ * out of the worker's arena range by range and copied in again at the caller: each
+ * element is moved once, into a transfer block, and the caller links the blocks into its
+ * own chunk list (`nish_cross_adopt`), as `nish_cross_in` now links a task's answer of
+ * 64 KB or more. That retired the `_range` pair and the sorted span table, and paid for
+ * the transfer list and the adoption.
  */
 const RUNTIME_CROSS_TEXT_BUDGET = 1280
 /**
@@ -217,6 +234,11 @@ const RUNTIME_CROSS_TEXT_BUDGET = 1280
  * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
  * `nish_guard_keep` takes over the set of a `Mutex`'s copies, which another thread's
  * guard may be changing.
+ *
+ * threads-complete's adoption measured **1,277 bytes** on 2026-10-16 with clang 18.1.3
+ * on linux-x64, 42 more, inside the same ceiling: the row above's change, with the
+ * chunk's transfer state thread-local here, which takes 16 bytes more to reach than
+ * the row above's plain static.
  */
 const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1280
 /**

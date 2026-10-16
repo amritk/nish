@@ -297,8 +297,22 @@ that let a `string` or a scalar array cross from one arena to another: out of a
 task's arena when it returns, or a parallel chunk's when it finishes, and into
 the arena of the thread that takes the answer; every string a
 `Channel<string>` sends; and the copies a `Mutex` owns of the strings stored
-through its guards. A copy-out collects the spans of the arena since the mark
-and sorts them once, so that a map's million slots each take a binary search.
+through its guards. A map's chunk packs each element it answers into a 64 KB
+transfer block of its own (`nish_cross_keep`) and rewinds its arena to the
+element's mark, and the caller links the blocks into its arena as chunks after
+the join (`nish_cross_adopt`): copying a region's answers in costs one link per
+block, and a single answer of 64 KB or more is linked rather than copied by
+`nish_cross_in`. An adopted block is freed by the release that would have freed
+the copy. Adoption measured 1,196 bytes of `.text` (1,277 in the threads build,
+where the transfer state is thread-local), and retired the sorted span table
+and the `_range` pair a copy-out per slot needed.
+
+Under glibc, `nish_pool_ready` raises `M_MMAP_THRESHOLD` to 32 MB and
+`M_TRIM_THRESHOLD` to 64 MB, so a 1 MB temporary a task or an element builds,
+freed at its release, is not returned to the kernel and faulted back in by the
+next one: 200 such tasks took 314 ms at one thread and take 48 ms. A region
+below its grain runs as the loop it would have been, and keeps that loop's
+cost. It costs 30 bytes of the threads build's `runtime-parallel.c`.
 
 It is an eighth unit rather than more of `runtime-parallel.c`: folded in, the
 copies took that file from 610 bytes to 1,786 against its ceiling of 768, and

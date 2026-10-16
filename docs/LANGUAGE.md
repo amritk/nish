@@ -2741,7 +2741,15 @@ from the whole-program facts, and each rule is reported there:
   after every element: the function gets an arena scope of its own, so each
   call marks the arena of the thread it runs on and releases it before it
   returns, and a map over a million elements holds one element's temporaries
-  at a time (`tests/link/par_alloc`). It compiles with a performance warning,
+  at a time (`tests/link/par_alloc`). Under glibc, a program that has divided
+  a region or joined a scope on other threads keeps the memory a release
+  gives back rather than returning it to the kernel, so an element or a task
+  that builds a 1 MB temporary does not fault it in again on every call: 200
+  tasks that each build one took 48 ms on 1 thread, against 314 ms when every
+  release trimmed the heap. A region below its grain runs as the loop it would
+  have been, on the calling thread, and keeps that loop's costs: 200 elements
+  that each build a 1 MB temporary take some 320 ms, as the loop does. It
+  compiles with a performance warning,
   NL9012, because every element pays for the allocation and the release:
   `` the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both ``.
   Two things make that release unsound, and each is refused. An allocation
@@ -2754,12 +2762,17 @@ from the whole-program facts, and each rule is reported there:
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
   released before the next element runs and a worker's arena is freed when
-  its thread exits. A string or a scalar array crosses by copy-at-join: each
-  chunk copies what it wrote out of its arena into a `malloc`'d transfer block
-  before the arena is reused (`nish_cross_out_range`), and once every chunk has
-  finished the caller copies each block into its own arena and frees it
-  (`nish_cross_in_range`); a result the body did not allocate — a literal, a
-  string it was handed — is not copied at all
+  its thread exits. A string or a scalar array crosses by copy-at-join, and
+  the caller then adopts it: as the chunk loop rewinds its arena after each
+  element, it moves the answer to the end of the chunk's transfer block, a
+  `malloc`'d block of 64 KB or more (`nish_cross_keep`), and once every chunk
+  has finished the caller links the blocks into its own arena's chunk list
+  (`nish_cross_adopt`), so the answers stay where they are and the join costs
+  one link per block rather than a copy per element. The blocks are then the
+  caller's arena memory like any other, given back when the caller's scope
+  releases what the result was made in, exactly when a copied value would
+  have been (`tests/link/thread_adopt_lifetime`); a result the body did not
+  allocate — a literal, a string it was handed — is not moved at all
   (`tests/link/par_map_string`: `parallelMap`, `parallelFrom` and
   `parallelMapInto` into a `string[]`, under `churn()`). Anything else — an
   array of strings, of arrays or of objects, a `Map`, a `Set`, a class — is
@@ -2769,23 +2782,24 @@ from the whole-program facts, and each rule is reported there:
   `parallelMap` and `parallelFrom` allocate their result before the region, so
   theirs is refused there, before `std/threads.ts` is instantiated
   (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
-  The copy back is serial: the caller copies every string or array into its
-  own arena after the join, one at a time. When each element's work is cheap,
-  a map that answers strings is therefore slower than the sequential loop
-  today. Five maps of 1M `` `n${x % 1000}` `` strings each took a median of
-  270 ms on 4 threads, against 200 ms for the same loop written sequentially;
-  two byte-identical copies of the threaded binary differed by 11 ms in the
-  same 25 interleaved rounds, and single runs ranged from 249 to 356 ms. A map
-  whose per-element work outweighs the copy does gain from the threads. What
+  A map of 1M short strings, `` `s${x % 100000}` ``, took a median of 23 ms
+  on 4 threads and 24 ms on 8, against 38 ms for the same loop written
+  sequentially, and peaked at 32 MB against the loop's 55 MB; on 1 thread it
+  took 54 ms, the cost of keeping each answer. Before adoption, when the
+  caller copied every string into its arena one at a time, the map took
+  56 ms on 4 threads and peaked at 67 MB; two byte-identical copies of that
+  binary differed by 5 ms in the same 7 interleaved rounds. What
   the body allocates for an element is released with that element, also when
   the body stores what it builds into an array literal on the way, which the
   arena scope above does not cover: the chunk loop marks the arena before each
   call and keeps only the answer
-  (`nish_cross_keep` copies it out, rewinds to the mark and copies it back).
+  (`nish_cross_keep` moves it to the transfer block and rewinds to the mark;
+  on the sequential path, below a map's grain, it copies it out and back).
   A body that builds a 2 KB string, stores it in an array literal and answers
-  a 4-byte slice of it, over 1M elements, peaks at 64 MB on 1 thread and
-  68 MB on 8, where it used to hold every element's temporaries until its
-  chunk ended and peaked at 2.1 GB (`tests/link/par_map_release`).
+  a 4-byte slice of it, over 1M elements, peaks at 32 MB on 1 thread and on
+  8 (63 and 67 MB before adoption), where it used to hold every element's
+  temporaries until its chunk ended and peaked at 2.1 GB
+  (`tests/link/par_map_release`).
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
