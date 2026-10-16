@@ -575,18 +575,48 @@ row stayed inside the noise band. A profile-guided build
 scenarios) cut user time per request by 10 to 24% in every row, but user time
 is a fifth of the whole: +4% on keep-alive, inside the band.
 
-**Memory is what sets the connection count**, not the CPU. Each slot
-allocates its `outputSize` at start-up, 64 KiB by default, so a pool's
-resident size is about 72 KiB a slot:
+**Memory is what sets the connection count**, not the CPU. Until the output
+pool, each slot allocated its `outputSize` at start-up, 64 KiB by default, so
+a pool's resident size was about 72 KiB a slot. The servers measured beside
+it hold no fixed output buffer per connection: Go's `net/http` borrows a
+4 KiB reader and a 4 KiB writer per connection from `sync.Pool`s
+(`net/http/server.go`), hyper starts an 8 KiB read buffer and queues the
+response's own bytes, uWebSockets (under Bun) shares one 16 KiB output buffer
+per event loop and gives a socket its own only under back-pressure, and
+nginx starts with a 1 KiB header buffer. Now a pool's slots borrow their
+output from one `Http1OutputPool` while they write and give it back once the
+socket has taken everything, so the output memory follows the connections
+the socket is holding back. Resident size after start-up, default
+`Http1Config`:
 
-| slots | `outputSize` 65,536 (default) | `outputSize` 4,096 |
+| slots | each slot's own output | borrowed from the pool |
 | ---: | ---: | ---: |
-| 1,024 | 75 MB | 10 MB |
-| 16,384 | 1,178 MB | 133 MB |
-| 65,536 | 4,708 MB | 529 MB |
+| 1,024 | 75 MB | 5.5 MB |
+| 16,384 | 1,178 MB | 64 MB |
+| 65,536 | 4,708 MB | 251 MB |
 
-A response larger than the output still goes out, a buffer at a time as the
-socket drains, so a server of small responses can take the smaller buffer.
+Under load, with 9,000 slots, peak RSS went from 633 MB to 35 MB in every
+scenario. Throughput is unchanged at 256 connections (−0.5% and +1.8% over
+seven rounds, against +2.2% and −3.7% for a byte-identical copy) and up
+12.7% at 4,096 (copy +2.6%), where the slots no longer touch 4,096 cold
+buffers. `net_http1_server` runs its whole plain section on one buffer.
+
+The same scenarios against other servers, each pinned to the one core the
+same way (three rounds; hyper 1.12 on a current-thread tokio runtime, nginx
+1.24 in one process with `return`, Bun 1.4 `Bun.serve`, Go 1.24 `net/http`
+with `GOMAXPROCS=1`, Node 22 `node:http`), in req/s and peak RSS. The other
+servers also send a `Date` field, which this one does not yet:
+
+| scenario | nish | hyper | nginx | Bun | Go | Node |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| keep-alive, c=256, `/plaintext` | 150,629 | 114,240 | 99,149 | 88,242 | 38,289 | 31,590 |
+| keep-alive, c=4096 | 88,883 | 70,626 | 83,166 | 70,052 | 30,214 | 26,267 |
+| close, c=64 | 63,664 | 45,933 | 54,892 | 41,924 | 27,187 | 16,008 |
+| peak RSS, 8,000 idle connections | 35 MB | 76 MB | 19 MB | 48 MB | 180 MB | 128 MB |
+
+Go and Node are from an earlier run of the same scenarios (the Nish build
+there was this one's base, at 141,782, 85,096 and 59,784). Bun's `close`
+rows carry about 200,000 wrk read errors a run.
 
 ## Other files
 

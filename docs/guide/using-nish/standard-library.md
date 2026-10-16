@@ -758,7 +758,9 @@ that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 `nish/net/http3-server`; like `nish:net` itself, they are native only. Your
 loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
 its interest changed, so a keep-alive request costs one `recv` and one `send`
-and no `pollModify`; `bench/http.mjs` load-tests that loop on one core. The
+and no `pollModify`. A slot borrows its output buffer only while it writes, so
+an idle connection costs a few KiB, not `outputSize`; `bench/http.mjs`
+load-tests that loop on one core. The
 HTTP/1.1 and WebSocket modules were written with a security record of their
 own ([docs/security/http1.md](../../security/http1.md)) rather than audited
 after the fact.

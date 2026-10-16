@@ -87,6 +87,13 @@
  * after request with `Arena.used()` flat. Accepting a WebSocket allocates
  * (the accept key), once a connection.
  *
+ * **Output is borrowed.** The pools' slots share an `Http1OutputPool`: a
+ * connection takes an `outputSize` buffer when it first needs room to write
+ * and gives it back once its carrier has sent everything, so the output
+ * memory a pool holds follows the connections the socket is holding back,
+ * not its size. A pool that ever had `n` connections writing at once keeps
+ * `n` buffers and allocates no more.
+ *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  *
@@ -312,6 +319,44 @@ const http1ServerReserved = (name: u8[]): boolean =>
   http1BytesAre(name, "content-length")
 
 /**
+ * Output buffers shared by the connections of one pool, each `size` bytes. A
+ * connection borrows one when it has something to write and gives it back
+ * once its carrier has sent everything, so a pool's output memory follows the
+ * connections the socket is holding back, not the slots: Go's `net/http`
+ * pools its writers the same way, and uWebSockets shares one per loop. A
+ * buffer is made only when none is free, so the pool grows to the most
+ * connections ever writing at once and then allocates nothing.
+ */
+export class Http1OutputPool {
+  // Widest first, so the layout packs without padding.
+  free: u8[][]
+  size: i32 = 0
+  /** How many buffers the pool has made. */
+  made: i32 = 0
+
+  constructor(size: i32) {
+    this.size = size
+    this.free = []
+  }
+
+  /** A buffer of `size` bytes: the one given back last, or a new one. */
+  take(): u8[] {
+    if (this.free.length > 0) {
+      const buf: u8[] = this.free[this.free.length - 1]
+      this.free.pop()
+      return buf
+    }
+    this.made = this.made + 1
+    return new Array<u8>(this.size)
+  }
+
+  /** Takes back a buffer `take` gave. */
+  give(buf: u8[]): void {
+    this.free.push(buf)
+  }
+}
+
+/**
  * One connection's HTTP/1.1 server, sans-IO: bytes in through `feed`, events
  * out of `next`, and the response the program writes in
  * `output[outputStart .. outputEnd)` for its carrier to send.
@@ -324,8 +369,16 @@ export class Http1Connection {
   parser: Http1Parser
   /** The frame decoder, once the slot has switched to WebSocket. */
   ws: WsDecoder
-  /** Bytes to send are `output[outputStart .. outputEnd)`. */
+  /**
+   * Bytes to send are `output[outputStart .. outputEnd)`. Empty until the
+   * connection first needs room to write: then its own buffer, made once, or
+   * one borrowed from `pool` and given back by `release` once sent.
+   */
   output: u8[]
+  /** The empty array `output` is while the connection holds no buffer. */
+  noOutput: u8[]
+  /** Where `output` is borrowed from, for a connection of a pool; null for one that keeps its own. */
+  pool: Http1OutputPool | null
   /** `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. */
   data: u8[]
   /** A ping's payload, kept until its pong fits. */
@@ -400,8 +453,10 @@ export class Http1Connection {
     this.parser.keepText = false
     this.parser.maxChunk = config.chunkSize
     this.ws = new WsDecoder(true, config.maxMessage)
-    this.output = new Array<u8>(config.outputSize)
-    this.data = this.output
+    this.noOutput = []
+    this.output = this.noOutput
+    this.pool = null
+    this.data = this.noOutput
     this.pong = new Array<u8>(WS_MAX_CONTROL)
     this.noFields = []
     // A line must fit whole before the parser can read it, so the buffer
@@ -423,7 +478,7 @@ export class Http1Connection {
     this.ws.reset()
     this.outputStart = 0
     this.outputEnd = 0
-    this.data = this.output
+    this.data = this.noOutput
     this.dataStart = 0
     this.dataLength = 0
     this.opcode = 0
@@ -441,6 +496,7 @@ export class Http1Connection {
     this.writeHeld = false
     this.pongPending = false
     this.inputEnded = false
+    this.release()
   }
 
   // ---- Bytes in and out ---------------------------------------------------------
@@ -492,6 +548,44 @@ export class Http1Connection {
     this.outputEnd = 0
     this.pongPending = false
     this.writeHeld = false
+    this.release()
+  }
+
+  /**
+   * Borrows `output` from the pool between connections of one, for a
+   * connection that keeps its own makes it the first time: before anything
+   * is written into it, which is why `room` calls it. It allocates only when
+   * the pool has no free buffer, or for a connection's own, once.
+   */
+  acquire(): void {
+    if (toI32(this.output.length) > 0) {
+      return
+    }
+    const pool: Http1OutputPool | null = this.pool
+    this.output = pool !== null ? pool.take() : new Array<u8>(this.config.outputSize)
+    this.outputStart = 0
+    this.outputEnd = 0
+  }
+
+  /**
+   * Gives `output` back to the pool once nothing in it is waiting: no bytes
+   * to send, no write held back for room. The carrier calls it after each
+   * send; a connection that keeps its own buffer keeps it.
+   */
+  release(): void {
+    const pool: Http1OutputPool | null = this.pool
+    if (
+      pool === null ||
+      toI32(this.output.length) === 0 ||
+      this.outputEnd > this.outputStart ||
+      this.writeHeld
+    ) {
+      return
+    }
+    pool.give(this.output)
+    this.output = this.noOutput
+    this.outputStart = 0
+    this.outputEnd = 0
   }
 
   /** Marks the first `n` bytes of the output sent. */
@@ -518,6 +612,7 @@ export class Http1Connection {
 
   /** The room at the end of the output, once what was sent is moved out of the way. */
   room(): i32 {
+    this.acquire()
     const output: u8[] = this.output
     const live: i32 = this.outputEnd - this.outputStart
     if (this.outputStart > 0) {
@@ -550,7 +645,7 @@ export class Http1Connection {
     if (this.writeHeld) {
       // Half the output free before the program is asked to write again, so
       // that a slow reader is not answered one small write at a time.
-      if (this.bodyRoom() * 2 < toI32(this.output.length) - H1_CONTROL_RESERVE) {
+      if (this.bodyRoom() * 2 < this.config.outputSize - H1_CONTROL_RESERVE) {
         return H1_NEED_MORE
       }
       this.writeHeld = false
@@ -801,7 +896,7 @@ export class Http1Connection {
     }
     if (end < 0 || end - this.outputEnd > room) {
       // The head was not written, or ate into the reserve: take it back.
-      if (end - this.outputEnd > toI32(this.output.length) - H1_CONTROL_RESERVE) {
+      if (end - this.outputEnd > this.config.outputSize - H1_CONTROL_RESERVE) {
         return H1_INVALID
       }
       if (this.outputEnd === 0) {
@@ -950,7 +1045,7 @@ export class Http1Connection {
     if (this.state !== H1_S_WEBSOCKET) {
       return H1_CLOSED
     }
-    if (opcode === WS_OP_CLOSE || len > toI32(this.output.length) - H1_CONTROL_RESERVE - 14) {
+    if (opcode === WS_OP_CLOSE || len > this.config.outputSize - H1_CONTROL_RESERVE - 14) {
       return H1_INVALID
     }
     if (websocketFrameSize(len, false) > this.bodyRoom()) {
@@ -1008,6 +1103,8 @@ export class Http1Server {
   fds: i32[]
   /** Each slot's interest as the loop last armed it, for `rearm`. */
   armed: i32[]
+  /** The output buffers the slots borrow while they write. */
+  outputs: Http1OutputPool
   /**
    * The free slots, a stack whose top `accept` takes: finding one costs the
    * same with every slot free as with all but one busy, where a scan of
@@ -1021,7 +1118,11 @@ export class Http1Server {
   /** The listening socket, which the program made with `tcpListen` and still owns. */
   listener: i32 = -1
 
-  /** A pool of `size` slots, at least one, serving `config` on `listener`. Every slot's buffers are allocated here. */
+  /**
+   * A pool of `size` slots, at least one, serving `config` on `listener`.
+   * Every slot's buffers are allocated here but the output, which the slots
+   * borrow from `outputs` while they write.
+   */
   constructor(config: Http1Config, listener: i32, size: i32) {
     this.config = config
     this.listener = listener
@@ -1029,9 +1130,12 @@ export class Http1Server {
     this.fds = []
     this.armed = []
     this.free = []
+    this.outputs = new Http1OutputPool(config.outputSize)
     const slots: i32 = size < 1 ? 1 : size
     for (let k: i32 = 0; k < slots; k++) {
-      this.connections.push(new Http1Connection(config))
+      const conn: Http1Connection = new Http1Connection(config)
+      conn.pool = this.outputs
+      this.connections.push(conn)
       this.fds.push(H1_FREE)
       this.armed.push(H1_WANT_READ)
       // Pushed last first, so the first accepts take slots 0, 1, 2 ...
@@ -1212,6 +1316,7 @@ export class Http1Server {
     if (conn.outputEnd - conn.outputStart < pending) {
       conn.lastActive = monotonicNanos()
     }
+    conn.release()
   }
 
   /**
@@ -1238,6 +1343,9 @@ export class Http1Server {
     netClose(this.fds[slot])
     this.fds[slot] = H1_FREE
     this.free.push(slot)
+    if (slot < toI32(this.connections.length)) {
+      this.connections[slot].abort()
+    }
   }
 
   /** Closes every slot that has been idle past `idleTimeout` at `now` (`monotonicNanos`); answers how many. */
@@ -1265,13 +1373,18 @@ export class Http1TlsServer {
   connections: Http1Connection[]
   /** Where TLS decrypts into before the connection takes the bytes. */
   scratch: u8[]
+  /** The output buffers the slots borrow while they write. */
+  outputs: Http1OutputPool
 
   /** A pool of `size` slots, at least one, serving `config` over TLS under `tlsConfig` on `listener`. */
   constructor(tlsConfig: TlsServerConfig, config: Http1Config, listener: i32, size: i32) {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
     this.connections = []
+    this.outputs = new Http1OutputPool(config.outputSize)
     for (let k: i32 = 0; k < this.tls.size(); k++) {
-      this.connections.push(new Http1Connection(config))
+      const conn: Http1Connection = new Http1Connection(config)
+      conn.pool = this.outputs
+      this.connections.push(conn)
     }
     this.scratch = new Array<u8>(config.chunkSize)
   }
@@ -1417,11 +1530,15 @@ export class Http1TlsServer {
     if (conn.outputEnd - conn.outputStart < pending) {
       conn.lastActive = monotonicNanos()
     }
+    conn.release()
   }
 
   /** Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does. */
   close(slot: i32): void {
     this.tls.close(slot)
+    if (slot >= 0 && slot < toI32(this.connections.length)) {
+      this.connections[slot].abort()
+    }
   }
 
   /** Closes every slot that has been idle past `idleTimeout` at `now` (`monotonicNanos`); answers how many. */

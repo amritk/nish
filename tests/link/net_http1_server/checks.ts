@@ -342,6 +342,8 @@ export const serverChecks = (): i32 => {
   }
   lb.send(stall, ascii(fourBig.join("")));
   lb.settle();
+  const outputs = lb.plain.outputs;
+  t.eqI32("the stalled slot holds one output buffer, borrowed from the pool", outputs.made - toI32(outputs.free.length), toI32(1));
   t.ok("four 2 MiB responses to a client that reads none fill the socket, and rearm asks for writing", lb.rearmed - rearmedStall >= 1);
   pollModify(lb.loop, stallPeer.fd, toI32(1), stallPeer.token);
   let wholes: i32 = 0;
@@ -356,6 +358,7 @@ export const serverChecks = (): i32 => {
   }
   lb.settle();
   t.ok("read again, all four arrive whole, and rearm asks for reading once the slot has drained", wholes === 4 && lb.rearmed - rearmedStall >= 2);
+  t.eqI32("and drained, it has given the buffer back", outputs.made - toI32(outputs.free.length), ZERO);
   lb.hangUp(stall);
 
   lb.send(a, ascii(`HEAD /hello HTTP/1.1\r\nHost: a\r\n\r\n${get}`));
@@ -562,6 +565,10 @@ export const serverChecks = (): i32 => {
   lb.settle();
   lb.measuring = false;
   t.eqI32("fifty connections, one after another, each answered", churned, toI32(50));
+  t.ok(
+    `every output buffer is back in the pool, and it made no more than the most slots ever writing at once (${lb.plain.outputs.made})`,
+    lb.plain.outputs.made === toI32(lb.plain.outputs.free.length) && lb.plain.outputs.made <= lb.plain.size()
+  );
   t.ok(`and accepting and freeing their slots moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0) && lb.plain.busy() === 0);
   t.ok(
     "a free slot answers H1_ERROR to next and done to the rest",
@@ -590,6 +597,7 @@ export const serverChecks = (): i32 => {
   }
   lb.measuring = false;
   t.eqI32("fifty exchanges over TLS on the warmed slot", tlsAnswered, toI32(50));
+  t.eqI32("and between them the TLS slot holds no output buffer", lb.secure.outputs.made - toI32(lb.secure.outputs.free.length), ZERO);
   t.ok(`and the arena did not move (${lb.growth} bytes)`, lb.growth === toI64(0));
   s.send("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
   s.response(new ClientReader(false));
