@@ -531,7 +531,11 @@ outlives `now` + 7200 s at its recording whatever its ticket says. The open
 check (row 3) already refuses a ticket that claims more, so the clamp is a
 second bound, held by the register itself: `TlsTicketStrikes.take(id,
 expiresAt, now)` records `min(expiresAt, now + 7200 s)`, whatever it is
-handed. The register is an open-addressed
+handed. An entry is held through its expiry inclusive and free strictly
+after it, as a ticket opens while `now` is no later than issue time plus
+lifetime. `take` answers true when it recorded the id, and false when the id
+is still held (row 6) or no entry is free (row 7), the second counted as a
+refusal for being full. The register is an open-addressed
 table made once at the capacity the program gives (65,536 ids by default; a
 12-byte id and an 8-byte expiry each, so about 1.3 MB), whose expired entries
 are reused, and which never grows. The program owns it and lends it to the
@@ -638,8 +642,9 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
 
 To be pinned by `net_tls_ticket` (replay refused; the register full refusing
 and counting each refusal, and taking ids again once entries expire;
-`TlsTicketStrikes.take` called directly with an expiry a week away, whose
-entry is free again 7200 s after `now`) and
+`TlsTicketStrikes.take` called directly with an expiry a week away: a second
+`take` of the same id false at `now + 7200 s`, and true one nanosecond later;
+`take` false and counted on a full register) and
 `net_tls_resume` (each row of the fallback and abort table below, rows 17 and
 18 included).
 
