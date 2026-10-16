@@ -2460,10 +2460,12 @@ const restatedBy = (warning: Diagnostic, refused: PanicSite[]): boolean => {
 }
 
 /** Which reserved prefix a symbol begins with, and who reserves it, for NL3037. */
-const reservedPrefixText = (name: string): string =>
-  name.startsWith("_")
-    ? "begins with `_`, which C reserves for its library and start-up code"
-    : "begins with `napi_`, which Node-API reserves for its functions"
+const reservedPrefixText = (name: string): string => {
+  if (name.startsWith("_")) {
+    return "begins with `_`, which C reserves for its library and start-up code"
+  }
+  return `begins with \`${name.startsWith("node_api_") ? "node_api_" : "napi_"}\`, which Node-API reserves for its functions`
+}
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node =>

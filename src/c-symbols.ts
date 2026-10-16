@@ -25,9 +25,10 @@
 //     (`__libc_start_main`, `__register_atfork`, `_start`, `__environ`,
 //     `_IO_2_1_stdout_`, ...) cannot be listed one by one, and each of them
 //     crashed or failed to link when a program defined it;
-//   - every name that begins with `napi_`, which Node-API reserves for its own
-//     functions, and which the N-API shim `src/interop-napi.ts` writes calls
-//     to;
+//   - every name that begins with `napi_` or `node_api_`, which Node-API
+//     reserves for its own functions: the N-API shim `src/interop-napi.ts`
+//     writes calls to the first, and its `NAPI_MODULE_INIT` defines one of the
+//     second (`node_api_module_get_api_version_v1`);
 //   - the names `isCLibrarySymbol` lists:
 //       - every symbol the runtime's objects leave undefined, natively, with
 //         `-DNISH_THREADS` and for wasm32-wasi, and every one
@@ -42,7 +43,13 @@
 //         `exp2`, `ldexp`, `cbrt`, ...), and the `memcpy` family and `bcmp`
 //         it lowers copies and comparisons to;
 //       - the rest of glibc's replaceable allocator, a family a program
-//         replaces together.
+//         replaces together;
+//       - under `--profile wasi`, where wasi-libc is linked statically, every
+//         name a wasi-libc member the link pulls in defines or references:
+//         one member's reference to another binds to a program function of the
+//         same name (an exported `sbrk` trapped at start, `strdup` broke
+//         `writeFileSync`), and a definition beside a member's is a duplicate
+//         symbol (`fwrite`, `rename`, `unlink`).
 //
 // `tests/run.js` holds the list to the toolchain ("c-symbols: ..."): every
 // symbol `llvm-nm -u` finds in the runtime's objects, in `runtime-wasm.c`, in
@@ -60,7 +67,7 @@
 
 /** Whether a symbol of this name is reserved to C: a listed name, or one of the reserved prefixes. */
 export const isCReservedSymbol = (name: string): boolean =>
-  name.startsWith("_") || name.startsWith("napi_") || isCLibrarySymbol(name)
+  name.startsWith("_") || name.startsWith("napi_") || name.startsWith("node_api_") || isCLibrarySymbol(name)
 
 /** Whether a symbol of this name would replace one the C library defines for the runtime or the program. */
 export const isCLibrarySymbol = (name: string): boolean =>
@@ -77,6 +84,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "__stderrp" ||
   name === "__tls_get_addr" ||
   name === "_exit" ||
+  name === "abort" ||
   name === "accept" ||
   name === "accept4" ||
   name === "access" ||
@@ -88,6 +96,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "cbrtf" ||
   name === "ceil" ||
   name === "ceilf" ||
+  name === "clearenv" ||
   name === "clock_gettime" ||
   name === "close" ||
   name === "closedir" ||
@@ -109,7 +118,9 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "expf" ||
   name === "fabs" ||
   name === "fabsf" ||
+  name === "faccessat" ||
   name === "fcntl" ||
+  name === "fdopendir" ||
   name === "floor" ||
   name === "floorf" ||
   name === "fmax" ||
@@ -119,8 +130,13 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "fmod" ||
   name === "fmodf" ||
   name === "fputs" ||
+  name === "fputs_unlocked" ||
   name === "free" ||
+  name === "frexp" ||
   name === "fstat" ||
+  name === "fstatat" ||
+  name === "fwrite" ||
+  name === "fwrite_unlocked" ||
   name === "getentropy" ||
   name === "getenv" ||
   name === "geteuid" ||
@@ -134,6 +150,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "kqueue" ||
   name === "ldexp" ||
   name === "ldexpf" ||
+  name === "link" ||
+  name === "linkat" ||
   name === "listen" ||
   name === "log" ||
   name === "log10" ||
@@ -152,11 +170,14 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "memmove" ||
   name === "memset" ||
   name === "mkdir" ||
+  name === "mkdirat" ||
   name === "nearbyint" ||
   name === "nearbyintf" ||
   name === "ntohs" ||
   name === "open" ||
+  name === "openat" ||
   name === "opendir" ||
+  name === "opendirat" ||
   name === "pipe" ||
   name === "pipe2" ||
   name === "posix_memalign" ||
@@ -167,6 +188,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "pow" ||
   name === "powf" ||
   name === "pread" ||
+  name === "program_invocation_name" ||
+  name === "program_invocation_short_name" ||
   name === "pthread_atfork" ||
   name === "pthread_cond_broadcast" ||
   name === "pthread_cond_destroy" ||
@@ -181,18 +204,30 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "pthread_mutex_lock" ||
   name === "pthread_mutex_unlock" ||
   name === "pvalloc" ||
+  name === "qsort" ||
+  name === "qsort_r" ||
   name === "read" ||
   name === "readdir" ||
+  name === "readlink" ||
+  name === "readlinkat" ||
   name === "realloc" ||
   name === "realpath" ||
   name === "recv" ||
   name === "recvmsg" ||
+  name === "remove" ||
+  name === "rename" ||
+  name === "renameat" ||
   name === "rint" ||
   name === "rintf" ||
+  name === "rmdir" ||
   name === "round" ||
   name === "roundeven" ||
   name === "roundevenf" ||
   name === "roundf" ||
+  name === "sbrk" ||
+  name === "scalbn" ||
+  name === "scandir" ||
+  name === "scandirat" ||
   name === "sched_getaffinity" ||
   name === "sched_yield" ||
   name === "send" ||
@@ -211,21 +246,46 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sqrtf" ||
   name === "stat" ||
   name === "stderr" ||
+  name === "stpcpy" ||
+  name === "strchrnul" ||
   name === "strcmp" ||
   name === "strcpy" ||
   name === "strcspn" ||
+  name === "strdup" ||
+  name === "strerror" ||
+  name === "strerror_l" ||
   name === "strlen" ||
   name === "strncmp" ||
+  name === "strnlen" ||
   name === "strspn" ||
   name === "strstr" ||
   name === "strtod" ||
+  name === "strtof" ||
+  name === "strtoimax" ||
+  name === "strtol" ||
+  name === "strtold" ||
   name === "strtoll" ||
+  name === "strtoul" ||
+  name === "strtoull" ||
+  name === "strtoumax" ||
+  name === "symlink" ||
+  name === "symlinkat" ||
   name === "sysconf" ||
   name === "tan" ||
   name === "tanf" ||
   name === "time" ||
   name === "trunc" ||
   name === "truncf" ||
+  name === "unlink" ||
+  name === "utime" ||
+  name === "utimensat" ||
+  name === "utimes" ||
   name === "valloc" ||
+  name === "vdprintf" ||
+  name === "vfprintf" ||
+  name === "vsnprintf" ||
   name === "waitpid" ||
-  name === "write"
+  name === "wcrtomb" ||
+  name === "wctomb" ||
+  name === "write" ||
+  name === "writev"

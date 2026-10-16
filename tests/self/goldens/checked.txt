@@ -46759,7 +46759,7 @@ function pick(n: Node | null, k: string): Node -> @pick
   pointer n: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee 13:56 new Node -> @Node.constructor
-function link(n: Node, k: string): void -> @link
+function link(n: Node, k: string): void -> @link$
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 16:3
   calls: Node.constructor nish_alloc_struct nish_str_concat
@@ -46774,13 +46774,13 @@ function churn(): i32 -> @churn
   local 21:12 i: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via link
-  calls: Node.constructor churn link nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pick
+  sharedWrite: via link$
+  calls: Node.constructor churn link$ nish_alloc_struct nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 pick
   stackSites=0 stackLocals=0
   local 28:9 root: Node (const)
   callee 28:16 new Node -> @Node.constructor
-  callee 29:3 link -> @link
-  callee 30:3 link -> @link
+  callee 29:3 link -> @link$
+  callee 30:3 link -> @link$
   local 31:9 p: Node (const)
   callee 31:13 pick -> @pick
   local 32:9 q: Node (const)

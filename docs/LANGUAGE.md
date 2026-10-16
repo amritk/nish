@@ -1433,9 +1433,10 @@ and their `.ll` goldens are byte-identical files.
   with `--no-strict-exports`, `reject_export_c_symbol_no_strict` and
   `reject_export_c_symbol_no_strict_exported`). A name that begins with `_`,
   which C reserves for its library and start-up code (C11 7.1.3), or with
-  `napi_`, which Node-API reserves, is refused the same way with
+  `napi_` or `node_api_`, which Node-API reserves, is refused the same way with
   `` begins with `_`, which C reserves for its library and start-up code `` or
-  `` begins with `napi_`, which Node-API reserves for its functions ``
+  `` begins with `napi_`, which Node-API reserves for its functions `` (or
+  `node_api_`)
   (`reject_export_c_symbol_reserved_prefix`, which pins `__libc_start_main` and
   `__register_atfork`, each of which crashed; `reject_export_c_symbol_napi_prefix`).
   The rule is the same in a wasm or an N-API build, where the exported name
@@ -1443,11 +1444,14 @@ and their `.ll` goldens are byte-identical files.
   where each comes from are in `src/c-symbols.ts`: the symbols the runtime
   leaves undefined on every platform it builds for, the libm calls behind
   every `Math` builtin and `%` on a float in `double` and in `float`, with
-  the ones LLVM rewrites them into, the `memcpy` family and the rest of the C
-  allocator. `tests/run.js` reads them back with `llvm-nm` from the runtime's
+  the ones LLVM rewrites them into, the `memcpy` family, the rest of the C
+  allocator, and, because `--profile wasi` links wasi-libc statically, every
+  name a wasi-libc member that link pulls in defines or references (an
+  exported `sbrk` trapped at start). `tests/run.js` reads them back with `llvm-nm` from the runtime's
   objects, `runtime-wasm.c`, the N-API shim, and two programs — one that calls
   every `Math` builtin, one that multiplies `i64`s, copies arrays and prints
-  strings — linked at three optimisation levels and compiled for wasm32, and
+  strings — linked at three optimisation levels and compiled for wasm32, the
+  wasi-libc members a traced `--profile wasi` link of each pulls in, and
   fails on a name the file does not reserve ("c-symbols: ..."). A function whose symbol is not its
   ABI is spelled apart instead of refused: an `internal` one whose name is
   reserved takes a `$` at the end of its symbol (`@floor$`), because LLVM

@@ -76,7 +76,7 @@ Four more rules come from compiling the whole program at once:
 else, generic classes and interfaces included, can be renamed with `as`.
 - **An exported function cannot be named after a C library function** such as
   `write`, `read`, `free`, `exit`, `strlen` or `sin`, nor take a name that
-  begins with `_` or `napi_`. An exported function keeps its name in the
+  begins with `_`, `napi_` or `node_api_`. An exported function keeps its name in the
   compiled program, and the runtime and your own `Math` calls reach the C
   library's function of that name to print, read files, allocate memory and
   compute, so they would reach yours instead. The same holds when you build

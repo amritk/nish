@@ -20302,6 +20302,80 @@ if (!only || "c-symbols".includes(only)) {
           none
         )
       }
+      // wasi-libc is linked statically under `--profile wasi`, so a reference
+      // from one of its members to another binds to a program function of the
+      // same name, and a definition beside a member's is a duplicate symbol.
+      // The link is `scripts/build.sh`'s own, through a C compiler that adds
+      // `--trace`, so the members are the ones that link really pulls in.
+      if (WASI_SYSROOT !== undefined) {
+        const traceDir = path.join(probeDir, "wasi-trace")
+        fs.rmSync(traceDir, { recursive: true, force: true })
+        fs.mkdirSync(traceDir, { recursive: true })
+        const tracer = path.join(traceDir, "cc-trace")
+        fs.writeFileSync(tracer, '#!/bin/sh\nexec clang "$@" -Wl,--trace\n', { mode: 0o755 })
+        const ir = spawnSync(NISH, [probeTs, "-o", `${traceDir}${path.sep}`, "--profile", "wasi"], {
+          cwd: root,
+          encoding: "utf8",
+        })
+        const lls =
+          ir.status === 0
+            ? fs
+                .readdirSync(traceDir)
+                .filter((f) => f.endsWith(".ll"))
+                .map((f) => path.join(traceDir, f))
+            : []
+        const link =
+          ir.status === 0
+            ? spawnSync(
+                "bash",
+                [
+                  path.join(root, "scripts", "build.sh"),
+                  ...lls,
+                  path.join(root, "runtime", "runtime.c"),
+                  "-o",
+                  path.join(traceDir, "app.wasm"),
+                  "--profile",
+                  "wasi",
+                ],
+                { cwd: root, encoding: "utf8", env: { ...process.env, CC: tracer, WASI_SYSROOT } }
+              )
+            : null
+        let error = null
+        let found = null
+        if (ir.status !== 0) {
+          error = `--profile wasi failed:\n${ir.stderr}`
+        } else if (link.status !== 0) {
+          error = `the traced wasi link failed:\n${link.stderr}`
+        } else {
+          const pulled = new Map()
+          for (const m of `${link.stdout}${link.stderr}`.matchAll(/(\S+\.a)\(([^)]+)\)/g)) {
+            if (!pulled.has(m[1])) {
+              pulled.set(m[1], new Set())
+            }
+            pulled.get(m[1]).add(m[2])
+          }
+          found = []
+          for (const [archive, members] of pulled) {
+            const nm = spawnSync(LLVM_NM, ["-A", archive], { encoding: "utf8", maxBuffer: 1 << 28 })
+            for (const line of nm.stdout.split("\n")) {
+              const m = /^.*\.a:([^:]+):\s+(?:[0-9a-f]+\s+)?([A-Za-z])\s+(\S+)$/.exec(line)
+              if (m !== null && members.has(m[1]) && (m[2] === "U" || /[A-TV-Z]/.test(m[2]))) {
+                found.push(m[3])
+              }
+            }
+          }
+          if (found.length === 0) {
+            error = "the traced wasi link named no archive member"
+            found = null
+          }
+        }
+        holds(
+          `the wasi-libc members a --profile wasi link of tests/c-symbols/${probe}.ts pulls in define or leave undefined`,
+          found,
+          error,
+          none
+        )
+      }
       // wasm32-wasi: the `wasi` profile links at -Oz without LTO and strips
       // the module, so the program's own object is what holds its libcalls.
       if (WASI_SYSROOT !== undefined) {
