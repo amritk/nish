@@ -755,7 +755,10 @@ never read a socket or a clock themselves, so you drive them from your own
 loop over [`nish:net`](../../LANGUAGE.md#builtin-modules-nish). The ones
 that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 `Http1Server` and `Http1TlsServer` pools), `nish/net/http2-tls` and
-`nish/net/http3-server`; like `nish:net` itself, they are native only. The
+`nish/net/http3-server`; like `nish:net` itself, they are native only. Your
+loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
+its interest changed, so a keep-alive request costs one `recv` and one `send`
+and no `pollModify`; `bench/http.mjs` load-tests that loop on one core. The
 HTTP/1.1 and WebSocket modules were written with a security record of their
 own ([docs/security/http1.md](../../security/http1.md)) rather than audited
 after the fact.

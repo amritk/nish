@@ -22,7 +22,7 @@
  *     }
  *     wants = server.flush(slot);
  *     if ((wants & H1_DONE) !== 0) { server.close(slot); }
- *     else { pollModify(loop, server.fd(slot), wants & 3, slot); }
+ *     else if (server.rearm(slot, wants)) { pollModify(loop, server.fd(slot), wants & 3, slot); }
  *
  * **Events.** `next()` answers `H1_REQUEST` (a request's head: the parser's
  * spans and `...Is` methods read it), `H1_BODY` (some of its body, de-chunked,
@@ -1006,6 +1006,14 @@ export class Http1Server {
   connections: Http1Connection[]
   /** Each slot's descriptor, or -1 while it is free. */
   fds: i32[]
+  /** Each slot's interest as the loop last armed it, for `rearm`. */
+  armed: i32[]
+  /**
+   * The free slots, a stack whose top `accept` takes: finding one costs the
+   * same with every slot free as with all but one busy, where a scan of
+   * `fds` walked the busy ones.
+   */
+  free: i32[]
   /** Where the socket is read into before the connection takes the bytes. */
   scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
@@ -1019,10 +1027,15 @@ export class Http1Server {
     this.listener = listener
     this.connections = []
     this.fds = []
+    this.armed = []
+    this.free = []
     const slots: i32 = size < 1 ? 1 : size
     for (let k: i32 = 0; k < slots; k++) {
       this.connections.push(new Http1Connection(config))
       this.fds.push(H1_FREE)
+      this.armed.push(H1_WANT_READ)
+      // Pushed last first, so the first accepts take slots 0, 1, 2 ...
+      this.free.push(slots - 1 - k)
     }
     this.scratch = new Array<u8>(config.chunkSize)
     this.peer = new Array<u8>(H1_ADDRESS_SIZE)
@@ -1062,17 +1075,26 @@ export class Http1Server {
 
   /**
    * Accepts the next waiting connection into a free slot and answers the
-   * slot; -11 when none is waiting, `H1_POOL_FULL` when every slot is busy
-   * (the connection is closed), or `tcpAccept`'s own failure.
+   * slot, which the program adds to its loop with `H1_WANT_READ`; -11 when
+   * none is waiting, `H1_POOL_FULL` when every slot is busy (the connection
+   * is closed), or `tcpAccept`'s own failure.
    */
   accept(): i32 {
     const fd: i32 = tcpAccept(this.listener, this.peer)
     if (fd < 0) {
       return fd
     }
-    for (let k: i32 = 0; k < toI32(this.fds.length) && k < toI32(this.connections.length); k++) {
-      if (this.fds[k] < 0) {
+    if (this.free.length > 0) {
+      const k: i32 = this.free[this.free.length - 1]
+      this.free.pop()
+      if (
+        k >= 0 &&
+        k < toI32(this.fds.length) &&
+        k < toI32(this.connections.length) &&
+        k < toI32(this.armed.length)
+      ) {
         this.fds[k] = fd
+        this.armed[k] = H1_WANT_READ
         const conn: Http1Connection = this.connections[k]
         conn.restart()
         conn.lastActive = monotonicNanos()
@@ -1083,7 +1105,10 @@ export class Http1Server {
     return H1_POOL_FULL
   }
 
-  /** The socket of `slot` is readable: reads it while the connection has room, then sends. Answers the interest. */
+  /**
+   * The socket of `slot` is readable: reads it while the connection has room
+   * and the socket has more, then sends. Answers the interest.
+   */
   readable(slot: i32): i32 {
     if (!this.holds(slot)) {
       return H1_DONE
@@ -1108,6 +1133,13 @@ export class Http1Server {
       }
       moved = true
       conn.feed(this.scratch, H1_ZERO, n)
+      // A short read emptied the socket. The loop's readiness is
+      // level-triggered, so more input, or the peer's close, wakes it again;
+      // reading once more here would only answer -11, at the price of a
+      // system call on every request.
+      if (n < want) {
+        break
+      }
     }
     if (moved) {
       conn.lastActive = monotonicNanos()
@@ -1182,6 +1214,22 @@ export class Http1Server {
     }
   }
 
+  /**
+   * Whether the program must `pollModify` `slot`'s descriptor to `wants`, the
+   * interest `readable`, `writable` or `flush` answered, and records it as
+   * armed when it must. A keep-alive connection answers the same interest
+   * request after request, and each `pollModify` is a system call
+   * (`epoll_ctl`) that changes nothing.
+   */
+  rearm(slot: i32, wants: i32): boolean {
+    const interest: i32 = wants & (H1_WANT_READ | H1_WANT_WRITE)
+    if (!this.holds(slot) || slot >= toI32(this.armed.length) || this.armed[slot] === interest) {
+      return false
+    }
+    this.armed[slot] = interest
+    return true
+  }
+
   /** Closes `slot`'s socket, whatever is left unsent, and frees the slot. */
   close(slot: i32): void {
     if (!this.holds(slot)) {
@@ -1189,6 +1237,7 @@ export class Http1Server {
     }
     netClose(this.fds[slot])
     this.fds[slot] = H1_FREE
+    this.free.push(slot)
   }
 
   /** Closes every slot that has been idle past `idleTimeout` at `now` (`monotonicNanos`); answers how many. */

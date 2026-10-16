@@ -505,6 +505,89 @@ nominal clock, taken from its model name or from `--ghz`, and not counted.
 the one pinned in the driver. Every build of `std/crypto/aes.ts`, kernel or
 bitsliced, must keep printing that checksum.
 
+## HTTP
+
+`http1-server.ts` is a program built on `nish/net/http1-server` the way the
+module's header says to build one: one `Http1Server` pool on plain TCP, one
+readiness loop, one thread, nothing between the socket and the handler. It
+answers `GET /plaintext` with 13 bytes and `GET /json` with
+`{"message":"Hello, World!","n":<count>}` from a `JsonWriter` reset onto one
+buffer per request. `http.mjs` load-tests builds of it against each other with
+[wrk](https://github.com/wg/wrk), with the server pinned to CPU 0 and wrk to
+the other CPUs, so the server has one core to itself:
+
+```bash
+npm run build
+build/nish bench/http1-server.ts --link build/bench/h1 --profile speed
+cp build/bench/h1 build/bench/h1-copy
+node bench/http.mjs build/bench/h1 build/bench/h1-copy      # the noise band: a build against its own copy
+node bench/http.mjs build/bench/h1 build/bench/h1-other     # two builds, interleaved round by round
+node bench/http.mjs --syscalls build/bench/h1               # system calls per request, under strace
+node bench/http.mjs --only keep-alive --rounds 7 build/bench/h1
+```
+
+Each scenario is one wrk run of five seconds after a one-second warm-up, and
+each build gets a fresh server per round, on a pool of 16,384 slots
+(`--slots`). The rounds alternate the order of the builds, and a scenario
+reports the median of its rounds and their spread. It also reports the
+server's user and system CPU per request, from `/proc/<pid>/stat` over the
+timed run, and its peak RSS. `--syscalls` attaches `strace -c` to the running
+server for two seconds of each scenario: a count, which does not drift with
+the machine the way throughput does. The scenarios are keep-alive at 256 and
+4,096 connections, `Connection: close` at 64 (every request a new TCP
+connection), and the same churn while 8,000 idle connections hold the pool's
+first slots.
+
+**Measured on the commit that adds this section.** x86-64, four-core Intel
+Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3, wrk 4.1.0, `-t3`.
+The base is `std/net/http1-server.ts` before that commit; the copy is the base
+binary, byte for byte, and its row is the noise band. Five rounds:
+
+| scenario | base req/s | copy (noise) | this commit | user µs/req | sys µs/req |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| keep-alive, c=256, `/plaintext` | 153,329 | −2.7% | 175,303 (**+14.3%**) | 1.17 → 1.16 | 5.18 → 4.44 |
+| keep-alive, c=256, `/json` | 153,822 | +3.3% | 169,507 (**+10.2%**) | 1.35 → 1.21 | 5.25 → 4.40 |
+| keep-alive, c=4096 | 86,269 | +0.4% | 93,088 (+7.9%) | 2.07 → 2.11 | 9.01 → 8.25 |
+| close, c=64 | 63,710 | +3.9% | 66,967 (+5.1%) | 1.97 → 1.76 | 13.02 → 12.84 |
+| close, c=64, 8,000 idle | 51,003 | +0.2% | 64,763 (**+27.0%**) | 7.23 → 1.82 | 11.88 → 13.18 |
+
+The kernel is four fifths of what a request costs, so the change is fewer
+system calls (`--syscalls`, the same run):
+
+| scenario | base | this commit |
+| --- | --- | --- |
+| keep-alive | 4.10 a request: `recvfrom` 2, `epoll_ctl` 1, `sendto` 1 | 2.06: `recvfrom` 1, `sendto` 1 |
+| close | 6.10: `recvfrom` 2, `accept4`, `epoll_ctl`, `sendto`, `close` | 5.10: `recvfrom` 1 and the rest |
+
+The second `recvfrom` was `readable` reading until the socket answered -11;
+it now stops at a short read, since level-triggered readiness wakes the loop
+again for more input or the peer's close. The `epoll_ctl` was the program's
+`pollModify` after every event; `rearm` answers whether the interest changed,
+and on a keep-alive connection it does not. The idle row is `accept`, which
+scanned the slots for a free one, walking past every busy slot on every
+connection; it now pops a stack of free slots.
+
+Two experiments that did not move the figures, so are not in the commit:
+`TCP_NODELAY` on the listener (inherited by every accepted socket): each
+response here is one `send`, so Nagle never holds anything back, and every
+row stayed inside the noise band. A profile-guided build
+(`scripts/build.sh --pgo-generate` / `--pgo-use`, trained on the same
+scenarios) cut user time per request by 10 to 24% in every row, but user time
+is a fifth of the whole: +4% on keep-alive, inside the band.
+
+**Memory is what sets the connection count**, not the CPU. Each slot
+allocates its `outputSize` at start-up, 64 KiB by default, so a pool's
+resident size is about 72 KiB a slot:
+
+| slots | `outputSize` 65,536 (default) | `outputSize` 4,096 |
+| ---: | ---: | ---: |
+| 1,024 | 75 MB | 10 MB |
+| 16,384 | 1,178 MB | 133 MB |
+| 65,536 | 4,708 MB | 529 MB |
+
+A response larger than the output still goes out, a buffer at a time as the
+socket drains, so a server of small responses can take the smaller buffer.
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
