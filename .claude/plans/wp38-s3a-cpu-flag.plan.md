@@ -17,7 +17,7 @@ stages:
   - id: s3a-measure
     title: S3a — S3's bar kernels, measured without a surface
     goal: Record in docs/wp38-simd.md §2.3 whether a portable 128-bit vector kernel beats a fair scalar Nish kernel by 1.5x, on a numeric kernel and on a byte scan
-    verification: node bench/simd-s3a.mjs --self --runs 15 prints every column with one checksum per kernel; npm run lint and node docs/check-links.mjs pass; npm test compiles the new bench/*.ts
+    verification: node bench/simd-s3a.mjs --self --runs 15 builds every form, prints every column with one checksum per kernel, and refuses a C vector file whose IR holds an llvm.x86 or llvm.aarch64 call; npm run lint and node docs/check-links.mjs pass
     status: pending
     todos:
       - id: s3a-numeric-kernels
@@ -83,8 +83,8 @@ The stages share no source file. `s7-other-holder-golden` is mechanical (`Model:
 | Stage | Owns |
 | --- | --- |
 | `s7-other-holder-golden` | `tests/cases/arr_bounds_offset_other.*`, `tests/run.js` (the two offset-index tables), `tests/differential/goldens/**`, `tests/self/goldens/**` |
-| `s3a-measure` | `bench/simd-s3a/**`, `bench/simd-s3a.mjs`, `docs/wp38-simd.md` (§2.3's S3a subsection, §7's S3a row) |
-| `s2-cpu-flag` | `src/compile.ts`, `src/run-cache.ts`, `src/capability-report.ts`, `scripts/build.sh`, `tests/run.js` (the two `ct_asm` sections and the driver tests), `tests/ct-asm-runtime.js`, `tests/nish/cli.ts`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/guide/using-nish/cli.md`, `docs/security/ct-verification.md`, `docs/wp38-simd.md` (§7's S2 row) |
+| `s3a-measure` | `bench/simd-s3a/**`, `bench/simd-s3a.mjs`, `docs/wp38-simd.md` (§2.3's S3a subsection, §7's S3a row), `THIRD_PARTY_NOTICES.md` (one row per file derived from `bench/spectral.ts`) |
+| `s2-cpu-flag` | `src/compile.ts`, `src/run-cache.ts`, `src/capability-report.ts`, `scripts/build.sh`, `tests/run.js` (the two `ct_asm` sections and the driver tests), `tests/ct-asm-runtime.js`, `tests/nish/cli.ts`, `tests/self/goldens/**`, `docs/LANGUAGE.md`, `docs/guide/using-nish/cli.md`, `docs/security/ct-verification.md`, `docs/wp38-simd.md` (§7's S2 row), `.github/workflows/ci.yml` (one step grepping the `--cpu` check's PASS line, nothing else; authorised by the owner 2026-10-16) |
 
 ## S7 — the missing golden
 
@@ -219,7 +219,7 @@ Each check name gains the level, so a record citing one still greps to it. #638 
 
 ## Tests
 
-- **S3a:** `npm test` already compiles every `bench/*.ts` (`tests/run.js:14881`), so the Nish forms are covered. The harness's checksum and portability checks are its own tests.
+- **S3a:** nothing in `npm test` compiles every file under `bench/` (amended at pre-flight: the earlier `tests/run.js:14881` claim was wrong), so the harness is the test: it builds every Nish and C form, fails on a build error or a checksum mismatch, and refuses a non-portable vector file. The mat-vec forms derive from `bench/spectral.ts` (Benchmarks Game, BSD-3-Clause): each keeps the upstream notice and gets a `THIRD_PARTY_NOTICES.md` row, as `bench/nbody.c` does.
 - **S2, positive:** a `--cpu x86-64-v3` build of `examples/hello.ts` links and prints the same output as the baseline build. Gate it on `/proc/cpuinfo` showing `avx2`, and grep its PASS line in `.github/workflows/ci.yml` so a runner without AVX2 cannot leave it unread (CLAUDE.md).
 - **S2, negative:** each of `--cpu native`, `--cpu x86-64-v4`, `--cpu armv8.2-a`, `--cpu x86-64-v3 --profile wasi`, and `--cpu x86-64-v3 --target aarch64-unknown-linux-gnu` exits 2 with its message.
 - **S2, caches:** the two-entry test above.
@@ -235,7 +235,6 @@ Each check name gains the level, so a record citing one still greps to it. #638 
   - `node bench/simd-s3a.mjs --self --runs 15`
   - `npm run lint`
   - `node docs/check-links.mjs`
-  - `npm test`
 - **S2:**
   - first, `bash scripts/fetch-seed.sh --force` and `npm run build`
   - then `npm run check` and `npm test`, undegraded, with the skip count read
