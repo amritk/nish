@@ -1,5 +1,5 @@
 // Two tasks of one scope both panic. Only the first panic prints: it claims
-// the process, writes its whole message and `_exit`s, and the second parks
+// the process, writes its whole message and exits, and the second parks
 // until that exit ends the program (`nish_panic_claim`, runtime/runtime.c).
 // Both messages are the same, so a second print or an interleaved one would
 // show in stderr, which `tests/run.js` reads over many runs.
