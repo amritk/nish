@@ -7,14 +7,13 @@ declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_exit(i32 noundef) #3
-declare extern_weak void @nish_panic_overflow(i32 noundef) #4
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
-declare i8 @llvm.fptoui.sat.i8.f64(double) #5
-declare i32 @llvm.fptoui.sat.i32.f64(double) #5
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare i8 @llvm.fptoui.sat.i8.f64(double) #4
+declare i32 @llvm.fptoui.sat.i32.f64(double) #4
 
 define internal noundef i32 @at32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %i) #0 {
 entry:
@@ -50,8 +49,7 @@ entry:
   br i1 %6, label %if.then, label %if.end
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [19 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [19 x i8] }* @.str.0 to i8*))
   unreachable
 
 if.end:
@@ -184,9 +182,8 @@ entry:
 attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
-attributes #3 = { noreturn nounwind }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

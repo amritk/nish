@@ -1,0 +1,2 @@
+reject_thread_region_parent_helper_walk.ts:34:9
+`total` writes memory a task of `s` may read, before the scope joins

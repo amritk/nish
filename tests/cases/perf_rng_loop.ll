@@ -11,12 +11,11 @@ declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
-declare void @nish_exit(i32 noundef) #2
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -77,8 +76,7 @@ for.body:
   br i1 %21, label %rng.ok, label %rng.fail
 
 rng.fail:
-  call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok:
@@ -92,8 +90,7 @@ rng.ok:
   br i1 %27, label %rng.ok.1, label %rng.fail.1
 
 rng.fail.1:
-  call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*))
   unreachable
 
 rng.ok.1:
@@ -104,8 +101,7 @@ rng.ok.1:
   br i1 %30, label %rng.ok.2, label %rng.fail.2
 
 rng.fail.2:
-  call void @nish_write(i8* bitcast ({ i64, [54 x i8] }* @.str.1 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [54 x i8] }* @.str.1 to i8*))
   unreachable
 
 rng.ok.2:
@@ -118,8 +114,7 @@ rng.ok.2:
   br i1 %35, label %rng.ok.3, label %rng.fail.3
 
 rng.fail.3:
-  call void @nish_write(i8* bitcast ({ i64, [46 x i8] }* @.str.2 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [46 x i8] }* @.str.2 to i8*))
   unreachable
 
 rng.ok.3:
@@ -131,8 +126,7 @@ rng.ok.3:
   br i1 %39, label %rng.ok.4, label %rng.fail.4
 
 rng.fail.4:
-  call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.3 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [44 x i8] }* @.str.3 to i8*))
   unreachable
 
 rng.ok.4:
@@ -202,9 +196,8 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }
+attributes #3 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -25,16 +25,15 @@ declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_exit(i32 noundef) #4
-declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
+declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #1
 declare double @llvm.floor.f64(double) #0
 declare double @llvm.ceil.f64(double) #0
 declare i32 @llvm.fptosi.sat.i32.f64(double) #0
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -103,8 +102,7 @@ entry:
   %2 = call i8* @nish_str_concat(i8* %1, i8* bitcast ({ i64, [23 x i8] }* @.str.1 to i8*))
   %3 = call i8* @nish_str_from_i32(i32 %want)
   %4 = call i8* @nish_str_concat(i8* %2, i8* %3)
-  call void @nish_write(i8* %4, i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* %4)
   unreachable
 }
 
@@ -117,8 +115,7 @@ entry:
   %3 = call i8* @nish_str_from_i32(i32 %length)
   %4 = call i8* @nish_str_concat(i8* %2, i8* %3)
   %5 = call i8* @nish_str_concat(i8* %4, i8* bitcast ({ i64, [10 x i8] }* @.str.4 to i8*))
-  call void @nish_write(i8* %5, i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* %5)
   unreachable
 }
 
@@ -142,8 +139,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
   unreachable
 
 len.ok:
@@ -239,8 +235,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
   unreachable
 
 len.ok:
@@ -273,8 +268,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
   unreachable
 
 len.ok:
@@ -307,8 +301,7 @@ entry:
   br i1 %4, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
   unreachable
 
 len.ok:
@@ -421,8 +414,7 @@ entry:
   br i1 %1, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
   unreachable
 
 len.ok:
@@ -512,8 +504,7 @@ if.end:
   br i1 %8, label %len.ok, label %len.fail
 
 len.fail:
-  call void @nish_write(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [26 x i8] }* @.str.5 to i8*))
   unreachable
 
 len.ok:
@@ -1730,9 +1721,8 @@ attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { noreturn nounwind }
-attributes #5 = { nounwind noreturn cold }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
