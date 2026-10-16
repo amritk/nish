@@ -1,0 +1,28 @@
+// NL2529: a write through the union.
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 1;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 2;
+}
+
+type Shape = Circle | Square;
+
+const pick = (n: i32): Shape => (n > 0 ? new Circle() : new Square());
+
+class Spot {
+  kind: Kind.Tri = Kind.Tri;
+}
+
+const reset = (s: Spot | Square): void => {
+  s.kind = Kind.Tri;
+};
