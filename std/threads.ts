@@ -300,7 +300,10 @@ export class ThreadScope {
   /**
    * `s.spawn(entry, arg)` as the compiler reads it: run `entry(arg)` on a
    * thread of its own when the scope closes, and store nothing. `entry`
-   * answers `void`. Only the compiler names this method (see `slotWritten`).
+   * answers `void`. Only the compiler names this method (see `slotWritten`):
+   * a scope is only ever the receiver of a `spawn` statement, so `s.spawnWith(...)`
+   * written in a program is refused by that rule (NL2389), as passing the
+   * scope would be.
    */
   spawnWith<A, R>(entry: (arg: A) => R, arg: A): void {
     runWith(entry, arg)
@@ -309,7 +312,8 @@ export class ThreadScope {
   /**
    * `s.spawn(() => work(xs))` as the compiler reads it: run the arrow, whose
    * captured `const` locals are its arguments, on a thread of its own when the
-   * scope closes, and store nothing. Only the compiler names this method.
+   * scope closes, and store nothing. Only the compiler names this method, and
+   * a program that names it is refused as `spawnWith`'s is (NL2389).
    */
   spawnThunk<R>(entry: () => R): void {
     runThunk(entry)

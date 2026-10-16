@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1021 programs, 102182 dump lines.
+# 1021 programs, 102185 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -53263,7 +53263,7 @@ function Mutex<Hist>.constructor(this: Mutex<Hist>, init: Hist): void -> @nish.M
   pointer this: size=8 writesThrough=true captured=false
   pointer init: size=88 writesThrough=true captured=true passedTo=nish.MutexGuard$$Hist.constructor#1
   stackSites=0 stackLocals=0
-  callee 384:18 new MutexGuard<Hist> -> @nish.MutexGuard$$Hist.constructor
+  callee 388:18 new MutexGuard<Hist> -> @nish.MutexGuard$$Hist.constructor
 function Mutex<Hist>.lock(this: Mutex<Hist>): MutexGuard<Hist> -> @nish.Mutex$$Hist.lock [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: nish_mutex_wait
@@ -67368,7 +67368,8 @@ function p256ScalarInvert(out: u32[], a: u32[]): void -> @nish.p256ScalarInvert
   callee 3748:7 p256FiatScalarMul -> @nish.p256FiatScalarMul
   callee 3751:3 p256Copy -> @nish.p256Copy
 function P256ProjectivePoint.constructor(this: P256ProjectivePoint): void -> @nish.P256ProjectivePoint.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via nish.p256FiatSetOne
   calls: nish.p256FiatSetOne nish.p256Limbs
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -67378,7 +67379,7 @@ function P256ProjectivePoint.constructor(this: P256ProjectivePoint): void -> @ni
   callee 3769:5 p256FiatSetOne -> @nish.p256FiatSetOne
 function P256PointScratch.constructor(this: P256PointScratch): void -> @nish.P256PointScratch.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.p256CurveB
+  sharedWrite: via nish.P256ProjectivePoint.constructor
   calls: nish.P256ProjectivePoint.constructor nish.p256CurveB nish.p256Limbs nish_alloc_struct
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -67649,7 +67650,7 @@ function p256ScalarMultWith(out: P256ProjectivePoint, k: u8[], p: P256Projective
   callee 4076:3 p256WipePoint -> @nish.p256WipePoint
 function p256Generator(): P256ProjectivePoint -> @nish.p256Generator
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
-  sharedWrite: via nish.p256FieldR2
+  sharedWrite: via nish.P256ProjectivePoint.constructor
   calls: nish.P256ProjectivePoint.constructor nish.p256FiatMul nish.p256FiatSetOne nish.p256FieldR2 nish.p256SetLimbs nish_alloc_struct
   stackSites=0 stackLocals=0
   local 4081:9 g: P256ProjectivePoint (const)
@@ -88559,11 +88560,11 @@ function Channel<i32>.send(this: Channel<i32>, x: i32): void -> @nish.Channel$i3
   stackSites=0 stackLocals=0
 function Channel<i32>.take(this: Channel<i32>): i32 -> @nish.Channel$i32.take [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 449:5
+  sharedWrite: 453:5
   calls: nish_panic_index nish_panic_overflow
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 448:11 x: i32 (const)
+  local 452:11 x: i32 (const)
 function Channel<i32>.ready(this: Channel<i32>): boolean -> @nish.Channel$i32.ready [exported method instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=24 writesThrough=false captured=false
@@ -88660,7 +88661,7 @@ function Mutex<Tally>.constructor(this: Mutex<Tally>, init: Tally): void -> @nis
   pointer this: size=8 writesThrough=true captured=false
   pointer init: size=4 writesThrough=true captured=true passedTo=nish.MutexGuard$$Tally.constructor#1
   stackSites=0 stackLocals=0
-  callee 384:18 new MutexGuard<Tally> -> @nish.MutexGuard$$Tally.constructor
+  callee 388:18 new MutexGuard<Tally> -> @nish.MutexGuard$$Tally.constructor
 function Mutex<Tally>.lock(this: Mutex<Tally>): MutexGuard<Tally> -> @nish.Mutex$$Tally.lock [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: nish_mutex_wait
@@ -88858,7 +88859,7 @@ function Mutex<Tally>.constructor(this: Mutex<Tally>, init: Tally): void -> @nis
   pointer this: size=8 writesThrough=true captured=false
   pointer init: size=4 writesThrough=true captured=true passedTo=nish.MutexGuard$$Tally.constructor#1
   stackSites=0 stackLocals=0
-  callee 384:18 new MutexGuard<Tally> -> @nish.MutexGuard$$Tally.constructor
+  callee 388:18 new MutexGuard<Tally> -> @nish.MutexGuard$$Tally.constructor
 function Mutex<Tally>.lock(this: Mutex<Tally>): MutexGuard<Tally> -> @nish.Mutex$$Tally.lock [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: nish_mutex_wait
@@ -88871,7 +88872,7 @@ function ThreadScope.spawnThunk<void, () => ...>(this: ThreadScope, entry: void)
   calls: nish.runThunk$void$fn.14.tallied$arrow0 nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 315:5 runThunk<void, () => ...> -> @nish.runThunk$void$fn.14.tallied$arrow0
+  callee 319:5 runThunk<void, () => ...> -> @nish.runThunk$void$fn.14.tallied$arrow0
 function ThreadScope.spawnThunk<void, () => ...>(this: ThreadScope, entry: void): void -> @nish.ThreadScope.spawnThunk$void$fn.14.tallied$arrow1 [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_scope_spawn
@@ -88879,7 +88880,7 @@ function ThreadScope.spawnThunk<void, () => ...>(this: ThreadScope, entry: void)
   calls: nish.runThunk$void$fn.14.tallied$arrow1 nish_scope_spawn
   pointer this: size=4 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 315:5 runThunk<void, () => ...> -> @nish.runThunk$void$fn.14.tallied$arrow1
+  callee 319:5 runThunk<void, () => ...> -> @nish.runThunk$void$fn.14.tallied$arrow1
 function runThunk<void, () => ...>(entry: void): void -> @nish.runThunk$void$fn.14.tallied$arrow0 [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: tallied$arrow0
@@ -90248,7 +90249,7 @@ function isKnownBenchmark(name: string): boolean -> @isKnownBenchmark
   stackSites=0 stackLocals=0
 function innerBenchmarkLoop(name: string, innerIterations: i32): boolean -> @innerBenchmarkLoop
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via List.innerBenchmarkLoop
+  sharedWrite: via Bounce.innerBenchmarkLoop
   escaping: innerIterations
   calls: Bounce.innerBenchmarkLoop List.innerBenchmarkLoop Mandelbrot.innerBenchmarkLoop Permute.constructor Permute.innerBenchmarkLoop Queens.constructor Queens.innerBenchmarkLoop Storage.innerBenchmarkLoop Towers.constructor Towers.innerBenchmarkLoop nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_eq
   stackSites=7 stackLocals=0
@@ -90327,7 +90328,8 @@ function Ball.bounce(this: Ball): boolean -> @Ball.bounce [method]
   local 21:11 yLimit: i32 (const)
   local 22:9 bounced: boolean (let)
 function Bounce.innerBenchmarkLoop(this: Bounce, innerIterations: i32): boolean -> @Bounce.innerBenchmarkLoop [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Bounce.benchmark
   calls: Bounce.benchmark Bounce.verifyResult nish_arena_mark nish_arena_release
   pointer this: size=0 writesThrough=false captured=false passedTo=Bounce.verifyResult#0 Bounce.benchmark#0
   stackSites=0 stackLocals=0
@@ -90335,7 +90337,8 @@ function Bounce.innerBenchmarkLoop(this: Bounce, innerIterations: i32): boolean 
   callee 58:12 Bounce.verifyResult -> @Bounce.verifyResult
   callee 58:30 Bounce.benchmark -> @Bounce.benchmark
 function Bounce.benchmark(this: Bounce): i32 -> @Bounce.benchmark [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Ball.constructor
   calls: Ball.bounce Ball.constructor nish_alloc_struct nish_array_grow nish_panic_overflow
   pointer this: size=0 writesThrough=false captured=false
   stackSites=2 stackLocals=2
@@ -100084,7 +100087,7 @@ function Mutex<Hist>.constructor(this: Mutex<Hist>, init: Hist): void -> @nish.M
   pointer this: size=8 writesThrough=true captured=false
   pointer init: size=88 writesThrough=true captured=true passedTo=nish.MutexGuard$$Hist.constructor#1
   stackSites=0 stackLocals=0
-  callee 384:18 new MutexGuard<Hist> -> @nish.MutexGuard$$Hist.constructor
+  callee 388:18 new MutexGuard<Hist> -> @nish.MutexGuard$$Hist.constructor
 function Mutex<Hist>.lock(this: Mutex<Hist>): MutexGuard<Hist> -> @nish.Mutex$$Hist.lock [exported method instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: nish_mutex_wait

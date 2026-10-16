@@ -1564,13 +1564,6 @@ export class Emitter {
     return this.table.llvmType(type)
   }
 
-  /** WP17: the unpacked object of a by-value `Result` parameter, or "". */
-  /**
-   * WP29: the LLVM types of the parameters `sig` carries for the captures of
-   * the arrows it was given, after its own. Empty for an arrow, whose
-   * captures are parameters of its signature already, and for every function
-   * that was given no capturing arrow.
-   */
   /**
    * WP29: the typed operands for the captures a call of `sig` passes after
    * its written arguments, each `<type> <value>` (`captureValue`), for a
@@ -1589,6 +1582,12 @@ export class Emitter {
     return out
   }
 
+  /**
+   * WP29: the LLVM types of the parameters `sig` carries for the captures of
+   * the arrows it was given, after its own. Empty for an arrow, whose
+   * captures are parameters of its signature already, and for every function
+   * that was given no capturing arrow.
+   */
   captureParamTypes(sig: FunctionSig, isPrivate: boolean): string[] {
     const out: string[] = []
     if (sig.lifted) {
@@ -1633,6 +1632,7 @@ export class Emitter {
     )
   }
 
+  /** WP17: the unpacked object of a by-value `Result` parameter, or "". */
   paramObject(name: string): string {
     let i = 0
     while (i < this.paramObjectNames.length) {

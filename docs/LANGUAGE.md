@@ -2542,16 +2542,25 @@ from the whole-program facts, and each rule is reported there:
   private array's slots hold is not private: a store into `rows[0][0]`, or a
   helper that makes one, writes what `rows[0]` reaches
   (`reject_par_private_helper_deep`).
-- **Nor is a write into an object only this call made.** A `const` bound to
-  the function's own `new`, object literal or array is memory no caller, thread
-  or task can see while the call runs, so a method or a function that writes
-  it writes nothing shared: `const r = new Rng(seed); r.nextI32()` is a body's
-  own business, and so is any object that steps its own state
-  (`tests/link/std_random`). What counts is what the object may hold: once a
-  constructor keeps an argument in it, a method puts one there, or anything
-  else the caller reaches gets inside it, a write below that slot writes the
-  caller's memory and is refused (`tests/cases/reject_par_private_object_held`,
-  `reject_par_private_object_kept`).
+- **Nor is a write into an object's own slots, when the object is one this
+  call made.** A `const` bound to the function's own `new` or object literal
+  is memory no caller, thread or task can see while the call runs, so a method
+  or a function that writes only that object's own fields — scalar state such
+  as an `Rng`'s — writes nothing shared: `const r = new Rng(seed);
+  r.nextI32()` is a body's own business (`tests/link/std_random`). That is
+  the whole of what is admitted. A write below the object's own slots, into a
+  field or an element of it, counts as a write into whatever it may hold, and
+  once a constructor, a store, a `push`, a `Map` or a `Set` has put the
+  caller's memory there, or memory of unknown origin, that write is refused
+  as any shared write is: `hs.push(box); hs[0].bump()`, `h.b = box;
+  h.b.bump()`, a constructor that keeps `box`, a method that forwards to a
+  field's method, `o.a.b = box`, and the same with a captured `Rng`
+  (`tests/cases/reject_thread_task_private_object_element`, `_field`,
+  `_ctor_alias`, `_capture`, `_map`, `_set`, `_nested`, `_array_own`,
+  `_forward`, `_forward_store`, `_array_rng`, and
+  `reject_par_private_object_field_rng`, `_array_rng`, `_for_of`, `_held`,
+  `_kept`). Freshness is not followed through a call: an object a helper made
+  and returned is not one this call made.
 - **What the function allocates dies with its element.** A function may build
   strings, arrays and objects on the way to its result. They are given back
   after every element: the function gets an arena scope of its own, so each
@@ -3461,8 +3470,8 @@ export const main = (): i32 => {
   `nextF64`'s double is exact, so `tests/link/std_random` prints the same lines
   both ways.
 - **A parallel body or a task steps an `Rng` it made itself**, which is its
-  own memory (`const r = new Rng(i)`, "Nor is a write into an object only
-  this call made" under [data parallelism](#data-parallelism-nishthreads)); a
+  own memory (`const r = new Rng(i)`, "Nor is a write into an object's own
+  slots" under [data parallelism](#data-parallelism-nishthreads)); a
   generator shared by several tasks would be a shared write, and is refused as
   one. Seed each task's own from its index.
 

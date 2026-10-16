@@ -193,10 +193,13 @@ The task forms change two of these:
   arrow is lifted into a function named after the one it is written in, which
   is what a debugger shows for its thread, so the old reason for refusing an
   arrow is kept by the name rather than by the refusal.
-- **A function may write an object it made itself** without a shared write,
-  as it may an array it made (`const r = new Rng(seed); r.nextI32()`), until
-  memory its caller reaches gets inside it. That is what lets a body or a
-  task step a generator of its own (`nish/random`).
+- **A function may write the own slots of an object it made itself**
+  without a shared write, as it may an array it made (`const r = new
+  Rng(seed); r.nextI32()`). A write below those slots counts as a write into
+  whatever they may hold, so once the caller's memory is inside the object
+  (stored, pushed, kept by a constructor) it is refused as any shared write
+  is. That is what lets a body or a task step a generator of its own
+  (`nish/random`).
 
 P3 changes three of these (§4.3, §4.4):
 
