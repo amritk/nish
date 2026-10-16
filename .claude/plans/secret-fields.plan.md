@@ -90,11 +90,11 @@ stages:
     title: "src (optional) — a holder made in a function leaves it wiped, returned or stored"
     goal: Track a local bound to new Holder() like an owned Secret so make-and-drop and arena-block-drop are refused
     verification: same as S1
-    status: pending
+    status: cancelled
     todos:
       - id: s5-rule
         content: Extend SecretFlow to holder locals with NL2440 and NL2441 analogues and the negatives listed — see S5
-        status: pending
+        status: cancelled
 ---
 
 ## Context
@@ -269,6 +269,14 @@ Commit: `feat(checker): a Secret may be a readonly field of a class whose wipe()
 
 Commit: `feat(crypto): HKDF, TLS schedule and QUIC derivations into a held Secret`. Purely additive, and needs no `src/` change.
 
+**Owns:**
+
+- `std/`: `std/crypto/hkdf.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts` (the new methods only), `std/net/quic-packet.ts` (the new functions only), `std/README.md`.
+- Tests: `tests/link/crypto_held_derive/**`, `tests/wipes/crypto.js` (the new group), `tests/cases/reject_secret_held_plain_dst.*`, `tests/nish-cmp.js`, the self and differential goldens.
+- Docs: the `nish/crypto` section of `docs/guide/using-nish/standard-library.md`, the HKDF row in `docs/security/crypto-k1.md`.
+
+Runs alongside S1: it uses only today's `exposeWith`. The shared files (`tests/nish-cmp.js`, the goldens, `standard-library.md` in a different section) are merged by regenerating, never by hand.
+
 **New forms:**
 
 | File | Forms |
@@ -349,6 +357,8 @@ Commit: `feat(quic)!: QuicConnection holds its traffic secrets in Secret fields;
 - **Close-out:** close QUIC-1 on D6's terms. Commit body `Fixes #668`. Close #430 once the owner confirms.
 
 ## S5 (optional) — src: a holder made in a function leaves it wiped, returned or stored
+
+**Cancelled at sign-off (2026-10-16).** Holder end of life stays runtime-pinned, as D7 records.
 
 Commit: `feat(checker): a Secret holder made in a function leaves it wiped, returned or stored`.
 
