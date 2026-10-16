@@ -764,7 +764,7 @@ wasm has nothing to call it with. An N-API addon is built with the speed
 flags, so it gets the native kernel unchanged.
 
 **Cost.** The new unit costs what each of its siblings did:
-- a ceiling constant in `tests/run.js`, set at the next 256-byte boundary
+- a ceiling constant in `tests/runtime-budgets.js`, set at the next 256-byte boundary
   above its first measurement, with a row in wp7's budget table and in
   MASTER_PLAN §2's table of units. The AVX2 path and the resolver count
   against that ceiling.
