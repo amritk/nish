@@ -56,9 +56,13 @@ language says it is not.
 - A `Result` whose `Ok` payload is fresh gives a fresh value through `orReturn`
   and `expect`.
 - The rule refuses more than it must in three places, each a compile error
-  rather than a missed read: a data-parallel arrow that reads the local before
-  the move (the read ends with the call), a `Result` local copied into another
-  (`const alias = r`), and a `let` assigned again after the move.
+  rather than a missed read, and each pinned: a data-parallel arrow that reads
+  the local before the move, where the read ends with the call
+  (`reject_secret_alias_capture_*`); a `Result` local copied into another,
+  `const alias = r` (`reject_secret_alias_result_copy`); and a `let` given
+  another local after the move, `raw = other`
+  (`reject_secret_alias_reassigned_after`). A `let` given a fresh value after
+  the move is accepted.
 - The rule is what refuses each case: the same `src/` with it taken out
   compiles every one of them.
 
@@ -74,7 +78,9 @@ The checks in `tests/run.js` that hold the above:
   `reject_secret_alias_return`, `reject_secret_alias_mutual`,
   `reject_secret_alias_ternary`, `reject_secret_alias_nullish`,
   `reject_secret_alias_ok`, `reject_secret_alias_err`,
-  `reject_secret_alias_unwrap_or`, `reject_secret_alias_constructor`,
+  `reject_secret_alias_unwrap_or`, `reject_secret_alias_unwrap_helper`,
+  `reject_secret_alias_unwrap_local`, `reject_secret_alias_result_copy`,
+  `reject_secret_alias_reassigned_after`, `reject_secret_alias_constructor`,
   `reject_secret_alias_receiver`, `reject_secret_alias_pop`,
   `reject_secret_alias_for_of`, `reject_secret_alias_capture_map`,
   `reject_secret_alias_capture_from`, `reject_secret_alias_capture_map_into`

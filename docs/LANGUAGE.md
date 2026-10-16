@@ -5121,13 +5121,18 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   `reject_secret_alias_return`, `reject_secret_alias_mutual`,
   `reject_secret_alias_ternary`, `reject_secret_alias_nullish`,
   `reject_secret_alias_ok`, `reject_secret_alias_err`,
-  `reject_secret_alias_unwrap_or`, `reject_secret_alias_constructor`,
+  `reject_secret_alias_unwrap_or`, `reject_secret_alias_unwrap_helper`,
+  `reject_secret_alias_unwrap_local`, `reject_secret_alias_constructor`,
   `reject_secret_alias_receiver`, `reject_secret_alias_pop`,
   `reject_secret_alias_for_of`, and `reject_secret_alias_capture_map`,
   `_from`, `_map_into` and `_reduce`). Pass a fresh value instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
   copy.set(raw)`, then `secret(copy)`. A declarator that reads `raw` after
   `secret(raw)` in the same statement is a moved read, NL2445
-  (`reject_secret_alias_declarator_moved`).
+  (`reject_secret_alias_declarator_moved`). The rule refuses some programs
+  that are safe, each with the reference named: a data-parallel arrow that
+  reads the local before the move, a `Result` local copied into another
+  (`reject_secret_alias_result_copy`), and a `let` given another local even
+  after the move (`reject_secret_alias_reassigned_after`).
 - A `Secret` parameter is borrowed. The callee may read it through `expose`,
   hand it on, wipe it or return it, and owes nothing: the caller wipes what it
   made.
