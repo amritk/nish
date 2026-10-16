@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1023 programs, 108274 dump lines.
+# 1023 programs, 108365 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -53731,6 +53731,38 @@ function exposeWith<u8[], u8[], u8[] | null, x25519Exposed>(s: Secret<u8[]>, arg
   pointer arg: size=0 writesThrough=false captured=false passedTo=nish.x25519Exposed#1
   stackSites=0 stackLocals=0
   callee 52:93 x25519Exposed -> @nish.x25519Exposed
+function exposeWith<u8[], u8[], u8[], tlsExtractSha256Exposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha256Exposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsExtractSha256Exposed
+  calls: nish.tlsExtractSha256Exposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=0 writesThrough=false captured=false passedTo=nish.tlsExtractSha256Exposed#1
+  stackSites=0 stackLocals=0
+  callee 52:93 tlsExtractSha256Exposed -> @nish.tlsExtractSha256Exposed
+function exposeWith<u8[], u8[], u8[], tlsExtractSha384Exposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha384Exposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsExtractSha384Exposed
+  calls: nish.tlsExtractSha384Exposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=0 writesThrough=false captured=false passedTo=nish.tlsExtractSha384Exposed#1
+  stackSites=0 stackLocals=0
+  callee 52:93 tlsExtractSha384Exposed -> @nish.tlsExtractSha384Exposed
+function exposeWith<u8[], Secret<u8[]>, u8[], tlsExtractSha384Salted>(s: Secret<u8[]>, arg: Secret<u8[]>, f: void): u8[] -> @nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha384Salted [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsExtractSha384Salted
+  calls: nish.tlsExtractSha384Salted
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=8 writesThrough=false captured=false passedTo=nish.tlsExtractSha384Salted#1
+  stackSites=0 stackLocals=0
+  callee 52:93 tlsExtractSha384Salted -> @nish.tlsExtractSha384Salted
+function exposeWith<u8[], Secret<u8[]>, u8[], tlsExtractSha256Salted>(s: Secret<u8[]>, arg: Secret<u8[]>, f: void): u8[] -> @nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha256Salted [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsExtractSha256Salted
+  calls: nish.tlsExtractSha256Salted
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=8 writesThrough=false captured=false passedTo=nish.tlsExtractSha256Salted#1
+  stackSites=0 stackLocals=0
+  callee 52:93 tlsExtractSha256Salted -> @nish.tlsExtractSha256Salted
 function exposeWith<u8[], u8[], boolean, grantTagHolds>(s: Secret<u8[]>, arg: u8[], f: void): boolean -> @nish.exposeWith$arr.u8$arr.u8$bool$fn.13.grantTagHolds [exported instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via grantTagHolds$
@@ -69408,15 +69440,15 @@ function tlsCertificateVerifyContent(transcriptHash: u8[]): u8[] -> @nish.tlsCer
 module std/net/tls/schedule.ts [package nish]
 import HkdfScratch from "nish/crypto/hkdf" -> struct HkdfScratch
 import hkdfExpandLabelInto from "nish/crypto/hkdf" -> function @nish.hkdfExpandLabelInto
-import hkdfExpandLabelSha256 from "nish/crypto/hkdf" -> function @nish.hkdfExpandLabelSha256
-import hkdfExpandLabelSha384 from "nish/crypto/hkdf" -> function @nish.hkdfExpandLabelSha384
+import hkdfExpandLabelSha256Secret from "nish/crypto/hkdf" -> function @nish.hkdfExpandLabelSha256Secret
+import hkdfExpandLabelSha384Secret from "nish/crypto/hkdf" -> function @nish.hkdfExpandLabelSha384Secret
 import hkdfExtractInto from "nish/crypto/hkdf" -> function @nish.hkdfExtractInto
-import hkdfExtractSha256 from "nish/crypto/hkdf" -> function @nish.hkdfExtractSha256
-import hkdfExtractSha384 from "nish/crypto/hkdf" -> function @nish.hkdfExtractSha384
 import hmacCopySha256 from "nish/crypto/hmac" -> function @nish.hmacCopySha256
 import hmacCopySha384 from "nish/crypto/hmac" -> function @nish.hmacCopySha384
 import hmacSha256 from "nish/crypto/hmac" -> function @nish.hmacSha256
+import hmacSha256Secret from "nish/crypto/hmac" -> function @nish.hmacSha256Secret
 import hmacSha384 from "nish/crypto/hmac" -> function @nish.hmacSha384
+import hmacSha384Secret from "nish/crypto/hmac" -> function @nish.hmacSha384Secret
 import tlsHexInto from "nish/net/tls/codec" -> function @nish.tlsHexInto
 import SHA256_SIZE from "nish/crypto/sha256" -> const SHA256_SIZE
 import Sha256 from "nish/crypto/sha256" -> struct Sha256
@@ -69424,6 +69456,10 @@ import sha256 from "nish/crypto/sha256" -> function @nish.sha256
 import SHA384_SIZE from "nish/crypto/sha512" -> const SHA384_SIZE
 import Sha384 from "nish/crypto/sha512" -> struct Sha384
 import sha384 from "nish/crypto/sha512" -> function @nish.sha384
+import Secret from "nish:secret" -> generic class Secret
+import exposeWith from "nish:secret" -> generic function exposeWith
+import secret from "nish:secret" -> generic function secret
+import wipe from "nish:secret" -> generic function wipe
 const TLS_AES_128_GCM_SHA256: i32 = 4865 [exported]
 const TLS_AES_256_GCM_SHA384: i32 = 4866 [exported]
 const TLS_CHACHA20_POLY1305_SHA256: i32 = 4867 [exported]
@@ -69453,107 +69489,162 @@ function tlsSuiteKeyLength(suite: i32): i32 -> @nish.tlsSuiteKeyLength [exported
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: suite
   stackSites=0 stackLocals=0
-function tlsExpandLabel(hashLength: i32, secret: u8[], label: string, context: u8[], length: i32): u8[] -> @nish.tlsExpandLabel [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.hkdfExpandLabelSha384
+function tlsExpandLabel(hashLength: i32, prk: Secret<u8[]>, label: string, context: u8[], length: i32): Secret<u8[]> -> @nish.tlsExpandLabel [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: via nish.hkdfExpandLabelSha384Secret
   escaping: label length
-  calls: nish.hkdfExpandLabelSha256 nish.hkdfExpandLabelSha384
-  pointer secret: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelSha384#0 nish.hkdfExpandLabelSha256#0
-  pointer context: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelSha384#2 nish.hkdfExpandLabelSha256#2
+  calls: nish.hkdfExpandLabelSha256Secret nish.hkdfExpandLabelSha384Secret
+  pointer prk: size=8 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelSha384Secret#0 nish.hkdfExpandLabelSha256Secret#0
+  pointer context: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelSha384Secret#2 nish.hkdfExpandLabelSha256Secret#2
   stackSites=0 stackLocals=0
-  callee 108:7 hkdfExpandLabelSha384 -> @nish.hkdfExpandLabelSha384
-  callee 109:7 hkdfExpandLabelSha256 -> @nish.hkdfExpandLabelSha256
-function tlsExtract(hashLength: i32, salt: u8[], ikm: u8[]): u8[] -> @nish.tlsExtract [exported]
+  callee 118:12 hkdfExpandLabelSha384Secret -> @nish.hkdfExpandLabelSha384Secret
+  callee 120:10 hkdfExpandLabelSha256Secret -> @nish.hkdfExpandLabelSha256Secret
+function tlsExtractSha256Exposed(ikm: u8[], salt: u8[]): u8[] -> @nish.tlsExtractSha256Exposed
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.hkdfExtractSha384
-  calls: nish.hkdfExtractSha256 nish.hkdfExtractSha384
-  pointer salt: size=0 writesThrough=true captured=true passedTo=nish.hkdfExtractSha384#0 nish.hkdfExtractSha256#0
-  pointer ikm: size=0 writesThrough=false captured=false passedTo=nish.hkdfExtractSha384#1 nish.hkdfExtractSha256#1
+  sharedWrite: via nish.hmacSha256
+  calls: nish.hmacSha256
+  pointer ikm: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#1
+  pointer salt: size=0 writesThrough=false captured=false passedTo=nish.hmacSha256#0
   stackSites=0 stackLocals=0
-  callee 113:32 hkdfExtractSha384 -> @nish.hkdfExtractSha384
-  callee 113:63 hkdfExtractSha256 -> @nish.hkdfExtractSha256
+  callee 124:66 hmacSha256 -> @nish.hmacSha256
+function tlsExtractSha384Exposed(ikm: u8[], salt: u8[]): u8[] -> @nish.tlsExtractSha384Exposed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacSha384
+  calls: nish.hmacSha384
+  pointer ikm: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384#1
+  pointer salt: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384#0
+  stackSites=0 stackLocals=0
+  callee 127:66 hmacSha384 -> @nish.hmacSha384
+function tlsExtractSha256Salted(salt: u8[], ikm: Secret<u8[]>): u8[] -> @nish.tlsExtractSha256Salted
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha256Exposed
+  calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha256Exposed
+  pointer salt: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha256Exposed#1
+  pointer ikm: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha256Exposed#0
+  stackSites=0 stackLocals=0
+  callee 131:3 exposeWith<u8[], u8[], u8[], tlsExtractSha256Exposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha256Exposed
+function tlsExtractSha384Salted(salt: u8[], ikm: Secret<u8[]>): u8[] -> @nish.tlsExtractSha384Salted
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha384Exposed
+  calls: nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha384Exposed
+  pointer salt: size=0 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha384Exposed#1
+  pointer ikm: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha384Exposed#0
+  stackSites=0 stackLocals=0
+  callee 135:3 exposeWith<u8[], u8[], u8[], tlsExtractSha384Exposed> -> @nish.exposeWith$arr.u8$arr.u8$arr.u8$fn.28.nish.tlsExtractSha384Exposed
+function tlsExtract(hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>): Secret<u8[]> -> @nish.tlsExtract [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: via nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha384Salted
+  calls: nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha256Salted nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha384Salted nish.secret$arr.u8
+  pointer salt: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha384Salted#0 nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha256Salted#0
+  pointer ikm: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha384Salted#1 nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha256Salted#1
+  stackSites=0 stackLocals=0
+  local 145:11 prk384: u8[] (const)
+  callee 145:26 exposeWith<u8[], Secret<u8[]>, u8[], tlsExtractSha384Salted> -> @nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha384Salted
+  callee 146:12 secret<u8[]> -> @nish.secret$arr.u8
+  local 148:9 prk: u8[] (const)
+  callee 148:21 exposeWith<u8[], Secret<u8[]>, u8[], tlsExtractSha256Salted> -> @nish.exposeWith$arr.u8$$Secret$arr.u8$arr.u8$fn.27.nish.tlsExtractSha256Salted
+  callee 149:10 secret<u8[]> -> @nish.secret$arr.u8
 function tlsEmptyHash(hashLength: i32): u8[] -> @nish.tlsEmptyHash [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha384
   calls: nish.sha256 nish.sha384
   stackSites=1 stackLocals=1
-  local 117:9 none: u8[] (const)
-  callee 118:39 sha384 -> @nish.sha384
-  callee 118:54 sha256 -> @nish.sha256
-function tlsDeriveSecret(hashLength: i32, secret: u8[], label: string, transcriptHash: u8[]): u8[] -> @nish.tlsDeriveSecret [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  local 154:9 none: u8[] (const)
+  callee 155:39 sha384 -> @nish.sha384
+  callee 155:54 sha256 -> @nish.sha256
+function tlsDeriveSecret(hashLength: i32, prk: Secret<u8[]>, label: string, transcriptHash: u8[]): Secret<u8[]> -> @nish.tlsDeriveSecret [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish.tlsExpandLabel
   escaping: hashLength label
   calls: nish.tlsExpandLabel
-  pointer secret: size=0 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
+  pointer prk: size=8 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
   pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#3
   stackSites=0 stackLocals=0
-  callee 123:3 tlsExpandLabel -> @nish.tlsExpandLabel
-function tlsEarlySecret(hashLength: i32): u8[] -> @nish.tlsEarlySecret [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  callee 164:20 tlsExpandLabel -> @nish.tlsExpandLabel
+function tlsEarlySecret(hashLength: i32): Secret<u8[]> -> @nish.tlsEarlySecret [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish.tlsExtract
   escaping: hashLength
-  calls: nish.tlsExtract nish_panic
+  calls: nish.secret$arr.u8 nish.tlsExtract nish.wipe$$Secret$arr.u8 nish_panic
   stackSites=0 stackLocals=0
-  local 127:9 none: u8[] (const)
-  callee 128:10 tlsExtract -> @nish.tlsExtract
-function tlsHandshakeSecret(hashLength: i32, earlySecret: u8[], ecdhe: u8[]): u8[] -> @nish.tlsHandshakeSecret [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.tlsExtract
+  local 168:9 salt: Secret<u8[]> (const)
+  callee 168:30 secret<u8[]> -> @nish.secret$arr.u8
+  local 169:9 ikm: Secret<u8[]> (const)
+  callee 169:29 secret<u8[]> -> @nish.secret$arr.u8
+  local 170:9 early: Secret<u8[]> (const)
+  callee 170:31 tlsExtract -> @nish.tlsExtract
+  callee 171:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 172:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function tlsHandshakeSecret(hashLength: i32, earlySecret: Secret<u8[]>, ecdhe: Secret<u8[]>): Secret<u8[]> -> @nish.tlsHandshakeSecret [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: via nish.tlsDeriveSecret
   escaping: hashLength
-  calls: nish.tlsDeriveSecret nish.tlsEmptyHash nish.tlsExtract
-  pointer earlySecret: size=0 writesThrough=false captured=false passedTo=nish.tlsDeriveSecret#1
-  pointer ecdhe: size=0 writesThrough=false captured=false passedTo=nish.tlsExtract#2
+  calls: nish.tlsDeriveSecret nish.tlsEmptyHash nish.tlsExtract nish.wipe$$Secret$arr.u8
+  pointer earlySecret: size=8 writesThrough=false captured=false passedTo=nish.tlsDeriveSecret#1
+  pointer ecdhe: size=8 writesThrough=false captured=false passedTo=nish.tlsExtract#2
   stackSites=0 stackLocals=0
-  callee 133:3 tlsExtract -> @nish.tlsExtract
-  callee 133:26 tlsDeriveSecret -> @nish.tlsDeriveSecret
-  callee 133:78 tlsEmptyHash -> @nish.tlsEmptyHash
-function tlsMasterSecret(hashLength: i32, handshakeSecret: u8[]): u8[] -> @nish.tlsMasterSecret [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.tlsExtract
+  local 185:9 derived: Secret<u8[]> (const)
+  callee 185:33 tlsDeriveSecret -> @nish.tlsDeriveSecret
+  callee 185:85 tlsEmptyHash -> @nish.tlsEmptyHash
+  local 186:9 handshake: Secret<u8[]> (const)
+  callee 186:35 tlsExtract -> @nish.tlsExtract
+  callee 187:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function tlsMasterSecret(hashLength: i32, handshakeSecret: Secret<u8[]>): Secret<u8[]> -> @nish.tlsMasterSecret [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
+  sharedWrite: via nish.tlsDeriveSecret
   escaping: hashLength
-  calls: nish.tlsDeriveSecret nish.tlsEmptyHash nish.tlsExtract nish_panic
-  pointer handshakeSecret: size=0 writesThrough=false captured=false passedTo=nish.tlsDeriveSecret#1
+  calls: nish.secret$arr.u8 nish.tlsDeriveSecret nish.tlsEmptyHash nish.tlsExtract nish.wipe$$Secret$arr.u8 nish_panic
+  pointer handshakeSecret: size=8 writesThrough=false captured=false passedTo=nish.tlsDeriveSecret#1
   stackSites=0 stackLocals=0
-  callee 137:3 tlsExtract -> @nish.tlsExtract
-  callee 139:5 tlsDeriveSecret -> @nish.tlsDeriveSecret
-  callee 139:61 tlsEmptyHash -> @nish.tlsEmptyHash
-function tlsFinishedVerifyData(hashLength: i32, baseKey: u8[], transcriptHash: u8[]): u8[] -> @nish.tlsFinishedVerifyData [exported]
+  local 196:9 derived: Secret<u8[]> (const)
+  callee 196:33 tlsDeriveSecret -> @nish.tlsDeriveSecret
+  callee 200:5 tlsEmptyHash -> @nish.tlsEmptyHash
+  local 202:9 zeros: Secret<u8[]> (const)
+  callee 202:31 secret<u8[]> -> @nish.secret$arr.u8
+  local 203:9 master: Secret<u8[]> (const)
+  callee 203:32 tlsExtract -> @nish.tlsExtract
+  callee 204:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 205:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function tlsFinishedVerifyData(hashLength: i32, baseKey: Secret<u8[]>, transcriptHash: u8[]): u8[] -> @nish.tlsFinishedVerifyData [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsExpandLabel
   escaping: hashLength
-  calls: nish.hmacSha256 nish.hmacSha384 nish.tlsExpandLabel
-  pointer baseKey: size=0 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
-  pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384#1 nish.hmacSha256#1
+  calls: nish.hmacSha256Secret nish.hmacSha384Secret nish.tlsExpandLabel nish.wipe$$Secret$arr.u8
+  pointer baseKey: size=8 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
+  pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384Secret#1 nish.hmacSha256Secret#1
   stackSites=1 stackLocals=1
-  local 149:9 none: u8[] (const)
-  local 150:9 finishedKey: u8[] (const)
-  callee 150:29 tlsExpandLabel -> @nish.tlsExpandLabel
-  callee 152:7 hmacSha384 -> @nish.hmacSha384
-  callee 153:7 hmacSha256 -> @nish.hmacSha256
-function tlsTrafficKey(suite: i32, secret: u8[]): u8[] -> @nish.tlsTrafficKey [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  local 217:9 none: u8[] (const)
+  local 218:9 finishedKey: Secret<u8[]> (const)
+  callee 218:37 tlsExpandLabel -> @nish.tlsExpandLabel
+  local 219:9 verifyData: u8[] (const)
+  callee 221:9 hmacSha384Secret -> @nish.hmacSha384Secret
+  callee 222:9 hmacSha256Secret -> @nish.hmacSha256Secret
+  callee 223:3 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function tlsTrafficKey(suite: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> -> @nish.tlsTrafficKey [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish.tlsExpandLabel
   escaping: suite
-  calls: nish.tlsExpandLabel nish.tlsSuiteHashLength nish.tlsSuiteKeyLength
-  pointer secret: size=0 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
-  stackSites=0 stackLocals=0
-  local 158:9 none: u8[] (const)
-  local 159:9 hashLength: i32 (const)
-  callee 159:27 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
-  callee 163:10 tlsExpandLabel -> @nish.tlsExpandLabel
-  callee 163:58 tlsSuiteKeyLength -> @nish.tlsSuiteKeyLength
-function tlsTrafficIv(suite: i32, secret: u8[]): u8[] -> @nish.tlsTrafficIv [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  calls: nish.secret$arr.u8 nish.tlsExpandLabel nish.tlsSuiteHashLength nish.tlsSuiteKeyLength
+  pointer trafficSecret: size=8 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
+  stackSites=1 stackLocals=1
+  local 232:9 none: u8[] (const)
+  local 233:9 hashLength: i32 (const)
+  callee 233:27 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
+  callee 235:12 secret<u8[]> -> @nish.secret$arr.u8
+  callee 237:10 tlsExpandLabel -> @nish.tlsExpandLabel
+  callee 237:65 tlsSuiteKeyLength -> @nish.tlsSuiteKeyLength
+function tlsTrafficIv(suite: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> -> @nish.tlsTrafficIv [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via nish.tlsExpandLabel
   escaping: suite
-  calls: nish.tlsExpandLabel nish.tlsSuiteHashLength
-  pointer secret: size=0 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
-  stackSites=0 stackLocals=0
-  local 168:9 none: u8[] (const)
-  local 169:9 hashLength: i32 (const)
-  callee 169:27 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
-  callee 173:10 tlsExpandLabel -> @nish.tlsExpandLabel
+  calls: nish.secret$arr.u8 nish.tlsExpandLabel nish.tlsSuiteHashLength
+  pointer trafficSecret: size=8 writesThrough=false captured=false passedTo=nish.tlsExpandLabel#1
+  stackSites=1 stackLocals=1
+  local 245:9 none: u8[] (const)
+  local 246:9 hashLength: i32 (const)
+  callee 246:27 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
+  callee 248:12 secret<u8[]> -> @nish.secret$arr.u8
+  callee 250:10 tlsExpandLabel -> @nish.tlsExpandLabel
 function TlsTranscript.constructor(this: TlsTranscript, hashLength: i32): void -> @nish.TlsTranscript.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.Sha256.constructor
@@ -69561,21 +69652,21 @@ function TlsTranscript.constructor(this: TlsTranscript, hashLength: i32): void -
   calls: nish.Sha256.constructor nish.Sha384.constructor nish_alloc_struct
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 206:19 new Sha256 -> @nish.Sha256.constructor
-  callee 207:19 new Sha384 -> @nish.Sha384.constructor
-  callee 208:21 new Sha256 -> @nish.Sha256.constructor
-  callee 209:21 new Sha384 -> @nish.Sha384.constructor
-  callee 210:20 new Sha256 -> @nish.Sha256.constructor
-  callee 211:20 new Sha384 -> @nish.Sha384.constructor
+  callee 283:19 new Sha256 -> @nish.Sha256.constructor
+  callee 284:19 new Sha384 -> @nish.Sha384.constructor
+  callee 285:21 new Sha256 -> @nish.Sha256.constructor
+  callee 286:21 new Sha384 -> @nish.Sha384.constructor
+  callee 287:20 new Sha256 -> @nish.Sha256.constructor
+  callee 288:20 new Sha384 -> @nish.Sha384.constructor
 function TlsTranscript.reset(this: TlsTranscript, hashLength: i32): void -> @nish.TlsTranscript.reset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 216:5
+  sharedWrite: 293:5
   escaping: hashLength
   calls: nish.hmacCopySha256 nish.hmacCopySha384
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 217:5 hmacCopySha256 -> @nish.hmacCopySha256
-  callee 218:5 hmacCopySha384 -> @nish.hmacCopySha384
+  callee 294:5 hmacCopySha256 -> @nish.hmacCopySha256
+  callee 295:5 hmacCopySha384 -> @nish.hmacCopySha384
 function TlsTranscript.update(this: TlsTranscript, data: u8[], off: i32, len: i32): void -> @nish.TlsTranscript.update [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Sha384.update
@@ -69584,60 +69675,60 @@ function TlsTranscript.update(this: TlsTranscript, data: u8[], off: i32, len: i3
   pointer this: size=56 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.Sha384.update#1 nish.Sha256.update#1
   stackSites=0 stackLocals=0
-  callee 224:7 Sha384.update -> @nish.Sha384.update
-  callee 226:7 Sha256.update -> @nish.Sha256.update
+  callee 301:7 Sha384.update -> @nish.Sha384.update
+  callee 303:7 Sha256.update -> @nish.Sha256.update
 function TlsTranscript.hashInto(this: TlsTranscript, out: u8[], at: i32): void -> @nish.TlsTranscript.hashInto [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 245:7
+  sharedWrite: 322:7
   calls: nish.Sha256.digest nish.Sha384.digest nish.hmacCopySha256 nish.hmacCopySha384 nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow
   pointer this: size=56 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 236:9 digest: u8[] (let)
-  callee 238:7 hmacCopySha384 -> @nish.hmacCopySha384
-  callee 239:16 Sha384.digest -> @nish.Sha384.digest
-  callee 241:7 hmacCopySha256 -> @nish.hmacCopySha256
-  callee 242:16 Sha256.digest -> @nish.Sha256.digest
-  local 244:14 k: i32 (let)
+  local 313:9 digest: u8[] (let)
+  callee 315:7 hmacCopySha384 -> @nish.hmacCopySha384
+  callee 316:16 Sha384.digest -> @nish.Sha384.digest
+  callee 318:7 hmacCopySha256 -> @nish.hmacCopySha256
+  callee 319:16 Sha256.digest -> @nish.Sha256.digest
+  local 321:14 k: i32 (let)
 function TlsTranscript.hash(this: TlsTranscript): u8[] -> @nish.TlsTranscript.hash [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsTranscript.hashInto
   calls: nish.TlsTranscript.hashInto nish_panic
   pointer this: size=56 writesThrough=false captured=false passedTo=nish.TlsTranscript.hashInto#0
   stackSites=0 stackLocals=0
-  local 251:11 out: u8[] (const)
-  callee 252:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  local 328:11 out: u8[] (const)
+  callee 329:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
 function TlsTranscript.restartWithMessageHash(this: TlsTranscript): void -> @nish.TlsTranscript.restartWithMessageHash [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsTranscript.hashInto
   calls: nish.TlsTranscript.hashInto nish.TlsTranscript.reset nish.TlsTranscript.update nish_panic
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.TlsTranscript.hashInto#0 nish.TlsTranscript.reset#0 nish.TlsTranscript.update#0 nish.TlsTranscript.update#0
   stackSites=1 stackLocals=1
-  local 263:11 first: u8[] (const)
-  callee 264:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
-  local 265:11 header: u8[] (const)
-  local 266:11 headerLength: i32 (const)
-  callee 267:5 TlsTranscript.reset -> @nish.TlsTranscript.reset
-  callee 268:5 TlsTranscript.update -> @nish.TlsTranscript.update
-  callee 269:5 TlsTranscript.update -> @nish.TlsTranscript.update
+  local 340:11 first: u8[] (const)
+  callee 341:5 TlsTranscript.hashInto -> @nish.TlsTranscript.hashInto
+  local 342:11 header: u8[] (const)
+  local 343:11 headerLength: i32 (const)
+  callee 344:5 TlsTranscript.reset -> @nish.TlsTranscript.reset
+  callee 345:5 TlsTranscript.update -> @nish.TlsTranscript.update
+  callee 346:5 TlsTranscript.update -> @nish.TlsTranscript.update
 function tlsEmptyHashInto(hashLength: i32, out: u8[]): void -> @nish.tlsEmptyHashInto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsHexInto
   calls: nish.tlsHexInto
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsHexInto#1
   stackSites=0 stackLocals=0
-  callee 283:3 tlsHexInto -> @nish.tlsHexInto
-function tlsDeriveSecretInto(kdf: HkdfScratch, hashLength: i32, secret: u8[], label: string, transcriptHash: u8[], hashOff: i32, out: u8[]): void -> @nish.tlsDeriveSecretInto [exported]
+  callee 360:3 tlsHexInto -> @nish.tlsHexInto
+function tlsDeriveSecretInto(kdf: HkdfScratch, hashLength: i32, prk: u8[], label: string, transcriptHash: u8[], hashOff: i32, out: u8[]): void -> @nish.tlsDeriveSecretInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandLabelInto
   escaping: hashLength hashOff label
   calls: nish.hkdfExpandLabelInto
   pointer kdf: size=40 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#0
-  pointer secret: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#2
+  pointer prk: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#2
   pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#4
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfExpandLabelInto#7
   stackSites=0 stackLocals=0
-  callee 304:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  callee 381:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
 function tlsMasterSecretInto(kdf: HkdfScratch, hashLength: i32, handshakeSecret: u8[], out: u8[]): void -> @nish.tlsMasterSecretInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.tlsDeriveSecretInto
@@ -69647,11 +69738,11 @@ function tlsMasterSecretInto(kdf: HkdfScratch, hashLength: i32, handshakeSecret:
   pointer handshakeSecret: size=0 writesThrough=false captured=false passedTo=nish.tlsDeriveSecretInto#2
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hkdfExtractInto#4
   stackSites=0 stackLocals=0
-  local 329:9 empty: u8[] (const)
-  callee 330:3 tlsEmptyHashInto -> @nish.tlsEmptyHashInto
-  local 331:9 salt: u8[] (const)
-  callee 332:3 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
-  callee 333:3 hkdfExtractInto -> @nish.hkdfExtractInto
+  local 406:9 empty: u8[] (const)
+  callee 407:3 tlsEmptyHashInto -> @nish.tlsEmptyHashInto
+  local 408:9 salt: u8[] (const)
+  callee 409:3 tlsDeriveSecretInto -> @nish.tlsDeriveSecretInto
+  callee 410:3 hkdfExtractInto -> @nish.hkdfExtractInto
 function tlsFinishedVerifyDataInto(kdf: HkdfScratch, hashLength: i32, baseKey: u8[], transcriptHash: u8[], hashOff: i32, out: u8[], at: i32): void -> @nish.tlsFinishedVerifyDataInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandLabelInto
@@ -69662,33 +69753,33 @@ function tlsFinishedVerifyDataInto(kdf: HkdfScratch, hashLength: i32, baseKey: u
   pointer transcriptHash: size=0 writesThrough=false captured=false passedTo=nish.HmacSha384Scratch.update#1 nish.HmacSha256Scratch.update#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.HmacSha384Scratch.finishInto#1 nish.HmacSha256Scratch.finishInto#1
   stackSites=1 stackLocals=1
-  local 352:9 none: u8[] (const)
-  local 353:9 finishedKey: u8[] (const)
-  callee 354:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
-  callee 367:5 HmacSha384Scratch.begin -> @nish.HmacSha384Scratch.begin
-  callee 368:5 HmacSha384Scratch.update -> @nish.HmacSha384Scratch.update
-  callee 369:5 HmacSha384Scratch.finishInto -> @nish.HmacSha384Scratch.finishInto
-  callee 371:5 HmacSha256Scratch.begin -> @nish.HmacSha256Scratch.begin
-  callee 372:5 HmacSha256Scratch.update -> @nish.HmacSha256Scratch.update
-  callee 373:5 HmacSha256Scratch.finishInto -> @nish.HmacSha256Scratch.finishInto
-  callee 376:3 HkdfScratch.wipe -> @nish.HkdfScratch.wipe
-function tlsTrafficKeysInto(kdf: HkdfScratch, suite: i32, secret: u8[], key: u8[], iv: u8[]): boolean -> @nish.tlsTrafficKeysInto [exported]
+  local 429:9 none: u8[] (const)
+  local 430:9 finishedKey: u8[] (const)
+  callee 431:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  callee 444:5 HmacSha384Scratch.begin -> @nish.HmacSha384Scratch.begin
+  callee 445:5 HmacSha384Scratch.update -> @nish.HmacSha384Scratch.update
+  callee 446:5 HmacSha384Scratch.finishInto -> @nish.HmacSha384Scratch.finishInto
+  callee 448:5 HmacSha256Scratch.begin -> @nish.HmacSha256Scratch.begin
+  callee 449:5 HmacSha256Scratch.update -> @nish.HmacSha256Scratch.update
+  callee 450:5 HmacSha256Scratch.finishInto -> @nish.HmacSha256Scratch.finishInto
+  callee 453:3 HkdfScratch.wipe -> @nish.HkdfScratch.wipe
+function tlsTrafficKeysInto(kdf: HkdfScratch, suite: i32, trafficSecret: u8[], key: u8[], iv: u8[]): boolean -> @nish.tlsTrafficKeysInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hkdfExpandLabelInto
   escaping: suite
   calls: nish.hkdfExpandLabelInto nish.tlsSuiteHashLength nish.tlsSuiteKeyLength
   pointer kdf: size=40 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#0 nish.hkdfExpandLabelInto#0
-  pointer secret: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#2 nish.hkdfExpandLabelInto#2
+  pointer trafficSecret: size=0 writesThrough=false captured=false passedTo=nish.hkdfExpandLabelInto#2 nish.hkdfExpandLabelInto#2
   pointer key: size=0 writesThrough=true captured=false passedTo=nish.hkdfExpandLabelInto#7
   pointer iv: size=0 writesThrough=true captured=false passedTo=nish.hkdfExpandLabelInto#7
   stackSites=1 stackLocals=1
-  local 393:9 none: u8[] (const)
-  local 394:9 hashLength: i32 (const)
-  callee 394:27 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
-  local 395:9 keyLength: i32 (const)
-  callee 395:26 tlsSuiteKeyLength -> @nish.tlsSuiteKeyLength
-  callee 404:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
-  callee 416:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  local 470:9 none: u8[] (const)
+  local 471:9 hashLength: i32 (const)
+  callee 471:27 tlsSuiteHashLength -> @nish.tlsSuiteHashLength
+  local 472:9 keyLength: i32 (const)
+  callee 472:26 tlsSuiteKeyLength -> @nish.tlsSuiteKeyLength
+  callee 481:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
+  callee 493:3 hkdfExpandLabelInto -> @nish.hkdfExpandLabelInto
 module std/net/quic-listener.ts [package nish]
 import AesKey from "nish/crypto/aes" -> struct AesKey
 import aesGcmSeal from "nish/crypto/aes" -> function @nish.aesGcmSeal
