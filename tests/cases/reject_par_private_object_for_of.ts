@@ -1,7 +1,6 @@
 // A walk of a body's own array of the caller's object hands that object to a
 // helper that writes it: `bumpBox(b)` writes `box` on every element at once.
-import { parallelFrom, parallelMapInto, scope } from "nish/threads";
-import { Rng } from "nish/random";
+import { parallelMapInto } from "nish/threads";
 class Box {
   n: i32 = 0;
 
