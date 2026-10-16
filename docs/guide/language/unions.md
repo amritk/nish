@@ -78,8 +78,10 @@ answers `Shape`, or written into a `Shape[]` literal; so does a `Round` where
 a `Shape` is wanted.
 
 A union crosses modules like any exported type, but not a C header or a N-API
-bridge: a sidecar has no C spelling for it yet, so an exported signature or
-field that holds one is refused.
+bridge: a sidecar has no C spelling for it yet, so an exported signature that
+holds one is refused. So is a field that holds one, in any class or interface
+of the program, exported or not: a header lays out every class, a private one
+too.
 
 A union is not a type argument, so `Box<Shape>`, `Map<string, Shape>`,
 `Set<Shape>` and `Result<Shape, string>` are refused, and so is a call to a
@@ -152,9 +154,11 @@ TypeScript also narrows by a test of the tag: after
 `if (s.kind === Kind.Circle) { return 1; }` it knows `s` is not a `Circle`,
 and a second `s.kind === Kind.Circle` is an error there. This version does
 not narrow yet, so it compiles that second test, which is always `false`,
-and the same holds for a tag stored in `const k: Kind`. Do not write a test
-the code above it has already ruled out; the version that adds narrowing
-will refuse it, as TypeScript does.
+and the same holds for a tag stored in `const k: Kind`. That local is wider
+still: TypeScript gives `k` only the variants' members, so even a first
+`k === Kind.Tri`, when no variant is a `Tri`, is an error there and compiles
+here. Do not write a test the code above it, or the variants, have already
+ruled out; the version that adds narrowing will refuse it, as TypeScript does.
 
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case

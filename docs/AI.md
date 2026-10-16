@@ -1457,13 +1457,15 @@ export const main = (): i32 => {
   crosses modules but not a sidecar (NL4009).
 - **The tag is the only member** (NL2528 for anything else, even a field every
   variant has). It reads as the enum: `const k: Kind = s.kind` — annotate it,
-  `const k = s.kind` is NL2530. A union is read-only, even for a field every
+  `const k = s.kind` is NL2530. Compare `k` only with the variants' members:
+  `tsc` narrows it to those, so `k === Kind.C` with no `C` variant is TS2367
+  there and compiles here. A union is read-only, even for a field every
   variant has (NL2529). Comparing the tag with a member no variant has is
   NL2531, a `case` for one NL2532.
 - **Not yet:** narrowing by `if`/`switch`. Until it lands, a second test of a
   tag already ruled out (`if (s.kind === Kind.A) { return }` then
   `s.kind === Kind.A`) compiles here and is TS2367 in `tsc`: do not write
-  one.
+  one. The same holds for a `const k: Kind = s.kind` from the start.
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`

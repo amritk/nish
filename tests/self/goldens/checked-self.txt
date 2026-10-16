@@ -49160,19 +49160,19 @@ function refuseUnions(compilation: Compilation, fns: ExternalFunction[]): boolea
   callee 964:16 sigNameNode -> @sigNameNode
   callee 965:9 TypeTable.holdsUnion -> @TypeTable.holdsUnion
   callee 966:7 reportUnion -> @reportUnion
-  callee 966:80 TypeTable.typeName -> @TypeTable.typeName
-  local 969:9 i: i32 (let)
-  local 971:13 t: i32 (const)
-  callee 972:11 TypeTable.holdsUnion -> @TypeTable.holdsUnion
-  local 973:15 what: string (const)
-  callee 973:89 TypeTable.typeName -> @TypeTable.typeName
-  callee 974:9 reportUnion -> @reportUnion
-  local 980:14 unit: ModuleUnit (const)
-  local 981:16 info: StructInfo (const)
-  local 985:18 f: FieldInfo (const)
-  callee 986:13 TypeTable.holdsUnion -> @TypeTable.holdsUnion
-  callee 987:11 reportUnion -> @reportUnion
-  callee 987:85 TypeTable.typeName -> @TypeTable.typeName
+  callee 970:44 TypeTable.typeName -> @TypeTable.typeName
+  local 974:9 i: i32 (let)
+  local 976:13 t: i32 (const)
+  callee 977:11 TypeTable.holdsUnion -> @TypeTable.holdsUnion
+  local 978:15 what: string (const)
+  callee 978:89 TypeTable.typeName -> @TypeTable.typeName
+  callee 979:9 reportUnion -> @reportUnion
+  local 985:14 unit: ModuleUnit (const)
+  local 986:16 info: StructInfo (const)
+  local 990:18 f: FieldInfo (const)
+  callee 991:13 TypeTable.holdsUnion -> @TypeTable.holdsUnion
+  callee 992:11 reportUnion -> @reportUnion
+  callee 996:48 TypeTable.typeName -> @TypeTable.typeName
 function reportUnion(compilation: Compilation, unit: ModuleUnit, at: Node, what: string): void -> @reportUnion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
@@ -49181,7 +49181,7 @@ function reportUnion(compilation: Compilation, unit: ModuleUnit, at: Node, what:
   pointer unit: size=88 writesThrough=false captured=false
   pointer at: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 997:3 DiagnosticSink.report -> @DiagnosticSink.report
+  callee 1007:3 DiagnosticSink.report -> @DiagnosticSink.report
 function reportUninstantiated(compilation: Compilation, unit: ModuleUnit, name: string, decl: Node, what: string, kind: string, becomes: string): void -> @reportUninstantiated
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
@@ -49190,8 +49190,8 @@ function reportUninstantiated(compilation: Compilation, unit: ModuleUnit, name: 
   pointer unit: size=88 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1014:9 at: Node (const)
-  callee 1015:3 DiagnosticSink.report -> @DiagnosticSink.report
+  local 1024:9 at: Node (const)
+  callee 1025:3 DiagnosticSink.report -> @DiagnosticSink.report
 function sigNameNode(sig: FunctionSig): Node -> @sigNameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
@@ -49204,21 +49204,21 @@ function cPrototype(table: TypeTable, fn: ExternalFunction): string -> @cPrototy
   pointer table: size=96 writesThrough=false captured=false passedTo=cType#0 cType#0
   pointer fn: size=32 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 1040:9 sig: FunctionSig (const)
-  local 1041:9 writtenParams: StringSet (const)
-  local 1042:9 ret: string (const)
-  callee 1042:15 cType -> @cType
-  local 1046:9 params: string[] (const)
-  local 1047:7 i: i32 (let)
-  local 1049:11 t: string (const)
-  callee 1049:15 cType -> @cType
-  callee 1049:58 StringSet.has -> @StringSet.has
-  callee 1053:24 spaceAfter -> @spaceAfter
-  callee 1053:40 cParamName -> @cParamName
-  local 1056:9 name: CName (const)
-  callee 1056:16 cFunctionName -> @cFunctionName
-  local 1057:9 list: string (const)
-  callee 1058:19 spaceAfter -> @spaceAfter
+  local 1050:9 sig: FunctionSig (const)
+  local 1051:9 writtenParams: StringSet (const)
+  local 1052:9 ret: string (const)
+  callee 1052:15 cType -> @cType
+  local 1056:9 params: string[] (const)
+  local 1057:7 i: i32 (let)
+  local 1059:11 t: string (const)
+  callee 1059:15 cType -> @cType
+  callee 1059:58 StringSet.has -> @StringSet.has
+  callee 1063:24 spaceAfter -> @spaceAfter
+  callee 1063:40 cParamName -> @cParamName
+  local 1066:9 name: CName (const)
+  callee 1066:16 cFunctionName -> @cFunctionName
+  local 1067:9 list: string (const)
+  callee 1068:19 spaceAfter -> @spaceAfter
 function spaceAfter(type: string): string -> @spaceAfter [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_at
@@ -49229,36 +49229,36 @@ function guardStem(outFile: string): string -> @guardStem [exported]
   escaping: outFile
   calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText basename nish_panic_index nish_panic_overflow nish_str_concat stripHeaderSuffix
   stackSites=1 stackLocals=1
-  local 1066:9 stem: string (const)
-  callee 1066:16 stripHeaderSuffix -> @stripHeaderSuffix
-  callee 1066:34 basename -> @basename
-  local 1067:9 id: StringBuilder (const)
-  callee 1067:14 new StringBuilder -> @StringBuilder.constructor
-  local 1068:7 i: i32 (let)
-  local 1070:11 c: i32 (const)
-  callee 1072:7 StringBuilder.addChar -> @StringBuilder.addChar
-  callee 1074:7 StringBuilder.addChar -> @StringBuilder.addChar
-  callee 1076:7 StringBuilder.addChar -> @StringBuilder.addChar
-  local 1080:9 text: string (const)
-  callee 1080:16 StringBuilder.toText -> @StringBuilder.toText
-  local 1084:9 first: i32 (const)
+  local 1076:9 stem: string (const)
+  callee 1076:16 stripHeaderSuffix -> @stripHeaderSuffix
+  callee 1076:34 basename -> @basename
+  local 1077:9 id: StringBuilder (const)
+  callee 1077:14 new StringBuilder -> @StringBuilder.constructor
+  local 1078:7 i: i32 (let)
+  local 1080:11 c: i32 (const)
+  callee 1082:7 StringBuilder.addChar -> @StringBuilder.addChar
+  callee 1084:7 StringBuilder.addChar -> @StringBuilder.addChar
+  callee 1086:7 StringBuilder.addChar -> @StringBuilder.addChar
+  local 1090:9 text: string (const)
+  callee 1090:16 StringBuilder.toText -> @StringBuilder.toText
+  local 1094:9 first: i32 (const)
 function stripHeaderSuffix(stem: string): string -> @stripHeaderSuffix
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: stem
   calls: endsWithFold nish_str_new
   stackSites=0 stackLocals=0
-  callee 1095:7 endsWithFold -> @endsWithFold
-  callee 1098:7 endsWithFold -> @endsWithFold
-  callee 1101:7 endsWithFold -> @endsWithFold
-  callee 1101:35 endsWithFold -> @endsWithFold
+  callee 1105:7 endsWithFold -> @endsWithFold
+  callee 1108:7 endsWithFold -> @endsWithFold
+  callee 1111:7 endsWithFold -> @endsWithFold
+  callee 1111:35 endsWithFold -> @endsWithFold
 function endsWithFold(text: string, suffix: string): boolean -> @endsWithFold [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: foldByte nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
-  local 1112:9 offset: i32 (const)
-  local 1113:7 i: i32 (let)
-  callee 1115:9 foldByte -> @foldByte
-  callee 1115:51 foldByte -> @foldByte
+  local 1122:9 offset: i32 (const)
+  local 1123:7 i: i32 (let)
+  callee 1125:9 foldByte -> @foldByte
+  callee 1125:51 foldByte -> @foldByte
 function foldByte(c: i32): i32 -> @foldByte
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: c
@@ -49269,40 +49269,40 @@ function banner(compilation: Compilation, flag: string, comment: string): string
   calls: Compilation.entry nish_str_concat
   pointer compilation: size=128 writesThrough=false captured=false passedTo=Compilation.entry#0
   stackSites=0 stackLocals=0
-  callee 1127:49 Compilation.entry -> @Compilation.entry
+  callee 1137:49 Compilation.entry -> @Compilation.entry
 function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fields: i32[]): string[] -> @resultDefinitions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1154:3
+  sharedWrite: 1164:3
   calls: nish_array_grow pushAll resultDefinition resultTypesUsed
   pointer table: size=96 writesThrough=false captured=false passedTo=resultTypesUsed#0 resultDefinition#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=resultTypesUsed#1
   pointer fields: size=0 writesThrough=false captured=false passedTo=resultTypesUsed#2
   stackSites=0 stackLocals=0
-  local 1149:9 uses: ResultUse[] (const)
-  callee 1149:16 resultTypesUsed -> @resultTypesUsed
-  local 1150:9 lines: string[] (const)
-  local 1167:14 use: ResultUse (const)
-  callee 1169:5 pushAll -> @pushAll
-  callee 1169:20 resultDefinition -> @resultDefinition
+  local 1159:9 uses: ResultUse[] (const)
+  callee 1159:16 resultTypesUsed -> @resultTypesUsed
+  local 1160:9 lines: string[] (const)
+  local 1177:14 use: ResultUse (const)
+  callee 1179:5 pushAll -> @pushAll
+  callee 1179:20 resultDefinition -> @resultDefinition
 function resultDefinition(table: TypeTable, use: ResultUse): string[] -> @resultDefinition
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1177:3
+  sharedWrite: 1187:3
   calls: cResultName cResultWord nish_alloc_struct nish_array_grow nish_str_concat resultField tsKeyword
   pointer table: size=96 writesThrough=false captured=false passedTo=tsKeyword#0 cResultName#0 resultField#0 resultField#0 resultField#0 resultField#0 cResultWord#0 tsKeyword#0
   pointer use: size=24 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 1175:9 layout: ResultLayout (const)
-  local 1176:9 lines: string[] (const)
-  callee 1177:20 tsKeyword -> @tsKeyword
-  callee 1179:26 cResultName -> @cResultName
-  callee 1182:23 resultField -> @resultField
-  callee 1184:21 resultField -> @resultField
-  local 1188:11 arms: string[] (const)
-  callee 1190:17 resultField -> @resultField
-  callee 1192:15 resultField -> @resultField
-  local 1193:11 name: string (const)
-  callee 1193:18 cResultWord -> @cResultWord
-  callee 1199:52 tsKeyword -> @tsKeyword
+  local 1185:9 layout: ResultLayout (const)
+  local 1186:9 lines: string[] (const)
+  callee 1187:20 tsKeyword -> @tsKeyword
+  callee 1189:26 cResultName -> @cResultName
+  callee 1192:23 resultField -> @resultField
+  callee 1194:21 resultField -> @resultField
+  local 1198:11 arms: string[] (const)
+  callee 1200:17 resultField -> @resultField
+  callee 1202:15 resultField -> @resultField
+  local 1203:11 name: string (const)
+  callee 1203:18 cResultWord -> @cResultWord
+  callee 1209:52 tsKeyword -> @tsKeyword
 function resultField(table: TypeTable, t: i32, name: string): string -> @resultField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via cFieldType
@@ -49310,13 +49310,13 @@ function resultField(table: TypeTable, t: i32, name: string): string -> @resultF
   calls: TypeTable.kindOf cFieldType nish_str_concat spaceAfter tsKeyword
   pointer table: size=96 writesThrough=false captured=false passedTo=cFieldType#0 TypeTable.kindOf#0 tsKeyword#0
   stackSites=0 stackLocals=0
-  local 1207:9 c: string (const)
-  callee 1207:13 cFieldType -> @cFieldType
-  local 1208:9 kind: i32 (const)
-  callee 1208:16 TypeTable.kindOf -> @TypeTable.kindOf
-  local 1209:9 note: string (const)
-  callee 1209:63 tsKeyword -> @tsKeyword
-  callee 1210:17 spaceAfter -> @spaceAfter
+  local 1217:9 c: string (const)
+  callee 1217:13 cFieldType -> @cFieldType
+  local 1218:9 kind: i32 (const)
+  callee 1218:16 TypeTable.kindOf -> @TypeTable.kindOf
+  local 1219:9 note: string (const)
+  callee 1219:63 tsKeyword -> @tsKeyword
+  callee 1220:17 spaceAfter -> @spaceAfter
 module src/interop-dts.ts
 import Compilation from "./compilation" -> struct Compilation
 import banner from "./interop-abi" -> function @banner

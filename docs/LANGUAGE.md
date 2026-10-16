@@ -771,8 +771,11 @@ test of its tag, so after `if (u.kind === Kind.A) { return 1; }` it knows
 `u.kind` is not `Kind.A`, and a second `u.kind === Kind.A`, in a ternary, a
 nested ternary or another `if`, is TS2367. This version does not narrow, so
 it accepts that comparison and evaluates it, to `false`. The tag stored in
-a local first, `const k: Kind = u.kind`, carries the same gap, which any
-local of an enum type already has: `tsc` narrows `k` by the same test.
+a local first, `const k: Kind = u.kind`, carries the same gap, and wider:
+`tsc` narrows `k` on its declaration to the variants' members
+(`Kind.A | Kind.B` for a union of those two), so even a first
+`k === Kind.C`, or a `case Kind.C:` of a `switch (k)`, is TS2367 (TS2678)
+there and accepted here, for a member of `Kind` no variant has.
 
 **Stricter than TypeScript.** Each of these programs is accepted by
 `tsc --strict` and refused here; each refusal is pinned:
@@ -845,7 +848,11 @@ does, and is NL2534 too (`reject_union_narrow_subunion`).
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
-union, or a field of an exported struct that does, is
+union is refused, and so is a union-holding field of any class or interface
+the compilation declares, exported or not, under any sidecar flag
+(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
+lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). The message is
 `` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
 (NL4009, `reject_union_export_param`, `reject_union_export_return`,
 `reject_union_export_field`, `reject_union_export_array_field`). Unions

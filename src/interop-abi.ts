@@ -963,7 +963,12 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolea
     const sig = fn.sig
     const at = sigNameNode(sig)
     if (table.holdsUnion(sig.returnType)) {
-      reportUnion(compilation, fn.unit, at, `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``)
+      reportUnion(
+        compilation,
+        fn.unit,
+        at,
+        `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
+      )
       ok = false
     }
     let i = 0
@@ -984,7 +989,12 @@ const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolea
       }
       for (const f of info.fields) {
         if (table.holdsUnion(f.type)) {
-          reportUnion(compilation, unit, f.decl, `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``)
+          reportUnion(
+            compilation,
+            unit,
+            f.decl,
+            `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``
+          )
           ok = false
         }
       }
