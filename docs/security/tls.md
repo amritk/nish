@@ -359,9 +359,9 @@ reads it (TLS-1).
 
 | Stage | Files | What |
 | --- | --- | --- |
-| psk-wire | `std/net/tls/codec.ts`, `std/net/tls/schedule.ts` | `TlsClientHelloView` reads `pre_shared_key`'s identities and binders and `psk_key_exchange_modes`; `tlsWriteNewSessionTicket` and the ServerHello `pre_shared_key` writer; the PSK early secret, binder key, binder verify and `tlsResumptionPsk`, in place |
+| psk-wire | `std/net/tls/codec.ts`, `std/net/tls/schedule.ts` | `TlsClientHelloView` reads `pre_shared_key`'s identities and binders and `psk_key_exchange_modes`; `tlsWriteNewSessionTicket` and the ServerHello `pre_shared_key` writer; the PSK early secret, binder key, binder verify, the handshake-secret salt from the PSK early secret, and `tlsResumptionPsk`, in place |
 | ticket-seal | `std/net/tls/ticket.ts` (new, `nish/net/tls/ticket`) | `tlsTicketSeal` and `tlsTicketOpen` over ChaCha20-Poly1305 under a borrowed `Secret` key; `TlsTicketKeyInfo`, `tlsTicketKeyDraw` and `tlsTicketKeyDue`; `TlsTicketStrikes`, the strike register |
-| server-resume | `std/net/tls.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | `TlsServer`'s ticket hand-off states and resumed path; `TlsRecordServer` sends the NewSessionTicket; `TlsTcpServer`'s per-slot calls that lend the program's keys |
+| server-resume | `std/net/tls.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | `TlsServer`'s ticket hand-off states and resumed path, `TlsExchangeWords` gaining the salt's words; `TlsRecordServer` sends the NewSessionTicket; `TlsTcpServer`'s per-slot calls that lend the program's keys |
 | interop-resume | `tests/link/net_interop_server`, `tests/interop`, `.github/workflows/interop.yml` | curl and Chromium each resume a session against the server |
 
 Resumption is server side and over TCP only (`TlsRecordServer`,
@@ -515,9 +515,14 @@ opening until the turn after and failing to open then) and by a `tests/run.js`
 wipe-count check after `opt -O2`, in the manner of `tests/wipes/crypto.js`'s
 groups: its roots are the test's rotation turn (the `wipe` of
 the previous key), `tlsTicketKeyDraw`, `tlsTicketOpen` and `tlsTicketSeal`
-(each `secureZero` of the plaintext, on the success and the failure path), and
+(the one `secureZero` of the plaintext in each), and
 each wipe is shown counted on its own by deleting it and watching its root's
-count drop. A wiped `Secret` cannot be read again (NL2443) and the plaintext
+count drop. Each of open and seal wipes its plaintext once, at a point every
+path reaches — after the branch on the tag and on the parse, as
+`chacha20Poly1305Open` wipes its state once after its branch — not once on
+each path: `opt -O2` merges a wipe placed on each of two paths into one
+store, and the count could then not see either go missing
+(`tests/wipes/crypto.js`). A wiped `Secret` cannot be read again (NL2443) and the plaintext
 is a local no object keeps, so the IR is where those wipes can be seen. The
 check is a group in `tests/wipes/tls.js`, the TLS area's file in the harness
 #639 added.
@@ -538,7 +543,9 @@ is still held (row 6) or no entry is free (row 7), the second counted as a
 refusal for being full. The register is an open-addressed
 table made once at the capacity the program gives (65,536 ids by default; a
 12-byte id and an 8-byte expiry each, so about 1.3 MB), whose expired entries
-are reused, and which never grows. The program owns it and lends it to the
+are reused, and which never grows. Before `take` reuses an expired entry
+on an id's probe chain it scans the rest of the chain for a live entry of the
+same id, so an expired entry ahead of it cannot let the id be recorded twice. The program owns it and lends it to the
 call that opens tickets, as it lends the keys. The id is the ticket's seal nonce, which
 the AEAD authenticates, so an id comes only from a ticket this server sealed.
 
@@ -644,7 +651,9 @@ To be pinned by `net_tls_ticket` (replay refused; the register full refusing
 and counting each refusal, and taking ids again once entries expire;
 `TlsTicketStrikes.take` called directly with an expiry a week away: a second
 `take` of the same id false at `now + 7200 s`, and true one nanosecond later;
-`take` false and counted on a full register) and
+`take` false and counted on a full register; a register of a few entries in
+which an id's probe chain has an expired entry ahead of the id's live entry:
+`take` of that id false, and the register holding one entry for it) and
 `net_tls_resume` (each row of the fallback and abort table below, rows 17 and
 18 included).
 
@@ -684,8 +693,14 @@ PSK alone, so a later leak of a ticket key would open the recorded traffic of
 every session resumed under it (§2.2: PSK alone loses forward secrecy for the
 application data).
 
-What a leaked ticket key exposes, until its tickets expire — at most 14 hours
-of awake time after the key was drawn (The clock, above):
+What a leaked ticket key exposes. Resumption and impersonation last until its
+tickets stop opening — at most 14 hours of awake time after the key was drawn
+(The clock, above). The contents of tickets already recorded stay readable to
+whoever holds the key's bytes, for good, and the bytes stay in the process
+until the program's rotation turn wipes them: the second turn after the draw,
+about 24 hours after it for a program that rotates at the end of each issue
+window, and never for one that does not rotate (Lifetime, enforced, above). In
+detail:
 
 - the state of every ticket sealed under it that the attacker has recorded:
   the PSK, the suite, the times and the server name. Recorded means offered by
@@ -722,37 +737,68 @@ As TLS-1 records for the other secrets:
   is wiped by the primitive (TLS-5). Outside `expose`,
   `tlsTicketOpen` parses that array into the caller's `TlsTicketState`,
   copying the PSK into the state's own array, and wipes the plaintext with
-  `secureZero` on every path, a failed parse's included. Sealing is the same
+  `secureZero` once, after the branch on the tag and on the parse, so the one
+  wipe covers every path, a failed parse's included. On a failed parse it
+  also wipes the state's PSK array before it answers, so no partial copy
+  stays. Sealing is the same
   shape the other way: the plaintext is built outside `expose` from bytes
   that are not a `Secret`, sealed by the function `exposeWith` runs, and wiped
-  once sealed. Both run in a `using a = arena()` block, so what they allocate
-  is released once wiped (the 0 bytes per handshake below). `TlsServer`
-  keeps the opened PSK in one of its secret arrays, since a `Secret` may not be a field, and
-  wipes it with `secureZero` once the early secret is extracted, on failure,
-  and in `restart`.
-- **The binder key and early secret** are made in place by the schedule and
-  wiped as the schedule's other intermediates are; the binder is compared in
-  constant time, as the client Finished is.
+  once, after the seal and its refusals. Both run in a `using a = arena()` block, so what they allocate
+  is released once wiped (the 0 bytes per handshake below).
+- **The opened PSK after the hand-off.** The hand-off call wipes the
+  state's PSK array with `secureZero` before it returns, whatever it answers:
+  an identity resumed (row 1), passed over (rows 4 to 8), or whose binder
+  failed (row 9). Only on row 1 does the PSK go on, into one of `TlsServer`'s
+  secret arrays, since a `Secret` may not be a field; `TlsServer` wipes that
+  with `secureZero` once the early secret is extracted, on failure, and in
+  `restart`. A handshake that ends full therefore holds no PSK.
+- **The PSK early secret and the binder key** are made in place in
+  `TlsServer`'s secret arrays by the schedule's `*Into` functions, which wipe
+  their own scratch. Their caller, the hand-off call, wipes the binder key
+  with `secureZero` once the binder is compared, verified or not, and
+  `TlsServer` wipes the PSK early secret once the handshake-secret salt is
+  derived from it, as `sign` wipes the master secret once its secrets are
+  out, and on failure and in `restart`. The binder is compared in constant
+  time, as the client Finished is.
+- **The handshake-secret salt.** On a resumed handshake the salt the
+  handshake secret is extracted under is `Derive-Secret(PSK early secret,
+  "derived", "")` (§7.1): a secret of the connection, not the constant
+  `TLS_DERIVED_SALT_*` a full handshake uses. It is derived in place outside
+  `expose`, since Expand-Label may panic with a computed message, which a
+  function run inside `expose` may not reach (NL2448). It reaches
+  `tlsExchange` as words in `TlsExchangeWords` beside the ephemeral key, so
+  the class stays numbers and the exchange keeps its own scope (TLS-3); each
+  word is zeroed by an ordinary store as soon as it is read, and the salt's
+  bytes are wiped with `secureZero` once they are words. A full handshake
+  keeps the constant.
 - **Issuing.** The resumption PSK for a NewSessionTicket is derived, sealed
   and wiped with `secureZero` before the record carrying it is sent; once its
   ticket is sealed, or at once on a connection that is issued none, the
-  connection's resumption master secret is wiped too, which closes that part
-  of TLS-1 for TLS over TCP.
+  connection's resumption master secret is wiped too. A connection that
+  fails or closes first — row 17, or a full handshake cut short — is wiped by
+  `TlsRecordServer.wipeHandshake`, its fail and close wipe, which today
+  leaves the resumption master secret out and gains it, the PSK, the PSK
+  early secret and the binder key arrays, so no path leaves one behind.
+  Together that closes that part of TLS-1 for TLS over TCP.
 - **Memory.** A resumed handshake through a reused slot leaves `Arena.mark()`
   where a full one leaves it: 0 bytes per handshake (TLS-3).
 
-To be pinned by the wipe-count check under Ticket keys (the plaintext's
-`secureZero` on each path of `tlsTicketOpen` and `tlsTicketSeal`, seen in the
-IR, since no object keeps the plaintext for a test to read) and
-`net_tls_resume` (the PSK and resumption master secret zero after the
-handshake; 0 bytes per resumed handshake through a reused slot).
+To be pinned by the wipe-count check under Ticket keys (the one
+`secureZero` of the plaintext in each of `tlsTicketOpen` and `tlsTicketSeal`,
+after its branch, seen in the IR, since no object keeps the plaintext for a
+test to read) and `net_tls_resume` (the PSK, the PSK early secret, the binder
+key, the salt's bytes and its words in `TlsExchangeWords`, and the resumption
+master secret zero after a resumed handshake, and the same arrays zero after a
+row 4 to 8 fallback, after row 9 and after row 17; 0 bytes per resumed
+handshake through a reused slot).
 
 ### Fallback and abort table
 
 What the server does with each ClientHello that offers `pre_shared_key`, and
 the rule it rests on. The checks the server makes today come first, in their
 order, but for the two a resumed handshake does not need, which row 14
-decides after the identities are read: `signature_algorithms` present, and
+decides after the identities are read and a selected identity's binder
+decided: `signature_algorithms` present, and
 the server's signature scheme in it. A
 *full handshake* is the certificate handshake the server makes today, ticket
 and binder unread, with nothing recorded in the strike register. Every later
@@ -783,7 +829,10 @@ Rows 2 to 8 and 18 never abort for a reason of the ticket: a client the server
 cannot resume gets the handshake it would have had without a ticket. Where
 one of them meets row 14 — a ticket that does not open, say, in a ClientHello
 without `signature_algorithms` — row 14 wins and the handshake is
-`missing_extension`, as it is today without a ticket. Row 9 is the one place a ticket that
+`missing_extension`, as it is today without a ticket. A ClientHello that meets
+rows 9 and 14 gets row 9's `decrypt_error`: whether the server authenticates
+by certificate, and so whether row 14 applies, is known only once the binder
+is decided, and a binder that fails is an abort §4.2.11 requires. Row 9 is the one place a ticket that
 opened can fail a connection, and it tells the attacker that the identity
 opened and was not recorded (§E.6). Tickets are in the clear in the
 ClientHello, the attacker cannot seal one, and what it learns is whether a
