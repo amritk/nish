@@ -33,7 +33,7 @@ the record that found it. The notes below the table name each such finding.
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h` | 0 / 2 / 3 / 8 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
 | TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 1 ⁹ | 0 / 0 / 0 / 2 |
-| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 3 ¹¹ | 0 / 0 / 0 / 4 |
+| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 4 ¹¹ | 0 / 0 / 0 / 3 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 2 ⁷ |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
@@ -41,7 +41,7 @@ the record that found it. The notes below the table name each such finding.
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 1 / 1 ¹⁰ |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 |
-| **Total** ⁸ | | | **3 / 10 / 13 / 82** | **0 / 1 / 3 / 18** |
+| **Total** ⁸ | | | **3 / 10 / 13 / 83** | **0 / 1 / 3 / 17** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -97,6 +97,13 @@ the record that found it. The notes below the table name each such finding.
     included, is wiped with a store no optimiser removes when its level, its
     key generation or the connection ends, the end of the closing or draining
     period included. It is counted as a fixed Low.
+    QUIC-5 (Low), the server's static keys and the listener's seed, was
+    closed for #430 too: `QuicListener.release` wipes the listener's seed,
+    scratch, INVALID_TOKEN keys and last answer, and `Http3Server.stop` the
+    configuration's stateless reset and Retry token keys with every
+    connection. A copy of a key the caller keeps stays the caller's to wipe,
+    and a configuration shared with another server is left keyed with zeros.
+    It is counted as a fixed Low.
 
 ## Open findings
 
@@ -121,7 +128,6 @@ only.
 | TLS-1 | Low | `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls.ts` | The schedule's one-shot functions, and `tlsNextTrafficSecret`, used only by tests, answer secrets, keys and IVs as plain `u8[]` that nothing wipes (`std/` uses the in-place forms, which wipe), and an open connection's secrets live in fields. Every key a connection holds is wiped by a volatile store when it ends: all at once on a failure and at the slot close; after a clean `close` the write direction and the resumption secret at once, the read direction at the client's `close_notify`, and the rest at `wipeKeys`, which a program driving `TlsRecordServer` without `TlsTcpServer` calls after close | #430 |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`) | The allocating key forms' answers and HKDF intermediates are not wiped; a connection's own keys go through the in-place forms and are (QUIC-2), and the Initial keys are public by construction | #430 |
-| QUIC-5 | Low | `std/net/quic.ts` (`QuicServerConfig`), `std/net/quic-listener.ts` (`QuicListener`) | The stateless reset key and Retry token key live in the caller's configuration, and the listener's seed in the listener, for the server's life, unwiped by either module | #430 |
 | QUIC-6 | Low | `std/net/quic.ts` | RFC 9001 §6.6's AEAD limits are not counted: no key update before 2^23 packets under one AES-GCM key, no AEAD_LIMIT_REACHED after too many failed opens | Q3 and Q4 |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
