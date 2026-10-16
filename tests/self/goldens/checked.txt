@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1030 programs, 112176 dump lines.
+# 1031 programs, 112238 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -15150,6 +15150,69 @@ function hashKey<string>(_key: string): u32 -> @nish.hashKey$str [instance]
 function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
+  stackSites=0 stackLocals=0
+program tests/cases/enum_member_type_inferred.ts
+module tests/cases/enum_member_type_inferred.ts (entry)
+struct Box<Kind.Array> (class) size=4 align=4
+  field v: Kind.Array index=0 offset=0
+  constructor -> @Box$em.p1.en$Kind.constructor
+  method with -> @Box$em.p1.en$Kind.with
+function array(): Kind.Array -> @array
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 46:3
+  calls: Box$em.p1.en$Kind.constructor Box$em.p1.en$Kind.with array id$em.p1.en$Kind nish_array_grow nish_panic_index nish_panic_overflow tag$i32 wrap$em.p1.en$Kind
+  stackSites=4 stackLocals=3
+  local 38:9 a: Kind.Array (const)
+  callee 38:25 array -> @array
+  local 39:9 c: boolean (const)
+  local 40:7 t: Kind.Array (let)
+  local 42:9 xs: Kind.Array[] (const)
+  local 44:9 m: Kind.Array[] | null (const)
+  local 45:7 ys: Kind.Array[] (let)
+  local 47:9 zs: Kind.Array[] (const)
+  callee 47:14 wrap<Kind.Array> -> @wrap$em.p1.en$Kind
+  local 49:9 u: Kind.Array (const)
+  callee 49:13 id<Kind.Array> -> @id$em.p1.en$Kind
+  local 50:7 fromCall: Kind.Array (let)
+  callee 50:18 array -> @array
+  local 51:9 p: Kind.Array (const)
+  callee 51:25 tag<i32> -> @tag$i32
+  local 52:9 q: Kind.Array (const)
+  callee 52:25 tag<i32> -> @tag$i32
+  local 53:9 box: Box<Kind.Array> (const)
+  callee 53:15 new Box<Kind.Array> -> @Box$em.p1.en$Kind.constructor
+  local 54:9 r: Kind.Array (const)
+  callee 54:25 Box<Kind.Array>.with -> @Box$em.p1.en$Kind.with
+  local 55:9 s: Kind.Array (const)
+  callee 55:25 Box<Kind.Array>.with -> @Box$em.p1.en$Kind.with
+  local 56:9 all: Kind.Array[] (const)
+  local 57:7 same: i32 (let)
+  local 58:14 k: Kind.Array (const)
+function Box<Kind.Array>.constructor(this: Box<Kind.Array>, v: Kind.Array): void -> @Box$em.p1.en$Kind.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box<Kind.Array>.with(this: Box<Kind.Array>, x: Kind.Array): Kind.Array -> @Box$em.p1.en$Kind.with [method instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function wrap<Kind.Array>(xs: Kind.Array[]): Kind.Array[] -> @wrap$em.p1.en$Kind [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: xs
+  pointer xs: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function id<Kind.Array>(x: Kind.Array): Kind.Array -> @id$em.p1.en$Kind [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  stackSites=0 stackLocals=0
+function tag<i32>(x: i32, k: Kind.Array): Kind.Array -> @tag$i32 [instance]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
   stackSites=0 stackLocals=0
 program tests/cases/enum_member_type_slots.ts
 module tests/cases/enum_member_type_slots.ts (entry)

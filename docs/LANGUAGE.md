@@ -1337,15 +1337,38 @@ and their `.ll` goldens are byte-identical files.
   write, an array literal, an object-literal field, `Ok`, `unwrapOr`'s
   default, a ternary arm and a `return` (`reject_enum_member_type_argument`,
   `_assign`, `_field_assign`, `_push`, `_element_write`, `_array_literal`,
-  `_object_field`, `_ok`, `_unwrap_or`, `_ternary`, `_return`), and so is an
+  `_object_field`, `_result_ok`, `_unwrap_or`, `_ternary`, `_return`), and so is an
   argument of a generic call, whether the member type binds a type parameter
   (`fold(xs, Kind.Array)` with `xs: Kind.Array[]`), sits in a concrete
   parameter beside one, or is `getOrInsert`'s value
-  (`tests/cases/enum_member_type_generic`, `reject_enum_member_type_generic`).
+  (`tests/cases/enum_member_type_generic`, `reject_enum_member_type_generic`,
+  `_fold`, `_get_or_insert`, `_generic_variable`, `_generic_method`,
+  `_class_param`); a parenthesised constant, `(Kind.Array)`, is the constant.
+  Two generic calls `tsc` accepts are refused, because the language binds a
+  type parameter only from the arguments, and binds it from the constant
+  before it reads a function argument: `const y: Kind.Array = id(Kind.Array)`
+  binds `T` to `Kind`, since the slot the call returns into binds nothing
+  (`reject_enum_member_type_generic_return`), and `apply(take, Kind.Array)`
+  binds `T` to `Kind` before `take: (x: Kind.Array) => Kind.Array` is read
+  (`reject_enum_member_type_generic_function_arg`). Pass a value already of
+  the member type, `id(a)` and `apply(take, a)`, and both bind `Kind.Array`.
   An unannotated `let` keeps the member type of a value already of it, as
   `tsc`'s does, and widens a member constant to its enum: `let w = keep(a)`
   holds only `Kind.Array`, `let w = Kind.Array` any `Kind`
-  (`reject_enum_member_type_inferred_let`). Two member types of one enum are two
+  (`reject_enum_member_type_inferred_let`). So does every place whose type is
+  inferred from what is written: a ternary whose arms are both `Kind.Array`,
+  an array literal of them (`[a]` is a `Kind.Array[]`), `??` between two
+  `Kind.Array[]`, and each of those passed to a generic function
+  (`tests/cases/enum_member_type_inferred`, `reject_enum_member_type_ternary_let`,
+  `_ternary_const`, `_ternary_generic`, `_array_inferred`, `_array_let`,
+  `_array_generic`, `_nullish`). Two arms or two elements that differ where one
+  is a member type — `c ? a : b` over `Kind.Array` and `Kind.Scalar`, or
+  `c ? a : Kind.Array` — are refused, `` Ternary branches must have the same type, got Kind.Array and Kind.Scalar: an enum member type is not widened to its enum, so annotate the type it holds, e.g. `Kind` ``,
+  and the array literal's message reads the same way: `tsc` types them as a
+  union, or as the member, or as the enum, by whether the constant is fresh,
+  so the variable is annotated instead (`reject_enum_member_type_ternary_mixed`,
+  `_ternary_constant`, `_array_mixed`). An object literal is always annotated,
+  so its fields always have a type to enter. Two member types of one enum are two
   types (`reject_enum_member_type_between`), and a field initializer of a
   member type is held to the same rule (`reject_enum_member_type_field_init`).
   The other direction is free: a member type converts to its enum, and a read

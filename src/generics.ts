@@ -36,6 +36,7 @@ import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
 import { checkExpression, recordMemberEntry, recordRangeEntry, WANT_RANGE } from "./expressions"
+import { unwrapParens } from "./emit-util"
 import {
   annotationName,
   annotationSpelling,
@@ -1369,7 +1370,8 @@ export const checkGenericCall = (
       (functional && isFunctionParameter(parameters.children[i])) || isContextualLiteral(args.children[i])
     // WP31 §7: an argument keeps its range, so `identity(r)` binds `T` to it.
     const type = deferred ? T_VOID : checkExpression(ctx, args.children[i], scope, WANT_RANGE)
-    const constant = !deferred && type !== T_ERROR && ctx.program.isEnumMember(ctx.table, args.children[i])
+    const constant =
+      !deferred && type !== T_ERROR && ctx.program.isEnumMember(ctx.table, unwrapParens(args.children[i]))
     later.push(deferred || constant)
     argTypes.push(constant ? T_VOID : type)
     i = i + 1

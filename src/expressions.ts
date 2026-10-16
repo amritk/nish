@@ -230,7 +230,9 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   const entry = ctx.table.isRanged(want) ? want : -1
   const keepsRange = welcome || want === WANT_RANGE || entry >= 0
   let inner = welcome && expr.kind !== N_PAREN ? -1 : want
-  if ((want === WANT_RANGE || want === WANT_INFERRED) && expr.kind !== N_PAREN) {
+  if (expr.kind === N_CONDITIONAL && (want === WANT_MAYBE || want === WANT_RANGE || want === WANT_INFERRED)) {
+    inner = WANT_INFERRED
+  } else if ((want === WANT_RANGE || want === WANT_INFERRED) && expr.kind !== N_PAREN) {
     inner = -1
   } else if (entry >= 0 && !takesRangeContext(expr)) {
     inner = -1
@@ -320,11 +322,18 @@ export const recordMemberEntry = (ctx: CheckContext, node: Node, from: i32, to: 
   return true
 }
 
-/** Whether `expr`, of type `computed`, is the constant of the member type `member`. */
-const isMemberConstant = (ctx: CheckContext, expr: Node, computed: i32, member: i32): boolean =>
-  computed === ctx.table.refOf(member) &&
-  ctx.program.isEnumMember(ctx.table, expr) &&
-  ctx.program.nodeEnumValues[expr.id] === ctx.table.memberValue(member)
+/**
+ * Whether `expr`, of type `computed`, is the constant of the member type
+ * `member`, parenthesised or not: `(Kind.Array)` is the constant too.
+ */
+const isMemberConstant = (ctx: CheckContext, expr: Node, computed: i32, member: i32): boolean => {
+  const bare = unwrapParens(expr)
+  return (
+    computed === ctx.table.refOf(member) &&
+    ctx.program.isEnumMember(ctx.table, bare) &&
+    ctx.program.nodeEnumValues[bare.id] === ctx.table.memberValue(member)
+  )
+}
 
 /**
  * A value checked into a slot of an enum member type, `Kind.Array`, which
@@ -1407,6 +1416,9 @@ const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32
     return ternaryResult(ctx, expr, whenTrue)
   }
   // `c ? p : null` is `T | null`, which is the one place the arms may differ.
+  if (ctx.table.isEnumMemberType(whenTrue) || ctx.table.isEnumMemberType(whenFalse)) {
+    return ctx.errorType(expr, ternaryMembersMessage(ctx, whenTrue, whenFalse))
+  }
   if (ctx.table.assignable(whenFalse, whenTrue)) {
     return ternaryResult(ctx, expr, whenTrue)
   }
@@ -1417,6 +1429,21 @@ const checkConditional = (ctx: CheckContext, expr: Node, scope: Scope, want: i32
   const b = ctx.table.typeName(whenFalse)
   return ctx.errorType(expr, `Ternary branches must have the same type, got ${a} and ${b}`)
 }
+
+/**
+ * Two arms, or two array elements, that differ where one is an enum member
+ * type. TypeScript gives them a union, or keeps the member, or widens to the
+ * enum, by rules that turn on whether a constant is fresh, so the language
+ * asks for the type instead: `let x: Kind = c ? a : b`.
+ */
+export const mixedMemberMessage = (ctx: CheckContext, lead: string, a: i32, b: i32): string => {
+  const enumType = ctx.table.isEnumMemberType(a) ? ctx.table.baseOf(a) : ctx.table.baseOf(b)
+  const spelled = `got ${ctx.table.typeName(a)} and ${ctx.table.typeName(b)}`
+  return `${lead}, ${spelled}: an enum member type is not widened to its enum, so annotate the type it holds, e.g. \`${ctx.table.typeName(enumType)}\``
+}
+
+const ternaryMembersMessage = (ctx: CheckContext, a: i32, b: i32): string =>
+  mixedMemberMessage(ctx, "Ternary branches must have the same type", a, b)
 
 /**
  * The ternary's type, refused when it is `void`. A ternary is an expression and

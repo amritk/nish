@@ -1349,9 +1349,16 @@ export const main = (): i32 => {
   member type converts to its enum, and a read of one *is* the enum, so it
   compares, switches and passes as a `Kind`. The IR is the enum's `i32`. A
   generic call takes the member's constant where the member type is wanted
-  (`fold(xs, Kind.Array)` with `xs: Kind.Array[]`). An unannotated `let`
+  (`fold(xs, Kind.Array)` with `xs: Kind.Array[]`), parenthesised or not.
+  It binds a type parameter only from the arguments, so `id(Kind.Array)`
+  into a `Kind.Array` slot, and `apply(take, Kind.Array)` with
+  `take: (x: Kind.Array) => Kind.Array`, bind `T` to `Kind` and are refused:
+  pass a value already of the member type instead. An unannotated `let`
   keeps the member type of a value already of it, and widens the member's
-  constant to `Kind`, as `tsc` does.
+  constant to `Kind`, as `tsc` does; so do a ternary, an array literal and
+  `??` (`[a]` is a `Kind.Array[]`). Arms or elements that differ where one is
+  a member type (`c ? a : b`, `[a, Kind.Array]`) are refused: annotate the
+  variable.
   `new Array<Kind.Array>(n)` zero-fills, so it is NL2520 unless the member is
   0; build such an array with `[]` and `push`. A `parallelMap`,
   `parallelFrom` or `parallelReduce` body answering one is NL2521: answer

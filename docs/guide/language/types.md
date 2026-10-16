@@ -312,6 +312,22 @@ export const main = (): i32 => {
 };
 ```
 
+The same goes for the other places a type is worked out from what you
+wrote. `c ? a : a` is a `Kind.Array` when `a` is, `[a]` is a `Kind.Array[]`,
+and so is `xs ?? [a]`. When the two arms of a ternary, or two elements of an
+array literal, differ and one of them is a member type, such as `c ? a : b`
+with `b` a `Kind.Scalar`, the compiler asks you to annotate the variable
+(`let x: Kind = c ? a : b`). TypeScript would give that a type of its own, a
+union of the two members.
+
+A generic function takes the member's constant where its type parameter is
+already bound to the member type, as in `fold(xs, Kind.Array)` with `xs` a
+`Kind.Array[]`. It works out the type parameter from the arguments only, so
+`id(Kind.Array)` is a `Kind` even where a `Kind.Array` is wanted, and so is
+`apply(take, Kind.Array)` when `take` takes a `Kind.Array`. Both are refused.
+TypeScript accepts them. Pass a value that already has the member type
+instead: `id(a)`.
+
 An array of a member type is built with `[]` and `push`. `new Array<T>(n)`
 fills its slots with 0, which here is `Kind.Scalar`, so the compiler refuses
 it for any member but the one whose value is 0:

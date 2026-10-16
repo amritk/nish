@@ -10,7 +10,14 @@ import {
 import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations"
 import { checkBuiltinArity, isArgvExpression, requireStatementPosition } from "./builtins"
 import { CheckContext } from "./context"
-import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound, unproven } from "./expressions"
+import {
+  checkBitwiseAssignOperands,
+  checkExpression,
+  isBitwiseCompound,
+  mixedMemberMessage,
+  unproven,
+  WANT_INFERRED,
+} from "./expressions"
 import { isArrayWriteMethod, storesInlineElements, unwrapParens } from "./emit-util"
 import { genericCallSpelling, indexOfName } from "./generics"
 import { checkIndexArgument, isGlobalMapType, mapReadSpelling } from "./members"
@@ -70,7 +77,9 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     }
     return want
   }
-  const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : -1
+  // With no array type to read, the element type is inferred, which keeps an
+  // enum member type as an unannotated `let` does: `[a]` is a `Kind.Array[]`.
+  const hint = want >= 0 && ctx.table.isArray(want) ? ctx.table.refOf(want) : WANT_INFERRED
   let elem = -1
   // `nish:secret`: the first element that holds a `Secret`, refused after the
   // loop so the message is built once (an element outlives its function).
@@ -92,6 +101,11 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
     }
     if (elem < 0) {
       elem = type
+    } else if (elem !== type && (ctx.table.isEnumMemberType(elem) || ctx.table.isEnumMemberType(type))) {
+      ctx.error(
+        element,
+        mixedMemberMessage(ctx, "Array literal elements must all have the same type", elem, type)
+      )
     } else if (elem !== type) {
       const a = ctx.table.typeName(elem)
       ctx.error(
