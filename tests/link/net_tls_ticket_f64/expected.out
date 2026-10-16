@@ -1,0 +1,91 @@
+PASS  AES-128-GCM: the ticket is key id, nonce, plaintext and tag
+PASS  AES-128-GCM: and it leads with the key's id
+PASS  AES-128-GCM: it opens
+PASS  AES-128-GCM: with the suite, issue time, lifetime and chain start sealed
+PASS  AES-128-GCM: and the server name and PSK
+PASS  AES-128-GCM: and its id is the ticket's nonce
+PASS  AES-128-GCM: the key counts the ticket
+PASS  AES-256-GCM: the ticket is key id, nonce, plaintext and tag
+PASS  AES-256-GCM: and it leads with the key's id
+PASS  AES-256-GCM: it opens
+PASS  AES-256-GCM: with the suite, issue time, lifetime and chain start sealed
+PASS  AES-256-GCM: and the server name and PSK
+PASS  AES-256-GCM: and its id is the ticket's nonce
+PASS  AES-256-GCM: the key counts the ticket
+PASS  ChaCha20-Poly1305: the ticket is key id, nonce, plaintext and tag
+PASS  ChaCha20-Poly1305: and it leads with the key's id
+PASS  ChaCha20-Poly1305: it opens
+PASS  ChaCha20-Poly1305: with the suite, issue time, lifetime and chain start sealed
+PASS  ChaCha20-Poly1305: and the server name and PSK
+PASS  ChaCha20-Poly1305: and its id is the ticket's nonce
+PASS  ChaCha20-Poly1305: the key counts the ticket
+PASS  the untouched ticket opens
+PASS  and fills the state's PSK
+PASS  a flipped bit in the key id: refused
+PASS  a flipped bit in the nonce: refused
+PASS  a flipped bit in the ciphertext: refused
+PASS  a flipped bit in the tag: refused
+PASS  and after a tag that does not verify, the state's PSK array reads zero
+PASS  a ticket of random bytes, under an unknown key id: refused
+PASS  a ticket cut short: refused
+PASS  a ticket opens at its issue time
+PASS  and not 1 ns before it
+PASS  it opens at its expiry, issue time plus 7200 s
+PASS  and not 1 ns after
+PASS  and a ticket refused past its expiry leaves the PSK array zero
+PASS  a ticket opens 24 h after its chain started
+PASS  and not 1 ns later, inside its own lifetime
+PASS  a ticket sealed with a lifetime of 7201 s is sealed
+PASS  and refused at its issue time
+PASS  a chain that starts at the ticket's issue time opens
+PASS  a chain that starts 1 ns after the ticket's issue time is refused
+PASS  a key is not due 1 ns before 12 h
+PASS  and is due at 12 h
+PASS  a key seals at 12 h
+PASS  and not 1 ns after
+PASS  its last ticket opens at 14 h, the end of its lifetime
+PASS  a fresh ticket opens under a key drawn 14 h ago
+PASS  and not under one drawn 14 h and 1 ns ago
+PASS  a key capped at 2 seals its first ticket
+PASS  and is not yet due
+PASS  it seals its second
+PASS  and is due at the cap
+PASS  its third is refused
+PASS  and not counted
+PASS  a seal refused for an output too short writes nothing
+PASS  turn 1: the last turn's ticket opens under the previous key
+PASS  turn 1: and not under the current one
+PASS  turn 2: the last turn's ticket opens under the previous key
+PASS  turn 2: and not under the current one
+PASS  turn 2: the ticket of two turns ago, inside its lifetime, opens under neither key
+PASS  turn 3: the last turn's ticket opens under the previous key
+PASS  turn 3: and not under the current one
+PASS  turn 3: the ticket of two turns ago, inside its lifetime, opens under neither key
+PASS  an id is taken once
+PASS  and refused when replayed
+PASS  and at its expiry, which it is held through
+PASS  and taken again 1 ns after its expiry
+PASS  in the slot it held, so it is recorded once
+PASS  an id whose ticket expires in a week is taken
+PASS  and refused 7200 s later
+PASS  and taken 1 ns after that
+PASS  an id of another length than a nonce is refused
+PASS  uncounted
+PASS  a register of 2 takes its first id
+PASS  and its second
+PASS  and refuses a third while both are held
+PASS  and a fourth
+PASS  counting both refusals
+PASS  it takes the third once an entry has expired
+PASS  reusing the expired entry, with no more slots used
+PASS  and one entry held after the other expires
+PASS  an id is taken at its home slot
+PASS  and an id with the same home after it
+PASS  once the first has expired, the second, still held, is refused
+PASS  and is recorded once
+PASS  while a third id takes the expired slot
+PASS  a resumption opens its ticket
+PASS  and strikes its id
+PASS  the same ticket opens again
+PASS  but its id is struck, so the replay is refused
+tls tickets: 90 passed, 0 failed, 0 skipped

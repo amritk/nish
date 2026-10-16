@@ -842,6 +842,17 @@ after the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
 as a `Secret<u8[]>` and answer secrets as one; the `QuicKeys` that `quicKeys`
 answers is plain, so call `quicKeysWipe` on it when you are done with it.
 
+A TLS server that resumes sessions seals its tickets with
+`nish/net/tls/ticket`: `tlsTicketSeal` and `tlsTicketOpen` take the ticket key
+as a borrowed `Secret<u8[]>`, so your program keeps the current and previous
+keys in locals and runs the rotation itself when `tlsTicketKeyDue` says so —
+`wipe(previous)`, `previous = current`, `previousInfo.copyFrom(currentInfo)`,
+`current = tlsTicketKeyDraw(currentInfo, now)`. Every time it takes is
+`monotonicNanos()`, read by you and passed in. Strike each opened ticket's
+`id` in a `TlsTicketStrikes` before you resume from it: `take` answers false
+for a replay, and for every ticket once the register is full, so make it as
+large as the tickets you issue in two hours.
+
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";
 
