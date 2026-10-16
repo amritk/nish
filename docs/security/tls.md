@@ -40,6 +40,10 @@ loopback, the AES key schedule expanded in place by `aesKeyInto`: every
 handshake after the first leaves 0 bytes, where RFC 8448's left 52,808
 (`net_tls_memory`).
 
+**TLS-5** (Low, open) was found in review of the resumption design: every
+ChaCha20-Poly1305 seal and open leaves a copy of its key in ChaCha20 state that
+nothing wipes; #639 closes it.
+
 **Resumption** is designed but not built: "Resumption" below records the
 threat model, the ticket-key and anti-replay decisions and the fallback and
 abort table that the stages building it are tested against.
@@ -88,6 +92,7 @@ driving the carrier is trusted, as the caller of `TlsServer` is.
 | TLS-2 | Low | `std/net/tls/record.ts` (`TlsRecordProtection`: `clear`, `derive`) | A direction's key, IV and AES key schedule live in its fields, since a `Secret` may not be one (NL2430). The key and IV are wiped with `secureZero` when the direction is installed again, cleared, or its slot closed (`TlsRecordServer.wipeKeys`); the schedule is `u64` words, which `secureZero` does not take, and is zeroed with ordinary stores, which stand because the schedule stays reachable for the next key. `derive` writes the key and IV straight into those fields, in the direction's own HKDF scratch, which wipes its last output block and both keyed HMAC hashers before each derivation returns (the pad blocks and digests on the way with `secureZero`, the hash words with stores that stand because the scratch stays reachable), and whatever else the derivation allocated is released by its arena block — unwiped, since a release frees without zeroing, but none of it key material once the scratch is wiped. The AES schedule is expanded by `aesKeyInto` straight into the direction's own `AesKey`; what remains is `aesKeyInto`'s working copy of it, zeroed with stores the optimiser may drop since nothing reads them again, and released by `derive`'s arena block: it is derived from the traffic secret, so a later memory disclosure could read key material from it until that memory is reused. `seal` and `open` copy the record's plaintext into arrays their scope releases, also unwiped: application data, not keys. The per-record nonce — the IV XOR a public sequence number, so as good as the IV — is wiped with `secureZero` in both, on every path after it is built. | **Open.** Follow-up: #430, which moves the TLS and QUIC key-holding structs (these keys, held in a struct across calls, among them) onto `nish:secret`. `secureZero` for a `u64[]`, or an AES key held as bytes, would close the schedule and its working copy. HKDF and HMAC now wipe their own state when run over a scratch, which closes the derivation's other temporaries. |
 | TLS-3 | Medium | `std/net/tls.ts` (`TlsServer`), `std/net/tls/record.ts` (`TlsRecordProtection.derive`), `std/net/tls/record-server.ts` (`advance`, `pump`, `handlePostHandshake`, `sendKeyUpdate`), `std/net/tls-tcp.ts` (`accept`) | **What it was.** Each handshake left arena memory behind until the program reset the arena: `TlsServer` kept its messages, transcript and secrets in objects of its own, made per connection, and nothing it allocated along the way could be released, since HMAC, HKDF and `aesKey` stored allocations of their own and so no arena scope and no `using a = arena()` block was allowed around them (NL2424). Measured over RFC 8448's AES-128-GCM handshake through `TlsRecordServer`, **52,808 bytes per handshake** (about 53 MB of RSS after a thousand); a key install left another 5,248, 10,496 for an answered KeyUpdate. A client opening connections in a loop grew a long-running server without bound — denial of service on attacker input. | **Closed** (N9's TLS memory stage). `TlsServer` allocates its buffers, transcript hashers, secret arrays (one of each hash's length per secret), HKDF scratch and ClientHello view once, and `restart` hands them to the slot's next connection; `TlsTcpServer` keeps one per slot. `receive` and `sign` run in `using a = arena()` blocks over `nish/crypto/hmac`'s `HmacSha256Scratch` / `HmacSha384Scratch` and `nish/crypto/hkdf`'s `HkdfScratch`, which compute in place; the record layer derives its keys in place and expands the AES schedule into the slot's own `AesKey` with `nish/crypto/aes`'s `aesKeyInto`, in an arena block too; the x25519 exchange, whose `x25519` answers a `Secret` it allocates, runs in `tlsExchange`, which takes only an object of numbers and so gets an arena scope of its own; the ClientHello is read as windows into the input, and every message is written into the output buffers in place, which `TlsRecordServer` seals from directly. Measured (`net_tls_memory`, `net_tls_record_refusals`): after the first handshake in a slot, **0 bytes per handshake** under AES-128-GCM (RFC 8448's, 1,000 handshakes, was 52,808), ChaCha20-Poly1305 (1,000 through one slot) and AES-256-GCM-SHA384 (1,000 accepted, handshaken and closed over loopback through `TlsTcpServer`), `Arena.mark()` exactly where the first left it each time; and **0 bytes per answered KeyUpdate** (was 10,496). Three allocations remain outside the blocks, none of them per handshake in a steady state: the input buffer doubles, once per slot, up to the largest message for a ClientHello longer than 2 KB; the `serverName` string is made when a client names a host other than the last one the slot saw — so clients that alternate between names make one each handshake, as long as the name, at most 64 KiB and in practice a DNS name's 253 bytes; and over QUIC the array the client's transport parameters are copied into, which `TlsServer` keeps and refills, grows when a client's are longer than any before it (N9's QUIC stage; a QUIC connection through a reused slot keeps 0 bytes, QUIC-3). A signature made with `tlsSignEcdsaP256` leaves `p256SignSha256`'s own allocations, which stores what it makes: measured over the carrier, 9,312 bytes a connection, the whole of the 9,376 a TLS connection over `TlsTcpServer` kept accept to close (#489). `TlsTcpServer.signP256` now signs in the pool's `TlsP256Signer`, which signs with `p256SignSha256Into` in a `P256SignScratch` made once and writes the DER into one of its own arrays, one per DER length from 8 to 72 bytes (`TlsServer.sign` takes the length from the array and stores what it computes, so the signature cannot be a temporary): **0 bytes a signature** (`net_tls_memory`: 1,000 connections accepted, signed by `signP256` and closed over loopback with `Arena.mark()` where the first left it, which fails on `tlsSignEcdsaP256`; and 300 `TlsP256Signer.sign` calls over three DER lengths, each `tlsSignEcdsaP256`'s bytes and none moving the mark). Over the carrier, `net_loopback`'s TLS and HTTP/1.1 connections keep 64 bytes each from accept to close, where they kept 9,376, in each of 20 runs: the 64 is the test program's own `Secret` copy of its key. `tlsSignEcdsaP256` stays, and keeps what it kept, for a caller that signs once. **What the slot costs instead.** The state a handshake used to allocate per connection is now allocated once per slot. Measured with `Arena.used()` on a fresh chunk, a `TlsServer` is 31,192 bytes (`Arena.used()` around the constructor) where it was 1,728 (most of it the ClientHello view's two 8 KiB duplicate bitmaps, the HKDF scratch and the transcript's six hashers; 80 of it the resumption master secret's two arrays, one per hash), and a `TlsRecordProtection` is 7,368 where it was 64 (its own HKDF scratch, both key sizes and both AES schedules), two of them per slot. Measured as resident memory over a pool of 400, a `TlsTcpServer` slot is about 136 KB where it was about 86 KB: about 50 KB more per slot, fixed, against the 52,808 bytes every handshake used to add. Over QUIC, which keeps one `TlsServer` per slot and `restart`s it for each connection the slot takes (`QuicConnection`'s `tlsSlot`, QUIC-3), each slot carries the same 29 KB more. `TLS_RECORD_MAX_KEY_UPDATES` (64) stays: it no longer bounds memory but still bounds the work a client can ask a connection for, at the interoperability cost RFC 8446 §4.6.3's lack of a limit implies (a client updating on a schedule of its own is refused at its 65th); lifting it is a separate decision. |
 | TLS-4 | Low | `std/net/tls-tcp.ts` (`TlsTcpServer`) | The carrier has no clock: a client may hold a slot for as long as it keeps the TCP connection open, mid-handshake or idle, and once every slot is held new connections are accepted and closed at once (`TLS_TCP_POOL_FULL`). Memory stays bounded, since the pool never grows; availability does not. | **Open, the program's to decide.** The program owns the loop and `pollWait`'s timeout, so it closes slots that have gone quiet; a carrier-level idle timeout needs a clock argument the API does not take yet. |
+| TLS-5 | Low | `std/crypto/chacha20poly1305.ts` (`chacha20State`, `chacha20Poly1305Seal`, `chacha20Poly1305Open`), reached from `std/net/tls/record.ts` (`TlsRecordProtection.seal`, `open` under ChaCha20-Poly1305) and, once the ticket-seal stage lands, `std/net/tls/ticket.ts` | Every ChaCha20-Poly1305 seal and open copies its key's eight words into a fresh ChaCha20 state, and makes a keystream block and a Poly1305 one-time key from it; none of them is zeroed before the arena releases it, so a later memory disclosure could read the key from that memory until it is reused. Today that key is a ChaCha20-Poly1305 traffic key; under the resumption design (Resumption, below) it would also be the ticket key, which is meant to be the most carefully held secret in the stack. Found in review of that design; the code is at b515c1b's base and unchanged since. Low on the README's scale, with TLS-1 and TLS-2: key material left in memory, not a forgery or a leak to the network. | **Open.** Closed by #639 (the crypto-wipe stage of #430), which wipes the ChaCha20 state, the keystream block, the Poly1305 key, `r` and the accumulator in every one-shot call, on the refusal path too, and pins the wipes after `-O2`. The resumption design adds nothing of its own to close: once #639 lands, the ticket key's AEAD copies are wiped as the traffic keys' are. |
 
 ## Properties verified
 
@@ -410,20 +415,34 @@ interop server does not.
   The clock is read outside `expose`, which reaches no clock (NL2448), and
   handed in as `now`. A monotonic clock that stops while the machine sleeps
   lengthens a ticket's server-side life by the sleep; the client still drops
-  it at `ticket_lifetime` by its own clock (§4.2.11.1).
-- **Lifetime, enforced.** A key seals tickets for 12 hours after it was drawn
-  (its *issue window*), and opens them for one ticket lifetime more (2 hours),
-  as the *previous* key. The module enforces both from the key's record,
+  it at `ticket_lifetime` by its own clock (§4.2.11.1). The same is true of a
+  key: every bound on a key below is in *awake time*, the time the machine
+  ran, since `monotonicNanos()` is `CLOCK_MONOTONIC` and stops in suspend. A
+  clock that counts suspend (`CLOCK_BOOTTIME`) is not exposed to Nish
+  programs today; the design takes awake time rather than the wall clock,
+  because a wall clock can step back and reopen replay. A program on a
+  machine that sleeps for long stretches rotates on resume.
+- **Lifetime, enforced.** A key seals tickets for 12 hours of awake time after
+  it was drawn (its *issue window*), and opens them for one ticket lifetime
+  more (2 hours), as the *previous* key. The module enforces both from the key's record,
   whatever the program does: `tlsTicketSeal` refuses a key past its issue
   window, and `tlsTicketOpen` refuses a ticket under a key past 14 hours, so
   the client gets a full handshake. A ticket sealed at the last moment of its
   key's issue window expires exactly as its key stops opening, so no ticket
-  outlives its key and none expires early because of rotation. What the module
+  outlives its key, and a key rotated at the end of its issue window ends no
+  ticket early. A rotation before that — at the seal cap, or when the program
+  chooses — wipes the previous key, and with it whatever of that key's tickets
+  were still within their lifetime, if the previous rotation was less than
+  one lifetime before. The design accepts that: those clients get a full
+  handshake and nothing else, and keeping a third key to spare them would
+  add a `Secret` the turn has to shuffle for a case the cap makes rare (2^30
+  tickets in under 2 hours is 150,000 a second). What the module
   cannot do is wipe the program's key: the wipe is the program's, at rotation.
   A program that never rotates keeps a key's bytes in memory, but no ticket
-  under it opens after 14 hours and no client offers one after 2 hours more
-  (§4.2.11.1), so the 14-hour bound on what a leaked key opens holds either
-  way.
+  under it opens after 14 hours of awake time and no client offers one after
+  its 2-hour lifetime by the client's clock (§4.2.11.1), so the bound on what
+  a leaked key opens holds either way: 14 hours of awake time, longer in wall
+  time only by the time the machine slept.
 - **Rotation.** The program holds at most two keys, current and previous, in
   locals. `tlsTicketKeyDraw(info, now): Secret<u8[]>` draws a fresh key and
   id with `crypto.getRandomValues`, moves the key into a `Secret`, fills
@@ -485,9 +504,17 @@ expiry at each bound, retired and unknown key ids, the chain bound; a key past
 its issue window refused by `tlsTicketSeal` and past 14 hours by
 `tlsTicketOpen`; the seal cap, brought forward to 2 as `recordLimit` is for
 KeyUpdate; `tlsTicketKeyDue` at the window's end and at the cap; and the
-caller's rotation turn, run three times with the previous key's array zero
-after each) and by a `tests/run.js` check that the key's wipe survives `opt
--O2`.
+caller's rotation turn run three times, with a ticket under the previous key
+opening until the turn after and failing to open then) and by a `tests/run.js`
+wipe-count check after `opt -O2`, in the manner of "crypto_hmac crypto_hkdf:
+the wipes survive -O2": its roots are the test's rotation turn (the `wipe` of
+the previous key), `tlsTicketKeyDraw`, `tlsTicketOpen` and `tlsTicketSeal`
+(each `secureZero` of the plaintext, on the success and the failure path), and
+each wipe is shown counted on its own by deleting it and watching its root's
+count drop. A wiped `Secret` cannot be read again (NL2443) and the plaintext
+is a local no object keeps, so the IR is where those wipes can be seen; if
+#639's `tests/wipes/` harness has landed, the check is a group in its
+`tls.js`.
 
 ### Anti-replay
 
@@ -539,7 +566,14 @@ the AEAD authenticates, so an id comes only from a ticket this server sealed.
   keeping it full takes resumptions at its capacity over the ticket lifetime,
   about 9.1 a second at the default, each a real connection with an x25519
   exchange on the attacker's side too, sustained for as long as the effect is
-  wanted. While it lasts every client resumes no session and pays a full
+  wanted. That is the cost to an attacker without a ticket key. One that holds
+  a live key (Forward secrecy and a leaked ticket key, below) seals tickets
+  under PSKs of its own choosing, binds ClientHellos to them, and never
+  finishes: each id is recorded once its binder verifies, so it fills the
+  register at the speed it can send ClientHellos, and keeps it full until the
+  program rotates the key away and its recorded entries expire, at most 2
+  hours later, or the key passes its 14 hours. It gains no more than that: it
+  can already resume, and impersonate the server to clients that do. While it lasts every client resumes no session and pays a full
   handshake, as it would on a server without tickets: a cost in CPU, never a
   key, a forged ticket or a ticket accepted twice. The design accepts that
   rather than bound it per chain or per client: a per-chain allowance only
@@ -619,7 +653,7 @@ every session resumed under it (§2.2: PSK alone loses forward secrecy for the
 application data).
 
 What a leaked ticket key exposes, until its tickets expire — at most 14 hours
-after the key was drawn:
+of awake time after the key was drawn (The clock, above):
 
 - the state of every ticket sealed under it that the attacker has recorded:
   the PSK, the suite, the times and the server name. Recorded means offered by
@@ -644,22 +678,25 @@ nothing a fresh anonymous connection would not.
 As TLS-1 records for the other secrets:
 
 - **Ticket keys** are the program's `Secret`s and are wiped by the program's
-  rotation turn when retired (Rotation, above). What the AEAD makes from a key while it runs is the
-  primitive's, under the AEADs' own record.
+  rotation turn when retired (Rotation, above). What the AEAD makes from a
+  key while it runs is not wiped yet: ChaCha20-Poly1305 copies the key's eight
+  words into a fresh ChaCha20 state, and makes a keystream and a Poly1305 key
+  from it, none of them zeroed before release. That is TLS-5 in Findings,
+  open until #639 lands.
 - **The opened state.** The function `tlsTicketOpen` hands `exposeWith` may
   not write through the argument it is given (NL2450), so it cannot decrypt
   into the caller's state. It opens the sealed bytes into fresh arrays and
   answers the plaintext — the suite, times, server name and resumption PSK —
   as a plain `u8[]`, empty when the tag fails; what the AEAD makes on the way
-  is the primitive's, under the AEADs' record. Outside `expose`,
+  is TLS-5's. Outside `expose`,
   `tlsTicketOpen` parses that array into the caller's `TlsTicketState`,
   copying the PSK into the state's own array, and wipes the plaintext with
   `secureZero` on every path, a failed parse's included. Sealing is the same
   shape the other way: the plaintext is built outside `expose` from bytes
   that are not a `Secret`, sealed by the function `exposeWith` runs, and wiped
   once sealed. Both run in a `using a = arena()` block, so what they allocate
-  is released once wiped (the 0 bytes per handshake below). `TlsServer` keeps the opened
-  PSK in one of its secret arrays, since a `Secret` may not be a field, and
+  is released once wiped (the 0 bytes per handshake below). `TlsServer`
+  keeps the opened PSK in one of its secret arrays, since a `Secret` may not be a field, and
   wipes it with `secureZero` once the early secret is extracted, on failure,
   and in `restart`.
 - **The binder key and early secret** are made in place by the schedule and
@@ -673,8 +710,9 @@ As TLS-1 records for the other secrets:
 - **Memory.** A resumed handshake through a reused slot leaves `Arena.mark()`
   where a full one leaves it: 0 bytes per handshake (TLS-3).
 
-To be pinned by `net_tls_ticket` (the plaintext zero after a successful and a
-failed open, and after a seal) and
+To be pinned by the wipe-count check under Ticket keys (the plaintext's
+`secureZero` on each path of `tlsTicketOpen` and `tlsTicketSeal`, seen in the
+IR, since no object keeps the plaintext for a test to read) and
 `net_tls_resume` (the PSK and resumption master secret zero after the
 handshake; 0 bytes per resumed handshake through a reused slot).
 
@@ -710,15 +748,20 @@ stage's tests cite this table by row.
 | 17 | an identity resumed as in row 1, then a client Finished that fails, a stream cut or a slot closed | the connection fails as today; the id stays recorded, and a later offer of the ticket is row 6 | §8.1; this design (recorded is spent) |
 | 18 | the same ClientHello on two slots before either finishes | the first resumes as in row 1; the second is row 6 | §8.1; this design (one call, no gap) |
 
-Rows 2 to 8 and 18 never abort: a client the server cannot resume gets the handshake
-it would have had without a ticket. Row 9 is the one place a ticket that
+Rows 2 to 8 and 18 never abort for a reason of the ticket: a client the server
+cannot resume gets the handshake it would have had without a ticket. Where
+one of them meets row 14 — a ticket that does not open, say, in a ClientHello
+without `signature_algorithms` — row 14 wins and the handshake is
+`missing_extension`, as it is today without a ticket. Row 9 is the one place a ticket that
 opened can fail a connection, and it tells the attacker that the identity
 opened and was not recorded (§E.6). Tickets are in the clear in the
 ClientHello, the attacker cannot seal one, and what it learns is whether a
 ticket it saw is still unspent; the design accepts that. Over QUIC, rows 1 to
-9, 17 and 18 are all a full handshake or today's handling, since its connections never open a ticket, and
-rows 10 to 15 hold as over TCP, the codec being shared; QUIC's own 0-RTT is
-not this record's. A ClientHello with no `pre_shared_key` is handled as today.
+9, 17 and 18 are all a full handshake or today's handling, since its
+connections never open a ticket, and rows 10 to 15 hold as over TCP, the
+codec being shared. Of row 16, the first half holds over QUIC (the extension
+is ignored); the second does not apply, since QUIC carries no TLS records and
+its 0-RTT packets are the QUIC record's (`quic.md`), not this one's. A ClientHello with no `pre_shared_key` is handled as today.
 
 To be pinned by `net_tls_psk_wire` (rows 10 to 13 as codec refusals, RFC
 8448 §3's NewSessionTicket and §4's resumption PSK, early secret and binder
