@@ -12,7 +12,7 @@
 
 import { aliasType, builtinTypeName, rejectRangedIntegerName, resolveType } from "./annotations"
 import { annotationSpelling, checkElementReferences } from "./arrays"
-import { checkExpression } from "./expressions"
+import { checkExpression, WANT_INFERRED } from "./expressions"
 import { checkDefiniteAssignment } from "./assignment"
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
@@ -1563,7 +1563,9 @@ class PerfWalk {
  * `inferReturn` is the arrow's case with no return type to check against: a
  * concise body's own type becomes the function's (`map(xs, (x) => x * 2)`
  * binds `U` from `x * 2`). The caller refuses a block body before it gets
- * here, because a block has many returns and no single type to take.
+ * here, because a block has many returns and no single type to take. The body
+ * is checked as an inferred position, so `(k) => k` answers a `Kind.Array`
+ * when `k` is one, as TypeScript infers it.
  */
 export const checkSignatureBody = (
   ctx: CheckContext,
@@ -1584,7 +1586,7 @@ export const checkSignatureBody = (
   if (body.kind === N_BLOCK) {
     terminates = checkStatements(ctx, body.children, scope)
   } else if (inferReturn) {
-    sig.returnType = checkExpression(ctx, body, scope, -1)
+    sig.returnType = checkExpression(ctx, body, scope, WANT_INFERRED)
   } else {
     checkReturnValue(ctx, body, scope)
   }

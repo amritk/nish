@@ -20,13 +20,13 @@
 # function and binding forms, class, interface and enum forms, and import and
 # export forms — each parsed into the node it resembles and refused by the
 # phase that owns its rule, the shape `src/nodes.ts` writes down; the last
-# stage took the six import and export wordings off. What is left is two
-# wordings no stage was given, each behind a parser sentence about a class:
+# stage took the six import and export wordings off. What is left is one
+# wording no stage was given, behind a parser sentence about a class:
 # `nl2118_override_method`, whose `override` method the parser reads as a
-# field with no type annotation before the checker can name the modifier, and
-# `nl2137_implements_expression`, whose `implements` names a member access the
-# class header does not read. Each comes off with the change that moves its
-# rule.
+# field with no type annotation before the checker can name the modifier. It
+# comes off with the change that moves its rule. `nl2137_implements_expression`
+# came off when enum member types taught the type parser a dotted name, which
+# reads `implements a.B` for the checker to refuse by its own rule.
 #
 # One warning from the member-header change, because this list is where somebody will next
 # take a wording off it: a case here proves what its *code* reaches, and a code
@@ -36,4 +36,3 @@
 # had. `tests/cases/reject_cls_ctor_static` is what pins it now, and a
 # `reject_*` case is the thing to write when a wording comes off this list.
 nl2118_override_method
-nl2137_implements_expression

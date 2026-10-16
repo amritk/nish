@@ -1,0 +1,1 @@
+`Point.x` is not a type: only a member of an enum may be named with a dot in a type, and `Point` is not an enum

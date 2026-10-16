@@ -1,0 +1,1 @@
+Argument 1 of `apply`: `take` is `(x: Kind.Array) => Kind.Array`, and `f` is `(x: Kind) => Kind`; a function argument must have exactly its parameter's type

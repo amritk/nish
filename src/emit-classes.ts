@@ -43,7 +43,7 @@ import { emitStringLength, emitStringMethodCall, guardKeep } from "./emit-string
 import { intrinsicType } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { isGuardedAccess } from "./parallel"
-import { N_FALSE, N_NULL, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
+import { N_FALSE, N_MEMBER, N_NULL, N_STRING, N_TEMPLATE, N_TRUE, N_UNARY, Node } from "./nodes"
 import { FieldInfo, FunctionSig, StructInfo } from "./program"
 import { ARRAY_TYPE } from "./runtime"
 import { ARRAY_STRUCT, isFloat, T_I32, T_STRING, T_VOID } from "./types"
@@ -115,9 +115,11 @@ const arenaObject = (emitter: Emitter, info: StructInfo): string => {
 
 /**
  * The LLVM constant for a field initializer, from its syntax and the field's
- * type alone. The checker only admits literals here, and the node may belong
- * to another module (an imported class `new`ed without a constructor), whose
- * type table this emitter does not have.
+ * type alone, or, for an enum member such as `Kind.Array`, from the value the
+ * checker folded into `field.initializerValue`. The checker only admits
+ * literals and enum members here, and the node may belong to another module
+ * (an imported class `new`ed without a constructor), whose type table and
+ * enums this emitter does not have.
  */
 export const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
   const init = field.initializer
@@ -141,6 +143,9 @@ export const initializerConstant = (emitter: Emitter, field: FieldInfo): string 
   if (literal.kind === N_TEMPLATE) {
     // A template with no holes is a string literal; its one text part is the value.
     return emitter.stringConstant(literal.children.length > 0 ? literal.children[0].text : "")
+  }
+  if (literal.kind === N_MEMBER) {
+    return `${field.initializerValue}` // `Kind.Array`, folded by the checker
   }
   if (isFloat(field.type)) {
     const value = numericLiteralValue(literal.text)

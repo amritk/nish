@@ -1,0 +1,1 @@
+`new Array<Kind.Array>(n)` would zero-fill with 0, which is not the member `Kind.Array`; build it with `[]` and `push` instead

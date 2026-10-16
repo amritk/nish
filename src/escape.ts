@@ -98,7 +98,7 @@ import { Options } from "./options"
 import { isSpawnEntry } from "./parallel"
 import { CheckedProgram, elementStride, FunctionSig } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
-import { isNumeric, K_ENUM, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
+import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
 const STACK_ARRAY_BYTES: i32 = 4096
@@ -1300,7 +1300,7 @@ export const marksTailCall = (
  * someone on purpose.
  */
 export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
-  isNumeric(type) || type === T_BOOL || table.kindOf(type) === K_ENUM
+  isNumeric(type) || type === T_BOOL || table.enumBase(type) >= 0
 
 /**
  * Whether nothing that existed before a call to `sig` can be made to hold a

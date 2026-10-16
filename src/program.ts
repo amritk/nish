@@ -783,6 +783,13 @@ export class FieldInfo {
    */
   inlineCapacity: i32
   /**
+   * The integer of an enum member initializer, `kind: Kind = Kind.Array`,
+   * folded when the field is collected. Here rather than in `nodeEnumValues`
+   * because the emitter that stores it may be another module's
+   * (`initializerConstant`).
+   */
+  initializerValue: i32
+  /**
    * WP33 R2: the typed-array name the field is declared with, or `""`, read
    * in the declaring module for the reason `FunctionSig.returnSpelling` is.
    */
@@ -801,6 +808,7 @@ export class FieldInfo {
     this.offset = 0
     this.readonly = false
     this.initializer = null
+    this.initializerValue = 0
     this.decl = decl
     this.inlineCapacity = -1
     this.spelling = ""
@@ -1069,6 +1077,23 @@ export class EnumInfo {
   /** The integer `name` stands for; the caller has already asked `hasMember`. */
   memberValue(name: string): i32 {
     return this.memberValues[this.members.get(name, 0)]
+  }
+
+  /**
+   * The first member declared with `value`, which is the name its member type
+   * is spelled by: two members of one value are one type, as they are in
+   * `tsc`, and the declaration rather than the annotation read first decides
+   * the spelling, so a diagnostic does not depend on the order of the source.
+   */
+  memberNameOf(value: i32): string {
+    let i = 0
+    while (i < this.memberValues.length) {
+      if (this.memberValues[i] === value) {
+        return this.memberNames[i]
+      }
+      i = i + 1
+    }
+    return ""
   }
 }
 
@@ -1933,7 +1958,8 @@ export class CheckedProgram {
     if (node.kind !== N_MEMBER || this.nodeTypes[node.children[0].id] >= 0) {
       return false
     }
-    return table.isEnum(this.nodeTypes[node.id])
+    // A constant checked into a slot of its member type records that type.
+    return table.enumBase(this.nodeTypes[node.id]) >= 0
   }
 
   /**

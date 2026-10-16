@@ -9619,6 +9619,121 @@ symbol for it: `tests/link/enum_export_ir` and `enum_export_ir_local` are one
 program with the enum imported and with it declared in `main.ts`, and both
 modules' `.ll` goldens are byte-identical files.
 
+### Enum member types
+
+`Kind.While` written as a type is a slot that holds that one member, and the
+checker is all it is: a member type is its enum's `i32`, a field initialised
+with a member stores the member's integer before the constructor runs, as a
+numeric literal would, and a read of the field is a `Kind` like any other. The
+listing is the program above with a tagged class added, and nothing in it
+names the member type (`tests/cases/enum_member_type` lowers to the same bytes
+as the program with every member type written `Kind`).
+
+<!-- cookbook:begin decl-enum-member -->
+```ts
+enum Kind {
+  If = 1,
+  While = 2,
+  Return = 3,
+}
+
+class Loop {
+  readonly kind: Kind.While = Kind.While
+  depth: i32 = 0
+}
+
+const weight = (k: Kind): i32 => {
+  switch (k) {
+    case Kind.If:
+      return 10
+    case Kind.While:
+      return 20
+    default:
+      return 30
+  }
+}
+
+export const main = (): number => {
+  const loop = new Loop()
+  const k: Kind.While = loop.kind
+  console.log(`weight = ${weight(k)}`)
+  return 0
+}
+```
+
+```llvm
+%struct.Loop = type { i32, i32 }
+
+@.str.0 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"weight = \00" }, align 8
+
+declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+
+define internal noundef i32 @weight(i32 noundef %k) #0 {
+entry:
+  switch i32 %k, label %sw.default [
+    i32 1, label %sw.case
+    i32 2, label %sw.case.1
+  ]
+
+sw.case:
+  ret i32 10
+
+sw.case.1:
+  ret i32 20
+
+sw.default:
+  ret i32 30
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %loop.addr = alloca %struct.Loop*, align 8
+  %Loop.obj = alloca %struct.Loop, align 8
+  %k.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.Loop, %struct.Loop* %Loop.obj, i32 0, i32 0
+  store i32 2, i32* %0, align 4, !tbaa !4
+  %1 = getelementptr inbounds %struct.Loop, %struct.Loop* %Loop.obj, i32 0, i32 1
+  store i32 0, i32* %1, align 4, !tbaa !5
+  store %struct.Loop* %Loop.obj, %struct.Loop** %loop.addr, align 8
+  %2 = load %struct.Loop*, %struct.Loop** %loop.addr, align 8
+  %3 = getelementptr inbounds %struct.Loop, %struct.Loop* %2, i32 0, i32 0
+  %4 = load i32, i32* %3, align 4, !tbaa !4
+  store i32 %4, i32* %k.addr, align 4
+  %5 = load i32, i32* %k.addr, align 4
+  %6 = call i32 @weight(i32 %5)
+  %7 = call i8* @nish_str_from_i32(i32 %6)
+  %8 = call i8* @nish_str_concat(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i8* %7)
+  call void @nish_print(i8* %8)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Loop", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
+```
+<!-- cookbook:end decl-enum-member -->
+
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that

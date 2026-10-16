@@ -586,6 +586,15 @@ export const reduceElementMessage = (
     intrinsic = "parallelFrom"
   }
   const result = typeArgs[typeArgs.length - 1]
+  // The template's `new Array<U>(n)` zero-fills, which a member type other
+  // than a 0 refuses (NL2520) inside `std/threads.ts`; refused here instead.
+  if (table.isEnumMemberType(result) && table.memberValue(result) !== 0) {
+    const spelled = table.typeName(result)
+    return (
+      `\`${functions[0].sourceName}\` answers the member type \`${spelled}\`, and \`${intrinsic}\` zero-fills ` +
+      `the array its workers write, which a \`${spelled}\` cannot hold; declare the body to answer \`${table.typeName(table.enumBase(result))}\``
+    )
+  }
   return role === PAR_REDUCE
     ? resultWording(table, intrinsic, functions[0], result)
     : crossingWording(table, intrinsic, functions[0], result)

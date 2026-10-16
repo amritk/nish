@@ -193,7 +193,8 @@ Type rules:
   is an `f64[]` wherever one is expected and vice versa,
   `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
   a `type` alias or a numeric `enum` declared or imported in the module
-  ([Type aliases](#type-aliases), [Enums](#enums)), and the
+  ([Type aliases](#type-aliases), [Enums](#enums)), one of that enum's
+  members as a type, `Kind.If` ([Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/annotations.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
@@ -1312,6 +1313,121 @@ and their `.ll` goldens are byte-identical files.
   other type is `` `case` label is i32 but the discriminant is Kind ``
   (`reject_enum_case_label`), so the integer a member stands for is not a
   label. See [`switch`](#switch).
+- **A member is also a type: `Kind.While` names the type whose one value is
+  that member.** A slot of a member type — a field, a parameter, a return, a
+  local, an element, an object-literal field or a `Result` arm — holds that
+  member and nothing else, which is what lets a `readonly` field record which
+  of an enum's cases its object is, as the tag a later discriminated union
+  reads:
+
+  ```ts
+  class ArrayNode {
+    readonly kind: Kind.While = Kind.While;
+  }
+  ```
+
+  The slot is entered by the member's own constant, or by a value already of
+  that member type; the enum's other members, and any `Kind` value that is not
+  a constant, are
+  `` Type `Kind.Array` holds only the member `Kind.Array`, got `Kind.Scalar` ``
+  (NL2519, `tests/cases/reject_enum_member_type_other`) and
+  `` …, got a value of type `Kind` `` (`reject_enum_member_type_widened`),
+  because a `Kind` could be any member. Every way into a slot is held to it:
+  a call argument, an assignment to a `let` or a field, a `push`, an element
+  write, an array literal, an object-literal field, `Ok`, `unwrapOr`'s
+  default, a ternary arm and a `return` (`reject_enum_member_type_argument`,
+  `_assign`, `_field_assign`, `_push`, `_element_write`, `_array_literal`,
+  `_object_field`, `_result_ok`, `_unwrap_or`, `_ternary`, `_return`), and so is an
+  argument of a generic call, whether the member type binds a type parameter
+  (`fold(xs, Kind.Array)` with `xs: Kind.Array[]`), sits in a concrete
+  parameter beside one, or is `getOrInsert`'s value
+  (`tests/cases/enum_member_type_generic`, `reject_enum_member_type_generic`,
+  `_fold`, `_get_or_insert`, `_generic_variable`, `_generic_method`,
+  `_class_param`); a parenthesised constant, `(Kind.Array)`, is the constant.
+  Two generic calls `tsc` accepts are refused, because the language binds a
+  type parameter only from the arguments, and binds it from the constant
+  before it reads a function argument: `const y: Kind.Array = id(Kind.Array)`
+  binds `T` to `Kind`, since the slot the call returns into binds nothing
+  (`reject_enum_member_type_generic_return`), and `apply(take, Kind.Array)`
+  binds `T` to `Kind` before `take: (x: Kind.Array) => Kind.Array` is read
+  (`reject_enum_member_type_generic_function_arg`). Pass a value already of
+  the member type, `id(a)` and `apply(take, a)`, and both bind `Kind.Array`.
+  An unannotated `let` keeps the member type of a value already of it, as
+  `tsc`'s does, and widens a member constant to its enum: `let w = keep(a)`
+  holds only `Kind.Array`, `let w = Kind.Array` any `Kind`
+  (`reject_enum_member_type_inferred_let`). So does every place whose type is
+  inferred from what is written: a ternary whose arms are both `Kind.Array`,
+  an array literal of them (`[a]` is a `Kind.Array[]`), `??` between two
+  `Kind.Array[]`, each of those passed to a generic function, and an arrow's
+  result, which binds the type parameter it returns: `map([a], (k) => k)` is a
+  `Kind.Array[]` and `apply(a, (k) => k)` a `Kind.Array`, while an arrow that
+  answers the constant, `(k) => Kind.Array`, answers `Kind`, as `tsc` widens
+  it (`tests/cases/enum_member_type_inferred`, `enum_member_type_arrow`,
+  `reject_enum_member_type_ternary_let`, `_ternary_const`, `_ternary_generic`,
+  `_array_inferred`, `_array_let`, `_array_generic`, `_nullish`, `_arrow_map`,
+  `_arrow_apply`). Two arms or two elements that differ where one is a member
+  type, or an array of one — `c ? a : b` over `Kind.Array` and `Kind.Scalar`,
+  `c ? a : k` over a `Kind`, `c ? a : Kind.Array`, `[a, Kind.Array]`, or
+  `[[a], [Kind.Array]]` — are refused, `` Ternary branches must have the same type, got Kind.Array and Kind.Scalar: an enum member type is not widened to its enum, so annotate the type it holds, e.g. `Kind` ``,
+  and the array literal's message reads the same way, naming `Kind[]` for the
+  nested case: `tsc` types them as a union of the members (the enum itself
+  when they are all of its members), or as the member, or as the enum, by
+  whether the constant is fresh, so the variable is annotated instead
+  (`reject_enum_member_type_ternary_mixed`, `_ternary_enum`,
+  `_ternary_constant`, `_ternary_nested`, `_array_mixed`, `_array_constant`,
+  `_array_nested_mixed`). An object literal is always annotated,
+  so its fields always have a type to enter. Two member types of one enum are two
+  types (`reject_enum_member_type_between`), and a field initializer of a
+  member type is held to the same rule (`reject_enum_member_type_field_init`).
+  The other direction is free: a member type converts to its enum, and a read
+  of a member-typed slot is the enum wherever a value is computed with, so it
+  compares with `===`, switches and passes as a `Kind`, and converts to `i32`
+  no more than a `Kind` does (`reject_enum_member_type_read`). In IR a member
+  type is its enum's `i32`: `tests/cases/enum_member_type` lowers to the same
+  bytes as the program with every member type written `Kind`
+  (`enum_member_type_widened`, whose golden is byte for byte the same).
+  - **The qualifier is an enum, local or imported, and the name one of its
+    members.** `import { Kind as K }` spells the exporter's member types
+    `K.Array` (`tests/link/enum_member_type_import`). Anything else before the
+    dot is `` `Point.x` is not a type: only a member of an enum may be named with a dot in a type, and `Point` is not an enum ``
+    (NL2517, `reject_enum_member_type_not_enum`), a missing member is
+    `` Enum `Kind` has no member `Missing` to name as a type ``
+    (NL2518, `reject_enum_member_type_unknown`), and type arguments are
+    `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
+    One dot is read; `A.B.C` is a syntax error (`reject_enum_member_type_nested`).
+  - **Two members of one value are one type**, as `tsc` reads them, spelled
+    by the member declared first: with `List = 1` beside `Array`, a
+    `Kind.List` slot is reported as `` `Kind.Array` ``
+    (`reject_enum_member_type_same_value`), and `Kind.List` enters a
+    `Kind.Array[]` (`tests/cases/enum_member_type_slots`).
+  - **A member type is a type wherever one is written**: a `type` alias's
+    right-hand side (`type ArrayTag = Kind.Array`), a type argument
+    (`Box<Kind.Array>`, `Map<Kind.Array, i32>`, `Set<Kind.Array>`), an
+    element type and an arrow argument's return type, and a `-g` build
+    describes it as its enum (`enum_member_type_slots`).
+  - **A zero-filled array of a member type holds 0**, so
+    `new Array<Kind.Array>(n)` is
+    `` `new Array<Kind.Array>(n)` would zero-fill with 0, which is not the member `Kind.Array`; build it with `[]` and `push` instead ``
+    (NL2520, `reject_enum_member_type_zero_fill`), and a member whose value
+    is 0, `Kind.Scalar` here, is allowed (`enum_member_type_slots`). The
+    `parallelMap`, `parallelFrom` and `parallelReduce` templates zero-fill the
+    array their workers write, so a body answering such a member type is
+    refused at the call, `` … answers the member type `Kind.Array`, and `parallelMap` zero-fills the array its workers write, which a `Kind.Array` cannot hold; declare the body to answer `Kind` ``
+    (NL2521, `reject_enum_member_type_parallel`, `_parallel_from`,
+    `_parallel_reduce`); a body answering the member at 0 runs in all three
+    (`tests/link/enum_member_type_parallel`).
+  - **A field initializer may be a member's constant** when the field is the
+    enum or one of its member types: `readonly kind: Kind = Kind.If` stores the
+    integer before the constructor runs, as a numeric literal would
+    (`enum_member_type_slots`). Another enum's member, a member the enum does
+    not declare, a member given to a number field and any other dotted
+    initializer are refused (`reject_enum_member_type_field_init_enum`,
+    `_field_init_level`, `_field_init_unknown`, `_field_init_i32`,
+    `_field_init_dotted`).
+  - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
+    it reads an enum as any of its members, which a member type cannot hold. A
+    member type crosses to C and JavaScript exactly where its enum does, which
+    is nowhere.
 - **A built-in type name may not be taken**: `enum i32 { ... }` is
   `` `i32` is a built-in type name and cannot be used for an enum ``
   (`tests/cases/reject_enum_builtin_name`), for the reason the same rule exists

@@ -21,6 +21,7 @@ import {
   refuseExpressionForm,
   resolveMaybeAnnotation,
   unproven,
+  WANT_INFERRED,
   WANT_MAYBE,
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
@@ -264,6 +265,8 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
       want = WANT_MAYBE
     } else if (mutable && ctx.table.isMaybe(declared)) {
       want = -1
+    } else if (mutable && declared < 0) {
+      want = WANT_INFERRED
     }
     const initType = checkExpression(ctx, initializer, scope, want)
     // An inferred type never carries the initialiser's proof (#234):

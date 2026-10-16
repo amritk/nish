@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 643
+export const RULE_COUNT: i32 = 648
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -469,6 +469,8 @@ const diagnosticRules = (): string[] => [
   "NL3021",
   "` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into",
   "NL2487",
+  "` is not a type: only a member of an enum may be named with a dot in a type, and `",
+  "NL2517",
   "`; check the nullable side against `null` first, then compare the narrowed values",
   "NL2114",
   ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
@@ -657,6 +659,8 @@ const diagnosticRules = (): string[] => [
   "NL2086",
   "`export default` is not supported; use a named `export`",
   "NL2131",
+  ">(n)` would zero-fill with 0, which is not the member `",
+  "NL2520",
   " extends ...`) is not supported yet: an unconstrained ",
   "NL2294",
   " produces no value and can only be used as a statement",
@@ -683,6 +687,8 @@ const diagnosticRules = (): string[] => [
   "NL2068",
   "` is the opt-in to it, so a policy can only deny it",
   "NL3034",
+  "` zero-fills the array its workers write, which a `",
+  "NL2521",
   "`: an unconstrained type parameter has no members; ",
   "NL2329",
   "`: typed JSON's options are `rename` and `optional`",
@@ -1129,6 +1135,8 @@ const diagnosticRules = (): string[] => [
   "NL2014",
   ": internal compiler error",
   "NL3003",
+  "` holds only the member `",
+  "NL2519",
   "` needs a type annotation",
   "NL2095",
   "`: unsupported modifier `",
@@ -1217,6 +1225,8 @@ const diagnosticRules = (): string[] => [
   "NL2248",
   "` expects f64, got ",
   "NL2062",
+  "` to name as a type",
+  "NL2518",
   "`, which needs the ",
   "NL4004",
   "`Err(...)` expects ",
