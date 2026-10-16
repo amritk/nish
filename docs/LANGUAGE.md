@@ -1330,9 +1330,14 @@ and their `.ll` goldens are byte-identical files.
   that member type; the enum's other members, and any `Kind` value that is not
   a constant, are
   `` Type `Kind.Array` holds only the member `Kind.Array`, got `Kind.Scalar` ``
-  (`tests/cases/reject_enum_member_type_other`) and
+  (NL2514, `tests/cases/reject_enum_member_type_other`) and
   `` …, got a value of type `Kind` `` (`reject_enum_member_type_widened`),
-  because a `Kind` could be any member. Two member types of one enum are two
+  because a `Kind` could be any member. Every way into a slot is held to it:
+  a call argument, an assignment to a `let` or a field, a `push`, an element
+  write, an array literal, an object-literal field, `Ok`, `unwrapOr`'s
+  default, a ternary arm and a `return` (`reject_enum_member_type_argument`,
+  `_assign`, `_field_assign`, `_push`, `_element_write`, `_array_literal`,
+  `_object_field`, `_ok`, `_unwrap_or`, `_ternary`, `_return`). Two member types of one enum are two
   types (`reject_enum_member_type_between`), and a field initializer of a
   member type is held to the same rule (`reject_enum_member_type_field_init`).
   The other direction is free: a member type converts to its enum, and a read
@@ -1340,21 +1345,44 @@ and their `.ll` goldens are byte-identical files.
   compares with `===`, switches and passes as a `Kind`, and converts to `i32`
   no more than a `Kind` does (`reject_enum_member_type_read`). In IR a member
   type is its enum's `i32`: `tests/cases/enum_member_type` lowers to the same
-  bytes as the program with every member type written `Kind`.
+  bytes as the program with every member type written `Kind`
+  (`enum_member_type_widened`, whose golden is byte for byte the same).
   - **The qualifier is an enum, local or imported, and the name one of its
     members.** `import { Kind as K }` spells the exporter's member types
     `K.Array` (`tests/link/enum_member_type_import`). Anything else before the
     dot is `` `Point.x` is not a type: only a member of an enum may be named with a dot in a type, and `Point` is not an enum ``
-    (`reject_enum_member_type_not_enum`), a missing member is
+    (NL2512, `reject_enum_member_type_not_enum`), a missing member is
     `` Enum `Kind` has no member `Missing` to name as a type ``
-    (`reject_enum_member_type_unknown`), and type arguments are
+    (NL2513, `reject_enum_member_type_unknown`), and type arguments are
     `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
-    One dot is read; `A.B.C` is a syntax error.
+    One dot is read; `A.B.C` is a syntax error (`reject_enum_member_type_nested`).
   - **Two members of one value are one type**, as `tsc` reads them, spelled
-    by the member declared first.
+    by the member declared first: with `List = 1` beside `Array`, a
+    `Kind.List` slot is reported as `` `Kind.Array` ``
+    (`reject_enum_member_type_same_value`), and `Kind.List` enters a
+    `Kind.Array[]` (`tests/cases/enum_member_type_slots`).
+  - **A member type is a type wherever one is written**: a `type` alias's
+    right-hand side (`type ArrayTag = Kind.Array`), a type argument
+    (`Box<Kind.Array>`, `Map<Kind.Array, i32>`, `Set<Kind.Array>`), an
+    element type and an arrow argument's return type, and a `-g` build
+    describes it as its enum (`enum_member_type_slots`).
+  - **A zero-filled array of a member type holds 0**, so
+    `new Array<Kind.Array>(n)` is
+    `` `new Array<Kind.Array>(n)` would zero-fill with 0, which is not the member `Kind.Array`; build it with `[]` and `push` instead ``
+    (NL2515, `reject_enum_member_type_zero_fill`), and a member whose value
+    is 0, `Kind.Scalar` here, is allowed (`enum_member_type_slots`). The
+    `parallelMap`, `parallelFrom` and `parallelReduce` templates zero-fill the
+    array their workers write, so a body answering such a member type is
+    refused at the call, `` … answers the member type `Kind.Array`, and `parallelMap` zero-fills the array its workers write, which a `Kind.Array` cannot hold; declare the body to answer `Kind` ``
+    (NL2516, `reject_enum_member_type_parallel`).
   - **A field initializer may be a member's constant** when the field is the
     enum or one of its member types: `readonly kind: Kind = Kind.If` stores the
-    integer before the constructor runs, as a numeric literal would.
+    integer before the constructor runs, as a numeric literal would
+    (`enum_member_type_slots`). Another enum's member, a member the enum does
+    not declare, a member given to a number field and any other dotted
+    initializer are refused (`reject_enum_member_type_field_init_enum`,
+    `_field_init_level`, `_field_init_unknown`, `_field_init_i32`,
+    `_field_init_dotted`).
   - **Typed JSON refuses a member-typed field** (`tests/cases/json_reject_enum_member`):
     it reads an enum as any of its members, which a member type cannot hold. A
     member type crosses to C and JavaScript exactly where its enum does, which

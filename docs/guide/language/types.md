@@ -289,5 +289,22 @@ class ArrayNode {
 ```
 
 Reading the slot gives you a `Kind`, so it compares, switches and passes
-anywhere a `Kind` does. The reference's [Enums](../../LANGUAGE.md#enums)
-section has every rule.
+anywhere a `Kind` does.
+
+An array of a member type is built with `[]` and `push`. `new Array<T>(n)`
+fills its slots with 0, which here is `Kind.Scalar`, so the compiler refuses
+it for any member but the one whose value is 0:
+
+```ts nish:err NL2515
+enum Kind {
+  Scalar,
+  Array,
+}
+
+export const main = (): i32 => {
+  const tags = new Array<Kind.Array>(4);
+  return tags.length;
+};
+```
+
+The reference's [Enums](../../LANGUAGE.md#enums) section has every rule.

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 641
+export const RULE_COUNT: i32 = 643
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -651,6 +651,8 @@ const diagnosticRules = (): string[] => [
   "NL2086",
   "`export default` is not supported; use a named `export`",
   "NL2131",
+  ">(n)` would zero-fill with 0, which is not the member `",
+  "NL2515",
   " extends ...`) is not supported yet: an unconstrained ",
   "NL2294",
   " produces no value and can only be used as a statement",
@@ -677,6 +679,8 @@ const diagnosticRules = (): string[] => [
   "NL2068",
   "` is the opt-in to it, so a policy can only deny it",
   "NL3034",
+  "` zero-fills the array its workers write, which a `",
+  "NL2516",
   "`: an unconstrained type parameter has no members; ",
   "NL2329",
   "`: typed JSON's options are `rename` and `optional`",

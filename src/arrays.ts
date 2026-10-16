@@ -696,6 +696,15 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
       `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is outside the range; build it with \`[]\` and \`push\` instead`
     )
   }
+  // A member type holds one value, so a zero is one of its values only when
+  // the member is 0: a zero-filled `Kind.Array[]` would hold `Kind.Scalar`.
+  if (ctx.table.isEnumMemberType(elem) && ctx.table.memberValue(elem) !== 0) {
+    const spelled = ctx.table.typeName(elem)
+    return ctx.errorType(
+      expr,
+      `\`new Array<${spelled}>(n)\` would zero-fill with 0, which is not the member \`${spelled}\`; build it with \`[]\` and \`push\` instead`
+    )
+  }
   if (args.children.length !== 1) {
     return ctx.errorType(
       expr,

@@ -114,9 +114,11 @@ const arenaObject = (emitter: Emitter, info: StructInfo): string => {
 
 /**
  * The LLVM constant for a field initializer, from its syntax and the field's
- * type alone. The checker only admits literals here, and the node may belong
- * to another module (an imported class `new`ed without a constructor), whose
- * type table this emitter does not have.
+ * type alone, or, for an enum member such as `Kind.Array`, from the value the
+ * checker folded into `field.initializerValue`. The checker only admits
+ * literals and enum members here, and the node may belong to another module
+ * (an imported class `new`ed without a constructor), whose type table and
+ * enums this emitter does not have.
  */
 export const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
   const init = field.initializer

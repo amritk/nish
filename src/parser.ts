@@ -4316,7 +4316,8 @@ export class Parser {
         if (nesting === 0) {
           return false
         }
-      } else if (kind !== TOK_IDENT && kind !== TOK_NULL && kind !== TOK_PIPE) {
+      } else if (kind !== TOK_IDENT && kind !== TOK_NULL && kind !== TOK_PIPE && kind !== TOK_DOT) {
+        // `.` spells an enum member type, `(x): Kind.Array => ...`.
         return false
       }
       if (nesting < 0) {

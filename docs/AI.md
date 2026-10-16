@@ -1348,6 +1348,10 @@ export const main = (): i32 => {
   member type) enters it; any other member, or a `Kind` value, is NL2514. A
   member type converts to its enum, and a read of one *is* the enum, so it
   compares, switches and passes as a `Kind`. The IR is the enum's `i32`.
+  `new Array<Kind.Array>(n)` zero-fills, so it is NL2515 unless the member is
+  0; build such an array with `[]` and `push`. A `parallelMap`,
+  `parallelFrom` or `parallelReduce` body answering one is NL2516: answer
+  `Kind` instead.
 
 ```ts nish:ok
 enum Kind {
