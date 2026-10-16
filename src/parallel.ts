@@ -2526,7 +2526,10 @@ export const isLockCall = (program: CheckedProgram, node: Node): boolean => {
  * Whether `node` is `g.value` or an access through it — `g.value.f`,
  * `g.value.xs[i]` — for a guard `g`: what R3 and R4 hold to their rules, and
  * the one shared memory a task may write (R6). A guard is only ever a `using`
- * binding named as `g.value` (R3), so its type is the whole test.
+ * binding named as `g.value` (R3), so its type is the whole test — save for
+ * `this.value` inside `MutexGuard` itself, the constructor's store of the
+ * data `new Mutex` was given, which is no guard's access: the field holds
+ * nothing yet, so a string store there must not take it for a copy to free.
  */
 export const isGuardedAccess = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const e = unwrapParens(node)
@@ -2535,7 +2538,7 @@ export const isGuardedAccess = (program: CheckedProgram, table: TypeTable, node:
   }
   const base = unwrapParens(e.children[0])
   if (e.kind === N_MEMBER && e.text === "value" && isGuardType(program, table, program.nodeTypes[base.id])) {
-    return true
+    return base.kind !== N_THIS
   }
   return isGuardedAccess(program, table, base)
 }

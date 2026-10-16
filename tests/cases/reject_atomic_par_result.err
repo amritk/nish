@@ -1,1 +1,1 @@
-`(x) => ...` answers `AtomicI32`, and `parallelMap` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory
+`(x) => ...` answers `AtomicI32`, and `parallelMap` hands back only a number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies out of the worker's arena: anything else would point into memory the worker frees or reuses

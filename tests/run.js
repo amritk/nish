@@ -4389,10 +4389,11 @@ for (const name of linkTests) {
   )
   // The worker pool (docs/wp20-threads.md §8e) at the two sizes a default run on a
   // big machine never sees: no workers, where the caller runs every task in spawn
-  // order, and one. wp29 C6's no-deadlock argument for channels rests on the pool's
-  // queue order at every size, so a threads program prints the same at each.
+  // order, and one; and at eight, more threads than a small runner has cores.
+  // wp29 C6's no-deadlock argument for channels rests on the pool's queue order
+  // at every size, so a threads program prints the same at each.
   if (/^(thread|par)_/.test(name)) {
-    for (const threads of ["1", "2"]) {
+    for (const threads of ["1", "2", "8"]) {
       const sized = await runNative(`link/${name} (NISH_NUM_THREADS=${threads})`, exe, [], {
         env: envWithThreads(threads),
       })
@@ -4879,6 +4880,12 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_sibling_disjoint_mutex`, `_mutex_types` and `_atomics` are the
 // sibling scopes of one `using` whose tasks reach locks or atomics each made
 // in a `const` of its own, of one type or of two, which share nothing.
+//
+// And copy-at-join: `thread_task_string`, whose tasks answer strings and
+// scalar arrays; `par_map_string`, whose data-parallel bodies do; and
+// `thread_channel_string` and `thread_mutex_string`, which send strings on
+// channels and store them through guards. Each reads what crossed after
+// `churn()`, and prints only what every task order agrees on.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4926,6 +4933,10 @@ for (const name of [
   "thread_sibling_disjoint_mutex_types",
   "thread_sibling_disjoint_atomics",
   "par_atomic",
+  "thread_task_string",
+  "par_map_string",
+  "thread_channel_string",
+  "thread_mutex_string",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
