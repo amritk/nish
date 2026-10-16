@@ -391,7 +391,7 @@ const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean =>
   ctx.program.nodeTypes[expr.id] = T_ERROR
   ctx.error(
     expr,
-    `The tag \`${ctx.textOf(expr)}\` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type Nish does not have, so annotate it as \`${kind}\``
+    `The tag \`${ctx.textOf(expr)}\` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type this version does not have, so annotate it as \`${kind}\``
   )
   return true
 }

@@ -256,7 +256,9 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
     // offset 0 whichever variant it holds. No TBAA tag, because the access
     // aliases each variant's own tag field.
     const union = emitter.emitExpression(expr.children[0])
-    const ptr = emitter.fn.emitValue(`getelementptr inbounds %union.tagged, ${UNION_TYPE} ${union}, i32 0, i32 0`)
+    const ptr = emitter.fn.emitValue(
+      `getelementptr inbounds %union.tagged, ${UNION_TYPE} ${union}, i32 0, i32 0`
+    )
     return emitter.fn.emitValue(`load i32, i32* ${ptr}, align 4`)
   }
   const info = structInfoOf(emitter, receiver)
