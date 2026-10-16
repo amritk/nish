@@ -165,20 +165,30 @@ because a squash merge does not keep the branch's own commits.
   element under `if (i < dst.length)`, and that conditional store kept LLVM's
   loop vectoriser off (no `pslld` or `psrad` in the binary, where Rust's
   vectorised `scramble` has both). Testing `dst`'s length in the loop condition
-  as well lets LLVM drop the test after the call, and the loop vectorises:
-  par-regions went from 588.9 to 183.3 ms on one thread and from 168.8 to
-  58.0 ms on four (minimums, interleaved beside byte-identical copies), and the
-  table now has it ahead of Rayon outside the band in every run.
-  `tests/run.js` pins the vector loop ("par_map_vector").
+  as well lets LLVM drop the test after the call, and the loop vectorises when
+  `f` inlines with no panic path. A body that keeps one does not vectorise,
+  before or after #619: an overflow-checked `x + 7`, or a table lookup whose
+  index is not proven, branches to its panic on every element. Timed in 11
+  interleaved rounds after a warm-up, each binary beside a byte-identical
+  copy, par-regions went from 588.9 / 624.0 to 183.3 / 190.6 ms (min /
+  median) on one thread, 3.21x / 3.27x against a noise band of 3.3% / 1.5%,
+  and from 168.8 / 218.6 to 58.0 / 73.7 ms on four, 2.91x / 2.97x against a
+  band of 14.5% / 3.3%. In the table it is ahead of Rayon outside the band on
+  the minimum in every run, and on the median in two runs of three, within the
+  band in the third. `tests/run.js` pins the vector loop ("par_map_vector").
 - `par-histogram`: a contended lock, and the most machine- and load-sensitive
   of the four; read its spread before its reading. What is measured: past 64
   spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
   and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
   System time is not the whole story, though: Rust's futex lock spends about
-  as much (0.46 s), and in the table's runs it comes out about level with
-  Nish, so parking on a futex is not shown to be the cure. The sign is not even stable between runs: the table's
-  latest runs put Nish ahead of Go on the median in two runs and behind in one,
-  where the runs before them put it behind Go on every median.
+  as much (0.46 s), and in those runs it came out about level with Nish, so
+  parking on a futex is not shown to be the cure. Those figures are from an
+  earlier session, in which Nish's `par` run took about 274 ms; in the table's
+  latest runs it took 96.7 ms and Rust's 259 ms, with no change to either
+  program, so par-histogram moves by 2x and more between sessions on this
+  machine. Even the sign is not stable: the latest runs put Nish ahead of Go
+  on the median in two runs and behind in one, where the runs before them put
+  it behind Go on every median.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and

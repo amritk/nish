@@ -88,7 +88,7 @@ entry:
   %i.addr = alloca i32, align 4
   %sum.addr = alloca i32, align 4
   %i.addr.1 = alloca i32, align 4
-  store i32 4096, i32* %n.addr, align 4
+  store i32 16384, i32* %n.addr, align 4
   %0 = load i32, i32* %n.addr, align 4
   %1 = sext i32 %0 to i64
   %2 = icmp ule i64 %1, 2147483647

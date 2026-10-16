@@ -4,6 +4,8 @@
 // conditional: `tests/run.js` links the modules, runs `opt -O3` and finds the
 // scramble's shift as a vector `shl`. Each element is the shift-and-xor of
 // bench/par-regions.ts, so the checksum below is the one Node prints too.
+// 16,384 elements is more than twice the grain the compiler gives this body
+// (6,831), so under NISH_NUM_THREADS=2 the map really is divided.
 import { parallelMapInto } from "nish/threads";
 
 const scramble = (x: i32): i32 => {
@@ -17,7 +19,7 @@ const scramble = (x: i32): i32 => {
 };
 
 export const main = (): i32 => {
-  const n: i32 = 4096;
+  const n: i32 = 16384;
   const src = new Array<i32>(n);
   const dst = new Array<i32>(n);
   for (let i: i32 = 0; i < toI32(src.length); i++) {
