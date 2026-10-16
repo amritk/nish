@@ -521,10 +521,10 @@ counted on its own by deleting it and watching its root's count drop. The
 rotation turn's `wipe(previous)` needs no deletion step: the checker enforces
 it, since `previous` cannot be assigned again while the `Secret` it holds is
 neither wiped nor returned (NL2442), so a turn without it does not compile;
-its root shows only that the wipes survive `opt -O2`. The roots under
-What stays in memory, `tlsExchange` and the master-secret step
-`TlsServer.masterSecretStep` (run once the server Finished is sent), are
-counted the same way. `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
+its root shows only that the wipes survive `opt -O2`. Two more roots, under
+"What stays in memory" below, are counted the same way: `tlsExchange`, and
+the master-secret step `TlsServer.masterSecretStep`, run once the server
+Finished is sent. `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
 `Secret` (NL2445) and has nothing of its own to wipe. The count shows that each
 wipe exists and survives `opt -O2`; it matches calls, not paths, so that the
 wipe is reached on every path is for review to check. Each of open and seal
@@ -767,7 +767,7 @@ As TLS-1 records for the other secrets:
   their own scratch. Their caller, the hand-off call, wipes the binder key
   with `secureZero` once the binder is compared, verified or not, and
   `TlsServer` wipes the PSK early secret once the handshake-secret salt is
-  derived from it, as `sign` wipes the master secret once its secrets are
+  derived from it, as `TlsServer.masterSecretStep` wipes the master secret once its secrets are
   out, and on failure and in `restart`. The binder is compared in constant
   time, as the client Finished is.
 - **The handshake-secret salt.** On a resumed handshake the salt the
@@ -803,17 +803,22 @@ As TLS-1 records for the other secrets:
   the master secret and wipes it (`tlsMasterSecretInto` to `secureZero(master)`,
   `std/net/tls.ts:1338-1384` at 394c439). That step is split out of `sign`
   into one method both paths call once the server Finished is sent, the
-  master-secret step `TlsServer.masterSecretStep`. In order, as `sign` does
+  master-secret step `TlsServer.masterSecretStep`. Before its `using
+  arena()` block opens, it points `clientApplicationSecret`,
+  `serverApplicationSecret`, `exporterSecret` and `expectedClientFinished`
+  at the slot's arrays, as `sign` does today (`std/net/tls.ts:1303-1307` at
+  394c439), so the derivations below write into the arrays `wipeHandshake`
+  wipes, not into ones the block releases. Then, in order, as `sign` does
   today, it derives the master secret from the handshake secret; the client
   and server application traffic secrets ("c ap traffic", "s ap traffic") and
   the exporter secret ("exp master") from the master; and the expected client
   Finished from the client handshake secret. It then absorbs that Finished
   into the transcript, since the resumption master secret is taken over the
   transcript through the client Finished (§7.1), and derives the resumption
-  master secret ("res master") from the master. Last, it sets
+  master secret ("res master") from the master. Last, as in `sign`, it wipes
+  the master with `secureZero`, on every path, and then sets
   `TLS_STATE_WAIT_FINISHED`, which the carrier's state-driven wipes of the
-  handshake secrets key on, and wipes the master with `secureZero` before it
-  returns, on every path. The
+  handshake secrets key on. The
   handshake secret is wiped as today, by `handleFinished`, `wipeHandshake`
   and `restart`, which a resumed connection reaches as a full one does.
 - **Issuing.** The resumption PSK for a NewSessionTicket is derived, sealed
