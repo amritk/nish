@@ -1,0 +1,1 @@
+`read` is the C library's `read`: `--no-strict-exports` keeps every function's name as its symbol

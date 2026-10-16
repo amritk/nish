@@ -70,7 +70,7 @@ while.end:
   ret i1 true
 }
 
-define internal noundef double @read(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h, i32 noundef %i) #1 {
+define internal noundef double @read$(%struct.Holder* noundef nonnull readonly align 8 dereferenceable(8) nocapture %h, i32 noundef %i) #1 {
 entry:
   %0 = icmp sge i32 %i, 0
   br i1 %0, label %land.rhs.1, label %land.end.1
@@ -149,7 +149,7 @@ entry:
   %12 = getelementptr inbounds double, double* %6, i64 5
   store double 0x4018000000000000, double* %12, align 8, !alias.scope !9, !noalias !8, !tbaa !16
   call void @Holder.constructor(%struct.Holder* %Holder.obj, %struct.nish_array* %1)
-  %13 = call double @read(%struct.Holder* %Holder.obj, i32 5)
+  %13 = call double @read$(%struct.Holder* %Holder.obj, i32 5)
   %14 = call i32 @llvm.fptosi.sat.i32.f64(double %13)
   ret i32 %14
 }
