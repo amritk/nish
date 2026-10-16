@@ -5297,7 +5297,9 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   `reject_secret_alias_unwrap_local`, `reject_secret_alias_constructor`,
   `reject_secret_alias_receiver`, `reject_secret_alias_pop`,
   `reject_secret_alias_for_of`, and `reject_secret_alias_capture_map`,
-  `_from`, `_map_into`, `_reduce` and `_spawn`). Pass a fresh value instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
+  `_from`, `_map_into`, `_reduce` and `_spawn`, and
+  `reject_secret_alias_spawn_arg` and `_spawn_with` for a task's argument,
+  which the scope keeps until the task has run). Pass a fresh value instead, or a copy: `const copy: u8[] = new Array<u8>(raw.length);
   copy.set(raw)`, then `secret(copy)`. A declarator that reads `raw` after
   `secret(raw)` in the same statement is a moved read, NL2445
   (`reject_secret_alias_declarator_moved`). The rule refuses some programs
