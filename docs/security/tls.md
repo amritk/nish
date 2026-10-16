@@ -318,8 +318,8 @@ test does) never has a slot's wipe reach the next connection's key, which as
 an array of zeros would be a publicly known x25519 key, nor has a pending
 handshake send the next connection's random. A random or key that is not 32
 bytes is refused with -22 before any connection is taken, and its array left
-as it was. A failed or closed connection wipes
-everything `TlsServer` still held, the exporter secret included
+as it was. A failed connection, or the carrier's slot close (`wipeKeys`),
+wipes everything `TlsServer` still held, the exporter secret included
 (`net_tls_record_refusals`); a key that does not install fails the connection
 rather than leave a direction in the clear, and `seal` refuses application
 data in the clear.
