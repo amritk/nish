@@ -58,7 +58,8 @@ import {
   standardWith,
   transcriptHash,
 } from "../net_tls_common/client";
-import { x25519Plain } from "../crypto_x25519/plain";
+import { copyOf, x25519Plain } from "../crypto_x25519/plain";
+import { secretCopy } from "../net_tls_common/secrets";
 import { leafPrivate, leafPublic } from "../net_tls_common/server";
 import { fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
@@ -381,11 +382,21 @@ export const qcFinish = (c: QcClient, serverHello: u8[]): void => {
   c.view = clientFinish(h, c.before, serverHello, c.cryptoHandshake, leafPublic());
   const shared: u8[] | null = x25519Plain(clientPrivate(), serverShareOf(serverHello));
   const none: u8[] = [];
-  const handshakeSecret: u8[] = tlsHandshakeSecret(h, tlsEarlySecret(h), shared === null ? none : shared);
-  const master: u8[] = tlsMasterSecret(h, handshakeSecret);
+  const early: Secret<u8[]> = tlsEarlySecret(h);
+  const ecdhe: Secret<u8[]> = secret(copyOf(shared === null ? none : shared));
+  const handshakeSecret: Secret<u8[]> = tlsHandshakeSecret(h, early, ecdhe);
+  wipe(early);
+  wipe(ecdhe);
+  const master: Secret<u8[]> = tlsMasterSecret(h, handshakeSecret);
+  wipe(handshakeSecret);
   const th: u8[] = transcriptHash(h, cat([c.before, serverHello, c.cryptoHandshake]));
-  c.appWriteSecret = tlsDeriveSecret(h, master, "c ap traffic", th);
-  c.appReadSecret = tlsDeriveSecret(h, master, "s ap traffic", th);
+  const appWrite: Secret<u8[]> = tlsDeriveSecret(h, master, "c ap traffic", th);
+  const appRead: Secret<u8[]> = tlsDeriveSecret(h, master, "s ap traffic", th);
+  wipe(master);
+  c.appWriteSecret = secretCopy(appWrite);
+  c.appReadSecret = secretCopy(appRead);
+  wipe(appWrite);
+  wipe(appRead);
   c.appWrite = quicKeys(qcAead(c.suite), c.appWriteSecret);
   c.appRead = quicKeys(qcAead(c.suite), c.appReadSecret);
 };

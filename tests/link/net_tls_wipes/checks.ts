@@ -49,7 +49,6 @@ import {
   TLS_CONTENT_APPLICATION_DATA,
   TLS_CONTENT_HANDSHAKE,
   TlsRecordProtection,
-  tlsNextTrafficSecret,
 } from "nish/net/tls/record";
 import { TLS_RECORD_STATE_CLOSED, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_HANDSHAKE, TLS_RECORD_STATE_OPEN, TLS_RECORD_SIGN, TlsRecordServer } from "nish/net/tls/record-server";
 import { TlsTcpServer } from "nish/net/tls-tcp";
@@ -58,6 +57,7 @@ import { clientHelloRaw, extKeyShare, extSignatureAlgorithms, extSupportedGroups
 import { Opened, ZERO, ascii, drain, feed, filled, join, keyUpdateMessage, openOne, protectionFor, range, readAll, sealOne } from "../net_tls_record_common/bytes";
 import { ClientKeys, clearRecord, clientKeysFor, recordHello, splitRecords } from "../net_tls_record_common/client";
 import { sameBytes } from "../crypto_x509/hex";
+import { nextTrafficCopy } from "../net_tls_common/secrets";
 
 /** `TlsServer`'s pool index of the handshake secret. */
 const HANDSHAKE: i32 = 0;
@@ -575,8 +575,8 @@ const keyUpdates = (t: Suite): void => {
     "both traffic secrets are the next generation, written over the one they replace",
     live.connected &&
       bytesHeld(oldRead) > 0 &&
-      equalBytes(conn.readSecret384, tlsNextTrafficSecret(hashLength, oldRead)) &&
-      equalBytes(conn.writeSecret384, tlsNextTrafficSecret(hashLength, oldWrite))
+      equalBytes(conn.readSecret384, nextTrafficCopy(hashLength, oldRead)) &&
+      equalBytes(conn.writeSecret384, nextTrafficCopy(hashLength, oldWrite))
   );
   t.eqI32("and the next-secret scratch of both directions reads zero", bytesHeld(conn.readProtection.next) + bytesHeld(conn.writeProtection.next), zero);
   conn.abort();

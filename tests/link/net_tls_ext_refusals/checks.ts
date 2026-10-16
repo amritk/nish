@@ -42,6 +42,8 @@ import {
   tlsTrafficIv,
   tlsTrafficKey,
 } from "nish/net/tls/schedule";
+import { Secret, secret, wipe } from "nish:secret";
+import { secretCopy } from "../net_tls_common/secrets";
 import {
   TLS_LEVEL_APPLICATION,
   TLS_LEVEL_HANDSHAKE,
@@ -613,17 +615,23 @@ export const refusalChecks = (): i32 => {
   // --- The schedule's edges ---------------------------------------------------
   t.eqI32("an unknown suite has no hash", tlsSuiteHashLength(toI32(0x1304)), zero);
   t.eqI32("and no key", tlsSuiteKeyLength(toI32(0x1304)), zero);
-  t.eqI32(
-    "and tlsTrafficKey answers an empty key for it rather than panicking",
-    toI32(tlsTrafficKey(toI32(0x1304), new Array<u8>(32)).length),
-    zero
-  );
-  t.eqI32("as tlsTrafficIv answers an empty IV", toI32(tlsTrafficIv(toI32(0x1304), new Array<u8>(32)).length), zero);
+  const anySecret: Secret<u8[]> = secret(new Array<u8>(32));
+  const noKey: Secret<u8[]> = tlsTrafficKey(toI32(0x1304), anySecret);
+  t.eqI32("and tlsTrafficKey answers an empty key for it rather than panicking", toI32(secretCopy(noKey).length), zero);
+  wipe(noKey);
+  const noIv: Secret<u8[]> = tlsTrafficIv(toI32(0x1304), anySecret);
+  t.eqI32("as tlsTrafficIv answers an empty IV", toI32(secretCopy(noIv).length), zero);
+  wipe(noIv);
+  wipe(anySecret);
   t.eqI32("TLS_AES_256_GCM_SHA384 has a 32-byte key", tlsSuiteKeyLength(TLS_AES_256_GCM_SHA384), toI32(32));
-  t.eqI32(
-    "tlsExpandLabel answers the length asked",
-    toI32(tlsExpandLabel(toI32(48), tlsExtract(toI32(48), empty, empty), "key", empty, toI32(32)).length),
-    toI32(32)
-  );
+  const salt: Secret<u8[]> = secret(new Array<u8>(0));
+  const ikm: Secret<u8[]> = secret(new Array<u8>(0));
+  const prk: Secret<u8[]> = tlsExtract(toI32(48), salt, ikm);
+  wipe(salt);
+  wipe(ikm);
+  const expanded: Secret<u8[]> = tlsExpandLabel(toI32(48), prk, "key", empty, toI32(32));
+  t.eqI32("tlsExpandLabel answers the length asked", toI32(secretCopy(expanded).length), toI32(32));
+  wipe(expanded);
+  wipe(prk);
   return t.done();
 };

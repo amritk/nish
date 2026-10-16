@@ -25,27 +25,37 @@
  * schedule inside `using a = arena()` blocks and leave the arena where it was
  * (TLS-3 in `docs/security/tls.md`). The scratch is wiped by every step.
  *
- * **Secrets are not wiped.** Every function here answers or holds a secret as
- * plain bytes, and each stays in arena memory until that memory is reused.
- * `secureZero`, the store no optimiser removes, is on `main`, and `std/` may
- * call it once a release ships it (CLAUDE.md §Security, TLS-1 in
- * `docs/security/tls.md`).
+ * **Secrets are `Secret`s.** The one-shot functions take every secret they
+ * read (a traffic secret, the ECDHE secret, a stage of the schedule) as a
+ * `Secret<u8[]>` (`nish:secret`) and answer every secret they derive as one;
+ * each reads its key only inside `exposeWith` and wipes the intermediates it
+ * made (the "derived" salts, the `finished_key`, the zero inputs) before it
+ * returns, and HMAC wipes its key blocks. The caller owns what it is handed
+ * and wipes it. What a `Secret` cannot reach is TLS-1 in
+ * `docs/security/tls.md`. The transcript hashes, the labels and a Finished
+ * message's `verify_data` are public and stay plain.
  *
  * Written from RFC 8446, not ported from another implementation.
  */
 import {
   HkdfScratch,
   hkdfExpandLabelInto,
-  hkdfExpandLabelSha256,
-  hkdfExpandLabelSha384,
+  hkdfExpandLabelSha256Secret,
+  hkdfExpandLabelSha384Secret,
   hkdfExtractInto,
-  hkdfExtractSha256,
-  hkdfExtractSha384,
 } from "nish/crypto/hkdf"
-import { hmacCopySha256, hmacCopySha384, hmacSha256, hmacSha384 } from "nish/crypto/hmac"
+import {
+  hmacCopySha256,
+  hmacCopySha384,
+  hmacSha256,
+  hmacSha256Secret,
+  hmacSha384,
+  hmacSha384Secret,
+} from "nish/crypto/hmac"
 import { tlsHexInto } from "nish/net/tls/codec"
 import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, Sha384, sha384 } from "nish/crypto/sha512"
+import { Secret, exposeWith, secret, wipe } from "nish:secret"
 
 /** `TLS_AES_128_GCM_SHA256` (RFC 8446 §B.4). */
 export const TLS_AES_128_GCM_SHA256: i32 = 0x1301
@@ -94,23 +104,50 @@ export const tlsSuiteKeyLength = (suite: i32): i32 => {
 
 /**
  * HKDF-Expand-Label (RFC 8446 §7.1) over the hash `hashLength` names: `length`
- * bytes from `secret`, the label (without its `"tls13 "` prefix, which is
- * added) and `context`.
+ * bytes from `prk` (RFC 8446's Secret), the label (without its `"tls13 "`
+ * prefix, which is added) and `context`, held as a `Secret`.
  */
 export const tlsExpandLabel = (
   hashLength: i32,
-  secret: u8[],
+  prk: Secret<u8[]>,
   label: string,
   context: u8[],
   length: i32
-): u8[] =>
-  hashLength === SHA384_SIZE
-    ? hkdfExpandLabelSha384(secret, label, context, length)
-    : hkdfExpandLabelSha256(secret, label, context, length)
+): Secret<u8[]> => {
+  if (hashLength === SHA384_SIZE) {
+    return hkdfExpandLabelSha384Secret(prk, label, context, length)
+  }
+  return hkdfExpandLabelSha256Secret(prk, label, context, length)
+}
 
-/** HKDF-Extract (RFC 5869 §2.2) over the hash `hashLength` names; an empty salt is HashLen zeros. */
-export const tlsExtract = (hashLength: i32, salt: u8[], ikm: u8[]): u8[] =>
-  hashLength === SHA384_SIZE ? hkdfExtractSha384(salt, ikm) : hkdfExtractSha256(salt, ikm)
+/** HMAC-SHA-256 keyed with the plain salt over the plain IKM, for the inner `exposeWith` of `tlsExtract` to run. */
+const tlsExtractSha256Exposed = (ikm: u8[], salt: u8[]): u8[] => hmacSha256(salt, ikm)
+
+/** HMAC-SHA-384 keyed with the plain salt over the plain IKM, as the SHA-256 one is. */
+const tlsExtractSha384Exposed = (ikm: u8[], salt: u8[]): u8[] => hmacSha384(salt, ikm)
+
+/** Exposes the IKM beside the already exposed salt: the outer `exposeWith` of `tlsExtract` over SHA-256. */
+const tlsExtractSha256Salted = (salt: u8[], ikm: Secret<u8[]>): u8[] =>
+  exposeWith(ikm, salt, tlsExtractSha256Exposed)
+
+/** Exposes the IKM beside the already exposed salt, as the SHA-256 one does. */
+const tlsExtractSha384Salted = (salt: u8[], ikm: Secret<u8[]>): u8[] =>
+  exposeWith(ikm, salt, tlsExtractSha384Exposed)
+
+/**
+ * HKDF-Extract (RFC 5869 §2.2) over the hash `hashLength` names, held as a
+ * `Secret`. Both inputs are `Secret`s, since the schedule salts every extract
+ * after the first with a derived secret; an empty salt keys HMAC as HashLen
+ * zeros do.
+ */
+export const tlsExtract = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>): Secret<u8[]> => {
+  if (hashLength === SHA384_SIZE) {
+    const prk384: u8[] = exposeWith(salt, ikm, tlsExtractSha384Salted)
+    return secret(prk384)
+  }
+  const prk: u8[] = exposeWith(salt, ikm, tlsExtractSha256Salted)
+  return secret(prk)
+}
 
 /** The hash of the empty string, the transcript `Derive-Secret(., "derived", "")` hashes. */
 export const tlsEmptyHash = (hashLength: i32): u8[] => {
@@ -118,59 +155,99 @@ export const tlsEmptyHash = (hashLength: i32): u8[] => {
   return hashLength === SHA384_SIZE ? sha384(none) : sha256(none)
 }
 
-/** Derive-Secret (RFC 8446 §7.1): Expand-Label of `secret` with `label` and a transcript hash, HashLen bytes. */
-export const tlsDeriveSecret = (hashLength: i32, secret: u8[], label: string, transcriptHash: u8[]): u8[] =>
-  tlsExpandLabel(hashLength, secret, label, transcriptHash, hashLength)
+/** Derive-Secret (RFC 8446 §7.1): Expand-Label of `prk` with `label` and a transcript hash, HashLen bytes held as a `Secret`. */
+export const tlsDeriveSecret = (
+  hashLength: i32,
+  prk: Secret<u8[]>,
+  label: string,
+  transcriptHash: u8[]
+): Secret<u8[]> => tlsExpandLabel(hashLength, prk, label, transcriptHash, hashLength)
 
 /** The early secret with no PSK: HKDF-Extract of HashLen zeros under a zero salt (RFC 8446 §7.1). */
-export const tlsEarlySecret = (hashLength: i32): u8[] => {
-  const none: u8[] = []
-  return tlsExtract(hashLength, none, new Array<u8>(hashLength))
+export const tlsEarlySecret = (hashLength: i32): Secret<u8[]> => {
+  const salt: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const ikm: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const early: Secret<u8[]> = tlsExtract(hashLength, salt, ikm)
+  wipe(salt)
+  wipe(ikm)
+  return early
 }
 
-/** The handshake secret: HKDF-Extract of the ECDHE secret under `Derive-Secret(early, "derived", "")`. */
-export const tlsHandshakeSecret = (hashLength: i32, earlySecret: u8[], ecdhe: u8[]): u8[] =>
-  tlsExtract(hashLength, tlsDeriveSecret(hashLength, earlySecret, "derived", tlsEmptyHash(hashLength)), ecdhe)
+/**
+ * The handshake secret: HKDF-Extract of the ECDHE secret under
+ * `Derive-Secret(early, "derived", "")`, which is wiped before it returns.
+ */
+export const tlsHandshakeSecret = (
+  hashLength: i32,
+  earlySecret: Secret<u8[]>,
+  ecdhe: Secret<u8[]>
+): Secret<u8[]> => {
+  const derived: Secret<u8[]> = tlsDeriveSecret(hashLength, earlySecret, "derived", tlsEmptyHash(hashLength))
+  const handshake: Secret<u8[]> = tlsExtract(hashLength, derived, ecdhe)
+  wipe(derived)
+  return handshake
+}
 
-/** The master secret: HKDF-Extract of HashLen zeros under `Derive-Secret(handshake, "derived", "")`. */
-export const tlsMasterSecret = (hashLength: i32, handshakeSecret: u8[]): u8[] =>
-  tlsExtract(
+/**
+ * The master secret: HKDF-Extract of HashLen zeros under
+ * `Derive-Secret(handshake, "derived", "")`, which is wiped before it returns.
+ */
+export const tlsMasterSecret = (hashLength: i32, handshakeSecret: Secret<u8[]>): Secret<u8[]> => {
+  const derived: Secret<u8[]> = tlsDeriveSecret(
     hashLength,
-    tlsDeriveSecret(hashLength, handshakeSecret, "derived", tlsEmptyHash(hashLength)),
-    new Array<u8>(hashLength)
+    handshakeSecret,
+    "derived",
+    tlsEmptyHash(hashLength)
   )
+  const zeros: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const master: Secret<u8[]> = tlsExtract(hashLength, derived, zeros)
+  wipe(derived)
+  wipe(zeros)
+  return master
+}
 
 /**
  * A Finished message's `verify_data` (RFC 8446 §4.4.4): the HMAC of the
  * transcript hash under `finished_key = Expand-Label(baseKey, "finished", "",
- * HashLen)`, where `baseKey` is the sender's handshake traffic secret.
+ * HashLen)`, where `baseKey` is the sender's handshake traffic secret. The
+ * `finished_key` is wiped before it returns; `verify_data` goes on the wire,
+ * so it is plain.
  */
-export const tlsFinishedVerifyData = (hashLength: i32, baseKey: u8[], transcriptHash: u8[]): u8[] => {
+export const tlsFinishedVerifyData = (hashLength: i32, baseKey: Secret<u8[]>, transcriptHash: u8[]): u8[] => {
   const none: u8[] = []
-  const finishedKey: u8[] = tlsExpandLabel(hashLength, baseKey, "finished", none, hashLength)
-  return hashLength === SHA384_SIZE
-    ? hmacSha384(finishedKey, transcriptHash)
-    : hmacSha256(finishedKey, transcriptHash)
+  const finishedKey: Secret<u8[]> = tlsExpandLabel(hashLength, baseKey, "finished", none, hashLength)
+  const verifyData: u8[] =
+    hashLength === SHA384_SIZE
+      ? hmacSha384Secret(finishedKey, transcriptHash)
+      : hmacSha256Secret(finishedKey, transcriptHash)
+  wipe(finishedKey)
+  return verifyData
 }
 
-/** The AEAD key a traffic secret gives `suite`'s record protection (RFC 8446 §7.3); empty for a suite this module does not negotiate. */
-export const tlsTrafficKey = (suite: i32, secret: u8[]): u8[] => {
+/**
+ * The AEAD key a traffic secret gives `suite`'s record protection (RFC 8446
+ * §7.3), held as a `Secret`; empty for a suite this module does not negotiate.
+ */
+export const tlsTrafficKey = (suite: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> => {
   const none: u8[] = []
   const hashLength: i32 = tlsSuiteHashLength(suite)
   if (hashLength === 0) {
-    return none
+    return secret(new Array<u8>(0))
   }
-  return tlsExpandLabel(hashLength, secret, "key", none, tlsSuiteKeyLength(suite))
+  return tlsExpandLabel(hashLength, trafficSecret, "key", none, tlsSuiteKeyLength(suite))
 }
 
-/** The 12-byte IV a traffic secret gives `suite`'s record protection (RFC 8446 §7.3); empty for a suite this module does not negotiate. */
-export const tlsTrafficIv = (suite: i32, secret: u8[]): u8[] => {
+/**
+ * The 12-byte IV a traffic secret gives `suite`'s record protection (RFC 8446
+ * §7.3), held as a `Secret`; empty for a suite this module does not negotiate.
+ */
+export const tlsTrafficIv = (suite: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> => {
   const none: u8[] = []
   const hashLength: i32 = tlsSuiteHashLength(suite)
   if (hashLength === 0) {
-    return none
+    return secret(new Array<u8>(0))
   }
-  return tlsExpandLabel(hashLength, secret, "iv", none, TLS_IV_SIZE)
+  return tlsExpandLabel(hashLength, trafficSecret, "iv", none, TLS_IV_SIZE)
 }
 
 /**
@@ -288,14 +365,14 @@ const tlsEmptyHashInto = (hashLength: i32, out: u8[]): void => {
 }
 
 /**
- * `tlsDeriveSecret` in place: Derive-Secret (RFC 8446 §7.1) of `secret` with
+ * `tlsDeriveSecret` in place: Derive-Secret (RFC 8446 §7.1) of `prk` with
  * `label` and the transcript hash `transcriptHash[hashOff .. hashOff +
  * hashLength)`, its HashLen bytes written at `out[0]`.
  */
 export const tlsDeriveSecretInto = (
   kdf: HkdfScratch,
   hashLength: i32,
-  secret: u8[],
+  prk: u8[],
   label: string,
   transcriptHash: u8[],
   hashOff: i32,
@@ -304,7 +381,7 @@ export const tlsDeriveSecretInto = (
   hkdfExpandLabelInto(
     kdf,
     hashLength,
-    secret,
+    prk,
     label,
     transcriptHash,
     hashOff,
@@ -386,7 +463,7 @@ export const tlsFinishedVerifyDataInto = (
 export const tlsTrafficKeysInto = (
   kdf: HkdfScratch,
   suite: i32,
-  secret: u8[],
+  trafficSecret: u8[],
   key: u8[],
   iv: u8[]
 ): boolean => {
@@ -395,7 +472,7 @@ export const tlsTrafficKeysInto = (
   const keyLength: i32 = tlsSuiteKeyLength(suite)
   if (
     hashLength === 0 ||
-    toI32(secret.length) !== hashLength ||
+    toI32(trafficSecret.length) !== hashLength ||
     toI32(key.length) !== keyLength ||
     toI32(iv.length) !== TLS_IV_SIZE
   ) {
@@ -404,7 +481,7 @@ export const tlsTrafficKeysInto = (
   hkdfExpandLabelInto(
     kdf,
     hashLength,
-    secret,
+    trafficSecret,
     "key",
     none,
     TLS_SCHEDULE_FROM,
@@ -416,7 +493,7 @@ export const tlsTrafficKeysInto = (
   hkdfExpandLabelInto(
     kdf,
     hashLength,
-    secret,
+    trafficSecret,
     "iv",
     none,
     TLS_SCHEDULE_FROM,
