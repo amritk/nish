@@ -1,0 +1,76 @@
+PASS  RFC 8448 §3's NewSessionTicket is 205 octets
+PASS  tlsEncodeNewSessionTicket writes RFC 8448 §3's NewSessionTicket
+PASS  tlsWriteNewSessionTicket at offset 5 answers where it ended
+PASS  and wrote the same bytes there
+PASS  tlsResumptionPsk gives RFC 8448 §3's PSK for nonce 0000
+PASS  tlsResumptionPskInto gives it from a window of the nonce
+PASS  tlsPskEarlySecret gives RFC 8448 §4's early secret
+PASS  so does tlsPskEarlySecretInto
+PASS  tlsBinderKey gives RFC 8448 §4's binder key
+PASS  so does tlsBinderKeyInto
+PASS  tlsHandshakeSalt gives RFC 8448 §4's derived salt
+PASS  so does tlsHandshakeSaltInto
+PASS  RFC 8448 §4's ClientHello is 512 octets
+PASS  it parses
+PASS  with a pre_shared_key
+PASS  and psk_key_exchange_modes
+PASS  offering psk_dhe_ke
+PASS  one identity
+PASS  one binder
+PASS  the binders list's prefix is at octet 477
+PASS  the hello up to it hashes to RFC 8448 §4's truncated hash
+PASS  tlsFinishedVerifyData under the binder key gives RFC 8448 §4's binder
+PASS  tlsSelectPskIdentity finds identity 0
+PASS  which is §3's ticket
+PASS  with its obfuscated age
+PASS  and binder 0 is §4's binder
+PASS  tlsBinderVerify accepts it
+PASS  and refuses it with its last bit flipped
+PASS  or cut to 31 bytes
+PASS  there is no identity 1
+PASS  or identity -1
+PASS  tlsParseClientHello reads it too
+PASS  with one identity
+PASS  the ticket
+PASS  its age
+PASS  its binder
+PASS  the binders' prefix, from the body
+PASS  and the modes
+PASS  psk_dhe_ke among them
+PASS  tlsEncodeServerHelloPsk writes RFC 8448 §4's ServerHello
+PASS  a pre_shared_key without psk_key_exchange_modes is missing_extension
+PASS  and the server answers it
+PASS  a well-formed pre_shared_key that is not last is illegal_parameter
+PASS  and the server answers it
+PASS  two identities and one binder is illegal_parameter
+PASS  and the server answers it
+PASS  one identity and two binders is illegal_parameter
+PASS  and the server answers it
+PASS  an identity list under 7 bytes is decode_error
+PASS  and the server answers it
+PASS  an empty identity is decode_error
+PASS  and the server answers it
+PASS  a 31-byte binder is decode_error
+PASS  and the server answers it
+PASS  an empty binder list is decode_error
+PASS  and the server answers it
+PASS  an identity list past the extension is decode_error
+PASS  and the server answers it
+PASS  bytes after the binders are decode_error
+PASS  and the server answers it
+PASS  an empty mode list is decode_error
+PASS  and the server answers it
+PASS  so it is with no pre_shared_key
+PASS  and the server answers it
+PASS  a mode list past its extension is decode_error with no pre_shared_key
+PASS  and the server answers it
+PASS  a malformed offer whose counts differ is decode_error
+PASS  so is a malformed offer without modes
+PASS  counts that differ without modes are illegal_parameter
+PASS  psk_ke alone parses
+PASS  and is not psk_dhe_ke
+PASS  an unknown mode is passed over
+PASS  and psk_dhe_ke after it still counts
+PASS  the server goes on without the PSK
+PASS  a hello with no PSK at all still parses
+tls psk wire: 75 passed, 0 failed, 0 skipped
