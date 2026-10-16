@@ -54,9 +54,9 @@ import { portabilityFindings } from "./portability"
 import { Checker } from "./checker"
 import { Diagnostic, DiagnosticSink, Edit, SourceFile } from "./diagnostics"
 import { codeFor } from "./codes"
-import { isCLibrarySymbol } from "./c-symbols"
+import { isCLibrarySymbol, isCReservedSymbol } from "./c-symbols"
 import { emitProgram } from "./emit"
-import { spellHiddenApart } from "./generics"
+import { spellCSymbolsApart } from "./generics"
 import { StringMap, StringSet } from "./map"
 import {
   isBuiltinSpecifier,
@@ -1138,7 +1138,6 @@ export class Compilation {
       unit.checker.closeReachableStructs(declared)
     }
     this.rejectSymbolClashes(clashed)
-    this.rejectCLibrarySymbols()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -1183,13 +1182,18 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
-    // #610: every body is checked, so a hidden function's diagnostics are
-    // reported and its instantiations keyed; it takes its link symbol now.
+    // #610, #618: every body is checked, so a function's diagnostics are
+    // reported and its instantiations keyed; it takes its link symbol now, and
+    // a function whose symbol is its ABI and is reserved to C is refused.
     const checked: CheckedProgram[] = []
     for (const unit of this.modules) {
       checked.push(unit.checker.program)
     }
-    spellHiddenApart(checked)
+    spellCSymbolsApart(checked, this.opts.strictExports)
+    this.rejectCLibrarySymbols()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     // WP15 §2.4: what every call site proves for its callee's parameters. It
     // needs every body checked, instantiations included, and the attribute
     // analysis below reads the proofs it adds.
@@ -2165,15 +2169,16 @@ export class Compilation {
   }
 
   /**
-   * A function of the program's own package whose symbol is its name and
-   * names a C library function (#618): exported, or any function under
-   * `--no-strict-exports`. The program's own package carries no prefix, so
-   * the definition is global in the executable and the runtime's calls to the
-   * C function would reach it (`src/c-symbols.ts`). Its name is its ABI, so
-   * it is refused rather than renamed, which a hidden function is
-   * (`spellHiddenApart`). A `declare function` is the C function itself, a
-   * method or an instantiation has a `.` or a `$` in its symbol, and another
-   * package's function has its package's prefix.
+   * A function of the program's own package whose symbol is still its name
+   * once `spellCSymbolsApart` has run, and is reserved to C (#618,
+   * `src/c-symbols.ts`): exported, or any function under
+   * `--no-strict-exports` that no other module's instantiation calls. The
+   * program's own package carries no prefix, so the definition is global in
+   * the executable and the C library's and the runtime's references to the
+   * name would reach it. Its name is its ABI, so it is refused rather than
+   * renamed, as an internal or a hidden function is. A `declare function` is
+   * the C function itself, a method or an instantiation has a `.` or a `$` in
+   * its symbol, and another package's function has its package's prefix.
    */
   rejectCLibrarySymbols(): void {
     for (const unit of this.modules) {
@@ -2184,12 +2189,10 @@ export class Compilation {
         if (!sig.definedIn(unit.source) || sig.foreign() || sig.owner !== null || sig.instance !== null) {
           continue
         }
-        if (!sig.exported && this.opts.strictExports) {
+        if (!isCReservedSymbol(sig.name)) {
           continue
         }
-        if (!isCLibrarySymbol(sig.name)) {
-          continue
-        }
+        const what = isCLibrarySymbol(sig.name) ? `is the C library's \`${sig.name}\`` : reservedPrefixText(sig.name)
         const why = sig.exported
           ? "an exported function of the program's own package keeps its name as its symbol"
           : "`--no-strict-exports` keeps every function's name as its symbol"
@@ -2198,7 +2201,7 @@ export class Compilation {
           unit.source,
           at.start,
           at.end,
-          `\`${sig.sourceName}\` is the C library's \`${sig.name}\`: ${why}, so the runtime's own calls to it would reach this function instead; rename it`
+          `\`${sig.sourceName}\` ${what}: ${why}, so the references the C library and the runtime make to that name would reach this function instead; rename it`
         )
       }
     }
@@ -2447,6 +2450,12 @@ const restatedBy = (warning: Diagnostic, refused: PanicSite[]): boolean => {
   }
   return false
 }
+
+/** Which reserved prefix a symbol begins with, and who reserves it, for NL3037. */
+const reservedPrefixText = (name: string): string =>
+  name.startsWith("_")
+    ? "begins with `_`, which C reserves for its library and start-up code"
+    : "begins with `napi_`, which Node-API reserves for its functions"
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */
 const nameNode = (sig: FunctionSig): Node =>

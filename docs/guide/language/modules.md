@@ -75,12 +75,16 @@ Four more rules come from compiling the whole program at once:
   is refused, because the type's name is part of the compiled program; anything
 else, generic classes and interfaces included, can be renamed with `as`.
 - **An exported function cannot be named after a C library function** such as
-  `write`, `read`, `free`, `exit` or `strlen`. An exported function keeps its
-  name in the compiled program, and the runtime calls the C library's function
-  of that name to print, read files and allocate memory, so it would call
-  yours instead. A private function can have any of these names; so can a
-  method. Importing the built-in `write` from `nish:io` or `exit` from
-  `nish:process` is fine too: those are not functions of your program.
+  `write`, `read`, `free`, `exit`, `strlen` or `sin`, nor take a name that
+  begins with `_` or `napi_`. An exported function keeps its name in the
+  compiled program, and the runtime and your own `Math` calls reach the C
+  library's function of that name to print, read files, allocate memory and
+  compute, so they would reach yours instead. The same holds when you build
+  for wasm or for Node through N-API, where the exported name is the one
+  JavaScript calls. A private function can have any of these names, and so
+  can a method: the compiler gives a private one a symbol the C library
+  cannot clash with. Importing the built-in `write` from `nish:io` or `exit`
+  from `nish:process` is fine too: those are not functions of your program.
 
 ```ts nish:err NL3037
 export const write = (line: string): i32 => toI32(line.length);

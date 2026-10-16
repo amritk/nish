@@ -4741,6 +4741,8 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
 // spawn order and join order print the same.
+// `thread_no_strict_hidden_task` (#618) is a private `read` handed to two
+// spawns under `--no-strict-exports`: hidden, so `@read$`, and accepted.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4775,6 +4777,7 @@ for (const name of [
   "thread_scope_region_read_back",
   "thread_scope_region_param_lookup",
   "thread_scope_libc_named_tasks",
+  "thread_no_strict_hidden_task",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
     continue
@@ -4803,6 +4806,32 @@ for (const name of [
     run === null
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
+// #618: a private function named after a libm function, called with a constant,
+// is folded as the C library's by LLVM unless its symbol is spelled apart
+// (`@floor$`), so `c_symbol_private_libm` prints under Node what its native
+// binary prints, which `expected.out` holds the link loop to.
+if (!only || "c_symbol_private_libm".includes(only)) {
+  const entry = path.join(linkDir, "c_symbol_private_libm", "main.ts")
+  const run = spawnSync(
+    "node",
+    [
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const want = fs.readFileSync(path.join(linkDir, "c_symbol_private_libm", "expected.out"), "utf8")
+  check(
+    "link/c_symbol_private_libm: Node prints what the native binary prints",
+    run.status === 0 && run.stdout === want,
+    `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
   )
 }
 
@@ -20201,64 +20230,181 @@ if (fs.existsSync(threadsLl)) {
   )
 }
 
-// #618: `src/c-symbols.ts` lists the C symbols a function of the program's own
-// package may not be named after when its name is its symbol, and the first
-// part of that list is every symbol the runtime leaves undefined. Held here to
-// `llvm-nm -u` of the runtime's objects -- natively, with and without
-// `-DNISH_THREADS`, and for wasm32-wasi when a sysroot is installed -- so a call
-// the runtime gains is a name the list gains, or this fails. `nish_` names are
-// the runtime's own (NL2202 reserves them), and `main` is the program's, which
-// the wasi runtime's `_start` calls and the compiler always emits as the wrapper.
+// #618: `src/c-symbols.ts` says which symbols are reserved to C: two prefixes
+// and a list. Held here to what the toolchain actually reaches, by reading
+// `llvm-nm` over everything a program is linked with and everything its own
+// code turns into:
+//
+//   - the runtime's objects, natively, with `-DNISH_THREADS` and for
+//     wasm32-wasi when a sysroot is installed: what they leave undefined;
+//   - `runtime/runtime-wasm.c`, the freestanding wasm32 runtime: what it
+//     leaves undefined and what it defines (`fmin`, `fmaxf`, ...);
+//   - the N-API shim `--emit-napi` writes for `tests/c-symbols/napi.ts`: what
+//     it leaves undefined, apart from the program's own exports it calls;
+//   - `tests/c-symbols/math.ts`, which calls every `Math` builtin and `%` on
+//     `f64` and `f32`, linked with the runtime at `-O0`, and at `-Oz` and `-O3`
+//     with LTO and `--save-temps`: what its LTO object and its executable
+//     leave undefined, so the libm calls LLVM lowers the program's arithmetic
+//     to are read rather than guessed.
+//
+// A name found and not reserved fails the check. The only exemptions are the
+// runtime's own `nish_` names (NL2202 reserves them) and `main`, which is the
+// program's and which the wasi runtime's `_start` calls.
 if (!only || "c-symbols".includes(only)) {
   const cSymbolsSource = fs.readFileSync(path.join(root, "src", "c-symbols.ts"), "utf8")
   const listed = new Set([...cSymbolsSource.matchAll(/name === "([^"]+)"/g)].map((m) => m[1]))
+  const prefixes = [...cSymbolsSource.matchAll(/name\.startsWith\("([^"]+)"\)/g)].map((m) => m[1])
+  const reserved = (name) => listed.has(name) || prefixes.some((p) => name.startsWith(p))
   const exempt = (name) => name.startsWith("nish_") || name === "main"
-  const undefinedIn = (objects) => {
-    const nm = spawnSync("llvm-nm", ["-u", "-j", ...objects], { encoding: "utf8" })
+  // A dynamic import is printed with its version (`write@GLIBC_2.2.5`).
+  const symbolsIn = (flags, objects) => {
+    const nm = spawnSync("llvm-nm", [...flags, "-j", ...objects], { encoding: "utf8" })
     return nm.status === 0
-      ? nm.stdout.split("\n").filter((line) => line.length > 0 && !line.endsWith(":"))
+      ? nm.stdout
+          .split("\n")
+          .filter((line) => line.length > 0 && !line.endsWith(":"))
+          .map((line) => line.replace(/@.*$/, ""))
       : null
   }
+  const holds = (label, found, error, ownNames) => {
+    const missing =
+      found === null
+        ? []
+        : [...new Set(found)].filter((name) => !exempt(name) && !ownNames.has(name) && !reserved(name))
+    check(
+      `c-symbols: every C symbol ${label} is one src/c-symbols.ts reserves`,
+      found !== null && missing.length === 0,
+      found === null
+        ? (error ?? "llvm-nm could not read the objects")
+        : `add to isCLibrarySymbol, with the reason beside it if it is not a plain runtime call: ${missing.sort().join(" ")}`
+    )
+  }
+  const none = new Set()
   if (!HAS_CLANG || !has("llvm-nm")) {
-    skip("c-symbols: the runtime's undefined symbols are read with clang and llvm-nm, and one is missing")
+    skip("c-symbols: the symbols are read with clang and llvm-nm, and one is missing")
   } else {
-    const builds = [
-      ["the native runtime", runtimeObjects([])],
-      ["the native runtime with -DNISH_THREADS", runtimeObjects(["-DNISH_THREADS=1"])],
+    const dir = path.join(buildDir, "c-symbols")
+    fs.mkdirSync(dir, { recursive: true })
+    const compileUnits = (sources, flags, sub) => {
+      const outDir = path.join(dir, sub)
+      fs.mkdirSync(outDir, { recursive: true })
+      const objects = []
+      for (const src of sources) {
+        const obj = path.join(outDir, path.basename(src).replace(/\.c$/, ".o"))
+        const cc = spawnSync("clang", [...flags, "-c", src, "-o", obj], { cwd: root, encoding: "utf8" })
+        if (cc.status !== 0) {
+          return { objects, error: `could not compile ${src} with ${flags.join(" ")}:\n${cc.stderr}` }
+        }
+        objects.push(obj)
+      }
+      return { objects, error: null }
+    }
+    const runtimeBuilds = [
+      ["the native runtime leaves undefined", runtimeObjects([])],
+      ["the native runtime with -DNISH_THREADS leaves undefined", runtimeObjects(["-DNISH_THREADS=1"])],
     ]
     if (WASI_SYSROOT === undefined) {
       skip(
         "c-symbols: no WASI sysroot (set WASI_SYSROOT): the wasm32-wasi runtime's undefined symbols are not read"
       )
     } else {
-      const dir = path.join(buildDir, "runtime-obj", "c-symbols-wasi")
-      fs.mkdirSync(dir, { recursive: true })
-      const wasi = { objects: [], error: null }
-      for (const src of RUNTIME_C) {
-        const obj = path.join(dir, path.basename(src).replace(/\.c$/, ".o"))
-        const cc = spawnSync(
-          "clang",
-          ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, "-O2", "-c", src, "-o", obj],
-          { cwd: root, encoding: "utf8" }
-        )
-        if (cc.status !== 0) {
-          wasi.error = `could not compile ${src} for wasm32-wasi:\n${cc.stderr}`
-          break
-        }
-        wasi.objects.push(obj)
-      }
-      builds.push(["the wasm32-wasi runtime", wasi])
+      runtimeBuilds.push([
+        "the wasm32-wasi runtime leaves undefined",
+        compileUnits(RUNTIME_C, ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, "-O2"], "wasi"),
+      ])
     }
-    for (const [label, built] of builds) {
-      const found = built.error === null ? undefinedIn(built.objects) : null
-      const missing =
-        found === null ? [] : [...new Set(found)].filter((name) => !exempt(name) && !listed.has(name))
-      check(
-        `c-symbols: every C symbol ${label} leaves undefined is one src/c-symbols.ts refuses`,
-        found !== null && missing.length === 0,
-        found === null
-          ? (built.error ?? "llvm-nm could not read the objects")
-          : `add to isCLibrarySymbol, with the reason beside it if it is not a plain runtime call: ${missing.sort().join(" ")}`
+    for (const [label, built] of runtimeBuilds) {
+      holds(label, built.error === null ? symbolsIn(["-u"], built.objects) : null, built.error, none)
+    }
+    const wasm = compileUnits(
+      [path.join(root, "runtime", "runtime-wasm.c")],
+      ["--target=wasm32", "-O2"],
+      "wasm"
+    )
+    holds(
+      "runtime-wasm.c leaves undefined",
+      wasm.error === null ? symbolsIn(["-u"], wasm.objects) : null,
+      wasm.error,
+      none
+    )
+    holds(
+      "runtime-wasm.c defines",
+      wasm.error === null ? symbolsIn(["--defined-only", "-g"], wasm.objects) : null,
+      wasm.error,
+      none
+    )
+    // The shim calls the program's own exports by name; those are the
+    // program's, and NL3037 already holds them to the same list.
+    const nodeInclude = path.join(path.dirname(process.execPath), "..", "include", "node")
+    if (!fs.existsSync(path.join(nodeInclude, "node_api.h"))) {
+      skip(`c-symbols: no node_api.h beside node (${nodeInclude}): the N-API shim's symbols are not read`)
+    } else {
+      const napiDir = path.join(dir, "napi")
+      fs.mkdirSync(napiDir, { recursive: true })
+      const shim = path.join(napiDir, "shim.c")
+      const gen = spawnSync(
+        NISH,
+        [
+          path.join(root, "tests", "c-symbols", "napi.ts"),
+          "-o",
+          `${napiDir}${path.sep}`,
+          "--emit-napi",
+          shim,
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const built =
+        gen.status === 0
+          ? compileUnits([shim], ["-O2", `-I${nodeInclude}`, `-I${path.join(root, "runtime")}`], "napi-obj")
+          : { objects: [], error: `--emit-napi failed:\n${gen.stderr}` }
+      holds(
+        "the N-API shim leaves undefined",
+        built.error === null ? symbolsIn(["-u"], built.objects) : null,
+        built.error,
+        new Set(["add", "scale", "greet", "total", "flag"])
+      )
+    }
+    const mathDir = path.join(dir, "math")
+    fs.mkdirSync(mathDir, { recursive: true })
+    const mathLl = path.join(mathDir, "math.ll")
+    const mathIr = spawnSync(NISH, [path.join(root, "tests", "c-symbols", "math.ts"), "-o", mathLl], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    for (const [level, flags] of [
+      ["-O0", ["-O0"]],
+      ["-Oz with LTO", ["-Oz", "-flto"]],
+      ["-O3 with LTO", ["-O3", "-flto"]],
+    ]) {
+      const exe = path.join(mathDir, `math${flags[0]}`)
+      const link =
+        mathIr.status === 0
+          ? spawnSync(
+              "clang",
+              [
+                ...flags,
+                "-Wno-override-module",
+                mathLl,
+                ...RUNTIME_C.map((f) => path.join(root, f)),
+                "-lm",
+                "-fuse-ld=lld",
+                "-Wl,--save-temps",
+                "-o",
+                exe,
+              ],
+              { cwd: mathDir, encoding: "utf8" }
+            )
+          : null
+      const error = mathIr.status !== 0 ? mathIr.stderr : link.status !== 0 ? link.stderr : null
+      const objects = [exe]
+      if (error === null && fs.existsSync(`${exe}.lto.o`)) {
+        objects.push(`${exe}.lto.o`)
+      }
+      holds(
+        `tests/c-symbols/math.ts linked at ${level} leaves undefined`,
+        error === null ? symbolsIn(["-u"], objects) : null,
+        error,
+        none
       )
     }
   }

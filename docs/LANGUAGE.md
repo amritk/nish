@@ -1421,24 +1421,45 @@ and their `.ll` goldens are byte-identical files.
   module of the program's own package has no symbol prefix, so an exported
   function's symbol is its name, in the entry module and in every other
   module of the package, and under `--no-strict-exports` every function's
-  is. Named `write`, `read`, `free`, `exit`, `strlen` or another function the
-  runtime calls, it would be the definition the runtime's own calls reach in
-  the linked program (`console.log` printing nothing, a crash at the first
-  file read), so it is
-  `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the runtime's own calls to it would reach this function instead; rename it ``
+  is. Named `write`, `read`, `free`, `exit`, `sin` or another function the
+  C library defines for the runtime or for the program's own arithmetic, it
+  would be the definition those references reach in the linked program
+  (`console.log` printing nothing, a crash at the first file read, `Math.sin`
+  answering what the program's `sin` returns), so it is
+  `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
   (`tests/cases/reject_export_c_symbol_const`, `reject_export_c_symbol_function`,
-  `tests/link/export_c_symbol_sibling`; with `--no-strict-exports`,
-  `reject_export_c_symbol_no_strict`). The names are the C symbols the runtime
-  leaves undefined, on every platform it builds for, with the libm calls LLVM
-  lowers the program's own arithmetic to and the rest of the C allocator
-  (`src/c-symbols.ts`, which `tests/run.js` holds to `llvm-nm -u` of the
-  runtime). A function nobody exports is `internal` and may have any of these
-  names, as may a method, whose symbol carries its class, and a function of
-  another package, whose symbol carries the package
-  (`tests/link/export_c_symbol_allowed`); a private function another module's
-  instantiation calls takes a `$` at the end of its symbol instead
-  (#610, under [function parameters](#function-parameters)). `main` is the
-  entry's alone (`tests/link/main_in_import`), and emitted as `@nish_main`.
+  `reject_export_c_symbol_libm`, `reject_export_c_symbol_libm_f32`,
+  `tests/link/export_c_symbol_sibling`, `export_c_symbol_sibling_function`;
+  with `--no-strict-exports`, `reject_export_c_symbol_no_strict` and
+  `reject_export_c_symbol_no_strict_exported`). A name that begins with `_`,
+  which C reserves for its library and start-up code (C11 7.1.3), or with
+  `napi_`, which Node-API reserves, is refused the same way with
+  `` begins with `_`, which C reserves for its library and start-up code `` or
+  `` begins with `napi_`, which Node-API reserves for its functions ``
+  (`reject_export_c_symbol_reserved_prefix`, which pins `__libc_start_main` and
+  `__register_atfork`, each of which crashed; `reject_export_c_symbol_napi_prefix`).
+  The rule is the same in a wasm or an N-API build, where the exported name
+  is the one JavaScript calls: rename the function there too. The names and
+  where each comes from are in `src/c-symbols.ts`: the symbols the runtime
+  leaves undefined on every platform it builds for, the libm calls behind
+  every `Math` builtin and `%` on a float in `double` and in `float`, with
+  the ones LLVM rewrites them into, the `memcpy` family and the rest of the C
+  allocator. `tests/run.js` reads them back with `llvm-nm` from the runtime's
+  objects, `runtime-wasm.c`, the N-API shim and a program that calls every
+  `Math` builtin linked at three optimisation levels, and fails on a name the
+  file does not reserve ("c-symbols: ..."). A function whose symbol is not its
+  ABI is spelled apart instead of refused: an `internal` one whose name is
+  reserved takes a `$` at the end of its symbol (`@floor$`), because LLVM
+  folds a call to a function it knows by name as the C library's, and a
+  private `floor` called as `floor(1.5)` answered 1
+  (`tests/link/c_symbol_private_libm`), and a `hidden` one, which another
+  module's instantiation calls, takes it whatever its name
+  (#610, under [function parameters](#function-parameters);
+  `tests/link/thread_no_strict_hidden_task`, under `--no-strict-exports`). A
+  method, whose symbol carries its class, and a function of another package,
+  whose symbol carries the package, may have any of these names
+  (`tests/link/export_c_symbol_allowed`). `main` is the entry's alone
+  (`tests/link/main_in_import`), and emitted as `@nish_main`.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library

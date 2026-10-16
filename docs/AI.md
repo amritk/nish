@@ -1386,11 +1386,13 @@ export const main = (): i32 => {
 - **A function name is unique across the whole program**, exported or not.
 - An `export`ed function is an external C-ABI symbol; every other function gets
   `internal` linkage so LLVM may inline or drop it.
-- **So an exported function is not named after a C library function** the
-  runtime calls (`write`, `read`, `free`, `exit`, `strlen`, …, the list in
-  `src/c-symbols.ts`): its symbol would replace the C one in the linked
-  program. `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the runtime's own calls to it would reach this function instead; rename it ``
-  (NL3037). Name it `writeLine`, or leave it private.
+- **So an exported function is not named after a C library function**
+  (`write`, `read`, `free`, `exit`, `strlen`, `sin`, …, the list in
+  `src/c-symbols.ts`) and does not begin with `_` or `napi_`: its symbol would
+  replace the C one in the linked program, in a native, a wasm or an N-API
+  build alike. `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
+  (NL3037). Name it `writeLine`, or leave it private: a private function with
+  such a name gets a symbol ending in `$`.
 
 ## Statements
 

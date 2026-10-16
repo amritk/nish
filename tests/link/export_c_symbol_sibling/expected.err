@@ -1,1 +1,1 @@
-`write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the runtime's own calls to it would reach this function instead; rename it
+`write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it
