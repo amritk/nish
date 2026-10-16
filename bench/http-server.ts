@@ -62,7 +62,7 @@ const decimal = (text: string): i32 => {
   return n
 }
 
-/** The server, its program, and the count and fold of what it answered. */
+/** The server, its program, and the count and checksum of what it answered. */
 class Bench {
   loop: i32
   listener: i32
