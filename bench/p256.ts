@@ -17,15 +17,19 @@
 // answer. `scale` divides every iteration count (the driver's `--check`
 // passes 16), so a short run does the same work in fewer turns.
 //
-// The input changes on every iteration, so no call can be computed once for
-// the whole loop: public-key stamps the iteration into the private key's last
-// word, sign stamps it into the message's first word (and so into the digest
-// and RFC 6979's nonce), and verify cycles through a ring of `RING` messages
-// signed before its clock starts. Each answer goes into the checksum, a word
-// at a time: the public key's first and last words of X and of Y, and every
-// word of `r || s`. A `null` answer, or a signature that does not verify, ends
-// the program with exit 1, so a refusal is never timed as though it had done
-// the work.
+// No call can be computed once for the whole loop. Public-key stamps the
+// iteration into the private key's last word and sign into the message's
+// first word (and so into the digest and RFC 6979's nonce), so their input
+// is new every iteration. Verify cycles through a ring of `RING` messages
+// signed before its clock starts: consecutive iterations differ, and each
+// input comes round again every `RING`. Each answer goes into the checksum:
+// the public key's first and last words of X and of Y, every word of
+// `r || s`, and each verify's answer with its ring index. Before verify's
+// clock, every signature in the ring is tampered with and must be refused,
+// and those answers are folded too, so a verify that accepted everything
+// would not print the pinned checksum. A `null` answer, or a signature that
+// does not verify, ends the program with exit 1, so a refusal is never timed
+// as though it had done the work.
 import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256"
 import { monotonicNanos } from "nish:process"
 import { Secret, secret, wipe } from "nish:secret"
@@ -163,6 +167,21 @@ const verifyLoop = (count: i32, f: Fold): i32 => {
   }
   wipe(priv)
   let sum: u32 = f.sum
+  // Before the clock, each signature with the last byte of its `s` flipped
+  // must not verify: a verify that answered `true` to everything would
+  // otherwise print the pinned checksum and be timed as a very fast one.
+  for (let r: i32 = 0; r < RING && r < toI32(msgs.length) && r < toI32(sigs.length); r++) {
+    const tampered: u8[] = new Array<u8>(64)
+    for (let k: i32 = 0; k < 64 && k < toI32(sigs[r].length); k++) {
+      tampered[k] = sigs[r][k]
+    }
+    tampered[63] = tampered[63] ^ toU8(1)
+    const forged: boolean = p256VerifySha256(pub, msgs[r], tampered)
+    if (forged) {
+      return fail("verify of a tampered signature")
+    }
+    sum = (sum ^ (toU32(r + 1) | (forged ? toU32(256) : toU32(0)))) * 16777619
+  }
   const started: i64 = monotonicNanos()
   for (let i: i32 = 0; i < count; i++) {
     const r: i32 = i % RING
@@ -171,10 +190,11 @@ const verifyLoop = (count: i32, f: Fold): i32 => {
     if (r < 0 || r >= toI32(msgs.length) || r >= toI32(sigs.length)) {
       return fail("verify")
     }
-    if (!p256VerifySha256(pub, msgs[r], sigs[r])) {
+    const ok: boolean = p256VerifySha256(pub, msgs[r], sigs[r])
+    if (!ok) {
       return fail("verify")
     }
-    sum = (sum ^ toU32(r + 1)) * 16777619
+    sum = (sum ^ (toU32(r + 1) | (ok ? toU32(512) : toU32(0)))) * 16777619
   }
   report("verify", started, count)
   f.sum = sum

@@ -383,9 +383,14 @@ Left cell) and there is no client authentication, so the server never
 verifies and never does ECDH. Signing multiplies only the base point, `k·G`
 for RFC 6979's nonce.
 
-**How it was measured.** On `b515c1b` (`main`; the branch adds only this note
-and the bench files), with `build/nish` built from that commit by the 0.18.0
-seed. The machine was an `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family
+**How it was measured.** On `b515c1b`, `main` as it was, with the bench files
+on top. Besides this note and the bench (`bench/p256.ts`, `bench/p256.mjs`,
+the P-256 section of `bench/README.md`), the branch changes only
+`tests/self/goldens/checked.txt`, regenerated: `bench` is one of
+`tests/self/corpus.js`'s `CORPUS_DIRS`, so the new program and its imports
+land in the `--emit-checked` dump. `std/crypto/` and `std/net/` are the same at
+`b515c1b` and at the branch's head, after its merges of `main`. The build was `build/nish` built from that commit by the 0.18.0
+seed, and the machine was an `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family
 6, model 85, stepping 7; 4 vCPUs under KVM), Ubuntu clang 18.1.3. There is no
 `perf` on it, so the profile is valgrind's callgrind, in instructions (Ir), not
 cycles.
@@ -464,7 +469,11 @@ microseconds a call:
 
 The second sample's baseline minima were 683.2, 761.9 and 1,406.5 µs. Every
 run printed the same checksum for each workload: public-key 1350825148, sign
-2157286632, verify 66543557.
+2157286632, verify 66543557. Review then made verify's checksum fold each
+answer and, before the clock, require every signature in the ring to be
+refused once tampered with. That adds sixteen verifies outside the timed loop
+and one `or` inside it, so the table stands, but the verify checksum is now
+645947189 and `--check`'s is 1238268086.
 
 **The noise band.** The copy against the baseline, minimum / median, + slower:
 
@@ -481,20 +490,34 @@ and the minima are again the steadier statistic.
 **What a fixed-base table can reach.** A table of `j·16^i·G` removes all 256
 doublings and the 14 table-building additions from `k·G`, leaving 64 mixed
 additions (Renes–Costello–Batina Algorithm 5: 11 field multiplies to the full
-addition's 12) and 64 table reads of two coordinates rather than three. At
-this profile's 25,383 Ir an addition, that is about 1.66 M Ir for `k·G`
-instead of 8.03 M, 4.8x fewer. The rest of the signature does not move: the
-two inversions, the hashing and the rest are 1,473,325 Ir, 15.5% of the signature
-today. So the signature comes to about 3.14 M Ir, **about 3.0x** fewer than
-9.50 M, and could not pass about 6.4x even if `k·G` cost nothing. `p256PublicKey`
-keeps only the field inversion, so it comes to about 3.9x.
+addition's 12) and 64 table reads of two coordinates rather than three. In
+Ir, from this profile:
+
+| Part of `k·G` | Now | With the table |
+| --- | ---: | ---: |
+| Doublings | 256 × 22,439 = 5,744,384 | none |
+| Additions | 78 × 25,383 = 1,979,874 (full) | 64 × 23,268 = 1,489,140 (mixed, 11/12 of a full one) |
+| Table reads (`p256TableMove`, 85 Ir a coordinate) | 64 × 16 × 3 = 3,072 moves, 261,120 | 64 × 16 × 2 = 2,048 moves, 174,080 |
+| **`k·G`** | **8,025,428** (the rest is the loop itself) | **about 1,663,220** |
+
+That is 4.8x fewer for `k·G`. The rest of the signature does not move: the
+two inversions, the hashing and the rest are 1,473,325 Ir, 15.5% of the
+signature today. So the signature comes to about 1,473,325 + 1,663,220 =
+3,136,545 Ir, **about 3.0x** fewer than 9.50 M, and could not pass about 6.4x
+even if `k·G` cost nothing. `p256PublicKey` keeps only the field inversion, so
+it comes to about 3.9x. All of these are ratios of instructions. They are not
+a projection of time: the signature is 69% of the handshake's Ir but about 37%
+of its user time, so its instructions and its time do not move together, and
+how the signature's time moves is known only once it is measured.
 
 **The bar, set before anything is built.** Both of:
 
-1. `p256SignSha256`'s minimum is at least **3x** faster than this baseline's,
-   at or under **251.5 µs** (754.4 / 3), outside the noise band, on this
-   machine, or on another after the baseline is re-run there in the same
-   rounds, as S5's bar allowed.
+1. `p256SignSha256`'s minimum is at or under **245.8 µs**: 3x faster than
+   this baseline's 754.4 µs (251.5 µs), and outside the 2.3% band at the
+   minimum (251.5 / 1.023). That is on this machine, or on another after the
+   baseline is re-run there in the same rounds, as S5's bar allowed, the
+   figure then being the re-run baseline's minimum / 3 / 1.023. This is a
+   bar in time, measured by `bench/p256.mjs`.
 2. P-256 is **no longer the largest module** in one handshake's server Ir:
    under X25519's 3,147,968 Ir, which puts it under about 42% of the
    handshake.
@@ -508,9 +531,12 @@ does not touch, 1.47 M Ir, are already 25.6% of a handshake in which `k·G` cost
 nothing. Reaching 25% would take the scalar inversion (0.78 M, the next
 largest) and the field inversion too, which is other work. Condition 2 is
 instead the one the table can meet, and it is tight: the projection, 3.14 M, is
-level with X25519's 3.15 M, as condition 1's projection, 3.0x, is level with
-3x. The table meets the bar only if its additions cost what the full
-addition's do now, and no more.
+level with X25519's 3.15 M. Condition 1 has no projection in time. The
+instructions the signature sheds, 3.0x, are about the 3x it asks, but the
+time ratio may land above or below that: the doublings the table removes are
+the straight-line multiplies this profile says retire most instructions a
+cycle. So both conditions may be missed, and a missed one is recorded as
+missed.
 
 ## 6. Decisions for the owner
 

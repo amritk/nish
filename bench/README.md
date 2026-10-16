@@ -524,9 +524,13 @@ node bench/p256.mjs --binary <other build>          # a column for another build
 
 The driver gives each workload a process of its own, and the program times
 the workload's loop alone, so a figure leaves out start-up and the signatures
-a verify reads, which are made before its clock starts. The private key, the
-message or the signature changes on every iteration, and every answer goes into
-the printed checksum. The columns run in rotating rounds, each going first
+a verify reads, which are made before its clock starts. Public-key and sign get
+a new private key or message on every iteration; verify cycles through a ring
+of sixteen signed messages, so consecutive calls differ and each comes round
+again every sixteen. Every answer goes into the printed checksum, verify's
+included, and before its clock verify must refuse each of the sixteen
+signatures once tampered with, so a verify that accepted everything would not
+print the pinned checksum. The columns run in rotating rounds, each going first
 equally often, and the driver stops when two runs of a workload print
 different checksums. It reports each workload's minimum and median time a
 call, in microseconds and calls a second. `--check` runs all three at a 16th of

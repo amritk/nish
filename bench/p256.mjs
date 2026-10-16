@@ -45,7 +45,7 @@ const fail = (msg) => {
  * keep printing it: a change to this number is a change to what P-256 answers.
  */
 const CHECK_SCALE = 16
-const CHECK_SUM = "checksum 2023672166"
+const CHECK_SUM = "checksum 1238268086"
 /** The workloads bench/p256.ts times, each given its own process. */
 const WORKLOADS = ["public-key", "sign", "verify"]
 
