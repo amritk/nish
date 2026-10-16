@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 643
+export const RULE_COUNT: i32 = 644
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -185,6 +185,8 @@ const diagnosticRules = (): string[] => [
   "NL2366",
   ", outside the no-panic scope this call is in, where nothing the caller proves can remove it: call a function that cannot panic, or make the call from a module outside the scope",
   "NL2458",
+  ". That reference would read the key outside the `Secret`, and zeros once it is wiped, so pass a fresh value (`secret([1, 2, 3])`, a `new`, or a call that makes one) or a copy: ",
+  "NL2512",
   "` is not a member a program may name: the data a `Mutex` owns is reachable only through the guard its `lock()` answers, `using g = m.lock()`, so every path to it takes the lock",
   "NL2464",
   "`: the block releases what it allocated when it ends, and nothing proves the object it is stored into ends with it (allocate what must outlive the block before the block opens)",
@@ -462,7 +464,7 @@ const diagnosticRules = (): string[] => [
   "` is `readonly`, and `jsonDecode` assigns every field of the class it decodes into",
   "NL2487",
   "` is not a type: only a member of an enum may be named with a dot in a type, and `",
-  "NL2512",
+  "NL2517",
   "`; check the nullable side against `null` first, then compare the narrowed values",
   "NL2114",
   ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",

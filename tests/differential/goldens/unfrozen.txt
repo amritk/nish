@@ -25,6 +25,7 @@ cases/arr_bounds_lazy_expect added after R6: no rewriter to freeze it with
 cases/arr_bounds_lazy_unwrap_or added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_floor added after R6: no rewriter to freeze it with
+cases/arr_bounds_offset_other added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_reach added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_wrap added after R6: no rewriter to freeze it with
 cases/arr_bounds_range added after R6: no rewriter to freeze it with

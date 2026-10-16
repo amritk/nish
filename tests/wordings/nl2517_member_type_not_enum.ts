@@ -1,4 +1,4 @@
-// NL2512: a dotted type whose qualifier is not an enum.
+// NL2517: a dotted type whose qualifier is not an enum.
 class Box {
   size: i32 = 0;
 }
