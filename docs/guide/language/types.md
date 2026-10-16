@@ -277,7 +277,7 @@ Only the member itself goes into such a slot. Another member is a compile
 error, and so is a plain `Kind` value, because the compiler cannot tell which
 member that holds:
 
-```ts nish:err NL2508
+```ts nish:err NL2514
 enum Kind {
   Scalar,
   Array,

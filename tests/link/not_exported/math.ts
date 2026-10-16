@@ -2,6 +2,6 @@ function secret(): number {
   return 7;
 }
 
-export function open(): number {
+export function openFile(): number {
   return secret();
 }

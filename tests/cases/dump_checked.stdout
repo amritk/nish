@@ -25,8 +25,7 @@ function dot(a: Vec, b: Vec): i32 -> @dot
   pointer b: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function run(n: i32): i32 -> @run [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Counter.tick
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Counter.constructor Counter.tick dot
   stackSites=2 stackLocals=2
   local 25:9 c: Counter (const)

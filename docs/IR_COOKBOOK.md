@@ -1614,6 +1614,200 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end thread-scope -->
 
+### `nish/threads`: an arrow task, with no destination
+
+`s.spawn(() => addTo(tally, a))` is the whole spelling of a task that answers
+`void` and reads its function's `const` locals. The arrow is lifted as a data-parallel
+arrow is, named after the function it is written in and a counter
+(`@tallied$arrow0`), with each name it reads appended to its parameters. The
+call reaches `ThreadScope.spawnThunk`, the method `nish/threads` writes for
+the form, and every capture travels as a parameter of that instance (`%cap.0`,
+`%cap.1`) into the task's payload, with no destination, no slot and no answer:
+
+```llvm
+%task.payload = alloca { %struct.Mutex$$Tally*, i32 }, align 8
+; ... tally and a stored into its two fields ...
+call void @nish_scope_spawn(i8* %scope, void (i8*)* @<spawn>$run, void (i8*)* @<spawn>$finish, i8* %payload, i64 <size>)
+```
+
+`@<spawn>$run(p)` loads the captures back and calls the arrow on the task's
+thread; `@<spawn>$finish(p)` has nothing to store and returns. `s.spawn(entry,
+arg)` is the same with the argument first in the payload
+(`ThreadScope.spawnWith`). Every scope rule holds of a capture as of an
+argument (docs/LANGUAGE.md, "Scoped tasks"); `tests/link/thread_task_arrow` and
+`thread_task_void` hold both modules.
+
+<!-- cookbook:begin thread-task-arrow -->
+```ts
+import { Mutex, scope } from "nish/threads"
+
+class Tally {
+  total: i32 = 0
+}
+
+const addTo = (tally: Mutex<Tally>, n: i32): void => {
+  using g = tally.lock()
+  g.value.total = g.value.total + n
+}
+
+export const tallied = (a: i32, b: i32): i32 => {
+  const tally = new Mutex<Tally>(new Tally())
+  {
+    using s = scope()
+    s.spawn(() => addTo(tally, a))
+    s.spawn(() => addTo(tally, b))
+  }
+  using g = tally.lock()
+  return g.value.total
+}
+```
+
+```llvm
+%struct.Tally = type { i32 }
+%struct.Mutex$$Tally = type { %struct.MutexGuard$$Tally* }
+%struct.MutexGuard$$Tally = type { %struct.Tally*, i32 }
+%struct.ThreadScope = type { i32 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+
+declare noundef nonnull align 8 dereferenceable(4) %struct.ThreadScope* @nish.scope() #1
+declare void @nish.ThreadScope.spawnThunk$void$fn.14.tallied$arrow0(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Mutex$$Tally* noundef, i32 noundef) #0
+declare void @nish.ThreadScope.spawnThunk$void$fn.14.tallied$arrow1(%struct.ThreadScope* noundef nonnull align 8 dereferenceable(4), %struct.Mutex$$Tally* noundef, i32 noundef) #0
+declare void @nish.Mutex$$Tally.constructor(%struct.Mutex$$Tally* noundef nonnull noalias align 8 dereferenceable(8) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
+declare noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture) #0
+declare void @nish.MutexGuard$$Tally.constructor(%struct.MutexGuard$$Tally* noundef nonnull noalias align 8 dereferenceable(16) nocapture, %struct.Tally* noundef nonnull align 8 dereferenceable(4)) #1
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare void @nish_scope_join(i8* noundef nonnull) #0
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal void @addTo(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %tally, i32 noundef %n) #0 {
+entry:
+  %g.addr = alloca %struct.MutexGuard$$Tally*, align 8
+  %0 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %tally)
+  store %struct.MutexGuard$$Tally* %0, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %1 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %2 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %1, i32 0, i32 1
+  %3 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %4 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %3, i32 0, i32 0
+  %5 = load %struct.Tally*, %struct.Tally** %4, align 8, !tbaa !5
+  %6 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %7 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %6, i32 0, i32 0
+  %8 = load %struct.Tally*, %struct.Tally** %7, align 8, !tbaa !5
+  %9 = getelementptr inbounds %struct.Tally, %struct.Tally* %8, i32 0, i32 0
+  %10 = load i32, i32* %9, align 4, !tbaa !7
+  %11 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %10, i32 %n)
+  %12 = extractvalue { i32, i1 } %11, 0
+  %13 = extractvalue { i32, i1 } %11, 1
+  br i1 %13, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %14 = getelementptr inbounds %struct.Tally, %struct.Tally* %5, i32 0, i32 0
+  store i32 %12, i32* %14, align 4, !tbaa !7
+  store atomic i32 0, i32* %2 release, align 4
+  ret void
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
+}
+
+define noundef i32 @tallied(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %tally.addr = alloca %struct.Mutex$$Tally*, align 8
+  %Mutex$$Tally.obj = alloca %struct.Mutex$$Tally, align 8
+  %s.addr = alloca %struct.ThreadScope*, align 8
+  %g.addr = alloca %struct.MutexGuard$$Tally*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_alloc_struct(i64 4)
+  %1 = bitcast i8* %0 to %struct.Tally*
+  %2 = getelementptr inbounds %struct.Tally, %struct.Tally* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !7
+  call void @nish.Mutex$$Tally.constructor(%struct.Mutex$$Tally* %Mutex$$Tally.obj, %struct.Tally* %1)
+  store %struct.Mutex$$Tally* %Mutex$$Tally.obj, %struct.Mutex$$Tally** %tally.addr, align 8
+  %3 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %3, %struct.ThreadScope** %s.addr, align 8
+  %4 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %5 = bitcast %struct.ThreadScope* %4 to i8*
+  %6 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %7 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %tally.addr, align 8
+  call void @nish.ThreadScope.spawnThunk$void$fn.14.tallied$arrow0(%struct.ThreadScope* %6, %struct.Mutex$$Tally* %7, i32 %a)
+  %8 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %9 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %tally.addr, align 8
+  call void @nish.ThreadScope.spawnThunk$void$fn.14.tallied$arrow1(%struct.ThreadScope* %8, %struct.Mutex$$Tally* %9, i32 %b)
+  call void @nish_scope_join(i8* %5)
+  %10 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %tally.addr, align 8
+  %11 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %10)
+  store %struct.MutexGuard$$Tally* %11, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %12 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %13 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %12, i32 0, i32 1
+  %14 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %15 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %14, i32 0, i32 0
+  %16 = load %struct.Tally*, %struct.Tally** %15, align 8, !tbaa !5
+  %17 = getelementptr inbounds %struct.Tally, %struct.Tally* %16, i32 0, i32 0
+  %18 = load i32, i32* %17, align 4, !tbaa !7
+  store atomic i32 0, i32* %13 release, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %18
+}
+
+define hidden void @tallied$arrow0(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %tally, i32 noundef %a) #0 {
+entry:
+  call void @addTo(%struct.Mutex$$Tally* %tally, i32 %a)
+  ret void
+}
+
+define hidden void @tallied$arrow1(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %tally, i32 noundef %b) #0 {
+entry:
+  call void @addTo(%struct.Mutex$$Tally* %tally, i32 %b)
+  ret void
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"i32", !1, i64 0}
+!4 = !{!"MutexGuard$$Tally", !2, i64 0, !3, i64 8}
+!5 = !{!4, !2, i64 0}
+!6 = !{!"Tally", !3, i64 0}
+!7 = !{!6, !3, i64 0}
+```
+<!-- cookbook:end thread-task-arrow -->
+
 ### `nish/threads`: a lock that owns its data
 
 `using g = m.lock()` calls the `Mutex`'s `lock()`, and each exit of the block
@@ -1936,6 +2130,66 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !14 = !{!13, !13, i64 0}
 ```
 <!-- cookbook:end thread-channel -->
+
+### `nish/random`: a seeded generator
+
+`new Rng(seed)` is an ordinary object of one `i32` field, here on the stack
+because it never leaves `roll`, and `nextI32` is a call into `nish/random`'s
+own module. There the step is a wrapping add of the Weyl increment and
+MurmurHash3's finaliser, whose two multiplies are `wrappingMul` from
+`nish:unsafe` and so plain `mul`s with no overflow check:
+
+```llvm
+define noundef i32 @nish.Rng.nextI32(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture %this) #1 {
+  ; ...
+  %2 = add i32 %1, -1640531527
+  ; ... stored back into `state` ...
+  %6 = tail call i32 @nish.mix(i32 %5)
+  ret i32 %6
+}
+; in @nish.mix, between the shifted exclusive ors:
+  %5 = mul i32 %4, -2048144789
+  %11 = mul i32 %10, -1028477387
+```
+
+Nothing in the step can panic, which is what keeps its bits the same under
+Node, where the same two calls are `(a + b) | 0` and `Math.imul`
+(`tests/link/std_random`, whose `random.ll` golden holds the module).
+
+<!-- cookbook:begin std-random -->
+```ts
+import { Rng } from "nish/random"
+
+export const roll = (seed: i32): i32 => {
+  const r = new Rng(seed)
+  return 1 + ((r.nextI32() >>> 1) % 6)
+}
+```
+
+```llvm
+%struct.Rng = type { i32 }
+
+declare void @nish.Rng.constructor(%struct.Rng* noundef nonnull noalias align 8 dereferenceable(4) nocapture, i32 noundef) #0
+declare noundef i32 @nish.Rng.nextI32(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture) #0
+declare noundef double @nish.Rng.nextF64(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture) #0
+
+define noundef i32 @roll(i32 noundef %seed) #0 {
+entry:
+  %r.addr = alloca %struct.Rng*, align 8
+  %Rng.obj = alloca %struct.Rng, align 8
+  call void @nish.Rng.constructor(%struct.Rng* %Rng.obj, i32 %seed)
+  store %struct.Rng* %Rng.obj, %struct.Rng** %r.addr, align 8
+  %0 = load %struct.Rng*, %struct.Rng** %r.addr, align 8
+  %1 = call i32 @nish.Rng.nextI32(%struct.Rng* %0)
+  %2 = lshr i32 %1, 1
+  %3 = srem i32 %2, 6
+  %4 = add nsw i32 1, %3
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end std-random -->
 
 ### `nish/text`: `indexOfAny` on the runtime kernel
 
@@ -9500,7 +9754,7 @@ const pick = (flag: boolean, a: number, b: number): number => {
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 
-define internal noundef i32 @abs(i32 noundef %x) #0 {
+define internal noundef i32 @abs$(i32 noundef %x) #0 {
 entry:
   %0 = icmp slt i32 %x, 0
   br i1 %0, label %if.then, label %if.end
@@ -18233,7 +18487,7 @@ program inherited can wait
 // can wait.
 import { netRead, netWrite, tcpListen } from "nish:net"
 
-export const listen = (port: i32): i32 => tcpListen("::", port, 128)
+export const listenOn = (port: i32): i32 => tcpListen("::", port, 128)
 
 export const echoOnce = (fd: i32, buf: u8[]): i32 => {
   const n = netRead(fd, buf, 0, buf.length)
@@ -18251,7 +18505,7 @@ declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonn
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #1
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
-define noundef i32 @listen(i32 noundef %port) #0 {
+define noundef i32 @listenOn(i32 noundef %port) #0 {
 entry:
   %0 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*), i32 %port, i32 128)
   ret i32 %0
@@ -18351,7 +18605,7 @@ reflects the ECN bits it arrived with
 // a blocking socket the program inherited can wait.
 import { udpBind, udpRecvFrom, udpSendTo } from "nish:net"
 
-export const bind = (port: i32): i32 => udpBind("::", port, 2)
+export const bindPort = (port: i32): i32 => udpBind("::", port, 2)
 
 export const echoOnce = (fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 => {
   const n = udpRecvFrom(fd, buf, 0, buf.length, from, meta)
@@ -18370,7 +18624,7 @@ declare noundef i32 @nish_udp_recv_from(i32 noundef, %struct.nish_array* noundef
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
-define noundef i32 @bind(i32 noundef %port) #0 {
+define noundef i32 @bindPort(i32 noundef %port) #0 {
 entry:
   %0 = call i32 @nish_udp_bind(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*), i32 %port, i32 2)
   ret i32 %0

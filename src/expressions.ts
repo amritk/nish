@@ -33,7 +33,12 @@ import {
   refuseOnce,
 } from "./generics"
 import { CheckContext } from "./context"
-import { captureWriteMessage, thisCaptureMessage } from "./parallel"
+import {
+  captureWriteMessage,
+  taskCaptureWriteMessage,
+  taskThisCaptureMessage,
+  thisCaptureMessage,
+} from "./parallel"
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays"
 import {
   checkBuiltinCall,
@@ -639,7 +644,14 @@ const isCapture = (ctx: CheckContext, local: Local | null): boolean => {
 const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
   const depth = ctx.arrowCaptures.length
   const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
-  refuseOnce(ctx, target, parallel ? captureWriteMessage(target.text) : capturedMessage(target.text))
+  const task = depth > 0 && depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
+  let message = capturedMessage(target.text)
+  if (task) {
+    message = taskCaptureWriteMessage(target.text)
+  } else if (parallel) {
+    message = captureWriteMessage(target.text)
+  }
+  refuseOnce(ctx, target, message)
   return T_ERROR
 }
 
@@ -650,7 +662,14 @@ const checkThis = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     // data-parallel form is told what it may read instead.
     const depth = ctx.arrowCaptures.length
     const parallel = depth > 0 && ctx.arrowCaptures[depth - 1]
-    refuseOnce(ctx, expr, parallel ? thisCaptureMessage() : capturedMessage("this"))
+    const task = depth > 0 && depth <= ctx.arrowTasks.length && ctx.arrowTasks[depth - 1]
+    let message = capturedMessage("this")
+    if (task) {
+      message = taskThisCaptureMessage()
+    } else if (parallel) {
+      message = thisCaptureMessage()
+    }
+    refuseOnce(ctx, expr, message)
     return T_ERROR
   }
   if (self === null) {
