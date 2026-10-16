@@ -979,10 +979,20 @@ export const referencedStructNames = (table: TypeTable, info: StructInfo, out: S
  * `Shape`'s. `implementsDeclaration` is the test a constraint uses (#161).
  */
 export const coercesTo = (ctx: CheckContext, from: i32, want: i32): boolean => {
-  if (want < 0 || !ctx.table.isStruct(from)) {
+  if (want < 0) {
     return false
   }
   const target = ctx.table.stripNull(want) // a class converts to `I | null` as it does to `I`
+  // A variant converts to its union, and a nullable one to the nullable
+  // union. Only the variant itself: a class that implements an interface
+  // variant is not one, because its tag is not where the union reads it.
+  if (ctx.table.isUnion(target)) {
+    const variant = ctx.table.stripNull(from)
+    return (variant === from || target !== want) && ctx.table.hasVariant(target, variant)
+  }
+  if (!ctx.table.isStruct(from)) {
+    return false
+  }
   if (!ctx.table.isStruct(target) || target === from) {
     return false
   }

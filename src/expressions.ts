@@ -256,7 +256,9 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   const keepsMember = want === WANT_INFERRED && ctx.table.isEnumMemberType(computed)
   const type = readAsBase(ctx, computed, keepsRange || keepsMember)
   if (coercesTo(ctx, type, want)) {
-    const target = ctx.table.stripNull(want)
+    // A nullable variant stays nullable as its union; everything else that
+    // converts is a non-null struct, and lands on the non-null target.
+    const target = type === ctx.table.stripNull(type) ? ctx.table.stripNull(want) : want
     ctx.program.nodeCoercions[expr.id] = type
     ctx.program.nodeTypes[expr.id] = target
     return target
