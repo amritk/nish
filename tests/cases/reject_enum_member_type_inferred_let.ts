@@ -1,4 +1,4 @@
-// NL2514 on an inferred `let`: initialised from a `Kind.Array`, it keeps that
+// NL2519 on an inferred `let`: initialised from a `Kind.Array`, it keeps that
 // member type, as tsc's would, so another member does not enter it.
 enum Kind {
   Scalar,

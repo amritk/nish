@@ -1,4 +1,4 @@
-// NL2516: a parallel body answering a member type the template's zero fill
+// NL2521: a parallel body answering a member type the template's zero fill
 // cannot hold.
 import { parallelMap } from "nish/threads";
 

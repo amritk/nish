@@ -1,4 +1,4 @@
-// NL2514: a slot of an enum member type given another member.
+// NL2519: a slot of an enum member type given another member.
 enum Kind {
   Scalar,
   Array,

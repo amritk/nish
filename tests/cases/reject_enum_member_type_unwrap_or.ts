@@ -1,4 +1,4 @@
-// NL2514 on `unwrapOr`: its default is a value of the `Ok` type, here `Kind.Array`.
+// NL2519 on `unwrapOr`: its default is a value of the `Ok` type, here `Kind.Array`.
 enum Kind {
   Scalar,
   Array,

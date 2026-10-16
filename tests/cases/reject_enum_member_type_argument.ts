@@ -1,4 +1,4 @@
-// NL2514 on a call argument: the parameter is a `Kind.Array`.
+// NL2519 on a call argument: the parameter is a `Kind.Array`.
 enum Kind {
   Scalar,
   Array,

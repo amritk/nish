@@ -1330,7 +1330,7 @@ and their `.ll` goldens are byte-identical files.
   that member type; the enum's other members, and any `Kind` value that is not
   a constant, are
   `` Type `Kind.Array` holds only the member `Kind.Array`, got `Kind.Scalar` ``
-  (NL2514, `tests/cases/reject_enum_member_type_other`) and
+  (NL2519, `tests/cases/reject_enum_member_type_other`) and
   `` …, got a value of type `Kind` `` (`reject_enum_member_type_widened`),
   because a `Kind` could be any member. Every way into a slot is held to it:
   a call argument, an assignment to a `let` or a field, a `push`, an element
@@ -1361,7 +1361,7 @@ and their `.ll` goldens are byte-identical files.
     dot is `` `Point.x` is not a type: only a member of an enum may be named with a dot in a type, and `Point` is not an enum ``
     (NL2517, `reject_enum_member_type_not_enum`), a missing member is
     `` Enum `Kind` has no member `Missing` to name as a type ``
-    (NL2513, `reject_enum_member_type_unknown`), and type arguments are
+    (NL2518, `reject_enum_member_type_unknown`), and type arguments are
     `` Unsupported type reference `Kind.Array<i32>` `` (`reject_enum_member_type_args`).
     One dot is read; `A.B.C` is a syntax error (`reject_enum_member_type_nested`).
   - **Two members of one value are one type**, as `tsc` reads them, spelled
@@ -1377,12 +1377,12 @@ and their `.ll` goldens are byte-identical files.
   - **A zero-filled array of a member type holds 0**, so
     `new Array<Kind.Array>(n)` is
     `` `new Array<Kind.Array>(n)` would zero-fill with 0, which is not the member `Kind.Array`; build it with `[]` and `push` instead ``
-    (NL2515, `reject_enum_member_type_zero_fill`), and a member whose value
+    (NL2520, `reject_enum_member_type_zero_fill`), and a member whose value
     is 0, `Kind.Scalar` here, is allowed (`enum_member_type_slots`). The
     `parallelMap`, `parallelFrom` and `parallelReduce` templates zero-fill the
     array their workers write, so a body answering such a member type is
     refused at the call, `` … answers the member type `Kind.Array`, and `parallelMap` zero-fills the array its workers write, which a `Kind.Array` cannot hold; declare the body to answer `Kind` ``
-    (NL2516, `reject_enum_member_type_parallel`, `_parallel_from`,
+    (NL2521, `reject_enum_member_type_parallel`, `_parallel_from`,
     `_parallel_reduce`); a body answering the member at 0 runs in all three
     (`tests/link/enum_member_type_parallel`).
   - **A field initializer may be a member's constant** when the field is the
@@ -2654,7 +2654,10 @@ from the whole-program facts, and each rule is reported there:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `parallelMapInto` runs it on several threads at once: a parallel body may read what its caller owns and write nothing but its result ``,
   naming the write, or the callee that makes it (`tests/cases/reject_par_shared_write`,
   `reject_par_shared_write_via`, and `reject_par_console_log`, which names the
-  runtime's `nish_print`). A bounds check, an integer division, the length
+  runtime's `nish_print`). A method of an
+  [atomic](#atomics-atomici32-and-atomici64) — `add`, `max` and the rest — is
+  the one shared write a body may make (`tests/link/par_atomic`). A bounds
+  check, an integer division, the length
   check of `new Array(n)` and `panic` are not writes: each prints and exits,
   and nothing runs again to see memory. When several threads panic at once,
   the first claims the program: it prints its whole message and exits 1, and
@@ -3124,8 +3127,9 @@ element's arena, which a task does not share, and each rule is reported at the
 
 - **The task writes nothing another can see**, except through the guard of a
   [`Mutex`](#a-lock-that-owns-its-data-mutext), the one shared write a task may
-  make, or by a `send` or a receive on a [`Channel`](#channels-channelt), which
-  is not a write the rule counts:
+  make, by a method of an [atomic](#atomics-atomici32-and-atomici64)
+  (`tests/link/thread_atomic_tasks`), or by a `send` or a receive on a
+  [`Channel`](#channels-channelt), neither of which is a write the rule counts:
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
@@ -3189,7 +3193,8 @@ the compiled program ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). `using` needs
 
 `parallelFor`, non-scalar results and `scope(n)` are not in this stage
 ([wp29-thread-surface.md](wp29-thread-surface.md) §7); the lock is the next
-section, and [channels](#channels-channelt) the one after it.
+section, [atomics](#atomics-atomici32-and-atomici64) the one after it, and
+[channels](#channels-channelt) the one after that.
 
 ### A lock that owns its data: `Mutex<T>`
 
@@ -3366,6 +3371,194 @@ else is its author's obligation, as an associative operator is for a named
 function given to `parallelReduce`; the checker does not try to prove it. It
 is the one place the lock weakens the scope's promise above, that the checker
 refuses anything that could tell the two orders apart.
+
+### Atomics: `AtomicI32` and `AtomicI64`
+
+An atomic is one integer a scope's tasks, and the bodies of the data-parallel
+forms, update at once without a lock: each method is a single indivisible
+operation on the word, so no update is lost to a race and none waits for
+another. Where a `Mutex` guards a whole value, an atomic guards one counter.
+The fast way to use one is the example's: each task counts into a local tally
+no other core touches and adds it to the shared counters once, at its end, so
+the atomics see one update per bin per task rather than one per value
+("Measured", below).
+
+```typescript
+import { AtomicI32, parallelMapInto, scope } from "nish/threads";
+
+class Shard {
+  xs: i32[];
+  bins: AtomicI32[];
+  constructor(xs: i32[], bins: AtomicI32[]) {
+    this.xs = xs;
+    this.bins = bins;
+  }
+}
+
+const binShard = (s: Shard): i32 => {
+  const local: i32[] = [0, 0, 0, 0]; // this task's own counts: no core shares them
+  for (const x of s.xs) {
+    const bin: i32 = x & 3;
+    if (bin < local.length) {
+      local[bin] += 1;
+    }
+  }
+  for (let b = 0; b < local.length; b++) {
+    s.bins[b].add(local[b]);         // one indivisible add per bin, no lock
+  }
+  return 0;
+};
+
+export const main = (): i32 => {
+  const bins: AtomicI32[] = [new AtomicI32(0), new AtomicI32(0), new AtomicI32(0), new AtomicI32(0)];
+  const done: i32[] = [0, 0];
+  {
+    using s = scope();
+    s.spawn(binShard, new Shard([1, 2, 3, 4, 5], bins), done, 0);
+    s.spawn(binShard, new Shard([6, 7, 8], bins), done, 1);
+  }
+  const big = new AtomicI32(0);
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => big.max(x));  // the one shared write a body may make
+  console.log(`${bins[0].load()} ${bins[1].load()} ${big.load()}`); // 2 2 9
+  return 0;
+};
+```
+
+- **The methods.** `load()` and `store(v)`; `add(n)`, `sub(n)`, `min(v)`,
+  `max(v)` and `exchange(v)`, each answering the value the word held before
+  it; and `compareExchange(expected, desired)`, which stores `desired` when the
+  word holds `expected` and answers the value it saw either way, so a loop
+  that retries until the answer is its `expected` builds any other update
+  (`tests/link/thread_atomic_tasks`). `add` and `sub` wrap at the width;
+  `min` and `max` compare signed. `AtomicI64` is the same over `i64`.
+- **Natively each method is one instruction**, sequentially consistent: a
+  `load atomic` or `store atomic ... seq_cst`, an `atomicrmw add`, `sub`,
+  `min`, `max` or `xchg ... seq_cst`, or a `cmpxchg ... seq_cst seq_cst`,
+  aligned to the width (`align 4`, `align 8`), the whole body of the method's
+  instance in `nish/threads`'s module (`tests/link/thread_atomic_tasks`, whose
+  `threads.ll` is the lowering; docs/IR_COOKBOOK.md, "an atomic"). On
+  `wasm32` a scope's tasks and a parallel call's chunks run one after another,
+  and the same IR is lowered for a module without shared memory.
+- **Under Node each method is the plain operation** on an ordinary field,
+  which is exact because Node runs every task at its `spawn` and every parallel
+  body in order. Node holds an `AtomicI64` as a `number`, and it agrees with
+  native while values stay within ±2^53; wrapping at 2^63 is native-only, the
+  same limit as every `i64` ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)), so a
+  program meant to run under Node as well passes it `i64`-typed values, not
+  `toI64` of a number, which is a BigInt there.
+
+Three rules keep every touch of the word indivisible and every program's
+answer the same natively and under Node:
+
+- **R1: an atomic is reached only by calling its methods.** Its word is a
+  field, `value`, that no program may name, read or store:
+  `` `value` is not a member a program may name: an atomic is read and updated only by calling its methods, `load()`, `add(n)` and the rest, each one indivisible: a plain read or store of its word would race with the update a task makes at the same moment ``
+  (NL2514, `tests/cases/reject_atomic_member_read`, `reject_atomic_member_store`,
+  and `reject_atomic_member_nested` for `h.a.b.value`). A method named without
+  a call is refused by the rule every class's methods keep, not by NL2514:
+  `` Unknown field `add` on class `AtomicI64` (it is a method; call it) ``
+  (`reject_atomic_member_unbound`). `new AtomicI32(v)` takes a number, so an
+  atomic is fresh when it is made, and `new` is the only way one is made. An
+  object literal of any class of `nish/threads` — an atomic, a `Mutex`, its
+  `MutexGuard`, a `Channel` or a `ThreadScope` — would be a plain record under
+  Node, without the methods, and is refused with
+  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
+  (NL2515, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`,
+  `reject_thread_literal_channel`, `reject_thread_literal_mutex` and
+  `reject_thread_literal_mutex_only`, whose `Mutex` literal is refused by this
+  rule rather than by `new Mutex`'s fresh-value one, and
+  `reject_thread_literal_scope`).
+- **R7: from the statement that holds a scope's first `spawn` to the end of its
+  block, the parent does not touch an atomic the scope's tasks can reach** —
+  with a method, or through any function, method or constructor it calls,
+  or by a data-parallel call that does — `Mutex`'s R7, for the same reason:
+  natively the tasks have not run there, and under Node each has run at its
+  spawn, so a `load()` would answer differently:
+  `` This `load()` reaches an atomic a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join ``
+  (NL2513, `reject_atomic_region_direct`; `reject_atomic_region_capture` for
+  an arrow task that captures it; `reject_atomic_region_field`,
+  `reject_atomic_region_array`, `reject_atomic_region_map` and
+  `reject_atomic_region_generic` for one the task's argument reaches through a
+  field, an element, a `Map`'s value or a generic's field;
+  `reject_atomic_region_call`, `reject_atomic_region_method` and
+  `reject_atomic_region_new` for a function, a method and a constructor that
+  touch it; `reject_atomic_region_this` for one reached through `this` handed
+  out of a constructor; `reject_atomic_region_declarators` for the second
+  declarator of a declaration; `reject_atomic_region_spawn_arg` for a second
+  `spawn`'s argument; `reject_atomic_region_parallel` for a parallel call).
+  It is asked by type, as `Mutex`'s is: an atomic of the type a task's argument
+  or capture reaches, at any depth, so an alias through `?:` or a function's
+  answer is the same atomic (`reject_atomic_region_ternary`,
+  `reject_atomic_region_return`), and so is any other atomic of that type the
+  task cannot in fact reach. An atomic of a type no task reaches is the
+  parent's alone, and its methods are not counted as writes the scope's tasks
+  may read (`tests/link/thread_atomic_unreached`). Before the first `spawn` and
+  after the join the parent touches it freely.
+
+  The scopes of one `using` are judged against each other too: natively they
+  join in reverse order, so a task of `t` in `using s = scope(), t = scope()`
+  runs before every task of `s`, and under Node each runs at its spawn. A
+  `spawn` on one of them whose task shares a destination, an atomic or a lock
+  with a task of another scope of the same statement is refused, naming the
+  other scope and the path it shares:
+  `` This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open the scopes in `using` statements of their own ``
+  (NL2516). A destination is shared when two scopes' spawns name the same
+  array, at the same slot or at different ones
+  (`reject_thread_sibling_destination`, `_slots`, `_arrow` for arrow tasks,
+  `_three` for three declarators; a void task that reaches another scope's
+  destination hands it on, which `_void` pins as refused by the destination
+  rule). An atomic or a lock is told apart by the `const` it was made in by
+  `new`: a task handed that binding, as its argument or a capture, reaches that
+  object and no other, and two such bindings are two objects. Reached any other
+  way — through another binding, a field, an element, a function's answer —
+  it is read as any object of its type, which meets every one
+  (`reject_atomic_sibling_load`, `reject_atomic_sibling_exchange`,
+  `reject_atomic_sibling_arrow`, `reject_atomic_sibling_three`,
+  `reject_thread_mutex_sibling`, `reject_thread_mutex_sibling_alias` for a
+  second name of one lock, `reject_thread_mutex_sibling_field` for one reached
+  through a field). Tasks that take no lock share none, and tasks that call no
+  atomic method share no atomic. Sibling scopes whose tasks reach disjoint
+  locks or atomics, of one type or of two, run as before
+  (`tests/link/thread_sibling_disjoint_mutex`, `_mutex_types`, `_atomics`).
+- **R8: an atomic reaches a task at any depth** — as its argument, a field of
+  it, an element of an `AtomicI32[]`, or a capture — unlike a `Mutex`, which
+  stops one field down: an atomic holds no data a task could keep, so which
+  tasks share it is a question R7 answers by type, without the exact sharing
+  set a lock's R5 needs.
+
+**An atomic update is the one shared write a task or a parallel body may make
+beside a guard.** A task that calls `add` on an atomic its argument reaches
+writes nothing the rule above counts, and neither does the body of
+`parallelMapInto`, `parallelMap`, `parallelFrom` or `parallelReduce`, which
+takes no lock but may update an atomic it captures or an element reaches
+(`tests/link/par_atomic`). Any other write beside it is refused as before
+(`reject_atomic_par_shared_write`). A parallel body answers a number, never
+an atomic (`reject_atomic_par_result`).
+
+**What an atomic program means.** The updates land in some order: natively
+the scheduler's, under Node spawn order and element order. A program prints
+the same both ways when its updates commute exactly — `add` and `sub`, `min`,
+`max`, a count, a histogram — and no task's answer or control flow depends on
+a value it read from a word another task updates. A `store`, an `exchange` or a
+`compareExchange` that wins against another task is order-dependent. A
+`parallelReduce`'s blocks depend on `n` alone, the same on one core or sixty
+four, but natively they run at once and under Node one after another, so what
+a body does to an atomic must not depend on which block reaches it first. That is the
+author's obligation, as it is for a `Mutex`'s critical sections; the checker
+does not try to prove it.
+
+**Measured.** `examples/histogram-atomic.ts` bins 4 × 2,000,000 values per
+round into 256 bins, four rounds, on four tasks. On a four-core machine, over
+seven interleaved rounds whose seeds move every round, the medians are: each
+task counting into a local tally and adding it with one `add` per bin, 24 ms
+(a byte-identical copy of it, the noise band, 24 ms, its runs 23–37 ms); one
+thread binning into plain counters, 77 ms (3.2× slower); one atomic `add` per
+value, 677 ms (28× slower), because every increment contends for a cache line
+another core is writing; and one `Mutex` taken per value, 6,565 ms. An atomic
+is far cheaper than a lock and still far dearer than a counter no other core
+touches: update it once per batch, not once per value.
 
 ### Channels: `Channel<T>`
 

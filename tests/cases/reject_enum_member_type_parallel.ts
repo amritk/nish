@@ -1,4 +1,4 @@
-// NL2516: `parallelMap` zero-fills the array its workers write, so a body
+// NL2521: `parallelMap` zero-fills the array its workers write, so a body
 // answering a member type other than the 0 is refused at the call rather than
 // inside `std/threads.ts`.
 import { parallelMap } from "nish/threads";

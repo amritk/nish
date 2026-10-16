@@ -1,4 +1,4 @@
-// NL2515: a zero-filled array of a member type whose value is not 0.
+// NL2520: a zero-filled array of a member type whose value is not 0.
 enum Kind {
   Scalar,
   Array,

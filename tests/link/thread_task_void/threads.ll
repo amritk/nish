@@ -1,4 +1,6 @@
 %struct.ThreadScope = type { i32 }
+%struct.AtomicI32 = type { i32 }
+%struct.AtomicI64 = type { i64 }
 %struct.Tally = type { i32 }
 %struct.Mutex$$Tally = type { %struct.MutexGuard$$Tally* }
 %struct.MutexGuard$$Tally = type { %struct.Tally*, i32 }
@@ -143,12 +145,140 @@ entry:
   ret %struct.ThreadScope* %1
 }
 
+define void @nish.AtomicI32.constructor(%struct.AtomicI32* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  store i32 %value, i32* %0, align 4, !tbaa !6
+  ret void
+}
+
+define noundef i32 @nish.AtomicI32.load(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = load atomic i32, i32* %0 seq_cst, align 4
+  ret i32 %1
+}
+
+define void @nish.AtomicI32.store(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  store atomic i32 %value, i32* %0 seq_cst, align 4
+  ret void
+}
+
+define noundef i32 @nish.AtomicI32.add(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %delta) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = atomicrmw add i32* %0, i32 %delta seq_cst, align 4
+  ret i32 %1
+}
+
+define noundef i32 @nish.AtomicI32.sub(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %delta) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = atomicrmw sub i32* %0, i32 %delta seq_cst, align 4
+  ret i32 %1
+}
+
+define noundef i32 @nish.AtomicI32.min(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = atomicrmw min i32* %0, i32 %value seq_cst, align 4
+  ret i32 %1
+}
+
+define noundef i32 @nish.AtomicI32.max(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = atomicrmw max i32* %0, i32 %value seq_cst, align 4
+  ret i32 %1
+}
+
+define noundef i32 @nish.AtomicI32.exchange(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = atomicrmw xchg i32* %0, i32 %value seq_cst, align 4
+  ret i32 %1
+}
+
+define noundef i32 @nish.AtomicI32.compareExchange(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %this, i32 noundef %expected, i32 noundef %desired) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI32, %struct.AtomicI32* %this, i32 0, i32 0
+  %1 = cmpxchg i32* %0, i32 %expected, i32 %desired seq_cst seq_cst, align 4
+  %2 = extractvalue { i32, i1 } %1, 0
+  ret i32 %2
+}
+
+define void @nish.AtomicI64.constructor(%struct.AtomicI64* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i64 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  store i64 %value, i64* %0, align 8, !tbaa !9
+  ret void
+}
+
+define noundef i64 @nish.AtomicI64.load(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  %1 = load atomic i64, i64* %0 seq_cst, align 8
+  ret i64 %1
+}
+
+define void @nish.AtomicI64.store(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this, i64 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  store atomic i64 %value, i64* %0 seq_cst, align 8
+  ret void
+}
+
+define noundef i64 @nish.AtomicI64.add(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this, i64 noundef %delta) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  %1 = atomicrmw add i64* %0, i64 %delta seq_cst, align 8
+  ret i64 %1
+}
+
+define noundef i64 @nish.AtomicI64.sub(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this, i64 noundef %delta) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  %1 = atomicrmw sub i64* %0, i64 %delta seq_cst, align 8
+  ret i64 %1
+}
+
+define noundef i64 @nish.AtomicI64.min(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this, i64 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  %1 = atomicrmw min i64* %0, i64 %value seq_cst, align 8
+  ret i64 %1
+}
+
+define noundef i64 @nish.AtomicI64.max(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this, i64 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  %1 = atomicrmw max i64* %0, i64 %value seq_cst, align 8
+  ret i64 %1
+}
+
+define noundef i64 @nish.AtomicI64.exchange(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this, i64 noundef %value) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  %1 = atomicrmw xchg i64* %0, i64 %value seq_cst, align 8
+  ret i64 %1
+}
+
+define noundef i64 @nish.AtomicI64.compareExchange(%struct.AtomicI64* noundef nonnull align 8 dereferenceable(8) nocapture %this, i64 noundef %expected, i64 noundef %desired) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.AtomicI64, %struct.AtomicI64* %this, i32 0, i32 0
+  %1 = cmpxchg i64* %0, i64 %expected, i64 %desired seq_cst seq_cst, align 8
+  %2 = extractvalue { i64, i1 } %1, 0
+  ret i64 %2
+}
+
 define void @nish.MutexGuard$$Tally.constructor(%struct.MutexGuard$$Tally* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, %struct.Tally* noundef nonnull align 8 dereferenceable(4) %value) #2 {
 entry:
   %0 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %this, i32 0, i32 1
-  store i32 0, i32* %0, align 4, !tbaa !7
+  store i32 0, i32* %0, align 4, !tbaa !12
   %1 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %this, i32 0, i32 0
-  store %struct.Tally* %value, %struct.Tally** %1, align 8, !tbaa !8
+  store %struct.Tally* %value, %struct.Tally** %1, align 8, !tbaa !13
   ret void
 }
 
@@ -158,14 +288,14 @@ entry:
   %1 = bitcast i8* %0 to %struct.MutexGuard$$Tally*
   call void @nish.MutexGuard$$Tally.constructor(%struct.MutexGuard$$Tally* %1, %struct.Tally* %init)
   %2 = getelementptr inbounds %struct.Mutex$$Tally, %struct.Mutex$$Tally* %this, i32 0, i32 0
-  store %struct.MutexGuard$$Tally* %1, %struct.MutexGuard$$Tally** %2, align 8, !tbaa !10
+  store %struct.MutexGuard$$Tally* %1, %struct.MutexGuard$$Tally** %2, align 8, !tbaa !15
   ret void
 }
 
 define noundef nonnull align 8 dereferenceable(16) %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Mutex$$Tally, %struct.Mutex$$Tally* %this, i32 0, i32 0
-  %1 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %0, align 8, !tbaa !10
+  %1 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %0, align 8, !tbaa !15
   %2 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %1, i32 0, i32 1
   %3 = cmpxchg i32* %2, i32 0, i32 1 acquire monotonic
   %4 = extractvalue { i32, i1 } %3, 1
@@ -182,19 +312,19 @@ lock.held:
 define void @nish.Channel$i32.constructor(%struct.Channel$i32* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 1
-  store i32 0, i32* %0, align 4, !tbaa !13
+  store i32 0, i32* %0, align 4, !tbaa !17
   %1 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 2
-  store i64 0, i64* %1, align 8, !tbaa !14
+  store i64 0, i64* %1, align 8, !tbaa !18
   %2 = call i8* @nish_alloc_struct(i64 24)
   %3 = bitcast i8* %2 to %struct.nish_array*
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
-  store i64 0, i64* %4, align 8, !alias.scope !18, !noalias !19, !tbaa !23
+  store i64 0, i64* %4, align 8, !alias.scope !22, !noalias !23, !tbaa !27
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 1
-  store i64 0, i64* %5, align 8, !alias.scope !18, !noalias !19, !tbaa !24
+  store i64 0, i64* %5, align 8, !alias.scope !22, !noalias !23, !tbaa !28
   %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 2
-  store i8* null, i8** %6, align 8, !alias.scope !18, !noalias !19, !tbaa !25
+  store i8* null, i8** %6, align 8, !alias.scope !22, !noalias !23, !tbaa !29
   %7 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 0
-  store %struct.nish_array* %3, %struct.nish_array** %7, align 8, !tbaa !26
+  store %struct.nish_array* %3, %struct.nish_array** %7, align 8, !tbaa !30
   ret void
 }
 
@@ -210,12 +340,12 @@ define noundef i32 @nish.Channel$i32.take(%struct.Channel$i32* noundef nonnull a
 entry:
   %x.addr = alloca i32, align 4
   %0 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 0
-  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !26
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !30
   %2 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4, !tbaa !13
+  %3 = load i32, i32* %2, align 4, !tbaa !17
   %4 = sext i32 %3 to i64
   %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
-  %6 = load i64, i64* %5, align 8, !alias.scope !18, !noalias !19, !tbaa !23
+  %6 = load i64, i64* %5, align 8, !alias.scope !22, !noalias !23, !tbaa !27
   %7 = icmp ult i64 %4, %6
   br i1 %7, label %bounds.ok, label %bounds.fail
 
@@ -225,13 +355,13 @@ bounds.fail:
 
 bounds.ok:
   %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
-  %9 = load i8*, i8** %8, align 8, !alias.scope !18, !noalias !19, !tbaa !25
+  %9 = load i8*, i8** %8, align 8, !alias.scope !22, !noalias !23, !tbaa !29
   %10 = bitcast i8* %9 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %4
-  %12 = load i32, i32* %11, align 4, !alias.scope !19, !noalias !18, !tbaa !28
+  %12 = load i32, i32* %11, align 4, !alias.scope !23, !noalias !22, !tbaa !32
   store i32 %12, i32* %x.addr, align 4
   %13 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 1
-  %14 = load i32, i32* %13, align 4, !tbaa !13
+  %14 = load i32, i32* %13, align 4, !tbaa !17
   %15 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %14, i32 1)
   %16 = extractvalue { i32, i1 } %15, 0
   %17 = extractvalue { i32, i1 } %15, 1
@@ -239,7 +369,7 @@ bounds.ok:
 
 ovf.ok:
   %18 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 1
-  store i32 %16, i32* %18, align 4, !tbaa !13
+  store i32 %16, i32* %18, align 4, !tbaa !17
   %19 = load i32, i32* %x.addr, align 4
   ret i32 %19
 
@@ -251,11 +381,11 @@ ovf.fail:
 define noundef zeroext i1 @nish.Channel$i32.ready(%struct.Channel$i32* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this) #3 {
 entry:
   %0 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 1
-  %1 = load i32, i32* %0, align 4, !tbaa !13
+  %1 = load i32, i32* %0, align 4, !tbaa !17
   %2 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %this, i32 0, i32 0
-  %3 = load %struct.nish_array*, %struct.nish_array** %2, align 8, !tbaa !26
+  %3 = load %struct.nish_array*, %struct.nish_array** %2, align 8, !tbaa !30
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %3, i64 0, i32 0
-  %5 = load i64, i64* %4, align 8, !alias.scope !18, !noalias !19, !tbaa !23
+  %5 = load i64, i64* %4, align 8, !alias.scope !22, !noalias !23, !tbaa !27
   %6 = trunc i64 %5 to i32
   %7 = icmp slt i32 %1, %6
   ret i1 %7
@@ -360,7 +490,7 @@ if.end:
 
 lor.rhs:
   %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
-  %5 = load i64, i64* %4, align 8, !alias.scope !18, !noalias !19, !tbaa !23
+  %5 = load i64, i64* %4, align 8, !alias.scope !22, !noalias !23, !tbaa !27
   %6 = trunc i64 %5 to i32
   %7 = icmp sge i32 %at, %6
   br label %lor.end
@@ -371,7 +501,7 @@ lor.end:
 
 if.then.1:
   %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
-  %10 = load i64, i64* %9, align 8, !alias.scope !18, !noalias !19, !tbaa !23
+  %10 = load i64, i64* %9, align 8, !alias.scope !22, !noalias !23, !tbaa !27
   %11 = trunc i64 %10 to i32
   call void @nish.slotOutOfRange(i32 %at, i32 %11)
   br label %if.end.1
@@ -415,7 +545,7 @@ entry:
 
 land.rhs:
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8, !alias.scope !18, !noalias !19, !tbaa !23
+  %2 = load i64, i64* %1, align 8, !alias.scope !22, !noalias !23, !tbaa !27
   %3 = trunc i64 %2 to i32
   %4 = icmp slt i32 %at, %3
   br label %land.end
@@ -427,15 +557,15 @@ land.end:
 if.then:
   %6 = sext i32 %at to i64
   %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 2
-  %8 = load i8*, i8** %7, align 8, !alias.scope !18, !noalias !19, !tbaa !25
+  %8 = load i8*, i8** %7, align 8, !alias.scope !22, !noalias !23, !tbaa !29
   %9 = bitcast i8* %8 to i32*
   %10 = getelementptr inbounds i32, i32* %9, i64 %6
-  store i32 %r, i32* %10, align 4, !alias.scope !19, !noalias !18, !tbaa !28
+  store i32 %r, i32* %10, align 4, !alias.scope !23, !noalias !22, !tbaa !32
   br label %if.end
 
 if.else:
   %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %dst, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !18, !noalias !19, !tbaa !23
+  %12 = load i64, i64* %11, align 8, !alias.scope !22, !noalias !23, !tbaa !27
   %13 = trunc i64 %12 to i32
   call void @nish.slotOutOfRange(i32 %at, i32 %13)
   br label %if.end
@@ -457,27 +587,31 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"i32", !1, i64 0}
 !3 = !{!"ThreadScope", !2, i64 0}
 !4 = !{!3, !2, i64 0}
-!5 = !{!"ptr", !1, i64 0}
-!6 = !{!"MutexGuard$$Tally", !5, i64 0, !2, i64 8}
-!7 = !{!6, !2, i64 8}
-!8 = !{!6, !5, i64 0}
-!9 = !{!"Mutex$$Tally", !5, i64 0}
-!10 = !{!9, !5, i64 0}
-!11 = !{!"i64", !1, i64 0}
-!12 = !{!"Channel$i32", !5, i64 0, !2, i64 8, !11, i64 16}
-!13 = !{!12, !2, i64 8}
-!14 = !{!12, !11, i64 16}
-!15 = !{!"nish array"}
-!16 = !{!"header", !15}
-!17 = !{!"elements", !15}
-!18 = !{!16}
-!19 = !{!17}
-!20 = !{!"header i64", !1, i64 0}
-!21 = !{!"header ptr", !1, i64 0}
-!22 = !{!"array header", !20, i64 0, !20, i64 8, !21, i64 16}
-!23 = !{!22, !20, i64 0}
-!24 = !{!22, !20, i64 8}
-!25 = !{!22, !21, i64 16}
-!26 = !{!12, !5, i64 0}
-!27 = !{!"element i32", !1, i64 0}
-!28 = !{!27, !27, i64 0}
+!5 = !{!"AtomicI32", !2, i64 0}
+!6 = !{!5, !2, i64 0}
+!7 = !{!"i64", !1, i64 0}
+!8 = !{!"AtomicI64", !7, i64 0}
+!9 = !{!8, !7, i64 0}
+!10 = !{!"ptr", !1, i64 0}
+!11 = !{!"MutexGuard$$Tally", !10, i64 0, !2, i64 8}
+!12 = !{!11, !2, i64 8}
+!13 = !{!11, !10, i64 0}
+!14 = !{!"Mutex$$Tally", !10, i64 0}
+!15 = !{!14, !10, i64 0}
+!16 = !{!"Channel$i32", !10, i64 0, !2, i64 8, !7, i64 16}
+!17 = !{!16, !2, i64 8}
+!18 = !{!16, !7, i64 16}
+!19 = !{!"nish array"}
+!20 = !{!"header", !19}
+!21 = !{!"elements", !19}
+!22 = !{!20}
+!23 = !{!21}
+!24 = !{!"header i64", !1, i64 0}
+!25 = !{!"header ptr", !1, i64 0}
+!26 = !{!"array header", !24, i64 0, !24, i64 8, !25, i64 16}
+!27 = !{!26, !24, i64 0}
+!28 = !{!26, !24, i64 8}
+!29 = !{!26, !25, i64 16}
+!30 = !{!16, !10, i64 0}
+!31 = !{!"element i32", !1, i64 0}
+!32 = !{!31, !31, i64 0}

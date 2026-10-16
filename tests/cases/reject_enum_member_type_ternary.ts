@@ -1,4 +1,4 @@
-// NL2514 on a ternary arm: each arm enters the `Kind.Array` the arrow returns.
+// NL2519 on a ternary arm: each arm enters the `Kind.Array` the arrow returns.
 enum Kind {
   Scalar,
   Array,

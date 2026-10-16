@@ -1,4 +1,4 @@
-// NL2514 on `Ok`: the value of a `Result<Kind.Array, string>` holds only that member.
+// NL2519 on `Ok`: the value of a `Result<Kind.Array, string>` holds only that member.
 enum Kind {
   Scalar,
   Array,

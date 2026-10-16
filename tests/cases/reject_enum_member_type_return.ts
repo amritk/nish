@@ -1,4 +1,4 @@
-// NL2514 on a `return` statement of a function answering `Kind.Array`.
+// NL2519 on a `return` statement of a function answering `Kind.Array`.
 enum Kind {
   Scalar,
   Array,

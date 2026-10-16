@@ -277,7 +277,7 @@ Only the member itself goes into such a slot. Another member is a compile
 error, and so is a plain `Kind` value, because the compiler cannot tell which
 member that holds:
 
-```ts nish:err NL2514
+```ts nish:err NL2519
 enum Kind {
   Scalar,
   Array,
@@ -295,7 +295,7 @@ A `let` with no annotation follows TypeScript. Start it from a value that
 already has the member type and it keeps that type. Start it from the
 member's constant and it is a `Kind`, so it can take another member later:
 
-```ts nish:err NL2514
+```ts nish:err NL2519
 enum Kind {
   Scalar,
   Array,
@@ -316,7 +316,7 @@ An array of a member type is built with `[]` and `push`. `new Array<T>(n)`
 fills its slots with 0, which here is `Kind.Scalar`, so the compiler refuses
 it for any member but the one whose value is 0:
 
-```ts nish:err NL2515
+```ts nish:err NL2520
 enum Kind {
   Scalar,
   Array,

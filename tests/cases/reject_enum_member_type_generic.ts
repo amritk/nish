@@ -1,4 +1,4 @@
-// NL2514 on a generic call: `tag`'s `k` is a `Kind.Array` beside a type
+// NL2519 on a generic call: `tag`'s `k` is a `Kind.Array` beside a type
 // parameter, and another member does not enter it.
 enum Kind {
   Scalar,

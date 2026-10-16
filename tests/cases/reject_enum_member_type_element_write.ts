@@ -1,4 +1,4 @@
-// NL2514 on an element write into a `Kind.Array[]`.
+// NL2519 on an element write into a `Kind.Array[]`.
 enum Kind {
   Scalar,
   Array,

@@ -870,6 +870,8 @@ export class StructInfo {
   collected: boolean
   /** `nish/json-typed`'s `JsonNumber`, which typed JSON reads and writes as one number. */
   jsonNumber: boolean
+  /** `nish/threads`'s `AtomicI32` or `AtomicI64`, whose methods the emitter writes (`markAtomicClass`). */
+  atomic: boolean
   /**
    * The (template, type-argument tuple) this layout was monomorphised from, or
    * `null` for a class or interface somebody declared (WP18 G5).
@@ -912,6 +914,7 @@ export class StructInfo {
     this.collected = false
     this.jsonOptions = null
     this.jsonNumber = false
+    this.atomic = false
   }
 
   /** The field called `name` on this struct, or `null`. */

@@ -16,7 +16,13 @@
 // interface it names.
 
 import { secretFieldMessage } from "./secret"
-import { DISPOSE_METHOD, disposeElsewhereMessage, isIteratorMethod, isThreadsSource } from "./parallel"
+import {
+  DISPOSE_METHOD,
+  disposeElsewhereMessage,
+  isIteratorMethod,
+  isThreadsSource,
+  markAtomicClass,
+} from "./parallel"
 import { CheckContext } from "./context"
 import { JSON_OPTIONS, checkJsonOptions, noteJsonOptions } from "./json-typed"
 import { rejectForeignPointer, resolveType } from "./annotations"
@@ -848,6 +854,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
     }
   }
   checkJsonOptions(ctx, info)
+  markAtomicClass(ctx.program, info)
   const floor = computeLayout(ctx, info)
   info.collected = true
   reportWastefulPadding(ctx, info, floor, prefix)

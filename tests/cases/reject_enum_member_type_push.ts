@@ -1,4 +1,4 @@
-// NL2514 on `push`: an element of a `Kind.Array[]` holds only that member.
+// NL2519 on `push`: an element of a `Kind.Array[]` holds only that member.
 enum Kind {
   Scalar,
   Array,

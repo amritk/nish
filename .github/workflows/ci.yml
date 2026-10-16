@@ -97,7 +97,11 @@ jobs:
   test:
     name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # 25 minutes, up from 15. Shard 1 runs its share of every section plus the
+    # shard-1-only steps (simd, the AES kernels, cpu-level and the rest), and
+    # took 14m49s on main at 6e11fa6b once #663 added about 3 s of clang -O2
+    # to each program that imports p256, so a 15-minute limit cancelled it.
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

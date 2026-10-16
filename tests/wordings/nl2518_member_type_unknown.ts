@@ -1,4 +1,4 @@
-// NL2513: a member type naming a member the enum does not declare.
+// NL2518: a member type naming a member the enum does not declare.
 enum Kind {
   Scalar,
 }

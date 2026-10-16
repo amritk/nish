@@ -1,4 +1,4 @@
-// NL2516: `parallelReduce` zero-fills the array of block results, so a fold
+// NL2521: `parallelReduce` zero-fills the array of block results, so a fold
 // answering a member type other than the 0 is refused at the call.
 import { parallelReduce } from "nish/threads";
 

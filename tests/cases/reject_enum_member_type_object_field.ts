@@ -1,4 +1,4 @@
-// NL2514 on an object literal: the interface field is a `Kind.Array`.
+// NL2519 on an object literal: the interface field is a `Kind.Array`.
 enum Kind {
   Scalar,
   Array,

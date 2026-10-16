@@ -351,7 +351,7 @@ const enterMember = (ctx: CheckContext, expr: Node, computed: i32, member: i32):
   return ctx.errorType(expr, memberSlotMessage(ctx, member, got))
 }
 
-/** NL2514, for a slot of the member type `member` given `got`, already spelled. */
+/** NL2519, for a slot of the member type `member` given `got`, already spelled. */
 export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): string => {
   const spelled = ctx.table.typeName(member)
   return `Type \`${spelled}\` holds only the member \`${spelled}\`, got ${got}`

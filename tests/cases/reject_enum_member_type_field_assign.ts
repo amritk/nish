@@ -1,4 +1,4 @@
-// NL2514 on an assignment to a mutable field of the member type.
+// NL2519 on an assignment to a mutable field of the member type.
 enum Kind {
   Scalar,
   Array,
