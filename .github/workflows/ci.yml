@@ -210,7 +210,7 @@ jobs:
           # `ld.lld` and `wasm-ld` regardless of what the runner image ships.
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
+          for tool in clang clang++ llc llvm-as llvm-link llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
@@ -310,6 +310,16 @@ jobs:
           set -o pipefail
           node tests/run.js "aes kernel" | tee "$RUNNER_TEMP/aes-kernel.log"
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/aes-kernel.log"
+
+      # #619: `par_map_vector` links its modules with `llvm-link` and runs `opt
+      # -O3`, and skips without either tool. The line that says the map's loop
+      # vectorised is required here, where both are installed.
+      - name: parallelMapInto's element loop vectorises
+        if: matrix.shard == 1
+        run: |
+          set -o pipefail
+          node tests/run.js par_map_vector | tee "$RUNNER_TEMP/par-map-vector.log"
+          grep -E "^PASS  par_map_vector: opt -O3 vectorises parallelMapInto's element loop" "$RUNNER_TEMP/par-map-vector.log"
 
       #
       # `build/nish` is what the steps after the suite drive: stage1, one

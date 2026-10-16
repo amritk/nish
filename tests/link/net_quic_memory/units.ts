@@ -38,7 +38,7 @@ const qmSameAes = (a: AesKey | null, b: AesKey | null): boolean => {
   if (a === null || b === null) {
     return a === null && b === null;
   }
-  if (a.rounds !== b.rounds || a.hHi !== b.hHi || a.hLo !== b.hLo || toI32(a.roundKeys.length) !== toI32(b.roundKeys.length)) {
+  if (a.rounds !== b.rounds || a.h[0] !== b.h[0] || a.h[1] !== b.h[1] || toI32(a.roundKeys.length) !== toI32(b.roundKeys.length)) {
     return false;
   }
   for (let k: i32 = 0; k < toI32(a.roundKeys.length) && k < toI32(b.roundKeys.length); k++) {
@@ -81,7 +81,7 @@ const qmZeroAes = (key: AesKey): boolean => {
       return false;
     }
   }
-  return key.hHi === toU64(0) && key.hLo === toU64(0);
+  return key.h[0] === toU64(0) && key.h[1] === toU64(0);
 };
 
 /** RFC 9001 Appendix A.1's client DCID. */
