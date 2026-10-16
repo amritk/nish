@@ -57,7 +57,7 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "oom", "at": "std/threads.ts:283:41", "allowed": true }
+                { "kind": "oom", "at": "std/threads.ts:336:41", "allowed": true }
               ]
             }
           ]

@@ -1,0 +1,1 @@
+`(i) => ...` writes memory its caller can see through `Rng.nextI32`
