@@ -56,9 +56,10 @@
  * `Secret` may not be a field, and the handshake, traffic and exporter secrets
  * its carrier reads — is wiped by its carrier, and by `restart` before the
  * next connection uses the arrays. The resumption master secret, which no
- * carrier reads yet, is wiped by `fail` and `restart`, and by its carrier
- * when the connection ends (`wipeResumption`; CLAUDE.md §Security; TLS-1 in
- * `docs/security/tls.md`).
+ * carrier reads yet, is wiped by `fail` and `restart`, and by the record
+ * layer's carrier when the connection closes or fails (`wipeResumption`;
+ * CLAUDE.md §Security; TLS-1 in `docs/security/tls.md`, which records that
+ * the QUIC carrier does not call it yet).
  *
  * **Memory.** A `TlsServer` keeps its state in buffers it allocates once —
  * the messages in and out, the transcript, the secrets, the HKDF scratch —
@@ -657,9 +658,10 @@ export class TlsServer {
   /**
    * `resumption_master_secret` (RFC 8446 §7.1), known once the client's
    * Finished is accepted: what a NewSessionTicket's PSK would be derived
-   * from. Nothing here issues tickets, so it is held for the caller and wiped
-   * by `fail`, `restart` and the carrier's `wipeResumption` when the
-   * connection ends (TLS-1).
+   * from. Nothing here issues tickets, so it is held for the caller while the
+   * connection is open and wiped by `fail`, `restart` and the record layer's
+   * `wipeResumption` once it closes or fails: a caller that wants it reads it
+   * before `close` (TLS-1).
    */
   resumptionSecret: u8[]
   /** The CertificateVerify input while `state` is `TLS_STATE_WAIT_SIGNATURE`. */

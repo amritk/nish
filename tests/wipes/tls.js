@@ -14,13 +14,15 @@ export const wipeChecks = [
   // A direction's `clear` 7: its two keys and IV (`secureZero`, 3) and both
   // AES schedules (`aesKeyWipe`, 2 each); with ordinary stores in place of
   // `aesKeyWipe` it is 3. `wipeWrite` 9 (the server's two secret arrays and
-  // `clear`), `wipeTraffic` 18 (the client's two, `clear` and `wipeWrite`),
+  // `clear`), `wipeRead` 9 (the client's), `wipeTraffic` 18 (both),
   // `wipeHandshake` 9 (`TlsServer`'s eight arrays and `wipeResumption`'s 1),
   // so `wipeKeys` 27. `fail` 41: the alert sealed first (`sendAlert`'s seal,
   // 14) and then `wipeKeys`, once, after the branch on whether the alert is
   // sent, so that `opt` has no two wipes to merge; a truncated stream and
-  // `abort` 27 each, `wipeKeys`. `sealClose` 23: the `close_notify`'s seal and
-  // then `wipeWrite`; `close` 24, `wipeResumption` and `sealClose`.
+  // `abort` 27 each, `wipeKeys`; `handleAlert` 36, `wipeRead` on the
+  // client's `close_notify` and `wipeKeys` on its error alert.
+  // `sealClose` 23: the `close_notify`'s seal and then `wipeWrite`; `close`
+  // 24, `wipeResumption` and `sealClose`.
   // `TlsServer`: `exchangeKeys` 5 (the exchange's copy of the ephemeral key,
   // the ECDHE secret on each of its two paths, the handshake secret's bytes,
   // and the words, wiped whole once after the branch on the alert; with the
@@ -38,12 +40,14 @@ export const wipeChecks = [
     roots: [
       ["nish.TlsRecordProtection.clear", 7],
       ["nish.TlsRecordServer.wipeWrite", 9],
+      ["nish.TlsRecordServer.wipeRead", 9],
       ["nish.TlsRecordServer.wipeTraffic", 18],
       ["nish.TlsRecordServer.wipeHandshake", 9],
       ["nish.TlsRecordServer.wipeKeys", 27],
       ["nish.TlsRecordServer.fail", 41],
       ["nish.TlsRecordServer.checkTruncation", 27],
       ["nish.TlsRecordServer.abort", 27],
+      ["nish.TlsRecordServer.handleAlert", 36],
       ["nish.TlsRecordServer.sealClose", 23],
       ["nish.TlsRecordServer.close", 24],
       ["nish.TlsServer.exchangeKeys", 5],

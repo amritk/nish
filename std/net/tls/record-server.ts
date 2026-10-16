@@ -50,11 +50,11 @@
  * handshake secret once the flight is signed and the caller's ephemeral key
  * once the ServerHello is written, or the handshake fails. The two application traffic secrets live
  * on here, for KeyUpdate: each is overwritten in place by the next. Every way
- * the connection ends wipes what it holds: a failure of any kind (`fail`, a
- * truncated stream, `abort`) wipes both directions' keys, both secrets and
+ * the connection ends wipes what it holds: a failure of any kind (`fail`, the
+ * client's error alert, a truncated stream, `abort`) wipes both directions' keys, both secrets and
  * everything `TlsServer` still holds once the last alert is sealed; the
- * server's `close_notify`, once sealed, wipes the write direction, and
- * `close` the resumption master secret; and `wipeKeys`, when the carrier
+ * server's `close_notify`, once sealed, wipes the write direction, the
+ * client's the read direction, and `close` the resumption master secret; and `wipeKeys`, when the carrier
  * closes the slot, and `start` wipe the rest. What stays unwiped is TLS-1's.
  *
  * Refusals are alerts, never panics. Written from RFC 8446 §4.6.3, §5, §6
@@ -327,11 +327,16 @@ export class TlsRecordServer {
 
   /** Wipes the two application traffic secrets and both directions' keys. */
   wipeTraffic(): void {
+    this.wipeRead()
+    this.wipeWrite()
+  }
+
+  /** Wipes the client's application traffic secret and the read keys. */
+  wipeRead(): void {
     // The two secret fields point into these four arrays, or at nothing.
     secureZero(this.readSecret256)
     secureZero(this.readSecret384)
     this.readProtection.clear()
-    this.wipeWrite()
   }
 
   /** Wipes the server's application traffic secret and its write keys. */
@@ -345,8 +350,8 @@ export class TlsRecordServer {
    * Wipes every secret `TlsServer` still holds — the ephemeral key it was
    * handed, the handshake, traffic, exporter and resumption master secrets
    * and the expected Finished — for a connection that has failed or is
-   * closed. On the way to
-   * an open connection each is wiped as soon as it has been used; this is
+   * closed. On the way to an open connection each is wiped as soon as it
+   * has been used; this is
    * for the ways that end early, and for the exporter secret, which a caller
    * may read until the connection ends.
    */
@@ -613,7 +618,10 @@ export class TlsRecordServer {
     }
     const description: i32 = toI32(this.scratch[1])
     if (description === TLS_ALERT_CLOSE_NOTIFY) {
+      // The client writes nothing after it (§6.1), and nothing after it is
+      // read, so the read keys have opened their last record.
       this.peerClosed = true
+      this.wipeRead()
       return 0
     }
     if (description === TLS_ALERT_USER_CANCELED) {
@@ -622,6 +630,9 @@ export class TlsRecordServer {
     this.peerAlert = description
     this.state = TLS_RECORD_STATE_FAILED
     this.dropOutput()
+    // The client's error alert ends the connection as `fail` does, with
+    // nothing sent back, so every key it held is wiped now.
+    this.wipeKeys()
     return 0
   }
 
@@ -1110,7 +1121,7 @@ export class TlsRecordServer {
    * of the handshake is dropped; application data already written stays
    * ahead of the alert, which waits for room in `output` when there is none.
    * The resumption master secret is wiped, since nothing issues a ticket
-   * from it, and the write keys once the `close_notify` is sealed (`pump`).
+   * from it, and the write keys once the `close_notify` is sealed (`sealClose`).
    * Nothing happens once the connection has failed or closed.
    */
   close(): void {

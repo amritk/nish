@@ -9,13 +9,14 @@
 //      directions' keys, IVs and AES schedules (every round-key word, the
 //      kernels' powers of H included, and H), both application traffic
 //      secrets and everything `TlsServer` holds, the resumption master secret
-//      among them, read zero.
+//      among them, read zero. The same after the client's own error alert.
 //   2. A stream cut off without `close_notify`, and `abort`: the same.
 //   3. `close`: the resumption master secret reads zero at once, and the
 //      write direction once its `close_notify` is sealed — after it, when the
 //      alert had to wait for room — while the read direction still opens what
-//      the client sends; the carrier's slot close (`wipeKeys`, as
-//      `TlsTcpServer.close` calls it) wipes the rest.
+//      the client sends, until the client's own `close_notify` wipes it; the
+//      carrier's slot close (`wipeKeys`, as `TlsTcpServer.close` calls it)
+//      wipes the rest.
 //   4. The same close over loopback through `TlsTcpServer`: its `close`
 //      leaves every key of the slot zero.
 //   5. `restart` and `start`, the slot handed its next connection: every
@@ -121,20 +122,23 @@ const exchangeHeld = (tls: TlsServer): i32 => {
   return wordsHeld(words) + (tls.exchange.hashLength !== 0 ? 1 : 0);
 };
 
-/**
- * Every secret `TlsServer` holds: the caller's ephemeral key, each secret
- * array of both hashes but the CertificateVerify input, and the exchange's
- * words.
- */
-const serverHeld = (tls: TlsServer): i32 => {
-  let count: i32 = bytesHeld(tls.ephemeralPrivate) + exchangeHeld(tls);
+/** What the secret arrays of both hashes hold, all but the one at `skip` (-1 for none). */
+const poolsHeld = (tls: TlsServer, skip: i32): i32 => {
+  let count: i32 = 0;
   for (let k: i32 = 0; k < toI32(tls.secrets256.length) && k < toI32(tls.secrets384.length); k++) {
-    if (k !== TO_BE_SIGNED) {
+    if (k !== skip) {
       count = count + bytesHeld(tls.secrets256[k]) + bytesHeld(tls.secrets384[k]);
     }
   }
   return count;
 };
+
+/**
+ * Every secret `TlsServer` holds: the caller's ephemeral key, each secret
+ * array of both hashes but the CertificateVerify input, and the exchange's
+ * words.
+ */
+const serverHeld = (tls: TlsServer): i32 => bytesHeld(tls.ephemeralPrivate) + exchangeHeld(tls) + poolsHeld(tls, TO_BE_SIGNED);
 
 /** Every key the slot and its `TlsServer` hold. */
 const allHeld = (conn: TlsRecordServer): i32 => readHeld(conn) + writeHeld(conn) + serverHeld(conn.tls);
@@ -143,19 +147,15 @@ const allHeld = (conn: TlsRecordServer): i32 => readHeld(conn) + writeHeld(conn)
 class Live {
   conn: TlsRecordServer;
   tls: TlsServer;
-  keys: ClientKeys;
   /** The client's reader of the server's application records, and its writer of its own. */
   reader: TlsRecordProtection;
   writer: TlsRecordProtection;
-  suite: i32 = 0;
   /** Both sides reached the end of the handshake. */
   connected: boolean = false;
 
-  constructor(tls: TlsServer, suite: i32) {
+  constructor(tls: TlsServer) {
     this.tls = tls;
     this.conn = new TlsRecordServer(tls);
-    this.suite = suite;
-    this.keys = new ClientKeys();
     this.reader = new TlsRecordProtection();
     this.writer = new TlsRecordProtection();
   }
@@ -164,6 +164,18 @@ class Live {
 /** A ClientHello offering `suite`, as the record-layer tests' client sends it. */
 const helloFor = (suite: i32): u8[] => recordHello([suite], false, false);
 
+/** The client's keys once it has read the server's two records (its ServerHello and flight) after sending `hello`, its Finished made. */
+const clientKeysAfter = (suite: i32, hello: u8[], records: u8[][]): ClientKeys => {
+  const header: i32 = 5;
+  const keys: ClientKeys = clientKeysFor(tlsSuiteHashLength(suite), hello, range(records[0], header, toI32(records[0].length)));
+  keys.finishWith(openOne(protectionFor(suite, keys.serverHandshake), records[1]).content);
+  return keys;
+};
+
+/** The client's Finished in the one record it sends it in, under its handshake keys. */
+const finishedRecord = (suite: i32, keys: ClientKeys): u8[] =>
+  sealOne(protectionFor(suite, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO);
+
 /**
  * A handshake under `suite` through a fresh slot, with the record-layer
  * tests' client on the other side: the ServerHello and flight drained, the
@@ -171,7 +183,7 @@ const helloFor = (suite: i32): u8[] => recordHello([suite], false, false);
  * keys installed on both of its protections.
  */
 const connect = (suite: i32): Live => {
-  const live = new Live(new TlsServer(tcpConfig([]), serverRandom(), serverPrivate()), suite);
+  const live = new Live(new TlsServer(tcpConfig([]), serverRandom(), serverPrivate()));
   const conn: TlsRecordServer = live.conn;
   const hello: u8[] = helloFor(suite);
   feed(conn, clearRecord(hello));
@@ -190,13 +202,8 @@ const connect = (suite: i32): Live => {
   if (toI32(records.length) !== 2) {
     return live;
   }
-  const header: i32 = 5;
-  const serverHello: u8[] = range(records[0], header, toI32(records[0].length));
-  const keys: ClientKeys = clientKeysFor(tlsSuiteHashLength(suite), hello, serverHello);
-  const flight: Opened = openOne(protectionFor(suite, keys.serverHandshake), records[1]);
-  keys.finishWith(flight.content);
-  feed(conn, sealOne(protectionFor(suite, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO));
-  live.keys = keys;
+  const keys: ClientKeys = clientKeysAfter(suite, hello, records);
+  feed(conn, finishedRecord(suite, keys));
   live.reader = protectionFor(suite, keys.serverApplication);
   live.writer = protectionFor(suite, keys.clientApplication);
   live.connected = conn.state === TLS_RECORD_STATE_OPEN && live.tls.state === TLS_STATE_CONNECTED;
@@ -252,6 +259,14 @@ const failures = (t: Suite, name: string, suite: i32): void => {
   t.eqI32(`${name}: and the write direction and the server's`, writeHeld(failed.conn), zero);
   t.eqI32(`${name}: and every secret TlsServer holds, the resumption master secret included`, serverHeld(failed.tls), zero);
 
+  // The client's own error alert ends the connection the same way, with nothing sent back.
+  const alerted: Live = connect(suite);
+  const heldBefore: boolean = holdsEverything(alerted);
+  const decryptError: u8[] = [toU8(2), toU8(51)];
+  feed(alerted.conn, sealOne(alerted.writer, TLS_CONTENT_ALERT, decryptError, ZERO));
+  t.ok(`${name}: the client's error alert fails the connection`, heldBefore && alerted.conn.state === TLS_RECORD_STATE_FAILED && alerted.conn.peerAlert === 51);
+  t.eqI32(`${name}: and every key the slot and its TlsServer hold reads zero after it`, allHeld(alerted.conn), zero);
+
   // 2. The client's stream cut off without close_notify, and the socket failing.
   const cut: Live = connect(suite);
   const held: boolean = holdsEverything(cut);
@@ -281,6 +296,8 @@ const closes = (t: Suite, name: string, suite: i32): void => {
   const closeNotify: u8[] = [toU8(1), toU8(0)];
   feed(conn, sealOne(live.writer, TLS_CONTENT_ALERT, closeNotify, ZERO));
   t.ok(`${name}: the client's close_notify ends its side`, conn.peerClosed && conn.state === TLS_RECORD_STATE_CLOSED);
+  t.eqI32(`${name}: and the read direction and the client's traffic secret read zero after it`, readHeld(conn), zero);
+  t.ok(`${name}: the exporter secret is left for the slot's close`, bytesHeld(live.tls.exporterSecret) > 0);
   conn.wipeKeys();
   t.eqI32(`${name}: and the carrier's slot close wipes every key that was left`, allHeld(conn), zero);
 };
@@ -314,8 +331,8 @@ const closeWhenFull = (t: Suite): void => {
 /** A socket would block. */
 const WOULD_BLOCK: i32 = -11;
 
-/** Writes all of `bytes` on `fd`, waiting on `loop` while it would block; false when it will not take them. */
-const sendAll = (loop: i32, ready: i32[], fd: i32, bytes: u8[]): boolean => {
+/** Writes all of `bytes` on `fd`, retrying while it would block; false when it will not take them. */
+const sendAll = (fd: i32, bytes: u8[]): boolean => {
   let sent: i32 = 0;
   let tries: i32 = 0;
   while (sent < toI32(bytes.length) && tries < 200) {
@@ -383,7 +400,7 @@ const slotClose = (t: Suite): void => {
   }
   pollAdd(loop, server.fd(slot), one, toI32(3));
   const hello: u8[] = helloFor(suite);
-  sendAll(loop, ready, client, clearRecord(hello));
+  sendAll(client, clearRecord(hello));
   let wants: i32 = server.readable(slot);
   polls = 0;
   while ((wants & TLS_RECORD_SIGN) === 0 && polls < 200) {
@@ -399,10 +416,7 @@ const slotClose = (t: Suite): void => {
   const records: u8[][] = splitRecords(flight);
   const conn: TlsRecordServer = server.connection(slot);
   if (toI32(records.length) === 2) {
-    const header: i32 = 5;
-    const keys: ClientKeys = clientKeysFor(tlsSuiteHashLength(suite), hello, range(records[0], header, toI32(records[0].length)));
-    keys.finishWith(openOne(protectionFor(suite, keys.serverHandshake), records[1]).content);
-    sendAll(loop, ready, client, sealOne(protectionFor(suite, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO));
+    sendAll(client, finishedRecord(suite, clientKeysAfter(suite, hello, records)));
     polls = 0;
     while (conn.state !== TLS_RECORD_STATE_OPEN && polls < 200) {
       pollWait(loop, ready, toI32(50));
@@ -429,10 +443,8 @@ const restarts = (t: Suite, name: string, suite: i32): void => {
   const held: boolean = holdsEverything(live);
   live.tls.restart(serverRandom(), serverPrivate());
   live.conn.start(live.tls);
-  let pools: i32 = 0;
-  for (let k: i32 = 0; k < toI32(live.tls.secrets256.length) && k < toI32(live.tls.secrets384.length); k++) {
-    pools = pools + bytesHeld(live.tls.secrets256[k]) + bytesHeld(live.tls.secrets384[k]);
-  }
+  const none: i32 = -1;
+  const pools: i32 = poolsHeld(live.tls, none);
   t.ok(`${name}: restart and start, for the slot's next connection`, held && live.conn.state === TLS_RECORD_STATE_HANDSHAKE);
   t.eqI32(`${name}: every secret array of both hashes reads zero, the CertificateVerify input's too`, pools, zero);
   t.eqI32(`${name}: and both directions read zero`, readHeld(live.conn) + writeHeld(live.conn), zero);
