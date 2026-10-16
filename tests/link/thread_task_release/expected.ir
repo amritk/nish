@@ -1,0 +1,2 @@
+call i8* @nish_cross_out(i8* %4, i64 0, i64 %3)
+  call void @nish_arena_release(i64 %3)

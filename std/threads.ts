@@ -31,8 +31,9 @@
  * (docs/LANGUAGE.md, "Data parallelism"): the function passed as `f` may write
  * nothing its caller could observe, may allocate only temporaries it drops
  * before it returns — they are given back after every element — `dst` may not
- * be reachable from an element of `src`, and the result type is a number or a
- * `boolean`. An arrow written at the call may read the `const` locals and
+ * be reachable from an element of `src`, and the result type is a number, a
+ * `boolean` or an enum — or, for a map, a `string` or an array of those
+ * scalars, which the join copies out of the worker's arena. An arrow written at the call may read the `const` locals and
  * the parameters of the function it is written in: each one is handed to the
  * body as a parameter of its own, which no body may write through. Importing this module compiles the program with `--threads`,
  * because every worker needs an arena of its own.
@@ -569,8 +570,9 @@ export class AtomicI64 {
 }
 
 /**
- * A channel of scalars between a scope's tasks (docs/wp29-thread-surface.md
- * §4.4): `send` from the tasks that produce, `for (const x of ch)` in the one
+ * A channel of scalars or strings between a scope's tasks (docs/wp29-thread-surface.md
+ * §4.4); a string is copied out of the sender's arena at `send` and into the
+ * receiver's at the loop: `send` from the tasks that produce, `for (const x of ch)` in the one
  * that consumes, or in the parent once the scope has joined.
  *
  *     const ch = new Channel<i32>()

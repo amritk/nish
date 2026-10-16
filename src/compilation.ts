@@ -153,6 +153,7 @@ import {
   reachesDstMessage,
   reduceMessage,
   resultMessage,
+  taskResultMessage,
   scopeFindings,
   sharedWriteMessage,
   bodyLockMessageFor,
@@ -1779,7 +1780,7 @@ export class Compilation {
         messages.push(
           isVoidSpawn(call.sig)
             ? voidTaskResultMessage(this.table, fn)
-            : resultMessage(this.table, call.sig, fn, fn.returnType)
+            : taskResultMessage(this.table, call.sig, fn, fn.returnType)
         )
         messages.push(sharedWriteMessage(call.sig, fn, facts))
         messages.push(arenaMessage(call.sig, fn, facts))

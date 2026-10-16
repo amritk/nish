@@ -57,7 +57,9 @@ export const main = (): i32 => {
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
   and no output: not `console.log`, `console.error`, `write`, `writeError` or
-  `process.exit` — and **answers a number, a `boolean` or an enum**. It may
+  `process.exit` — and **answers a number, a `boolean`, an enum, a `string`, or
+  an array of numbers, booleans or enums** (a reduce's `f` only the first
+  three; see below). It may
   look keys up in a `Map` or `Set` its element reaches (`get`, `has`, `size`),
   and it may `panic`: if several elements panic at once, only the first
   prints its message, and the program exits 1. It may
@@ -65,6 +67,16 @@ export const main = (): i32 => {
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
   own: it may fill it, `push` onto it, or pass it to a helper that writes it.
+- **A string or an array is copied out at the join.** Each thread copies the
+  answers it built out of its arena before the next element reuses it, and the
+  caller copies them into its own once every thread has finished, so the array
+  you get back holds strings you own. An array of strings, an array of arrays,
+  an object, a `Map` or a `Set` is refused: copying one would mean following
+  every element.
+- **A reduce folds numbers, booleans or enums.** Its `f` answers the same type
+  it takes, on many threads at once, so a string there is refused; map the
+  strings to numbers first, `parallelReduce(parallelMap(words, (w) => w.length),
+  (a, b) => a + b, 0)`.
 - **A reduce is deterministic.** The array is folded in fixed blocks and the
   blocks are combined in order, so an `f64` sum is the same bits on one core or
   sixty-four. For that to be the fold you meant, `f` must be associative and
@@ -105,6 +117,29 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+The answer may be a string or an array of numbers, too; each one is copied out
+of the thread that built it, so it lives as long as the array you get back:
+
+```ts nish:ok
+import { parallelFrom, parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  const names = parallelFrom(3, (i) => `worker-${i}`);    // worker-0 worker-1 worker-2
+  const lengths = parallelMap(names, (s) => s.length);    // 8 8 8
+  const tags = parallelMap(names, (s) => s.substring(7)); // 0 1 2
+  console.log(`${names[2]} ${lengths[0]} ${tags[1]}`);    // worker-2 8 1
+  return 0;
+};
+```
+
+That copy has a cost, and the caller pays its last part alone, one string at
+a time, after every thread has finished. When the work per element is small,
+a `parallelMap` that answers strings is slower than a plain loop today. Five
+maps of a million `` `n${x % 1000}` `` strings took a median of 270 ms on 4
+threads, against 200 ms for the sequential loop. Single runs ranged from 249
+to 356 ms, so measure your own case. Reach for the threads when each element does real work,
+or when the answer is a number.
 
 ## Reading the function's constants
 
@@ -227,8 +262,10 @@ export const main = (): i32 => {
 - **A task follows the rules of a parallel `f` above:** it writes nothing
   another thread can see (except through a `Mutex` or a `Channel`, below) and
   prints nothing (`console.log`, `console.error`, `write`, `writeError` and
-  `process.exit` are all refused), answers a number, a `boolean` or an enum
-  when it has a destination, and opens no scope of its own. Looking a key up
+  `process.exit` are all refused), answers a number, a `boolean`, an enum, a
+  `string` or an array of numbers, booleans or enums when it has a
+  destination — a string or an array is copied into the parent's memory when
+  the scope joins — and opens no scope of its own. Looking a key up
   in a shared `Map` or `Set` (`get`, `has`, `size`) is a read, so tasks may
   share a table that way; changing it, or walking it with `for...of`, is a
   write. A task may `panic`: if several threads panic at once, only the first
@@ -357,7 +394,9 @@ export const main = (): i32 => {
   never a value you still hold another reference to, which would be a way
   round the lock.
 - **Use the guard only as `g.value`, and only to read or store a number, a
-  `boolean` or an enum through it.** Don't bind `g` or `g.value` to another
+  `boolean`, an enum or a `string` through it.** A string you store is copied
+  into memory the `Mutex` owns, and one you read is copied out to you, so
+  neither side keeps a pointer the other can free. Don't bind `g` or `g.value` to another
   name, pass them on, or keep an array they reach: anything that outlives the
   block would outlive the lock.
 - **One lock at a time, and no waiting while you hold it.** Inside a guard's
@@ -510,7 +549,7 @@ export const main = (): i32 => {
 
 ## Passing values: `Channel<T>`
 
-A `Channel` carries numbers from the tasks that produce them to one that
+A `Channel` carries numbers or strings from the tasks that produce them to one that
 consumes them. Producers call `send`, which never waits; the consumer walks
 the channel with `for...of`, which waits for values and ends once every task
 that may send has returned. Nobody closes a channel, so nobody can close one
@@ -558,8 +597,9 @@ export const main = (): i32 => {
 };
 ```
 
-- **A channel carries a number, a `boolean` or an enum.** Never a string, an
-  array or an object.
+- **A channel carries a number, a `boolean`, an enum or a `string`.** A string
+  is copied when it is sent and again when it is received, so the receiver
+  owns what it gets. Never an array or an object.
 - **Declare it as a `const` just before its scope**, and hand it to a task as
   the task's argument or as a field of the object you build for it in the
   `spawn`, as `new Pipe(ch, 10)` does. Don't bind it to another name, store it

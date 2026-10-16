@@ -157,7 +157,8 @@ TypeScript reader already knows what it means. Decisions taken in the build:
   be handed over.
 - **A task answers through a destination the parent names:**
   `spawn(entry, arg, dst, at)` stores `dst[at] = entry(arg)` at the join. `R`
-  is a number, a `boolean` or an enum.
+  is a number, a `boolean`, an enum, a `string` or an array of numbers,
+  booleans or enums; a string or an array crosses by copy-at-join (§7).
 - **`using` takes only `scope()`**, and a scope comes only from `using`. Since
   [#420](https://github.com/amritk/nish/pull/420), `using` also takes the
   builtin `arena()`. The join is emitted at the block's end, at a `return`,
@@ -276,7 +277,7 @@ one, which is the argument P2 used for `using`.
 | R1 | `new Mutex<T>(init)` takes a value that is fresh all the way down: `init` is a `new` expression or a literal whose every argument or element is a scalar or is itself fresh by this rule. So `new Hist(bins)` and `[row]`, with `bins` or `row` a named value, are refused. A string literal is fresh. The value inside is reachable only through a guard, and `Mutex` has no public `value`. | An alias kept outside the lock is an unguarded path to the data, which is the thing Rust's design removes. A fresh outer value with a named inner one would keep that alias one level down. A string is immutable, and R4 never stores into one through a guard, so a string literal leaves no path to write. |
 | R2 | `m.lock()` is only ever the initialiser of a `using` declaration, the third disposable beside `scope()` and `arena()`. The release is emitted at every exit of the block. At a `return` (or an `orReturn`) the order is the opposite of the join's: the join runs before the returned value is computed, and the release runs after it, before control leaves. So `return g.value.n` reads under the lock. | A guard bound any other way is one nobody releases. A join must come first so the value can read what the tasks stored; a release must come last so the value is read while the lock is held. |
 | R3 | A guard is used only as `g.value`, and `g.value` only as the base of a chain of member and element accesses. A chain that is read yields a scalar, or is itself the base of a further access or a store: `g.value.bins[i]` is a read, and `const b = g.value.bins` is refused. When `T` is itself a scalar, as in `Mutex<i32>`, `g.value` is read and stored directly: `g.value = g.value + 1`. Neither the guard nor anything a chain reaches is bound, passed, returned, stored or captured. | Nothing derived from the guard outlives the block that holds the lock. A bound `b` would be guarded data read after the release, or by a task while another writes it under the guard: a race, since R6 restricts only a task's writes. A scalar read out of the guard is a copy, so it carries no path back. |
-| R4 | Every store through a guard stores a scalar (a number, a `boolean` or an enum), into a field or into an element of an array that already exists. No method is called through `g.value`, so there is no `push`. | A task's arena is freed at the join (§7). A pointer into it stored in the parent's data would dangle, and a `push` can reallocate the array into that arena. |
+| R4 | Every store through a guard stores a scalar (a number, a `boolean` or an enum) or a `string`, into a field or into an element of an array that already exists. A string is copied into a block the mutex owns (`nish_guard_keep`), which frees the block it replaces; a string read through a guard is copied out to the reader. No method is called through `g.value`, so there is no `push`. | A task's arena is freed at the join (§7). A pointer into it stored in the parent's data would dangle, and a `push` can reallocate the array into that arena. A string is the one pointer that can be copied flat, so it is copied rather than refused. |
 | R5 | Inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`. | One lock is held at a time, and nothing is waited on while it is held. So **a P3 program cannot deadlock**, by construction, with no lock-order analysis. |
 | R6 | A task may write shared memory only through a guard, or by a `send` or a receive on a channel (§4.4). P2's rule is otherwise unchanged. | The lock is the one admitted shared write, which answers §11's question of how P3 fits P2's rule. A channel's buffer is shared too, but it is written only by the channel's own operations, which take its lock themselves. |
 | R7 | From the first statement of the block that holds a `spawn` on the scope to that block's end, the parent does not lock, directly or through any function it calls, a mutex that any of that scope's tasks can reach. After the join it may. This is the anchor P2's own rule uses (LANGUAGE.md, ["Scoped tasks"](LANGUAGE.md#scoped-tasks-using-s--scope)). | This is P2's rule that the parent "neither reads a destination nor writes memory a task may read", extended to the lock. Natively the tasks run at the join and under Node at the spawn, so a parent's guarded read or write there would see a different state in each. A lock written before the first `spawn` but inside a loop that spawns runs after an earlier pass's `spawn`, so the stretch starts at the block, not at the `spawn`. A helper that locks is the same lock. |
@@ -366,7 +367,7 @@ decisions:
 
 | | Rule | Why |
 | --- | --- | --- |
-| C1 | `T` is a scalar: a number, a `boolean` or an enum. | A sender's arena is freed at the join (§7), so a non-scalar element would be a pointer into it. Non-scalars wait for copy-at-join. |
+| C1 | `T` is a scalar — a number, a `boolean` or an enum — or a `string`. | A sender's arena is freed at the join (§7), so a non-scalar element would be a pointer into it. A string is copied into a `malloc`'d block at `send` and out of it, into the receiver's arena, at the receive (§7); an array or an object is still refused. |
 | C2 | `new Channel<T>()` is a `const` the parent declares in the block that holds the scope's `using s = scope()`, or in the block that has the scope's block as one of its own statements, with no loop, conditional or function boundary between the declaration and the `using`. The channel is never stored, returned or captured. It reaches a task only as R8 says a `Mutex` does: as the argument, or as a field of a class the argument is. It is never a destination. | Each run of the declaration makes a new channel, and each run of it is followed by exactly one run of the scope. So each channel serves one run of one scope: a scope inside a loop, or in a function called twice, gets a fresh channel every time, and no channel is used again after it closed. A conditional between them could skip the scope, leaving a channel nothing closes. C5 and C6 are computed from the reachability, which a stored or captured channel would hide. |
 | C3 | A channel is unbounded: `ch.send(x)` never blocks. | A bounded channel can block a sender under Node, where nothing else is running to drain it. |
 | C4 | A channel is reachable from the tasks of exactly one scope. The parent may send only before the block that holds the scope's spawns begins, and after the join it may only receive. There is no `close()`: a channel closes when every task of the scope that may send on it has returned, and a channel no task may send on is closed when the join starts. "May send" is the call graph from the task's entry reaching `send` on a channel reachable from its argument, so an over-count only closes the channel later. | Go's "who closes it" question, removed: nobody can close a channel too early, or twice. One scope is what makes "every sender has returned" a single moment, so no send can arrive after it. The parent's sends are anchored on the block, as R7 is, so a loop that spawns cannot put one after a `spawn`. A channel with no senders would otherwise never close, and its receiver would wait forever. |
@@ -481,15 +482,24 @@ question of *where* memory lives. A worker's allocations are freed when its
 thread exits, so a pointer into them dangles once the join returns. This is
 the same shape as WP15 §2a's `NL2290`/`NL2291` interior-pointer rule. Hence:
 
-- **A worker's result is a scalar** (a number, a `boolean` or an enum).
-  `parallelMapInto` with a `string` or class `U` is refused, with a message
-  that names the type.
+- **A worker's result is a scalar, a string or a scalar array** (an array of
+  numbers, booleans or enums). Anything else — an array of strings or of
+  arrays, a class, a `Map`, a `Set` — is refused, with a message that names
+  the type; a `parallelReduce`'s `T` stays a scalar, because it is every
+  partial too.
 - **Results come back through memory the parent owns**: `dst` for P1 and the
   destination array for P2.
-- **Lifting the restriction means a copy at the join** into the parent's arena,
-  for a type whose size is known at the boundary. That is a later stage. It is
-  also where a `Channel<T>` of a non-scalar lands, so the two should be designed
-  together.
+- **A string or a scalar array crosses by copy-at-join.** Neither holds a
+  pointer, so one flat copy of its bytes is the whole value. The worker copies
+  its answer into a `malloc`'d transfer block before its arena is freed or
+  reused (`nish_cross_out`, `nish_cross_out_range` for a region's slots); the
+  parent, after the join, copies each block into its own arena and frees it
+  (`nish_cross_in`, `nish_cross_in_range`). A value the worker did not
+  allocate since its mark — a literal, a string it was handed — is passed
+  through uncopied, and a pointer's low bit tags the blocks that are transfer
+  copies, so the parent frees only those. The same pair carries a
+  `Channel<string>`'s elements, `send` to receive. A deep copy, for an array of
+  strings or an object, is not attempted: it would follow every element.
 
 The plan's original rule was "a worker may write through a pointer the parent
 lent it". It was not needed: P2 runs tasks only while the parent waits (§4.2),
@@ -700,9 +710,10 @@ file at commit `c3529665`.
 - **Whether the partitioner belongs in the runtime or in emitted IR.** A
   partition loop is code the optimiser would like to see, and nobody has costed
   the move.
-- **Whether R4 widens to strings.** A string stored through a guard is a pointer
-  into the task's arena. Once copy-at-join (§7) exists, the store can copy into
-  the parent's arena instead.
+- ~~Whether R4 widens to strings.~~ **Closed: it does.** The store copies the
+  string into a block the mutex owns, and a read copies it out (§4.3, R4). The
+  block a slot holds when its `Mutex` is dropped is not freed, because nothing
+  says when the arena holding the `Mutex` goes.
 - **Whether a guard may be passed to a function that provably does not keep
   it.** R3 refuses every call. The escape analysis (`src/escape.ts`) could
   admit a callee that only reads and stores through its parameter.
@@ -711,9 +722,11 @@ file at commit `c3529665`.
   (R6), one lock is held at a time and
   nothing is waited on while it is held (R5), and `using` takes `m.lock()` as
   its third disposable (R2).
-- ~~What a `Channel<T>` of a non-scalar costs.~~ **Closed for now by C1
-  (§4.4).** A channel carries scalars. Non-scalars arrive with copy-at-join
-  (§7), designed together with non-scalar results.
+- ~~What a `Channel<T>` of a non-scalar costs.~~ **Closed for strings by
+  copy-at-join (§7):** two copies per element, one at `send` and one at the
+  receive. A string left in the buffer when the receiver breaks out leaks with
+  the buffer, which is given back only once drained closed. Arrays and objects
+  stay refused (C1).
 - ~~Identity or initial value for `parallelReduce`.~~ **Closed by P1: an
   identity.** `src` is split into `min(64, ceil(n / 2^20))` blocks. Each block
   is folded from the identity, and the block results are combined left to

@@ -56,7 +56,16 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { capturedReads, CheckedProgram, inlineElementStruct, Instantiation, PAR_SPAWN } from "./program"
+import { crossesByCopy, parallelRole } from "./parallel"
+import {
+  capturedReads,
+  CheckedProgram,
+  inlineElementStruct,
+  Instantiation,
+  PAR_FROM,
+  PAR_MAP_NEW,
+  PAR_SPAWN,
+} from "./program"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -702,7 +711,7 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
   // Zero-filling is a valid value for scalars and for `T | null` — a zero
   // pointer *is* `null` — but a zeroed plain string or array would be a null
   // value the language has no way to represent or to check for.
-  if (ctx.table.isPointer(elem)) {
+  if (ctx.table.isPointer(elem) && !fillsEverySlot(ctx, elem)) {
     const spelled = ctx.table.typeName(elem)
     return ctx.errorType(
       expr,
@@ -1393,4 +1402,24 @@ export const aliasedRecordElements = (program: CheckedProgram, table: TypeTable,
     collectAliased(program, table, child, body, out)
   }
   return out
+}
+
+/**
+ * `parallelMap`'s and `parallelFrom`'s own `new Array<U>(n)` (`std/threads.ts`)
+ * for a `U` that crosses threads by copy (`crossesByCopy`): the region after it
+ * writes every slot before the array is answered, and a panic ends the
+ * process, so no zeroed string or array is ever read. Nothing else is let
+ * past the refusal.
+ */
+const fillsEverySlot = (ctx: CheckContext, elem: i32): boolean => {
+  const instance = ctx.currentInstance
+  if (instance === null || !crossesByCopy(ctx.table, elem)) {
+    return false
+  }
+  const template = instance.template
+  if (template === null) {
+    return false
+  }
+  const role = parallelRole(template)
+  return role === PAR_MAP_NEW || role === PAR_FROM
 }

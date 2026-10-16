@@ -244,8 +244,10 @@ static void nish_cpu_relax(void) {
  * the lock before the caller returns, which orders every job's writes before
  * it. A worker's arena is its own, not a caller's: the storage class is what
  * makes the two disjoint (WP20 T0). Nothing a job leaves in it outlives the
- * job -- the language keeps a chunk's or a task's results out of its arena --
- * so it is rewound for the next one rather than freed, and kept only when it
+ * job -- a string or an array of scalars a chunk or a task answers, sends or
+ * stores through a guard is copied out before the job returns (runtime-cross.c),
+ * and the language refuses every other result that would point into the arena
+ * -- so it is rewound for the next one rather than freed, and kept only when it
  * is one ordinary chunk, so a job that allocated a large block does not leave
  * a parked worker holding it. */
 static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
@@ -448,8 +450,10 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
 
   /* The caller runs chunk 0 itself, in its own arena, which means chunk 0
    * behaves exactly as a sequential call would -- the asymmetry is deliberate
-   * and is why a body whose result is allocated is the surface's error rather
-   * than this file's. */
+   * and is why what a body's result may hold is the surface's question rather
+   * than this file's: a string or an array of scalars is copied out of the
+   * chunk's arena, whichever it ran in, by the trampoline the compiler emits
+   * (runtime-cross.c), and the surface refuses every other allocated result. */
   jobs[n - 1].job.next = 0;
   nish_jobs_run(&jobs[0].job, jobs[0].job.next);
 #else
