@@ -26,7 +26,6 @@ import {
   TLS_CONTENT_APPLICATION_DATA,
   TLS_CONTENT_HANDSHAKE,
   TlsRecordProtection,
-  tlsNextTrafficSecret,
 } from "nish/net/tls/record";
 import { TLS_RECORD_DONE, TLS_RECORD_INVALID, TLS_RECORD_STATE_FAILED } from "nish/net/tls/record-server";
 import { TlsTcpServer } from "nish/net/tls-tcp";
@@ -47,6 +46,7 @@ import {
 import { Opened, ZERO, ascii, filled, join, keyUpdateMessage, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
 import { clearRecord, clientKeysFor, recordHello } from "../net_tls_record_common/client";
 import { Loopback, SIGN_BROKEN, SIGN_LEAF, SIGN_TRACE } from "./harness";
+import { nextTrafficCopy } from "../net_tls_common/secrets";
 
 /** The next whole record client `index` receives, header and all; empty on a timeout or the end of its stream. */
 const nextRecord = (lb: Loopback, index: i32): u8[] => {
@@ -134,20 +134,20 @@ export const tcpChecks = (): i32 => {
   t.ok(`and the server's calls moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0));
 
   lb.send(b, sealOne(write, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(1), ZERO));
-  const clientNext: u8[] = tlsNextTrafficSecret(32, keys.clientApplication);
+  const clientNext: u8[] = nextTrafficCopy(32, keys.clientApplication);
   write.install(suite, clientNext);
   lb.send(b, sealOne(write, TLS_CONTENT_APPLICATION_DATA, ascii("after"), ZERO));
   t.eqStr("the client's KeyUpdate asking for one is answered under the server's old keys", shown(openOne(read, nextRecord(lb, b))), "22 1800000100");
-  const serverNext: u8[] = tlsNextTrafficSecret(32, keys.serverApplication);
+  const serverNext: u8[] = nextTrafficCopy(32, keys.serverApplication);
   read.install(suite, serverNext);
   t.eqStr("and data under the client's next keys is echoed under the server's", shown(openOne(read, nextRecord(lb, b))), `23 ${toHex(ascii("after"))}`);
 
   t.eqI32("the program asks for a KeyUpdate of its own, wanting one back", lb.server.keyUpdate(ZERO, true), ZERO);
   t.eqStr("it arrives asking", shown(openOne(read, nextRecord(lb, b))), "22 1800000101");
-  const serverThird: u8[] = tlsNextTrafficSecret(32, serverNext);
+  const serverThird: u8[] = nextTrafficCopy(32, serverNext);
   read.install(suite, serverThird);
   lb.send(b, sealOne(write, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(0), ZERO));
-  write.install(suite, tlsNextTrafficSecret(32, clientNext));
+  write.install(suite, nextTrafficCopy(32, clientNext));
   lb.send(b, sealOne(write, TLS_CONTENT_APPLICATION_DATA, ascii("again"), ZERO));
   t.eqStr("both sides move on, and the echo follows", shown(openOne(read, nextRecord(lb, b))), `23 ${toHex(ascii("again"))}`);
 
@@ -157,7 +157,7 @@ export const tcpChecks = (): i32 => {
   t.eqStr("the last record the key may protect", shown(openOne(read, nextRecord(lb, b))), `23 ${toHex(ascii("x1"))}`);
   lb.send(b, sealOne(write, TLS_CONTENT_APPLICATION_DATA, ascii("x2"), ZERO));
   t.eqStr("the next is preceded by the writer's own KeyUpdate", shown(openOne(read, nextRecord(lb, b))), "22 1800000100");
-  read.install(suite, tlsNextTrafficSecret(32, serverThird));
+  read.install(suite, nextTrafficCopy(32, serverThird));
   t.eqStr("and comes under the next key", shown(openOne(read, nextRecord(lb, b))), `23 ${toHex(ascii("x2"))}`);
 
   t.eqI32("the program shuts the connection down", lb.server.shutdown(ZERO), TLS_RECORD_DONE);

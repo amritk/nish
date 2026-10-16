@@ -1,0 +1,37 @@
+PASS  a Retry
+PASS  a stateless reset
+PASS  the Initial carrying its token is accepted
+PASS  and one whose token's MAC is changed is closed with INVALID_TOKEN
+PASS  before release: the seed is held
+PASS  so are the generator's unused bytes
+PASS  and the INVALID_TOKEN close's Initial secrets and both key slots
+PASS  the tag, the HKDF block and the HMAC-SHA256 hashers already read zero between datagrams, wiped after each use
+PASS  the HMAC-SHA384 hashers, which the listener never keys, hold SHA-384's initial state
+PASS  and handle's spare answer holds the INVALID_TOKEN close it last answered
+PASS  after release: the seed reads zero
+PASS  so do the generator's unused bytes
+PASS  the Initial secrets
+PASS  both key slots, schedules included
+PASS  and the tag and the HMAC and HKDF scratch, both hashes' hashers included
+PASS  and the spare answer, across its whole room and both IDs' 20 bytes
+PASS  a released listener drops a Version Negotiation's Initial
+PASS  a first Initial, which would be a Retry
+PASS  the Initial carrying its token
+PASS  the forged one
+PASS  and a short header, which would be a stateless reset
+PASS  its configuration's keys are not the listener's: they are still held
+PASS  so a listener sharing them answers the same Retry, byte for byte
+PASS  and the same stateless reset
+PASS  a server with a connection across loopback
+PASS  before stop: the stateless reset key and the Retry token key are held
+PASS  so are the index's salt and the listener's seed
+PASS  and the connection's keys
+PASS  the entropy a connection is begun with already reads zero, wiped once it is taken
+PASS  after stop: the stateless reset key and the Retry token key read zero
+PASS  so do the index's salt and the entropy scratch
+PASS  the listener's seed, generator and key slots
+PASS  and every slot's connection, the one in use and the one never used
+PASS  and the listener's last answer, across its whole room
+PASS  the slot is free
+PASS  and a new client's Initial is dropped: no slot taken, none accepted
+quic server wipes: 36 passed, 0 failed, 0 skipped
