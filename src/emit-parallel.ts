@@ -178,11 +178,15 @@ export const emitParallelRegion = (
     // Every chunk left its elements in a malloc'd block of their own
     // (`chunkTrampoline`); each comes into this thread's arena here.
     const dst = fn.emitValue(`bitcast ${fieldTypes[crossing.field]} ${fieldValues[crossing.field]} to i8*`)
-    fn.emit(`call void ${emitter.useRuntime("nish_cross_in_range")}(i8* ${dst}, i64 ${len}, i64 ${crossing.size})`)
+    fn.emit(
+      `call void ${emitter.useRuntime("nish_cross_in_range")}(i8* ${dst}, i64 ${len}, i64 ${crossing.size})`
+    )
   }
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(doneBlock)
-  emitter.module.addFunction(chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured, crossing))
+  emitter.module.addFunction(
+    chunkTrampoline(emitter, trampoline, chunk, ctxType, fieldTypes, captured, crossing)
+  )
 }
 
 /**
@@ -472,7 +476,7 @@ const loadPayload = (
  * -1 for a scalar, which crosses as it is. The checker admits nothing else
  * across (`crossesByCopy` in parallel.ts).
  */
-export const crossingSize = (emitter: Emitter, type: i32): i32 => {
+const crossingSize = (emitter: Emitter, type: i32): i32 => {
   const table = emitter.table
   if (type === T_STRING) {
     return 0
@@ -484,7 +488,14 @@ export const crossingSize = (emitter: Emitter, type: i32): i32 => {
 }
 
 /** `value`, of LLVM type `type`, through `nish_cross_out(value, size, mark)`. */
-const crossOut = (emitter: Emitter, fn: IRFunction, type: string, value: string, size: i32, mark: string): string => {
+const crossOut = (
+  emitter: Emitter,
+  fn: IRFunction,
+  type: string,
+  value: string,
+  size: i32,
+  mark: string
+): string => {
   const raw = type === "i8*" ? value : fn.emitValue(`bitcast ${type} ${value} to i8*`)
   const out = fn.emitValue(
     `call i8* ${emitter.useRuntime("nish_cross_out")}(i8* ${raw}, i64 ${size}, i64 ${mark})`

@@ -48,7 +48,15 @@ import {
 } from "./nodes"
 import { StringSet } from "./map"
 import { crossesByCopy, parallelRole } from "./parallel"
-import { capturedReads, CheckedProgram, inlineElementStruct, Instantiation, PAR_FROM, PAR_MAP_NEW, PAR_SPAWN } from "./program"
+import {
+  capturedReads,
+  CheckedProgram,
+  inlineElementStruct,
+  Instantiation,
+  PAR_FROM,
+  PAR_MAP_NEW,
+  PAR_SPAWN,
+} from "./program"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
 
