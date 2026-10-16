@@ -26,7 +26,8 @@
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { QUIC_STREAM_END } from "nish/net/quic-stream";
-import { QuicKeys, QuicKeysSlot, quicKeyUpdateSecret, quicKeysUpdate } from "nish/net/quic-packet";
+import { QuicKeys, QuicKeysSlot, quicKeysWipe } from "nish/net/quic-packet";
+import { quicKeyUpdateCopy, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_CONN_DATAGRAM_SIZE, QUIC_STATE_CONNECTED, QuicConnection, QuicServerConfig } from "nish/net/quic";
 import { TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
@@ -277,14 +278,18 @@ const qmRecordSuite = (conn: QuicConnection, suite: i32, b: QmBuffers, pass: QmP
   qmRecord(conn, c, qcShort(c, qcStream(n64(0), n64(0), "before the update", true)), s, b, pass);
   const keys: QuicKeys | null = c.appWrite;
   if (keys !== null) {
-    const next: u8[] | null = quicKeyUpdateSecret(qcAead(suite), c.appWriteSecret);
+    const next: u8[] | null = quicKeyUpdateCopy(qcAead(suite), c.appWriteSecret);
     if (next !== null) {
-      const updated: QuicKeys | null = quicKeysUpdate(keys, next);
+      const updated: QuicKeys | null = quicKeysUpdateOf(keys, next);
       qmRecord(conn, c, qcShortWith(c, updated, true, c.appPn, qcStream(n64(4), n64(0), "after it", true)), s, b, pass);
       c.appPn = c.appPn + n64(1);
       c.now = c.now + conn.recovery.probeTimeout() * n64(2);
       qmRecord(conn, c, qcShortWith(c, updated, true, c.appPn, fromHex("01")), s, b, pass);
       c.appPn = c.appPn + n64(1);
+      secureZero(next);
+      if (updated !== null) {
+        quicKeysWipe(updated);
+      }
     }
   }
   s.closeAt = c.now;

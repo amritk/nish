@@ -31,9 +31,6 @@ import {
   QuicPacket,
   quicDecryptPacket,
   quicInitialSecrets,
-  quicKeys,
-  quicKeyUpdateSecret,
-  quicKeysUpdate,
   quicLongHeader,
   quicOpenPacket,
   quicPacketNumberDecode,
@@ -49,8 +46,9 @@ import {
   quicVarintPush,
   quicVarintPushSized,
   quicVarintRead,
-  quicVarintSize
+  quicVarintSize,
 } from "nish/net/quic-packet";
+import { quicKeyUpdateCopy, quicKeysOf, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { bytesOf, flipped, hexOf, joined, prefix, zeros } from "./bytes";
 import { a5Packet, a5Secret, clientDcid, initialOf, keysOf, orEmpty } from "./checks";
 import { a2Packet, a3Packet, a4Retry } from "./vectors";
@@ -215,14 +213,14 @@ const builderRefusals = (t: Suite): void => {
   t.ok("nor one past 2^62 - 1", quicShortHeader([], false, false, QUIC_MAX_VARINT + 1, 1) === null);
 
   t.ok("no Initial secrets for a 21-byte DCID", quicInitialSecrets(longCid()) === null);
-  t.ok("no keys for an AEAD this module does not know", quicKeys(99, zeros(32)) === null);
-  t.ok("nor for AES-128-GCM from a 48-byte secret", quicKeys(QUIC_AEAD_AES_128_GCM, zeros(48)) === null);
-  t.ok("nor for AES-256-GCM from a 32-byte one", quicKeys(QUIC_AEAD_AES_256_GCM, zeros(32)) === null);
-  t.ok("nor for ChaCha20-Poly1305 from 31 bytes", quicKeys(QUIC_AEAD_CHACHA20_POLY1305, zeros(31)) === null);
-  t.ok("no key update for an unknown AEAD", quicKeyUpdateSecret(99, zeros(32)) === null);
-  t.ok("nor from a secret of the wrong length", quicKeyUpdateSecret(QUIC_AEAD_AES_128_GCM, zeros(31)) === null);
-  t.ok("no next generation from a secret of the wrong length", quicKeysUpdate(a5Keys(), zeros(48)) === null);
-  t.ok("nor from keys quicKeys did not make", quicKeysUpdate(new QuicKeys(0, [], [], []), zeros(32)) === null);
+  t.ok("no keys for an AEAD this module does not know", quicKeysOf(99, zeros(32)) === null);
+  t.ok("nor for AES-128-GCM from a 48-byte secret", quicKeysOf(QUIC_AEAD_AES_128_GCM, zeros(48)) === null);
+  t.ok("nor for AES-256-GCM from a 32-byte one", quicKeysOf(QUIC_AEAD_AES_256_GCM, zeros(32)) === null);
+  t.ok("nor for ChaCha20-Poly1305 from 31 bytes", quicKeysOf(QUIC_AEAD_CHACHA20_POLY1305, zeros(31)) === null);
+  t.ok("no key update for an unknown AEAD", quicKeyUpdateCopy(99, zeros(32)) === null);
+  t.ok("nor from a secret of the wrong length", quicKeyUpdateCopy(QUIC_AEAD_AES_128_GCM, zeros(31)) === null);
+  t.ok("no next generation from a secret of the wrong length", quicKeysUpdateOf(a5Keys(), zeros(48)) === null);
+  t.ok("nor from keys quicKeys did not make", quicKeysUpdateOf(new QuicKeys(0, [], [], []), zeros(32)) === null);
 
   const keys: QuicKeys = a5Keys();
   const header: u8[] = orEmpty(quicShortHeader([], false, false, one, 1));

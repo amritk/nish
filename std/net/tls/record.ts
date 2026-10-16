@@ -71,6 +71,7 @@ import {
   tlsSuiteKeyLength,
   tlsTrafficKeysInto,
 } from "nish/net/tls/schedule"
+import { Secret } from "nish:secret"
 
 // ---- The wire's constants ------------------------------------------------------
 
@@ -134,11 +135,12 @@ const TLS_RECORD_FROM: i32 = 0
 /**
  * The traffic secret a KeyUpdate moves one direction to (RFC 8446 §7.2):
  * `HKDF-Expand-Label(secret, "traffic upd", "", Hash.length)` over the hash
- * `hashLength` names. The old secret is the caller's to wipe.
+ * `hashLength` names, held as a `Secret`. The old secret is the caller's to
+ * wipe.
  */
-export const tlsNextTrafficSecret = (hashLength: i32, secret: u8[]): u8[] => {
+export const tlsNextTrafficSecret = (hashLength: i32, trafficSecret: Secret<u8[]>): Secret<u8[]> => {
   const none: u8[] = []
-  return tlsExpandLabel(hashLength, secret, "traffic upd", none, hashLength)
+  return tlsExpandLabel(hashLength, trafficSecret, "traffic upd", none, hashLength)
 }
 
 /** Whether `[off, off + len)` is a window inside an array of `length` elements: every caller's range check. */

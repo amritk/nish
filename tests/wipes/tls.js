@@ -6,6 +6,9 @@
 /** The modules that define the TLS server, its record layer and carrier, and the AEADs they seal with. */
 const TLS_MODULES = /^define [^\n]*@nish\.(Tls|tls|Aes|aes|ghash|chacha20|poly1305)/m
 
+/** The schedule's module and the HMAC and HKDF it derives with. */
+const SCHEDULE_MODULES = /^define [^\n]*@nish\.(tls|Tls|hmac|Hmac|hkdf|Hkdf)/m
+
 export const wipeChecks = [
   // `nish/net/tls`, `nish/net/tls/record`, `nish/net/tls/record-server` and
   // `nish/net/tls-tcp` wipe every key a connection holds when it ends.
@@ -69,6 +72,25 @@ export const wipeChecks = [
       ["nish.TlsServer.handleFinished", 1],
       ["nish.TlsRecordServer.start", 59],
       ["nish.TlsRecordServer.advance", 397],
+    ],
+  },
+  // `nish/net/tls/schedule`'s one-shot derivations take and answer `Secret`s
+  // and wipe what they derive on the way (#430's secret-boundary stage).
+  // `net_tls_rfc8448` calls each of them on the RFC 8448 trace. Each root's
+  // own share stays in its optimised body: `tlsEarlySecret` 2 (the zero salt
+  // and input), `tlsHandshakeSecret` 1 (the "derived" salt),
+  // `tlsMasterSecret` 2 (the "derived" salt and the zero input) and
+  // `tlsFinishedVerifyData` 1 (`finished_key`); the rest of each count is the
+  // HMAC and HKDF wipes under it (`crypto.js`), both hash lengths' calls.
+  {
+    name: "tls: the one-shot derivations' wipes survive opt -O2 (the early secret's zero salt and input, the derived salts, the master secret's zero input, finished_key)",
+    program: "tests/link/net_tls_rfc8448/main.ts",
+    modules: SCHEDULE_MODULES,
+    roots: [
+      ["nish.tlsEarlySecret", 28],
+      ["nish.tlsHandshakeSecret", 57],
+      ["nish.tlsMasterSecret", 58],
+      ["nish.tlsFinishedVerifyData", 57],
     ],
   },
 ]

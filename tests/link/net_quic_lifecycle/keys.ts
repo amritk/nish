@@ -10,11 +10,10 @@ import {
   QuicKeys,
   QuicPacket,
   quicDecryptPacket,
-  quicKeyUpdateSecret,
-  quicKeysUpdate,
   quicParseHeader,
   quicRemoveHeaderProtection,
 } from "nish/net/quic-packet";
+import { quicKeyUpdateCopy, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { QUIC_ERROR_KEY_UPDATE, quicPushAck } from "nish/net/quic-frame";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import {
@@ -55,11 +54,11 @@ const lcNext = (g: LcGeneration): LcGeneration => {
   if (keys === null) {
     return new LcGeneration(null, none, !g.phase);
   }
-  const secret: u8[] | null = quicKeyUpdateSecret(keys.aead, g.secret);
+  const secret: u8[] | null = quicKeyUpdateCopy(keys.aead, g.secret);
   if (secret === null) {
     return new LcGeneration(null, none, !g.phase);
   }
-  return new LcGeneration(quicKeysUpdate(keys, secret), secret, !g.phase);
+  return new LcGeneration(quicKeysUpdateOf(keys, secret), secret, !g.phase);
 };
 
 /** What the client made of one 1-RTT packet from the server: whether it opened, its Key Phase bit, its number and frames. */

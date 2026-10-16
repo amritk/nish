@@ -30,7 +30,6 @@ import {
   TLS_MAX_RECORD,
   TlsRecordProtection,
   TlsRecordReader,
-  tlsNextTrafficSecret,
   tlsRecordLength,
 } from "nish/net/tls/record";
 import {
@@ -82,6 +81,7 @@ import {
   sealOne,
 } from "../net_tls_record_common/bytes";
 import { clearRecord, clientKeysFor, recordHello, splitRecords } from "../net_tls_record_common/client";
+import { nextTrafficCopy } from "../net_tls_common/secrets";
 
 const SUITE: i32 = TLS_AES_128_GCM_SHA256;
 
@@ -461,7 +461,7 @@ export const refusalChecks = (): i32 => {
   const updating = traceOpen();
   const updater = clientWriter();
   const update: u8[] = sealOne(updater, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(0), ZERO);
-  const next: u8[] = tlsNextTrafficSecret(32, rfc8448ClientApplicationTraffic());
+  const next: u8[] = nextTrafficCopy(32, rfc8448ClientApplicationTraffic());
   const updated = protectionFor(SUITE, next);
   feed(updating, join([update, sealOne(updated, TLS_CONTENT_APPLICATION_DATA, ascii("after"), ZERO)]));
   t.eqStr("the client's KeyUpdate moves the read keys: its next record is under the next secret", toHex(readAll(updating)), toHex(ascii("after")));
@@ -480,7 +480,7 @@ export const refusalChecks = (): i32 => {
   const answer: Opened = openOne(serverReader, drain(asked));
   t.eqStr("a KeyUpdate asking for one, in two records, is answered with the server's own, under its old keys", `${answer.type} ${toHex(answer.content)}`, "22 1800000100");
   t.eqI32("the server's next write takes everything", asked.write(ascii("fresh"), ZERO, toI32(5)), toI32(5));
-  const nextServer = protectionFor(SUITE, tlsNextTrafficSecret(32, rfc8448ServerApplicationTraffic()));
+  const nextServer = protectionFor(SUITE, nextTrafficCopy(32, rfc8448ServerApplicationTraffic()));
   t.eqStr("and is under its next secret", toHex(openOne(nextServer, drain(asked)).content), toHex(ascii("fresh")));
   t.eqI32("keyUpdate(true) sends one asking the client back", asked.keyUpdate(true), ZERO);
   t.eqStr("whose request byte is 1", toHex(openOne(nextServer, drain(asked)).content), "1800000101");
@@ -497,7 +497,7 @@ export const refusalChecks = (): i32 => {
     const o: Opened = openOne(tickReader, record);
     shownTicks.push(`${o.type}:${toHex(o.content)}`);
     if (o.type === TLS_CONTENT_HANDSHAKE) {
-      tickReader.install(SUITE, tlsNextTrafficSecret(32, rfc8448ServerApplicationTraffic()));
+      tickReader.install(SUITE, nextTrafficCopy(32, rfc8448ServerApplicationTraffic()));
     }
   }
   t.eqStr(
@@ -515,7 +515,7 @@ export const refusalChecks = (): i32 => {
   const updates: u8[][] = [];
   for (let k: i32 = 0; k <= TLS_RECORD_MAX_KEY_UPDATES; k++) {
     const update: u8[] = sealOne(spamWriter, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(1), ZERO);
-    spamSecret = tlsNextTrafficSecret(32, spamSecret);
+    spamSecret = nextTrafficCopy(32, spamSecret);
     spamWriter.install(SUITE, spamSecret);
     updates.push(join([update, sealOne(spamWriter, TLS_CONTENT_APPLICATION_DATA, ascii("k"), ZERO)]));
   }
@@ -581,7 +581,7 @@ export const refusalChecks = (): i32 => {
     while (c.state === TLS_RECORD_STATE_OPEN && records < 20) {
       if (kind === 0) {
         feed(c, sealOne(w, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(0), ZERO));
-        s2 = tlsNextTrafficSecret(32, s2);
+        s2 = nextTrafficCopy(32, s2);
         w.install(SUITE, s2);
       } else if (kind === 1) {
         feed(c, sealOne(w, TLS_CONTENT_APPLICATION_DATA, none, ZERO));
