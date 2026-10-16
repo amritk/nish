@@ -16,7 +16,7 @@ fixed here, and one lies outside this stage's files and stays open.
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/p256.ts` | `p256PublicKey`, `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`; `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyExposed`, `p256SignSExposed`) and `p256ScalarMultWith` |
+| `std/crypto/p256.ts` | `p256PublicKey`, `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`, and the fixed-base comb that multiplies G for a public key or a signature (`p256BaseMult`, `p256BaseMultWith` and the table `p256BaseTable`, added by #628 after this audit; see below); `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyExposed`, `p256SignSExposed`) and `p256ScalarMultWith` |
 | `std/crypto/x25519.ts` | `x25519`, `x25519Base`, and the field (`f25519*`), `f25519Decode` / `f25519Encode`, `f25519Invert` and `x25519Ladder` |
 | `tests/cases/ct_asm_p256.ts`, `tests/cases/ct_asm_x25519.ts` | the copies the constant-time disassembly check holds, compared here with the module functions they mirror |
 
@@ -285,6 +285,62 @@ by reading, and it remains discipline rather than proof, as the module headers
 say. The one branch on a secret is RFC 6979's retry when a candidate nonce is
 not below n. The RFC prescribes it, it happens about once in 2^32 signatures,
 and it reveals only that a discarded value was large.
+
+**The fixed-base comb** (#628, after this audit; anchors at `@@HASH@@`).
+`p256PublicKey` and `p256Sign` now compute k·G with `p256BaseMult`
+(`std/crypto/p256.ts:4663`, over `p256BaseMultWith` at `:4676`): a 4-tooth
+comb over `p256BaseTable` (`:4120`), 240 affine multiples of G that
+`scripts/gen-p256-table.mjs` computes with BigInt, in 4 rows of 16 mixed
+additions with a doubling between rows. `p256Verify` and ECDH keep
+`p256ScalarMult`, which is the comb's reference.
+
+- **Agreement.** The comb answers what `p256ScalarMult(G, k)` answers, byte
+  for byte, on RFC 6979 A.2.5's three scalars, 986 edge and per-digit scalars
+  (every one of the table's 240 entries is the only entry read at least
+  once), the `r` and `s` of all 1,104 64-byte signatures of Wycheproof's two
+  P1363 files taken as scalars, the 355 private keys of
+  `ecdh_secp256r1_ecpoint` (330 shared secrets as published, 25 keys
+  refused), and a seeded corpus of 10,000 scalars, 625 of them also signing
+  through both `p256SignSha256` and `p256SignSha256Into`: "p256 agree: the
+  fixed-base comb and the variable-base window give the same bytes for every
+  scalar of tests/link/crypto_p256_agree, natively", and under Node's WASI,
+  "p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints
+  the same expected.out under Node's WASI". The table is what the generator
+  writes: "p256: the comb table in std/crypto/p256.ts is what
+  scripts/gen-p256-table.mjs generates".
+- **What ct_asm reads.** `tests/cases/ct_asm_p256` adds copies of the digit
+  (`p256BaseDigit`, `:4559`), the fifteen-entry read (`p256BaseSelect`,
+  `:4578`), the mixed addition (`p256PointAddMixed`, `:4596`, Renes, Costello
+  and Batina's Algorithm 5), the masked keep (`p256BaseKeep`, `:4644`) and one
+  whole step of the comb (`p256BaseStep`, the body of `p256BaseMultWith`'s
+  inner loop), and its `main` reproduces A.2.5's public key and both `r`s
+  through them. Each passes on x86-64 and aarch64, following its calls into
+  the field functions: "ct_asm: ${name} ${spec.name} on ${target.name}:
+  ${spec.promise}", for `p256BaseDigit`, `p256BaseSelect`,
+  `p256PointAddMixed`, `p256BaseKeep` and `p256BaseStep` with the promise "no
+  branch, call, secret-indexed access or secret-dependent latency". The read
+  it replaces, one entry loaded at the digit's offset, is seeded to fail:
+  `ct_asm_refused`'s `leakyBaseRead`, "refused for a load or store at a secret
+  address" on both targets.
+- **What remains discipline.** The copies compute their offsets with
+  `wrappingAdd` / `wrappingMul` and read with `uncheckedGet`, so they hold no
+  branch at all; the module's own functions do not. Its `p256BaseSelect`
+  computes `(c * 15 + j - 1) * 16` (`:4583`) with checked arithmetic, whose
+  overflow test branches on the public `c` and `j`; `p256BaseDigit` guards
+  its byte index (`:4566`) and `p256BaseKeep` its lengths, on public
+  positions and lengths; and the 4-row and 16-column loops of
+  `p256BaseMultWith`, with its `r < 3` before each doubling (`:4682`), branch
+  on loop counters. None of these is read by ct_asm; each was read here and
+  depends on no bit of the scalar.
+- **The wipe.** `p256BaseMultWith` wipes the selected entry before it
+  returns, and its callers wipe the scratch's sum and the accumulator, as for
+  the window: "p256: the fixed-base comb's wipes survive opt -O2 (the
+  selected entry in p256BaseMultWith; the scratch and accumulator in
+  p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)". **Not
+  reached:** the digit, the `ctEq` mask and the scalar's byte, which live in
+  registers or spill slots no store in the language names, as ECC-2 records
+  for the ladder's `swap` and `bit`. The table is a function of G alone and
+  is not wiped.
 
 ## Doc corrections for the security-policy stage
 

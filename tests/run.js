@@ -4496,7 +4496,9 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
   fs.rmSync(agreeDir, { recursive: true, force: true })
   fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
   fs.mkdirSync(programDir, { recursive: true })
-  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), { recursive: true })
+  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
+    recursive: true,
+  })
   fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
   fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
   fs.writeFileSync(
@@ -6438,7 +6440,9 @@ if (!only || "p256 wipe survives -O2 p256BaseMult".includes(only)) {
           })
         : c
     const bodies = new Map()
-    for (const m of o.status === 0 ? o.stdout.matchAll(/^define [^\n]*?@"?([\w.$]+)"?\([\s\S]*?\n\}/gm) : []) {
+    for (const m of o.status === 0
+      ? o.stdout.matchAll(/^define [^\n]*?@"?([\w.$]+)"?\([\s\S]*?\n\}/gm)
+      : []) {
       bodies.set(m[1], m[0])
     }
     const reached = new Map()
@@ -6471,7 +6475,9 @@ if (!only || "p256 wipe survives -O2 p256BaseMult".includes(only)) {
         ? shown(o)
         : wrong
             .map(([symbol, want, got]) =>
-              got === null ? `${symbol}: not in the optimised module` : `${symbol}: ${got} volatile wipes, want exactly ${want}`
+              got === null
+                ? `${symbol}: not in the optimised module`
+                : `${symbol}: ${got} volatile wipes, want exactly ${want}`
             )
             .join("\n")
     )

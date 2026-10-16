@@ -49,31 +49,42 @@
  * of field operations, so there is no case to branch on.
  *
  * **Constant time where a secret is involved.** A private key and a nonce are
- * only ever multiplied by `p256ScalarMult`, a fixed 4-bit window: sixteen
- * multiples of the point in a table, then 64 windows of four doublings, a
- * table read and an addition, whatever the scalar. The read loads all sixteen
- * entries and keeps one with fiat's conditional move, steered by `ctEq` on the
- * window's digit, so neither a branch nor an address depends on the scalar.
- * The inversions raise to the public exponents p - 2 and n - 2, so their
- * branches follow a constant. The branches that remain are on public facts: a
- * length, a limb or bit position, whether a received key or signature is in
- * range, and — once in about 2^32 signatures — RFC 6979's retry when a
- * candidate nonce is not below n.
+ * only ever multiplied by G, and that by `p256BaseMult`, a comb over a
+ * precomputed table: 4 teeth 64 bits apart, 16 sub-tables of the 15 non-zero
+ * sums of a tooth's multiples of G, one per 4-bit offset, as affine points in
+ * the Montgomery domain (`p256BaseTable`, 15 KiB, written by
+ * `scripts/gen-p256-table.mjs`). Four rows of 16 mixed additions with a
+ * doubling between rows replace the 256 doublings and 64 additions of a
+ * window, whatever the scalar. Each addition reads all fifteen entries of its
+ * sub-table and keeps one with fiat's conditional move, steered by `ctEq` on
+ * the digit; a zero digit keeps none, and the sum is then discarded by the
+ * same conditional move rather than skipped, so neither a branch nor an
+ * address depends on the scalar. `p256ScalarMult`, a fixed 4-bit window over
+ * sixteen multiples of a point, is what verification multiplies G and the
+ * received key by, and the reference the comb is held to bit for bit
+ * (`tests/link/crypto_p256_agree`). The inversions raise to the public
+ * exponents p - 2 and n - 2, so their branches follow a constant. The
+ * branches that remain are on public facts: a length, a limb or bit position,
+ * whether a received key or signature is in range, and — once in about 2^32
+ * signatures — RFC 6979's retry when a candidate nonce is not below n.
  *
  * **What is verified by disassembly and what is discipline.**
  * `tests/cases/ct_asm_p256` holds copies of fiat's field multiply, square, add
  * and subtract, its scalar multiply and its conditional move, the table read
- * by a secret digit, the complete doubling and addition, and one window step
- * of `p256ScalarMult` to the check of `tests/ct-asm.js`, which refuses any
- * branch, call it cannot follow or secret-indexed access in them on x86-64 and
- * aarch64, following each call into the field functions. The copies of the
- * point functions take coordinate arrays rather than points, and the table
- * read's loop is written out there, as that fixture's header says; its `main`
- * runs RFC 6979 A.2.5 through them. The 64-window loop, the table build, the
- * inversions, the encodings and the nonce derivation are constant time by
- * construction rather than by that proof.
+ * by a secret digit, the complete doubling and addition, one window step of
+ * `p256ScalarMult`, and the comb's digit, entry read, mixed addition,
+ * conditional keep and one whole comb step to the check of
+ * `tests/ct-asm.js`, which refuses any branch, call it cannot follow or
+ * secret-indexed access in them on x86-64 and aarch64, following each call
+ * into the field functions. The copies of the point functions take coordinate
+ * arrays rather than points, the table reads' loops are written out there and
+ * their offsets computed with wrapping arithmetic, as that fixture's header
+ * says; its `main` runs RFC 6979 A.2.5 through them, by the window and by the
+ * comb. The 64-window and 4-row loops, the table build, the inversions, the
+ * encodings and the nonce derivation are constant time by construction rather
+ * than by that proof.
  *
- * Verification multiplies only public values, and uses the same routine.
+ * Verification multiplies only public values, by `p256ScalarMult` alone.
  *
  * **The private key is a `Secret`** (`nish:secret`, docs/LANGUAGE.md
  * "Secrets"). `p256PublicKey` and `p256Sign` read it only inside `expose` /
