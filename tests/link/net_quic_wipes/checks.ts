@@ -1,9 +1,10 @@
 // What a QUIC connection wipes, read back as zero at each point a level, a key
 // generation or the connection ends (QUIC-2 in docs/security/quic.md): the
-// Initial and Handshake levels when they are discarded, the write keys a key
-// update replaces, and every key and secret once the closing period after a
-// close or a failure ends, once the draining period after the client's close
-// ends, at the idle timeout and at `release()`. Each runs under the three
+// Initial and Handshake levels when they are discarded, the write keys and the
+// read secret a key update replaces, and every key, secret and reset token
+// once the closing period after a close or a failure ends, once the draining
+// period after the client's close ends, at the idle timeout, at `release()`
+// and at `reset`. Each runs under the three
 // suites, against the test client of `net_quic_conn`. `tests/wipes/quic.js`
 // compiles this program to count the same wipes after `opt -O2`.
 import { Suite } from "nish/testing";
@@ -11,6 +12,7 @@ import { AesKey } from "nish/crypto/aes";
 import { QuicKeys, QuicKeysSlot, quicKeyUpdateSecret, quicKeysUpdate } from "nish/net/quic-packet";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import {
+  QUIC_CONN_ENTROPY_SIZE,
   QUIC_STATE_CLOSING,
   QUIC_STATE_CONNECTED,
   QUIC_STATE_DRAINING,
@@ -23,6 +25,14 @@ import { fromHex } from "../crypto_x509/hex";
 import { n64 } from "../net_quic_frame/typed";
 import { CLIENT_SCID, QcClient, qcAead, qcConnect, qcDrain, qcExchange, qcHello, qcParams, qcShort, qcShortWith } from "../net_quic_conn/client";
 import { qcDefaultConfig, qcServer } from "../net_quic_conn/common";
+
+/**
+ * The first of the application space's write slots, as `nish/net/quic`'s
+ * `QUIC_CONN_APP_WRITE_SLOTS`: slots 0 and 1 are the read generations, 2 and
+ * 3 the write ones, and the current write keys are in this plus
+ * `appWriteSlot`.
+ */
+const QW_APP_WRITE_SLOTS: i32 = 2;
 
 /** Whether every byte of `bytes` is zero. */
 const qwZero = (bytes: u8[]): boolean => {
@@ -135,6 +145,65 @@ const qwHeld = (conn: QuicConnection, suite: i32): boolean => {
   );
 };
 
+/**
+ * The arrays besides the key slots that hold something secret, taken before
+ * an end of life so that they are read back after it even where the
+ * connection has let go of them: both sides' stateless reset tokens, as the ID
+ * table and the transport parameters hold them, the encoded transport
+ * parameters `TlsServer` sends (the first ID's token is in them), and the
+ * read keys of the generation besides the current one.
+ */
+class QwSnapshot {
+  local: u8[][];
+  peer: u8[][];
+  localToken: u8[];
+  peerToken: u8[];
+  encoded: u8[];
+  otherKey: u8[];
+  otherIv: u8[];
+  /** Whether the tokens and the encoded parameters held something when taken. */
+  held: boolean;
+
+  constructor(conn: QuicConnection) {
+    this.local = [];
+    this.peer = [];
+    this.encoded = [];
+    this.otherKey = [];
+    this.otherIv = [];
+    for (const entry of conn.cids.local) {
+      this.local.push(entry.resetToken);
+    }
+    for (const entry of conn.cids.peer) {
+      this.peer.push(entry.resetToken);
+    }
+    this.localToken = conn.localParameters.statelessResetToken;
+    this.peerToken = conn.peerParameters.statelessResetToken;
+    const tls: TlsServer | null = conn.tlsSlot;
+    if (tls !== null) {
+      this.encoded = tls.config.quicTransportParameters;
+    }
+    const other: QuicKeys | null = conn.otherReadKeys;
+    if (other !== null) {
+      this.otherKey = other.key;
+      this.otherIv = other.iv;
+    }
+    this.held = !qwAllZero(this.local) && !qwZero(this.localToken) && !qwZero(this.encoded) && !qwZero(this.otherKey);
+  }
+
+  /** Whether every array taken reads zero now. */
+  zero(): boolean {
+    return (
+      qwAllZero(this.local) &&
+      qwAllZero(this.peer) &&
+      qwZero(this.localToken) &&
+      qwZero(this.peerToken) &&
+      qwZero(this.encoded) &&
+      qwZero(this.otherKey) &&
+      qwZero(this.otherIv)
+    );
+  }
+}
+
 /** A connection under `suite` and the client that completed its handshake. */
 class QwPair {
   conn: QuicConnection;
@@ -156,8 +225,41 @@ class QwPair {
 /** `release()` wipes everything at once. */
 const qwRelease = (t: Suite, name: string, conn: QuicConnection, suite: i32): void => {
   const held: boolean = qwHeld(conn, suite);
+  const taken = new QwSnapshot(conn);
   conn.release();
   t.ok(`${name}: release() leaves every key and secret zero`, held && qwConnZero(conn) && conn.deadline() === n64(-1));
+  t.ok(`${name}: and every reset token, the encoded transport parameters and the other read generation`, taken.held && taken.zero());
+};
+
+/**
+ * `reset` wipes everything before the slot takes its next connection's
+ * entropy, all zero here so that what `begin` copies in reads zero too.
+ */
+const qwReset = (t: Suite, name: string, suite: i32): void => {
+  const p = new QwPair(suite);
+  const conn: QuicConnection = p.conn;
+  const held: boolean = qwHeld(conn, suite);
+  const taken = new QwSnapshot(conn);
+  const entropy: u8[] = [];
+  for (let k: i32 = 0; k < QUIC_CONN_ENTROPY_SIZE; k++) {
+    entropy.push(toU8(0));
+  }
+  conn.reset(entropy);
+  t.ok(
+    `${name}, reset: every key, secret and reset token the connection held reads zero`,
+    p.connected && held && taken.held && taken.zero() && qwConnZero(conn)
+  );
+};
+
+/** A new connection wipes the entropy it is given once it has copied it. */
+const qwEntropy = (t: Suite): void => {
+  const entropy: u8[] = [];
+  for (let k: i32 = 0; k < QUIC_CONN_ENTROPY_SIZE; k++) {
+    entropy.push(toU8(0x40 + k));
+  }
+  const conn = new QuicConnection(qcDefaultConfig(), entropy);
+  t.ok("a new connection wipes the entropy passed in once it is taken", qwZero(entropy) && !qwZero(conn.cidSeed));
+  conn.release();
 };
 
 /** The Initial and Handshake levels are wiped as each is discarded, and the 1-RTT keys are not. */
@@ -191,8 +293,10 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
     t.ok(`${name}: the client updates its keys`, false);
     return;
   }
-  const oldWrite: QuicKeysSlot = conn.application.keySlot(2 + conn.appWriteSlot);
+  const oldWrite: QuicKeysSlot = conn.application.keySlot(QW_APP_WRITE_SLOTS + conn.appWriteSlot);
   const oldRead: QuicKeysSlot = conn.application.keySlot(conn.appReadSlot);
+  const oldReadSecret: u8[] = conn.appReadSecret;
+  const readSecretHeld: boolean = !qwZero(oldReadSecret);
   const oldAes: AesKey | null = qwPacketAes(oldWrite, suite);
   const wasHeld: boolean = !qwZero(qwPacketKey(oldWrite, suite)) && (oldAes === null || !qwZeroAes(oldAes));
   const readKey: u8[] = [];
@@ -210,6 +314,7 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
       qwZero(oldWrite.keys.iv) &&
       (oldAes === null || qwZeroAes(oldAes))
   );
+  t.ok(`${name}: and so does the read secret the update replaced`, readSecretHeld && qwZero(oldReadSecret) && !qwZero(conn.appReadSecret));
   t.ok(`${name}: but for the header-protection key, which every generation shares`, !qwZero(qwHpKey(oldWrite, suite)));
   t.ok(`${name}: the previous read generation is kept for a probe timeout`, !qwZero(qwPacketKey(oldRead, suite)));
   c.now = c.now + conn.recovery.probeTimeout() * n64(2);
@@ -249,6 +354,34 @@ const qwClose = (t: Suite, name: string, suite: i32): void => {
   qwPeriod(t, `${name}, closed`, p.conn, suite, QUIC_STATE_CLOSING);
 };
 
+/**
+ * However long the caller waits between `close` and `takeDatagram`, the
+ * CONNECTION_CLOSE goes out, and the closing period starts when it does:
+ * until then `deadline()` names no time, so a caller's clock wakes nothing.
+ */
+const qwCloseLate = (t: Suite, name: string, suite: i32): void => {
+  const p = new QwPair(suite);
+  const gap: i64 = p.conn.recovery.probeTimeout() * n64(10);
+  p.conn.close(n64(0));
+  const owed: boolean = p.conn.deadline() === n64(-1) && qwHeld(p.conn, suite);
+  p.client.now = p.client.now + gap;
+  const sent: i32 = qcDrain(p.conn, p.client);
+  t.ok(`${name}, closed late: the CONNECTION_CLOSE still goes out ten probe timeouts after close()`, p.connected && owed && sent === 1);
+  qwPeriod(t, `${name}, closed late`, p.conn, suite, QUIC_STATE_CLOSING);
+};
+
+/** As `qwCloseLate`, for a failure: the packet that breaks the protocol is received, and its close taken ten probe timeouts later. */
+const qwFailLate = (t: Suite, name: string, suite: i32): void => {
+  const p = new QwPair(suite);
+  const gap: i64 = p.conn.recovery.probeTimeout() * n64(10);
+  p.conn.receive(qcShort(p.client, fromHex("1e")), p.client.now);
+  const owed: boolean = p.conn.state === QUIC_STATE_CLOSING && p.conn.deadline() === n64(-1) && qwHeld(p.conn, suite);
+  p.client.now = p.client.now + gap;
+  const sent: i32 = qcDrain(p.conn, p.client);
+  t.ok(`${name}, failed late: the CONNECTION_CLOSE still goes out ten probe timeouts after the failure`, p.connected && owed && sent === 1);
+  qwPeriod(t, `${name}, failed late`, p.conn, suite, QUIC_STATE_CLOSING);
+};
+
 /** The client breaks the protocol (HANDSHAKE_DONE to a server, RFC 9000 §19.20): the connection fails, and closes as `qwClose` does. */
 const qwFail = (t: Suite, name: string, suite: i32): void => {
   const p = new QwPair(suite);
@@ -276,15 +409,19 @@ const qwIdle = (t: Suite, name: string, suite: i32): void => {
 /** Every check, and the exit code. */
 export const quicWipeChecks = (): i32 => {
   const t = new Suite("quic wipes");
+  qwEntropy(t);
   const suites: i32[] = [TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256];
   const names: string[] = ["AES-128-GCM", "AES-256-GCM", "ChaCha20-Poly1305"];
   for (let k: i32 = 0; k < toI32(suites.length) && k < toI32(names.length); k++) {
     qwDiscard(t, names[k], suites[k]);
     qwKeyUpdate(t, names[k], suites[k]);
     qwClose(t, names[k], suites[k]);
+    qwCloseLate(t, names[k], suites[k]);
     qwFail(t, names[k], suites[k]);
+    qwFailLate(t, names[k], suites[k]);
     qwDrain(t, names[k], suites[k]);
     qwIdle(t, names[k], suites[k]);
+    qwReset(t, names[k], suites[k]);
   }
   return t.done();
 };

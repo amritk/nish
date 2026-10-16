@@ -3,8 +3,12 @@
 // them, and each wipe this group pins was deleted in turn to show its roots'
 // counts drop.
 
-/** The modules that define the QUIC connection, its packet protection, or AES. */
-const QUIC_MODULES = /^define [^\n]*@"?nish\.(Quic|quic|Aes|aes)/m
+/**
+ * The modules that define the QUIC connection, its packet protection, AES, or
+ * HMAC: `HmacSha256Scratch.wipe`, which the connection ID and reset-token
+ * derivations call, is in `nish/crypto/hmac`.
+ */
+const QUIC_MODULES = /^define [^\n]*@"?nish\.(Quic|quic|Aes|aes|Hmac|hmac)/m
 
 export const wipeChecks = [
   // `nish/net/quic-packet`'s key slots and packet protection, and
@@ -29,12 +33,25 @@ export const wipeChecks = [
   // secret among them; `release` is `wipeAll`. `runClocks` 200: `wipeAll` at the idle timeout and again at
   // the end of the closing or draining period, each copy counted, and
   // `prepareNextReadKeys` once a key update's previous keys have had their
-  // probe timeout. `afterTls` 86: once the handshake is confirmed, the
+  // probe timeout. `afterTls` 134: once the handshake is confirmed, the
   // Handshake level's `discard`, 23, and `TlsServer`'s two handshake traffic
   // secrets, 2, besides the wipes of the derivations it runs as each level's
-  // keys arrive.
+  // keys arrive, the connection IDs' and reset tokens' HMACs among them.
+  //
+  // The roots below pin the wipes the ones above do not reach.
+  // `applyPhase` 13: the read secret a key update replaces, 1, and
+  // `updateWriteKeys`, 12. The stateless reset token: `quicStatelessResetToken`
+  // 14, its HMAC output among them, and `quicConnResetTokenInto` 25, the
+  // scratch HMAC's `wipe` and the tag; `deriveConnectionId` 25, the same for
+  // a connection ID. `begin` 2: the entropy once it is copied, and the
+  // failure path's. `establish` 28: the first ID's reset token once it is in
+  // the transport parameters, besides its derivation. `openPacket` 266: the
+  // Initial level's `discard` on the first Handshake packet, besides the
+  // derivations and wipes of every level it opens. `quicInitialSecretsInto`
+  // 1: the Initial secret once both directions' are expanded. `reset` 101:
+  // `wipeAll`, 95, and `begin`'s wipes of the next connection's entropy.
   {
-    name: "quic: the wipes survive opt -O2 (a key slot's keys and AES schedules, each packet's nonce and mask, a key update's replaced generation, a discarded level and its handshake secrets, and every key at release, the idle timeout and the end of the closing or draining period)",
+    name: "quic: the wipes survive opt -O2 (a key slot's keys and AES schedules, each packet's nonce and mask, a key update's replaced generation, a discarded level and its handshake secrets, the reset tokens, connection IDs and entropy once used, and every key at release, reset, the idle timeout and the end of the closing or draining period)",
     program: "tests/link/net_quic_wipes/main.ts",
     modules: QUIC_MODULES,
     roots: [
@@ -48,7 +65,16 @@ export const wipeChecks = [
       ["nish.QuicConnection.wipeAll", 95],
       ["nish.QuicConnection.release", 95],
       ["nish.QuicConnection.runClocks", 200],
-      ["nish.QuicConnection.afterTls", 86],
+      ["nish.QuicConnection.afterTls", 134],
+      ["nish.QuicConnection.applyPhase", 13],
+      ["nish.quicStatelessResetToken", 14],
+      ["nish.quicConnResetTokenInto", 25],
+      ["nish.QuicConnection.deriveConnectionId", 25],
+      ["nish.QuicConnection.begin", 2],
+      ["nish.QuicConnection.establish", 28],
+      ["nish.QuicConnection.openPacket", 266],
+      ["nish.quicInitialSecretsInto", 1],
+      ["nish.QuicConnection.reset", 101],
     ],
   },
 ]

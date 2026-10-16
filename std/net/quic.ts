@@ -98,7 +98,10 @@
  * reordered, before the next generation's are derived (RFC 9001 §6.5). Once
  * the connection has closed, by either side, its keys are kept through the
  * closing or draining period, three probe timeouts (RFC 9000 §10.2), and
- * wiped at its end; `deadline()` is that end, then -1.
+ * wiped at its end; `deadline()` is that end, then -1. A close this side
+ * owes starts the period when `takeDatagram` sends it, not when `close` or
+ * `fail` is called, so that however long the caller waits, the close still
+ * goes out.
  *
  * **Key update** (RFC 9001 §6), both ways. A 1-RTT packet whose Key Phase
  * bit differs from the current one is opened with the next generation's read
@@ -145,7 +148,8 @@
  * 1-RTT keys, the key-update secrets, the traffic secrets `TlsServer` holds,
  * its ephemeral key and the connection-ID seed — by `release()`, `reset`,
  * the idle timeout, and the end of the closing or draining period (RFC 9000
- * §10.2), three probe timeouts after the connection closed either way.
+ * §10.2), three probe timeouts after this side's CONNECTION_CLOSE went out
+ * or the client's arrived.
  * `docs/security/quic.md` records what is wiped where as QUIC-2.
  *
  * Written from RFC 9000, RFC 9001 and RFC 9221, in this module's own
@@ -1164,7 +1168,8 @@ export class QuicConnection {
   /**
    * When a closed connection's closing or draining period ends (RFC 9000
    * §10.2), and `runClocks` wipes every key it kept for it, or -1: before
-   * the close, and once the keys are wiped.
+   * the close, while a close this side owes has not gone out, and once the
+   * keys are wiped.
    */
   closingUntil: i64 = -1
   /** The packet number of a client key update read but not applied yet, or -1. */
@@ -1425,7 +1430,6 @@ export class QuicConnection {
     this.error = code
     this.errorFrameType = frameType
     this.errorIsApplication = false
-    this.startClosingPeriod()
   }
 
   /**
@@ -1442,14 +1446,16 @@ export class QuicConnection {
     this.error = code
     this.errorFrameType = 0
     this.errorIsApplication = true
-    this.startClosingPeriod()
   }
 
   /**
    * Starts the closing or draining period, three probe timeouts long (RFC
-   * 9000 §10.2). The keys stay through it, for the CONNECTION_CLOSE still to
-   * go out, and `runClocks` wipes them all at its end, which `deadline()`
-   * names, so that a connection nobody `release()`s does not keep them.
+   * 9000 §10.2), once nothing more is owed: when the client's
+   * CONNECTION_CLOSE arrives, when `takeCloseInto` sends this side's, or when
+   * `begin` closes before anything could be sent. The keys stay through it,
+   * as the period's state, and `runClocks` wipes them all at its end, which
+   * `deadline()` names, so that a connection nobody `release()`s does not
+   * keep them.
    */
   startClosingPeriod(): void {
     this.closingUntil = this.now + this.recovery.probeTimeout() * 3
@@ -2713,8 +2719,9 @@ export class QuicConnection {
    * timeout), or the end of a key update's probe timeout, whichever comes
    * first; once the connection has closed, the end of its closing or
    * draining period, when its keys are wiped. -1 when nothing is timed:
-   * before the first packet, once a closed connection's keys are wiped, and
-   * with no idle timeout, nothing in flight and no update pending.
+   * before the first packet, while a closed connection's own close has not
+   * gone out (`takeDatagram` sends it), once a closed connection's keys are
+   * wiped, and with no idle timeout, nothing in flight and no update pending.
    */
   deadline(): i64 {
     if (this.closed()) {
@@ -3515,6 +3522,7 @@ export class QuicConnection {
       return 0
     }
     this.closeSent = true
+    this.startClosingPeriod()
     let position: i32 = at
     const limit: i32 = at + QUIC_CONN_DATAGRAM_SIZE
     for (let level: i32 = 0; level < 3; level += 1) {
