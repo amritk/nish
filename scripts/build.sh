@@ -58,6 +58,15 @@
 # put in the .ll (line table, variables) reaches the binary. `nish
 # --link -g` passes it through automatically.
 #
+# CPU level (WP38 S2): `--cpu x86-64-v3` compiles and links every input --
+# the module, the runtime and any other C -- with -march=x86-64-v3
+# -ffp-contract=off, so the code generator may use AVX2, BMI2 and the other
+# v3 instructions and still forms no fused multiply-add the IR did not write.
+# It is the one level taken; any other value is refused with exit 2, and so are
+# the wasm and wasi profiles, which are not x86-64. A binary built with it
+# stops with SIGILL on a CPU without AVX2. `nish --link --cpu x86-64-v3`
+# passes it through.
+#
 # The runtime compiled once (the debug, speed and size profiles only; `nish
 # --link` and `nish run` use these through their runtime cache, src/compile.ts):
 #   --runtime-objects <dir>  compile the runtime.c input and its six siblings, 
@@ -84,23 +93,33 @@ debug=0                                # -g: keep DWARF (nish -g emits it in the
 threads=0                              # --threads: -DNISH_THREADS, the thread-local arena (WP20 T0)
 objects_to=""                          # --runtime-objects <dir>: compile the runtime alone, into <dir>
 objects_from=""                        # --runtime-from <dir>: link against the runtime compiled there
+cpu=""                                 # --cpu x86-64-v3: the one CPU level above the baseline (WP38 S2)
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
     --profile) profile="$2"; shift 2 ;;
     -g) debug=1; shift ;;
     --threads) threads=1; shift ;;
+    --cpu)
+      [ -n "${2-}" ] || { echo "error: --cpu needs a level; the one taken is x86-64-v3" >&2; exit 2; }
+      cpu="$2"; shift 2 ;;
     --runtime-objects) objects_to="$2"; shift 2 ;;
     --runtime-from) objects_from="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,75p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,85p' "$0"; exit 0 ;;
     *) inputs+=("$1"); shift ;;
   esac
 done
 [ ${#inputs[@]} -gt 0 ] || { echo "error: no input files" >&2; exit 2; }
+if [ -n "$cpu" ]; then
+  [ "$cpu" = x86-64-v3 ] || { echo "error: --cpu takes x86-64-v3, not '$cpu'" >&2; exit 2; }
+  case "$profile" in
+    wasm|wasi) echo "error: --cpu x86-64-v3 is an x86-64 level, so the $profile profile does not take it" >&2; exit 2 ;;
+  esac
+fi
 if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
   # A cached runtime is the profile's ordinary compile, so it exists only for
   # the profiles that compile the runtime with nothing but these flags.
@@ -209,6 +228,12 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # command lines, which have no threads to link against, and where
 # runtime-parallel.c compiles to its sequential fallback because it tests
 # __wasi__ and __wasm__ as well as the macro.
+# --cpu: every unit at the one level, so the module, the runtime and the link
+# (LTO generates code there) agree. -ffp-contract=off keeps the meaning fixed:
+# v3 has FMA, and contracting a*b+c into one rounding would print a different
+# float than the baseline build (docs/LANGUAGE.md, "The CPU level").
+if [ -n "$cpu" ]; then common+=(-march=x86-64-v3 -ffp-contract=off); fi
+
 tls=()
 if [ "$threads" = 1 ]; then
   common+=(-DNISH_THREADS=1 -ftls-model=initial-exec -pthread)
