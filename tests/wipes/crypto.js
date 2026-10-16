@@ -6,6 +6,9 @@
 /** The modules that define HMAC, HKDF or SHA-2. */
 const HMAC_HKDF_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha)/m
 
+/** The module that defines P-256. */
+const P256_MODULES = /^define [^\n]*@nish\.(P256|p256)/m
+
 /** The modules that define AES or ChaCha20-Poly1305. */
 const AEAD_MODULES = /^define [^\n]*@nish\.(Aes|aes|ghash|chacha20|poly1305)/m
 
@@ -100,6 +103,24 @@ export const wipeChecks = [
       ["nish.poly1305KeyGen", 2],
       ["nish.chacha20Poly1305Seal", 6],
       ["nish.chacha20Poly1305Open", 7],
+    ],
+  },
+  // `nish/crypto/p256`'s fixed-base comb (#628). `p256BaseMultWith` wipes the
+  // entry it selected, `s.entry`'s three coordinates, 3, and its callers wipe
+  // the scratch, the accumulator they hand it and the scalar's other
+  // intermediates (ECC-2): `p256PublicKeyExposed` 18, `p256SignExposed` 93 and
+  // `p256SignSha256Into` 56. `opt` inlines `p256BaseMult` into
+  // `p256PublicKeyExposed` and `p256SignScalar`, and that into
+  // `p256SignExposed`, so its wipes are counted there.
+  {
+    name: "crypto: the wipes survive opt -O2 (P-256's selected comb entry in p256BaseMultWith; the scratch and accumulator in p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)",
+    program: "tests/link/crypto_p256/main.ts",
+    modules: P256_MODULES,
+    roots: [
+      ["nish.p256BaseMultWith", 3],
+      ["nish.p256PublicKeyExposed", 18],
+      ["nish.p256SignExposed", 93],
+      ["nish.p256SignSha256Into", 56],
     ],
   },
 ]

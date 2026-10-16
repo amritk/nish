@@ -15,3 +15,6 @@ ok    p256TableMove: hit 1 takes the entry at the offset
 ok    RFC 6979 A.2.5 public key
 ok    RFC 6979 A.2.5 SHA-256 "sample": k G has x = r
 ok    RFC 6979 A.2.5 SHA-256 "test": k G has x = r
+ok    RFC 6979 A.2.5 public key, by the comb
+ok    RFC 6979 A.2.5 SHA-256 "sample", by the comb: k G has x = r
+ok    RFC 6979 A.2.5 SHA-256 "test", by the comb: k G has x = r
