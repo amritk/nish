@@ -4793,6 +4793,9 @@ if (!only || "par_alloc".includes(only)) {
 // `compareExchange` loop, and `par_atomic`, whose four data-parallel bodies
 // each make an atomic update their one shared write. Every update commutes,
 // so spawn order, iteration order and the pool's threads print the same.
+// `thread_sibling_disjoint_mutex`, `_mutex_types` and `_atomics` are the
+// sibling scopes of one `using` whose tasks reach locks or atomics each made
+// in a `const` of its own, of one type or of two, which share nothing.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4836,6 +4839,9 @@ for (const name of [
   "thread_task_void",
   "thread_atomic_tasks",
   "thread_atomic_unreached",
+  "thread_sibling_disjoint_mutex",
+  "thread_sibling_disjoint_mutex_types",
+  "thread_sibling_disjoint_atomics",
   "par_atomic",
   "std_random",
 ]) {

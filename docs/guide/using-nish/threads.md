@@ -449,6 +449,14 @@ export const main = (): i32 => {
 - **Don't touch it in the scope's block once the first task is spawned.** Read
   it before the first `spawn` or after the block, when every task has
   finished.
+- **Scopes opened by one `using` share nothing.** In
+  `using s = scope(), t = scope()`, `t`'s tasks finish before `s`'s natively,
+  and under Node each runs where it is spawned, so a task of `s` and a task of
+  `t` may not use the same destination array, the same atomic or the same lock.
+  Two counters each made with `new` in a `const` of their own are two counters,
+  and their tasks are fine side by side; one counter reached through a second
+  name or a field counts as any counter of its type. Open scopes that share
+  something in `using` statements of their own.
 - **Make the updates commute.** `add`, `sub`, `min` and `max` give the same
   total whatever order the threads made them in; a `store`, an `exchange`, or
   an answer that depends on a value another task is changing does not, and
@@ -478,6 +486,25 @@ export const main = (): i32 => {
     seen = a.load(); // the task may not have run yet
   }
   return seen;
+};
+```
+
+```ts nish:err NL2515
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+const peek = (a: AtomicI32): i32 => a.load();
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const bumped: i32[] = [0];
+  const seen: i32[] = [0];
+  {
+    using s = scope(), t = scope(); // t's tasks finish first natively
+    s.spawn(bump, a, bumped, 0);
+    t.spawn(peek, a, seen, 0);
+  }
+  return seen[0];
 };
 ```
 

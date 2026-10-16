@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 641
+export const RULE_COUNT: i32 = 642
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -69,6 +69,10 @@ const diagnosticRules = (): string[] => [
   "NL2394",
   "`, which could be the array `parallelMapInto` is writing: another thread would be writing it while this one reads; a captured array is known not to be `dst` only when one of the two is a `const` bound to an array of its own, such as a literal or a `new Array`, and the other is another such `const` or a parameter",
   "NL2505",
+  "` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open the scopes in `using` statements of their own",
+  "NL2515",
+  "` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through",
+  "NL2514",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
   "` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing",
@@ -161,8 +165,6 @@ const diagnosticRules = (): string[] => [
   "NL2338",
   "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",
   "NL2352",
-  "An atomic is made only by `new AtomicI32(v)` or `new AtomicI64(v)`: an object literal would be a plain record under Node, with none of the methods every atomic is read and updated through",
-  "NL2514",
   " and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`",
   "NL2368",
   "` cannot be a `Secret`: a field of a class or interface outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter",

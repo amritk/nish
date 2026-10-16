@@ -1,5 +1,5 @@
-// NL2514: an atomic is made only by `new`; an object literal would be a plain
-// record under Node, with none of the atomic's methods.
+// NL2514: a class of `nish/threads` is made only as the module makes it; an
+// object literal would be a plain record under Node, with none of its methods.
 import { AtomicI32 } from "nish/threads";
 
 export const main = (): i32 => {

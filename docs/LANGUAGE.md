@@ -3375,11 +3375,16 @@ answer the same natively and under Node:
   a call is refused by the rule every class's methods keep, not by NL2513:
   `` Unknown field `add` on class `AtomicI64` (it is a method; call it) ``
   (`reject_atomic_member_unbound`). `new AtomicI32(v)` takes a number, so an
-  atomic is fresh when it is made, and `new` is the only way one is made: an
-  object literal of an atomic's type would be a plain record under Node,
-  without the methods,
-  `` An atomic is made only by `new AtomicI32(v)` or `new AtomicI64(v)`: an object literal would be a plain record under Node, with none of the methods every atomic is read and updated through ``
-  (NL2514, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`).
+  atomic is fresh when it is made, and `new` is the only way one is made. An
+  object literal of any class of `nish/threads` — an atomic, a `Mutex`, its
+  `MutexGuard`, a `Channel` or a `ThreadScope` — would be a plain record under
+  Node, without the methods, and is refused with
+  `` `AtomicI32` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through ``
+  (NL2514, `tests/cases/reject_atomic_literal`, `reject_atomic_literal_i64`,
+  `reject_thread_literal_channel`, `reject_thread_literal_mutex` and
+  `reject_thread_literal_mutex_only`, whose `Mutex` literal is refused by this
+  rule rather than by `new Mutex`'s fresh-value one, and
+  `reject_thread_literal_scope`).
 - **R7: from the statement that holds a scope's first `spawn` to the end of its
   block, the parent does not touch an atomic the scope's tasks can reach** —
   with a method, or through any function, method or constructor it calls,
@@ -3410,13 +3415,28 @@ answer the same natively and under Node:
   The scopes of one `using` are judged against each other too: natively they
   join in reverse order, so a task of `t` in `using s = scope(), t = scope()`
   runs before every task of `s`, and under Node each runs at its spawn. A
-  `spawn` on one of them whose task reaches an atomic, or takes a lock, that a
-  task of another scope of the same statement can reach is refused with the
-  message above, naming that other scope (`reject_atomic_sibling_load`,
-  `reject_atomic_sibling_exchange`, `reject_atomic_sibling_arrow`,
-  `reject_atomic_sibling_three` for three declarators, and
-  `reject_thread_mutex_sibling` for a `Mutex`). Scopes whose tasks share
-  nothing run as before.
+  `spawn` on one of them whose task shares a destination, an atomic or a lock
+  with a task of another scope of the same statement is refused, naming the
+  other scope and the path it shares:
+  `` This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open the scopes in `using` statements of their own ``
+  (NL2515). A destination is shared when two scopes' spawns name the same
+  array, at the same slot or at different ones
+  (`reject_thread_sibling_destination`, `_slots`, `_arrow` for arrow tasks,
+  `_three` for three declarators; a void task that reaches another scope's
+  destination hands it on, which `_void` pins as refused by the destination
+  rule). An atomic or a lock is told apart by the `const` it was made in by
+  `new`: a task handed that binding, as its argument or a capture, reaches that
+  object and no other, and two such bindings are two objects. Reached any other
+  way — through another binding, a field, an element, a function's answer —
+  it is read as any object of its type, which meets every one
+  (`reject_atomic_sibling_load`, `reject_atomic_sibling_exchange`,
+  `reject_atomic_sibling_arrow`, `reject_atomic_sibling_three`,
+  `reject_thread_mutex_sibling`, `reject_thread_mutex_sibling_alias` for a
+  second name of one lock, `reject_thread_mutex_sibling_field` for one reached
+  through a field). Tasks that take no lock share none, and tasks that call no
+  atomic method share no atomic. Sibling scopes whose tasks reach disjoint
+  locks or atomics, of one type or of two, run as before
+  (`tests/link/thread_sibling_disjoint_mutex`, `_mutex_types`, `_atomics`).
 - **R8: an atomic reaches a task at any depth** — as its argument, a field of
   it, an element of an `AtomicI32[]`, or a capture — unlike a `Mutex`, which
   stops one field down: an atomic holds no data a task could keep, so which

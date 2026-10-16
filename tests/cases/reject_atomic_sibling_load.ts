@@ -10,12 +10,13 @@ const bump = (a: AtomicI32): i32 => {
 const peek = (a: AtomicI32): i32 => a.load();
 export const main = (): i32 => {
   const a = new AtomicI32(0);
-  const out: i32[] = [0, 0];
+  const out: i32[] = [0];
+  const seen: i32[] = [0];
   {
     using s = scope(), t = scope();
     s.spawn(bump, a, out, 0);
-    t.spawn(peek, a, out, 1);
+    t.spawn(peek, a, seen, 0);
   }
-  console.log(`${out[1]} ${a.load()}`);
+  console.log(`${seen[0]} ${a.load()}`);
   return 0;
 };

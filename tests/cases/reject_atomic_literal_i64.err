@@ -1,1 +1,1 @@
-An atomic is made only by `new AtomicI32(v)` or `new AtomicI64(v)`: an object literal would be a plain record under Node, with none of the methods every atomic is read and updated through
+`AtomicI64` is a class of `nish/threads`, and its objects are made only as the module makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. An object literal would be a plain record under Node, with none of the methods the class is used through

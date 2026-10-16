@@ -6,13 +6,15 @@ const peek = (a: AtomicI32): i32 => a.load();
 const other = (x: i32): i32 => x + 1;
 export const main = (): i32 => {
   const a = new AtomicI32(0);
-  const out: i32[] = [0, 0, 0];
+  const out: i32[] = [0];
+  const mid: i32[] = [0];
+  const seen: i32[] = [0];
   {
     using r = scope(), s = scope(), t = scope();
-    t.spawn(peek, a, out, 2);
-    s.spawn(other, 3, out, 1);
+    t.spawn(peek, a, seen, 0);
+    s.spawn(other, 3, mid, 0);
     r.spawn(bump, a, out, 0);
   }
-  console.log(`${out[2]}`);
+  console.log(`${seen[0]}`);
   return 0;
 };

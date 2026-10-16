@@ -15,12 +15,13 @@ const read = (m: Mutex<C>): i32 => {
 };
 export const main = (): i32 => {
   const m = new Mutex<C>(new C());
-  const out: i32[] = [0, 0];
+  const out: i32[] = [0];
+  const seen: i32[] = [0];
   {
     using s = scope(), t = scope();
     s.spawn(setOne, m, out, 0);
-    t.spawn(read, m, out, 1);
+    t.spawn(read, m, seen, 0);
   }
-  console.log(`${out[1]}`);
+  console.log(`${seen[0]}`);
   return 0;
 };
