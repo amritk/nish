@@ -190,8 +190,8 @@ const tlsClearAesKey = (aes: AesKey): void => {
   for (let k: i32 = 0; k < toI32(aes.roundKeys.length); k++) {
     aes.roundKeys[k] = toU64(0)
   }
-  aes.hHi = toU64(0)
-  aes.hLo = toU64(0)
+  aes.h[0] = toU64(0)
+  aes.h[1] = toU64(0)
 }
 
 /**

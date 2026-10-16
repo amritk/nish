@@ -13,9 +13,9 @@ br label %aes.join
 aes.walker:
 call void @nish.aesCtrInto(%struct.nish_array* %20, i32 %22, %struct.nish_array* %j0, %struct.nish_array* %src, %struct.nish_array* %dst, i32 %length)
 aes.join:
-call void @nish_aes_schedule(%struct.nish_array* %key, i32 %25, %struct.nish_array* %26)
-call void @nish.aesScheduleInto(%struct.nish_array* %key, i32 %25, %struct.nish_array* %26)
+call void @nish_aes_schedule(%struct.nish_array* %key, i32 %33, %struct.nish_array* %34)
+call void @nish.aesScheduleInto(%struct.nish_array* %key, i32 %33, %struct.nish_array* %34)
 call void @nish_aes_block(%struct.nish_array* %13, i32 %15, %struct.nish_array* %src, %struct.nish_array* %dst)
 call void @nish.aesBlockInto(%struct.nish_array* %13, i32 %15, %struct.nish_array* %src, %struct.nish_array* %dst)
-call void @nish_aes_ghash(%struct.nish_array* %y, i64 %15, i64 %17, %struct.nish_array* %19, %struct.nish_array* %data, i32 %length)
-call void @nish.ghashBlocksInto(%struct.nish_array* %y, i64 %15, i64 %17, %struct.nish_array* %19, %struct.nish_array* %data, i32 %length)
+call void @nish_aes_ghash(%struct.nish_array* %y, i64 %23, i64 %33, %struct.nish_array* %35, %struct.nish_array* %data, i32 %length)
+call void @nish.ghashBlocksInto(%struct.nish_array* %y, i64 %23, i64 %33, %struct.nish_array* %35, %struct.nish_array* %data, i32 %length)
