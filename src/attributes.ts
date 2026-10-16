@@ -4457,6 +4457,25 @@ const markForeign = (f: FunctionFacts, root: string, steps: string, below: boole
   return changed
 }
 
+/**
+ * Whether a write into `steps` of `f`'s own object `root`, `below` past those
+ * slots too, may land in memory a parameter reaches or in memory of unknown
+ * origin: the question `markForeign` answers by marking, asked without marking.
+ */
+const reachesForeign = (f: FunctionFacts, root: string, steps: string, below: boolean): boolean => {
+  for (const d of f.dirt) {
+    if (!d.active || d.root !== root) {
+      continue
+    }
+    const over = stepsUnder(d.steps, steps, d.below)
+    const under = below && stepsUnder(steps, d.steps, false)
+    if ((over || under) && (d.unknown || d.params.length > 0)) {
+      return true
+    }
+  }
+  return false
+}
+
 /** A write into what `path` names, `deep` past its own slots, made by `f` or by a callee it hands `path` to. */
 const markPath = (f: FunctionFacts, path: MemPath, deep: boolean): boolean => {
   if (path.kind === ROOT_PARAM) {
@@ -4755,6 +4774,21 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
       }
     }
     if (!edgeWrites(facts, edge)) {
+      continue
+    }
+    // WP29: an object this call made itself (`ROOT_OWN`) is memory no caller,
+    // thread or task can see while the call runs, as a private array is, so
+    // `const r = new Rng(seed); r.nextI32()` writes nothing shared. But a
+    // field or an element of it, or anything below its own slots, may be
+    // memory a parameter reaches, or anything (`DirtMark`): `hs.push(box);
+    // hs[0].bump()` writes `box`. Such a write is a shared one, as it would be
+    // through the parameter itself, and not only a `writesReach` of it
+    // (`callWrites`), which is all the parent's region rule reads.
+    if (edge.path.kind === ROOT_OWN) {
+      const deep = target === null || target.writesDeep
+      if (reachesForeign(f, edge.path.name, edge.path.steps, deep) && markPastWrite(f)) {
+        changed = true
+      }
       continue
     }
     const pointer: PointerParamFacts | null = edge.param.length > 0 ? f.pointerParam(edge.param) : null

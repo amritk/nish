@@ -172,6 +172,35 @@ TypeScript reader already knows what it means. Decisions taken in the build:
   the four-core machine of §8a: **1.81 s in sequence, 0.547 s as one scope,
   3.30x**.
 
+The task forms change two of these:
+
+- **A task may have no destination.** `s.spawn(entry, arg)` and
+  `s.spawn(() => ...)` run an entry that answers `void`, seen through a lock
+  or a channel. TypeScript would write the three forms as overloads of one
+  method; the language has none, so the checker reads the two short forms as
+  `ThreadScope.spawnWith` and `spawnThunk`, which `nish/threads` writes for
+  them, and under Node, where the source runs unmodified and every form
+  reaches `spawn`, that method's body sees the slot was not written
+  (`slotWritten`) and runs the task at once with nothing to store.
+- **The entry may be an arrow**, which reads its function's `const` locals as
+  a P1 arrow does. Each capture is copied into the task's payload beside the
+  argument and is the task's argument to every rule: the region (§4.2's
+  destination and write rules, #564's `new`), R7, R8, NL2290's stale element
+  (read at the join, so a `push` before the block's end is refused, for an
+  argument as for a capture), NL2394 and NL2445. A lock may be captured; a
+  guard, a channel (whose senders the scope counts from the argument), a
+  scope, a `Result`, a value that may be absent and a `Secret` may not. The
+  arrow is lifted into a function named after the one it is written in, which
+  is what a debugger shows for its thread, so the old reason for refusing an
+  arrow is kept by the name rather than by the refusal.
+- **A function may write the own slots of an object it made itself**
+  without a shared write, as it may an array it made (`const r = new
+  Rng(seed); r.nextI32()`). A write below those slots counts as a write into
+  whatever they may hold, so once the caller's memory is inside the object
+  (stored, pushed, kept by a constructor) it is refused as any shared write
+  is. That is what lets a body or a task step a generator of its own
+  (`nish/random`).
+
 P3 changes three of these (§4.3, §4.4):
 
 - **Tasks are no longer held to P1's rule alone.** A task may also write

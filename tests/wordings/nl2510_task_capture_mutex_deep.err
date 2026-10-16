@@ -1,0 +1,1 @@
+The task's arrow reads `o`, which is `Outer` and reaches a `Mutex` through `o.inner.m`: a captured value is the task's argument, and a `Mutex` reaches a task as an argument or as a field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer

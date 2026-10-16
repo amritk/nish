@@ -2598,6 +2598,25 @@ from the whole-program facts, and each rule is reported there:
   private array's slots hold is not private: a store into `rows[0][0]`, or a
   helper that makes one, writes what `rows[0]` reaches
   (`reject_par_private_helper_deep`).
+- **Nor is a write into an object's own slots, when the object is one this
+  call made.** A `const` bound to the function's own `new` or object literal
+  is memory no caller, thread or task can see while the call runs, so a method
+  or a function that writes only that object's own fields — scalar state such
+  as an `Rng`'s — writes nothing shared: `const r = new Rng(seed);
+  r.nextI32()` is a body's own business (`tests/link/std_random`). That is
+  the whole of what is admitted. A write below the object's own slots, into a
+  field or an element of it, counts as a write into whatever it may hold, and
+  once a constructor, a store, a `push`, a `Map` or a `Set` has put the
+  caller's memory there, or memory of unknown origin, that write is refused
+  as any shared write is: `hs.push(box); hs[0].bump()`, `h.b = box;
+  h.b.bump()`, a constructor that keeps `box`, a method that forwards to a
+  field's method, `o.a.b = box`, and the same with a captured `Rng`
+  (`tests/cases/reject_thread_task_private_object_element`, `_field`,
+  `_ctor_alias`, `_capture`, `_map`, `_set`, `_nested`, `_array_own`,
+  `_forward`, `_forward_store`, `_array_rng`, and
+  `reject_par_private_object_field_rng`, `_array_rng`, `_for_of`, `_held`,
+  `_kept`). Freshness is not followed through a call: an object a helper made
+  and returned is not one this call made.
 - **What the function allocates dies with its element.** A function may build
   strings, arrays and objects on the way to its result. They are given back
   after every element: the function gets an arena scope of its own, so each
@@ -2637,10 +2656,11 @@ from the whole-program facts, and each rule is reported there:
 #### A data-parallel arrow reads its function's `const` locals
 
 An arrow passed to one of the four forms may read the `const` locals and the
-parameters of the function it is written in. Nothing else captures: an arrow
-given to any other function parameter, or to `spawn`, still reads only its own
-parameters and the module's top-level names (`tests/cases/reject_par_capture_not_parallel`,
-`reject_par_capture_spawn`).
+parameters of the function it is written in, and so may an arrow given to a
+scope's `spawn`, by the rules of [scoped tasks](#scoped-tasks-using-s--scope).
+Nothing else captures: an arrow given to any other function parameter still
+reads only its own parameters and the module's top-level names
+(`tests/cases/reject_par_capture_not_parallel`).
 
 ```typescript
 import { parallelMapInto } from "nish/threads";
@@ -2768,12 +2788,69 @@ export const main = (): i32 => {
 
 - **`s.spawn(entry, arg, dst, at)`** runs `entry(arg)` on a thread of its own
   and stores the answer in `dst[at]` (`tests/link/thread_scope_basic`). `entry`
-  is a [function parameter](#function-parameters) and must be a top-level
-  function named at the call; an arrow is
-  `` The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name) ``
-  (`tests/cases/reject_thread_task_arrow`). `at` is checked at the spawn and
+  is a [function parameter](#function-parameters): a top-level function named
+  at the call, or an arrow written there, which may read its function's
+  `const` locals (below). `at` is checked at the spawn and
   again when the answer is stored; out of range is
   `spawn: destination index 3 is out of range for an array of 1 elements` and exit 1.
+- **`s.spawn(entry, arg)` and `s.spawn(() => ...)` have no destination.** The
+  task runs as any other does and its scope stores nothing when it joins, so
+  `entry` answers `void`: it is seen through the guard of a
+  [`Mutex`](#a-lock-that-owns-its-data-mutext) its argument or a capture
+  reaches, or through a [`Channel`](#channels-channelt) it sends on
+  (`tests/link/thread_task_void`, `thread_task_arrow`). A block body is `void`
+  without an annotation. An entry that answers a value is
+  `` `sumOf` answers `i32`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination ``
+  (NL2511, `tests/cases/reject_thread_task_void_result`, and `_arrow` for
+  `() => sumOf(xs)`). TypeScript would spell the three forms as overloads;
+  the checker picks `ThreadScope`'s method by the number of arguments,
+  `spawnWith` for two and `spawnThunk` for one, and under Node every form
+  reaches `spawn`, which runs a task without a slot at once
+  ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)).
+- **An arrow task reads its function's `const` locals and parameters**, which
+  is the whole spelling of a task that needs more than one value:
+
+  ```typescript
+  {
+    using s = scope();
+    s.spawn(() => binInto(xs0, hist));   // xs0: a `const` array; hist: a `Mutex`
+    s.spawn(() => binInto(xs1, hist));
+  }
+  ```
+
+  Each name the arrow reads is appended to its parameters, as a
+  [data-parallel arrow](#a-data-parallel-arrow-reads-its-functions-const-locals)'s
+  is, and copied into the task's payload at the spawn beside its argument; the
+  task reads it on its own thread when the scope joins. A capture **is the
+  task's argument to every rule of this section**: the parent may not write
+  what it reaches before the join, however it does so — a store, a second name
+  for it, a helper, a `new` whose constructor writes it or keeps `this` in it,
+  in a scope bound by any declarator of its `using`
+  (`tests/cases/reject_thread_task_capture_parent_write`, `_alias`, `_helper`,
+  `_new`, `_this_escape`, `_declarator`); a destination is never captured
+  (`_dst`); the task writes nothing its caller can see except through a guard,
+  a constructor it runs included (`_task_write`, `_task_new`,
+  `_task_this_escape`); a `Mutex` it captures is one the parent may not lock
+  before the join (R7, `_mutex_lock`) and that it may reach only as a capture
+  or a field of one (R8,
+  `` The task's arrow reads `o`, which is `Outer` and reaches a `Mutex` through `o.inner.m`: a captured value is the task's argument, … ``,
+  NL2510, `_mutex_deep`); the parent's `orReturn` before the join is refused
+  (NL2394, `_or_return`); a captured element reference is read at the join,
+  so a `push` that may move its storage before the end of the block is
+  NL2290 (`_stale_record`, `_stale_join`, and
+  `reject_thread_task_arg_stale_join` for a task's argument, read at the join
+  the same way); and an array moved into a `Secret` is not read again
+  (NL2445, `_secret_moved`). A `let` is not captured, since it could change
+  before the task runs (NL2506, `_let`), nor `this` (NL2507, `_this`; a `const
+  self = this` is captured as the reference it is,
+  `tests/link/thread_task_arrow`), and a captured name is never assigned
+  (NL2508, `_assign`). A guard, a channel, a scope, a `Result`, a value that
+  may be absent and a `Secret` are never captured:
+  `` The arrow reads `ch`, which is `Channel<i32>`, and a task cannot capture it: a guard, a channel or a scope is shared only by the rules of its own block; a task reaches a channel through its argument, `s.spawn(entry, arg)`, where the scope counts its senders ``
+  (NL2509, `_guard`, `_channel`, `_secret`). An arrow inside a task's arrow
+  captures nothing (NL2501, `_nested`). The arrow is lifted into a function
+  named after the one it is written in and a counter (`main$arrow0`), which
+  is the name a debugger or a profiler shows for the task's thread.
 - **A task runs when its scope joins, not when it is spawned.** Joining a
   scope runs every task it was given at once — the first on the thread that
   opened the scope and each other on a thread of its own, so `N` tasks start
@@ -3419,6 +3496,40 @@ for the lock. A task's channel is checked where it can be read, at the
 `spawn`; a parallel body has no way to reach one, because a task calls no
 `parallelMapInto` and a channel is made only beside a scope. `select` stays
 declined (wp29 §9).
+
+### Random numbers: `Rng` in `nish/random`
+
+`new Rng(seed)` is a generator of pseudo-random numbers whose every answer
+depends on its `i32` seed alone, and is the same natively and under Node:
+
+```typescript
+import { Rng } from "nish/random";
+
+export const main = (): i32 => {
+  const r = new Rng(42);
+  const die: i32 = 1 + ((r.nextI32() >>> 1) % 6);
+  const u: f64 = r.nextF64(); // in [0, 1)
+  console.log(`${die} ${u < 1.0}`);
+  return 0;
+};
+```
+
+- **`nextI32()`** answers the next 32 bits as an `i32`, and **`nextF64()`** a
+  double in [0, 1) built from 53 bits of two steps. The state walks a Weyl
+  sequence (an odd increment, wrapping) through all 2^32 values, and each
+  answer is MurmurHash3's 32-bit finaliser of it, so every seed, 0 included,
+  starts a full sequence, and seeds 1, 2 and 3 start unrelated ones. It is not
+  for cryptography: a key comes from `crypto.getRandomValues`.
+- **The same bits under Node** are the point of the design. The two
+  operations that wrap are `wrappingAdd` and `wrappingMul` from
+  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), every shift has a constant count, and
+  `nextF64`'s double is exact, so `tests/link/std_random` prints the same lines
+  both ways.
+- **A parallel body or a task steps an `Rng` it made itself**, which is its
+  own memory (`const r = new Rng(i)`, "Nor is a write into an object's own
+  slots" under [data parallelism](#data-parallelism-nishthreads)); a
+  generator shared by several tasks would be a shared write, and is refused as
+  one. Seed each task's own from its index.
 
 ### Byte search: `indexOfAny` in `nish/text`
 

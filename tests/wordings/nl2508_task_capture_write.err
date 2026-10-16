@@ -1,0 +1,1 @@
+The arrow assigns to `n`, which belongs to the function it is written in: a task reads a captured value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument
