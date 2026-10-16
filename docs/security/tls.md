@@ -513,11 +513,17 @@ KeyUpdate; `tlsTicketKeyDue` at the window's end and at the cap; and the
 caller's rotation turn run three times, with a ticket under the previous key
 opening until the turn after and failing to open then) and by a `tests/run.js`
 wipe-count check after `opt -O2`, in the manner of `tests/wipes/crypto.js`'s
-groups: its roots are the test's rotation turn, with one `wipe`, of
-the previous key, and `tlsTicketOpen` and `tlsTicketSeal`, with one
-`secureZero` each, of the plaintext; and
-each wipe is shown counted on its own by deleting it and watching its root's
-count drop. `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
+groups. Its roots are `tlsTicketOpen`, with two `secureZero`s (of the
+plaintext, and of the state's PSK array on a failed parse); `tlsTicketSeal`,
+with one, of the plaintext; and the test's rotation turn, pinned at the total
+of volatile stores it has after `opt -O2`. Each wipe of open and seal is shown
+counted on its own by deleting it and watching its root's count drop. The
+rotation turn's `wipe(previous)` needs no deletion step: the checker enforces
+it, since `previous` cannot be assigned again while the `Secret` it holds is
+neither wiped nor returned (NL2442), so a turn without it does not compile;
+its root shows only that the wipes survive `opt -O2`. The roots under
+Resumption secrets, `tlsExchange` and the post-Finished schedule step, are
+counted the same way. `tlsTicketKeyDraw` is not a root: it moves the drawn array into a
 `Secret` (NL2445) and has nothing of its own to wipe. The count shows that each
 wipe exists and survives `opt -O2`; it matches calls, not paths, so that the
 wipe is reached on every path is for review to check. Each of open and seal
@@ -777,9 +783,22 @@ As TLS-1 records for the other secrets:
   its returns (an `internal_error`, or `illegal_parameter` for a low-order
   share), so no path leaves them in `TlsExchangeWords`. The extract needs the
   salt as bytes, and the function `exposeWith` runs cannot wipe its argument
-  (NL2450), so `tlsExchange` wipes the array it rebuilds from the words with
-  `secureZero` after the extract, on every path. A full handshake
-  keeps the constant.
+  (NL2450), so `tlsExchange` rebuilds the salt array from the words at its
+  top, where it reads them, and wipes it with `secureZero` once, at a point
+  every path reaches: the two early refusals set their alert rather than
+  return, the extract runs only when no alert is set, and the wipe follows
+  it, before the one return. A wipe before each return instead is one `opt
+  -O2` may merge, as under Ticket keys. A full handshake keeps the constant.
+- **The master secret.** A resumed handshake sends no Certificate or
+  CertificateVerify, so it never runs `sign`, where a full handshake derives
+  the master secret and wipes it (`tlsMasterSecretInto` to `secureZero(master)`,
+  `std/net/tls.ts:1338-1384` at 394c439). That step is split out of `sign`
+  into one function both paths call once the server Finished is sent: it
+  derives the master secret from the handshake secret, the application
+  traffic secrets and the resumption master secret from the master, and
+  wipes the master with `secureZero` before it returns, on every path. The
+  handshake secret is wiped as today, by `handleFinished`, `wipeHandshake`
+  and `restart`, which a resumed connection reaches as a full one does.
 - **Issuing.** The resumption PSK for a NewSessionTicket is derived, sealed
   and wiped with `secureZero` before the record carrying it is sent; once its
   ticket is sealed, or at once on a connection that is issued none, the
@@ -792,12 +811,15 @@ As TLS-1 records for the other secrets:
 - **Memory.** A resumed handshake through a reused slot leaves `Arena.mark()`
   where a full one leaves it: 0 bytes per handshake (TLS-3).
 
-To be pinned by the wipe-count check under Ticket keys (the one
-`secureZero` of the plaintext in each of `tlsTicketOpen` and `tlsTicketSeal`,
-after its branch, seen in the IR, since no object keeps the plaintext for a
-test to read) and `net_tls_resume` (the PSK, the PSK early secret, the binder
-key, the salt's bytes and its words in `TlsExchangeWords`, and the resumption
-master secret zero after a resumed handshake, and the same arrays zero after
+To be pinned by the wipe-count check under Ticket keys, seen in the IR since
+no object keeps these arrays for a test to read (the two `secureZero`s of
+`tlsTicketOpen` and the one of `tlsTicketSeal`; `tlsExchange`, with the one
+`secureZero` of its salt array beside the wipes it has today, pinned at its
+total; and the post-Finished schedule step, with the one `secureZero` of the
+master secret), and by `net_tls_resume` (the PSK, the PSK early secret, the
+binder key, the salt's bytes and its words in `TlsExchangeWords`, the
+handshake secret and the resumption master secret zero after a resumed
+handshake, and the same arrays zero after
 row 2, after row 3 (an expired ticket), after a row 4 to 8 fallback, after row
 9 and after row 17; a resumed ClientHello whose x25519 share is low-order,
 after which the salt's words in `TlsExchangeWords` and its bytes are zero; 0 bytes per resumed
@@ -857,6 +879,9 @@ but for `psk_key_exchange_modes`: the codec reads it from every ClientHello to
 decide issuance, so a malformed one is row 13's `decode_error` with or without
 `pre_shared_key`.
 
-To be pinned by `net_tls_psk_wire` (rows 10 to 13 as codec refusals, RFC
+To be pinned by `net_tls_psk_wire` (rows 10 to 13 as codec refusals, and a
+malformed `psk_key_exchange_modes` in a ClientHello without `pre_shared_key`
+as row 13's `decode_error`; RFC
 8448 §3's NewSessionTicket and §4's resumption PSK, early secret and binder
-byte for byte) and `net_tls_resume` (every row, over `TlsRecordServer`).
+byte for byte) and `net_tls_resume` (every row, over `TlsRecordServer`, and
+the same malformed modes with no `pre_shared_key`, end to end).
