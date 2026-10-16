@@ -5,12 +5,12 @@
  * before it trusts one.
  *
  * A translation unit of its own for the reason runtime-os.c is one: each file
- * carries its own measured `.text*` ceiling in tests/run.js. runtime-os.c had
- * 143 bytes of its ceiling left when these arrived, the four measure more than
- * that, and a ceiling is not raised to make room (docs/MASTER_PLAN.md §2 has
- * the numbers). Section GC still means a program that calls none of them pays
- * for none of them, and scripts/build.sh pairs this file with runtime.c like
- * the other two halves, so a link line still names one runtime.
+ * carries its own measured `.text*` ceiling in tests/runtime-budgets.js.
+ * runtime-os.c had 143 bytes of its ceiling left when these arrived, the
+ * four measure more than that, and a ceiling is not raised to make room
+ * (docs/MASTER_PLAN.md §2 has the numbers). Section GC still means a program that
+ * calls none of them pays for none of them, and scripts/build.sh pairs this file
+ * with runtime.c like the other two halves, so a link line still names one runtime.
  *
  * Every function here is platform code, and the two platforms differ in three
  * places: `getrandom` on Linux and `getentropy` elsewhere, `st_mtim`

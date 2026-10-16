@@ -201,7 +201,7 @@ own source until the seed compiles it, which is the next release.
    `runtime/runtime.c`. Any struct layout change touches `src/runtime.ts` and
    `runtime.c` in the same commit and extends a layout test. Keep each file
    within its budget — every `.text*` section summed, at `-Oz`, under the
-   `*_TEXT_BUDGET` constant `tests/run.js` holds for it (3,606 bytes for
+   `*_TEXT_BUDGET` constant `tests/runtime-budgets.js` holds for it (3,606 bytes for
    `runtime.c` and 1,536 for `runtime-os.c` today; §2 of the master plan, and
    [wp7-runtime.md](wp7-runtime.md) for each measurement, why the ceilings are
    separate and why each moved). `node tests/run.js budget` measures every
@@ -268,10 +268,13 @@ a layout smoke test.
 3,606, plus 10,279 bytes of `.rodata` that is almost all Ryu's two
 power-of-five tables) and `runtime/runtime-os.c` (the system-call half: 1,530
 bytes against 1,536) provide, in the order of the `RuntimeTable` in `src/runtime.ts`, the symbols
-below, with `runtime-parallel.c`, `runtime-host.c` and `runtime-net.c` beside
-them under budgets of their own; measure any of them with
-`clang -Oz -c <file> && size -A <file>.o`, or `scripts/size-report.sh`, which
-reports every row:
+below, with `runtime-parallel.c`, `runtime-host.c`, `runtime-net.c`,
+`runtime-simd.c` and `runtime-aes.c` beside them under budgets of their own;
+measure any of them with `clang -Oz -c <file> && size -A <file>.o`, or
+`scripts/size-report.sh --budgets`, which prints one row for every unit and
+configuration `node tests/run.js runtime-budget` gates, each with the ceiling
+and constant that gate applies (both read `tests/runtime-budgets.js`, and the
+gate fails if the report disagrees with it):
 
 | Symbol | Purpose |
 | --- | --- |
@@ -684,8 +687,11 @@ on the suite are in [wp9-optimisation.md](wp9-optimisation.md); the
 instrumented link needs the compiler-rt profile runtime
 (`libclang-rt-18-dev` on Ubuntu).
 
-`scripts/size-report.sh [--markdown] [module.ll] [driver.c]` prints one row
-per profile; CI attaches it to every run.
+`scripts/size-report.sh [--markdown] [--budgets] [module.ll] [driver.c]`
+prints one row per runtime `.text*` budget, with the ceiling the
+`runtime-budget` gate applies to it, then the core's `.rodata`, then one row
+per profile (`--budgets` stops before the profiles); CI attaches it to every
+run.
 
 ## Test harness
 
