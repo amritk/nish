@@ -3783,7 +3783,7 @@ class P256ProjectivePoint {
 
 /**
  * The temporaries of one addition or doubling, allocated once per scalar
- * multiplication rather than once per step, the comb entry `p256BaseMult`
+ * multiplication rather than once per step, the table entry a multiplication
  * selects into, and the curve's `b`, which the formulas multiply by.
  */
 class P256PointScratch {
@@ -4052,7 +4052,7 @@ const p256ScalarMult = (
   // digits, so all three are wiped before it returns.
   const table: u32[] = new Array<u32>(384)
   const acc = new P256ProjectivePoint()
-  const entry = new P256ProjectivePoint()
+  const entry: P256ProjectivePoint = s.entry
   const kLength: i32 = toI32(k.length)
   if (kLength < 32) {
     return

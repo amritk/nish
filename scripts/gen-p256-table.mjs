@@ -106,11 +106,15 @@ const montgomeryLimbs = (a) => {
 }
 
 const limbs = []
+// The teeth of sub-table c, 2^(4c + 64b) G for b = 0 to 3: sub-table 0's from
+// G, each later one's four doublings past the one before.
+let teeth = []
+for (let b = 0; b < TEETH; b++) {
+  teeth.push(shift(G, SPACING * b))
+}
 for (let c = 0; c < SUBTABLES; c++) {
-  // The teeth of sub-table c: 2^(4c + 64b) G for b = 0 to 3.
-  const teeth = []
-  for (let b = 0; b < TEETH; b++) {
-    teeth.push(shift(G, 4 * c + SPACING * b))
+  if (c > 0) {
+    teeth = teeth.map((t) => shift(t, 4))
   }
   for (let j = 1; j < 1 << TEETH; j++) {
     let point = null

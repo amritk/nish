@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1022 programs, 108759 dump lines.
+# 1022 programs, 108757 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -67981,12 +67981,11 @@ function p256ScalarMult(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoin
   pointer k: size=0 writesThrough=false captured=false
   pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256TableBuild#1
   pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256TableBuild#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointAdd#3
-  stackSites=3 stackLocals=3
+  stackSites=2 stackLocals=2
   local 4053:9 table: u32[] (const)
   local 4054:9 acc: P256ProjectivePoint (const)
   callee 4054:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   local 4055:9 entry: P256ProjectivePoint (const)
-  callee 4055:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   local 4056:9 kLength: i32 (const)
   callee 4060:3 p256TableBuild -> @nish.p256TableBuild
   callee 4061:3 p256SetIdentity -> @nish.p256SetIdentity
@@ -105390,12 +105389,11 @@ function p256ScalarMult(out: P256ProjectivePoint, k: u8[], p: P256ProjectivePoin
   pointer k: size=0 writesThrough=false captured=false
   pointer p: size=24 writesThrough=false captured=false passedTo=nish.p256TableBuild#1
   pointer s: size=64 writesThrough=false captured=false passedTo=nish.p256TableBuild#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointDouble#2 nish.p256PointAdd#3
-  stackSites=3 stackLocals=3
+  stackSites=2 stackLocals=2
   local 4053:9 table: u32[] (const)
   local 4054:9 acc: P256ProjectivePoint (const)
   callee 4054:15 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   local 4055:9 entry: P256ProjectivePoint (const)
-  callee 4055:17 new P256ProjectivePoint -> @nish.P256ProjectivePoint.constructor
   local 4056:9 kLength: i32 (const)
   callee 4060:3 p256TableBuild -> @nish.p256TableBuild
   callee 4061:3 p256SetIdentity -> @nish.p256SetIdentity

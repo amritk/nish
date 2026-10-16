@@ -4508,7 +4508,7 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
   )
   const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
   const entry = path.join(programDir, "main.ts")
-  if (!only || only !== "wasi") {
+  if (only !== "wasi") {
     const exe = path.join(agreeDir, "app")
     const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
       cwd: root,
@@ -6452,7 +6452,7 @@ if (!only || "p256 wipe survives -O2 p256BaseMult".includes(only)) {
       }
       reached.set(symbol, 0)
       const body = bodies.get(symbol)
-      let count = (body.match(/call void @llvm\.memset[^\n]*i1 true\)/g) || []).length
+      let count = (body.match(/call void @llvm\.memset[^\n]*i1 true\)|call void @nish_wipe\(/g) || []).length
       for (const m of body.matchAll(/call [^\n]*?@"?([\w.$]+)"?\(/g)) {
         count += bodies.has(m[1]) ? wipesUnder(m[1]) : 0
       }
