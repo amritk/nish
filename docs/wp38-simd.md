@@ -2,7 +2,7 @@
 
 **Status: accepted; S0 and S1's kernel and surface landed, S1's `bench/json`
 bar missed and S1b proposed, S2's bar met on a re-measurement but its flag not
-built, S4 declined for now, S5's 5x bar met, S6, S3a and S7 proposed (tracking issues #516 and #577).** The owner took the
+built, S4 declined for now, S5's 5x bar met, S6 proposed, S7 met by #561, S3a and S2 decided and planned (tracking issues #516 and #577).** The owner took the
 first four decisions in §8 on 2026-10-09, as recommended. S0's baselines are in §2.3
 (#517). S1's kernel, `runtime/runtime-simd.c` (#518), and its `std/text`
 function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
@@ -13,16 +13,16 @@ S2's `--cpu` flag is not built: S0's figures missed its bar, and a
 re-measurement against the noise met it (§7); building it is the owner's call.
 What reading every level costs the constant-time checkers was measured: the
 x86-64 levels and ARMv8 without SVE already pass, the SVE levels do not, and
-`native` cannot be read. The flag is recommended with one value,
-`x86-64-v3` (§7; §8, Q7, open).
+`native` cannot be read. The owner decided on 2026-10-16 to build it with one
+value, `x86-64-v3` (§7; §8, Q7), in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md).
 S4, the lexer on `indexOfAny`, is declined for now, because the lexer is too
 small a part of the bootstrap to move it (§7). S3's bar now names the scalar
 kernel it is judged against, and its operation list leaves out a fused
 multiply-add, after a portable-vector benchmark's findings were checked
-against LLVM 18 (§3.2.1). It is recommended to wait: first S7, crediting an
-offset index from the test that bounds it, then S3a, S3's two bar kernels
-measured without a surface, and S3 decided on those figures (§7; §8, Q8 and
-Q9, open). S5 put `std/crypto/aes.ts`'s key schedule, block,
+against LLVM 18 (§3.2.1). It waits for S3a, S3's two bar kernels measured
+without a surface, and is decided on those figures (§8, Q8, decided
+2026-10-16). S7, crediting an offset index from the test that bounds it, was
+to come first, and turned out to be built already, by #561 (§7, S7). S5 put `std/crypto/aes.ts`'s key schedule, block,
 GCTR and GHASH on AES-NI and PCLMULQDQ, and on ARMv8's AES and PMULL, as a
 runtime kernel behind a run-time branch that keeps the bitsliced code as the
 fallback: 38.5x on a 16 KiB AES-128-GCM seal (§2.3, §7). S6 puts `nish/json-tokenizer`'s byte runs on kernels, its numbers on
@@ -937,9 +937,34 @@ access as `uncheckedGet` inside the same guard gives the unchecked speed
 without the flag. Crediting an offset index `i + k` from a test
 `i + c < n`, with `0 <= k <= c`, would give it with no `nish:unsafe` at all.
 
+**Since #561, it does.** #561 (on `main` after 0.18.0) credits `xs[i + c]`
+from a guard on the sum (`offsetIndex` and `belowReach`, `src/bounds.ts`).
+The 0.18.0 rows above predate it. At `5403a55`, the same kernel, with
+`const n = a.length`, `if (b.length < n) { return 0 }` and the loop's
+`i + 3 < n`, keeps no bounds check in `dotGuarded`. Its `--profile speed`
+binary is byte-identical to the one built from the same kernel with every
+access through `uncheckedGet`, and `opt -O3` gives it the `<4 x float>`
+accumulator. Without the `b.length` guard, the four `b` accesses keep their
+checks, NL9007 now warns on each of the four, offset ones included, and the
+loop stays scalar. Timed at `--profile speed` on the 2.1 GHz Xeon (4 vCPUs,
+AVX2), nine interleaved rounds of 200,000 calls over 4,096 elements, one
+element bumped before each call, every answer folded into the printed
+checksum 44904233791, minimum / median in ms:
+
+| Build | min | median |
+| --- | ---: | ---: |
+| guarded, checked indexing | 126.3 | 128.9 |
+| its byte-identical copy | 123.9 | 135.1 |
+| guarded, `uncheckedGet` (the same bytes) | 122.6 | 131.3 |
+| without the `b.length` guard | 153.4 | 163.4 |
+
+The first three are one binary, so they differ only by the machine's noise,
+3% at the minimum and 5% at the median. The unguarded build is 21% slower
+than the guarded one at the minimum, outside that band.
+
 For a float kernel, then, much of what
 S3 could show over scalar Nish is available to scalar Nish already, and the
-bounds checks stand in the way. It is (d)'s loop-shape work (§3.4) as much
+bounds checks stood in the way until #561. It is (d)'s loop-shape work (§3.4) as much
 as (b)'s. S3's float comparator therefore has one scalar accumulator for
 every lane of the vector kernel's accumulators, and the stage reports it
 under both indexing modes.
@@ -1147,15 +1172,15 @@ a printed checksum.
 | **S0** | Measurement, nothing built. It records the baselines that S1–S3 are judged against: `bench/json` after #507's stage 3, `bench/scan.ts` natively and as wasm, nbody, vec3 and spectral at the baseline and with `-march=x86-64-v3` on the same `.ll`, and `scripts/bootstrap.sh --verify`. | It is written into this note's §2.3 with the commit it was taken at. **Landed (#517)**: [S0: the baselines](#s0-the-baselines), at `97210d5` and `c4dd861`, and `f33139a` for `bench/json` (taken by `s1-json`). |
 | **S1** | (a): the find-first-of-a-set kernel, its `std/text` function and the compiler's recognition of it. `std/json`'s structure scan and string skip move onto it. | `bench/json` with `jsonFields` is **at least 1.5x faster** than §2.3's S0 row, on the same machine. None of #507's non-benchmark shapes is slower: a compiler `--json` line, a 50-key object with the field last, a miss, and a line of short strings only. The kernel's three paths agree on a fuzzed corpus. The runtime stays within its budget. **Kernel landed (#518), surface landed (#519)**: `runtime/runtime-simd.c` and `indexOfAny` in `std/text`, with the three paths' agreement test. **`bench/json` bar missed**: no variant was reliably faster than S0 (one median leaves the noise band, from S0's own outlier median in that row), none came near 1.5x, and `std/json` is unchanged ([§2.3](#s1-stdjson-on-indexofany-the-bar-missed)). |
 | **S1b** | (a): the block classifier, only if S1 misses its `bench/json` bar | It reaches S1's `bench/json` bar where S1 alone did not, under S1's other conditions. **Not built; designing it is the owner's call** (below). |
-| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. Recommended with one value, `x86-64-v3`, after S7 (Q7, open). |
-| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Not built; S7 and S3a first (Q8, open)**: see below. |
-| **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Proposed (Q8, open)**: see below. |
+| **S2** | (d): the `--cpu` flag | A **≥10%** gain at one level on at least one of nbody, vec3 or spectral, with no loss on the others. `tests/ct-asm.js` reads every level the flag accepts, and its fixtures pass at each one (§6). **Bar met on a re-measurement; not built**: see below. **Decided 2026-10-16 (Q7)**: `x86-64-v3` only, for the module and the runtime alike; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
+| **S3** | (b): `nish:simd` | A kernel written with it is **≥1.5x** faster than the same kernel in scalar Nish at the default target. It must do that on a numeric program from `bench/` and on a byte scan that S1's kernel cannot express (`bench/scan.ts`'s depth counting). The scalar kernel does the same work (§3.2.1): its integer arithmetic wraps where the lanes do, it has one accumulator for every lane of the vector kernel's accumulators, and it is timed under both checked and unchecked indexing, with the record saying whether it vectorised. The aligned scalar kernel can be faster than a naive one. In §3.2.1 a four-accumulator scalar dot product ran 4.2x faster than a one-accumulator one under unchecked indexing. Every operation has a golden, a negative test and a Node reading checked by a native round trip. **Not built; decided on S3a's figures (Q8, decided 2026-10-16)**: see below. |
+| **S3a** | Measurement for S3, nothing built: S3's two bar kernels (a numeric program from `bench/` and `bench/scan.ts`'s depth counting) written in C with portable `vector_size(16)` vectors, the LLVM vector IR `nish:simd` would lower to, against the scalar Nish comparator S3's bar describes. Taken after S7. | It is written into this note's §2.3 with the commit it was taken at, with both indexing modes and whether each scalar loop vectorised. **Next (Q8, decided 2026-10-16)**; planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
 | **S4** | `src/`'s lexer on S1's function, from the release after S1 | `scripts/bootstrap.sh --verify` is measurably faster, and its fixed point is reached. **Declined for now**: see below. |
 | **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). In those three samples, at the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). **The bar holds at the minimum too, against `ce9d394` itself, at `b515c1b`** ([§2.3](#s5-aes-gcm-the-result)): a fourth sample, 48 rounds on a host where the byte-identical copy stayed within 1.4% at the minimum, puts every workload's fallback minimum within +3.0% of `ce9d394`'s (worst +0.8%) and every median within 11.1% (worst +2.0%). |
 | **S6a** | (a): byte-class run kernels on `u8[]` for `JsonTokenizer` and `JsonWriter`: the first index at or after `from`, below `limit`, whose byte is *not* a blank, a digit, or a plain string byte, each class fixed in its kernel, with no set to splat (§7, S6) | On `bench/json-compare` against the `06645ecf` record ([§2.4](#24-jsontokenizer-after-json-parity-the-gap-s6-is-aimed-at)), tokenize on twitter.json and citm_catalog.json are **at least 1.2x** faster at the minimum, and serialize on citm_catalog.json is faster outside its band. No corpus or workload is slower outside its band, and `bench/json-tokenizer`'s 242-byte body is not slower: short runs pay no call. The scalar, 16-byte and 32-byte paths agree on a fuzzed corpus that puts every class boundary at every offset of a block. JSONTestSuite's verdicts, the conformance corpus, the fuzz checksum and #582's mutation-pinned boundaries are unchanged. The unit stays within its ceiling. **Proposed.** |
 | **S6b** | Eisel–Lemire in `numberF64`, in Nish: a 128-bit product of the significand and a table of powers of five, with `parseFloat` kept for the ambiguous case. Not a vector; it is here because it is most of canada's gap (§2.4) | Tokenize on canada.json is **at least 1.5x** faster than the `06645ecf` record at the minimum, and twitter and citm are not slower outside their bands. Every `numberF64` answer is bit-for-bit `parseFloat`'s on canada.json, on every JSONTestSuite number, and on at least 10^8 random doubles printed shortest and at 17 digits, and under Node, where `numberF64` stays `parseFloat`. **Proposed.** |
 | **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Proposed; its design is written and decided before anything is built (§8, Q5).** |
-| **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Proposed (Q9, open)**: see below. |
+| **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Met by #561** (Q9): at `5403a55` the guarded kernel compiles to the same `--profile speed` binary as its `uncheckedGet` form, with the `<4 x float>` accumulator; #561's own entry measured it 3.1x faster than before, against a 2.4% band (§3.2.1, and below). |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
 missed its bar because a per-call search has nothing to jump on `bench/json`
@@ -1266,7 +1291,7 @@ tests/cases/ct_asm_mac.ts -o mac.ll`, compile it with `clang -O2 -S
 the same flag to `runtimeAsm`'s clang line in `tests/ct-asm-runtime.js` and
 call `runtimeChecks`.
 
-**S2: the recommendation (Q7, open).** Build the flag with one value,
+**S2: the recommendation (Q7, decided 2026-10-16).** Build the flag with one value,
 `--cpu x86-64-v3`, and refuse every other, `native` included. Only `x86-64-v3`
 has met the bar; the bar is per level, and a value with no measurement behind
 it is a promise without evidence. An AArch64 level or `x86-64-v4` comes later,
@@ -1295,17 +1320,16 @@ What it costs, one pull request:
   tests/run.js wasi` and `node tests/run.js performance` and regenerates the
   checked goldens, as every `src/` change does.
 
-It comes after S7, which may give numeric code more than the flag does,
-without a flag.
+S7, which was to come first, is already built (#561).
 
-**S3: what stands in front of it (Q8, open).** §3.2.1 already shows scalar
+**S3: what stands in front of it (Q8, decided).** §3.2.1 already shows scalar
 Nish reaching the vector code for a float kernel. A four-accumulator dot
 product without bounds checks compiled to the same `<4 x float>` loop a
 one-accumulator `f32x4` kernel would be, 4.2x faster than one accumulator, and
 its C twin ran at 0.99x the speed of SSE2 intrinsics. What stands in the way is
-the bounds check on each offset access, which the range analysis does not
-credit from the test `i + 3 < n`. So S3's numeric half is likely won by S7,
-with no surface. Its byte half is a scan `indexOfAny` cannot express, such as
+the bounds check on each offset access, which the range analysis did not
+credit from the test `i + 3 < n` until #561. Since #561 it does (§3.2.1), so
+S3's numeric half is likely won already, with no surface. Its byte half is a scan `indexOfAny` cannot express, such as
 `bench/scan.ts`'s depth counting, which a block classifier (S1b, re-aimed as
 S6c) would also reach, in the runtime. Against that, S3's surface is large and permanent: six types,
 about a dozen operation families, six checker rules with their negative tests,
@@ -1318,8 +1342,8 @@ before the next release, and it has no use for it (S4 was declined). Each
 `src/` pull request of the series also regenerates the checked goldens and
 must leave the NL9007 ratchet where it was.
 
-So the order recommended is S7, then S3a, then S3 decided on S3a's figures: if
-neither of S3a's kernels clears 1.5x after S7, S3 moves to §9; if only the
+So the order, decided on 2026-10-16, is S3a, then S3 decided on S3a's
+figures: if neither of S3a's kernels clears 1.5x, S3 moves to §9; if only the
 byte kernel does, S3 is weighed against S6c's classifier on that kernel.
 
 **S4 is declined for now on its own bar.** The lexer is about 1% of the front
@@ -1480,16 +1504,21 @@ grammar, the limits, the errors and every value stay in `std/json-tokenizer.ts`.
 which S1 measured. Serialize beyond S6a's escape scan is out of scope: its
 remaining gap is per-value work, not a byte scan.
 
-**S7: why it comes first (Q9, open).** It is the cheapest way to more vector
-code that this note has found. It touches no surface, withdraws nothing, and,
-per §3.2.1, the bounds checks it removes are what keep a scalar float kernel
-from the vector loop LLVM would otherwise build. It is WP15's bounds pipeline
-taking one more shape, so it reaches `src/` on the next bootstrap with no
-rolling-freeze cost. Its soundness rests on the same proof that credits
-`i < n` today, extended by a constant, and it needs the negative cases its row
-names. The NL9007 warning grows with it: it speaks today only for an index
-that is a plain local, so an offset access keeps its check without a word
-(§3.2.1).
+**S7: met by #561 (Q9).** It was to come first, as the cheapest way to more
+vector code this note had found: no surface, nothing withdrawn, and, per
+§3.2.1, the bounds checks it removes were what kept a scalar float kernel from
+the vector loop LLVM would otherwise build. #561 had already built it, as
+WP15's bounds pipeline taking one more shape: a guard `i + c < w.length`, or
+`i + c < n` with `n <= w.length`, records how far past `i` the length reaches,
+and `w[i + k]` is proven for every `k` up to that reach. §3.2.1 gives the
+measurement against its row's bar, and the bar is met: the guarded kernel is
+the same binary as its `uncheckedGet` form. Of the negative cases the row
+names, #561 pins two, a reach too short for `k`
+(`tests/cases/arr_bounds_offset_reach`) and a sum that may be negative
+(`arr_bounds_offset_floor`), and a third of its own, `--wrapping`
+(`arr_bounds_offset_wrap`). The row's third, a guard on one array's length
+indexing another, has no golden: the unguarded control in §3.2.1 shows the
+four checks stay, and the plan adds the golden as its first stage.
 
 S0 comes first, because every later bar is a ratio against it. S1 comes before
 S3 because it is cheaper, withdraws nothing, and is aimed at the gap that was
@@ -1502,7 +1531,7 @@ first; S6c waits for both, because its bar is a ratio against what they leave.
 
 ## 8. Decisions
 
-The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6 and are open. Q7 to Q9 came with §7's measurement of what S2's flag costs, and are open. The reason
+The owner took Q1 to Q4 on 2026-10-09, each as recommended. Q5 and Q6 came with S6 and are open. Q7 to Q9 came with §7's measurement of what S2's flag costs, and the owner took them on 2026-10-16, each as recommended; Q9's stage turned out to be built already. The reason
 beside each is the one the recommendation gave, and it is the reason the
 decision stands on: a stage that finds it untrue comes back here before it
 builds anything else.
@@ -1515,9 +1544,9 @@ builds anything else.
 | Q4 | Vector width in (b) | 128 bits only; 128 and 256; scalable | **128 only.** It is the width every target shares, simd128 included. Wider work is the runtime's job (§3.1). |
 | Q5 | S6c's structural index | a bitmask per block kept beside the document; a list of `u32` positions; not built | **Open.** Recommended: not decided until S6a and S6b have landed and their records say how much of §2.4's gap is left; then a written design (S6, *S6c*) the owner accepts before anything is built. |
 | Q6 | Where S6a's functions live | `nish/text`, beside `indexOfAny`; a new `nish/bytes` for `u8[]` scans | **Open.** Recommended: `nish/bytes`, since `nish/text` is about `string`s and these read `u8[]`. |
-| Q7 | S2's `--cpu` flag | build it with `x86-64-v3` only; build it with §3.4's levels; defer | **Open.** Recommended: `x86-64-v3` only, for the module and the runtime alike, after S7. It is the one level that met the bar. Both constant-time checkers already pass at it. `native` can never be read, and the SVE levels fail today. |
-| Q8 | S3, `nish:simd` | S7, then S3a, then decide; build S3 now; decline it now | **Open.** Recommended: S7, then S3a, then decide. Scalar Nish already reaches the vector loop for a float kernel once the bounds checks go. The byte half overlaps S6c's classifier. The surface is large and permanent. |
-| Q9 | S7, the offset-index credit | build it ahead of S2 and S3; leave it to WP15 | **Open.** Recommended: build it ahead of both. It has no surface and no freeze cost, and is likely the largest gain of the three for numeric code. |
+| Q7 | S2's `--cpu` flag | build it with `x86-64-v3` only; build it with §3.4's levels; defer | **`x86-64-v3` only, for the module and the runtime alike** (2026-10-16). It is the one level that met the bar, and both constant-time checkers already read it cleanly; `native` can never be read, and the SVE levels fail today. Planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
+| Q8 | S3, `nish:simd` | S7, then S3a, then decide; build S3 now; decline it now | **S3a, then decide** (2026-10-16). S7 was already built (#561), so scalar Nish reaches the vector loop for a float kernel with checked indexing; the byte half overlaps S6c's classifier; the surface is large and permanent. S3a is planned in [the S3a and S2 plan](../.claude/plans/wp38-s3a-cpu-flag.plan.md). |
+| Q9 | S7, the offset-index credit | build it ahead of S2 and S3; leave it to WP15 | **Ahead of both** (2026-10-16), and found built: #561 had landed it on 2026-10-10 (§7, S7). |
 
 ---
 
