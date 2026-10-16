@@ -79,7 +79,7 @@ while.end:
   ret i32 %20
 }
 
-define internal noundef i32 @send(i32 noundef %fd, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %data, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %to) #0 {
+define internal noundef i32 @send$(i32 noundef %fd, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %data, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %to) #0 {
 entry:
   %0 = add i64 0, 3
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %data, i64 0, i32 0
@@ -237,7 +237,7 @@ net.ok:
   %55 = load i32, i32* %a.addr, align 4
   %56 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
   %57 = load %struct.nish_array*, %struct.nish_array** %toB.addr, align 8
-  %58 = call i32 @send(i32 %55, %struct.nish_array* %56, %struct.nish_array* %57)
+  %58 = call i32 @send$(i32 %55, %struct.nish_array* %56, %struct.nish_array* %57)
   %59 = call i8* @nish_str_from_i32(i32 %58)
   call void @nish_print(i8* %59)
   %60 = load i32, i32* %b.addr, align 4
@@ -430,7 +430,7 @@ bounds.ok.6:
   %194 = load i32, i32* %a.addr, align 4
   %195 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
   %196 = load %struct.nish_array*, %struct.nish_array** %toB.addr, align 8
-  %197 = call i32 @send(i32 %194, %struct.nish_array* %195, %struct.nish_array* %196)
+  %197 = call i32 @send$(i32 %194, %struct.nish_array* %195, %struct.nish_array* %196)
   %198 = call i8* @nish_str_from_i32(i32 %197)
   call void @nish_print(i8* %198)
   %199 = load i32, i32* %b.addr, align 4
@@ -597,7 +597,7 @@ land.end.2:
   %295 = load i32, i32* %both.addr, align 4
   %296 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
   %297 = load %struct.nish_array*, %struct.nish_array** %toB.addr, align 8
-  %298 = call i32 @send(i32 %295, %struct.nish_array* %296, %struct.nish_array* %297)
+  %298 = call i32 @send$(i32 %295, %struct.nish_array* %296, %struct.nish_array* %297)
   %299 = call i8* @nish_str_from_i32(i32 %298)
   call void @nish_print(i8* %299)
   %300 = load i32, i32* %b.addr, align 4

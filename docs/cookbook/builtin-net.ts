@@ -5,7 +5,7 @@
 // can wait.
 import { netRead, netWrite, tcpListen } from "nish:net"
 
-export const listen = (port: i32): i32 => tcpListen("::", port, 128)
+export const listenOn = (port: i32): i32 => tcpListen("::", port, 128)
 
 export const echoOnce = (fd: i32, buf: u8[]): i32 => {
   const n = netRead(fd, buf, 0, buf.length)
