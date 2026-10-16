@@ -145,6 +145,12 @@ stays green, so the line that says the path ran is required in
 "calls all four kernels" check was gated that way and required nowhere until
 review round 1.
 
+**Moving where a fact lives moves every pointer to it in the same PR.** Grep
+the tree for the old location before the PR goes up: the docs, `.claude/`,
+`CLAUDE.md` and source comments. #636 moved the runtime ceilings from
+`tests/run.js` into `tests/runtime-budgets.js`, and the pointers left in its
+docs and in six `runtime/*.c` headers took two more review rounds to find.
+
 ## Security
 
 Vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) says,

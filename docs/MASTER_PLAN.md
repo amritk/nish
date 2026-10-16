@@ -81,14 +81,14 @@ Design rules that every WP must respect:
   run (`node tests/run.js budget`) rather than by a reviewer. The core,
   `runtime.c`, is a closed set whose ceiling should only come down; the
   OS-facing units grow with the surface, and an addition that does not fit
-  becomes a unit of its own rather than borrowing room. Measured 2026-10-05
-  with clang 18 on linux-x64:
+  becomes a unit of its own rather than borrowing room. Measured with clang 18
+  on linux-x64 on 2026-10-05, or on the date a row gives:
 
   | Unit | Today | Ceiling |
   | --- | ---: | ---: |
-  | `runtime.c` | 3,606 (3,731 with `-DNISH_THREADS=1`) | 3,606 (3,840) |
+  | `runtime.c` | 3,684 (3,885 with `-DNISH_THREADS=1`) (2026-10-16) | 3,684 (3,885) |
   | `runtime-os.c` | 1,530 | 1,536 |
-  | `runtime-parallel.c` | 597 (1,403 threaded) | 768 (1,536) |
+  | `runtime-parallel.c` | 610 (2,665 threaded) (2026-10-16) | 768 (2,816) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 675 (2026-10-09) | 768 |
