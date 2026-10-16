@@ -113,7 +113,7 @@ if ! installed nghttp2 "$nghttp2_ver"; then
   echo "== nghttp2 ${nghttp2_ver} (h2load with HTTP/3)"
   dir="$(fetch "$nghttp2_url" "$nghttp2_sha")"
   (cd "$dir" && CC=gcc-14 CXX=g++-14 ./configure --prefix="$prefix" --enable-http3 --enable-app \
-    --with-libngtcp2 --with-libnghttp3 --disable-python-bindings \
+    --with-libngtcp2 --with-libnghttp3 \
     LDFLAGS="-Wl,-rpath,${prefix}/lib" >/dev/null && make -j"$jobs" >/dev/null && make install >/dev/null)
   echo "$nghttp2_ver" >"${stamps}/nghttp2"
 fi
