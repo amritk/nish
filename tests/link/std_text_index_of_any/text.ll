@@ -13,16 +13,15 @@ declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly n
 declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #6
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #6
 declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #7
-declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #5
-declare void @nish_exit(i32 noundef) #8
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #5
-declare void @nish_panic_index(i64 noundef, i64 noundef) #9
-declare extern_weak void @nish_panic_overflow(i32 noundef) #9
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #8
+declare void @nish_panic_index(i64 noundef, i64 noundef) #8
+declare extern_weak void @nish_panic_overflow(i32 noundef) #8
 declare i64 @llvm.smin.i64(i64, i64) #0
 declare i64 @llvm.smax.i64(i64, i64) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #10 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #9 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -855,8 +854,7 @@ lor.end:
   br i1 %7, label %if.then, label %if.end
 
 if.then:
-  call void @nish_write(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [44 x i8] }* @.str.0 to i8*))
   unreachable
 
 if.end:
@@ -880,8 +878,7 @@ while.body:
   br i1 %17, label %if.then.1, label %if.end.1
 
 if.then.1:
-  call void @nish_write(i8* bitcast ({ i64, [48 x i8] }* @.str.1 to i8*), i32 2, i1 true)
-  call void @nish_exit(i32 1)
+  call void @nish_panic(i8* bitcast ({ i64, [48 x i8] }* @.str.1 to i8*))
   unreachable
 
 if.end.1:
@@ -1012,9 +1009,8 @@ attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #5 = { nounwind willreturn }
 attributes #6 = { nounwind willreturn memory(argmem: read) }
 attributes #7 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
-attributes #8 = { noreturn nounwind }
-attributes #9 = { nounwind noreturn cold }
-attributes #10 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #8 = { nounwind noreturn cold }
+attributes #9 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

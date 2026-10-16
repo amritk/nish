@@ -118,6 +118,7 @@ import {
   TemplateInfo,
   capturedReads,
 } from "./program"
+import { isCollectionStruct } from "./generics"
 import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
@@ -1701,6 +1702,20 @@ const writesThroughMessage = (
   return ""
 }
 
+/**
+ * The `walkOpen` a `for...of` straight over a `Map` or `Set` calls where the
+ * loop is entered, or null for any other loop. A walk of `m.keys()` or
+ * `m.values()` is a call of its own, which the region judges as one.
+ */
+const walkOpenOf = (program: CheckedProgram, loop: Node): FunctionSig | null => {
+  if (unwrapParens(loop.children[1]).kind === N_CALL) {
+    return null
+  }
+  const read = program.nodeCallees[loop.id]
+  const owner: StructInfo | null = read === null ? null : read.owner
+  return owner === null || !isCollectionStruct(owner) ? null : owner.method("walkOpen")
+}
+
 /** Whether `sig`'s parameter `name` is a `Channel`. */
 const isChannelParam = (
   program: CheckedProgram,
@@ -1779,6 +1794,11 @@ const walkRegion = (
     message = regionReadMessage(state, unwrapParens(node.children[0]).text)
   } else if (node.kind === N_FOR_OF && state.isDestination(namedLocal(program, node.children[1]))) {
     message = regionReadMessage(state, unwrapParens(node.children[1]).text)
+  } else if (node.kind === N_FOR_OF && walkOpenOf(program, node) !== null) {
+    // A walk of a `Map` or `Set` itself is a call of its `walkOpen`, which
+    // counts the walk into the table, as `s.keys()` in the same place is.
+    const open = walkOpenOf(program, node)
+    message = open === null ? "" : writesThroughMessage(program, table, facts, node, open, state)
   } else if (node.kind === N_CALL) {
     message = regionCallMessage(program, table, facts, node, state, uses)
   } else if (node.kind === N_NEW) {
