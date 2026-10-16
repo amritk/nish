@@ -11,8 +11,9 @@
 # is checked against the SHA-256 below before it is unpacked.
 #
 # nghttp2 1.70 needs C++23's <print>, which GCC 13 lacks, so h2load is built
-# with gcc-14 / g++-14 (Ubuntu 24.04: apt-get update, then
-# apt-get install -y gcc-14 g++-14).
+# with gcc-14 / g++-14, and h2load links libev and c-ares (Ubuntu 24.04:
+# apt-get update, then apt-get install -y gcc-14 g++-14 libev-dev libc-ares-dev
+# zlib1g-dev).
 set -euo pipefail
 
 prefix="${HOME}/.cache/nish-h3-bench"
@@ -23,7 +24,7 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     -h | --help)
-      sed -n '2,15p' "$0"
+      sed -n '2,16p' "$0"
       exit 0
       ;;
     *)
@@ -52,6 +53,12 @@ nginx_sha=89ea8a3dc171511f7325043b50e4c036248d9fad5feb7ec809c0b82d5df42c65
 for tool in gcc-14 g++-14 make curl sha256sum tar pkg-config; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "build-tools.sh: '$tool' is not on PATH (gcc-14 / g++-14: apt-get install -y gcc-14 g++-14)" >&2
+    exit 2
+  fi
+done
+for header in ev.h ares.h zlib.h; do
+  if ! echo "#include <${header}>" | gcc-14 -E - >/dev/null 2>&1; then
+    echo "build-tools.sh: <${header}> not found (apt-get install -y libev-dev libc-ares-dev zlib1g-dev)" >&2
     exit 2
   fi
 done
@@ -91,8 +98,9 @@ export LD_LIBRARY_PATH="${prefix}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 if ! installed openssl "$openssl_ver"; then
   echo "== OpenSSL ${openssl_ver}"
   dir="$(fetch "$openssl_url" "$openssl_sha")"
-  (cd "$dir" && ./Configure --prefix="$prefix" --libdir=lib no-docs no-tests >/dev/null && make -j"$jobs" >/dev/null &&
-    make install_sw >/dev/null)
+  (cd "$dir" && ./Configure --prefix="$prefix" --libdir=lib no-docs no-tests \
+    "-Wl,-rpath,${prefix}/lib" >/dev/null && make -j"$jobs" >/dev/null &&
+    make install_sw install_ssldirs >/dev/null)
   echo "$openssl_ver" >"${stamps}/openssl"
 fi
 

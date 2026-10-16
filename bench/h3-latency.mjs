@@ -176,7 +176,11 @@ const freePort = () => {
   return Number(out.trim())
 }
 
-/** One nginx with one worker, HTTP/3 on `port`, and nothing logged per request. */
+/**
+ * One nginx with one worker, HTTP/3 on `port`, and nothing logged per request.
+ * keepalive_requests defaults to 1000, after which nginx closes the connection
+ * and h2load's timed mode does not reconnect: raised so a run never meets it.
+ */
 const nginxConfig = (dir, port, www, certs) => `daemon off;
 master_process off;
 worker_processes 1;
@@ -185,6 +189,7 @@ pid ${join(dir, "nginx.pid")};
 events { worker_connections 1024; }
 http {
   access_log off;
+  keepalive_requests 100000000;
   client_body_temp_path ${dir};
   proxy_temp_path ${dir};
   fastcgi_temp_path ${dir};
