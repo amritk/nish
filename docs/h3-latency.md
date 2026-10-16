@@ -79,7 +79,9 @@ Raising the body makes the shape appear on this machine. The sweep below is
 three interleaved rounds of one 4 s single-client run per body and server;
 each cell is the range over the rounds of h2load's summary figures. nginx ran
 with `keepalive_requests` raised, so its connection is never recycled
-mid-run.
+mid-run, as the harness configures it. The sweep was a shell loop beside the
+harness, with the same pinning; `node bench/h3-latency.mjs --scenario single
+--size <bytes>` reproduces any one row.
 
 | body | nish p50 | nish p95 | nish p99 | nish req/s | nginx p50 | nginx p99 |
 | --- | --- | --- | --- | --- | --- | --- |
