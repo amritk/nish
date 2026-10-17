@@ -213,12 +213,25 @@ answer depend on which thread ran first.
 import { parallelMap } from "nish/threads";
 
 export const main = (): i32 => {
-  const total: i32 = 0;
+  const sum: i32 = 0;
   const ys = parallelMap([1, 2, 3], (x): i32 => {
-    total = total + x; // every thread would write it at once
+    sum = sum + x; // every thread would write it at once
     return x;
   });
   return ys[0];
+};
+```
+
+Answer the value from the body instead, and fold the answers with
+`parallelReduce` after the call. Here the body answers `x` itself, so the
+fold reads the array the call was given:
+
+```ts nish:ok
+import { parallelReduce } from "nish/threads";
+
+export const main = (): i32 => {
+  const sumTotal = parallelReduce([1, 2, 3], (a, b) => a + b, 0);
+  return sumTotal;
 };
 ```
 
@@ -918,7 +931,7 @@ with an example on this page that compiles.
 |---|---|---|
 | NL2345 | `f` of a parallel call writes what its caller can see, or prints | `f` answers the value, `const square = (x: f64): f64 => x * x`, and the call writes it, `parallelMapInto(src, dst, square)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
 | NL2348 | an element answer that is an array of strings or arrays, an object, a `Map` or a `Set` | answer a string or a number per element, `const squares = parallelFrom(5, (i) => i * i)`, and build the structure after the call: [`parallelFrom`](#a-new-array-parallelmap-and-parallelfrom) |
-| NL2503 | a parallel arrow writes a local of its function | answer the value from the body instead, and fold the answers with `parallelReduce`, `const total = parallelReduce(dst, (a, b) => a + b, 0.0)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| NL2503 | a parallel arrow writes a local of its function | answer the value from the body instead, and fold the answers with `parallelReduce`, `const sumTotal = parallelReduce([1, 2, 3], (a, b) => a + b, 0)`: [below the rule](#reading-the-functions-constants) |
 | NL2500 | a parallel arrow reads a `let` | a `const` snapshot before the call, `const kNow = k`: [below](#a-let-read-by-a-parallel-arrow) |
 | NL2388 | `scope()` bound without `using` | `using s = scope()`: [below](#a-scope-bound-without-using) |
 | NL2506 | an arrow task reads a `let` | a `const` snapshot before the `spawn`, `const kNow = k`: [`nish --fix`](#letting-nish---fix-write-it) |

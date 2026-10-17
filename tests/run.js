@@ -17701,6 +17701,7 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
   const isPlaceholder = (fragment) =>
     /\.\.\.|…/.test(fragment) ||
     /\bnew [A-Z]\b/.test(fragment) ||
+    /:\s*[A-Z](?![\w<])/.test(fragment) ||
     [...fragment.matchAll(/<([^<>]+)>/g)].some((m) =>
       m[1].split(/[,|]/).some((arg) => {
         const name = arg.trim().replace(/\[\]$/, "")
@@ -17801,7 +17802,7 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
   // code reached several ways (NL2479 from a spawn, a constructor, two scopes and a
   // late send) builds its remedy several ways, and each one ends with the code.
   const wordingDir = path.join(root, "tests", "wordings")
-  const remedyCodes = /^nl(2345|2348|2465|246[7-9]|247\d|2503|2511|2513|2516)_/
+  const remedyCodes = /^nl(2345|2348|2388|2465|246[6-9]|247\d|248[14]|2500|2503|2506|2511|2513|2516|2536)_/
   for (const file of fs.readdirSync(wordingDir).sort()) {
     if (!file.endsWith(".err") || !remedyCodes.test(file)) {
       continue

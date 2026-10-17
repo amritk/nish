@@ -3062,7 +3062,9 @@ export const main = (): i32 => {
   name itself is
   `` The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one; answer the value from the body instead, and read the answers from the array the call gives back, `const kValues = parallelMap([1, 2], (x): i32 => x)` ``
   (`reject_par_capture_assign`, and `reject_par_capture_update` for a `k++`
-  after a read).
+  after a read). A reducer that assigns to one is shown the same
+  `parallelReduce` without the write,
+  `` answer the value from the reducer instead, and let `parallelReduce` fold it, `const callsTotal = parallelReduce([1, 2, 3], (a, b): i32 => a + b, 0)` ``.
 - **A `let` is not captured**, since it could change between the call and a
   thread's read of it:
   `` The arrow reads `m`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call, `const mNow = m`, and read `mNow` in the arrow ``

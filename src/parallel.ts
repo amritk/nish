@@ -1176,8 +1176,9 @@ export const captureWriteMessage = (name: string, remedy: string): string =>
  * The code NL2503 shows for `target`, a captured name the arrow writes: the
  * fold the write spells, `+=`, `*=`, `= name + e`, `= name * e` or `++`, as a
  * `parallelReduce` over the values the body would have added, and a plain
- * `=` as the array the call gives back. It is built from the call the arrow
- * is passed to, its source and the arrow's own parameters.
+ * `=` as the array the call gives back; a reducer that writes one is the same
+ * `parallelReduce` without the write. It is built from the call the arrow is
+ * passed to, its source and the arrow's own parameters.
  */
 export const captureWriteRemedy = (program: CheckedProgram, target: Node): string => {
   const text = program.source.text
@@ -1246,7 +1247,18 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
     mapped = source
   }
   if (callee === "parallelReduce") {
-    return "answer the value from the reducer instead, and let `parallelReduce` fold it"
+    const lead = "answer the value from the reducer instead, and let `parallelReduce` fold it"
+    const args = call.children[1].children
+    if (args.length < 3 || !inlinable(arrow)) {
+      return lead
+    }
+    let result = arrow.children[3]
+    if (result.kind === N_BLOCK) {
+      result = result.children[result.children.length - 1].children[0]
+    }
+    const folded = freshName(text, `${name}Total`, 0)
+    const init = oneLine(program, args[2])
+    return `${lead}, \`const ${folded} = parallelReduce(${source}, ${head} => ${oneLine(program, result)}, ${init})\``
   }
   if (op === "") {
     const values = freshName(text, `${name}Values`, 0)

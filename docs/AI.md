@@ -894,7 +894,8 @@ export const main = (): i32 => {
   naming the write (NL2345): answer the value and write after the call. An
   arrow may read the `const` locals and parameters around it, never write
   them (NL2503: answer the value from the body instead, and fold the answers with `parallelReduce`,
-  `const total = parallelReduce(xs, (a, b) => a + b, 0)`)
+  `const sumTotal = parallelReduce(xs, (a, b) => a + b, 0)`, or read them from the array the call
+  gives back, `const kValues = parallelMap(xs, (x): i32 => x)`)
   and never read a `let` (NL2500: snapshot it first, `const kNow = k`). Reading is fine; so are a bounds check, an integer
   division and `panic`.
 - **What `f` allocates is freed after every element.** A string, array or
