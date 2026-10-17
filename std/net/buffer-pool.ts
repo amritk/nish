@@ -56,9 +56,17 @@ export class BufferPool {
   /**
    * An empty pool: it makes nothing until the first `take`. `name` is what
    * its panics print (the owner's type and field reads best,
-   * `"Http2TlsServer.output"`).
+   * `"Http2TlsServer.output"`). Panics, naming the pool, unless `size` is
+   * above 0 and `ceiling` at least 1: a pool of neither makes a buffer
+   * nobody can use or none at all.
    */
   constructor(name: string, size: i32, ceiling: i32) {
+    if (size <= 0) {
+      panic(`BufferPool ${name}: a buffer size of ${size} bytes is not above 0`)
+    }
+    if (ceiling < 1) {
+      panic(`BufferPool ${name}: a ceiling of ${ceiling} buffers is below 1`)
+    }
     this.name = name
     this.size = size
     this.ceiling = ceiling

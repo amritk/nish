@@ -845,7 +845,11 @@ after the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
 `tlsTrafficKey` and the rest of `nish/net/tls/schedule`) and QUIC's
 `quicKeys`, `quicKeysUpdate` and `quicKeyUpdateSecret` take a traffic secret
 as a `Secret<u8[]>` and answer secrets as one; the `QuicKeys` that `quicKeys`
-answers is plain, so call `quicKeysWipe` on it when you are done with it.
+answers is plain, so call `quicKeysWipe` on it when you are done with it. A server
+that lends byte buffers across connections takes them from
+`nish/net/buffer-pool`'s `BufferPool`: a pool of fixed-size buffers, up to a
+ceiling, whose `give` zeroes the bytes a buffer used before it is lent again,
+and whose `giveSecret` wipes the buffer whole.
 
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";

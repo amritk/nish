@@ -96,7 +96,7 @@ export const main = (): number => {
   t.eqI32("giveSecret zeroes the used extent", nonZero(d3, 0, 20), 0);
   t.eqI32("giveSecret takes the buffer back", pool.lent(), 0);
   const e: u8[] = pool.take();
-  t.eqI32("a buffer given back by giveSecret is the next one lent", nonZero(e, 0, 64), 0);
+  t.eqI32("a buffer given back by giveSecret is lent again all zeros", nonZero(e, 0, 64), 0);
   pool.giveSecret(e, 0);
   t.eqI32("giveSecret with used 0 still takes the buffer back", pool.lent(), 0);
 

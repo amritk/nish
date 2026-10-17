@@ -22,7 +22,7 @@ PASS  all three given back leaves none lent
 PASS  taking the ceiling again makes nothing new
 PASS  giveSecret zeroes the used extent
 PASS  giveSecret takes the buffer back
-PASS  a buffer given back by giveSecret is the next one lent
+PASS  a buffer given back by giveSecret is lent again all zeros
 PASS  giveSecret with used 0 still takes the buffer back
 PASS  a warmed take/give loop moves Arena.used() by 0
 PASS  the warmed loop made nothing past its warm-up
