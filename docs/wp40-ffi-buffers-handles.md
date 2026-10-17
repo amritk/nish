@@ -67,9 +67,11 @@ and it may keep no address. A handle keeps **§7a's placement rule**: a `CPtr`
 can still go only where the compiler can see all of its uses. This document
 adds one place for it to go, a field whose lifetime a `using` block bounds.
 With every exit of that block known, a use after close or a double close
-through the `using` binding cannot be written. A close written by hand inside
-the class's own methods is the one way left, and §4c lays out the two answers
-to it for the owner (Q9).
+through the `using` binding is refused. Two ways remain. One is a close
+written by hand inside the class's own methods, and §4c lays out the two
+answers to it for the owner (Q9). The other is a C function that closes,
+keeps or shares the pointer behind the compiler's back, which §4c lists as a
+C contract.
 
 ## 2. What exists at `249cbe9`
 
@@ -251,8 +253,9 @@ these hold, and kept otherwise:
   or another binding that aliases the buffer is not credited, because a
   later argument could reassign the path between the two reads;
 - no argument evaluated after the count can resize any array: it contains
-  no `push` or `pop` call on any receiver, and no call to a callee whose facts
-  say `resizesArray`. `len` is loaded last, so a resize between the count and
+  no `push` or `pop` call on any receiver, and no call or `new` whose callee
+  facts say `resizesArray`. A constructor is a callee here, as it is for the
+  existing `mayResize` (src/emit-arrays.ts:561), which already follows `new`. `len` is loaded last, so a resize between the count and
   the load would make them differ. The receiver is not matched against `x`,
   because aliases are not tracked (`const b = x; … toI64(b.pop())` resizes
   `x`): any resizing call disqualifies. `push` and `pop` must be named here
@@ -274,7 +277,17 @@ i64)`: `pwrite(fd, buf, toU64(buf.length), 0)` has no check, and
 it and panics `ffi-length` in a `panics_ffi_length` variant; and so does the
 inline arm `pwrite(fd, buf, toU64(buf.length), toI64(buf.pop()))`, whose `pop`
 no callee fact records, in a second panics variant
-(`panics_ffi_length_inline_pop`).
+(`panics_ffi_length_inline_pop`). A third arm is the constructor:
+`pwrite(fd, buf, toU64(buf.length), new Popper(buf).off())`, where
+`Popper`'s constructor pops `buf`, keeps the check, and the golden `.ll` shows
+it.
+
+**`--unchecked-indexing` keeps the check.** The flag drops index bounds
+checks in the entry package. `ffi-length` is not an index check. It is the
+condition C's access depends on, as a range type's check is that type's
+meaning (docs/LANGUAGE.md, "keeps it"). So `--unchecked-indexing` leaves every
+`ffi-length` compare in place, and `panics_ffi_length` runs a second time
+under the flag to pin it.
 
 The other answer, for the owner: emit the check on every call and prove
 nothing. It is one compare and one branch per call, on a call that is about
@@ -487,8 +500,18 @@ passed to is §4c's question.
 
 `CPtr | null` is what makes a failed `fopen` expressible without a panic in
 the constructor. The class narrows the field where it is used, through a
-field-derived local, and the example in §1 shows this. A non-nullable field
-needs a constructor that panics on `null`. Both are allowed.
+field-derived local, and the example in §1 shows this.
+
+**A non-nullable field is reachable only from a C function that returns a
+plain `CPtr`.** F's right-hand side is the foreign call alone, and the
+constructor never reads the field. So the field's type is the declared return
+type of `g`. With `fopen` declared `CPtr | null`, as it is here, these are all
+refused: `fopen(…)!`, `.expect(…)`, and a `const r = fopen(…)` tested for null
+before `this.f = r`. A `CPtr` field therefore needs a C function declared to
+return `CPtr`. That is a C contract that it never returns `NULL`, and it is
+the same kind of unchecked declaration as any other return type. Dispose
+shape 1 (§4b) is for that case. A second F shape that would let a class turn
+`CPtr | null` into `CPtr` is Q14, with its siblings and its costs.
 
 ### 4b. How the class names its close function
 
@@ -501,7 +524,19 @@ has one of two shapes, and no other:
   not type, since `this.f` is still `CPtr | null` inside the `if`.
 
 In both shapes, `close` is a `declare function` and the call's result is
-discarded. Any other body is refused (`reject_ffi_handle_dispose_body`). A
+discarded. Any other body is refused (`reject_ffi_handle_dispose_body`).
+Today the body of a dispose method is never resolved or typed
+(src/structs.ts:619 skips the method). H1.1 therefore type-checks the close
+call itself:
+- its name resolves to a `declare function`;
+- it takes exactly one argument;
+- that argument fits the parameter's type: `this.f` of type `CPtr`, or the
+  narrowed local `p`.
+
+A misspelled close (`reject_ffi_handle_dispose_unknown`), a two-argument
+close (`reject_ffi_handle_dispose_arity`) and a `CPtr | null` field passed
+straight to a `CPtr` parameter (`reject_ffi_handle_dispose_arg_type`) each
+have a case. A
 dispose method on a class with no `CPtr` field keeps today's refusal
 (src/structs.ts:619-623).
 
@@ -524,8 +559,14 @@ kind, as each was for locks:
   handle stack, or a scope holding only a handle would be skipped;
 - `emitScopeExit` (src/emit.ts:698), called at src/emit.ts:588, :1153, :1180,
   :1192 and :1519, and on the `orReturn()` propagation path at
-  src/emit-result.ts:560 and :564. It calls a close pass beside
-  `emitLockReleases` (src/emit-parallel.ts:867);
+  src/emit-result.ts:560 and :564. Today it calls `emitLockReleases`
+  (src/emit-parallel.ts:867), a pass over locks alone. H1.2 replaces that
+  with one LIFO pass over `openScopes` that releases a lock or closes a
+  handle as it meets each one. Two passes, one per kind, would get the order
+  wrong: under `using l = m.lock(); using f = new File(p)`, `f` closes before
+  `l` is released, the reverse of their order of opening, as on the
+  fall-through path. `ffi_handle_file` has a lock and a handle in one block
+  and shows that order on an early `return`;
 - the tail-call suppression. `holdsLock` (src/emit-parallel.ts:878) stops
   src/emit.ts:662 from marking a call in return position `tail` while a lock
   is held, because the release runs after it. An open handle needs the same,
@@ -688,7 +729,7 @@ the list. "Value" is a handle object, "field" its `CPtr` field.
 | Absence: `null`, `undefined`, `!`, `?.`, `??` | `f === null`, `f!`, `f?.m()` and `f ?? g` are refused: a handle is never nullable (row 14) | L2 is the only comparison; `p ?? q` and `p!` are refused (row 16b) |
 | Functions: declarations, module-level arrows, return | A parameter is H2. A return of `C`, a return type naming it, and a default value `f: File = new File(p)` are refused (rows 1, 8) | Never a parameter (S2) |
 | Generic functions, classes, interfaces and methods | `C` as a type argument, explicit or inferred (`id(f)`), is refused, on both template paths, and `C` may not have type parameters (row 5) | Unchanged from S2 |
-| Function parameters: callbacks and function types | `(f: File) => void` as a type is refused by the type rule; a callback that captures a handle is refused (row 4) | A closure capturing either is refused (row 4) |
+| Function parameters: callbacks and function types | A function is never a value (docs/LANGUAGE.md, "Function parameters": no function pointer, no indirect call). So the only way to pass a function is at a function-typed parameter of a top-level function, where it is instantiated. A function type that names `C`, such as `(f: File) => void`, is refused by the type rule. Naming an H2 function as an argument would need exactly that type, so it is refused too. A callback that captures a handle is refused (row 4) | A closure capturing either is refused (row 4) |
 | `nish:threads`, `scope()`, `spawnWith`, `Channel`, `Mutex` | A task capturing a handle (row 10), `spawnWith<File>` and `Channel<File>` (type rule), `ch.send(f)` (not U2) are refused | A task capturing the field or a local is refused (row 4) |
 | Calling C: `declare function` | A declared parameter of type `C` is refused by the type rule and by src/declarations.ts | R1 and L1 are the field's only way out |
 | Module constants and module-level bindings | Refused: H1 is inside a function body (row 15) | Unchanged from S2 |
@@ -699,7 +740,7 @@ the list. "Value" is a handle object, "field" its `CPtr` field.
 | Modules: `export`, `import`, re-export | `export class C`, a re-export, and an exported function or class whose method takes `C` are refused (row 19). A non-exported class cannot be imported, so a handle class and every function that takes one live in one module | — |
 | `const`, `let`, `using` | Only H1. `const g = f`, `let g: File`, `using g = f`, a ternary or `as` initialiser, and a second declarator `b = a` are refused (rows 2, 15) | R2 only, each declarator alone |
 | Expression statement | `f.m();` is U1. A bare `f;` is refused | `this.f;` is refused |
-| `if`, `while`, `for`, `for…of`, `switch`, labelled blocks | A handle as a condition, a `switch` subject or a `for…of` source (`for (const g of [f])`) is refused; U1 and U2 inside them are allowed, and a `using` in a loop body opens and closes once per iteration | F outside the constructor body's top level is refused |
+| `if`, `while`, `for`, `for…of`, `switch` (labelled statements are refused for every program, `reject_labeled_statement`) | A handle as a condition, a `switch` subject or a `for…of` source (`for (const g of [f])`) is refused; U1 and U2 inside them are allowed, and a `using` in a loop body opens and closes once per iteration | F outside the constructor body's top level is refused |
 | `return`, `break`, `continue` | `return f` is refused; `return f.m()` is U1, with the close after it (§4b, §4e) | `return this.f` and `return p` are refused (S2 keeps `CPtr` out of a return) |
 | `throw`, `try`/`catch` | Both are refused for every program (`reject_throw`, `reject_try_catch`, docs/LANGUAGE.md:4312-4325), so neither is a position or an exit | — |
 | Assignment, as a statement or used as an expression, either side, and compound assignment | `g = f`, `f = g`, `x.h = f` and `const q = (g = f)` are refused (row 15) | Every write but F is refused, including `const q = this.f = fopen(…)` (row 17); `x = this.f` and `x = p` are refused (row 16b) |
@@ -831,6 +872,16 @@ design, decided on a program that needs them.
   The comment at src/escape.ts:1320-1321, "No pointer this compiler
   allocated crosses the C boundary", goes stale the moment `buf->data`
   crosses, so B1.2 rewrites it to say that one does, borrowed and not kept.
+  More than the comment depends on that sentence. It is one premise of
+  `rootsHoldNoPointer`, and so of `FunctionFacts.contained`: everything a
+  call allocates is reachable afterwards only through its return value, and
+  the caller releases the call's arena on that basis. After B1, containment
+  still holds, but only through the borrow contract. If a C function keeps
+  `buf->data` against the contract, the arena is released under it, and a
+  later C access is a use after free, not just a stale read. B1.2's rewritten
+  comment names the contract as the premise. The LANGUAGE.md rule for the
+  borrow names this consequence, so the contract states what breaking it
+  costs.
   (B1.3 then rewrites the attributes comment of §3c; the escape comment
   belongs to the step that first passes the pointer, which is B1.2.) It is not a read, though. A
   foreign callee gets no per-argument facts today: `addCallee`
@@ -846,7 +897,13 @@ design, decided on a program that needs them.
     path starts from, the fact parallel.ts:1918 reads beside
     `writesThrough`;
   - an array private to the function (a `ROOT_OWN` local) records the call
-    as its write site, as a store does;
+    as its write site, as a store does. It stays private only because of the
+    facts entry above. Escape analysis asks `calleeCaptures` whether the
+    foreign callee keeps the argument, and that entry's pointer parameter
+    answers `captured = false`. Without the entry, `calleeCaptures` answers
+    `true` (src/escape.ts:638), the array escapes, and it loses its private
+    placement. `ffi_buffer_read`'s golden `.ll` shows the private array still
+    in the released scope;
   - an argument with no path (a call's result) is a past write, the
     conservative arm.
 
@@ -993,8 +1050,8 @@ case. A review that finds one of them probes the rest in the same round.
 | 15 | An alias, `let`, assignment on either side (as a statement or used as an expression), or module-level binding, including `const self = this` inside the class | Refused (§4d, §4a) | `reject_ffi_handle_alias`, `reject_ffi_handle_module_binding` |
 | 16 | Reading the `CPtr` field from outside the class, by member access or destructuring | Refused (§4a) | `reject_ffi_handle_field_read_outside` |
 | 16a | Reading the `CPtr` field inside the class by any path but `this.f`: another instance (`other.f`) or destructuring (`const { f } = this`) | Refused (§4a) | `reject_ffi_handle_field_other_instance` |
-| 16b | Copying a field-derived local (`const q = p`), binding the field to a `let`, or yielding it from a ternary or logical operator | Refused (§4a), so the field's names in a class are `this.f` and its direct `const` locals | `reject_ffi_handle_field_alias` |
-| 17 | Any write of the `CPtr` field but F: outside the constructor, a second one in it, one in a loop or a branch, one from anything but a foreign call, an initialiser, or an assignment used as an expression (`const q = this.f = fopen(p, "r")`, `fclose(this.f = fopen(p, "r"))`) | Refused (§4a). The seed's `readonly` check admits the second assignment today, since it does not count | `reject_ffi_handle_field_copy` |
+| 16b | Copying a field-derived local (`const q = p`), binding the field to a `let`, or yielding it from a ternary or logical operator | Refused (§4a), so the field's names in a class are `this.f` and its direct `const` locals | `reject_ffi_handle_field_alias_copy`, `reject_ffi_handle_field_alias_let`, `reject_ffi_handle_field_alias_ternary`, `reject_ffi_handle_field_alias_logical` |
+| 17 | Any write of the `CPtr` field but F: outside the constructor, a second one in it, one in a loop or a branch, one from anything but a foreign call, an initialiser, or an assignment used as an expression (`const q = this.f = fopen(p, "r")`, `fclose(this.f = fopen(p, "r"))`) | Refused (§4a). The seed's `readonly` check admits the second assignment today, since it does not count | `reject_ffi_handle_field_copy_method`, `_twice`, `_loop`, `_branch`, `_after_exit` (after an `orReturn()`), `_non_foreign` (`this.f = other.f`, `this.f = null`), `_ternary`, `_compound`, `_expr_const`, `_expr_arg` (each `reject_ffi_handle_field_copy_*`); the initialiser is row 34 |
 | 18 | An explicit dispose call on any receiver: `f[Symbol.dispose]()`, and inside the class `this[Symbol.dispose]()` and `other[Symbol.dispose]()` | Refused (§4c) | `reject_ffi_handle_dispose_call` |
 | 19 | An exported handle class or a re-export of one, an exported function taking one, or a method of an exported class (handle or not) taking one | Refused: an H2 parameter's function and class are not exported (§4d, §5) | `reject_ffi_handle_export`, `reject_ffi_handle_exported_param` |
 | 20 | A buffer, through its paired count: the next parameter is missing or is not a `u64` | Refused (§3a) | `reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type` |
@@ -1008,7 +1065,18 @@ case. A review that finds one of them probes the rest in the same round.
 | 28 | An interface field of type `File`, an object of that interface built from a handle, and returned from a block (the seed accepts a class instance in an interface field today) | Refused by the type rule: an interface field is not H2 (§4d) | `reject_ffi_handle_interface_field` |
 | 29 | An object literal holding a handle (`{ file: f }`, `{ f }`), or a handle passed to a builtin (`m.set(k, f)`, `JSON.stringify(f)`, `console.log(f)`) | Refused by the general rule: neither is U1 or U2 (§4d) | `reject_ffi_handle_object_literal`, `reject_ffi_handle_builtin_arg` |
 | 30 | A handle class with no `[Symbol.dispose]` | Refused: D5 (§4a) | `reject_ffi_handle_no_dispose` |
-| 31 | A read of the `CPtr` field in the constructor, or a closure in a method reading it | Refused by the field rule: R1 and R2 are in a method body, directly (§4a) | `reject_ffi_handle_field_position` |
+| 31 | A read of the `CPtr` field in the constructor, or a closure in a method reading it | Refused by the field rule: R1 and R2 are in a method body, directly (§4a) | `reject_ffi_handle_field_position_ctor`, `reject_ffi_handle_field_position_closure` |
+| 32 | A second `CPtr` or `CPtr \| null` field | Refused: D1 (§4a) | `reject_ffi_handle_two_fields` |
+| 33 | A `CPtr` field that is not `readonly` | Refused: D1 (§4a) | `reject_ffi_handle_field_mutable` |
+| 34 | A `CPtr` field with an initialiser, such as `readonly file: CPtr \| null = null`, which the literal-initialiser rule otherwise permits | Refused: D1 (§4a) | `reject_ffi_handle_field_initialiser` |
+| 35 | A dispose body of neither §4b shape, or one whose close call does not type | Refused (§4b) | `reject_ffi_handle_dispose_body`, `reject_ffi_handle_dispose_unknown`, `reject_ffi_handle_dispose_arity`, `reject_ffi_handle_dispose_arg_type` |
+
+**One case file per shape.** A `.err` golden pins one diagnostic, and a
+diagnostic names one position. So where a row lists several shapes, each gets
+its own file, named for the row's case plus a suffix for the shape, as rows
+16b, 17, 31 and 35 spell out. That is true even when every file expects the
+same message. Rows whose shapes are not split out yet follow the same rule,
+and H1.1's commit lists the files it adds.
 
 ## 7. Stage 9's precondition: the finding
 
@@ -1144,9 +1212,9 @@ B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
 
 | Step | What | Tests |
 | --- | --- | --- |
-| H1.1 | The handle rule as the allow-lists of §4a (D1–D5, F, R1, R2, L1, L2) and §4d (H1–H3, U1, U2, the type rule), each enforced as one positive check with one general refusal (`reject_ffi_handle_position`, `reject_ffi_handle_type_position`, `reject_ffi_handle_field_position`) rather than one check per way in; the dispose shape; the class-template check (§6 row 5); and `reject_ffi_handle_close_call` if Q9 is option A | Every new `reject_ffi_handle_*` case in §6, rows 1–19 (rows 9 and 11 are existing refusals and add none), 16a, 16b, 22 (under Q9's option A only) and 28–31; and one negative case per row of §4d's walk that no §6 row already covers (`reject_ffi_handle_walk_*`), so that each form the walk names is pinned |
+| H1.1 | The handle rule as the allow-lists of §4a (D1–D5, F, R1, R2, L1, L2) and §4d (H1–H3, U1, U2, the type rule), each enforced as one positive check with one general refusal (`reject_ffi_handle_position`, `reject_ffi_handle_type_position`, `reject_ffi_handle_field_position`) rather than one check per way in; the dispose shape; the class-template check (§6 row 5); and `reject_ffi_handle_close_call` if Q9 is option A | Every new `reject_ffi_handle_*` case in §6, one file per shape: rows 1–19 (rows 9 and 11 are existing refusals and add none), 16a, 16b, 22 (under Q9's option A only) and 28–35, which include the declaration refusals of D1 and the dispose-body refusals of §4b; and one negative case per row of §4d's walk that no §6 row already covers (`reject_ffi_handle_walk_*`), so that each form the walk names is pinned |
 | H1.2 | The emitted close as a fourth kind on `openScope`'s stack, wired into every exit path §4b lists (fall-through, `emitScopeJoins` and its `later` test, `emitScopeExit` including `orReturn()` propagation, and the tail-call suppression); per-declarator opening under Q12(a), or `reject_ffi_handle_using_exit_in_initialiser` under Q12(b) (§4e); the `ffi` offer at the `using`; the wasm32 checks (§5) | `ffi_handle_file` (golden `.ll` + native round trip: a class owning an `fopen` handle, closed by `using`, reading a file the sidecar `ffi_handle_file.c` writes first, with an early `return`, a `break` and a `continue` in a loop, an `orReturn()` that propagates out of the block, `return f.readByte()` in tail position (no `tail` marker in the golden), and two declarators (under Q12(a), the second initialiser's `orReturn()` propagating with the first open), and the sidecar counting the closes through an `fclose` wrapper it exports, so that the output shows exactly one close per open); `ffi_handle_arena` (§5); `caps_ffi_handle`; in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_handle_file` |
-| H1.3 | Use after close, refused | `reject_ffi_handle_use_after_close`: the binding named after its block (`let x = 0; { using f = new File(p) } f.read()`) is already a scope error; the case pins its message, and a second program reaches the object through a callee that tries to keep it, refused by row 15 |
+| H1.3 | Use after close, refused | `reject_ffi_handle_use_after_close`: the binding named after its block (`let x = 0; { using f = new File(p) } f.read()`) is already a scope error; the case pins its message, and a second case file, `reject_ffi_handle_use_after_close_keep`, reaches the object through a callee that tries to keep it (`let saved` assigned from an H2 parameter), refused by row 15 |
 
 H1's bar is a class that owns an `fopen` handle and is closed by `using`, with
 use after close refused and one negative case per sibling. `ffi_handle_file`
@@ -1171,7 +1239,8 @@ reason untrue comes back here before building anything else.
 | Q10 | A buffer argument whose array a later argument resizes | (a) load `data` and `len` after every argument, and elide the check only when no later argument may resize; (b) refuse the call by the `resizesArray` fact and load at the argument's position | **Open. Recommended: (a).** C gets the block and length that exist when it runs, and no program is refused. (b) is simpler IR and a refusal phrased in callee facts (§3a). |
 | Q11 | `syscall` and fixed-arity declarations of variadic C functions | (a) a name denylist, for `syscall` and optionally the variadic libc names; (b) a stated C contract | **Open. Recommended: (a) for `syscall` alone, (b) for the rest.** A denylist of libc names is incomplete and catches `open` (§8). |
 | Q12 | An exit inside a later declarator's initialiser of a `using` that already opened a handle | (a) open each declarator before the next initialiser runs, as JavaScript does; (b) refuse the exit | **Open. Recommended: (a).** It is the semantics `tsc` and Node give the same source, and the leak is otherwise silent. It moves the emit order for every kind `using` opens and the goldens with multi-declarator `using`; (b) moves nothing and refuses valid programs; widened to every kind, it also closes the existing lock and scope leak, which deserves its own issue either way (§4e). |
-| Q13 | Whether §4d's allow-list is too restrictive | (a) ship it as written: no handle in a constructor parameter, a closure or another module, and nothing in the constructor but field writes; (b) widen one position now, each needing its own walk against the list (most likely a cross-module import, which needs the export refusal to tell a Nish import from the ABI surface) | **Open. Recommended: (a).** It admits every program this design set out to admit, it is sound by construction because nothing off the list is admitted, and each widening is additive and can wait for a program that needs it (§4d). |
+| Q13 | Whether §4d's allow-list is too restrictive | (a) ship it as written: no handle in a constructor parameter, a closure or another module, and nothing in the constructor but field writes; (b) widen one position now, each needing its own walk against the list (most likely a cross-module import, which needs the export refusal to tell a Nish import from the ABI surface) | **Open. Recommended: (a).** It admits every program this design set out to admit. Nothing off the list is admitted, so what the checker sees is sound by construction. The C contracts of §4c stay, as they would under any option. Each widening is additive and can wait for a program that needs it (§4d). |
+| Q14 | How a class gets a non-nullable `CPtr` field from a C function that may return `NULL` | (a) as written: a `CPtr` field only from a C function declared to return `CPtr`, and otherwise a `CPtr \| null` field narrowed at each use (§4a); (b) a second write shape, F2: `const r = g(args); if (r === null) { panic(msg); } this.f = r;` as three consecutive top-level constructor statements, with `r` used in nothing else | **Open. Recommended: (a).** (b) is sound if its siblings are refused, and each needs its own rule and case: `r` passed to C before the write, `r` copied, a second write of `r`, an `if` whose body does anything but `panic`, an `else`, a `return` in place of the `panic` (a constructor that leaves the field unset), and a `r!` or `r.expect()` spelling in place of the test. It costs one more write form and a constructor-local rule beside R2. All it buys is the null test written once in the constructor rather than at each use, which shape 2 of §4b already does in the dispose (§4a). |
 
 ## 11. Declined
 
