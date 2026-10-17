@@ -708,6 +708,14 @@ class EscapeAnalysis {
       ) {
         return new Outcome(FLOW_LOCAL, true, false)
       }
+      // WP27 S3.1: a `string` handed to a `declare function` is borrowed for
+      // the length of the call, and the C function may not keep its address
+      // (`docs/wp27-ffi.md` §8b). Nothing about a C body can be proved, so
+      // this is the decision read as a fact: a read, as `console.log`'s is,
+      // and the arena scope may release once the call has returned.
+      if (callee !== null && callee.foreign()) {
+        return new Outcome(FLOW_LOCAL, true, false)
+      }
       const captures = callee === null ? true : this.calleeCaptures(callee, found.index)
       return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true, captures)
     }
