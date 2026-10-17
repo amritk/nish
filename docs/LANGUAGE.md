@@ -3617,7 +3617,14 @@ breaks one is refused with that rule's own code:
   `const b = g.value.bins`, which would race a guarded write once the block
   ends; `reject_mutex_guard_return` and `reject_mutex_guard_return_array` for a
   return; `reject_mutex_guard_store_field` and `reject_mutex_guard_store_element`
-  for a store; `reject_mutex_guard_for_of` for a walk). An arrow cannot capture
+  for a store; `reject_mutex_guard_for_of` for a walk). An arrow's expression
+  body is its answer and is judged as a `return` of it is, so a helper written
+  `(g: MutexGuard<Box>): Box => g.value` is refused as one that writes
+  `return g.value` (`reject_mutex_guard_helper_expr_value`, `_field`, `_paren`,
+  `_index`, `link/reject_mutex_guard_helper_expr_import`), and
+  `reject_mutex_guard_helper_expr_churn` is the use-after-free it would open: the
+  object kept past the lock, its string replaced under a second lock, and
+  `churn()` reusing the memory before the old one is printed. An arrow cannot capture
   a guard (`reject_mutex_guard_capture`), and an arrow passed to a
   data-parallel form, which may read its function's `const` locals, may not
   read a guard among them (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
@@ -3633,7 +3640,8 @@ breaks one is refused with that rule's own code:
   class). A `null` is not stored through a guard, into a `string | null` field,
   element or `Mutex<string | null>` alike:
   `` This stores `null` through a guard: a store into a `string | null` slot of a `Mutex`'s data copies the string into memory the `Mutex` owns and frees the copy it replaces, an exchange only a string takes part in, so a `null` cannot empty the slot; store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0`, or keep a `boolean` field beside it, `g.value.hasLast = false` ``
-  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`). The store's
+  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`, and `_paren`
+  for `g.value.last = (null)`). The store's
   exchange, `nish_guard_keep`, copies the string it is given, so it has no
   `null` to copy; admitting the store would mean an exchange that frees the
   slot's copy and keeps nothing, which the runtime does not have in this
@@ -4024,7 +4032,8 @@ sends and receives:
   compared, and no member but `send` is named:
   `` A `Channel` cannot be bound, stored, returned or compared here: a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer ``
   (NL2477, `reject_channel_bound`, `reject_channel_member`, `reject_channel_member_take`, `_ready`,
-  `_head` and `_state`, and `reject_channel_stored` for a class that holds one
+  `_head` and `_state`, `reject_channel_returned_expr` for an arrow whose
+  expression body is a channel, which is its answer, and `reject_channel_stored` for a class that holds one
   made anywhere but at the `spawn`; `reject_channel_nullable` for a task's
   argument whose channel may be `null`, which the `spawn` could not count as a
   sender). A type holds a channel only as exactly `Channel<T>`: never as one

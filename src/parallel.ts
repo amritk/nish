@@ -1499,6 +1499,28 @@ const identsNamed = (node: Node, name: string, out: Node[]): boolean => {
   return true
 }
 
+/** Whether `node` assigns `name`, `name = v`, `name += v` or `name++`: the fix's `const` could not take the write. */
+const assignsName = (node: Node, name: string): boolean => {
+  if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+    const target = unwrapParens(node.children[0])
+    if (target.kind === N_IDENT && target.text === name) {
+      return true
+    }
+  }
+  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    const target = unwrapParens(node.children[0])
+    if (target.kind === N_IDENT && target.text === name) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (assignsName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * The fix for an arrow argument that reads a `let` of the function it is
  * written in: the value is bound to a `const` on the line above the statement
@@ -1509,6 +1531,8 @@ const identsNamed = (node: Node, name: string, out: Node[]): boolean => {
  * else in the statement names the `let`, so the value bound is the one the
  * arrow read: a call in a loop's header or a condition would bind it at
  * another time, and an argument that assigns the `let` would change it after.
+ * An arrow that assigns the `let` itself is left alone: the write would land on
+ * the `const`.
  */
 export const letCaptureEdits = (text: string, host: Node, arrow: Node, name: string): Edit[] => {
   const edits: Edit[] = []
@@ -1544,7 +1568,7 @@ export const letCaptureEdits = (text: string, host: Node, arrow: Node, name: str
     return edits
   }
   const uses: Node[] = []
-  if (!identsNamed(arrow, name, uses) || uses.length === 0) {
+  if (!identsNamed(arrow, name, uses) || uses.length === 0 || assignsName(arrow, name)) {
     return edits
   }
   for (const arg of call.children[1].children) {
@@ -3478,10 +3502,14 @@ const walkMutexes = (
         return
       }
     }
-  } else if (isGuardedAccess(program, table, node) && parent !== null) {
-    const base = (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at
+  } else if (isGuardedAccess(program, table, node)) {
+    // With no parent the chain is an arrow's whole expression body, which is
+    // its answer: judged as `return g.value` is, by the type it would carry out.
+    const base =
+      parent !== null && (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at
     const above: Node | null = depth > 1 ? parents[depth - 2] : null
     if (
+      parent !== null &&
       base &&
       parent.kind === N_MEMBER &&
       above !== null &&
@@ -3492,10 +3520,10 @@ const walkMutexes = (
       out.push(new ScopeFinding(above, guardMethodMessage(parent.text)))
     } else if (base) {
       // an access through it: judged where it ends
-    } else if (isStoreTarget(at, parents, depth)) {
+    } else if (parent !== null && isStoreTarget(at, parents, depth)) {
       // A store's target has no type of its own in the tables; what is stored is the value's.
       const stored = parent.kind === N_BINARY ? program.nodeTypes[parent.children[1].id] : type
-      if (parent.kind === N_BINARY && parent.children[1].kind === N_NULL) {
+      if (parent.kind === N_BINARY && unwrapParens(parent.children[1]).kind === N_NULL) {
         out.push(new ScopeFinding(parent, GUARD_NULL_STORE_MESSAGE))
       } else if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
         out.push(new ScopeFinding(parent, guardStoreMessage(table, stored)))
@@ -4266,8 +4294,13 @@ const walkChannelUses = (
   const type = program.nodeTypes[node.id]
   const declaresName =
     parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === at
-  if (node.kind !== N_PAREN && !declaresName && parent !== null && isChannelType(program, table, type)) {
-    const message = channelUseFinding(program, table, sig, node, at, parents, depth, locals)
+  if (node.kind !== N_PAREN && !declaresName && isChannelType(program, table, type)) {
+    // With no parent the channel is an arrow's whole expression body, which is
+    // its answer: refused as `return ch` is.
+    const message =
+      parent === null
+        ? channelUseMessage("A `Channel` cannot be bound, stored, returned or compared here")
+        : channelUseFinding(program, table, sig, node, at, parents, depth, locals)
     if (message.length > 0) {
       out.push(new ScopeFinding(node, message))
       return

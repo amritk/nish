@@ -1558,7 +1558,7 @@ const declarationIn = (program: CheckedProgram, node: Node, local: Local): Node 
  * literal); -1 otherwise, and for a method, whose answer may be its
  * receiver's. A call to such a function answers memory no further from its
  * caller than that argument, since a parameter is never reassigned
- * (`checkAssignment` and `checkIncrement` in `expressions.ts` refuse it):
+ * (`checkAssignment` and `checkIncrement` in `expressions.ts` refuse it, NL2179):
  * `rebuiltSlots` in `std/collections.ts`, which `Map.rebuild` refiles into.
  * A fresh return may hold another argument's memory, `[ys]` or `new H(ys)`,
  * and the path still names only the one parameter: that is sound because a

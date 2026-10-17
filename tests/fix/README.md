@@ -124,13 +124,16 @@ none. Two such `spawn`s in one scope each get a slot of their own, `answer` and
 statement, which is the value the arrow would have read when it ran; a `let`
 another argument also names (`thread-nofix-capture-other-argument`) or one a
 `for` header declares (`thread-nofix-capture-for`), where no statement before
-the call is in the loop, keeps the refusal. `thread-hoist-channel` (NL2484)
+the call is in the loop, keeps the refusal, and so does an arrow that assigns
+the `let` itself (`thread-nofix-capture-assigned`, `-assigned-map`), whose write
+would land on the `const`. `thread-hoist-channel` (NL2484)
 moves an arrow that uses a `Channel` to a `const` of its own above the
 top-level statement it is written in, named for the function and `Task`; an
 arrow that captures (`thread-nofix-hoist-capturing`) or leaves a type out
 (`thread-nofix-hoist-unannotated`) would not check at the top level, and one
 in a method (`thread-nofix-hoist-method`) has no name to give the `const`,
-since `Runner.run` is not an identifier, so it stays. Each input is an error, so none runs before its fix and none has a
+since `Runner.run` is not an identifier, so it stays; a `parallelMap` body in
+a method (`thread-nofix-hoist-method-map`) stays for the same reason. Each input is an error, so none runs before its fix and none has a
 `.stdout`; the fixed programs print 25, 42, `joined`, `joined`, 24, 66 and 3. The fixed
 program imports `nish/threads`, which is why the runner compiles it with
 `-o fixed/`: one `.ll` per module.
