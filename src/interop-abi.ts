@@ -32,7 +32,7 @@ import { ROOT_PACKAGE } from "./packages"
 import { hasFunctionParameter } from "./generics"
 import { basename } from "./paths"
 import { N_CONSTRUCTOR, Node } from "./nodes"
-import { FunctionSig, STRUCT_CLASS, TemplateInfo } from "./program"
+import { FieldInfo, FunctionSig, STRUCT_CLASS, StructInfo, TemplateInfo } from "./program"
 import { ResultLayout, resultLayout } from "./result"
 import { StringBuilder } from "./strings"
 import {
@@ -595,6 +595,10 @@ export const tsKeyword = (table: TypeTable, t: i32): string => {
   if (table.isEnumMemberType(t)) {
     return table.typeName(t)
   }
+  // A discriminated union crosses nowhere either, and reads as written.
+  if (table.isUnion(t)) {
+    return table.typeName(t)
+  }
   switch (table.kindOf(t)) {
     case T_I32:
       return "number"
@@ -837,11 +841,11 @@ const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalF
 
 /**
  * What a sidecar refuses to describe, reported into the compilation's sink;
- * true when there is nothing to refuse. `cDeclared` is the functions a header
- * or an N-API shim -- the two files that declare C prototypes -- will declare,
- * and is empty when neither was asked for.
+ * true when there is nothing to refuse. `fns` is every external function,
+ * and `cDeclared` the ones a header or an N-API shim -- the two files that
+ * declare C prototypes -- will declare, empty when neither was asked for.
  *
- * Two refusals, both about a name a host would reach for:
+ * Three refusals, the first two about a name a host would reach for:
  *
  *   - **An exported generic that this program never instantiates**
  *     (`docs/wp18-generics.md` §8, message 9). It has no symbol, so every
@@ -850,8 +854,13 @@ const cNameClashes = (table: TypeTable, declared: ExternalFunction[]): ExternalF
  *     only its exports are described (`externalFunctions`).
  *   - **Two functions with one C identifier** (`cNameClashes`), which a header
  *     would declare twice and which would not compile.
+ *   - **A discriminated union** in a signature or a field (`refuseUnions`).
  */
-export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFunction[]): boolean => {
+export const acceptsSidecars = (
+  compilation: Compilation,
+  fns: ExternalFunction[],
+  cDeclared: ExternalFunction[]
+): boolean => {
   let ok = true
   for (const unit of compilation.modules) {
     const program = unit.checker.program
@@ -916,6 +925,9 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
       }
     }
   }
+  if (!refuseUnions(compilation, fns)) {
+    ok = false
+  }
   // The clashes come in pairs, and the test on the second of each is what
   // proves both reads.
   const clashes = cNameClashes(compilation.table, cDeclared)
@@ -935,6 +947,103 @@ export const acceptsSidecars = (compilation: Compilation, cDeclared: ExternalFun
     i = i + 2
   }
   return ok
+}
+
+/**
+ * Refuses a discriminated union in what a sidecar describes: a parameter or
+ * result of an external function, every sidecar's or none, and a field of any class or interface the
+ * header lays out. A union has no C spelling yet, so the header would write it
+ * as `void *` and the host could not tell the variants apart. True when there
+ * is none; otherwise the first is reported.
+ */
+const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
+  // The loops only look; the one report is written after them, so no pass of a
+  // loop keeps a message alive past itself, and the first union is the one.
+  const table = compilation.table
+  let fn: ExternalFunction | null = null
+  let slot = NO_UNION
+  for (const each of fns) {
+    slot = unionSlot(table, each.sig)
+    if (slot !== NO_UNION) {
+      fn = each
+      break
+    }
+  }
+  if (fn !== null) {
+    const sig = fn.sig
+    const what =
+      slot === RETURN_SLOT
+        ? `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
+        : `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[slot]}\` is \`${table.typeName(sig.paramTypes[slot])}\``
+    reportUnion(compilation, fn.unit, sigNameNode(sig), what)
+    return false
+  }
+  let unit: ModuleUnit | null = null
+  let info: StructInfo | null = null
+  for (const each of compilation.modules) {
+    info = unionStruct(table, each)
+    if (info !== null) {
+      unit = each
+      break
+    }
+  }
+  let f: FieldInfo | null = null
+  if (info !== null) {
+    f = unionField(table, info)
+  }
+  if (unit !== null && info !== null && f !== null) {
+    reportUnion(compilation, unit, f.decl, `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``)
+    return false
+  }
+  return true
+}
+
+/** The first class or interface `unit` declares with a field that holds a union, or null. */
+const unionStruct = (table: TypeTable, unit: ModuleUnit): StructInfo | null => {
+  for (const info of unit.checker.program.structList) {
+    if (info.origin === unit.source && unionField(table, info) !== null) {
+      return info
+    }
+  }
+  return null
+}
+
+/** `unionSlot`'s answers besides a parameter's index. */
+const NO_UNION: i32 = -2
+const RETURN_SLOT: i32 = -1
+
+/** Where `sig` holds a union: `RETURN_SLOT`, a parameter's index, or `NO_UNION`. */
+const unionSlot = (table: TypeTable, sig: FunctionSig): i32 => {
+  if (table.holdsUnion(sig.returnType)) {
+    return RETURN_SLOT
+  }
+  let i = 0
+  while (i < sig.paramTypes.length && i < sig.paramNames.length) {
+    if (table.holdsUnion(sig.paramTypes[i])) {
+      return i
+    }
+    i = i + 1
+  }
+  return NO_UNION
+}
+
+/** The first field of `info` that holds a union, or null. */
+const unionField = (table: TypeTable, info: StructInfo): FieldInfo | null => {
+  for (const f of info.fields) {
+    if (table.holdsUnion(f.type)) {
+      return f
+    }
+  }
+  return null
+}
+
+const reportUnion = (compilation: Compilation, unit: ModuleUnit, at: Node, what: string): void => {
+  compilation.sink.report(
+    unit.source,
+    at.start,
+    at.end,
+    `${what}, which holds a union no sidecar can describe: a union has no C spelling in this version`
+  )
 }
 
 const reportUninstantiated = (

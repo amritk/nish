@@ -25,6 +25,15 @@
  * schedule inside `using a = arena()` blocks and leave the arena where it was
  * (TLS-3 in `docs/security/tls.md`). The scratch is wiped by every step.
  *
+ * **Held.** Each step also has a `*Held` form that reads its secrets from
+ * `Secret`s the caller holds and writes the secret it derives over the bytes
+ * of one, in place, so a connection keeps each stage of the schedule in one
+ * `Secret` for its life and ratchets it: `tlsDeriveSecretHeld`,
+ * `tlsHandshakeSecretHeld`, `tlsMasterSecretHeld`, and the two that answer
+ * plain bytes, `tlsFinishedVerifyDataHeld` (`verify_data` goes on the wire)
+ * and `tlsTrafficKeysFromHeld` (the cipher reads the key and IV). Every
+ * plain intermediate is wiped before it returns.
+ *
  * **Secrets are `Secret`s.** The one-shot functions take every secret they
  * read (a traffic secret, the ECDHE secret, a stage of the schedule) as a
  * `Secret<u8[]>` (`nish:secret`) and answer every secret they derive as one;
@@ -39,8 +48,11 @@
  */
 import {
   HkdfScratch,
+  hkdfExpandLabelHeldInto,
   hkdfExpandLabelInto,
+  hkdfExpandLabelSha256Held,
   hkdfExpandLabelSha256Secret,
+  hkdfExpandLabelSha384Held,
   hkdfExpandLabelSha384Secret,
   hkdfExtractInto,
 } from "nish/crypto/hkdf"
@@ -55,7 +67,7 @@ import {
 import { tlsHexInto } from "nish/net/tls/codec"
 import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, Sha384, sha384 } from "nish/crypto/sha512"
-import { Secret, exposeWith, secret, wipe } from "nish:secret"
+import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 
 /** `TLS_AES_128_GCM_SHA256` (RFC 8446 §B.4). */
 export const TLS_AES_128_GCM_SHA256: i32 = 0x1301
@@ -502,5 +514,187 @@ export const tlsTrafficKeysInto = (
     TLS_SCHEDULE_FROM,
     TLS_IV_SIZE
   )
+  return true
+}
+
+// ---- The schedule into held `Secret`s --------------------------------------
+
+/** The length of the bytes a `Secret` holds, which is public, for `expose` to read. */
+const tlsHeldLength = (bytes: u8[]): i32 => toI32(bytes.length)
+
+/** Overwrites the bytes a `Secret` holds with `from`, for `exposeWith` to run on the destination. */
+const tlsHeldCopy = (held: u8[], from: u8[]): void => {
+  for (let k: i32 = 0; k < toI32(held.length) && k < toI32(from.length); k++) {
+    held[k] = from[k]
+  }
+}
+
+/** `transcriptHash[hashOff .. hashOff + hashLength)` in a fresh array: the context a held form hands HKDF. */
+const tlsHeldWindow = (hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
+  const window: u8[] = new Array<u8>(hashLength)
+  for (let k: i32 = 0; k < toI32(window.length); k++) {
+    window[k] = transcriptHash[hashOff + k]
+  }
+  return window
+}
+
+/**
+ * Panics naming `caller` unless `hashLength` is 32 or 48 and `held` holds
+ * `hashLength` bytes, as every secret of the schedule does.
+ */
+const tlsHeldCheck = (caller: string, hashLength: i32, held: Secret<u8[]>): void => {
+  if (hashLength !== SHA256_SIZE && hashLength !== SHA384_SIZE) {
+    panic(`${caller}: a hash length of ${hashLength}, not 32 or 48`)
+  }
+  const length: i32 = expose(held, tlsHeldLength)
+  if (length !== hashLength) {
+    panic(`${caller}: a secret of ${length} bytes, not ${hashLength}`)
+  }
+}
+
+/** HKDF-Extract of `ikm` under `salt`, both held, written over `dst`'s bytes; the plain PRK is wiped. */
+const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, dst: Secret<u8[]>): void => {
+  const prk: u8[] =
+    hashLength === SHA384_SIZE
+      ? exposeWith(salt, ikm, tlsExtractSha384Salted)
+      : exposeWith(salt, ikm, tlsExtractSha256Salted)
+  exposeWith(dst, prk, tlsHeldCopy)
+  wipe(prk)
+}
+
+/**
+ * `tlsDeriveSecret` into a held `Secret`: Derive-Secret (RFC 8446 §7.1) of
+ * `prk` with `label` and the transcript hash `transcriptHash[hashOff ..
+ * hashOff + hashLength)`, written over the HashLen bytes `dst` holds. `dst`
+ * may be `prk`. Panics unless `hashLength` is 32 or 48 and both hold
+ * HashLen bytes.
+ */
+export const tlsDeriveSecretHeld = (
+  hashLength: i32,
+  prk: Secret<u8[]>,
+  label: string,
+  transcriptHash: u8[],
+  hashOff: i32,
+  dst: Secret<u8[]>
+): void => {
+  tlsHeldCheck("tlsDeriveSecretHeld", hashLength, prk)
+  tlsHeldCheck("tlsDeriveSecretHeld", hashLength, dst)
+  const context: u8[] = tlsHeldWindow(hashLength, transcriptHash, hashOff)
+  if (hashLength === SHA384_SIZE) {
+    hkdfExpandLabelSha384Held(dst, prk, label, context)
+  } else {
+    hkdfExpandLabelSha256Held(dst, prk, label, context)
+  }
+}
+
+/**
+ * `tlsHandshakeSecret` into a held `Secret`: HKDF-Extract of `ecdhe` under
+ * `Derive-Secret(early, "derived", "")`, written over `dst`'s HashLen bytes.
+ * The salt is wiped before it returns; `dst` may be `earlySecret`.
+ */
+export const tlsHandshakeSecretHeld = (
+  hashLength: i32,
+  earlySecret: Secret<u8[]>,
+  ecdhe: Secret<u8[]>,
+  dst: Secret<u8[]>
+): void => {
+  tlsHeldCheck("tlsHandshakeSecretHeld", hashLength, dst)
+  const derived: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  tlsDeriveSecretHeld(
+    hashLength,
+    earlySecret,
+    "derived",
+    tlsEmptyHash(hashLength),
+    TLS_SCHEDULE_FROM,
+    derived
+  )
+  tlsExtractHeld(hashLength, derived, ecdhe, dst)
+  wipe(derived)
+}
+
+/**
+ * `tlsMasterSecret` into a held `Secret`: HKDF-Extract of HashLen zeros under
+ * `Derive-Secret(handshake, "derived", "")`, written over `dst`'s HashLen
+ * bytes. The salt and the zeros are wiped before it returns; `dst` may be
+ * `handshakeSecret`.
+ */
+export const tlsMasterSecretHeld = (
+  hashLength: i32,
+  handshakeSecret: Secret<u8[]>,
+  dst: Secret<u8[]>
+): void => {
+  tlsHeldCheck("tlsMasterSecretHeld", hashLength, dst)
+  const derived: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  tlsDeriveSecretHeld(
+    hashLength,
+    handshakeSecret,
+    "derived",
+    tlsEmptyHash(hashLength),
+    TLS_SCHEDULE_FROM,
+    derived
+  )
+  const zeros: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  tlsExtractHeld(hashLength, derived, zeros, dst)
+  wipe(derived)
+  wipe(zeros)
+}
+
+/**
+ * `tlsFinishedVerifyData` from a held base key and a window of a transcript:
+ * the HMAC of `transcriptHash[hashOff .. hashOff + hashLength)` under
+ * `finished_key = Expand-Label(baseKey, "finished", "", HashLen)` (RFC 8446
+ * §4.4.4). The finished key is held and wiped before it returns;
+ * `verify_data` goes on the wire, so it is plain.
+ */
+export const tlsFinishedVerifyDataHeld = (
+  hashLength: i32,
+  baseKey: Secret<u8[]>,
+  transcriptHash: u8[],
+  hashOff: i32
+): u8[] => {
+  tlsHeldCheck("tlsFinishedVerifyDataHeld", hashLength, baseKey)
+  const none: u8[] = []
+  const finishedKey: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  if (hashLength === SHA384_SIZE) {
+    hkdfExpandLabelSha384Held(finishedKey, baseKey, "finished", none)
+  } else {
+    hkdfExpandLabelSha256Held(finishedKey, baseKey, "finished", none)
+  }
+  const transcript: u8[] = tlsHeldWindow(hashLength, transcriptHash, hashOff)
+  const verifyData: u8[] =
+    hashLength === SHA384_SIZE
+      ? hmacSha384Secret(finishedKey, transcript)
+      : hmacSha256Secret(finishedKey, transcript)
+  wipe(finishedKey)
+  return verifyData
+}
+
+/**
+ * `tlsTrafficKeysInto` from a held traffic secret: the AEAD key it gives
+ * `suite` (RFC 8446 §7.3) written into `key`, which must be the suite's key
+ * length, and its 12-byte IV into `iv`. Both stay plain, since the cipher
+ * reads them. `false`, writing nothing, for a suite this module does not
+ * negotiate, a secret that is not its hash's length, or a key or IV array of
+ * the wrong length.
+ */
+export const tlsTrafficKeysFromHeld = (
+  suite: i32,
+  trafficSecret: Secret<u8[]>,
+  key: u8[],
+  iv: u8[]
+): boolean => {
+  const none: u8[] = []
+  const hashLength: i32 = tlsSuiteHashLength(suite)
+  const keyLength: i32 = tlsSuiteKeyLength(suite)
+  if (
+    hashLength === 0 ||
+    expose(trafficSecret, tlsHeldLength) !== hashLength ||
+    toI32(key.length) !== keyLength ||
+    toI32(iv.length) !== TLS_IV_SIZE
+  ) {
+    return false
+  }
+  hkdfExpandLabelHeldInto(hashLength, trafficSecret, "key", none, key, TLS_SCHEDULE_FROM, keyLength)
+  hkdfExpandLabelHeldInto(hashLength, trafficSecret, "iv", none, iv, TLS_SCHEDULE_FROM, TLS_IV_SIZE)
   return true
 }

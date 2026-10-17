@@ -189,6 +189,15 @@ PASS  refused: names and values of different lengths
 PASS  refused: status 600
 PASS  refused: 204 with a length
 PASS  refused: a reason with a LF
+PASS  a date goes on a final response after the caller's fields and before the framing
+PASS  and costs the head 37 bytes
+PASS  a 1xx carries no date
+PASS  the program's own date field replaces the writer's
+PASS  in any case
+PASS  a head that fits exactly without its date is HTTP1_NO_ROOM with it
+PASS  and fits a buffer exactly its size
+PASS  refused: a date that is not field text
+PASS  but not on a 1xx, which sends no date
 PASS  http1WriteChunk writes the chunk at its offset
 PASS  an empty chunk writes nothing
 PASS  a chunk that just fits is written
@@ -196,4 +205,4 @@ PASS  one byte further on it is HTTP1_NO_ROOM
 PASS  http1WriteLastChunk writes the last chunk at its offset
 PASS  and is HTTP1_NO_ROOM four bytes from the end
 PASS  http1BytesAre compares octets with a lowercase word in any case, and nothing longer or shorter
-http1: 198 passed, 0 failed, 0 skipped
+http1: 207 passed, 0 failed, 0 skipped

@@ -173,6 +173,7 @@ same `i32`).
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, narrowing, and a `??` default: [Nullable types](#nullable-types). |
 | `(x: T) => U`, only on a parameter of a top-level function | none: no LLVM parameter, no value | — | (not representable) | Names a callee chosen at each call and compiled into the instantiation's body as a direct call: [Function parameters](#function-parameters). |
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
+| `A \| B`, each a tagged class or interface | `%union.tagged*` to `%union.tagged = type { i32 }`, the tag every variant begins with | 8 / 8 (pointer) | (not representable) | A variant converts by a `bitcast`; only the tag is read: [Discriminated unions](#discriminated-unions). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`TypeTable.llvmType`, `alignOf`),
@@ -211,8 +212,10 @@ Type rules:
   (`tests/cases/reject_nullable_scalar`). A type may be **parenthesised**, and
   `(T | null)[]` is where it matters: `T | null[]` groups the other way and
   means "a `T`, or an array of `null`". The parentheses only group — the type
-  inside them is the type — so `(A | B)[]` is still refused as a union
-  (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
+  inside them is the type — so `(A | B)[]` is held to the union rules as
+  `A | B` is (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
+  A union of tagged classes and interfaces is a
+  [discriminated union](#discriminated-unions).
 - **No implicit conversion.** `const y: f64 = x` with `x: number` in i32
   mode is `Cannot initialize f64 variable ... with i32` *(CLI only)*;
   `x + n` with `x: i64`, `n: number` is rejected
@@ -670,6 +673,190 @@ value, so nothing is boxed; `null` takes its type from context.
 - **Attributes**: a nullable parameter or return loses `nonnull` and
   `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
   rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+
+### Discriminated unions
+
+A union of two or more **variants**, `type Shape = Circle | Square | Tri`, is a
+pointer to whichever variant it holds, and its first field says which. A
+variant is a class or an interface whose first field is its **tag**: a field
+of an [enum member type](#enums), conventionally
+`readonly kind: Kind.Circle = Kind.Circle` (`tests/cases/union_types`,
+`tests/link/union_export` across modules).
+
+```ts
+enum Kind {
+  Circle,
+  Square,
+}
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 1;
+}
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 2;
+}
+type Shape = Circle | Square;
+const label = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square");
+```
+
+**Layout.** Every union is the one LLVM type `%union.tagged = type { i32 }`,
+behind a pointer. Every variant begins with its `i32` tag, so a variant
+pointer is a union pointer by a `bitcast`, and reading the tag is a
+`getelementptr` to field 0 and a load, whichever variant is there:
+
+```llvm
+%4 = bitcast %struct.Circle* %3 to %union.tagged*
+...
+%0 = getelementptr inbounds %union.tagged, %union.tagged* %s, i32 0, i32 0
+%1 = load i32, i32* %0, align 4
+```
+
+`Shape | null` is the same pointer with `null` allowed, as
+[Nullable types](#nullable-types) are.
+
+**What makes a variant.** Each rule is checked where the union is spelled,
+and each has its own code:
+
+- A variant is a class or an interface that is not generic, so
+  `type R = Ring<i32>` named in a union is
+  `` `Ring<i32>` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself ``
+  (NL2522, `reject_union_generic_variant`). A generic type spelled with its
+  arguments inside the union, `Circle | Ring<i32>`, and a member that is a
+  scalar, an enum or an alias of one get the general refusal,
+  `` Union types other than `T | null` are forbidden in Nish (values have one fixed layout) ``
+  (NL1053, `reject_union_inline_generic`, `reject_union_untagged_scalar`,
+  `reject_union_enum_alias_member`, `reject_union_scalar_alias_member`,
+  `reject_union_type`).
+- Its first field is of one enum member type: otherwise
+  `` `Point` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as `readonly kind: Kind.Circle = Kind.Circle` ``
+  (NL2523, `reject_union_untagged`, `reject_paren_union_type`).
+- The tag is `readonly`: otherwise
+  `` `Circle` cannot be a union variant: its tag `kind` must be `readonly`, because the union tells its variants apart by it ``
+  (NL2535, `reject_union_mutable_tag`).
+- All the tags come from one enum (NL2524, `reject_union_mixed_enums`), the
+  tag field has one name in every variant (NL2525, `reject_union_tag_names`),
+  and no two variants share a tag (NL2526, `reject_union_duplicate_tag`).
+- A union names at least two different variants, after aliases and nested
+  unions are flattened: `Circle | Circle` is NL2527
+  (`reject_union_one_variant`).
+
+**Where a union goes.** A union is the type of a local, a parameter, a
+field, a return, an array element (`Shape[]`, `Shape[][]`, or the members
+spelled in place, `(Circle | Square)[]`), or of any of those made nullable.
+An alias may name another union, which is flattened: with `type Round =
+Circle | Square`, `type Shape = Round | Tri` is the three variants. A value
+of a variant, or of a union whose variants are all the wider union's,
+converts to the union wherever the union is expected: an argument, a
+`return`, an array literal under a `Shape[]` annotation, a `push`, a ternary
+arm or a `??` default whose other side is the union
+(`tests/cases/union_forms`). Equality on two unions compares the pointers, as
+on any object.
+
+**Reading.** The tag is the one member a union has (NL2528 for any other
+field or method, `reject_union_member_field`, `reject_union_method_call`,
+even when every variant has it). It reads as the enum, `Kind`, so it compares,
+switches and is passed as one. A union is read-only: a write through it is
+NL2529, even to a field every variant has (`reject_union_assign_tag`).
+
+**Comparisons that cannot be true.** As in `tsc`, comparing the tag with a
+member no variant has is an error: `s.kind === Kind.Tri` when no variant is
+tagged `Kind.Tri` is NL2531 (`reject_union_disjoint_compare`), and
+`case Kind.Tri:` in a `switch (s.kind)` is NL2532
+(`reject_union_disjoint_case`).
+
+**Accepted here, refused by TypeScript.** One gap runs the other way, and
+the next stage, narrowing by the tag, closes it. `tsc` narrows a union by a
+test of its tag, so after `if (u.kind === Kind.A) { return 1; }` it knows
+`u.kind` is not `Kind.A`, and a second `u.kind === Kind.A`, in a ternary, a
+nested ternary or another `if`, is TS2367. This version does not narrow, so
+it accepts that comparison and evaluates it, to `false`. The tag stored in
+a local first, `const k: Kind = u.kind`, carries the same gap, and wider:
+`tsc` narrows `k` on its declaration to the variants' members
+(`Kind.A | Kind.B` for a union of those two), so even a first
+`k === Kind.C`, or a `case Kind.C:` of a `switch (k)`, is TS2367 (TS2678)
+there and accepted here, for a member of `Kind` no variant has.
+
+**Stricter than TypeScript.** Each of these programs is accepted by
+`tsc --strict` and refused here; each refusal is pinned:
+
+- **No narrowing by assignment.** `tsc` narrows a union-typed slot to the
+  type of the value last stored in it, so after `let s: Shape = new Circle()`
+  it treats `s` as a `Circle`. This version does not track that, so a store
+  of a value that is only some of the variants into a union local, field,
+  element or nullable union is NL2534, and asks for the variant's own type or
+  a value of the whole union (`reject_union_narrow_const`,
+  `reject_union_narrow_assign`, `reject_union_narrow_field`,
+  `reject_union_narrow_element`, `reject_union_narrow_ternary`,
+  `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
+  the whole union, and is stored freely. Passing and returning a variant
+  narrows nothing, and is accepted. Narrowing by `if` and `switch` on the
+  tag is not in this version either.
+- **No union type arguments.** `Box<Shape>`, a generic function or method
+  whose type parameter would bind to a union, `Map<K, Shape>` and
+  `Result<Shape, E>` / `Result<T, Shape>` are NL2533
+  (`reject_union_generic_class_arg`, `reject_union_generic_binding`,
+  `reject_union_generic_method`, `reject_union_map_value`,
+  `reject_union_result_ok`, `reject_union_result_err`). A union is not a
+  `Map` or `Set` key, which is the key rule's refusal
+  (`reject_union_map_key`, `reject_union_set`).
+- **No inferred unions.** A union is never inferred: an unannotated ternary
+  or array literal of two variants is the existing same-type refusal
+  (`reject_union_ternary_inferred`, `reject_union_array_inferred`), an arrow
+  returning one needs its annotation (`reject_union_arrow_result`), and a
+  local initialised from the tag without an annotation, `const k = s.kind`
+  or the tag in a `for…of`, is NL2530, because `tsc` would infer the union
+  of the tags' member types, which this version does not have
+  (`reject_union_inferred_tag`, `reject_union_forof_tag`). So is the tag as
+  an element of an unannotated array literal, an arm of an unannotated
+  ternary, or the result of an arrow that binds a type parameter
+  (`reject_union_tag_array`, `reject_union_tag_ternary`,
+  `reject_union_tag_arrow`). An annotation as the enum, `const k: Kind =
+  s.kind`, is accepted, with the narrowing gap above.
+- **No covariant arrays.** A `Circle[]` is not a `Shape[]`, since a push
+  through the wider type would put a `Square` among the circles; build the
+  array as a `Shape[]` (`reject_union_covariant_array`).
+- **No object literal of a union.** An object literal where a union is
+  wanted, `area({ kind: Kind.Tri, base: 2 })` for a `Circle | Tri`
+  parameter, has no one class to build (`reject_union_object_literal`):
+  build it into a local annotated as the interface, `const t: Tri = { ... }`,
+  and pass that.
+- **No `new Array<Shape>(n)`**, which would fill the array with a zero no
+  variant is (`reject_union_new_array`).
+- **No class for its interface variant.** A class that implements an
+  interface variant is not itself a variant, so `tsc` accepts a `Band
+  implements Ring` where `Circle | Ring` is wanted and this version does not
+  (`reject_union_implements_variant`): convert it to the interface first,
+  `const r: Ring = new Band()`.
+- **A readonly tag.** `tsc` accepts a variant whose tag can be reassigned;
+  this version asks for `readonly` (NL2535, `reject_union_mutable_tag`).
+- **No write through the union.** `tsc` accepts `s.x = 1` when every variant
+  has `x`; this version refuses every write through a union (NL2529,
+  `reject_union_assign_tag`).
+
+A union is not a class either, so `new Shape()` names no constructor, as in
+`tsc` (`reject_union_new`). A value of any other type where a union is
+wanted is the existing refusal of its position (`reject_union_into_init`,
+`reject_union_into_assign`, `reject_union_into_arg`,
+`reject_union_into_push`, `reject_union_into_index`,
+`reject_union_into_nullable`, `reject_union_field_other`,
+`reject_union_return_other`, `reject_union_method_arg`,
+`reject_union_ctor_arg`, `reject_union_array_other`,
+`reject_union_ternary_other`, `reject_union_nullish_other`). A smaller union
+stored where a larger one is declared narrows it in `tsc`, as a variant
+does, and is NL2534 too (`reject_union_narrow_subunion`).
+
+**Across a sidecar.** A union has no C spelling yet, so a function exported
+through `--emit-header` or `--emit-napi` whose parameter or return holds a
+union is refused, and so is a union-holding field of any class or interface
+the compilation declares, exported or not, under any sidecar flag
+(`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-napi-async`): a header
+lays out every class and interface of the program, a private one too
+(`reject_union_private_field`). The message is
+`` `tagOf`'s parameter `s` is `Circle | Square`, which holds a union no sidecar can describe: a union has no C spelling in this version ``
+(NL4009, `reject_union_export_param`, `reject_union_export_return`,
+`reject_union_export_field`, `reject_union_export_array_field`). Unions
+cross Nish modules freely (`tests/link/union_export`).
 
 ## Result and error handling
 
@@ -2123,7 +2310,10 @@ export const main = (): i32 => {
   to one, which only a method's `.`-joined name can still cause —
   `Point.shifted` beside a function `Point_shifted`:
   `` `Point.shifted` and `Point_shifted` are both `Point_shifted` in C, so a header that declared both would not compile: rename one of them ``
-  (NL4008, `tests/cases/reject_interop_generic_clash`).
+  (NL4008, `tests/cases/reject_interop_generic_clash`). They also refuse a
+  signature or an exported struct field that holds a
+  [discriminated union](#discriminated-unions), which has no C spelling yet
+  (NL4009, `tests/cases/reject_union_export_param`).
 - **A template may be exported and instantiated from another module, and each
   instantiation is defined exactly once**, in the module that declares the
   template. Everywhere else it is a `declare` carrying that definition's
@@ -3192,7 +3382,7 @@ element's arena, which a task does not share, and each rule is reported at the
   make, by a method of an [atomic](#atomics-atomici32-and-atomici64)
   (`tests/link/thread_atomic_tasks`), or by a `send` or a receive on a
   [`Channel`](#channels-channelt), neither of which is a write the rule counts:
-  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, `const t = new T()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
@@ -3230,7 +3420,29 @@ element's arena, which a task does not share, and each rule is reported at the
   lead to the array only by keeping it, so that route is `_new`'s. A store through a `?:` with the
   array in one arm is a store into either (`_ternary`), and an element of a
   private array of arrays is the array it holds
-  (`reject_thread_task_private_nested`). A task inside a task, or
+  (`reject_thread_task_private_nested`). The same holds for the task's other
+  own memory: a method that writes only the fields of an object the task made,
+  `const h = new Holder(); h.poke()`; `set`, `add` and `delete` on a `Map` or
+  a `Set` it made; a store into an array field of an object it made, whose
+  constructor filled it with a fresh array; a second name for its array bound
+  in the same statement, `xs = new Array<i32>(n), ys = xs`; and a store
+  through what a helper answers when the helper answers its argument, the
+  task's own array, all write nothing shared
+  (`tests/link/thread_task_own_writes`). What the argument reaches is not the
+  task's own, even when the `spawn` made it there, because where an argument
+  was made is not tracked: an object the task makes that holds the argument's
+  array from its constructor on, has a field re-pointed at it, or is handed it
+  by a helper or a method, and a helper that may answer either its own array
+  or the caller's, all write the caller's memory
+  (`reject_thread_task_own_holds_param`, `_repointed`, `_helper_stores_param`,
+  `_method_adopts_param`, `_either_returned`), and so does a second name bound
+  in the same statement as a fresh array when it names the argument's
+  (`reject_thread_task_own_declarator_binds_arg`). A helper's fresh answer
+  that holds the caller's memory, `[ys]` or `new H(ys)`, is the task's at its
+  top level only, so a write below it is refused
+  (`reject_thread_task_own_fresh_holds_array`, `_new`, `_object`). That
+  refusal starts with what to write: `` make scratch only this task uses inside it, `const t = new T()`, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`, `using g = m.lock()`, and hand a value the parent needs back as the task's answer, `s.spawn(task, arg, out, i)` ``.
+  A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
   data-parallel call inside a task is refused by it too
@@ -3356,11 +3568,49 @@ breaks one is refused with that rule's own code:
   (`reject_mutex_using_lock_then_scope`). A `lock()` anywhere but a `using`
   initialiser is
   `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases ``
-  (NL2465, `reject_mutex_lock_not_using`).
+  (NL2465, `reject_mutex_lock_not_using`; `reject_mutex_lock_expr_body` for
+  an arrow whose expression body is `m.lock()`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
-  of another access.** Passed, bound, stored, returned or walked, a guard is
+  of another access.** Bound, stored, returned or walked, a guard is
   `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock ``
-  (NL2466, `reject_mutex_guard_passed`), and anything read through it that is
+  (NL2466, `reject_mutex_guard_helper_return`, `reject_mutex_guard_helper_field`,
+  `reject_mutex_guard_helper_ternary`). The one place a guard may go is to a
+  **guard helper**: a function named at the call, neither a method, a
+  constructor nor a generic, whose parameter in that position is declared as
+  the guard is, `MutexGuard<T>`, with the guard named once among the call's
+  arguments:
+
+  ```ts
+  const bump = (g: MutexGuard<Counter>): void => {
+    g.value.n = g.value.n + 1;
+  };
+
+  {
+    using g = m.lock();
+    bump(g);
+  }
+  ```
+
+  The helper's parameter is held to R3–R5 in its body exactly as `g` is in the
+  block, so it can only read and store through it, and R5 follows the call, so
+  a helper that locks, opens a scope, spawns or receives is refused at the call
+  (`reject_mutex_guard_helper_spawn`, `reject_mutex_guard_helper_receive`). A
+  helper that passes the guard on is judged by the same rule at that call
+  (`reject_mutex_guard_helper_forward`), through helpers that call each other
+  (`reject_mutex_guard_helper_mutual`) and across an import
+  (`link/reject_mutex_guard_helper_import`); a helper that locks a `Mutex`
+  it is handed is refused by R5 at the call
+  (`reject_mutex_guard_helper_second_lock`), and `g.value` handed beside the
+  guard by NL2467 (`reject_mutex_guard_helper_value_arg`). A helper has no
+  default, rest or destructured parameter, which Nish has none of
+  (`reject_mutex_guard_helper_default`, `_rest`, `_destructured`).
+  `link/thread_mutex_helper` is three helpers deep on four threads. Any other call is
+  `` `g` is passed to `push`, a method: a guard is handed only to a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared as the guard is, `MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; write the helper as `const f = (g: MutexGuard<T>): void => { g.value.n = g.value.n + 1 }` and call it as `f(g)` ``
+  (NL2536; `reject_mutex_guard_helper_array`, `_map`, `_method`, `_new`,
+  `_ctor_this`, `_generic`, `_twice`, `_nullable`, and `_callback` for a
+  helper that takes a function, which makes it a generic), because a method or a
+  constructor has `this` as a second way out, a generic's body treats `T` as any
+  value, and a guard passed twice is two names for one lock. Anything read through it that is
   not a number, a `boolean`, an enum or a `string` — `const c = g.value`,
   `g.value.xs` as a value, a `for...of` over it — is
   `` This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock ``
@@ -3368,7 +3618,16 @@ breaks one is refused with that rule's own code:
   `const b = g.value.bins`, which would race a guarded write once the block
   ends; `reject_mutex_guard_return` and `reject_mutex_guard_return_array` for a
   return; `reject_mutex_guard_store_field` and `reject_mutex_guard_store_element`
-  for a store; `reject_mutex_guard_for_of` for a walk). An arrow cannot capture
+  for a store; `reject_mutex_guard_for_of` for a walk). An arrow's expression
+  body is its answer and is judged as a `return` of it is, so a helper written
+  `(g: MutexGuard<Box>): Box => g.value` is refused as one that writes
+  `return g.value` (`reject_mutex_guard_helper_expr_value`, `_field`, `_paren`,
+  `_index`, `link/reject_mutex_guard_helper_expr_import`; `_call`, `_new` and
+  `_cond` for `g.value` handed to a call or a `new`, or written as an arm of
+  `? :`, inside the body), and
+  `reject_mutex_guard_helper_expr_churn` is the use-after-free it would open: the
+  object kept past the lock, its string replaced under a second lock, and
+  `churn()` reusing the memory before the old one is printed. An arrow cannot capture
   a guard (`reject_mutex_guard_capture`), and an arrow passed to a
   data-parallel form, which may read its function's `const` locals, may not
   read a guard among them (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
@@ -3381,7 +3640,17 @@ breaks one is refused with that rule's own code:
   field or an element of an array that already exists:
   `` This stores `string[]` through a guard, which stores only a number, a `boolean`, an enum or a `string`, which the store copies, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined ``
   (NL2468, `reject_mutex_guard_store`; `reject_mutex_guard_store_class` for a
-  class). A string stored through a guard is copied into memory the mutex
+  class). A `null` is not stored through a guard, into a `string | null` field,
+  element or `Mutex<string | null>` alike:
+  `` This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a `string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the `Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0` ``
+  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`, `_paren`
+  for `g.value.last = (null)`, and `_class` for a `Link | null` field, which
+  holds a pointer a guard stores in no form). The store's
+  exchange, `nish_guard_keep`, reads the length of the string it is given, so
+  a `null` handed to it would be dereferenced; written past it, the `null`
+  would leave the slot's copy allocated, one block per store. Admitting the
+  store would mean an exchange that frees the slot's copy and keeps nothing,
+  which the runtime does not have in this version. A string stored through a guard is copied into memory the mutex
   owns: `nish_guard_keep` `malloc`s the copy, records it, and frees the copy
   the slot held before, if that one was its own; a string read through a guard
   is copied out into the reader's arena (`.length` excepted, which keeps
@@ -3768,7 +4037,8 @@ sends and receives:
   compared, and no member but `send` is named:
   `` A `Channel` cannot be bound, stored, returned or compared here: a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer ``
   (NL2477, `reject_channel_bound`, `reject_channel_member`, `reject_channel_member_take`, `_ready`,
-  `_head` and `_state`, and `reject_channel_stored` for a class that holds one
+  `_head` and `_state`, `reject_channel_returned_expr` for an arrow whose
+  expression body is a channel, which is its answer, and `reject_channel_stored` for a class that holds one
   made anywhere but at the `spawn`; `reject_channel_nullable` for a task's
   argument whose channel may be `null`, which the `spawn` could not count as a
   sender). A type holds a channel only as exactly `Channel<T>`: never as one
@@ -3858,7 +4128,9 @@ sends and receives:
   never waits and may stay:
   `` A loop over a channel is reached while `g` holds its lock: a receive waits, and nothing waits while a lock is held, so there is no receive inside a guard's block, directly or through any function it calls (a `send` never waits, and may stay) ``
   (NL2482, `reject_channel_loop_held`, and `reject_channel_receive_held_call`
-  for a function that receives on a channel it is handed). A function that
+  for a function that receives on a channel it is handed;
+  `reject_channel_receive_held_expr` for one reached through an arrow whose
+  expression body calls it). A function that
   receives only on a channel of its own opens a scope to fill it, which R5
   refuses under a lock already.
 
@@ -3871,6 +4143,22 @@ for the lock. A task's channel is checked where it can be read, at the
 `spawn`; a parallel body has no way to reach one, because a task calls no
 `parallelMapInto` and a channel is made only beside a scope. `select` stays
 declined (wp29 §9).
+
+### What `nish --fix` writes for a thread program
+
+The thread refusals end with the code to write instead (each pinned whole by
+its `tests/wordings` case), and six of them carry a fix that `nish --fix` applies, each only where the source alone decides the
+replacement (`tests/fix/thread-*`; the refused shapes are its `thread-nofix-*`
+cases):
+
+| Refusal | The fix | Left alone |
+| --- | --- | --- |
+| NL2388, a `scope()` not bound by `using` | `const s = scope()` becomes `using s = scope()` | a `let`, which is assigned again |
+| NL2465, a `lock()` not bound by `using` | `const g = m.lock()` becomes `using g = m.lock()` | a `let` |
+| NL2511, a `spawn` with no destination, whose task answers a number or a `boolean` | `const answer = new Array<T>(1)` above the scope's `using`, and `, answer, 0` after the arguments | a `spawn` in a loop, where every task would write one slot; an answer that is not a number or a `boolean` |
+| NL2506, a task's arrow that captures a `let` | `const kNow = k` just before the statement, and the arrow reads `kNow`: the value it would have read when it ran | a `let` another argument names; a `let` a `for` header declares, where no statement before the call is in the loop |
+| NL2500, the same in a `parallelMap` | the same | the same |
+| NL2484, an arrow that uses a `Channel` | the arrow moves to a `const` above the top-level statement it is written in, named for the function and `Task` (`mainTask`), and the call names it | an arrow that captures, or leaves a parameter's or its result's type out, which would not check at the top level |
 
 ### Random numbers: `Rng` in `nish/random`
 
@@ -8687,7 +8975,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | `symbol` type | `` `symbol` type is forbidden in Nish (no symbol type) `` | `reject_symbol_type` |
 | `bigint` type | `` `bigint` type is forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_type` |
 | `undefined` type | `` `undefined` is forbidden in Nish; use `null` with a `T \| null` type `` | `reject_union_undefined` (via the union rule) |
-| union types other than `T \| null` / `null \| T` | `` Union types other than `T \| null` are forbidden in Nish (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined` |
+| union types other than `T \| null` / `null \| T` and [discriminated unions](#discriminated-unions) | `` Union types other than `T \| null` are forbidden in Nish (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined`, `reject_union_untagged_scalar` |
 | `Function`, `Symbol`, `Proxy` as type names | `` `Function` type is forbidden in Nish (no dynamic function values) `` (and analogous) | `reject_function_type` |
 | `import("x").T` | `` Dynamic `import()` is forbidden in Nish (modules are resolved at compile time) `` | `reject_dynamic_import` |
 | `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in Nish `` | `reject_as_any`, `reject_as_any_angle` |
