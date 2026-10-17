@@ -81,4 +81,19 @@ export const dateChecks = (t: Suite): void => {
   big.settle();
   const refused: H3Response = big.response(n64(0));
   t.eqStr("the server's own 431 is a final response too, and carries the date", `${refused.status} ${refused.fields}`, `431 date: ${PINNED}`);
+
+  // A bare 431 counts 42 and one with the date 107: a client limit of 107
+  // takes the date, and one of 106 takes the 431 without it, not a reset.
+  const roomy: H3Peer = limited(n64(107));
+  roomy.h3.date = bytesOf(PINNED);
+  roomy.send(n64(4), roomy.headers("GET", "/hello", ["x-big"], [huge.join("")]), false);
+  roomy.settle();
+  const fits: H3Response = roomy.response(n64(4));
+  t.eqStr("a client limit with room for the 431 and its date gets both", `${fits.status} ${fits.fields}`, `431 date: ${PINNED}`);
+  const tight: H3Peer = limited(n64(106));
+  tight.h3.date = bytesOf(PINNED);
+  tight.send(n64(4), tight.headers("GET", "/hello", ["x-big"], [huge.join("")]), false);
+  tight.settle();
+  const bareRefusal: H3Response = tight.response(n64(4));
+  t.ok("one with room for the 431 alone gets it without the date, with the FIN", bareRefusal.status === "431" && bareRefusal.fin && toI32(bareRefusal.fields.indexOf("date")) < 0);
 };

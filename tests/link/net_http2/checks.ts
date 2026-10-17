@@ -584,5 +584,28 @@ export const http2Checks = (): i32 => {
   v.wire.headers(toI32(1), [":method", "GET", ":scheme", "https", ":path", "/", "x-big", longValue.join("").substring(0, 300)], H2_FLAG_END_STREAM);
   v.send();
   t.eqStr("the server's own 431 is a final response too, and carries the date", v.takeFrames(), `HEADERS 1 end :status=431 date=${pinned}`);
+
+  // A head whose bound fills the output room exactly: 48 + 6 + 822 + 11
+  // bytes of fields and a 9-byte frame header are the 896 bytes a 1,024-byte
+  // output leaves above its control reserve, and the date's 44 do not fit.
+  const tight = new Http2Config();
+  tight.outputSize = 1024;
+  const roomFill: u8[][] = [filler(822)];
+  const roomBare = new Client(tight);
+  roomBare.open();
+  roomBare.wire.headers(toI32(1), getOf("/room"), H2_FLAG_END_STREAM);
+  roomBare.send();
+  roomBare.takeEvents();
+  roomBare.takeFrames();
+  t.eqI32("a head that fills the output room exactly, with no date: sent", roomBare.conn.respond(toI32(1), toI32(200), namesOf(["x-fill", "v"]), roomFill, true), ZERO);
+  const roomDated = new Client(tight);
+  roomDated.conn.date = httpFieldBytes(pinned);
+  roomDated.open();
+  roomDated.wire.headers(toI32(1), getOf("/room"), H2_FLAG_END_STREAM);
+  roomDated.send();
+  roomDated.takeEvents();
+  roomDated.takeFrames();
+  t.eqI32("the same head with the date counted against the room: H2_INVALID", roomDated.conn.respond(toI32(1), toI32(200), namesOf(["x-fill", "v"]), roomFill, true), H2_INVALID);
+  t.eqStr("and nothing went out for the head the date overfills", roomDated.takeFrames(), "");
   return t.done();
 };

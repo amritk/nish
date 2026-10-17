@@ -118,6 +118,8 @@ PASS  with one, the same head is H3_TOO_LARGE: the date counts
 PASS  and :status with the date alone fill it exactly
 PASS  and arrive
 PASS  the server's own 431 is a final response too, and carries the date
+PASS  a client limit with room for the 431 and its date gets both
+PASS  one with room for the 431 alone gets it without the date, with the FIN
 PASS  connected
 PASS  200 requests on a warm connection — HEADERS and DATA in, a 200 with a body out, ACKs and credit — keep no arena memory
 PASS  and every one was answered
@@ -129,4 +131,4 @@ PASS  each served its ten requests
 PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
 PASS  and from the second on, a handshake keeps nothing either: its state is the slot's (QUIC-3)
-http3: 131 passed, 0 failed, 0 skipped
+http3: 133 passed, 0 failed, 0 skipped

@@ -176,26 +176,27 @@ chose nothing is shut down with `close_notify` before any HTTP/2 byte is sent
 one write still has every request answered before the server closes its own
 side.
 
-**One date on every final head** (`net_http2`, `net_http2_tls` and their
-`_f64` twins; written against `main` at `f8643b9`, cited by function rather
-than by line). `encodeStatus` puts the connection's `date` straight after
-`:status` on every final head, an error's 431 included, and never on a 1xx or
-trailers; a program's own `date` (`http2NamesHoldDate`, which matches any ASCII
-case) is sent instead, so a head never carries two. A mixed-case `Date` never
-reaches it: `sendHead` refuses an uppercase name with `H2_INVALID` (§8.2.1). The field goes as a literal without
-indexing, the static table's name and a value Huffman-coded when that is
-shorter, so the dynamic table stays empty: the encoder's table holds no entry
-after a dated response. `sendHead` counts the field in its bound before it
-checks the output's room, so a head that does not fit waits (`H2_AGAIN`) or is
-refused (`H2_INVALID`) whole, with nothing written; the 431 a connection
-answers past its own `maxHeaderListSize` carries the date too, inside the
-control reserve. A bare `Http2Connection` has no clock and sends none.
-`Http2TlsServer` points every slot at its one `HttpDate`, refreshed at
-`connection(slot)` and `next(slot)`, so a date is at most one turn of the
-program's loop stale. Five responses with the pinned clock a second on before
-each format it five times and move `Arena.used()` exactly as five on a still
-clock do (3,640 bytes, the new streams' own); two slots answered in one second
-share one format. Tests:
+**One date on every final head** (`net_http2`, `net_http2_tls` and their `_f64`
+twins; written against `main` at `f8643b9`, cited by function rather than by
+line). `encodeStatus` puts the connection's `date` straight after `:status` on
+every final head, an error's 431 included, and never on a 1xx or trailers; a
+program's own `date` (`http2NamesHoldDate`, which matches any ASCII case) is
+sent instead, so a head never carries two. A mixed-case `Date` never reaches it:
+`sendHead` refuses an uppercase name with `H2_INVALID` (§8.2.1). The field goes
+as a literal without indexing, the static table's name and a value Huffman-coded
+when that is shorter, so the dynamic table stays empty: the encoder's table
+holds no entry after a dated response. `sendHead` counts the field in its bound
+before it checks the output's room, so a head that does not fit waits
+(`H2_AGAIN`) or is refused (`H2_INVALID`) whole, with nothing written: a head
+whose bound fills a 1,024-byte output's room exactly is sent without the date
+and refused with it. The 431 a connection answers past its own
+`maxHeaderListSize` carries the date too, inside the control reserve. A bare
+`Http2Connection` has no clock and sends none. `Http2TlsServer` points every
+slot at its one `HttpDate`, refreshed at `connection(slot)` and `next(slot)`, so
+a date is at most one turn of the program's loop stale. Five responses with the
+pinned clock a second on before each format it five times and move
+`Arena.used()` exactly as five on a still clock do (3,640 bytes, the new
+streams' own); two slots answered in one second share one format. Tests:
 `link/net_http2: exits with 0 and stdout matches expected.out`,
 `link/net_http2_f64: exits with 0 and stdout matches expected.out`,
 `link/net_http2_tls: exits with 0 and stdout matches expected.out`,

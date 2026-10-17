@@ -113,4 +113,7 @@ PASS  and nothing went out for it
 PASS  the date never enters the HPACK dynamic table
 PASS  a connection with no server to keep the clock sends no date
 PASS  the server's own 431 is a final response too, and carries the date
-http2 connection: 115 passed, 0 failed, 0 skipped
+PASS  a head that fills the output room exactly, with no date: sent
+PASS  the same head with the date counted against the room: H2_INVALID
+PASS  and nothing went out for the head the date overfills
+http2 connection: 118 passed, 0 failed, 0 skipped

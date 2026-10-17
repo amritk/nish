@@ -1744,13 +1744,19 @@ export class Http3Connection {
   /**
    * A request whose field section is past `maxFieldSectionSize`: answered
    * with a 431 and its stream asked to stop with H3_NO_ERROR (§4.2.2,
-   * §4.1.2). The program never sees it.
+   * §4.1.2). The program never sees it. A peer whose own
+   * SETTINGS_MAX_FIELD_SECTION_SIZE has room for a bare 431 but not for one
+   * with the date gets it without the date rather than a reset.
    */
   answerTooLarge(k: i32, id: i64): i32 {
     this.tooLarge = h3Count(this.tooLarge)
     const empty: u8[][] = this.nameList
     http3EmptyList(empty)
-    if (this.writeHead(k, id, H3_STATUS_TOO_LARGE, empty, empty, true) !== 0) {
+    let r: i32 = this.writeHead(k, id, H3_STATUS_TOO_LARGE, empty, empty, true, true)
+    if (r === H3_TOO_LARGE) {
+      r = this.writeHead(k, id, H3_STATUS_TOO_LARGE, empty, empty, true, false)
+    }
+    if (r !== 0) {
       this.abandon(k, id, H3_EXCESSIVE_LOAD)
     }
     this.quic.streamStopSending(id, H3_NO_ERROR)
@@ -1867,12 +1873,13 @@ export class Http3Connection {
 
   /**
    * Encodes `:status` (unless it is 0, for trailers), the server's `date`
-   * for a final status unless `names` holds one, and `names`/`values` into a
-   * HEADERS frame and writes it whole to stream `id`, with the FIN when `fin`.
-   * The date counts against the peer's SETTINGS_MAX_FIELD_SECTION_SIZE as any
-   * field does. Answers 0, H3_AGAIN, or H3_TOO_LARGE.
+   * for a final status when `dated` unless `names` holds one, and
+   * `names`/`values` into a HEADERS frame and writes it whole to stream `id`,
+   * with the FIN when `fin`. The date counts against the peer's
+   * SETTINGS_MAX_FIELD_SECTION_SIZE as any field does. Answers 0, H3_AGAIN,
+   * or H3_TOO_LARGE.
    */
-  writeHead(k: i32, id: i64, status: i32, names: u8[][], values: u8[][], fin: boolean): i32 {
+  writeHead(k: i32, id: i64, status: i32, names: u8[][], values: u8[][], fin: boolean, dated: boolean): i32 {
     const out: u8[] = this.encoded
     http3Empty(out)
     this.encoder.beginSection(out)
@@ -1897,7 +1904,7 @@ export class Http3Connection {
       )
       size = toI64(nameLength + valueLength + QPACK_FIELD_OVERHEAD)
     }
-    if (status >= 200 && toI32(this.date.length) > 0 && !http3NamesHoldDate(names)) {
+    if (dated && status >= 200 && toI32(this.date.length) > 0 && !http3NamesHoldDate(names)) {
       const nl: i32 = toI32(this.dateName.length)
       const vl: i32 = toI32(this.date.length)
       this.encoder.encodeField(out, this.dateName, H3_ZERO, nl, this.date, H3_ZERO, vl, false, true)
@@ -1963,7 +1970,7 @@ export class Http3Connection {
     ) {
       return H3_INVALID
     }
-    return this.writeHead(k, id, status, names, values, endStream)
+    return this.writeHead(k, id, status, names, values, endStream, true)
   }
 
   /**
@@ -1983,7 +1990,7 @@ export class Http3Connection {
     ) {
       return H3_INVALID
     }
-    return this.writeHead(k, id, H3_ZERO, names, values, true)
+    return this.writeHead(k, id, H3_ZERO, names, values, true, false)
   }
 
   /**
