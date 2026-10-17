@@ -3597,7 +3597,7 @@ breaks one is refused with that rule's own code:
   an arrow whose expression body is `m.lock()`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
   of another access.** Bound, stored, returned or walked, a guard is
-  `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock ``
+  `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock; write `g.value.n` where the value is used, or hand `g` to a helper whose parameter is a `MutexGuard<Counter>` ``
   (NL2466, `reject_mutex_guard_helper_return`, `reject_mutex_guard_helper_field`,
   `reject_mutex_guard_helper_ternary`). The one place a guard may go is to a
   **guard helper**: a function named at the call, neither a method, a
@@ -3630,7 +3630,7 @@ breaks one is refused with that rule's own code:
   default, rest or destructured parameter, which Nish has none of
   (`reject_mutex_guard_helper_default`, `_rest`, `_destructured`).
   `link/thread_mutex_helper` is three helpers deep on four threads. Any other call is
-  `` `g` is passed to `push`, a method: a guard is handed only to a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared as the guard is, `MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; write the helper as `const f = (g: MutexGuard<T>): void => { g.value.n = g.value.n + 1 }` and call it as `f(g)` ``
+  `` `g` is passed to `push`, a method: a guard is handed only to a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared as the guard is, `MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; write the helper as `const useGuard = (g: MutexGuard<Counter>): void => { console.log(g.value.n) }` and call it as `useGuard(g)` ``
   (NL2536; `reject_mutex_guard_helper_array`, `_map`, `_method`, `_new`,
   `_ctor_this`, `_generic`, `_twice`, `_nullable`, and `_callback` for a
   helper that takes a function, which makes it a generic), because a method or a
@@ -4051,7 +4051,7 @@ sends and receives:
   as one of its statements, before it, with no loop, condition or function
   between, so each run of the declaration makes a channel for one run of one
   scope — a scope in a loop gets a fresh one every pass:
-  `` `new Channel` must be the initialiser of a `const`: a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope ``
+  `` `new Channel` must be the initialiser of a `const`: a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope; write `const ch = new Channel<i32>()` on the line before `using s = scope()` ``
   (NL2476, `reject_channel_not_const`, `reject_channel_let_second_declarator`
   for a `let` that declares it beside something else, `reject_channel_scope_conditional`
   for a scope inside an `if`, and `reject_channel_scope_loop` for one inside a

@@ -17641,14 +17641,25 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
   const threadRefusals = new Map()
   /** The remedy of a refusal: its text after the last `; `, else its last sentence, else after its last `: `. */
   const lastClause = (message) => {
-    let inside = false
+    // A span opens with a run of backticks and closes with a run as long, as in
+    // Markdown, so ``[`row-${i}`]`` is one span.
+    let open = 0
     let clause = -1
     let sentence = -1
     let colon = 0
     for (let i = 0; i < message.length; i++) {
       if (message[i] === "`") {
-        inside = !inside
-      } else if (!inside && message[i + 1] === " ") {
+        let run = 1
+        while (message[i + run] === "`") {
+          run++
+        }
+        if (open === 0) {
+          open = run
+        } else if (open === run) {
+          open = 0
+        }
+        i += run - 1
+      } else if (open === 0 && message[i + 1] === " ") {
         if (message[i] === ";") {
           clause = i + 2
         } else if (message[i] === ".") {
@@ -17658,15 +17669,34 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         }
       }
     }
-    return message.slice(clause >= 0 ? clause : sentence >= 0 ? sentence : colon)
+    if (clause >= 0) {
+      return message.slice(clause)
+    }
+    return message.slice(sentence >= 0 ? sentence : colon)
   }
   /** Whether a clause holds a backticked fragment of code rather than a single word. */
   const holdsCode = (clause) => {
-    const fragments = [...clause.matchAll(/`([^`]+)`/g)].map((m) => m[1])
+    const fragments = [...clause.matchAll(/(`+)(?!`)(.+?)(?<!`)\1(?!`)/g)].map((m) => m[2].trim())
     return fragments.some((f) => /[\s(=.[]/.test(f)) && !fragments.some(isPlaceholder)
   }
   /** The type names a `<...>` may hold that are spelled in lower case. */
-  const lowerTypes = new Set(["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "number", "string", "boolean", "void", "null"])
+  const lowerTypes = new Set([
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "f32",
+    "f64",
+    "number",
+    "string",
+    "boolean",
+    "void",
+    "null",
+  ])
   /** Whether a fragment of code stands in for code rather than being it. */
   const isPlaceholder = (fragment) =>
     /\.\.\.|…/.test(fragment) ||
@@ -17749,11 +17779,7 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
       continue
     }
     const clause = lastClause(message)
-    check(
-      `${threadsPage}: ${code} ends with the code to write`,
-      holdsCode(clause),
-      `last clause: ${clause}`
-    )
+    check(`${threadsPage}: ${code} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
   }
   // Each row's "write instead" cell quotes code the page compiles: every fragment of
   // more than one word is in a `nish:ok` fence, and the cell links to an example.
@@ -17761,7 +17787,9 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     .filter((s) => s.kind === "ok")
     .map((s) => s.source)
   for (const row of threadsText.matchAll(/^\| (NL\d{4}) \|.*\| (.*) \|$/gm)) {
-    const fragments = [...row[2].matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter((f) => /[\s(=.[]/.test(f))
+    // A link's text names the section it points to, not code to write.
+    const cell = row[2].replace(/\[[^\]]*\]\([^)]*\)/g, "")
+    const fragments = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter((f) => /[\s(=.[]/.test(f))
     const missing = fragments.filter((f) => !okSources.some((source) => source.includes(f)))
     check(
       `${threadsPage}: ${row[1]}'s cell quotes code a nish:ok fence compiles`,

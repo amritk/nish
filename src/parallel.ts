@@ -818,7 +818,6 @@ export const resultMessage = (
 export const taskResultMessage = (
   program: CheckedProgram,
   table: TypeTable,
-  sig: FunctionSig,
   fn: FunctionSig,
   type: i32,
   call: Node
@@ -1651,8 +1650,12 @@ const lastWordOf = (chain: string): string => {
 }
 
 /** A literal of `slot`'s type, for a remedy that stores into it. */
-const slotLiteral = (slot: CopiedSlot): string =>
-  slot.type === T_STRING ? '""' : slot.type === T_BOOL ? "false" : "0"
+const slotLiteral = (slot: CopiedSlot): string => {
+  if (slot.type === T_STRING) {
+    return '""'
+  }
+  return slot.type === T_BOOL ? "false" : "0"
+}
 
 /**
  * The value a remedy stores into `slot`, reached from `target`: what `from`
@@ -3706,27 +3709,53 @@ const lockNotUsingMessage = (name: string, mutex: string): string =>
   "when the block that declares it ends, so a guard bound any other way would be one nobody releases; " +
   `declare it as \`using ${name} = ${mutex}.lock()\``
 
-const guardUseMessage = (name: string): string =>
+/** The first number or string `guard`'s data holds, read through `name`: `g.value.n`, or `g.value` when there is none. */
+const guardSlot = (program: CheckedProgram, table: TypeTable, guard: i32, name: string): string => {
+  const info = classLayoutOf(program, table, guard)
+  if (info !== null) {
+    for (const field of info.fields) {
+      if (field.name === "value") {
+        const slot = copiedSlot(program, table, `${name}.value`, field.type)
+        if (slot.text.length > 0) {
+          return slot.text
+        }
+      }
+    }
+  }
+  return `${name}.value`
+}
+
+const guardUseMessage = (name: string, guard: string, slot: string): string =>
   `A guard is used only as \`${name}.value\`, and \`${name}.value\` only as the base of a field or element ` +
   "read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock; " +
-  `write \`${name}.value.n\` where the value is used, or hand \`${name}\` to a helper whose parameter is a ` +
-  "`MutexGuard<T>`"
+  `write \`${slot}\` where the value is used, or hand \`${name}\` to a helper whose parameter is a \`${guard}\``
 
-const guardArgumentMessage = (name: string, why: string): string =>
+const guardArgumentMessage = (
+  name: string,
+  why: string,
+  guard: string,
+  helper: string,
+  slot: string
+): string =>
   `\`${name}\` is passed to ${why}: a guard is handed only to a function named at the call, ` +
   "neither a method, a constructor nor a generic, whose parameter is declared as the guard is, " +
   "`MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; " +
-  `write the helper as \`const f = (g: MutexGuard<T>): void => { g.value.n = g.value.n + 1 }\` and call it as \`f(${name})\``
+  `write the helper as \`const ${helper} = (g: ${guard}): void => { console.log(${slot}) }\` and call it as \`${helper}(${name})\``
 
-const guardDerivedMessage = (table: TypeTable, type: i32, read: string, field: string): string =>
-  `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
-  "element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, " +
-  "would outlive the block that holds the lock; " +
-  (table.isNullable(type)
-    ? nullableFieldRemedy(table, type, field)
-    : read.length > 0
-      ? `do the work inside the guard's block, or read the numbers and strings it holds one at a time, \`${read}\``
-      : COPIED_NONE_REMEDY)
+const guardDerivedMessage = (table: TypeTable, type: i32, read: string, field: string): string => {
+  let remedy = COPIED_NONE_REMEDY
+  if (table.isNullable(type)) {
+    remedy = nullableFieldRemedy(table, type, field)
+  } else if (read.length > 0) {
+    remedy = `do the work inside the guard's block, or read the numbers and strings it holds one at a time, \`${read}\``
+  }
+  return (
+    `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
+    "element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, " +
+    "would outlive the block that holds the lock; " +
+    remedy
+  )
+}
 
 /** The remedy for a nullable field read through a guard: a field that is never `null`. */
 const nullableFieldRemedy = (table: TypeTable, type: i32, field: string): string =>
@@ -4207,12 +4236,17 @@ const walkMutexes = (
       const call: Node | null = depth > 1 ? parents[depth - 2] : null
       const passed = node.kind === N_IDENT && parent !== null && parent.kind === N_LIST && call !== null
       const why = passed && call !== null ? guardArgumentWhy(program, table, call, at, node.text) : ""
+      const guard = table.typeName(type)
       if (!passed) {
-        out.push(new ScopeFinding(node, guardUseMessage(named)))
+        out.push(
+          new ScopeFinding(node, guardUseMessage(named, guard, guardSlot(program, table, type, named)))
+        )
         return
       }
       if (why.length > 0) {
-        out.push(new ScopeFinding(node, guardArgumentMessage(named, why)))
+        const helper = freshName(program.source.text, "useGuard", 0)
+        const message = guardArgumentMessage(named, why, guard, helper, guardSlot(program, table, type, "g"))
+        out.push(new ScopeFinding(node, message))
         return
       }
     }

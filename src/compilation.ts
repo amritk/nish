@@ -1791,7 +1791,7 @@ export class Compilation {
         messages.push(
           isVoidSpawn(call.sig)
             ? voidTaskResultMessage(program, this.table, fn, call.node)
-            : taskResultMessage(program, this.table, call.sig, fn, fn.returnType, call.node)
+            : taskResultMessage(program, this.table, fn, fn.returnType, call.node)
         )
         messages.push(sharedWriteMessage(program, this.table, call.sig, fn, facts, call.node))
         messages.push(arenaMessage(call.sig, fn, facts))
