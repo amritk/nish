@@ -32,7 +32,7 @@ import { ROOT_PACKAGE } from "./packages"
 import { hasFunctionParameter } from "./generics"
 import { basename } from "./paths"
 import { N_CONSTRUCTOR, Node } from "./nodes"
-import { FunctionSig, STRUCT_CLASS, TemplateInfo } from "./program"
+import { FieldInfo, FunctionSig, STRUCT_CLASS, StructInfo, TemplateInfo } from "./program"
 import { ResultLayout, resultLayout } from "./result"
 import { StringBuilder } from "./strings"
 import {
@@ -957,51 +957,84 @@ export const acceptsSidecars = (
  * is none; otherwise the first is reported.
  */
 const refuseUnions = (compilation: Compilation, fns: ExternalFunction[]): boolean => {
-  // Each report ends the walk, so no pass of a loop keeps a message alive
-  // past itself: the first union refused is the one reported.
+  // The loops only look; the one report is written after them, so no pass of a
+  // loop keeps a message alive past itself, and the first union is the one.
   const table = compilation.table
-  for (const fn of fns) {
-    const sig = fn.sig
-    const at = sigNameNode(sig)
-    if (table.holdsUnion(sig.returnType)) {
-      reportUnion(
-        compilation,
-        fn.unit,
-        at,
-        `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
-      )
-      return false
-    }
-    let i = 0
-    while (i < sig.paramTypes.length && i < sig.paramNames.length) {
-      const t = sig.paramTypes[i]
-      if (table.holdsUnion(t)) {
-        const what = `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[i]}\` is \`${table.typeName(t)}\``
-        reportUnion(compilation, fn.unit, at, what)
-        return false
-      }
-      i = i + 1
+  let fn: ExternalFunction | null = null
+  let slot = NO_UNION
+  for (const each of fns) {
+    slot = unionSlot(table, each.sig)
+    if (slot !== NO_UNION) {
+      fn = each
+      break
     }
   }
-  for (const unit of compilation.modules) {
-    for (const info of unit.checker.program.structList) {
-      if (info.origin !== unit.source) {
-        continue
-      }
-      for (const f of info.fields) {
-        if (table.holdsUnion(f.type)) {
-          reportUnion(
-            compilation,
-            unit,
-            f.decl,
-            `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``
-          )
-          return false
-        }
-      }
+  if (fn !== null) {
+    const sig = fn.sig
+    const what =
+      slot === RETURN_SLOT
+        ? `\`${sig.sourceName}\` returns \`${table.typeName(sig.returnType)}\``
+        : `\`${sig.sourceName}\`'s parameter \`${sig.paramNames[slot]}\` is \`${table.typeName(sig.paramTypes[slot])}\``
+    reportUnion(compilation, fn.unit, sigNameNode(sig), what)
+    return false
+  }
+  let unit: ModuleUnit | null = null
+  let info: StructInfo | null = null
+  for (const each of compilation.modules) {
+    info = unionStruct(table, each)
+    if (info !== null) {
+      unit = each
+      break
     }
+  }
+  let f: FieldInfo | null = null
+  if (info !== null) {
+    f = unionField(table, info)
+  }
+  if (unit !== null && info !== null && f !== null) {
+    reportUnion(compilation, unit, f.decl, `\`${info.name}.${f.name}\` is \`${table.typeName(f.type)}\``)
+    return false
   }
   return true
+}
+
+/** The first class or interface `unit` declares with a field that holds a union, or null. */
+const unionStruct = (table: TypeTable, unit: ModuleUnit): StructInfo | null => {
+  for (const info of unit.checker.program.structList) {
+    if (info.origin === unit.source && unionField(table, info) !== null) {
+      return info
+    }
+  }
+  return null
+}
+
+/** `unionSlot`'s answers besides a parameter's index. */
+const NO_UNION: i32 = -2
+const RETURN_SLOT: i32 = -1
+
+/** Where `sig` holds a union: `RETURN_SLOT`, a parameter's index, or `NO_UNION`. */
+const unionSlot = (table: TypeTable, sig: FunctionSig): i32 => {
+  if (table.holdsUnion(sig.returnType)) {
+    return RETURN_SLOT
+  }
+  let i = 0
+  while (i < sig.paramTypes.length && i < sig.paramNames.length) {
+    if (table.holdsUnion(sig.paramTypes[i])) {
+      return i
+    }
+    i = i + 1
+  }
+  return NO_UNION
+}
+
+/** The first field of `info` that holds a union, or null. */
+const unionField = (table: TypeTable, info: StructInfo): FieldInfo | null => {
+  for (const f of info.fields) {
+    if (table.holdsUnion(f.type)) {
+      return f
+    }
+  }
+  return null
 }
 
 const reportUnion = (compilation: Compilation, unit: ModuleUnit, at: Node, what: string): void => {
