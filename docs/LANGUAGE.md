@@ -5733,9 +5733,11 @@ class Session {
   store anywhere else — a method, a function, a compound `+=`, or a second
   name for `this` — is the `readonly` refusal, NL2181
   (`reject_secret_field_store_method`, `_store_outside`, `_compound`,
-  `_this_escape`). A holder is made only by `new`: an object literal is NL2527
-  (`reject_secret_field_object_literal`), and typed JSON neither encodes nor
-  decodes one (NL2485, `reject_secret_field_json`, `_json_decode`).
+  `_this_escape`). The store is a statement of its own: `const x = (this.k =
+  secret(v))` binds the key a second time, and is NL2526
+  (`reject_secret_field_store_value`). A holder is made only by `new`: an
+  object literal is NL2527 (`reject_secret_field_object_literal`), and typed
+  JSON neither encodes nor decodes one (NL2485, `reject_secret_field_json`, `_json_decode`).
 - **Reads.** `h.f` is borrowed, as a `Secret` parameter is: it is an argument
   of a call or a `new` — `expose`, `exposeWith`, `wipe`, or a function that
   takes a `Secret` — or an operand of `===` or `!==` against another `Secret`
@@ -5744,7 +5746,10 @@ class Session {
   key, and is `` `k` is a `Secret` field, which is read only as a call's
   argument or an `===`/`!==` operand `` (NL2526, `reject_secret_field_bind`,
   `_assign_local`, `_return`, `_ternary`, `_nullish`, `_optional_chain`,
-  `_chain`). Every place a `Secret` may not go is closed to the field too:
+  `_chain`). A function that takes a `Secret` may return it, as it may a
+  local's, and what it returns is a `Secret` the caller must wipe or return;
+  it names the holder's key, so a use of it after the holder's `wipe()` reads
+  zeroes. Every place a `Secret` may not go is closed to the field too:
   `reject_secret_field_console` (NL2432), `_template` (NL2431), `_equality`
   (NL2433), `_condition` (NL2434), `_index` (NL2435), `_member` (NL2436),
   `_array`, `_array_literal` and `_result` (NL2429), `_new_arg` (NL2439: a
@@ -5752,7 +5757,10 @@ class Session {
   `_holder_payload` (NL2428: neither a `Secret` nor a holder is key material).
 - **The holder is a value.** It may be aliased and kept in an array, a `Map`,
   another object's field or a `Result`. A data-parallel body or a task may not
-  capture one (`reject_secret_field_capture`, `_task_wipe`, NL2509), and
+  capture one (`reject_secret_field_capture`, `_task_wipe`, NL2509), the
+  scope's own thread may not wipe one a task of it may read before the join —
+  through `wipe()`, a helper or a constructor (`_scope_wipe`, `_scope_helper`,
+  `_scope_new`) — and
   `using` does not take one (NL2387, `reject_secret_field_using`).
 
 `secret_field` runs all of it, and `tests/run.js` holds the wipe to `-O2`

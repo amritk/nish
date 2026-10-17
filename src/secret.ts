@@ -788,7 +788,11 @@ class SecretFlow {
         this.declarations(stmt, state, block)
         return
       case N_EXPR_STMT:
-        this.expression(stmt.children[0], ROLE_READ, state)
+        if (stmt.children[0].kind === N_BINARY && stmt.children[0].text === "=") {
+          this.assignment(stmt.children[0], state, true)
+        } else {
+          this.expression(stmt.children[0], ROLE_READ, state)
+        }
         if (terminatesControlFlow(this.ctx, stmt.children[0])) {
           state.reachable = false // the process ends, and the key with it
         }
@@ -1174,9 +1178,11 @@ class SecretFlow {
    * store of a `Secret` field — in a method, through another name than
    * `this`, compound — is refused there before this walk runs, so this is
    * where the two rules meet. The value is `secret(...)`, made here and owned
-   * by the field from now, and the field is not yet set.
+   * by the field from now, and the field is not yet set. The store is a
+   * statement of its own: `const x = (this.k = secret(v))` would bind the
+   * value the field now owns, a second owner as `const x = this.k` is.
    */
-  fieldStore(target: Node, value: Node, state: FlowState): void {
+  fieldStore(target: Node, value: Node, state: FlowState, statement: boolean): void {
     const at = this.building ? this.slotIndex(target) : -1
     if (at < 0) {
       this.expression(value, ROLE_READ, state)
@@ -1190,6 +1196,9 @@ class SecretFlow {
       }
       state.live[at] = true
       state.wiped[at] = false
+      if (!statement) {
+        this.error(target, fieldReadMessage(target.text))
+      }
       return
     }
     if (made.kind === N_BINARY && made.text === "=") {
@@ -1256,7 +1265,7 @@ class SecretFlow {
   binary(node: Node, state: FlowState): void {
     const op = node.text
     if (op === "=") {
-      this.assignment(node, state)
+      this.assignment(node, state, false)
       return
     }
     if (op === "===" || op === "!==") {
@@ -1301,11 +1310,12 @@ class SecretFlow {
     return field === null ? -1 : field.type
   }
 
-  assignment(node: Node, state: FlowState): void {
+  /** `target = value`; `statement` when it is the whole of an expression statement, so its value goes nowhere. */
+  assignment(node: Node, state: FlowState, statement: boolean): void {
     const target = unwrapSecretNode(node.children[0])
     const value = node.children[1]
     if (target.kind === N_MEMBER && this.ctx.table.isSecret(this.storedType(target))) {
-      this.fieldStore(target, value, state)
+      this.fieldStore(target, value, state, statement)
       return
     }
     if (target.kind !== N_IDENT) {

@@ -162,7 +162,13 @@ can name the field.
   are each refused.
 - The field is set only in the constructor, only from `secret(...)` (NL2524),
   and only once (NL2525); `secret(...)` there keeps the sole-reference rule
-  (NL2512). A store anywhere else is NL2181.
+  (NL2512). A store anywhere else is NL2181, and the store is a statement of its
+  own: its value bound to a local is NL2526.
+- A scope's parent may not wipe a holder while a task of the scope may read
+  its key: `wipe` marks what its argument reaches as written
+  (`markWipe`, `src/attributes.ts`), so `h.wipe()`, a helper that wipes
+  `h.k`, and a constructor reached by `new` that does are each the region
+  rule's write before the join, as `wipe(h.k)` written in the block is.
 - A read of the field is a loan: an argument of a call or of `new`, or an
   operand of `===` or `!==`. Anything else is NL2526, and the existing rules
   (NL2428, NL2431 to NL2436, NL2439) still refuse what they refused of a local.
@@ -175,7 +181,11 @@ can name the field.
 - What the rule leaves out: nothing makes a program call `wipe()`, so a holder
   that is never wiped leaves its key in memory, unzeroed; the rule does
   not follow a second reference to the holder itself, which is a loan of the
-  whole object rather than of the key; and a key made per packet or per record
+  whole object rather than of the key; a function that takes a `Secret` and
+  returns it, as `(s: Secret<u8[]>): Secret<u8[]> => s`, hands back the
+  field's key under a second name, as it does a local's: the result is a
+  `Secret` its caller must wipe or return, and a use of it after the holder's
+  `wipe()` is the program's error, a wrong answer and not a leak; and a key made per packet or per record
   is a local, held to NL2448 and NL2450, not a field.
 
 ### Tests
@@ -203,7 +213,9 @@ can name the field.
   `reject_secret_field_equality`, `reject_secret_field_secret_arg`,
   `reject_secret_field_new_arg`, `reject_secret_field_object_literal`,
   `reject_secret_field_json`, `reject_secret_field_json_decode`,
-  `reject_secret_field_capture`, `reject_secret_field_task_wipe` and
+  `reject_secret_field_capture`, `reject_secret_field_task_wipe`,
+  `reject_secret_field_scope_wipe`, `reject_secret_field_scope_helper`,
+  `reject_secret_field_scope_new`, `reject_secret_field_store_value` and
   `reject_secret_field_using`: one road each.
 - `${name}: IR matches golden` and `${name}: native output matches .out`, for
   `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.

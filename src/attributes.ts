@@ -3535,7 +3535,10 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
  * instance says what its emitted body does: it reads the header or the field
  * that leads to the bytes, writes through its parameter, and the write is one
  * its caller can see, because the caller's key is what it zeroes. It keeps
- * nothing, so the parameter stays uncaptured.
+ * nothing, so the parameter stays uncaptured. The bytes it zeroes lie below
+ * the parameter's own slots, so the write reaches past them too: a caller that
+ * hands it `this.k` writes what `this` reaches, which is what a scope's region
+ * rule reads of a holder's `wipe()` called beside a task that borrows the key.
  */
 const markWipe = (facts: FunctionFacts): void => {
   facts.effect = EFFECT_WRITE
@@ -3543,7 +3546,10 @@ const markWipe = (facts: FunctionFacts): void => {
   facts.sharedWrite = true
   facts.callees.add(WIPE_MEMSET)
   if (facts.pointerParams.length > 0) {
-    facts.pointerParams[0].writesThrough = true
+    const pp = facts.pointerParams[0]
+    pp.writesThrough = true
+    pp.writesReach = true
+    pp.writesDeep = true
   }
 }
 
