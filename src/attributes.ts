@@ -1557,8 +1557,14 @@ const declarationIn = (program: CheckedProgram, node: Node, local: Local): Node 
  * either that parameter or a fresh allocation (`new`, an array or an object
  * literal); -1 otherwise, and for a method, whose answer may be its
  * receiver's. A call to such a function answers memory no further from its
- * caller than that argument, since a parameter is never reassigned:
+ * caller than that argument, since a parameter is never reassigned
+ * (`checkAssignment` and `checkIncrement` in `expressions.ts` refuse it):
  * `rebuiltSlots` in `std/collections.ts`, which `Map.rebuild` refiles into.
+ * A fresh return may hold another argument's memory, `[ys]` or `new H(ys)`,
+ * and the path still names only the one parameter: that is sound because a
+ * task's own write through the answer lands in its top-level slots, which a
+ * fresh allocation owns, and any deeper write or a field's is refused
+ * (`reject_thread_task_own_fresh_holds_*`).
  */
 const returnedParameter = (callee: FunctionSig): i32 => {
   const body = callee.body()

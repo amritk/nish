@@ -1281,13 +1281,44 @@ const usingPlaceMessage = (): string =>
 /** The element types a destination the fix declares may hold: a scalar the task's answer is. */
 const DESTINATION_ELEMENTS: string = "|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|number|boolean|"
 
-/** The first of `answer`, `answer2`, ... that is not a word anywhere in `text`, so the declaration shadows nothing. */
-const freshAnswerName = (text: string): string => {
+/**
+ * The `skip + 1`th of `answer`, `answer2`, ... that is not a word anywhere in
+ * `text`, so the declaration shadows nothing, and each `spawn` the fix gives
+ * a destination in one round has a slot of its own.
+ */
+const freshAnswerName = (text: string, skip: i32): string => {
+  let left = skip
   let name = "answer"
-  for (let n = 2; containsWord(text, name); n++) {
+  for (let n = 2; containsWord(text, name) || left > 0; n++) {
+    if (!containsWord(text, name)) {
+      left = left - 1
+    }
     name = `answer${n}`
   }
   return name
+}
+
+/** How many `receiver.spawn(task, arg)` calls under `node` start before `at`: the slots the fix names ahead of the one at `at`. */
+const spawnsBefore = (node: Node, receiver: string, at: i32): i32 => {
+  let count = 0
+  for (const child of node.children) {
+    if (child.start >= at) {
+      continue
+    }
+    if (child.kind === N_CALL && child.children.length === 2 && child.children[1].children.length === 2) {
+      const callee = child.children[0]
+      if (
+        callee.kind === N_MEMBER &&
+        callee.text === "spawn" &&
+        callee.children[0].kind === N_IDENT &&
+        callee.children[0].text === receiver
+      ) {
+        count = count + 1
+      }
+    }
+    count = count + spawnsBefore(child, receiver, at)
+  }
+  return count
 }
 
 const isWordChar = (code: i32): boolean =>
@@ -1296,6 +1327,19 @@ const isWordChar = (code: i32): boolean =>
   (code >= 97 && code <= 122) ||
   code === 95 ||
   code === 36
+
+/** Whether `text` is a name a `const` may take: word characters, the first not a digit. */
+const isIdentifier = (text: string): boolean => {
+  if (text.length === 0 || (text.charCodeAt(0) >= 48 && text.charCodeAt(0) <= 57)) {
+    return false
+  }
+  for (let i = 0; i < text.length; i++) {
+    if (!isWordChar(text.charCodeAt(i))) {
+      return false
+    }
+  }
+  return true
+}
 
 const containsWord = (text: string, word: string): boolean => {
   let from = text.indexOf(word)
@@ -1383,7 +1427,13 @@ export const destinationEdits = (
         ) {
           const decl = prior.children[0].children[0]
           if (decl.children[0].text === receiver) {
-            return scopeDestinationEdits(program, prior, args[1], element)
+            return scopeDestinationEdits(
+              program,
+              prior,
+              args[1],
+              element,
+              spawnsBefore(up, receiver, call.start)
+            )
           }
         }
       }
@@ -1397,14 +1447,20 @@ export const destinationEdits = (
   return edits
 }
 
-const scopeDestinationEdits = (program: CheckedProgram, scope: Node, last: Node, element: string): Edit[] => {
+const scopeDestinationEdits = (
+  program: CheckedProgram,
+  scope: Node,
+  last: Node,
+  element: string,
+  earlier: i32
+): Edit[] => {
   const edits: Edit[] = []
   const text = program.source.text
   const indent = indentBefore(text, scope.start)
   if (indent === null) {
     return edits
   }
-  const name = freshAnswerName(text)
+  const name = freshAnswerName(text, earlier)
   const semi = text.slice(scope.start, scope.end).endsWith(";") ? ";" : ""
   edits.push(new Edit(scope.start, scope.start, `const ${name} = new Array<${element}>(1)${semi}\n${indent}`))
   edits.push(new Edit(last.end, last.end, `, ${name}, 0`))
@@ -1626,6 +1682,9 @@ const hoistArrowEdits = (program: CheckedProgram, sig: FunctionSig, arrow: Node,
     above = commentLineAbove(text, at)
   }
   const suffix = spawnCallee(program, parents[depth - 2]) !== null ? "Task" : "Body"
+  if (!isIdentifier(sig.sourceName)) {
+    return edits
+  }
   let name = `${sig.sourceName}${suffix}`
   for (let n = 2; containsWord(text, name); n++) {
     name = `${sig.sourceName}${suffix}${n}`
@@ -3002,8 +3061,8 @@ const mutexFreshMessage = (): string =>
   "`new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every " +
   "argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a " +
   "`Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to " +
-  "it that skips the lock; build the value inside the call, `new Mutex(new Hist(new Array<i32>(16)))`, or copy " +
-  "what it needs into a fresh one, `new Mutex(new Hist(h.n))`"
+  "it that skips the lock; build the value inside the call, `new Mutex<Hist>(new Hist(new Array<i32>(16)))`, or " +
+  "copy what it needs into a fresh one, `new Mutex<Hist>(new Hist(h.n))`"
 
 const mutexMemberMessage = (name: string): string =>
   `\`${name}\` is not a member a program may name: the data a \`Mutex\` owns is reachable only through ` +
@@ -3048,7 +3107,7 @@ const guardStoreMessage = (table: TypeTable, type: i32): string =>
   `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\`, an enum ` +
   "or a `string`, which the store copies, into a field or an element that already exists: anything else is a " +
   "pointer, which may point into a task's arena, freed when the task is joined; store its fields one at a time, " +
-  "`g.value.h.n = v.n`, or make the value when the lock is, `new Mutex(new T(new H()))`"
+  "`g.value.h.n = v.n`, or make the value when the lock is, `new Mutex<T>(new T(new H()))`"
 
 /**
  * A `null` stored through a guard. The store into a `string | null` slot is
@@ -3071,10 +3130,11 @@ const guardHeldMessage = (what: string, guard: string): string =>
 
 /** R6, in `sharedWriteMessage`'s words for a task. */
 const TASK_WRITE_TAIL: string =
-  ", and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the " +
-  "guard of a `Mutex`, `using g = m.lock()`. Scratch only this task uses is made inside it, `const t = new T()`: " +
-  "an object handed in as the argument is shared memory even when the `spawn` made it, because where an argument " +
-  "was made is not tracked. A value the parent needs back is the task's answer, `s.spawn(task, arg, out, i)`"
+  ", and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, " +
+  "`const t = new T()`, because an object handed in as the argument is shared memory even when the `spawn` made " +
+  "it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a " +
+  "`Mutex`, `using g = m.lock()`, and hand a value the parent needs back as the task's answer, " +
+  "`s.spawn(task, arg, out, i)`"
 
 const regionLockMessage = (state: RegionState, what: string, path: string): string =>
   `${what} locks a \`Mutex\` a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +

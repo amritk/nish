@@ -3382,7 +3382,7 @@ element's arena, which a task does not share, and each rule is reported at the
   make, by a method of an [atomic](#atomics-atomici32-and-atomici64)
   (`tests/link/thread_atomic_tasks`), or by a `send` or a receive on a
   [`Channel`](#channels-channelt), neither of which is a write the rule counts:
-  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, `const t = new T()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
@@ -3435,8 +3435,13 @@ element's arena, which a task does not share, and each rule is reported at the
   by a helper or a method, and a helper that may answer either its own array
   or the caller's, all write the caller's memory
   (`reject_thread_task_own_holds_param`, `_repointed`, `_helper_stores_param`,
-  `_method_adopts_param`, `_either_returned`). That refusal ends with what to
-  write: `` Scratch only this task uses is made inside it, `const t = new T()`: an object handed in as the argument is shared memory even when the `spawn` made it, because where an argument was made is not tracked. A value the parent needs back is the task's answer, `s.spawn(task, arg, out, i)` ``.
+  `_method_adopts_param`, `_either_returned`), and so does a second name bound
+  in the same statement as a fresh array when it names the argument's
+  (`reject_thread_task_own_declarator_binds_arg`). A helper's fresh answer
+  that holds the caller's memory, `[ys]` or `new H(ys)`, is the task's at its
+  top level only, so a write below it is refused
+  (`reject_thread_task_own_fresh_holds_array`, `_new`, `_object`). That
+  refusal starts with what to write: `` make scratch only this task uses inside it, `const t = new T()`, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`, `using g = m.lock()`, and hand a value the parent needs back as the task's answer, `s.spawn(task, arg, out, i)` ``.
   A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
@@ -3590,11 +3595,19 @@ breaks one is refused with that rule's own code:
   a helper that locks, opens a scope, spawns or receives is refused at the call
   (`reject_mutex_guard_helper_spawn`, `reject_mutex_guard_helper_receive`). A
   helper that passes the guard on is judged by the same rule at that call
-  (`reject_mutex_guard_helper_forward`); `link/thread_mutex_helper` is three
-  helpers deep on four threads. Any other call is
+  (`reject_mutex_guard_helper_forward`), through helpers that call each other
+  (`reject_mutex_guard_helper_mutual`) and across an import
+  (`link/reject_mutex_guard_helper_import`); a helper that locks a `Mutex`
+  it is handed is refused by R5 at the call
+  (`reject_mutex_guard_helper_second_lock`), and `g.value` handed beside the
+  guard by NL2467 (`reject_mutex_guard_helper_value_arg`). A helper has no
+  default, rest or destructured parameter, which Nish has none of
+  (`reject_mutex_guard_helper_default`, `_rest`, `_destructured`).
+  `link/thread_mutex_helper` is three helpers deep on four threads. Any other call is
   `` `g` is passed to `push`, a method: a guard is handed only to a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared as the guard is, `MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; write the helper as `const f = (g: MutexGuard<T>): void => { g.value.n = g.value.n + 1 }` and call it as `f(g)` ``
   (NL2536; `reject_mutex_guard_helper_array`, `_map`, `_method`, `_new`,
-  `_ctor_this`, `_generic`, `_twice` and `_nullable`), because a method or a
+  `_ctor_this`, `_generic`, `_twice`, `_nullable`, and `_callback` for a
+  helper that takes a function, which makes it a generic), because a method or a
   constructor has `this` as a second way out, a generic's body treats `T` as any
   value, and a guard passed twice is two names for one lock. Anything read through it that is
   not a number, a `boolean`, an enum or a `string` — `const c = g.value`,
