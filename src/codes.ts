@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 663
+export const RULE_COUNT: i32 = 665
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -61,6 +61,8 @@ export const RULE_COUNT: i32 = 663
  * contains.
  */
 const diagnosticRules = (): string[] => [
+  'This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a `string | null` slot of a `Mutex`\'s data the store is an exchange that copies the string into memory the `Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0`',
+  "NL2537",
   "`using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, in this version: they are the values whose disposal the language defines — a scope joins its tasks, a guard releases its lock, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs",
   "NL2387",
   "`new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock",
@@ -263,8 +265,6 @@ const diagnosticRules = (): string[] => [
   "NL2390",
   "`, whose `[key, value]` pairs need destructuring, which this version does not have: walk `keys()` or `values()` instead, as in `for (const k of ",
   "NL2375",
-  ", and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()`",
-  "NL2471",
   "`?.` is allowed only in a chain that ends in `??`, whose default stands in when a link is `null`: write `a?.b ?? d`, or narrow with `!== null`",
   "NL1062",
   "` can only be the receiver of a `spawn` statement: passed, stored, returned or copied, it could be given a task after its block has joined it",
@@ -315,6 +315,8 @@ const diagnosticRules = (): string[] => [
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
   "NL2010",
+  ", and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, `const t = new T()`",
+  "NL2471",
   ", which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` by `===` or `!==`",
   "NL2369",
   "` is a function parameter and can only be called or passed on as a function argument: a function is never a value in ",
@@ -691,6 +693,8 @@ const diagnosticRules = (): string[] => [
   "NL2101",
   "` requires two operands of the same numeric type, got ",
   "NL2102",
+  "a guard is handed only to a function named at the call",
+  "NL2536",
   '"`) are not supported; modules have no top-level code',
   "NL2033",
   "Generic type parameters are forbidden on a method in ",

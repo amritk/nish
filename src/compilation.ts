@@ -162,6 +162,7 @@ import {
   taskArgumentMessage,
   isVoidSpawn,
   voidTaskResultMessage,
+  destinationEdits,
   threadsModuleName,
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
@@ -1766,7 +1767,17 @@ export class Compilation {
     for (const unit of this.modules) {
       const program = unit.checker.program
       for (const finding of scopeFindings(programs, program, this.table, facts, summaries)) {
-        this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
+        if (finding.edits.length > 0) {
+          this.sink.reportFix(
+            program.source,
+            finding.node.start,
+            finding.node.end,
+            finding.message,
+            finding.edits
+          )
+        } else {
+          this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
+        }
       }
       for (const call of program.spawnCalls) {
         const fn = parallelBodyOf(call.sig)
@@ -1784,8 +1795,16 @@ export class Compilation {
         )
         messages.push(sharedWriteMessage(call.sig, fn, facts))
         messages.push(arenaMessage(call.sig, fn, facts))
-        for (const message of messages) {
-          if (message.length > 0) {
+        // The one with a fix: a scalar answer nothing stores gets a destination to store it in.
+        const none: Edit[] = []
+        const edits = isVoidSpawn(call.sig)
+          ? destinationEdits(program, this.table, unit.parents, call.node, fn)
+          : none
+        for (let i = 0; i < messages.length; i++) {
+          const message = messages[i]
+          if (message.length > 0 && i === 2 && edits.length > 0) {
+            this.sink.reportFix(program.source, call.node.start, call.node.end, message, edits)
+          } else if (message.length > 0) {
             this.sink.report(program.source, call.node.start, call.node.end, message)
           }
         }

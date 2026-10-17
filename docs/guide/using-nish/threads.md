@@ -396,9 +396,12 @@ export const main = (): i32 => {
 - **Use the guard only as `g.value`, and only to read or store a number, a
   `boolean`, an enum or a `string` through it.** A string you store is copied
   into memory the `Mutex` owns, and one you read is copied out to you, so
-  neither side keeps a pointer the other can free. Don't bind `g` or `g.value` to another
-  name, pass them on, or keep an array they reach: anything that outlives the
-  block would outlive the lock.
+  neither side keeps a pointer the other can free. You may hand `g` to a
+  function of your own, called by name — `bump(g)` with
+  `const bump = (g: MutexGuard<Counter>): void => { … }` — which uses it the
+  same way. Don't bind `g` or `g.value` to another name, store or return
+  either, or keep an array they reach: anything that outlives the block would
+  outlive the lock (NL2536).
 - **One lock at a time, and no waiting while you hold it.** Inside a guard's
   block — directly or through any call — there is no second `lock()`, no
   `scope()` and no parallel map. That is why a program that compiles cannot
