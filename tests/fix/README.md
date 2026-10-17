@@ -128,8 +128,10 @@ the call is in the loop, keeps the refusal, and so does an arrow that assigns
 the `let` itself (`thread-nofix-capture-assigned`, `-assigned-map`), whose write
 would land on the `const`. Two statements in one block that capture the same
 `let` are rewritten in one round from the same text, so each takes a name of
-its own, `kNow` and `kNow2`, counted by the capturing arrows before it
-(`thread-capture-two`). `thread-hoist-channel` (NL2484)
+its own, `kNow` and `kNow2`, counted by the capturing arrows before it:
+two `parallelMap`s (`thread-capture-two`), two `spawn`s in one scope
+(`thread-capture-two-spawn`) and two in a loop's body
+(`thread-capture-two-loop`). `thread-hoist-channel` (NL2484)
 moves an arrow that uses a `Channel` to a `const` of its own above the
 top-level statement it is written in, named for the function and `Task`; an
 arrow that captures (`thread-nofix-hoist-capturing`) or leaves a type out
@@ -140,7 +142,7 @@ a method (`thread-nofix-hoist-method-map`) stays for the same reason. A
 hoisted arrow is dedented to the top level line by line, except a line that
 starts inside a template literal, whose spaces are part of its string
 (`thread-hoist-template`, which prints 11, not the 7 of `one\ntwo`). Each input is an error, so none runs before its fix and none has a
-`.stdout`; the fixed programs print 25, 42, `joined`, `joined`, 24, 66, 86, 3 and 11. The fixed
+`.stdout`; the fixed programs print 25, 42, `joined`, `joined`, 24, 66, 86, 31, 27, 3 and 11. The fixed
 program imports `nish/threads`, which is why the runner compiles it with
 `-o fixed/`: one `.ll` per module.
 
