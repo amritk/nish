@@ -1722,8 +1722,8 @@ through `exposeWith`; read `this.k` only as a call or `new` argument (`expose`,
 `exposeWith`, a function taking a `Secret`; `wipe` only in the holder's own `wipe()`) or a `===`/`!==` operand —
 never bind, return or store it. The class declares `wipe(): void`, no
 parameters, calling `wipe(this.k)` itself for every such field on every path
-(NL2536, NL2537); a field is wiped nowhere else (NL2543). A function taking a
-`Secret` borrows it: it neither returns it (NL2542) nor wipes it (NL2544). Nothing checks that `wipe()` is called: call it when the
+(NL2538, NL2539); a field is wiped nowhere else (NL2545). A function taking a
+`Secret` borrows it: it neither returns it (NL2544) nor wipes it (NL2546). Nothing checks that `wipe()` is called: call it when the
 holder is done.
 
 ```ts nish:ok
@@ -1752,7 +1752,7 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2540
+```ts nish:err NL2542
 import { Secret, secret, wipe } from "nish:secret";
 
 class Session {
@@ -1767,7 +1767,7 @@ class Session {
 
 export const main = (): i32 => {
   const s = new Session();
-  const k = s.key; // NL2540: a second owner of the key
+  const k = s.key; // NL2542: a second owner of the key
   s.wipe();
   return 0;
 };

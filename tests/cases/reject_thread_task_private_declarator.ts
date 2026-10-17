@@ -1,21 +1,30 @@
-// Every declarator of a statement is a use: the third binds a second name
-// for the array the second allocates, so that array is not private, and the
-// store through the first name is a shared write.
+// Every declarator of a statement is a use: the third pushes the array the
+// second allocates onto an array the argument holds, so that array is not
+// private, and the push is a shared write.
 import { scope } from "nish/threads";
 
-const twice = (n: i32): i32 => {
+class Holder {
+  all: i32[][];
+
+  constructor() {
+    this.all = [];
+  }
+}
+
+const twice = (h: Holder): i32 => {
   const k: i32 = 2,
-    xs = new Array<i32>(n),
-    ys = xs;
+    xs = new Array<i32>(4),
+    n = h.all.push(xs);
   xs[0] = k;
-  return ys[0];
+  return n;
 };
 
 export const main = (): i32 => {
+  const h = new Holder();
   const out: i32[] = [0];
   {
     using s = scope();
-    s.spawn(twice, 4, out, 0);
+    s.spawn(twice, h, out, 0);
   }
   return out[0];
 };

@@ -4016,7 +4016,9 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
         check(`fix ${name}: --fix takes ${want} rounds`, rounds === want, shown(fixed))
       }
       fs.writeFileSync(path.join(work, `${name}.fixed.ts`), expected)
-      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed.ll"], {
+      // A directory, so a fixed program that imports a module (`nish/threads`) is
+      // written as one `.ll` per module rather than refused for being several.
+      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed/"], {
         cwd: work,
         encoding: "utf8",
       })
@@ -4935,6 +4937,11 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
 // `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`,
 // and `par_map_table_reads` has a parallel map's body read them.
+// `thread_task_own_writes` has tasks write only what they made: a holder poked
+// through a method, a `Map` and a `Set`, an object's array fields, an array
+// handed back by a helper returning its argument, and an array under a second
+// declarator. `par_map_captured_strings` has a body build a literal of a
+// captured string and drop it.
 //
 // And the forms that answer a new array, `par_map_new` and `par_from`, and the
 // two capture programs, whose bodies read their function's `const` locals:
@@ -4990,6 +4997,7 @@ for (const name of [
   "thread_mutex_contended",
   "thread_mutex_scalar",
   "thread_mutex_using_mixed",
+  "thread_mutex_helper",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
@@ -5007,6 +5015,8 @@ for (const name of [
   "thread_scope_region_param_lookup",
   "thread_scope_task_map_reads",
   "par_map_table_reads",
+  "thread_task_own_writes",
+  "par_map_captured_strings",
   "thread_scope_libc_named_tasks",
   "thread_no_strict_hidden_task",
   "thread_private_prefixed_names",

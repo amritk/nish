@@ -125,10 +125,10 @@ no base line describes it.
 | --- | --- |
 | `src/secret.ts` | `admitsSecretField` and `secretFieldOf` (the declaration), `checkHolderReleaser` (the releaser's signature), `SecretFlow.collectSlots`, `fieldRead`, `fieldStore` and `storedType` (the walk over a holder's constructor, its `wipe()` and every other body) |
 | `src/structs.ts` | where a field's type is admitted, and where `checkHolderReleaser` runs once a class's members are known |
-| `src/members.ts` | the object literal of a holder (NL2541) |
+| `src/members.ts` | the object literal of a holder (NL2543) |
 | `src/interop-header.ts` | `structDefinitions` and `structFieldTypes`: a `Secret` (`isSecretStruct`) and a holder (`secretFieldOf`) are opaque in an `--emit-header` sidecar |
 | `src/attributes.ts` | `markWipe`: a `wipe` marks what its argument reaches as written, for the region rule of a scope |
-| `src/codes.ts` | the field rule's diagnostics, NL2536 to NL2544, with their fragments and advice |
+| `src/codes.ts` | the field rule's diagnostics, NL2538 to NL2546, with their fragments and advice |
 | `src/types.ts` | `TypeTable.holdsSecret`, which does not look inside a struct: a holder travels as a value, since its own `wipe()` ends its field |
 
 ### Threat model
@@ -174,9 +174,9 @@ each row names functions rather than base lines.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| SECRET-2 | Medium | `SecretFlow.name` (`src/secret.ts`) | Identity laundering: a function, an arrow, a generic `id<T>` or a method that returned the `Secret` it was passed handed its caller a second name for a holder's key, which outlived the holder's `wipe()` and read zeros, or read the key before it with no tie to the holder. A ternary between two borrowed keys was the same road. Medium on SECRET-1's reasoning: no input reaches it, but an accepted program holds the key under a name the rule does not see | **Fixed.** A `Secret` parameter is borrowed: returning it is NL2542, for every `Secret` parameter (a break from 0.18.0, docs/LANGUAGE.md, "Secrets"). A ternary of two is refused by the copy rule |
-| SECRET-3 | Low | `SecretFlow.fieldRead` (`src/secret.ts`) | Wipe then read: `wipe(h.k)` in a function, another method, a constructor, through `this` handed out of one, or in a holder's `wipe()` aimed at a nested or another holder's field, zeroed a key its holder went on using. A wrong answer, not a leak | **Fixed.** A field is wiped only by `wipe(this.f)` in its own holder's `wipe()` (NL2543) |
-| SECRET-4 | Low | `SecretFlow.name` (`src/secret.ts`) | A helper that wiped its `Secret` parameter, called directly, by `new` or by a method, zeroed a holder's key behind its back | **Fixed.** Wiping a borrowed `Secret` is NL2544; the owner wipes it |
+| SECRET-2 | Medium | `SecretFlow.name` (`src/secret.ts`) | Identity laundering: a function, an arrow, a generic `id<T>` or a method that returned the `Secret` it was passed handed its caller a second name for a holder's key, which outlived the holder's `wipe()` and read zeros, or read the key before it with no tie to the holder. A ternary between two borrowed keys was the same road. Medium on SECRET-1's reasoning: no input reaches it, but an accepted program holds the key under a name the rule does not see | **Fixed.** A `Secret` parameter is borrowed: returning it is NL2544, for every `Secret` parameter (a break from 0.18.0, docs/LANGUAGE.md, "Secrets"). A ternary of two is refused by the copy rule |
+| SECRET-3 | Low | `SecretFlow.fieldRead` (`src/secret.ts`) | Wipe then read: `wipe(h.k)` in a function, another method, a constructor, through `this` handed out of one, or in a holder's `wipe()` aimed at a nested or another holder's field, zeroed a key its holder went on using. A wrong answer, not a leak | **Fixed.** A field is wiped only by `wipe(this.f)` in its own holder's `wipe()` (NL2545) |
+| SECRET-4 | Low | `SecretFlow.name` (`src/secret.ts`) | A helper that wiped its `Secret` parameter, called directly, by `new` or by a method, zeroed a holder's key behind its back | **Fixed.** Wiping a borrowed `Secret` is NL2546; the owner wipes it |
 | SECRET-5 | Low | `structDefinitions`, `structFieldTypes` (`src/interop-header.ts`) | The `--emit-header` sidecar gave a `Secret`'s struct and an exported holder's layout, so a host could read the key's bytes by offset, or allocate a holder and skip the constructor that sets its key | **Fixed.** A `Secret` (`isSecretStruct`) and a holder (`secretFieldOf`) are opaque: a `typedef` with no fields, reached only as a pointer, and a function that takes or returns one is not bridged to JS |
 
 ### Properties verified
@@ -184,13 +184,13 @@ each row names functions rather than base lines.
 - A `Secret` field is `readonly`, typed exactly `Secret<T>`, on a non-generic
   class; any other declaration is NL2430, and a `Secret` inside an array, a
   `Result` or another `Secret` is NL2429.
-- A class with such a field has `wipe(): void` with no parameters (NL2536),
+- A class with such a field has `wipe(): void` with no parameters (NL2538),
   and that method calls `wipe(this.f)` for every field on every path out of it
-  (NL2537): a branch, a loop body, an early `return` and a helper that wipes it
+  (NL2539): a branch, a loop body, an early `return` and a helper that wipes it
   are each refused. A field is wiped only there: `wipe(h.f)` anywhere else,
-  a constructor included, is NL2543 (`SecretFlow.fieldRead`, `src/secret.ts`).
-- A `Secret` parameter is borrowed: returning it is NL2542 and wiping it
-  NL2544 (`SecretFlow.name`), so no function, arrow or generic instantiation
+  a constructor included, is NL2545 (`SecretFlow.fieldRead`, `src/secret.ts`).
+- A `Secret` parameter is borrowed: returning it is NL2544 and wiping it
+  NL2546 (`SecretFlow.name`), so no function, arrow or generic instantiation
   hands a caller a second name for a holder's key.
 - The C header keeps a `Secret` opaque, as it does a `Map`
   (`isSecretStruct`, `src/interop-header.ts`): an exported function's
@@ -198,19 +198,19 @@ each row names functions rather than base lines.
   layout. A holder is opaque too (`secretFieldOf`): a `typedef` with no
   fields, so a host cannot allocate one and skip the constructor that sets
   the key. The `.d.ts` and N-API shim bridge no such function.
-- The field is set only in the constructor, only from `secret(...)` (NL2538),
-  and only once (NL2539); `secret(...)` there keeps the sole-reference rule
+- The field is set only in the constructor, only from `secret(...)` (NL2540),
+  and only once (NL2541); `secret(...)` there keeps the sole-reference rule
   (NL2512). A store anywhere else is NL2181, and the store is a statement of its
-  own: its value bound to a local is NL2540.
+  own: its value bound to a local is NL2542.
 - A scope's parent may not wipe a holder while a task of the scope may read
   its key: `wipe` marks what its argument reaches as written
   (`markWipe`, `src/attributes.ts`), so `h.wipe()`, a helper that wipes
   `h.k`, and a constructor reached by `new` that does are each the region
   rule's write before the join, as `wipe(h.k)` written in the block is.
 - A read of the field is a loan: an argument of a call or of `new`, or an
-  operand of `===` or `!==`. Anything else is NL2540, and the existing rules
+  operand of `===` or `!==`. Anything else is NL2542, and the existing rules
   (NL2428, NL2431 to NL2436, NL2439) still refuse what they refused of a local.
-- A holder made by an object literal is NL2541, and JSON encode and decode of
+- A holder made by an object literal is NL2543, and JSON encode and decode of
   one are NL2485.
 - The `wipe()` of a holder is the same volatile `llvm.memset` a local's is, and
   it survives `opt -O2` where a plain `fill(0)` of the twin's field is an
@@ -270,7 +270,7 @@ each row names functions rather than base lines.
   `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.
 - `nish:secret: a holder's wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is an ordinary one`.
 - `codes: every registry code is provoked by a program, declared, or explained (${wordingsSummary})`:
-  NL2536 to NL2544 each have their `tests/wordings/` program.
+  NL2538 to NL2546 each have their `tests/wordings/` program.
 - `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
   for `docs/AI.md` and `docs/guide/using-nish/standard-library.md`: a holder
-  accepted, and a field copied into a local refused with NL2540.
+  accepted, and a field copied into a local refused with NL2542.
