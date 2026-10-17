@@ -28,6 +28,10 @@ PASS  a flipped bit in the tag: refused
 PASS  and after a tag that does not verify, the state's PSK array reads zero
 PASS  a ticket of random bytes, under an unknown key id: refused
 PASS  a ticket cut short: refused
+PASS  a ticket opened with another key under its own key's id: refused
+PASS  the untouched ticket opens again
+PASS  the right key under a record of another key id: refused
+PASS  before the key is read, so the PSK opened before it is untouched
 PASS  a ticket opens at its issue time
 PASS  and not 1 ns before it
 PASS  it opens at its expiry, issue time plus 7200 s
@@ -39,6 +43,8 @@ PASS  a ticket sealed with a lifetime of 7201 s is sealed
 PASS  and refused at its issue time
 PASS  a chain that starts at the ticket's issue time opens
 PASS  a chain that starts 1 ns after the ticket's issue time is refused
+PASS  a key's default seal cap is 2^30
+PASS  a key does not seal 1 ns before its draw
 PASS  a key is not due 1 ns before 12 h
 PASS  and is due at 12 h
 PASS  a key seals at 12 h
@@ -46,6 +52,7 @@ PASS  and not 1 ns after
 PASS  its last ticket opens at 14 h, the end of its lifetime
 PASS  a fresh ticket opens under a key drawn 14 h ago
 PASS  and not under one drawn 14 h and 1 ns ago
+PASS  nor under one drawn 1 ns after now
 PASS  a key capped at 2 seals its first ticket
 PASS  and is not yet due
 PASS  it seals its second
@@ -84,8 +91,10 @@ PASS  and an id with the same home after it
 PASS  once the first has expired, the second, still held, is refused
 PASS  and is recorded once
 PASS  while a third id takes the expired slot
+PASS  recorded once
+PASS  with no more slots used
 PASS  a resumption opens its ticket
 PASS  and strikes its id
 PASS  the same ticket opens again
 PASS  but its id is struck, so the replay is refused
-tls tickets: 90 passed, 0 failed, 0 skipped
+tls tickets: 99 passed, 0 failed, 0 skipped

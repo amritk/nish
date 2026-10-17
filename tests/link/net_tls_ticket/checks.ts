@@ -25,11 +25,8 @@ import { Suite } from "nish/testing";
 import { Secret, wipe } from "nish:secret";
 import { TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256, tlsSuiteHashLength } from "nish/net/tls/schedule";
 import {
-  TLS_TICKET_CHAIN_LIMIT,
   TLS_TICKET_KEY_ID_SIZE,
   TLS_TICKET_NONCE_SIZE,
-  TLS_TICKET_OPEN_WINDOW,
-  TLS_TICKET_SEAL_WINDOW,
   TlsTicketKeyInfo,
   TlsTicketState,
   TlsTicketStrikes,
@@ -43,6 +40,10 @@ import {
 const SECOND: i64 = 1000000000;
 const MINUTE: i64 = SECOND * 60;
 const HOUR: i64 = MINUTE * 60;
+/** The record's bounds, written here as literals so a change to the module's own constants fails a check. */
+const SEAL_WINDOW: i64 = HOUR * 12;
+const OPEN_WINDOW: i64 = HOUR * 14;
+const CHAIN_LIMIT: i64 = HOUR * 24;
 /** An arbitrary awake time at which the tests start, well clear of 0. */
 const START: i64 = HOUR * 100;
 
@@ -156,6 +157,18 @@ const tampering = (t: Suite): void => {
   crypto.getRandomValues(unknown);
   t.ok("a ticket of random bytes, under an unknown key id: refused", !tlsTicketOpen(key, info, unknown, START, out));
   t.ok("a ticket cut short: refused", !tlsTicketOpen(key, info, range(ticket, 0, last), START, out));
+
+  // The key-id gate: the id matches and the key does not, then the key matches and the id does not.
+  const otherInfo = new TlsTicketKeyInfo();
+  const other: Secret<u8[]> = tlsTicketKeyDraw(otherInfo, START);
+  t.ok("a ticket opened with another key under its own key's id: refused", !tlsTicketOpen(other, info, ticket, START, out));
+  t.ok("the untouched ticket opens again", tlsTicketOpen(key, info, ticket, START, out));
+  const renamed = new TlsTicketKeyInfo();
+  renamed.copyFrom(info);
+  renamed.id[0] = toU8(toI32(renamed.id[0]) ^ 1);
+  t.ok("the right key under a record of another key id: refused", !tlsTicketOpen(key, renamed, ticket, START, out));
+  t.eqI32("before the key is read, so the PSK opened before it is untouched", held(out.psk, 48), toI32(48));
+  wipe(other);
   wipe(key);
 };
 
@@ -173,10 +186,10 @@ const ticketBounds = (t: Suite): void => {
   t.eqI32("and a ticket refused past its expiry leaves the PSK array zero", held(out.psk, 32), toI32(0));
 
   // The chain bound: a chain that started 23 h 30 min before the ticket.
-  const chainStart: i64 = issued - (TLS_TICKET_CHAIN_LIMIT - MINUTE * 30);
+  const chainStart: i64 = issued - (CHAIN_LIMIT - MINUTE * 30);
   const late: u8[] = sealed(key, info, stateFor(TLS_CHACHA20_POLY1305_SHA256, chainStart), issued);
-  t.ok("a ticket opens 24 h after its chain started", tlsTicketOpen(key, info, late, chainStart + TLS_TICKET_CHAIN_LIMIT, out));
-  t.ok("and not 1 ns later, inside its own lifetime", !tlsTicketOpen(key, info, late, chainStart + TLS_TICKET_CHAIN_LIMIT + 1, out));
+  t.ok("a ticket opens 24 h after its chain started", tlsTicketOpen(key, info, late, chainStart + CHAIN_LIMIT, out));
+  t.ok("and not 1 ns later, inside its own lifetime", !tlsTicketOpen(key, info, late, chainStart + CHAIN_LIMIT + 1, out));
 
   // Tickets this server never issues, sealed here because the test holds the key.
   const long: TlsTicketState = stateFor(TLS_AES_128_GCM_SHA256, issued);
@@ -197,21 +210,25 @@ const keyBounds = (t: Suite): void => {
   const key: Secret<u8[]> = tlsTicketKeyDraw(info, START);
   const out = new TlsTicketState();
   const state: TlsTicketState = stateFor(TLS_AES_128_GCM_SHA256, START);
-  const end: i64 = START + TLS_TICKET_SEAL_WINDOW;
+  t.eqI64("a key's default seal cap is 2^30", new TlsTicketKeyInfo().sealCap, toI64(1073741824));
+  t.eqI32("a key does not seal 1 ns before its draw", toI32(sealed(key, info, state, START - 1).length), toI32(0));
+  const end: i64 = START + SEAL_WINDOW;
   t.ok("a key is not due 1 ns before 12 h", !tlsTicketKeyDue(info, end - 1));
   t.ok("and is due at 12 h", tlsTicketKeyDue(info, end));
   const lastTicket: u8[] = sealed(key, info, state, end);
   t.ok("a key seals at 12 h", toI32(lastTicket.length) > 0);
   t.eqI32("and not 1 ns after", toI32(sealed(key, info, state, end + 1).length), toI32(0));
-  t.ok("its last ticket opens at 14 h, the end of its lifetime", tlsTicketOpen(key, info, lastTicket, START + TLS_TICKET_OPEN_WINDOW, out));
+  t.ok("its last ticket opens at 14 h, the end of its lifetime", tlsTicketOpen(key, info, lastTicket, START + OPEN_WINDOW, out));
 
   // The open window alone: a fresh ticket, under a key whose draw is moved back.
   const fresh: u8[] = sealed(key, info, state, START + HOUR);
   const drawn: i64 = info.createdAt;
-  info.createdAt = START + HOUR - TLS_TICKET_OPEN_WINDOW;
+  info.createdAt = START + HOUR - OPEN_WINDOW;
   t.ok("a fresh ticket opens under a key drawn 14 h ago", tlsTicketOpen(key, info, fresh, START + HOUR, out));
-  info.createdAt = START + HOUR - TLS_TICKET_OPEN_WINDOW - 1;
+  info.createdAt = START + HOUR - OPEN_WINDOW - 1;
   t.ok("and not under one drawn 14 h and 1 ns ago", !tlsTicketOpen(key, info, fresh, START + HOUR, out));
+  info.createdAt = START + HOUR + 1;
+  t.ok("nor under one drawn 1 ns after now", !tlsTicketOpen(key, info, fresh, START + HOUR, out));
   info.createdAt = drawn;
 
   // The seal cap, brought forward to 2.
@@ -266,12 +283,12 @@ export const ticketRotationTurns = (t: Suite): void => {
   wipe(current);
 };
 
-/** Two ids that start their probe chains at the same slot of `strikes`: the second found by trying values of its last byte. */
-const collidingId = (strikes: TlsTicketStrikes, id: u8[]): u8[] => {
+/** An id that starts its probe chain at the same slot of `strikes` as `id`, and is neither `id` nor `besides`: found by trying values of its last byte. */
+const collidingId = (strikes: TlsTicketStrikes, id: u8[], besides: u8[]): u8[] => {
   const other: u8[] = range(id, 0, TLS_TICKET_NONCE_SIZE);
   for (let b: i32 = 0; b < 256; b++) {
     other[11] = toU8(b);
-    if (toI32(other[11]) !== toI32(id[11]) && strikes.home(other) === strikes.home(id)) {
+    if (!same(other, id, TLS_TICKET_NONCE_SIZE) && !same(other, besides, TLS_TICKET_NONCE_SIZE) && strikes.home(other) === strikes.home(id)) {
       return other;
     }
   }
@@ -318,12 +335,15 @@ const strikes = (t: Suite): void => {
   // A live id behind an expired slot on its probe chain.
   const chain = new TlsTicketStrikes(8);
   const x: u8[] = idOf(5);
-  const y: u8[] = collidingId(chain, x);
+  const y: u8[] = collidingId(chain, x, x);
   t.ok("an id is taken at its home slot", chain.take(x, START + MINUTE, START));
   t.ok("and an id with the same home after it", chain.take(y, START + HOUR, START));
   t.ok("once the first has expired, the second, still held, is refused", !chain.take(y, START + HOUR, START + MINUTE * 2));
   t.eqI32("and is recorded once", chain.count(y), toI32(1));
-  t.ok("while a third id takes the expired slot", chain.take(collidingId(chain, y), START + HOUR, START + MINUTE * 2));
+  const third: u8[] = collidingId(chain, y, x);
+  t.ok("while a third id takes the expired slot", chain.take(third, START + HOUR, START + MINUTE * 2));
+  t.eqI32("recorded once", chain.count(third), toI32(1));
+  t.eqI32("with no more slots used", chain.filled, toI32(2));
 };
 
 /** 1–5 together: a ticket opened, then struck, so that its replay is refused. */
