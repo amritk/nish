@@ -653,9 +653,9 @@ export class Emitter {
       return false
     }
     // WP27 S3.2: a `string` from C is copied after the call returns
-    // (`emitForeignStringResult`), so the call is not the last thing, and a
-    // release ahead of it would let the copy land on bytes C answered from
-    // inside one of its arguments (`strchr`).
+    // (`emitForeignStringResult`), so the call is not the last thing. A call
+    // with a string argument (`strchr`) is refused by `marksTailCall` already;
+    // this keeps the copy out of a released scope for the rest by construction.
     if (callee.foreign() && this.table.stripNull(callee.returnType) === T_STRING) {
       return false
     }
