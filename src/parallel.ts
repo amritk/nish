@@ -584,7 +584,8 @@ const arrowBindings = (program: CheckedProgram, body: Node, values: string[]): s
   if (result.kind === N_BLOCK) {
     for (let k = 0; k < result.children.length - 1; k++) {
       const statement = oneLine(program, result.children[k])
-      out = statement.endsWith(";") || statement.endsWith("}") ? `${out}${statement} ` : `${out}${statement}; `
+      out =
+        statement.endsWith(";") || statement.endsWith("}") ? `${out}${statement} ` : `${out}${statement}; `
     }
   }
   return out
@@ -623,7 +624,12 @@ const arrowParam = (body: Node, k: i32, fallback: string): string => {
 const callDeclaredName = (program: CheckedProgram, call: Node, fallback: string): string => {
   const parents = new ParentTable(program.file, program.nodeTypes.length)
   const decl = parents.parentOf(call)
-  if (decl !== null && decl.kind === N_VAR_DECL && decl.children[2] === call && decl.children[0].kind === N_IDENT) {
+  if (
+    decl !== null &&
+    decl.kind === N_VAR_DECL &&
+    decl.children[2] === call &&
+    decl.children[0].kind === N_IDENT
+  ) {
     return decl.children[0].text
   }
   return fallback
@@ -637,7 +643,13 @@ const callDeclaredName = (program: CheckedProgram, call: Node, fallback: string)
  * builds, or a reduce's result. "" when the call has no body argument where
  * `intrinsic` puts it, or an arrow's block body cannot be inlined.
  */
-const serialRemedy = (program: CheckedProgram, table: TypeTable, intrinsic: string, call: Node, result: i32): string => {
+const serialRemedy = (
+  program: CheckedProgram,
+  table: TypeTable,
+  intrinsic: string,
+  call: Node,
+  result: i32
+): string => {
   if (call.kind !== N_CALL) {
     return ""
   }
@@ -716,12 +728,28 @@ const serialRemedy = (program: CheckedProgram, table: TypeTable, intrinsic: stri
   return `${start}; for (const ${element} of ${source}) { ${arrowBindings(program, body, values)}${out}.push(${answer}) }`
 }
 
-/** `advice`, then `serial` as the other way out when there is one: the remedy's last clause. */
-const withSerial = (advice: string, serial: string): string =>
-  serial === "" ? advice : `${advice}, or run it on the thread that called it, \`${serial}\``
+/**
+ * `advice`, then `serial` as the other way out when there is one: the remedy's
+ * last clause. Code that holds a template literal is fenced with two backticks,
+ * as Markdown spells a code span that holds one.
+ */
+const withSerial = (advice: string, serial: string): string => {
+  if (serial === "") {
+    return advice
+  }
+  const fence = serial.indexOf("`") >= 0 ? "``" : "`"
+  const pad = fence === "``" ? " " : ""
+  return `${advice}, or run it on the thread that called it, ${fence}${pad}${serial}${pad}${fence}`
+}
 
 /** The refusal of a body answering `type`, which is not a number, a `boolean` or an enum, from `intrinsic`. */
-const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32, serial: string): string => {
+const resultWording = (
+  table: TypeTable,
+  intrinsic: string,
+  fn: FunctionSig,
+  type: i32,
+  serial: string
+): string => {
   if (isScalarArgument(table, type)) {
     return ""
   }
@@ -744,7 +772,13 @@ export const crossesByCopy = (table: TypeTable, type: i32): boolean =>
   type === T_STRING || (table.isArray(type) && isScalarArgument(table, table.refOf(type)))
 
 /** The refusal of a task answering `type`, which is not a scalar, a string or an array of scalars. */
-const crossingWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32, serial: string): string => {
+const crossingWording = (
+  table: TypeTable,
+  intrinsic: string,
+  fn: FunctionSig,
+  type: i32,
+  serial: string
+): string => {
   if (isScalarArgument(table, type) || crossesByCopy(table, type)) {
     return ""
   }
@@ -1177,7 +1211,13 @@ export const captureWriteRemedy = (program: CheckedProgram, target: Node): strin
   if (list !== null) {
     call = parents.parentOf(list)
   }
-  if (arrow === null || call === null || call.kind !== N_CALL || call.children[0].kind !== N_IDENT || value === "") {
+  if (
+    arrow === null ||
+    call === null ||
+    call.kind !== N_CALL ||
+    call.children[0].kind !== N_IDENT ||
+    value === ""
+  ) {
     return "answer the value from the body instead, and fold the answers with `parallelReduce` after the call"
   }
   const callee = call.children[0].text
@@ -1569,7 +1609,13 @@ class CopiedSlot {
 const copiedSlot = (program: CheckedProgram, table: TypeTable, chain: string, type: i32): CopiedSlot =>
   copiedSlotAt(program, table, chain, type, 3)
 
-const copiedSlotAt = (program: CheckedProgram, table: TypeTable, chain: string, type: i32, depth: i32): CopiedSlot => {
+const copiedSlotAt = (
+  program: CheckedProgram,
+  table: TypeTable,
+  chain: string,
+  type: i32,
+  depth: i32
+): CopiedSlot => {
   if (type < 0 || depth < 0 || table.isNullable(type) || table.enumBase(type) >= 0) {
     return new CopiedSlot("", type)
   }
@@ -1628,7 +1674,10 @@ const storedInto = (program: CheckedProgram, slot: CopiedSlot, target: string, f
   if (from !== null && from.kind === N_ARRAY && from.children.length > 0 && rest.slice(0, 3) === "[0]") {
     const first = unwrapParens(from.children[0])
     const after = rest.slice(3)
-    if (after.length === 0 && (first.kind === N_STRING || first.kind === N_NUMBER || first.kind === N_IDENT)) {
+    if (
+      after.length === 0 &&
+      (first.kind === N_STRING || first.kind === N_NUMBER || first.kind === N_IDENT)
+    ) {
       return shownSource(program, first, slotLiteral(slot))
     }
     if (first.kind === N_IDENT || first.kind === N_MEMBER) {
@@ -2242,7 +2291,12 @@ const indentOfLine = (text: string, at: i32): i32 => {
   return n
 }
 
-export const voidTaskResultMessage = (program: CheckedProgram, table: TypeTable, fn: FunctionSig, node: Node): string => {
+export const voidTaskResultMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  fn: FunctionSig,
+  node: Node
+): string => {
   if (fn.returnType === T_VOID) {
     return ""
   }
@@ -3431,7 +3485,12 @@ const siblingShareMessage = (program: CheckedProgram, earlier: SiblingSpawn, lat
   return ""
 }
 
-const siblingMessage = (program: CheckedProgram, later: SiblingSpawn, earlier: SiblingSpawn, what: string): string =>
+const siblingMessage = (
+  program: CheckedProgram,
+  later: SiblingSpawn,
+  earlier: SiblingSpawn,
+  what: string
+): string =>
   `This \`spawn\` on \`${later.scope.name}\` hands its task ${what}, which a task of \`${earlier.scope.name}\` ` +
   "also reaches: the scopes one `using` statement opens join one after the other natively, the last declared " +
   "first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no " +
@@ -3789,7 +3848,14 @@ const bodyLockRemedy = (program: CheckedProgram, table: TypeTable, sig: Function
     )
   }
   if (role === PAR_MAP) {
-    const tasks = scopeTasks(text, i, `${src}.length`, `${src}[${i}]`, oneLine(program, args[2]), oneLine(program, args[1]))
+    const tasks = scopeTasks(
+      text,
+      i,
+      `${src}.length`,
+      `${src}[${i}]`,
+      oneLine(program, args[2]),
+      oneLine(program, args[1])
+    )
     return `run it as a scope's tasks instead, \`${tasks}\``
   }
   const out = freshName(text, "out", 0)
@@ -3804,7 +3870,14 @@ const bodyLockRemedy = (program: CheckedProgram, table: TypeTable, sig: Function
 }
 
 /** A scope whose tasks run `task` on `each` for every index `i` below `count`, storing into `dst[i]`. */
-const scopeTasks = (text: string, i: string, count: string, each: string, task: string, dst: string): string => {
+const scopeTasks = (
+  text: string,
+  i: string,
+  count: string,
+  each: string,
+  task: string,
+  dst: string
+): string => {
   const s = freshName(text, "s", 0)
   return `{ using ${s} = scope(); for (let ${i} = 0; ${i} < ${count}; ${i}++) { ${s}.spawn(${task}, ${each}, ${dst}, ${i}) } }`
 }
@@ -4163,7 +4236,8 @@ const walkMutexes = (
       const args = above.children[1].children
       const from: Node | null = args.length > 0 ? unwrapParens(args[0]) : null
       const value = from !== null && table.isArray(type) ? storedInto(program, slot, `${chain}[0]`, from) : ""
-      const store = slot.text.length > 0 ? `\`${slot.text} = ${value.length > 0 ? value : slotLiteral(slot)}\`` : ""
+      const store =
+        slot.text.length > 0 ? `\`${slot.text} = ${value.length > 0 ? value : slotLiteral(slot)}\`` : ""
       out.push(new ScopeFinding(above, guardMethodMessage(parent.text, store)))
     } else if (base) {
       // an access through it: judged where it ends
@@ -4182,7 +4256,10 @@ const walkMutexes = (
     } else if (type >= 0 && !isScalarArgument(table, type) && type !== T_STRING) {
       const slot = copiedSlot(program, table, shownSource(program, node, "g.value.x"), type)
       const bound = boundNameOf(node, parents, depth, "")
-      const read = slot.text.length > 0 ? `const ${bound.length > 0 ? bound : freshName(program.source.text, lastWordOf(slot.text), 0)} = ${slot.text}` : ""
+      const read =
+        slot.text.length > 0
+          ? `const ${bound.length > 0 ? bound : freshName(program.source.text, lastWordOf(slot.text), 0)} = ${slot.text}`
+          : ""
       const field = node.kind === N_MEMBER ? node.text : "field"
       out.push(new ScopeFinding(node, guardDerivedMessage(table, type, read, field)))
       return
@@ -4509,8 +4586,7 @@ const regionAtomicMessageFor = (
 const CHANNEL_DECLARE_TAIL: string =
   ": a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the " +
   "block that has the scope's block as one of its statements, before it, so each run of the declaration " +
-  "makes a channel for one run of one scope; write `const ch = new Channel<T>()` on the line before " +
-  "`using s = scope()`"
+  "makes a channel for one run of one scope"
 
 /** C2's use. */
 const CHANNEL_USE_TAIL: string =
@@ -4577,7 +4653,17 @@ const channelElementMessage = (table: TypeTable, type: i32, name: string): strin
   "out of it on the way, so anything else would point into freed memory; keep the values in an array the " +
   `receiver can read and send each one's index, \`const ${name} = new Channel<i32>()\``
 
-const channelDeclareMessage = (what: string): string => `${what}${CHANNEL_DECLARE_TAIL}`
+/** C2's refusal of `what`, ending with the declaration of `name`, a channel of `element`, for the scope `scope`. */
+const channelDeclareMessage = (
+  table: TypeTable,
+  what: string,
+  name: string,
+  element: i32,
+  scope: string
+): string => {
+  const carried = element < 0 ? "i32" : table.typeName(element)
+  return `${what}${CHANNEL_DECLARE_TAIL}; write \`const ${name} = new Channel<${carried}>()\` on the line before \`using ${scope} = scope()\``
+}
 
 const channelUseMessage = (what: string): string => `${what}${CHANNEL_USE_TAIL}`
 
@@ -4588,7 +4674,8 @@ const channelArrowMessage = (): string =>
   "write the arrow as a module function, `const sendAll = (ch: Channel<i32>): void => { ch.send(1) }`, and pass " +
   "`sendAll` where the arrow was"
 
-const channelSendersMessage = (what: string, remedy: string): string => `${what}${CHANNEL_SENDERS_TAIL}; ${remedy}`
+const channelSendersMessage = (what: string, remedy: string): string =>
+  `${what}${CHANNEL_SENDERS_TAIL}; ${remedy}`
 
 /** C4's remedy for a channel a task is handed from outside the function: one this function declares. */
 const ownChannelRemedy = (program: CheckedProgram, table: TypeTable, node: Node): string => {
@@ -5075,7 +5162,17 @@ const channelUseFinding = (
       parent.children[2] === at &&
       depth > 2 &&
       isConstDeclaration(parents[depth - 3])
-    return declared ? "" : channelDeclareMessage("`new Channel` must be the initialiser of a `const`")
+    if (declared) {
+      return ""
+    }
+    const bound = boundNameOf(at, parents, depth, "ch")
+    return channelDeclareMessage(
+      table,
+      "`new Channel` must be the initialiser of a `const`",
+      bound,
+      element,
+      "s"
+    )
   }
   // A constructor holds a channel it is handed only to set a field from it;
   // one it declares itself is used as in any other function.
@@ -5454,7 +5551,7 @@ const checkChannels = (
   collectChannelOps(program, sig, body, summaries, ops)
   let c = 0
   while (c < locals.length && c < decls.length) {
-    checkChannel(program, summaries, body, locals[c], decls[c], spawns, ops, scopeType, out)
+    checkChannel(program, table, summaries, body, locals[c], decls[c], spawns, ops, scopeType, out)
     c = c + 1
   }
 }
@@ -5862,6 +5959,7 @@ const receiveWhat = (program: CheckedProgram, summaries: ChannelSummaries, node:
 /** C2's placement, C4, C5 and C6 for the channel `local`, declared by `decl` in `body`. */
 const checkChannel = (
   program: CheckedProgram,
+  table: TypeTable,
   summaries: ChannelSummaries,
   body: Node,
   local: Local,
@@ -5873,8 +5971,14 @@ const checkChannel = (
 ): void => {
   const site = statementSiteOf(body, decl)
   const block = site.block
+  const element = channelElement(program, table, local.type)
   if (block === null) {
-    out.push(new ScopeFinding(decl, channelDeclareMessage(`\`${local.name}\` serves no scope`)))
+    out.push(
+      new ScopeFinding(
+        decl,
+        channelDeclareMessage(table, `\`${local.name}\` serves no scope`, local.name, element, "s")
+      )
+    )
     return
   }
   const candidates = candidateScopes(program, block, site.index, scopeType)
@@ -5903,10 +6007,11 @@ const checkChannel = (
       }
     }
     if (found === null) {
+      const what = `\`${local.name}\` is not declared for the scope of this \`spawn\``
       out.push(
         new ScopeFinding(
           spawn,
-          channelDeclareMessage(`\`${local.name}\` is not declared for the scope of this \`spawn\``)
+          channelDeclareMessage(table, what, local.name, element, receiver === null ? "s" : receiver.name)
         )
       )
       return
@@ -5929,7 +6034,12 @@ const checkChannel = (
     chosen = candidates.length > 0 ? candidates[0] : null
   }
   if (chosen === null) {
-    out.push(new ScopeFinding(decl, channelDeclareMessage(`\`${local.name}\` serves no scope`)))
+    out.push(
+      new ScopeFinding(
+        decl,
+        channelDeclareMessage(table, `\`${local.name}\` serves no scope`, local.name, element, "s")
+      )
+    )
     return
   }
   recordSeal(program, chosen.decl, decl)

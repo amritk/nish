@@ -654,6 +654,26 @@ export const main = (): i32 => {
 };
 ```
 
+Read it once the block has closed, when every task has finished:
+
+```ts nish:ok
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const done: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(bump, a, done, 0);
+  }
+  const seen = a.load(); // every task has finished
+  console.log(`${seen}`); // 1
+  return 0;
+};
+```
+
 ```ts nish:err NL2516
 import { AtomicI32, scope } from "nish/threads";
 
@@ -877,7 +897,7 @@ export const main = (): i32 => {
 It writes these repairs: `const` becomes `using` for a scope or a guard
 bound without it (NL2388, NL2465); a task that answers a number or a
 `boolean` with nowhere to store it gets a destination,
-`const answer = new Array<T>(1)` above the scope and `, answer, 0` after its
+`const answer = new Array<i32>(1)` for an `i32` task, above the scope and `, answer, 0` after its
 arguments (NL2511); a `let` an arrow task or a `parallelMap` arrow reads gets
 a `const` snapshot (NL2506, NL2500); and an arrow that uses a channel moves to
 a top-level `const`, `mainTask`, which the `spawn` names (NL2484). It writes a
@@ -896,19 +916,19 @@ with an example on this page that compiles.
 
 | Code | Refused | Write instead |
 |---|---|---|
-| NL2345 | `f` of a parallel call writes what its caller can see, or prints | `f` answers the value and the write comes after the call, `parallelMapInto(xs, out, (x) => x * 2)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
-| NL2348 | an element answer that is an array of strings or arrays, an object, a `Map` or a `Set` | answer a string or a number per element and build the structure after the call: [`parallelFrom`](#a-new-array-parallelmap-and-parallelfrom) |
-| NL2503 | a parallel arrow writes a local of its function | answer the value and fold it, `const total = parallelReduce(xs, (a, b) => a + b, 0)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| NL2345 | `f` of a parallel call writes what its caller can see, or prints | `f` answers the value, `const square = (x: f64): f64 => x * x`, and the call writes it, `parallelMapInto(src, dst, square)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| NL2348 | an element answer that is an array of strings or arrays, an object, a `Map` or a `Set` | answer a string or a number per element, `const squares = parallelFrom(5, (i) => i * i)`, and build the structure after the call: [`parallelFrom`](#a-new-array-parallelmap-and-parallelfrom) |
+| NL2503 | a parallel arrow writes a local of its function | answer the value from the body instead, and fold the answers with `parallelReduce`, `const total = parallelReduce(dst, (a, b) => a + b, 0.0)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
 | NL2500 | a parallel arrow reads a `let` | a `const` snapshot before the call, `const kNow = k`: [below](#a-let-read-by-a-parallel-arrow) |
 | NL2388 | `scope()` bound without `using` | `using s = scope()`: [below](#a-scope-bound-without-using) |
 | NL2506 | an arrow task reads a `let` | a `const` snapshot before the `spawn`, `const kNow = k`: [`nish --fix`](#letting-nish---fix-write-it) |
-| NL2511 | a task that answers a value has no destination | `const answer = new Array<i32>(1)` above the scope and `s.spawn(twice, arg, answer, 0)`: [below](#a-task-answer-with-nowhere-to-go) |
-| NL2465 | `m.lock()` bound without `using` | `using g = m.lock()`: [`Mutex<T>`](#sharing-a-value-mutext) |
-| NL2536 | a guard handed to a method, a constructor or a generic function | a top-level helper, `const note = (g: MutexGuard<Stats>, x: i32): void => ...`: [the helper](#sharing-a-value-mutext) |
-| NL2513 | an atomic read inside the scope's block after a `spawn` | read it after the block, `a.load()`: [atomics](#counting-without-a-lock-atomici32-and-atomici64) |
+| NL2511 | a task that answers a value has no destination | `const answer = new Array<i32>(1)` above the scope and `s.spawn(twice, 21, answer, 0)`: [below](#a-task-answer-with-nowhere-to-go) |
+| NL2465 | `m.lock()` bound without `using` | `using g = total.lock()`: [`Mutex<T>`](#sharing-a-value-mutext) |
+| NL2536 | a guard handed to a method, a constructor or a generic function | a top-level helper, `const note = (g: MutexGuard<Stats>, x: i32): void => {`, called as `note(g, x)`: [the helper](#sharing-a-value-mutext) |
+| NL2513 | an atomic read inside the scope's block after a `spawn` | read it after the block, `const seen = a.load()`: [atomics](#counting-without-a-lock-atomici32-and-atomici64) |
 | NL2516 | two scopes of one `using` share an atomic | one `using` per scope, `using s = scope()` and `using t = scope()`: [below](#two-scopes-that-share-an-atomic) |
-| NL2481 | a channel's receiver spawned before a sender | spawn every sender first, `s.spawn(produce, ...)` above `s.spawn(consume, ...)`: [`Channel<T>`](#passing-values-channelt) |
-| NL2484 | an arrow that uses a channel | a module function the `spawn` names, `const sendOne = (c: Channel<i32>): void => ...`: [below](#a-channel-in-an-arrow) |
+| NL2481 | a channel's receiver spawned before a sender | spawn every sender first, `s.spawn(produce, new Pipe(ch, 10), sent, 0)` above `s.spawn(consume, new Pipe(ch, 0), sums, 0)`: [`Channel<T>`](#passing-values-channelt) |
+| NL2484 | an arrow that uses a channel | a module function the `spawn` names, `const sendOne = (c: Channel<i32>): void => {` and `s.spawn(sendOne, ch)`: [below](#a-channel-in-an-arrow) |
 
 ### A `let` read by a parallel arrow
 

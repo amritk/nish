@@ -17422,29 +17422,35 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
 
   // The threads page's refusal table: each code's `nish:err` example must be refused
   // with a message whose last clause holds the code to write. The clause is what
-  // follows the last `; ` outside backticks or, in a message with none, what follows
-  // the rule, the text up to the first `: `. The code is a backticked fragment that
+  // follows the last `; ` outside backticks or, in a message with none, the start of
+  // its last sentence, or after its last `: `. The code is a backticked fragment that
   // is more than one word (`using g = m.lock()`, `a.load()`), so a remedy that only
   // names a keyword, "bind the value to a `const`", is prose; and code the user can
   // paste, so no fragment of the clause holds a placeholder: `...`, `<field>`, or a
   // single-letter type, `Channel<T>`, `new T()`.
   const threadsPage = "docs/guide/using-nish/threads.md"
+  /** @type {Map<string, string>} the first message each `nish:err` code of the page is refused with */
   const threadRefusals = new Map()
-  /** The remedy of a refusal: its text after the last `; `, or after the rule's `: `. */
+  /** The remedy of a refusal: its text after the last `; `, else its last sentence, else after its last `: `. */
   const lastClause = (message) => {
     let inside = false
-    let from = -1
-    let rule = 0
+    let clause = -1
+    let sentence = -1
+    let colon = 0
     for (let i = 0; i < message.length; i++) {
       if (message[i] === "`") {
         inside = !inside
-      } else if (!inside && message[i + 1] === " " && message[i] === ";") {
-        from = i + 2
-      } else if (!inside && message[i + 1] === " " && message[i] === ":" && rule === 0) {
-        rule = i + 2
+      } else if (!inside && message[i + 1] === " ") {
+        if (message[i] === ";") {
+          clause = i + 2
+        } else if (message[i] === ".") {
+          sentence = i + 2
+        } else if (message[i] === ":") {
+          colon = i + 2
+        }
       }
     }
-    return message.slice(from < 0 ? rule : from)
+    return message.slice(clause >= 0 ? clause : sentence >= 0 ? sentence : colon)
   }
   /** Whether a clause holds a backticked fragment of code rather than a single word. */
   const holdsCode = (clause) => {
@@ -17539,6 +17545,20 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
       `${threadsPage}: ${code} ends with the code to write`,
       holdsCode(clause),
       `last clause: ${clause}`
+    )
+  }
+  // Each row's "write instead" cell quotes code the page compiles: every fragment of
+  // more than one word is in a `nish:ok` fence, and the cell links to an example.
+  const okSources = markedSnippets(threadsText)
+    .filter((s) => s.kind === "ok")
+    .map((s) => s.source)
+  for (const row of threadsText.matchAll(/^\| (NL\d{4}) \|.*\| (.*) \|$/gm)) {
+    const fragments = [...row[2].matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter((f) => /[\s(=.[]/.test(f))
+    const missing = fragments.filter((f) => !okSources.some((source) => source.includes(f)))
+    check(
+      `${threadsPage}: ${row[1]}'s cell quotes code a nish:ok fence compiles`,
+      fragments.length > 0 && missing.length === 0 && /\]\(#/.test(row[2]),
+      fragments.length === 0 ? "no code in the cell" : `not in a fence: ${missing.join(" | ") || "(no link)"}`
     )
   }
   // Every pinned wording of a thread refusal, not only the page's example of it: a
