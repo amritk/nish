@@ -2,8 +2,10 @@
 // returns, so the result array it allocates is the block's alone, and the
 // block's release frees it when the block ends. Only the number leaves. A map
 // that answers strings may sit in the block too: the blocks of strings it
-// adopts from its workers are the block's newest memory, and go with it.
-import { parallelMap } from "nish/threads";
+// adopts from its workers are the block's newest memory, and go with it. A
+// `parallelMapInto` that fills an outer array of numbers may sit there as well:
+// it stores numbers, so nothing it writes is the block's.
+import { parallelMap, parallelMapInto } from "nish/threads";
 
 const sumScaled = (xs: i32[], k: i32): i32 => {
   let s = 0;
@@ -29,6 +31,11 @@ const wordLengths = (xs: i32[], k: i32): i32 => {
   return s;
 };
 
+const fillScaled = (xs: i32[], out: i32[], k: i32): void => {
+  using a = arena();
+  parallelMapInto(xs, out, (x) => x * k + 1);
+};
+
 export const main = (): i32 => {
   const xs: i32[] = [];
   for (let i = 0; i < 1000; i++) {
@@ -39,6 +46,12 @@ export const main = (): i32 => {
     c = (c + sumScaled(xs, r)) % 1000003;
     c = (c + wordLengths(xs, r)) % 1000003;
   }
+  const out: i32[] = [];
+  for (let i = 0; i < 1000; i++) {
+    out.push(0);
+  }
+  fillScaled(xs, out, 3);
   console.log(`${c}`);
+  console.log(`${out[0]} ${out[999]}`);
   return 0;
 };
