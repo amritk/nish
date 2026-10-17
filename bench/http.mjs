@@ -80,6 +80,11 @@ const payloadFile = resolvePath(
 const payload = readFileSync(payloadFile, "latin1")
 // The echo's answer is the payload with its revision one higher.
 const echoed = payload.replace(/"revision":(\d+)/, (_, n) => `"revision":${Number(n) + 1}`)
+if (echoed === payload) {
+  // Else the pre-check would pass a server that echoes the body unchanged.
+  console.error(`${payloadFile}: no "revision":<digits> to raise`)
+  process.exit(2)
+}
 
 const cpus = availableParallelism()
 const clientCpus = cpus > 1 ? `1-${cpus - 1}` : "0"
@@ -124,6 +129,9 @@ const start = (bin) =>
 
 const stop = async (child) => {
   child.removeAllListeners("exit")
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return
+  }
   const done = new Promise((resolve) => child.on("exit", resolve))
   child.kill("SIGINT")
   await done
@@ -206,7 +214,10 @@ const median = (xs) => {
 const label = (k) =>
   servers.findIndex((s) => s.name === servers[k].name) === k ? servers[k].name : `${servers[k].name}#${k}`
 
-/** One request to `port` on the scenario's path: resolves to its status and body. */
+/** How long the pre-check waits for an answer before it fails. */
+const FETCH_TIMEOUT_MS = 5000
+
+/** One request to `port` on the scenario's path: resolves to its status and body, or rejects after `FETCH_TIMEOUT_MS`. */
 const fetchOnce = (scenario, port) =>
   new Promise((resolve, reject) => {
     const req = request(
@@ -226,6 +237,9 @@ const fetchOnce = (scenario, port) =>
         )
         res.on("error", reject)
       }
+    )
+    req.setTimeout(FETCH_TIMEOUT_MS, () =>
+      req.destroy(new Error(`no answer in ${FETCH_TIMEOUT_MS / 1000} s`))
     )
     req.on("error", reject)
     req.end(scenario.post ? Buffer.from(payload, "latin1") : undefined)

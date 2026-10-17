@@ -9,12 +9,16 @@
 //   POST /json-echo      an order (bench/http-payload.json) decoded by
 //                        `jsonDecode` into one reused `Order`, its revision
 //                        raised by one, and written back by `jsonEncode`
-//   POST /json-echo-doc  the same answer through one reused `JsonDocument`:
-//                        parse, `set` the revision, `write`
+//   POST /json-echo-doc  the same answer for an order, through one reused
+//                        `JsonDocument`: parse, `set` the revision, `write`.
+//                        It is laxer than /json-echo: any object with an
+//                        integer `revision` is echoed, where /json-echo
+//                        answers 400 to anything that is not a whole order
 //
 // A request body is gathered from `H1_BODY` events into a buffer its slot
-// keeps, and answered at `H1_END`: 413 past 4 KiB, 400 when it is not an
-// order. Once each buffer exists, /json-echo allocates nothing: the decoder
+// keeps, and answered at `H1_END`: 400 when it is not an order. A body past
+// 4 KiB is the module's to refuse, with `maxBody`: 413, `Content-Length: 0`
+// and `Connection: close`, before the body is read. Once each buffer exists, /json-echo allocates nothing: the decoder
 // reuses the order's strings and arrays when they are equal or in place.
 // /json-echo-doc reuses the document's storage, and only `newI64` formats the
 // new revision into a short string.
@@ -140,7 +144,9 @@ class Bench {
 
   constructor(listener: i32, slots: i32) {
     this.listener = listener
-    this.server = new Http1Server(new Http1Config(), listener, slots)
+    const config: Http1Config = new Http1Config()
+    config.maxBody = MAX_BODY
+    this.server = new Http1Server(config, listener, slots)
     this.loop = pollCreate()
     this.ready = new Array<i32>(128)
     this.plainBody = bytesOf("Hello, World!")
