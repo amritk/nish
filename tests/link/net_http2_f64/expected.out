@@ -104,4 +104,13 @@ PASS  move the arena not at all (0 bytes)
 PASS  a restart allocates nothing (0 bytes)
 PASS  and the connection starts again with its SETTINGS
 PASS  stream 1 is new again
-http2 connection: 106 passed, 0 failed, 0 skipped
+PASS  a final response carries one date, straight after :status
+PASS  a 103 and the trailers carry none, the 200 between them one
+PASS  a head with the program's own date
+PASS  goes out with that date alone, never two
+PASS  a mixed-case Date, which HTTP/2 does not allow (§8.2.1): H2_INVALID
+PASS  and nothing went out for it
+PASS  the date never enters the HPACK dynamic table
+PASS  a connection with no server to keep the clock sends no date
+PASS  the server's own 431 is a final response too, and carries the date
+http2 connection: 115 passed, 0 failed, 0 skipped

@@ -121,6 +121,13 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  *
+ * **The Date.** A response carries the `date` in `conn.date`, 29 bytes of
+ * IMF-fixdate, right after `:status`, unless the program's fields hold their
+ * own; trailers carry none. It counts against the peer's
+ * SETTINGS_MAX_FIELD_SECTION_SIZE. A bare connection has no clock, so `date`
+ * starts empty and nothing is sent; `Http3Server` fills it from its
+ * `HttpDate` (RFC 9110 §6.6.1).
+ *
  * Written from RFC 9114 and RFC 9204, not ported from another implementation.
  */
 import {
@@ -344,6 +351,21 @@ const http3CheckCap = (what: string, value: i32, low: i32, high: i32): void => {
   }
 }
 
+/** Whether one of `names` is `date` in any ASCII case (RFC 9110 §5.1). */
+const http3NamesHoldDate = (names: u8[][]): boolean => {
+  // An ASCII letter's case is its 0x20 bit, and every octet of `date` is a letter.
+  const bit: i32 = 32
+  for (const name of names) {
+    if (toI32(name.length) === 4) {
+      const d: boolean = (toI32(name[0]) | bit) === 100 && (toI32(name[1]) | bit) === 97
+      if (d && (toI32(name[2]) | bit) === 116 && (toI32(name[3]) | bit) === 101) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 /** Empties `bytes`, keeping its storage for the next fill. */
 const http3Empty = (bytes: u8[]): void => {
   while (toI32(bytes.length) > 0) {
@@ -400,6 +422,15 @@ export class Http3Connection {
   valueList: u8[][]
   statusName: u8[]
   statusValue: u8[]
+  /**
+   * The `date` every response carries (RFC 9110 §6.6.1), as the 29 bytes of
+   * an IMF-fixdate, or empty for none. A bare connection has no clock, so it
+   * starts empty; `Http3Server` points it at its `HttpDate`'s bytes, which
+   * that rewrites in place once a second.
+   */
+  date: u8[]
+  /** The bytes of `date`, the field's name, made once. */
+  dateName: u8[]
   /** The SETTINGS this side sends. */
   settingIds: i64[]
   settingValues: i64[]
@@ -539,6 +570,8 @@ export class Http3Connection {
     this.valueList = []
     this.statusName = httpFieldBytes(":status")
     this.statusValue = [48, 48, 48]
+    this.date = []
+    this.dateName = httpFieldBytes("date")
     this.settingIds = [
       H3_SETTINGS_QPACK_MAX_TABLE_CAPACITY,
       H3_SETTINGS_QPACK_BLOCKED_STREAMS,
@@ -1833,9 +1866,11 @@ export class Http3Connection {
   }
 
   /**
-   * Encodes `:status` (unless it is 0, for trailers) and `names`/`values` into a HEADERS
-   * frame and writes it whole to stream `id`, with the FIN when `fin`.
-   * Answers 0, H3_AGAIN, or H3_TOO_LARGE.
+   * Encodes `:status` (unless it is 0, for trailers), the server's `date`
+   * for a final status unless `names` holds one, and `names`/`values` into a
+   * HEADERS frame and writes it whole to stream `id`, with the FIN when `fin`.
+   * The date counts against the peer's SETTINGS_MAX_FIELD_SECTION_SIZE as any
+   * field does. Answers 0, H3_AGAIN, or H3_TOO_LARGE.
    */
   writeHead(k: i32, id: i64, status: i32, names: u8[][], values: u8[][], fin: boolean): i32 {
     const out: u8[] = this.encoded
@@ -1861,6 +1896,12 @@ export class Http3Connection {
         true
       )
       size = toI64(nameLength + valueLength + QPACK_FIELD_OVERHEAD)
+    }
+    if (status >= 200 && toI32(this.date.length) > 0 && !http3NamesHoldDate(names)) {
+      const nl: i32 = toI32(this.dateName.length)
+      const vl: i32 = toI32(this.date.length)
+      this.encoder.encodeField(out, this.dateName, H3_ZERO, nl, this.date, H3_ZERO, vl, false, true)
+      size = size + toI64(nl + vl + QPACK_FIELD_OVERHEAD)
     }
     const n: i32 = toI32(names.length)
     for (let j: i32 = 0; j < n && j < toI32(names.length) && j < toI32(values.length); j++) {
