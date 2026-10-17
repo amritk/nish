@@ -354,12 +354,14 @@ export const main = (): i32 => {
 
 **What is refused, and why.** Every refusal in a scope keeps one promise:
 nothing a task reads changes while the task may be running. So a scope bound
-without `using` is refused, since its tasks might never be joined (NL2388);
-reading a destination inside the block is refused, since its answer is not
-there yet; and writing memory a task reads, or reading a `let` from an arrow
-task, is refused, since the task would see whichever value was there when its
-thread got to it (NL2506). [`nish --fix`](#letting-nish---fix-write-it) writes
-the usual repair for each of these.
+without `using` is refused, since its tasks might never be joined (NL2388).
+Reading a destination inside the block is refused, since its answer is not
+there yet, and so is writing memory a task reads, since the task would see
+whichever value was there when its thread got to it. Reading a `let` from an
+arrow task is refused for the same reason (NL2506): the `let` could change
+before the task runs. [`nish --fix`](#letting-nish---fix-write-it) repairs the
+missing `using` and the captured `let`; a destination read early or a write a
+task would see is yours to move after the block.
 
 ```ts nish:err NL2506
 import { scope } from "nish/threads";
@@ -436,7 +438,7 @@ export const main = (): i32 => {
   `const bump = (g: MutexGuard<Counter>): void => { … }` — which uses it the
   same way. Don't bind `g` or `g.value` to another name, store or return
   either, or keep an array they reach: anything that outlives the block would
-  outlive the lock (NL2467, NL2536).
+  outlive the lock (NL2466 for the guard, NL2467 for what it reaches).
 - **One lock at a time, and no waiting while you hold it.** Inside a guard's
   block — directly or through any call — there is no second `lock()`, no
   `scope()` and no parallel map. That is why a program that compiles cannot
@@ -491,12 +493,14 @@ export const main = (): i32 => {
 
 **What is refused, and why.** The guard is the lock, so anything that could
 keep the guard past its block is refused. A helper is a plain function called
-by name; handing `g` to a method, a constructor or a generic function is
-refused (NL2536), since `this` or a type parameter is a way for the guard to
-be kept, and so is handing it twice in one call. Binding, storing or
-returning an object read through the guard, `const c = g.value`, is refused
-(NL2467), and so is storing `null` through it (NL2537), which has no string
-to copy into the `Mutex`.
+by name. Binding, storing, returning or walking the guard itself is refused
+(NL2466), and handing `g` to a method, a constructor or a generic function is
+refused too (NL2536), since `this` or a type parameter is a way for the guard
+to be kept, and so is handing it twice in one call. Binding, storing,
+returning or walking an object read through the guard, `const c = g.value`, is
+refused (NL2467); storing anything but a number, a `boolean`, an enum or a
+`string` into it is refused (NL2468), and so is storing `null` (NL2537), which has
+no string to copy into the `Mutex`.
 A guard bound with `const` would never be released (NL2465). A second lock
 inside a guard's block is refused because two tasks each holding one lock and
 waiting for the other would wait forever.
@@ -623,8 +627,8 @@ export const main = (): i32 => {
 
 **What is refused, and why.** An atomic is safe to update from any task, but
 its value is only an answer once every task has finished. So reading it inside
-the scope's block, while the tasks may still be adding to it, is refused
-(NL2513): the number would depend on how far each thread had got. Two scopes
+the scope's block after the first `spawn`, while the tasks may still be adding
+to it, is refused (NL2513): the number would depend on how far each thread had got. Two scopes
 opened by one `using` may not share an atomic either (NL2516), since natively
 one scope's tasks finish before the other's start and under Node they run as
 they are spawned, so the two would print different answers.
@@ -818,9 +822,10 @@ export const main = (): i32 => {
   gone once the task is joined, so an entry or a map that answers one is
   refused. Answer the numbers or strings it is built from, or build it after
   the scope from what the tasks answered.
-- **The copy back is serial.** It runs on the joining thread after the last
-  task finishes, so a task that answers a large string pays for it twice:
-  once to build it, once to copy it. Five maps of a million short strings
+- **The copy back is serial.** A task that answers a string builds it, copies
+  it out of its own memory on its own thread, and then the joining thread
+  copies it in, one answer at a time, after the last task finishes: two copies
+  after the build, and the second runs on one thread. Five maps of a million short strings
   each took a median of 270 ms on four threads, against 200 ms for the same
   loop on one; a map pays off when each element costs more to compute than
   to copy.
@@ -875,9 +880,10 @@ arguments (NL2511); a `let` an arrow task or a `parallelMap` arrow reads gets
 a `const` snapshot (NL2506, NL2500); and an arrow that uses a channel moves to
 a top-level `const`, `mainTask`, which the `spawn` names (NL2484). It writes a
 repair only where your source alone decides it, so it leaves alone a `spawn`
-in a loop, where every task would write the one slot, a `let` a `for` header
-declares, and an arrow that captures a local, which would not check at the
-top level; those stay refused for you to fix by hand. The reference lists each case:
+in a loop, where every task would write the one slot; a `let` another
+argument of the call names, or one a `for` header declares; and a channel
+arrow that captures a local or leaves a parameter's or its result's type out,
+which would not check at the top level; those stay refused for you to fix by hand. The reference lists each case:
 [What `nish --fix` writes for a thread program](../../LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
 
 The full rules, and the code each one is refused with, are in the reference:

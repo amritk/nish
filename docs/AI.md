@@ -1033,8 +1033,10 @@ export const main = (): i32 => {
 - **Only `g.value`, and only as the base of a field or element access.** Read
   a number, a `boolean`, an enum or a `string` through it, or store one into a
   field or an element that already exists (a string is copied each way) (for a `Mutex<i32>`, `g.value = g.value + 1`).
-  Don't bind, store or return `g.value` or an array it holds (NL2467), store
-  no `null` through it (NL2537), and call no method through it (no `push`).
+  Don't bind, store, return or walk `g` itself (NL2466), nor bind, store, return
+  or walk `g.value` or an array it holds (NL2467); store only a scalar or a
+  `string` into it (NL2468), never `null` (NL2537), and call no method
+  through it (no `push`).
 - **A guard goes only to a helper**: a top-level function named at the call,
   whose parameter is `MutexGuard<T>`, once per call — `note(g, x)` with
   `const note = (g: MutexGuard<Stats>, x: i32): void => { … }`. The helper is
@@ -1252,8 +1254,9 @@ export const main = (): i32 => {
 
 - **Crosses, by copy:** a number, a `boolean`, an enum, a `string`, an array
   of numbers, booleans or enums — a task's answer, a `parallelMap` element, a
-  `Channel<string>` value, a string stored through a guard. The copy back runs
-  on the joining thread, one value at a time, so cheap work that answers
+  `Channel<string>` value, a string stored through a guard. The worker copies
+  an answer out on its own thread and the joining thread copies it in, one
+  value at a time, so cheap work that answers
   strings can be slower threaded than sequential.
 - **Doesn't cross:** a class value, a nested array, a `string[]`, a `Map`, a
   `Set`. Answer what it is built from, and build it after the join.
@@ -1261,8 +1264,9 @@ export const main = (): i32 => {
   guard (NL2388, NL2465), a destination for a number or `boolean` answer
   (NL2511), a `const kNow = k` snapshot of a `let` an arrow reads (NL2506,
   NL2500), and a channel arrow hoisted to a top-level `const` (NL2484). It
-  leaves a `spawn` in a loop, a `for` header's `let` and a capturing arrow to
-  you.
+  leaves to you a `spawn` in a loop, a `let` another argument names or a `for`
+  header declares, and a channel arrow that captures or leaves a parameter's or
+  its result's type out.
 
 ```ts nish:err NL2506
 import { scope } from "nish/threads";
