@@ -4139,6 +4139,8 @@ const INDEX_OF_ANY_REFUSALS = [
  */
 const LINK_READ_LATER = [
   "par_dst_short",
+  "par_map_idle",
+  "par_map_join_small",
   "par_map_release",
   "range_export",
   "range_export_dts",
@@ -4644,10 +4646,40 @@ if (!only || "thread_task_release".includes(only)) {
   )
 }
 
+// A region whose chunks keep little has it copied in at the join rather than
+// adopted (`nish_cross_adopt`). `par_map_join_small` runs two 16-element maps
+// 3,000 times in a loop, each element a short string or a two-element array;
+// it peaks at 5 MB on one thread and on four, and with every chunk's 64 KB
+// block adopted at 53 MB and 125 MB. The bound is 16 MB.
+if (!only || "par_map_join_small".includes(only)) {
+  const fixture = linkTests.includes("par_map_join_small")
+  const dir = path.join(buildDir, "link", "par_map_join_small")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "4"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/par_map_join_small: 6,000 small maps on ${threads} thread(s) peak under 16 MB`,
+      kb > 0 && kb < 16 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
 // A map's chunk loop keeps each element its body answers and gives back the
 // rest (`nish_cross_keep`). `par_map_release` builds a 2 KB string per element
-// of a million and answers 4 bytes cut from it; it peaks at 64 MB on one thread
-// and 68 MB on eight, and without the keep at 2.1 GB on either. The bound is
+// of a million and answers 4 bytes cut from it; it peaks at 32 MB on one thread
+// and on eight, and without the keep at 2.1 GB on either. The bound is
 // 256 MB.
 if (!only || "par_map_release".includes(only)) {
   const fixture = linkTests.includes("par_map_release")
@@ -4670,6 +4702,40 @@ if (!only || "par_map_release".includes(only)) {
       `link/par_map_release: a million 2 KB temporaries on ${threads} thread(s) peak under 256 MB`,
       kb > 0 && kb < 256 * 1024,
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
+// A worker that finds the queue empty for a second lowers glibc's trim
+// threshold, frees a 16 MB block through its own arena so the arena's top is
+// cut back, and trims (`nish_pool_drain`). `par_map_idle` runs four maps of
+// 1.2 million short strings and then spins; two seconds after its first line
+// it holds 2.3 MB on four threads and on eight. With the 64 MB threshold left
+// in place it held 82 MB on either, every worker's arena keeping the burst's
+// top. The bound is 16 MB, read from `/proc/<pid>/status` while it spins, so
+// the check runs on Linux alone.
+if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
+  const fixture = linkTests.includes("par_map_idle")
+  const exe = path.join(buildDir, "link", "par_map_idle", "app")
+  const sample =
+    'o=$(mktemp); "$1" > "$o" & p=$!; ' +
+    'until [ -s "$o" ] || ! kill -0 $p 2>/dev/null; do sleep 0.05; done; ' +
+    'sleep 2; grep VmRSS /proc/$p/status; wait $p; s=$?; rm -f "$o"; exit $s'
+  for (const threads of ["4", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe)
+        ? spawnSync("sh", ["-c", sample, "sh", exe], {
+            encoding: "utf8",
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+        : null
+    const m = run !== null ? /VmRSS:\s*(\d+)/.exec(run.stdout) : null
+    const kb = run !== null && run.status === 0 && m !== null ? Number(m[1]) : -1
+    const missing = fixture ? `no such binary: ${exe}` : "no such fixture"
+    check(
+      `link/par_map_idle: a parked pool on ${threads} threads holds under 16 MB`,
+      kb > 0 && kb < 16 * 1024,
+      run !== null ? `exit ${run.status}, idle ${kb} KB\n${run.stdout}${run.stderr}` : missing
     )
   }
 }
@@ -4978,7 +5044,8 @@ if (!only || "par_alloc".includes(only)) {
 // And copy-at-join: `thread_task_string`, whose tasks answer strings and
 // scalar arrays; `par_map_string`, whose data-parallel bodies do; and
 // `thread_channel_string` and `thread_mutex_string`, which send strings on
-// channels and store them through guards. Each reads what crossed after
+// channels and store them through guards; and `thread_adopt_lifetime`, whose
+// answers the caller adopts and then releases. Each reads what crossed after
 // `churn()`, and prints only what every task order agrees on.
 for (const name of [
   "arena_using_exit_paths",
@@ -5034,6 +5101,7 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_adopt_lifetime",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -5642,7 +5710,8 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `thread_task_string`, `par_map_string`, `thread_channel_string` and
 // `thread_mutex_string` are the strings and scalar arrays that cross by copy,
 // whose transfer block carries a tag in its pointer's low bit on a 32-bit
-// pointer as on a 64-bit one.
+// pointer as on a 64-bit one; `thread_adopt_lifetime` adopts those blocks, and
+// a 24-byte transfer state, on wasm32 as on a 64-bit target.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -5656,6 +5725,7 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_adopt_lifetime",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue

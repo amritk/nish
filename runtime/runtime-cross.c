@@ -21,9 +21,14 @@
  * `nish_cross_send` is a channel's: it copies every string, which costs the
  * string's length and nothing that grows with the sender's arena.
  * `nish_cross_in` runs on the thread that takes the value: a tagged one is
- * copied into its arena and its block freed, so every block is freed by the
- * one `cross_in` its value meets. Arena blocks, literals and the copies here
- * are all 8-aligned, which is what keeps the low bit free for the tag.
+ * copied into its arena and its block freed, or, when it is large, its block
+ * becomes a chunk of that arena, so every block is either freed by the one
+ * `cross_in` its value meets or freed with the arena that adopted it. A map's
+ * elements do not go one block each: a chunk packs them into blocks of its
+ * own (`nish_cross_keep`), which the caller adopts whole, or copies in and
+ * frees when they hold little (`nish_cross_adopt`). Arena blocks,
+ * literals and the copies here are all 8-aligned, which is what keeps the low
+ * bit free for the tag.
  *
  * `esize` is 0 for a string and the element's size for an array of scalars,
  * which holds no pointer, so one flat copy of its header and its elements is
@@ -68,24 +73,6 @@ static void *nish_cross_block(uint64_t size) {
   return b;
 }
 
-/* What of this thread's arena was bumped since `mark`: the chunks are newest
- * first, so each one before the chunk that holds `mark` is new from its base,
- * and that one from `mark`. The spans go into `out[2i]`, `out[2i+1]` (start,
- * end) and their count is answered; `cap` 0 only counts them. */
-static int64_t nish_arena_spans(uint64_t mark, uintptr_t *out, int64_t cap) {
-  int64_t n = 0;
-  for (const nish_xchunk *c = (const nish_xchunk *)nish_arena.chunks; c; c = c->next, n++) {
-    uintptr_t base = (uintptr_t)(c + 1), end = base + c->cap;
-    int marked = mark >= base && mark <= end;
-    if (n < cap) {
-      out[2 * n] = marked ? (uintptr_t)mark : base;
-      out[2 * n + 1] = end;
-    }
-    if (marked) return n + 1;
-  }
-  return n;
-}
-
 /* Whether `p` was bumped since `mark`: one walk of the chunks, for a single
  * value. */
 static int nish_since(uint64_t mark, uintptr_t p) {
@@ -98,49 +85,50 @@ static int nish_since(uint64_t mark, uintptr_t p) {
   return 0;
 }
 
-/* Whether `p` lies in one of `n` spans sorted by start: a binary search, so a
- * map's range of slots costs one walk of the chunks and a log per slot. A
- * walk per slot was quadratic in the size of a map's result, its chunks being
- * 64 KB. */
-static int nish_in_spans(const uintptr_t *sp, int64_t n, uintptr_t p) {
-  int64_t lo = 0, hi = n;
-  while (lo < hi) {
-    int64_t mid = (lo + hi) / 2;
-    if (sp[2 * mid] <= p) lo = mid + 1; else hi = mid;
+/* The bytes `v` takes, rounded to 8: a string's header, bytes and NUL, or an
+ * array's header and elements. */
+static uint64_t nish_cross_size(const void *v, uint64_t esize) {
+  uint64_t n = esize ? sizeof(nish_array) + ((const nish_array *)v)->len * esize
+                     : 8 + ((const nish_str *)v)->len + 1;
+  return (n + 7) & ~(uint64_t)7;
+}
+
+/* `v` copied to `at`, flat (an array's elements follow its header). */
+static void nish_cross_put(char *at, const void *v, uint64_t esize) {
+  if (esize == 0) {
+    memcpy(at, v, (size_t)(8 + ((const nish_str *)v)->len + 1));
+  } else {
+    const nish_array *a = (const nish_array *)v;
+    nish_array *c = (nish_array *)at;
+    c->len = c->cap = a->len;
+    c->data = (char *)(c + 1);
+    if (a->len) memcpy(c->data, a->data, (size_t)(a->len * esize));
   }
-  return lo > 0 && p < sp[2 * lo - 1];
 }
 
-static int nish_span_cmp(const void *a, const void *b) {
-  uintptr_t x = *(const uintptr_t *)a, y = *(const uintptr_t *)b;
-  return (x > y) - (x < y);
+/* `n` bytes after a chunk header, so the block can become a chunk of the arena
+ * that takes it: runtime.c's `nish_free_until` frees it as it frees one
+ * `nish_arena_grow` made. */
+static nish_xchunk *nish_cross_chunk(uint64_t n) {
+  nish_xchunk *c = (nish_xchunk *)nish_cross_block(sizeof *c + n);
+  c->cap = n;
+  return c;
 }
 
-/* The spans since `mark`, sorted by start, in a block the caller frees. */
-static uintptr_t *nish_sorted_spans(uint64_t mark, int64_t *n) {
-  *n = nish_arena_spans(mark, 0, 0);
-  uintptr_t *sp = (uintptr_t *)nish_cross_block((uint64_t)(*n ? *n : 1) * 2 * sizeof(uintptr_t));
-  nish_arena_spans(mark, sp, *n);
-  qsort(sp, (size_t)*n, 2 * sizeof(uintptr_t), nish_span_cmp);
-  return sp;
+/* Links the block `c` into this thread's arena as its newest chunk, and bumps
+ * from it, full to its `cap`. A chunk grown here would
+ * sit in the same place, so a release, a keep and a reset treat these as they
+ * treat it: whatever rewinds the arena past this point frees them. */
+static void nish_cross_link(nish_xchunk *c) {
+  c->next = (nish_xchunk *)nish_arena.chunks;
+  nish_arena = (struct nish_arena){(char *)(c + 1), c->cap, c->cap, c};
 }
 
 /* `v` in a block of its own, tagged. */
 static void *nish_cross_copy(const void *v, uint64_t esize) {
-  void *b;
-  if (esize == 0) {
-    const nish_str *s = (const nish_str *)v;
-    b = nish_cross_block(8 + s->len + 1);
-    memcpy(b, s, (size_t)(8 + s->len + 1));
-  } else {
-    const nish_array *a = (const nish_array *)v;
-    nish_array *c = (nish_array *)nish_cross_block(sizeof *c + a->len * esize);
-    c->len = c->cap = a->len;
-    c->data = (char *)(c + 1);
-    if (a->len) memcpy(c->data, a->data, (size_t)(a->len * esize));
-    b = c;
-  }
-  return (void *)((uintptr_t)b | 1);
+  nish_xchunk *c = nish_cross_chunk(nish_cross_size(v, esize));
+  nish_cross_put((char *)(c + 1), v, esize);
+  return (void *)((uintptr_t)(c + 1) | 1);
 }
 
 void *nish_cross_out(void *v, uint64_t esize, uint64_t mark) {
@@ -149,49 +137,126 @@ void *nish_cross_out(void *v, uint64_t esize, uint64_t mark) {
 
 void *nish_cross_send(void *s) { return nish_cross_copy(s, 0); }
 
+/* The transfer state of the chunk this thread is running
+ * (`nish_cross_begin`): the list its blocks go on, the block being filled and
+ * how much of it is, and the state it hides, which `nish_cross_end` restores
+ * -- a map nested in a chunk's body runs its own chunks inside it. A map's
+ * sequential path begins with no list, which hides the outer state without
+ * pushing one, so its elements are not packed into the outer chunk's block. */
+typedef struct nish_xfer {
+  void **list;
+  nish_xchunk *block;
+  uint64_t off;
+  struct nish_xfer *prev;
+} nish_xfer;
+_Static_assert(sizeof(nish_xfer) == (sizeof(void *) == 8 ? 32 : 24),
+               "src/emit-parallel.ts allocas the state as { i8*, i8*, i64, i8* }");
+static NISH_TLS nish_xfer *nish_xfer_top;
+
+void nish_cross_begin(void *state, void **list) {
+  nish_xfer *x = (nish_xfer *)state;
+  *x = (nish_xfer){list, 0, 0, nish_xfer_top};
+  nish_xfer_top = list ? x : 0;
+}
+
+/* The block being filled records how much of it is, as its `cap`, so the
+ * join reads what each chunk kept and an adopted block is full where it ends. */
+void nish_cross_end(void *state) {
+  nish_xfer *x = (nish_xfer *)state;
+  if (x->block) x->block->cap = x->off;
+  nish_xfer_top = x->prev;
+}
+
 /* A map's or a `parallelFrom`'s element, kept as its chunk loop rewinds the
  * arena to `mark`, the bump position before the body was called: everything
  * else the body bumped is dead once it has answered, so a chunk holds one
  * element's temporaries at a time rather than all of its elements'. A value
- * made since `mark` goes out to a block of its own and back in below `mark`;
- * one made before it is answered as it is. */
+ * made since `mark` is copied, in a chunk of a divided region, to the end of
+ * the chunk's transfer block -- a new one, pushed on the region's list when it
+ * does not fit, of 4 KB doubling to 64 KB or of the value's size, so what a
+ * chunk leaves unused is bounded by what it keeps -- and is answered there;
+ * the caller adopts the blocks at the join (`nish_cross_adopt`). On a map's
+ * sequential path, where no state is pushed, it goes out to a block of its own
+ * and back in below `mark`. One made before `mark` is answered as it is. */
 void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark) {
-  v = nish_cross_out(v, esize, mark);
+  nish_xfer *x = nish_xfer_top;
+  if (v && nish_since(mark, (uintptr_t)v)) {
+    if (!x) {
+      v = nish_cross_copy(v, esize);
+    } else {
+      uint64_t n = nish_cross_size(v, esize);
+      if (!x->block || x->block->cap - x->off < n) {
+        uint64_t want = x->block && x->block->cap < 32768 ? x->block->cap * 2 : x->block ? 65536 : 4096;
+        x->block = nish_cross_chunk(n > want ? n : want);
+        x->block->next = __atomic_exchange_n((nish_xchunk **)x->list, x->block, __ATOMIC_RELAXED);
+        x->off = 0;
+      }
+      char *at = (char *)(x->block + 1) + x->off;
+      x->off += n;
+      nish_cross_put(at, v, esize);
+      v = at;
+    }
+  }
   nish_arena_release(mark);
   return nish_cross_in(v, esize);
 }
 
+/* A value of 64 KB or more that does not fit what is left of the current
+ * chunk is adopted rather than copied: `nish_arena_grow` would have made a
+ * chunk of exactly its size for the copy, and the block is that chunk
+ * already. A smaller one is copied, so a run of small values never makes a
+ * chunk each, which a release would walk. */
 void *nish_cross_in(void *p, uint64_t esize) {
   if (!((uintptr_t)p & 1)) return p;
-  void *b = (void *)((uintptr_t)p & ~(uintptr_t)1);
-  void *r;
-  if (esize == 0) {
-    const nish_str *s = (const nish_str *)b;
-    r = nish_str_new(s->data, s->len);
-  } else {
-    const nish_array *a = (const nish_array *)b;
-    nish_array *c = nish_alloc_array(esize, a->len);
-    if (a->len) memcpy(c->data, a->data, (size_t)(a->len * esize));
-    r = c;
+  void *v = (void *)((uintptr_t)p & ~(uintptr_t)1);
+  nish_xchunk *c = (nish_xchunk *)v - 1;
+  uint64_t n = c->cap;
+  if (n >= 65536 && n > nish_arena.cap - nish_arena.off) {
+    nish_cross_link(c);
+    return v;
   }
-  free(b);
+  char *r = (char *)nish_alloc_struct(n);
+  nish_cross_put(r, v, esize);
+  free(c);
   return r;
 }
 
-/* A chunk's slots of `dst`, `[lo, hi)`, out; and, once every chunk is done,
- * the first `n` in. Each slot holds a pointer. */
-void nish_cross_out_range(nish_array *dst, int64_t lo, int64_t hi, uint64_t esize, uint64_t mark) {
-  void **d = (void **)dst->data;
-  int64_t n;
-  uintptr_t *sp = nish_sorted_spans(mark, &n);
-  for (int64_t i = lo; i < hi; i++)
-    if (d[i] && nish_in_spans(sp, n, (uintptr_t)d[i])) d[i] = nish_cross_copy(d[i], esize);
-  free(sp);
-}
-
-void nish_cross_in_range(nish_array *dst, int64_t n, uint64_t esize) {
-  void **d = (void **)dst->data;
-  for (int64_t i = 0; i < n; i++) d[i] = nish_cross_in(d[i], esize);
+/* Once every chunk is done, on the thread that called the region, with `dst`
+ * the array the region wrote. When the blocks the chunks filled hold 64 KB or
+ * more, they become the newest chunks of its arena (`nish_cross_link`), so
+ * the elements in them stay where they are, and the cost is one link per
+ * block rather than a copy per element. Less is copied, element by element,
+ * into the arena and the blocks freed, as `nish_cross_in` copies a small
+ * value: an adopted block leaves the arena's current chunk behind, and a
+ * region run in a loop would leave one per run. */
+void nish_cross_adopt(void *list, void *dst, uint64_t esize) {
+  nish_xchunk *first = (nish_xchunk *)list, *c, *next;
+  uint64_t kept = 0;
+  for (c = first; c; c = c->next) kept += c->cap;
+  if (kept >= 65536) {
+    for (c = first; c; c = next) {
+      next = c->next;
+      nish_cross_link(c);
+    }
+    return;
+  }
+  if (!first) return;
+  nish_array *a = (nish_array *)dst;
+  void **e = (void **)a->data;
+  for (uint64_t i = 0; i < a->len; i++) {
+    for (c = first; c; c = c->next) {
+      if ((uintptr_t)e[i] - (uintptr_t)(c + 1) < c->cap) {
+        char *r = (char *)nish_alloc_struct(nish_cross_size(e[i], esize));
+        nish_cross_put(r, e[i], esize);
+        e[i] = r;
+        break;
+      }
+    }
+  }
+  for (c = first; c; c = next) {
+    next = c->next;
+    free(c);
+  }
 }
 
 /* ---- A string a guard stores ----
@@ -209,7 +274,9 @@ void nish_cross_in_range(nish_array *dst, int64_t n, uint64_t esize) {
  * the `Mutex`, not one per store. The set is one for the process, behind one
  * lock of its own, since two `Mutex`es are locked by two tasks at once; it is
  * taken only by a store, so stores through two different guards wait on each
- * other for the moment it is held. */
+ * other for the moment it is held. The set holds each block's header, the
+ * pointer `malloc` answered, so a leak checker counts a block a dropped `Mutex`
+ * left as reachable rather than as possibly lost. */
 static struct {
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_t mu;
@@ -257,17 +324,15 @@ static int nish_kept_take(uintptr_t p) {
 
 /* `old` is null when the slot is a `string | null` that held none. */
 void *nish_guard_keep(void *old, const void *s) {
-  const nish_str *str = (const nish_str *)s;
-  void *b = nish_cross_block(8 + str->len + 1);
-  memcpy(b, str, (size_t)(8 + str->len + 1));
+  void *b = (void *)((uintptr_t)nish_cross_copy(s, 0) & ~(uintptr_t)1);
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_lock(&nish_kept.mu);
 #endif
-  int mine = old && nish_kept_take((uintptr_t)old);
-  nish_kept_put((uintptr_t)b);
+  int mine = old && nish_kept_take((uintptr_t)((nish_xchunk *)old - 1));
+  nish_kept_put((uintptr_t)((nish_xchunk *)b - 1));
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_unlock(&nish_kept.mu);
 #endif
-  if (mine) free(old);
+  if (mine) free((nish_xchunk *)old - 1);
   return b;
 }

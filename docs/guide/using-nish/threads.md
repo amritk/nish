@@ -67,10 +67,12 @@ export const main = (): i32 => {
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
   own: it may fill it, `push` onto it, or pass it to a helper that writes it.
-- **A string or an array is copied out at the join.** Each thread copies the
-  answers it built out of its arena before the next element reuses it, and the
-  caller copies them into its own once every thread has finished, so the array
-  you get back holds strings you own. An array of strings, an array of arrays,
+- **A string or an array is copied out once, then handed over.** Each thread
+  copies the answers it built into a block of its own before the next element
+  reuses its arena. Once every thread has finished, the caller takes those
+  blocks into its own arena whole when they hold 64 KB or more, and copies the
+  answers in when they hold less, so the array you get back holds strings you
+  own. An array of strings, an array of arrays,
   an object, a `Map` or a `Set` is refused: copying one would mean following
   every element.
 - **A reduce folds numbers, booleans or enums.** Its `f` answers the same type
@@ -140,13 +142,14 @@ export const main = (): i32 => {
 };
 ```
 
-That copy has a cost, and the caller pays its last part alone, one string at
-a time, after every thread has finished. When the work per element is small,
-a `parallelMap` that answers strings is slower than a plain loop today. Five
-maps of a million `` `n${x % 1000}` `` strings took a median of 270 ms on 4
-threads, against 200 ms for the sequential loop. Single runs ranged from 249
-to 356 ms, so measure your own case. Reach for the threads when each element does real work,
-or when the answer is a number.
+Each thread moves the strings its elements answer into blocks of its own, and
+the caller takes the blocks whole at the join rather than copying each string
+again, so the copy runs on every thread at once. A map of a million
+`` `s${x % 100000}` `` strings took a median of 24 ms on 4 threads (22 to 32 ms
+over nine runs), against 40 ms for the sequential loop. On one thread the same
+map takes 65 ms, since every element still pays the move, so measure your own
+case. Reach for the threads when each element does some work, or when there is
+more than one core to run it.
 
 **What is refused, and why.** The rules for `f` above, and an answer that is
 an array of strings, an array of arrays, an object, a `Map` or a `Set`
@@ -822,13 +825,12 @@ export const main = (): i32 => {
   gone once the task is joined, so an entry or a map that answers one is
   refused. Answer the numbers or strings it is built from, or build it after
   the scope from what the tasks answered.
-- **The copy back is serial.** A task that answers a string builds it, copies
-  it out of its own memory on its own thread, and then the joining thread
-  copies it in, one answer at a time, after the last task finishes: two copies
-  after the build, and the second runs on one thread. Five maps of a million short strings
-  each took a median of 270 ms on four threads, against 200 ms for the same
-  loop on one; a map pays off when each element costs more to compute than
-  to copy.
+- **The copy back runs on every thread.** A `parallelMap` or `parallelFrom`
+  element that is a string or an array is moved into a block of its chunk's
+  as it is answered, and the joining thread takes the blocks whole, so a map
+  of a million short strings took a median of 24 ms on four threads, against
+  40 ms for the same loop on one. A scope's task answer is copied in by the
+  joining thread when it is under 64 KB, and taken whole above that.
 
 ## Letting `nish --fix` write it
 
