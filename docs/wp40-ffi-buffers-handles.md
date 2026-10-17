@@ -23,10 +23,12 @@ length.**
 
 **A class may hold one field of type `CPtr` if its `[Symbol.dispose]` method
 calls one declared C function on that field, in one of the two shapes §4b
-allows: a bare call, or a call guarded by a null test. Such a class is a
+allows: a bare call on `this.f`, or a call on a `const` local read from it and
+guarded by a null test. Such a class is a
 *handle class*. Its instances are created only as the initialiser of a `using`
 declaration, and they are bound nowhere else. The compiler emits the close at
-every exit of the block.**
+every exit of the block that returns control to the program; a panic or
+`process.exit` ends the process without it (§4e).**
 
 ```ts
 declare function read(fd: i32, buf: u8[], n: u64): i64;
@@ -46,8 +48,9 @@ class File {
     return p === null ? -1 : fgetc(p);
   }
   [Symbol.dispose](): void {
-    if (this.file !== null) {
-      fclose(this.file);
+    const p = this.file;      // a field is not narrowed, so bind it first
+    if (p !== null) {
+      fclose(p);
     }
   }
 }
@@ -145,16 +148,33 @@ to it for the owner (Q9).
 ### 3a. How the length crosses: a declared `u64`, checked at the call
 
 **Decision (recommended, Q1):** the parameter right after a buffer must be a
-`u64`, and it is that buffer's byte count. The call lowers to
-`n <= buf.length` and panics if that is false. The declaration then promises
-that C touches no byte at or past `buf.data + n`. That is the same kind of
-promise `free(block: CPtr)` makes about what `free` does.
+`u64`, and it is that buffer's byte count. The call lowers to an unsigned
+compare of `n` against the array's length, and panics if `n` is larger. The
+declaration then promises that C touches no byte at or past `buf.data + n`.
+That is the same kind of promise `free(block: CPtr)` makes about what `free`
+does.
 
 ```ts
 declare function read(fd: i32, buf: u8[], n: u64): i64;
-const got = read(0, buf, buf.length);   // proved: n is buf.length, no check emitted
-const head = read(0, buf, 16);          // checked: panics `ffi-length` if buf.length < 16
+const got = read(0, buf, toU64(buf.length));   // proved: the count is the length, no check emitted
+const head = read(0, buf, 16);                 // checked: panics `ffi-length` if buf.length < 16
 ```
+
+`buf.length` is an `i32` (an `f64` under `--number-mode f64`), and the
+language converts no integer implicitly, so the count is written
+`toU64(buf.length)`, as any `u64` built from a length is (docs/LANGUAGE.md,
+"convert with toU32 or toU64").
+
+**The compare is unsigned.** `n` is a `u64`, and the header's `len` is an
+`i64` (`%struct.nish_array = type { i64, i64, i8* }`, src/runtime.ts:30). The
+check is `icmp ule i64 %n, %len`, and the panic branch is its negation. A
+signed `icmp sle` would read `toU64(0) - toU64(1)`, which is 2^64 − 1
+(docs/LANGUAGE.md:441), as −1, pass it, and let C run past the block. `len` is
+never negative, so reading it unsigned changes nothing for it. The header is
+the same `{ i64, i64, ptr }` on wasm32, so the compare is the same `i64` one
+there. Pinned by `panics_ffi_length_wrapped`: `read(fd, buf,
+toU64(0) - toU64(1))` panics `ffi-length`, and its golden `.ll` shows the
+`icmp ule`.
 
 Three options were weighed.
 
@@ -169,11 +189,12 @@ Three options were weighed.
 2. **A declared count, paired by position and checked (chosen).** It writes
    `read` and `write` as C declares them. It also writes `recv`, `send`,
    `getrandom` and `SHA256_Update(ctx, data, len)`. The check is one compare,
-   and `--emit-panics` lists it. The common call passes `buf.length`, or a
-   value that a guard or loop bound already proves `<= buf.length`, and the
-   bounds machinery proves those calls away exactly as it proves an `index`
-   site. A failing check is a new panic kind, **`ffi-length`**, listed by
-   `--emit-panics` (`panics_ffi_length`).
+   and `--emit-panics` lists it. The common call passes
+   `toU64(buf.length)`, and B1.2 proves exactly that call away (below). Any
+   other count keeps its check: the bounds machinery credits no `u64` against
+   a length today (docs/LANGUAGE.md:4584), and teaching it guards on `u64`
+   counts is a follow-up, not part of B1. A failing check is a new panic kind,
+   **`ffi-length`**, listed by `--emit-panics` (`panics_ffi_length`).
 3. **A declared count, paired by a spelling.** For example a type
    `ByteCount<"buf">`, or `n: (typeof buf)["length"]`. This is more explicit
    than position, but it needs a type-level string or an indexed-access type
@@ -210,28 +231,51 @@ only then loads `buf->data` and `buf->len` for each buffer and runs the check.
 Nothing is evaluated between those loads and the `call` instruction. The
 reason is that a later argument may change the array: in
 `write(1, buf, grow(buf))`, where `grow` pushes `buf` past its capacity and
-returns the new length, a `data` pointer loaded when `buf` was evaluated
-points at the block the push freed, and a `len` loaded then is the old length.
-Loading both last means C gets the block and the length that exist when C
-runs. Pinned by `ffi_buffer_late_load` (golden `.ll` showing the `data` and
+returns the new length as a `u64`, a `data` pointer loaded when `buf` was
+evaluated points at the block the push freed, and a `len` loaded then is the
+old length. Loading both last means C gets the block and the length that exist
+when C runs. That holds whatever path the later argument reaches the array
+by: an alias (`write(1, a, grow(b))` with `const b = a`), a field or an
+element. The loads go through the header pointer the buffer argument produced,
+and a push moves the data block, never the header. Pinned by `ffi_buffer_late_load` (golden `.ll` showing the `data` and
 `len` loads after the call to `grow`, and a native round trip whose output is
 the bytes `grow` appended).
 
-The sibling is the proof that elides the check. `read(0, buf, buf.length)`
-needs no check only if nothing evaluated after the count argument may resize
-`buf`. The count is the last argument of `read` and `write`, so for them
-the proof holds, but the rule is stated on the facts, not on the position:
-the check is elided when the count is `buf.length` and no argument evaluated
-after it calls a callee whose facts say `resizesArray`, and kept otherwise.
-`ffi_buffer_late_load` pins both arms with `pwrite(fd, buf, n, off: i64)`:
-`pwrite(fd, buf, buf.length, 0)` has no check, and
-`pwrite(fd, buf, buf.length, shrink(buf))`, where `shrink` pops, keeps it and
-panics `ffi-length` in a `panics_ffi_length` variant.
+**The proof that elides the check** is a named piece of B1.2, not something
+the bounds machinery already does. A buffer's check is elided when all of
+these hold, and kept otherwise:
+- the count argument is spelled `toU64(x.length)`, in the call itself, where
+  `x` is the very binding the buffer argument is: a `const` local or a
+  parameter, named alone. A field path (`toU64(o.bytes.length)`), an element,
+  or another binding that aliases the buffer is not credited, because a
+  later argument could reassign the path between the two reads;
+- no argument evaluated after the count calls a callee whose facts say
+  `resizesArray`, since `len` is loaded last and a resize between the count
+  and the load would make them differ.
+
+`toU64` of a length is its zero extension, and in f64 mode a conversion of an
+exact non-negative integer, so the elided compare is `len <= len`. For a run,
+the proof is per buffer: `memcpy(dst, src, toU64(dst.length))` elides `dst`'s
+check and keeps `src`'s. The count is the last argument of `read` and
+`write`, so their common call is proved. `ffi_buffer_count_proved` pins the
+credited shape (no check in the golden `.ll`) and three that are not
+credited: a field path, an aliasing local, and a count from another array.
+`ffi_buffer_late_load` pins the resize arm with `pwrite(fd, buf, n, off:
+i64)`: `pwrite(fd, buf, toU64(buf.length), 0)` has no check, and
+`pwrite(fd, buf, toU64(buf.length), shrink(buf))`, where `shrink` pops, keeps
+it and panics `ffi-length` in a `panics_ffi_length` variant.
+
+The other answer, for the owner: emit the check on every call and prove
+nothing. It is one compare and one branch per call, on a call that is about
+to enter C, and it removes the proof and its test. The recommendation is the
+narrow proof, because `read(fd, buf, toU64(buf.length))` is the shape the
+guide teaches, and `--emit-panics` would otherwise list every such call as an
+unproven site.
 
 Concurrency adds nothing new here. Another task that resizes `buf` while C
 runs is the data race the existing `scope()` rule refuses for an array a
 task writes while its parent can reach it (`writesThroughMessage`, which a
-foreign `u8[]` argument now feeds, §5).
+foreign `u8[]` argument now feeds through every path, §5).
 
 The other answer, for the owner: refuse a call in which an argument after a
 buffer may resize it, using the same `resizesArray` fact, and load at the
@@ -355,10 +399,23 @@ A **handle class** is a class with exactly one field of type `CPtr` or
 - A constructor cannot take a `CPtr` (src/declarations.ts:92 holds for
   constructors). It cannot copy one from another object either: an assignment
   from anything but a foreign call is refused (`reject_ffi_handle_field_copy`).
-- A `CPtr` field is read only inside the class's own methods. It is read
-  either as a direct argument to a declared function, or into a `const` local
-  that is then narrowed and passed. A read from outside the class is refused
-  (`reject_ffi_handle_field_read_outside`). A closure in a method that captures
+- A `CPtr` field is read only inside the class's own methods, and only as the
+  literal member access `this.f`. A read from outside the class is refused
+  (`reject_ffi_handle_field_read_outside`). Inside it, so is every other path
+  to the field (`reject_ffi_handle_field_other_instance`): `other.f` on a
+  parameter of the class's own type, destructuring (`const { f } = this`),
+  and `this` bound to a local (`const self = this; self.f`), which is an
+  alias of a handle and is refused by §6 row 15 before the field is reached.
+- `this.f` appears in exactly two places: as a direct argument to a declared
+  function, or as the whole initialiser of a `const` local
+  (`const p = this.f`). Such a field-derived local is used only as a direct
+  argument to a declared function or as an operand of `=== null` or
+  `!== null`. Copying it (`const q = p`), binding the field to a `let`, or
+  yielding it from a ternary or a logical operator
+  (`const q = c ? this.f : other`) is refused
+  (`reject_ffi_handle_field_alias`). Each declarator of
+  `const p = this.f, q = this.f` is checked on its own, and each is a
+  field-derived local. A closure in a method that captures
   the field, or a `const` local read from it, is refused too
   (`reject_ffi_handle_field_capture`): a closure is a value that could carry
   the pointer past the method, which §7a's rule does not allow for a `CPtr`
@@ -378,7 +435,10 @@ in §1 shows this. A non-nullable field needs a constructor that panics on
 **Decision (recommended, Q5):** a `[Symbol.dispose](): void` method whose body
 has one of two shapes, and no other:
 - `close(this.f);` for a `CPtr` field;
-- `if (this.f !== null) { close(this.f); }` for a `CPtr | null` field.
+- `const p = this.f; if (p !== null) { close(p); }` for a `CPtr | null`
+  field. The local is needed because a property path is not narrowed
+  (docs/LANGUAGE.md:603-604): `if (this.f !== null) { close(this.f); }` does
+  not type, since `this.f` is still `CPtr | null` inside the `if`.
 
 In both shapes, `close` is a `declare function` and the call's result is
 discarded. Any other body is refused (`reject_ffi_handle_dispose_body`). A
@@ -437,7 +497,8 @@ name an instance ever has outside its own methods (§4d), and that binding goes
 out of scope at the exact point where the close is emitted. So no code can
 follow the emitted close and name the object. The program cannot call the
 dispose method: `f[Symbol.dispose]()` is refused
-(`reject_ffi_handle_dispose_call`). The emitted close runs once per exit path,
+(`reject_ffi_handle_dispose_call`), and so are `this[Symbol.dispose]()` and
+`other[Symbol.dispose]()` inside the class, on any receiver. The emitted close runs once per exit path,
 and each path runs exactly one exit.
 
 **What placement does not prove.** A method of the class can call the close
@@ -460,10 +521,16 @@ the object. There are two answers, and the choice is Q9.
 - **Option A: refuse it statically.** A written call to the dispose method's
   close function (`fclose` above) whose argument is the owned field, or a
   `const` local read from it, is refused anywhere in the class
-  (`reject_ffi_handle_close_call`). The check is local to the class, because
-  the field is readable nowhere else (§4a), and closures over it are refused
-  (`reject_ffi_handle_field_capture`), so the class body is every place the
-  pointer can be named. Its cost and its edges:
+  (`reject_ffi_handle_close_call`). The check is local to the class, and it
+  sees every name the pointer can have, because §4a closes every other path:
+  the field is readable nowhere else, only as `this.f` (never `other.f`, by
+  destructuring or through an alias of `this`), a field-derived local cannot
+  be copied, and closures over either are refused
+  (`reject_ffi_handle_field_capture`). So the names of the pointer in a class
+  body are `this.f` and the field-derived locals, and the rule tests a close's
+  argument against exactly those. Another instance's pointer cannot be named
+  at all, so `merge(other: File)` borrows `other` and may call its methods,
+  but cannot close it. Its cost and its edges:
   - It is one more checker rule with one message, beside the dispose-shape
     check, which already resolves the close's name. The dispose method's own
     call is the one exempt site.
@@ -474,9 +541,14 @@ the object. There are two answers, and the choice is Q9.
     replace or keep the pointer cannot be seen: `freopen(path, mode, p)`
     closes `p`'s descriptor, `fdclose` and `fclose` through a C wrapper with
     another name free it, and `setvbuf(p, …)` makes the stream keep a buffer.
-    These stay a C contract, stated in the LANGUAGE.md rule like §3a's
-    count: "the class's methods pass the field only to functions that use it
-    and return".
+    Two more launder the pointer through C: a C function that returns its
+    argument (`const q = ident(this.f)` gives a `CPtr` the rule does not
+    know is the field, and `fclose(q)` then passes), and `close(fileno(p))`,
+    which closes the descriptor under the stream without passing the
+    pointer to a close at all. These stay a C contract, stated in the
+    LANGUAGE.md rule like §3a's count: "the class's methods pass the field
+    only to functions that use it and return, and that neither close what
+    it owns nor hand it back".
   - Ownership itself stays a C contract. Two objects built from one C getter
     that returns a shared pointer (`stdin`'s `FILE *` through a C helper, for
     example) both close it. The rule is that the constructor's foreign call
@@ -540,11 +612,45 @@ design, decided on a program that needs them.
   through `fwrite` and not yet flushed loses its tail on a bounds panic. The
   LANGUAGE.md rule says this, and the guide page recommends `fflush` before
   any code that may panic.
+- **`process.exit`.** `process.exit(code)` is typed `never`
+  (runtime/nish.d.ts:404) and ends the process where it is called, as a
+  panic does, and so does `nish:process`'s `exit`. Neither runs the close,
+  for the same reason: the operating system reclaims the descriptor, and
+  stdio is flushed by `exit` but not by a check's `_exit`. "Every exit" in
+  §1 and §4b means every exit that returns control to the program: the
+  fall-through, `break`, `continue`, `return` and `orReturn()`.
 - **The return value.** As with an arena, the return value is computed before
   the close (src/emit.ts:1149), so `return f.readByte()` reads from an open
   file.
 - **Multiple declarators.** `using a = new File(p), b = new File(q)` closes
-  `b`, then `a`, as `openScope` already orders declarators.
+  `b`, then `a`, as `openScope` already orders declarators. That holds once
+  both are open. It does not hold while the second initialiser runs:
+  src/emit.ts:1100-1104 runs `emitVariableDeclarations` for every
+  declarator first and calls `openScope` after them. So
+  `using a = new File(p), b = new File(q.orReturn())` returns from the
+  `orReturn()` with `a` open and nothing on the stack to close it, a leak.
+  JavaScript disposes
+  each declarator as soon as its own initialiser completes. Two answers, for
+  the owner (Q12):
+  - **(a) JavaScript's order (recommended).** `using` emits each declarator
+    and pushes it onto the stack before the next initialiser runs, so a
+    later initialiser's exit closes the earlier handles. The cost: the emit
+    order in `emitStatementKind` changes for every kind `using` opens
+    (scope, arena, lock, handle), the multi-declarator goldens move, and
+    H1.2 reads each moved `.ll` in its commit body. A panic in a later
+    initialiser is unaffected, since panics never close (above).
+  - **(b) Refuse the exit.** An `orReturn()` (or any other expression that
+    can leave the block) inside a later declarator's initialiser, once an
+    earlier declarator of the same statement opened a handle, is refused
+    (`reject_ffi_handle_using_exit_in_initialiser`). No emit order changes,
+    and nothing moves, but a program that is valid TypeScript and correct
+    under JavaScript's order is refused, and the user writes two `using`
+    statements instead.
+
+  Under (a), `ffi_handle_file` gains
+  `using a = new File(p), b = new File(q.orReturn())` with `q` an `Err`, and
+  the sidecar's close count shows `a` closed once. Under (b), the refusal is
+  the negative case and `ffi_handle_file` keeps two plain declarators.
 - **The object's memory.** The object is allocated in the arena that is live
   at the `new`. It is popped from the stack before any arena opened earlier
   releases, so the close never reads freed memory.
@@ -553,15 +659,38 @@ design, decided on a program that needs them.
 
 **src/escape.ts and the arena scopes.**
 - *Buffers.* A buffer argument does not escape, exactly as S3's string does
-  not and as `console.log`'s does not (src/escape.ts:552), so an array
-  allocated in a released scope may be passed. It is not a read, though. A
+  not, so an array allocated in a released scope may be passed. Escape
+  analysis decides that at `useOutcome` (src/escape.ts:691): an argument
+  flows out only when `calleeCaptures` (src/escape.ts:638, read at :711)
+  says the callee keeps it, and `calleeCaptures` answers `true` for a callee
+  with no facts entry, which a foreign callee is today. So B1.2 gives each
+  declared function that takes a buffer a facts entry whose buffer
+  parameters are pointer parameters with `captured = false` (and
+  `writesThrough = true` for `u8[]`), which is the borrow written as a fact.
+  The comment at src/escape.ts:1320-1321, "No pointer this compiler
+  allocated crosses the C boundary", goes stale the moment `buf->data`
+  crosses, so B1.2 rewrites it to say that one does, borrowed and not kept.
+  (B1.3 then rewrites the attributes comment of §3c; the escape comment
+  belongs to the step that first passes the pointer, which is B1.2.) It is not a read, though. A
   foreign callee gets no per-argument facts today: `addCallee`
   (src/attributes.ts:2713-2722) returns before `noteArguments` for a foreign
   callee, which was sound while no array could reach one. B1.2 adds the
-  missing step. A `u8[]` argument to a declared function sets the caller's
-  `PointerParamFacts` for that array to `writesThrough = true` and
-  `captured = false`, as a Nish callee that writes its parameter would. A
-  `readonly u8[]` argument sets neither.
+  missing step, and it is path-aware. For each `u8[]` argument of a foreign
+  call, B1.2 calls `noteSlotWrite(call, arg)` (src/attributes.ts:1887), the
+  recorder an element store `arg[i] = v` already goes through, so the call
+  records exactly what a store through that argument would:
+  - a parameter `b` sets its `writesThrough`, and `noteSharedWrite`;
+  - a field path `o.bytes` or an element `bufs[i]` pushes its path onto
+    `memWrites` (`pathOf`), which becomes `writesReach` on the parameter the
+    path starts from, the fact parallel.ts:1918 reads beside
+    `writesThrough`;
+  - an array private to the function (a `ROOT_OWN` local) records the call
+    as its write site, as a store does;
+  - an argument with no path (a call's result) is a past write, the
+    conservative arm.
+
+  A `readonly u8[]` argument records nothing, and it cannot carry a writable
+  array's write, because a `readonly u8[]` is never converted to `u8[]`.
 
   Every fact derived from `writesThrough` then follows, and each is a place
   where leaving it unset would be a miscompile or a lie in a generated file:
@@ -575,8 +704,13 @@ design, decided on a program that needs them.
     which copies the bytes back to the host only for a written parameter, and
     the `const` of napi's C declaration (src/interop-napi.ts:318);
   - the `scope()` sharing rule (`writesThroughMessage`, src/parallel.ts:1897),
-    which refuses a task that writes an array its parent also reads. §3a's
-    concurrency claim depends on it.
+    which refuses a task that writes an array its parent also reads, through
+    `writesThrough || writesReach` (src/parallel.ts:1918). §3a's concurrency
+    claim depends on it for every path: a task that calls `read(fd, b, n)`
+    on a parameter (`reject_ffi_buffer_scope_race`), on a field path
+    `o.bytes` (`reject_ffi_buffer_scope_field_race`), or on an element
+    `bufs[i]` (`reject_ffi_buffer_scope_element_race`) while the parent
+    reads the same array is refused.
 
   `captured` stays `false`, by the borrow (WP27 §8b): C keeps no address. That
   is the assertion §3c already states, now written into a fact.
@@ -676,31 +810,34 @@ the rest in the same round.
 | # | Way in | What happens | Negative case |
 | --- | --- | --- | --- |
 | 1 | A constructor reached by `new`, outside a `using` initialiser, including `new File()` inside another class's constructor, a default parameter value, or an argument | Refused: a handle-class `new` is legal only as a `using` initialiser | `reject_ffi_handle_new_outside_using` |
-| 2 | Every declarator of `using a = …, b = …` | Each declarator is checked on its own. `using a = new File(p), b = a` is refused at `b` | `reject_ffi_handle_using_second_declarator` |
+| 2 | Every declarator of `using a = …, b = …` | Each declarator is checked on its own. `using a = new File(p), b = a` is refused at `b`. An exit inside a later declarator's initialiser closes the earlier handles under Q12(a) and is refused under Q12(b) (§4e) | `reject_ffi_handle_using_second_declarator`; `reject_ffi_handle_using_exit_in_initialiser` (Q12(b) only) |
 | 3 | `this` leaving a constructor or method (`h.l = this`, `return this`, `xs.push(this)`) | Refused, because the target's type would have to be the handle class (a field, an element or a return, rows 6, 7 and 8) | `reject_ffi_handle_this_escapes` |
 | 4 | A closure capture of the `using` binding or of a handle parameter; inside the class, a closure capture of the `CPtr` field or of a `const` local read from it | Refused, even for an arrow called at once (§4a) | `reject_ffi_handle_closure_capture`, `reject_ffi_handle_field_capture` |
 | 5 | A generic type argument (`Box<File>`, `new Box<File>()`, `id<File>(f)`, `Secret<File>`), and a generic handle class (`class File<T>`) | Refused on both template paths. src/generics.ts:1248 checks function templates only, and the class-template path (src/generics.ts:993-1001) has no check today, so H1.1 adds one there for the handle rule and for `CPtr` alike. A handle class may not have type parameters | `reject_ffi_handle_type_argument` (a function and a class template each), `reject_ffi_handle_generic_class` |
 | 6 | An array element (`File[]`, `[f]`) | Refused | `reject_ffi_handle_array` |
 | 7 | A `Result` arm (`Result<File, E>`) | Refused. A fallible open is written with a `CPtr \| null` field (§4a) | `reject_ffi_handle_result` |
 | 8 | A return from a program function or method | Refused | `reject_ffi_handle_return` |
-| 9 | An `async` function: a handle parameter, or a `using` of one, in its body | Refused. A suspension point inside the block would split the close from the code that uses the handle | `reject_ffi_handle_async` |
+| 9 | An `async` function: a handle parameter, or a `using` of one, in its body | Closed by an existing rule: `async` is refused outright (docs/LANGUAGE.md:8705), so no suspension point can split the close from the code that uses the handle. If `async` arrives, this row comes back | `reject_async_function` (existing) |
 | 10 | A `scope()` task capturing a handle | Refused. Two tasks would call the same C handle concurrently, and C handles are not thread-safe by default | `reject_ffi_handle_scope_task` |
 | 11 | An inherited field | Closed by an existing rule: there is no `extends` (docs/LANGUAGE.md:1979). If inheritance arrives, this row comes back | `reject_cls_extends` (existing) |
 | 12 | A field of another class whose type is the handle class, including a static field | Refused | `reject_ffi_handle_field` |
 | 13 | Widening to an interface (`class File implements Closer`, then `const c: Closer = f`) | Refused: a handle class may not `implements`, so it has no other type to widen to | `reject_ffi_handle_implements` |
 | 14 | A nullable handle type (`File \| null`) | Refused. Nullability lives in the field, not in the object | `reject_ffi_handle_nullable` |
-| 15 | An alias, `let`, assignment or module-level binding | Refused (§4d) | `reject_ffi_handle_alias`, `reject_ffi_handle_module_binding` |
+| 15 | An alias, `let`, assignment or module-level binding, including `const self = this` inside the class | Refused (§4d, §4a) | `reject_ffi_handle_alias`, `reject_ffi_handle_module_binding` |
 | 16 | Reading the `CPtr` field from outside the class, by member access or destructuring | Refused (§4a) | `reject_ffi_handle_field_read_outside` |
+| 16a | Reading the `CPtr` field inside the class by any path but `this.f`: another instance (`other.f`) or destructuring (`const { f } = this`) | Refused (§4a) | `reject_ffi_handle_field_other_instance` |
+| 16b | Copying a field-derived local (`const q = p`), binding the field to a `let`, or yielding it from a ternary or logical operator | Refused (§4a), so the field's names in a class are `this.f` and its direct `const` locals | `reject_ffi_handle_field_alias` |
 | 17 | Assigning the `CPtr` field anywhere but the constructor, or from another object's field | Refused (§4a) | `reject_ffi_handle_field_copy` |
-| 18 | An explicit `f[Symbol.dispose]()` call | Refused (§4c) | `reject_ffi_handle_dispose_call` |
+| 18 | An explicit dispose call on any receiver: `f[Symbol.dispose]()`, and inside the class `this[Symbol.dispose]()` and `other[Symbol.dispose]()` | Refused (§4c) | `reject_ffi_handle_dispose_call` |
 | 19 | An exported class, or an exported function taking one | Refused (§5) | `reject_ffi_handle_export`, `reject_ffi_handle_exported_param` |
 | 20 | A buffer, through its paired count: the next parameter is missing or is not a `u64` | Refused (§3a) | `reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type` |
 | 21 | A buffer of another element type, a nullable buffer, or a returned buffer | Refused (§3b) | `reject_ffi_buffer_element`, `reject_ffi_buffer_nullable`, `reject_ffi_buffer_return` |
-| 22 | A close of the owned field written by hand, in a method or the constructor, through the dispose's close function | Option A: refused. Option B: a stated C contract. The owner chooses (§4c, Q9) | `reject_ffi_handle_close_call` (option A only) |
-| 23 | The owned field passed to another C function that closes, replaces or keeps it (`freopen`, `setvbuf`), or two objects owning one pointer a C getter shares | A C contract under either option, named in the LANGUAGE.md rule (§4c) | none: the compiler cannot see it |
+| 22 | A close of the owned field written by hand, in a method or the constructor, through the dispose's close function, on `this.f` or a field-derived local | Option A: refused, and rows 15, 16a and 16b leave it no other name to reach. Option B: a stated C contract. The owner chooses (§4c, Q9) | `reject_ffi_handle_close_call` (option A only) |
+| 23 | The owned field passed to another C function that closes, replaces, keeps or returns it (`freopen`, `setvbuf`, `ident(this.f)`, `close(fileno(p))`), or two objects owning one pointer a C getter shares | A C contract under either option, named in the LANGUAGE.md rule (§4c) | none: the compiler cannot see it |
 | 24 | A buffer's `data` or `len` read at a stale moment, because a later argument resizes the array | Both are loaded after every argument is evaluated (§3a, Q10). The elided check also requires that no later argument may resize | `ffi_buffer_late_load` (positive, both arms) |
-| 25 | A foreign write reaching the caller of a program function through its `u8[]` parameter, where that function is exported or its parameter's facts feed LLVM attributes | The foreign call marks the argument array `writesThrough` (§5), so the parameter loses `readonly`, renders without `const`, and is copied back by the wasm glue | `ffi_buffer_export_written` (positive) |
-| 26 | A run of buffers sharing one count | Each buffer in the run is checked against the count (§3a) | `ffi_buffer_memcpy` (positive) |
+| 25 | A foreign write reaching the caller of a program function through its `u8[]` parameter, directly, through a field path or through an element, where that function is exported, its parameter's facts feed LLVM attributes, or a `scope()` task holds it | The foreign call records what an element store through the argument would (`noteSlotWrite`, §5): `writesThrough` for the parameter, `writesReach` for a path from it. The parameter loses `readonly`, renders without `const`, is copied back by the wasm glue, and a task race is refused | `ffi_buffer_export_written` (positive); `reject_ffi_buffer_scope_race`, `reject_ffi_buffer_scope_field_race`, `reject_ffi_buffer_scope_element_race` |
+| 26 | A run of buffers sharing one count | Each buffer in the run is checked against the count, unsigned, and the proof elides only the buffer whose own length is the count (§3a) | `ffi_buffer_memcpy` (positive) |
+| 27 | A count that is not the buffer's own length: a field path, an element, an aliasing local, another array, or a wrapped `u64` | Checked at run time, never proved; a wrapped count fails the unsigned compare (§3a) | `ffi_buffer_count_proved` (positive, the uncredited arms), `panics_ffi_length_wrapped` |
 
 ## 7. Stage 9's precondition: the finding
 
@@ -825,8 +962,8 @@ guide, and the cases below do not need S3.
 | Step | What | Tests |
 | --- | --- | --- |
 | B1.1 | `u8[]` and `readonly u8[]` parameters in `checkForeignSignature`, the run-and-count rule (§3a) and the refusals; `reject_ffi_syscall` if Q11 is (a) | `reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type`, `reject_ffi_buffer_element`, `reject_ffi_buffer_nullable`, `reject_ffi_buffer_return`, `reject_ffi_variadic`, `reject_ffi_callback`, `reject_ffi_pointer_deref`, `reject_ffi_asm`, `reject_ffi_allocator`, and `reject_ffi_syscall` under Q11(a) |
-| B1.2 | Lowering: `buf->data` as `ptr` and `len` loaded after every argument (§3a), the `n <= len` check per buffer of a run and the `ffi-length` panic kind; the foreign argument facts, `writesThrough` for `u8[]` and nothing for `readonly u8[]`, `captured = false` (§5); the wasm32 checks (§5) | `ffi_buffer_write` (golden `.ll` + native round trip: `write(1, bytes, bytes.length)` and a prefix `write(1, bytes, 3)`, with all output through `write` so that it does not interleave with `console.log`'s buffer); `ffi_buffer_read` (sidecar `ffi_buffer_read.c` whose `main` makes a pipe, fills it and calls the case's exported `run(fd)`, which `read`s into a `new Array<u8>(64)` from a function whose arena scope releases after the call and prints the bytes); `panics_ffi_length` (a count past the length: exit 1 and the message, plus the `--emit-panics` entry, `proven: false`); the proof of `read(fd, buf, buf.length)` shown in `ffi_buffer_read.ll` as no check; `ffi_buffer_late_load` (§3a, both arms); `ffi_buffer_memcpy` (a two-buffer run, a native round trip and a `panics_ffi_length` program whose source is the shorter array); `ffi_buffer_export_written` (§5: the header, `.ll` and wasm glue goldens); in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_buffer_write` |
-| B1.3 | Re-derive `resizesArray = false` for a foreign callee (§3c) | `ffi_buffer_bounds_survive` (golden `.ll`: an element loop over `buf` after `read`, whose compound-store re-check is gone, compared in the commit body against the `.ll` before B1.3) |
+| B1.2 | Lowering: `buf->data` as `ptr` and `len` loaded after every argument (§3a), the `n <= len` check per buffer of a run and the `ffi-length` panic kind; the unsigned `icmp ule` and the narrow proof (§3a); the foreign argument facts through `noteSlotWrite`, path-aware, nothing for `readonly u8[]`, and the callee's facts entry with `captured = false` (§5); the rewritten comment at src/escape.ts:1320-1321 (§5); the wasm32 checks (§5) | `ffi_buffer_write` (golden `.ll` + native round trip: `write(1, bytes, toU64(bytes.length))` and a prefix `write(1, bytes, 3)`, with all output through `write` so that it does not interleave with `console.log`'s buffer); `ffi_buffer_read` (sidecar `ffi_buffer_read.c` whose `main` makes a pipe, fills it and calls the case's exported `run(fd)`, which `read`s into a `new Array<u8>(64)` from a function whose arena scope releases after the call and prints the bytes); `panics_ffi_length` (a count past the length: exit 1 and the message, plus the `--emit-panics` entry, `proven: false`); `panics_ffi_length_wrapped` (`toU64(0) - toU64(1)` as the count: the unsigned compare fails); the proof of `read(fd, buf, toU64(buf.length))` shown in `ffi_buffer_read.ll` as no check, and `ffi_buffer_count_proved` (§3a: the credited shape and the three uncredited ones); `ffi_buffer_late_load` (§3a, both arms); `ffi_buffer_memcpy` (a two-buffer run, a native round trip and a `panics_ffi_length` program whose source is the shorter array); `ffi_buffer_export_written` (§5: the header, `.ll` and wasm glue goldens); `reject_ffi_buffer_scope_race`, `reject_ffi_buffer_scope_field_race` and `reject_ffi_buffer_scope_element_race` (§5); in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_buffer_write` |
+| B1.3 | Re-derive `resizesArray = false` for a foreign callee (§3c), and rewrite the comment at src/attributes.ts:3392-3396 that asks for it | `ffi_buffer_bounds_survive` (golden `.ll`: an element loop over `buf` after `read`, whose compound-store re-check is gone, compared in the commit body against the `.ll` before B1.3) |
 
 B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
 `ffi_buffer_read` and `ffi_buffer_write` are that bar.
@@ -836,8 +973,8 @@ B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
 
 | Step | What | Tests |
 | --- | --- | --- |
-| H1.1 | The handle-class rule: the one `CPtr` field, the dispose shape, the `using`-only placement with every sibling in §6, the class-template check (§6 row 5), and `reject_ffi_handle_close_call` if Q9 is option A | Every `reject_ffi_handle_*` case in §6, rows 1–19 and 22 (row 22 under Q9's option A only) |
-| H1.2 | The emitted close as a fourth kind on `openScope`'s stack, wired into every exit path §4b lists (fall-through, `emitScopeJoins` and its `later` test, `emitScopeExit` including `orReturn()` propagation, and the tail-call suppression); the `ffi` offer at the `using`; the wasm32 checks (§5) | `ffi_handle_file` (golden `.ll` + native round trip: a class owning an `fopen` handle, closed by `using`, reading a file the sidecar `ffi_handle_file.c` writes first, with an early `return`, a `break` and a `continue` in a loop, an `orReturn()` that propagates out of the block, `return f.readByte()` in tail position (no `tail` marker in the golden), and two declarators, and the sidecar counting the closes through an `fclose` wrapper it exports, so that the output shows exactly one close per open); `ffi_handle_arena` (§5); `caps_ffi_handle`; in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_handle_file` |
+| H1.1 | The handle-class rule: the one `CPtr` field, read only as `this.f` and its direct `const` locals (§4a), the dispose shape, the `using`-only placement with every sibling in §6, the class-template check (§6 row 5), and `reject_ffi_handle_close_call` if Q9 is option A | Every new `reject_ffi_handle_*` case in §6, rows 1–19 (rows 9 and 11 are existing refusals and add none), 16a, 16b and 22 (row 22 under Q9's option A only) |
+| H1.2 | The emitted close as a fourth kind on `openScope`'s stack, wired into every exit path §4b lists (fall-through, `emitScopeJoins` and its `later` test, `emitScopeExit` including `orReturn()` propagation, and the tail-call suppression); per-declarator opening under Q12(a), or `reject_ffi_handle_using_exit_in_initialiser` under Q12(b) (§4e); the `ffi` offer at the `using`; the wasm32 checks (§5) | `ffi_handle_file` (golden `.ll` + native round trip: a class owning an `fopen` handle, closed by `using`, reading a file the sidecar `ffi_handle_file.c` writes first, with an early `return`, a `break` and a `continue` in a loop, an `orReturn()` that propagates out of the block, `return f.readByte()` in tail position (no `tail` marker in the golden), and two declarators (under Q12(a), the second initialiser's `orReturn()` propagating with the first open), and the sidecar counting the closes through an `fclose` wrapper it exports, so that the output shows exactly one close per open); `ffi_handle_arena` (§5); `caps_ffi_handle`; in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_handle_file` |
 | H1.3 | Use after close, refused | `reject_ffi_handle_use_after_close`: the binding named after its block (`let x = 0; { using f = new File(p) } f.read()`) is already a scope error; the case pins its message, and a second program reaches the object through a callee that tries to keep it, refused by row 15 |
 
 H1's bar is a class that owns an `fopen` handle and is closed by `using`, with
@@ -859,9 +996,10 @@ reason untrue comes back here before building anything else.
 | Q6 | Use after close and double close through the binding | (a) refused statically, by the `using`-only placement; (b) a defined panic, `ffi-closed`, with a flag | **Open. Recommended: (a).** The placement rule makes both impossible to write through the binding, and (b) costs a check per call. A close written inside the class is Q9 (§4c). |
 | Q7 | Where a handle may live | (a) only a `using` binding and non-exported parameters; (b) anywhere, with run-time ownership | **Open. Recommended: (a).** It is §7a's rule one level up. A handle that outlives its block is a later design (§4d). |
 | Q8 | Stage 9 | (a) move `getenv` to `std/` with a trusted summary; (b) the finding | **Open. Recommended: (b).** All four properties would be lost, and the mechanism that restores them is the unchecked attribute channel this compiler exists without (§7). |
-| Q9 | A close of the owned field written by hand in the class | (A) refused statically for the dispose's named close function, everywhere in the class, with other closing C functions and shared pointers stated as a C contract; (B) all of it a stated C contract | **Open. Recommended: (A).** It refuses the mistake a program is most likely to write for one checker rule, and what it leaves is the same class of unchecked declaration as the borrow. (B) costs nothing and adds a third C contract (§4c). |
+| Q9 | A close of the owned field written by hand in the class | (A) refused statically for the dispose's named close function, everywhere in the class, with the field readable only as `this.f` and its uncopyable `const` locals so the rule sees every name; other closing C functions, C functions that return the pointer, and shared pointers stated as a C contract; (B) all of it a stated C contract | **Open. Recommended: (A).** It refuses the mistake a program is most likely to write for one checker rule plus §4a's two path refusals, and what it leaves is the same class of unchecked declaration as the borrow. (B) costs nothing and adds a third C contract (§4c). |
 | Q10 | A buffer argument whose array a later argument resizes | (a) load `data` and `len` after every argument, and elide the check only when no later argument may resize; (b) refuse the call by the `resizesArray` fact and load at the argument's position | **Open. Recommended: (a).** C gets the block and length that exist when it runs, and no program is refused. (b) is simpler IR and a refusal phrased in callee facts (§3a). |
 | Q11 | `syscall` and fixed-arity declarations of variadic C functions | (a) a name denylist, for `syscall` and optionally the variadic libc names; (b) a stated C contract | **Open. Recommended: (a) for `syscall` alone, (b) for the rest.** A denylist of libc names is incomplete and catches `open` (§8). |
+| Q12 | An exit inside a later declarator's initialiser of a `using` that already opened a handle | (a) open each declarator before the next initialiser runs, as JavaScript does; (b) refuse the exit | **Open. Recommended: (a).** It is the semantics `tsc` and Node give the same source, and the leak is otherwise silent. It moves the emit order for every kind `using` opens and the goldens with multi-declarator `using`; (b) moves nothing and refuses valid programs (§4e). |
 
 ## 11. Declined
 
