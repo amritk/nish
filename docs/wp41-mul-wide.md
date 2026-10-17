@@ -4,7 +4,7 @@
 This note is the record of stage s8 of the FFI-reach run (#678). It states the
 bar first, as it was committed before any kernel was timed, then the figures
 and the decision. The radix-2^64 kernel is 14–21% faster natively on x86-64
-and 19–23% slower on wasm32, and the bar counts a wasm32 loss outside the noise
+and 19–27% slower on wasm32 over the three runs of §4, and the bar counts a wasm32 loss outside the noise
 band as a miss. It adds no
 rule to [LANGUAGE.md](LANGUAGE.md); where they disagree, LANGUAGE.md wins.
 
@@ -57,12 +57,13 @@ On x86-64 a `mulHigh` and `mulLow` pair on the same operands fused into one
 
 The kernel was correct. `tests/link/crypto_chacha20poly1305`, with the RFC 8439
 vectors and the Wycheproof AEAD set, printed its expected output byte for byte.
-Both kernels gave the bench's checksum.
+Both kernels gave the same checksum. The bench at `8cceabe` pins only its
+`--check` run, a short native run at scale 64 that prints `checksum 3090113157`.
 
 **The workload.** It is the bar's: 2^12 MACs, each over a 64 KiB message with
 one byte changed from the last, under one key. Every tag is folded into an
-FNV-1a checksum, which is printed (`checksum 2156522685`, the same for every
-column).
+FNV-1a checksum, which is printed. Every column printed `checksum 2156522685`
+on every run, but nothing in `8cceabe` pins that value.
 
 **The columns.** There are three:
 
@@ -95,7 +96,8 @@ The two earlier runs at the same tree agree:
 | 30 rounds | −18.4% / −21.1% | −0.5% / −2.8% | +24.2% / +19.3% | +0.3% / −0.9% |
 
 **Radix 2^44.** The bar also allowed radix 2^44, and it was measured over 15
-rounds. It is a three-limb kernel that takes each product's bits above 2^44 as
+rounds. That kernel was a local variant of the bench and was never committed, so
+these figures cannot be rebuilt from `8cceabe`. It is a three-limb kernel that takes each product's bits above 2^44 as
 `(lo >>> 44) | (mulHigh << 20)`, so no 128-bit carry is ever tested. Its nine
 full products made it no faster natively: +0.1% / −4.0% against base, inside a
 band of −1.2% / −2.4%. On wasm32 it was +95.5% / +93.5% slower.
@@ -103,12 +105,15 @@ band of −1.2% / −2.4%. On wasm32 it was +95.5% / +93.5% slower.
 ## 5. Why wasm32 loses
 
 wasm has no 64×64→128 multiply, so each `mulHigh` on wasm32 is the
-schoolbook product of the 32-bit halves: four `i64.mul` and eight shifts, masks
-and adds. The radix-2^64 block needs four 128-bit products. That is about 64
-operations on wasm32 where x86-64 needs four instructions.
+schoolbook product of the 32-bit halves. That is 16 operations: four masks and
+shifts to split the operands, four `i64.mul`, and eight shifts, masks and adds
+to combine them. The radix-2^64 block needs four 128-bit products, so it does
+up to 64 operations on wasm32 where x86-64 needs four instructions. The figure
+is before LLVM reuses any split that two products share.
 
-The cost of those operations was measured directly. The halves were replaced
-with a single, wrong `(a >>> 32) * (b >>> 32)`, and that kernel ran in about
+The cost of those operations was measured directly, with a local variant that
+was never committed. The halves were replaced with a single, wrong
+`(a >>> 32) * (b >>> 32)`, and that kernel ran in about
 300–310 ms on wasm32, level with `base`. The halves are the whole of the loss.
 The carry detection the radix-2^64 kernel needs, `((a & b) | ((a | b) & ~s))
 >>> 63` at seven points per block, is not where the time goes.
@@ -128,8 +133,10 @@ outside the band is a miss.
 
 By §3, the builtin and the kernel are dropped. `std/` keeps the radix-2^26
 kernel, nothing in `src/` changes, and this record is all that lands. The bench
-went with the kernel, since it measured that kernel against `main`'s. It can be
-rebuilt from `8cceabe`.
+went with the kernel, since it measured that kernel against `main`'s.
+`8cceabe` holds the builtin, the radix-2^64 kernel and the three-column bench,
+so the table above can be rebuilt from it. The radix-2^44 figures and the
+single-multiply experiment cannot.
 
 **What would reopen this.** Either of two things:
 
