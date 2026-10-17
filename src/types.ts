@@ -143,6 +143,17 @@ const K_RANGED: i32 = 19
  * computed with (`baseOf`).
  */
 const K_ENUM_MEMBER: i32 = 20
+/**
+ * A discriminated union, `A | B` (docs/LANGUAGE.md, "Discriminated unions"):
+ * a pointer to one of its variants, each a class or an interface whose first
+ * field is the tag. `refs[type]` indexes `unions`, the variant ids in
+ * ascending order, which is the type's identity; `errs[type]` is the tag's
+ * enum and `names[type]` the tag field's name. Every union is one LLVM type,
+ * `%union.tagged*`, whose one field is the `i32` every variant keeps at
+ * offset 0, so a union converts to a wider one for nothing and a variant
+ * enters one with a `bitcast`.
+ */
+const K_UNION: i32 = 21
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -162,6 +173,12 @@ export const RESULT_PAYLOAD_SHIFT: i32 = 32
  * arithmetic. The reasoning and the measurement are in stage0's `src/types.ts`.
  */
 export const RESULT_ARMS: string = "{ i1, i32, i32 }"
+
+/**
+ * The one type every discriminated union is: a pointer to the `i32` tag every
+ * variant keeps first (`structTypeDeclarations` declares it).
+ */
+export const UNION_TYPE: string = "%union.tagged*"
 
 /** The one header type every array shares; `ARRAY_TYPE` in stage0's `src/codegen/runtime.ts`. */
 export const ARRAY_STRUCT: string = "%struct.nish_array"
@@ -257,9 +274,15 @@ export class TypeTable {
    * the report they make has to know whether it is owed as a `--json` object.
    */
   json: boolean
+  /** The variant ids of each union, ascending; a union's `refs` entry indexes this. */
+  unions: i32[][]
+  /** Each union's tags, parallel to `unions`. */
+  unionTags: i32[][]
 
   constructor() {
     this.json = false
+    this.unions = []
+    this.unionTags = []
     this.kinds = []
     this.refs = []
     this.names = []
@@ -431,6 +454,105 @@ export class TypeTable {
       return type
     }
     return this.isEnumMemberType(type) ? this.refs[type] : -1
+  }
+
+  /**
+   * The union of `variants`, interned by its variant set, so `A | B` and
+   * `B | A` are one id. `tags` are the variants' tags, as member types,
+   * `tagEnum` is the enum every one is a member of and `tagName` the field
+   * that holds it, which the resolver has checked
+   * agree. Two or more distinct struct ids, the caller's to ensure.
+   */
+  unionOf(variants: i32[], tags: i32[], tagEnum: i32, tagName: string): i32 {
+    const sorted: i32[] = []
+    const sortedTags: i32[] = []
+    let i = 0
+    while (i < variants.length && i < tags.length) {
+      const variant = variants[i]
+      const tag = tags[i]
+      sorted.push(variant)
+      sortedTags.push(tag)
+      let at = sorted.length - 1
+      while (at > 0 && at < sortedTags.length && sorted[at - 1] > sorted[at]) {
+        const swap = sorted[at - 1]
+        sorted[at - 1] = sorted[at]
+        sorted[at] = swap
+        const swapTag = sortedTags[at - 1]
+        sortedTags[at - 1] = sortedTags[at]
+        sortedTags[at] = swapTag
+        at = at - 1
+      }
+      i = i + 1
+    }
+    const parts: string[] = [`${K_UNION}:u`]
+    for (const variant of sorted) {
+      parts.push(`${variant}`)
+    }
+    const key = parts.join(":")
+    const existing = this.index.get(key, -1)
+    if (existing >= 0) {
+      return existing
+    }
+    this.unions.push(sorted)
+    this.unionTags.push(sortedTags)
+    const id = this.intern(K_UNION, this.unions.length - 1, tagName)
+    this.errs[id] = tagEnum
+    this.index.set(key, id)
+    return id
+  }
+
+  /** Whether `type` is a discriminated union; -1 is not. */
+  isUnion(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_UNION
+  }
+
+  /** A union's variant ids, ascending. */
+  variantsOf(type: i32): i32[] {
+    return this.unions[this.refs[type]]
+  }
+
+  /** A union's variants' tags, as enum member types, in `variantsOf`'s order. */
+  tagsOf(type: i32): i32[] {
+    return this.unionTags[this.refs[type]]
+  }
+
+  /** The enum a union's tag is a member of. */
+  tagEnumOf(type: i32): i32 {
+    return this.errs[type]
+  }
+
+  /** The name of a union's tag field. */
+  tagNameOf(type: i32): string {
+    return this.names[type]
+  }
+
+  /** Whether the union `type` has `variant` among its variants. */
+  hasVariant(type: i32, variant: i32): boolean {
+    const variants = this.variantsOf(type)
+    let i = 0
+    while (i < variants.length) {
+      if (variants[i] === variant) {
+        return true
+      }
+      i = i + 1
+    }
+    return false
+  }
+
+  /** Whether every variant of the union `from` is a variant of the union `to`. */
+  unionWithin(from: i32, to: i32): boolean {
+    if (!this.isUnion(from) || !this.isUnion(to)) {
+      return false
+    }
+    const variants = this.variantsOf(from)
+    let i = 0
+    while (i < variants.length) {
+      if (!this.hasVariant(to, variants[i])) {
+        return false
+      }
+      i = i + 1
+    }
+    return true
   }
 
   /** `T | null`, which is already itself for a `T | null`, as in stage0's `src/types.ts`. */
@@ -616,9 +738,46 @@ export class TypeTable {
       // keeps `cStructName`'s escape injective.
       case K_RANGED:
         return `rng.${signedBound(this.refs[type])}.${signedBound(this.errs[type])}`
+      // The count leads, and each variant is a struct's own `$` name, so the
+      // encoding reads one way however the names run.
+      case K_UNION:
+        return this.unionMangle(type)
       default:
         return this.scalarName(type)
     }
+  }
+
+  unionMangle(type: i32): string {
+    const variants = this.variantsOf(type)
+    return `un${variants.length}${this.joinedMangles(variants, 0)}`
+  }
+
+  /** `.` and each variant's mangle from `at` on, recursively so that nothing is written. */
+  joinedMangles(variants: i32[], at: i32): string {
+    if (at < 0 || at >= variants.length) {
+      return ""
+    }
+    return `.${this.mangle(variants[at])}${this.joinedMangles(variants, at + 1)}`
+  }
+
+  /** An array's element as its type spells it: a union in parentheses, `(A | B)[]`. */
+  elementName(element: i32): string {
+    const name = this.typeName(element)
+    return this.isUnion(this.stripNull(element)) ? `(${name})` : name
+  }
+
+  /** The variant names joined as the source joins them, ascending by id. */
+  unionName(type: i32): string {
+    return this.joinedNames(this.variantsOf(type), 0)
+  }
+
+  /** The names from `at` on, joined by ` | `, recursively so that nothing is written. */
+  joinedNames(variants: i32[], at: i32): string {
+    if (at < 0 || at >= variants.length) {
+      return ""
+    }
+    const head = this.typeName(variants[at])
+    return at + 1 < variants.length ? `${head} | ${this.joinedNames(variants, at + 1)}` : head
   }
 
   /** The LLVM struct name (without the `%struct.` prefix) backing a `Result`. */
@@ -632,7 +791,7 @@ export class TypeTable {
     // `T_CPTR` is here because `CPtr | null` is the *only* way a foreign call
     // can report failure: C says "no" with a null pointer and has no second
     // channel to say it through (WP27 S2).
-    return kind === K_STRUCT || kind === K_ARRAY || type === T_STRING || type === T_CPTR
+    return kind === K_STRUCT || kind === K_ARRAY || kind === K_UNION || type === T_STRING || type === T_CPTR
   }
 
   isNullable(type: i32): boolean {
@@ -680,6 +839,28 @@ export class TypeTable {
     }
     if (kind === K_RESULT) {
       return this.holdsSecret(this.refs[type]) || this.holdsSecret(this.errs[type])
+    }
+    return false
+  }
+
+  /**
+   * A union anywhere in `type`: itself, an element, a nullable's value or a
+   * `Result` arm. What a type argument may not hold (docs/LANGUAGE.md,
+   * Discriminated unions).
+   */
+  holdsUnion(type: i32): boolean {
+    if (type < 0) {
+      return false
+    }
+    const kind = this.kinds[type]
+    if (kind === K_UNION) {
+      return true
+    }
+    if (kind === K_ARRAY || kind === K_NULLABLE || kind === K_MAYBE) {
+      return this.holdsUnion(this.refs[type])
+    }
+    if (kind === K_RESULT) {
+      return this.holdsUnion(this.refs[type]) || this.holdsUnion(this.errs[type])
     }
     return false
   }
@@ -790,6 +971,8 @@ export class TypeTable {
         return this.llvmType(this.refs[type]) // the payload; the found bit is an `i1` beside it
       case K_RESULT:
         return `%struct.${this.resultStructName(type)}*`
+      case K_UNION:
+        return UNION_TYPE
       default:
         process.exit(internalErrorFor(`internal error: llvmType of kind ${this.kinds[type]}`, this.json))
     }
@@ -832,8 +1015,8 @@ export class TypeTable {
         return "boolean"
       case K_ARRAY:
         return this.readonlys[type]
-          ? `readonly ${this.typeName(this.refs[type])}[]`
-          : `${this.typeName(this.refs[type])}[]`
+          ? `readonly ${this.elementName(this.refs[type])}[]`
+          : `${this.elementName(this.refs[type])}[]`
       case K_STRUCT:
         return this.displays[type].length > 0 ? this.displays[type] : this.names[type]
       case K_ENUM:
@@ -850,6 +1033,8 @@ export class TypeTable {
         // The proof is not part of the name: a narrowed `Result` reads the
         // same in a diagnostic as the value it was narrowed from.
         return `Result<${this.typeName(this.refs[type])}, ${this.typeName(this.errs[type])}>`
+      case K_UNION:
+        return this.unionName(type)
       default:
         return this.scalarName(type)
     }
@@ -925,8 +1110,18 @@ export class TypeTable {
     if (this.widensToReadonlyArray(from, to)) {
       return true
     }
+    // Every union is the one `%union.tagged*`, so a union enters a wider one
+    // as the same pointer. A variant entering a union is a `bitcast`, which
+    // `coercesTo` records where the value is checked into its sink.
+    if (this.unionWithin(from, to)) {
+      return true
+    }
     if (this.kinds[to] === K_NULLABLE) {
-      return this.refs[to] === from || this.widensToReadonlyArray(from, this.refs[to])
+      return (
+        this.refs[to] === from ||
+        this.widensToReadonlyArray(from, this.refs[to]) ||
+        this.unionWithin(from, this.refs[to])
+      )
     }
     return false
   }
