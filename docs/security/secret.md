@@ -125,6 +125,8 @@ no base line describes it.
 | `src/secret.ts` | `admitsSecretField` and `secretFieldOf` (the declaration), `checkHolderReleaser` (the releaser's signature), `SecretFlow.collectSlots`, `fieldRead`, `fieldStore` and `storedType` (the walk over a holder's constructor, its `wipe()` and every other body) |
 | `src/structs.ts` | where a field's type is admitted, and where `checkHolderReleaser` runs once a class's members are known |
 | `src/members.ts` | the object literal of a holder (NL2541) |
+| `src/interop-header.ts` | `structDefinitions` and `structFieldTypes`: a `Secret` (`isSecretStruct`) and a holder (`secretFieldOf`) are opaque in an `--emit-header` sidecar |
+| `src/attributes.ts` | `markWipe`: a `wipe` marks what its argument reaches as written, for the region rule of a scope |
 
 ### Threat model
 
@@ -154,8 +156,25 @@ can name the field.
   helper that wipes its `Secret` parameter; a constructor reached by `new`
   that zeroes the key in place inside `wipe()`; a field read through a nested
   member, `o.h.k`; and the header, typings and N-API shim of an exported
-  function that takes or returns a holder.
+  function that takes or returns a holder. Review round 2 added: a method
+  that returns the `Secret` it borrows; a ternary that picks between two
+  borrowed keys; a helper that wipes its parameter, reached by `new` and by a
+  method call; a holder's `wipe()` that wipes a nested holder's field,
+  `wipe(this.h.k)`, or another holder's, `wipe(o.k)`; the C layout of an
+  exported holder; and an exported function that returns a bare `Secret`.
 - Wrote a program for each and compiled it with the branch's `build/nish`.
+
+### Findings
+
+Found by review rounds 1 and 2 of #685, on the branch before it landed, so
+each row names functions rather than base lines.
+
+| Id | Severity | Where | Description | Disposition |
+| --- | --- | --- | --- | --- |
+| SECRET-2 | Medium | `SecretFlow.name` (`src/secret.ts`) | Identity laundering: a function, an arrow, a generic `id<T>` or a method that returned the `Secret` it was passed handed its caller a second name for a holder's key, which outlived the holder's `wipe()` and read zeros, or read the key before it with no tie to the holder. A ternary between two borrowed keys was the same road. Medium on SECRET-1's reasoning: no input reaches it, but an accepted program holds the key under a name the rule does not see | **Fixed.** A `Secret` parameter is borrowed: returning it is NL2542, for every `Secret` parameter (a break from 0.18.0, docs/LANGUAGE.md, "Secrets"). A ternary of two is refused by the copy rule |
+| SECRET-3 | Low | `SecretFlow.fieldRead` (`src/secret.ts`) | Wipe then read: `wipe(h.k)` in a function, another method, a constructor, through `this` handed out of one, or in a holder's `wipe()` aimed at a nested or another holder's field, zeroed a key its holder went on using. A wrong answer, not a leak | **Fixed.** A field is wiped only by `wipe(this.f)` in its own holder's `wipe()` (NL2543) |
+| SECRET-4 | Low | `SecretFlow.name` (`src/secret.ts`) | A helper that wiped its `Secret` parameter, called directly, by `new` or by a method, zeroed a holder's key behind its back | **Fixed.** Wiping a borrowed `Secret` is NL2544; the owner wipes it |
+| SECRET-5 | Low | `structDefinitions`, `structFieldTypes` (`src/interop-header.ts`) | The `--emit-header` sidecar gave a `Secret`'s struct and an exported holder's layout, so a host could read the key's bytes by offset, or allocate a holder and skip the constructor that sets its key | **Fixed.** A `Secret` (`isSecretStruct`) and a holder (`secretFieldOf`) are opaque: a `typedef` with no fields, reached only as a pointer, and a function that takes or returns one is not bridged to JS |
 
 ### Properties verified
 
@@ -171,9 +190,11 @@ can name the field.
   NL2544 (`SecretFlow.name`), so no function, arrow or generic instantiation
   hands a caller a second name for a holder's key.
 - The C header keeps a `Secret` opaque, as it does a `Map`
-  (`isSecretStruct`, `src/interop-header.ts`): a holder's field and an
-  exported function's parameter are pointers to an incomplete struct with no
-  layout, and the `.d.ts` and N-API shim bridge no such function.
+  (`isSecretStruct`, `src/interop-header.ts`): an exported function's
+  `Secret` parameter or return is a pointer to an incomplete struct with no
+  layout. A holder is opaque too (`secretFieldOf`): a `typedef` with no
+  fields, so a host cannot allocate one and skip the constructor that sets
+  the key. The `.d.ts` and N-API shim bridge no such function.
 - The field is set only in the constructor, only from `secret(...)` (NL2538),
   and only once (NL2539); `secret(...)` there keeps the sole-reference rule
   (NL2512). A store anywhere else is NL2181, and the store is a statement of its
@@ -234,9 +255,12 @@ can name the field.
   `reject_secret_field_wipe_outside`, `reject_secret_field_wipe_through`,
   `reject_secret_field_wipe_method`, `reject_secret_field_wipe_ctor`,
   `reject_secret_field_this_fin`, `reject_secret_field_this_store`,
-  `reject_secret_field_wipe_param`, `reject_secret_field_wipe_new` and
-  `reject_secret_field_nested`: one road each.
-- `nish:secret: --emit-header keeps a Secret opaque in a holder's field and a parameter, and --emit-dts / --emit-napi bridge neither`.
+  `reject_secret_field_wipe_param`, `reject_secret_field_wipe_new`,
+  `reject_secret_field_nested`, `reject_secret_field_launder_method`,
+  `reject_secret_field_launder_ternary`, `reject_secret_field_wipe_param_new`,
+  `reject_secret_field_wipe_param_method`, `reject_secret_field_wipe_nested`
+  and `reject_secret_field_wipe_other`: one road each.
+- `nish:secret: --emit-header keeps a Secret and its holder opaque, and --emit-dts / --emit-napi bridge neither`.
 - `${name}: IR matches golden` and `${name}: native output matches .out`, for
   `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.
 - `nish:secret: a holder's wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is an ordinary one`.

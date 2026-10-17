@@ -38,7 +38,7 @@ import {
 } from "./interop-abi"
 import { CheckedProgram, inlineElementStruct, StructInfo, STRUCT_CLASS } from "./program"
 import { isCollectionStruct } from "./generics"
-import { isSecretStruct } from "./secret"
+import { isSecretStruct, secretFieldOf } from "./secret"
 import { K_ARRAY, TypeTable } from "./types"
 
 /**
@@ -154,6 +154,16 @@ const structDefinitions = (compilation: Compilation): string[] => {
       i = i + 1
       continue
     }
+    // So is a class holding one: with its layout a host could allocate it and
+    // skip the constructor that sets the key. It reaches C only as a pointer.
+    if (secretFieldOf(table, info) !== null) {
+      lines.push(
+        `/* ${file}: ${kind} ${info.name}, opaque: it holds a key, so only its constructor makes one */`
+      )
+      lines.push(`typedef struct ${cName} ${cName};`)
+      i = i + 1
+      continue
+    }
     lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`)
     if (info.fields.length === 0) {
       lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`)
@@ -183,8 +193,12 @@ const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = []
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      // An opaque `Map`, `Set` (WP32) or `Secret` contributes no field to describe.
-      if (isCollectionStruct(info) || isSecretStruct(info)) {
+      // An opaque `Map`, `Set` (WP32), `Secret` or holder contributes no field to describe.
+      if (
+        isCollectionStruct(info) ||
+        isSecretStruct(info) ||
+        secretFieldOf(compilation.table, info) !== null
+      ) {
         continue
       }
       for (const f of info.fields) {

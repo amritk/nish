@@ -1660,7 +1660,8 @@ may not drop, as a statement: how a key in a plain array is cleared once used.
 **Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
 array or a record of integer fields). It is opaque: no printing, interpolating,
 comparing with a value, branching, indexing, `.value`, array element or
-`Result` payload, field but a holder's (below), and no builtin takes one. Read it only with `expose(s, f)` or
+`Result` payload, a field other than a holder's `readonly` one (below), and no
+builtin takes one. Read it only with `expose(s, f)` or
 `exposeWith(s, arg, f)`, where `f` is a top-level function or an arrow that
 declares its return type, reaches no I/O and no C, keeps nothing of the value
 and returns no `Secret` — that return is what leaves. A `Secret` your function
@@ -1718,7 +1719,7 @@ export const main = (): i32 => {
 `readonly` field of exactly `Secret<T>` (the class not generic). Set it once,
 in the constructor, with `this.k = secret(fresh)`; rewrite it only in place
 through `exposeWith`; read `this.k` only as a call or `new` argument (`expose`,
-`exposeWith`, `wipe`, a function taking a `Secret`) or a `===`/`!==` operand —
+`exposeWith`, a function taking a `Secret`; `wipe` only in the holder's own `wipe()`) or a `===`/`!==` operand —
 never bind, return or store it. The class declares `wipe(): void`, no
 parameters, calling `wipe(this.k)` itself for every such field on every path
 (NL2536, NL2537); a field is wiped nowhere else (NL2543). A function taking a

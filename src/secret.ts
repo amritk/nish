@@ -299,7 +299,7 @@ const refillMessage = (field: string): string =>
 const fieldReadMessage = (field: string): string =>
   `\`${field}\` is a \`Secret\` field, which is read only as a call's argument or an \`===\`/\`!==\` ` +
   "operand: bound, returned, chosen or stored, it would be a second owner of the key the holder's " +
-  "`wipe()` ends, so pass it to `expose`, `exposeWith`, `wipe` or a function that takes a `Secret`"
+  "`wipe()` ends, so pass it to `expose`, `exposeWith` or a function that takes a `Secret`"
 
 /** `wipe(h.k)` anywhere but the holder's own `wipe()`. */
 const fieldWipeMessage = (field: string): string =>

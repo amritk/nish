@@ -839,6 +839,10 @@ export const main = (): i32 => {
 };
 ```
 
+Up to 0.18.0 a function could return or wipe a `Secret` it was passed; from
+the release after it, both are refused. Drop such a return and keep using the
+key you passed in, and leave the `wipe` to the code that made the key.
+
 Calling `wipe()` is the program's job: the compiler checks that the method
 wipes every field, not that something calls it. The rules are in
 [A `Secret` field](../../LANGUAGE.md#a-secret-field).

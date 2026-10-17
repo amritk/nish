@@ -5883,6 +5883,13 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   would leave the caller reading zeroes and wiping it again (NL2544,
   `reject_secret_field_wipe_param`).
 
+  **This narrows 0.18.0.** Up to 0.18.0 a callee could also return or wipe a
+  borrowed `Secret`; from the release after it, both are refused, for every
+  `Secret` parameter and not only a holder's field. A function that returned
+  its parameter is called for its effect and the caller goes on using the key
+  it passed; a function that wiped its parameter leaves the wipe to the owner,
+  the function or holder that made the key.
+
 #### A `Secret` field
 
 A key that lives as long as an object does — a connection's traffic secret, a
@@ -5938,8 +5945,8 @@ class Session {
   object literal is NL2541 (`reject_secret_field_object_literal`), and typed
   JSON neither encodes nor decodes one (NL2485, `reject_secret_field_json`, `_json_decode`).
 - **Reads.** `h.f` is borrowed, as a `Secret` parameter is: it is an argument
-  of a call or a `new` — `expose`, `exposeWith`, `wipe`, or a function that
-  takes a `Secret` — or an operand of `===` or `!==` against another `Secret`
+  of a call or a `new` — `expose`, `exposeWith`, or a function that
+  takes a `Secret`, and `wipe` only in the holder's own `wipe()` (NL2543) — or an operand of `===` or `!==` against another `Secret`
   or `null`. Bound to a local, assigned, returned, chosen by a ternary or `??`,
   or read through `?.` or a chain of fields, it would be a second owner of the
   key, and is `` `k` is a `Secret` field, which is read only as a call's
@@ -5972,12 +5979,13 @@ class Session {
 ("nish:secret: a holder's wipe survives opt -O2"): `secret_field_wipe_o2`'s
 `wipe()` is a volatile `llvm.memset` of the key after `opt -O2`, where its twin
 `secret_field_wipe_o2_plain`, zeroing the same bytes with `fill(0)`, has an
-ordinary one. An exported holder appears in an `--emit-header` sidecar with the
-field as a pointer to an opaque struct, as an exported function's `Secret`
-parameter does: the header names the `Secret`'s struct and keeps its layout
-back, as it does a `Map`'s, and `--emit-dts` and `--emit-napi` bridge no
-function that takes or returns a holder or a `Secret` ("nish:secret:
---emit-header keeps a Secret opaque in a holder's field and a parameter, and
+ordinary one. An exported holder appears in an `--emit-header` sidecar as an
+opaque struct, a `typedef` with no fields: with its layout a host could
+allocate one and skip the constructor that sets the key, so it reaches C only
+as a pointer. A `Secret` an exported function takes or returns is likewise a
+pointer to an opaque struct, as a `Map` is, and `--emit-dts` and `--emit-napi`
+bridge no function that takes or returns a holder or a `Secret`
+("nish:secret: --emit-header keeps a Secret and its holder opaque, and
 --emit-dts / --emit-napi bridge neither").
 
 What the rule leaves out, so a review need not look for it here:

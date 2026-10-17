@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 88 programs, 2607548 dump lines live, 88 distinct modules.
+# 88 programs, 2607554 dump lines live, 88 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/builtins.ts src/arrays.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/result.ts src/structs.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arena-report.ts: src/arena-report.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/emit-util.ts src/symbols.ts src/options.ts src/checker.ts src/expressions.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/members.ts src/fusion.ts src/parents.ts src/assignment.ts src/statements.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/builtins.ts src/members.ts src/result.ts src/structs.ts src/fusion.ts src/parents.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
@@ -50253,6 +50253,7 @@ import StructInfo from "./program" -> struct StructInfo
 import STRUCT_CLASS from "./program" -> const STRUCT_CLASS
 import isCollectionStruct from "./generics" -> function @isCollectionStruct
 import isSecretStruct from "./secret" -> function @isSecretStruct
+import secretFieldOf from "./secret" -> function @secretFieldOf
 import K_ARRAY from "./types" -> const K_ARRAY
 import TypeTable from "./types" -> struct TypeTable
 function elementNotes(table: TypeTable, fn: ExternalFunction): string -> @elementNotes
@@ -50292,7 +50293,7 @@ function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string 
 function structDefinitions(compilation: Compilation): string[] -> @structDefinitions
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via cStructName
-  calls: TypeTable.isRanged TypeTable.kindOf cFieldType cParamName cStructName isCollectionStruct isSecretStruct nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq spaceAfter tsKeyword
+  calls: TypeTable.isRanged TypeTable.kindOf cFieldType cParamName cStructName isCollectionStruct isSecretStruct nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf spaceAfter tsKeyword
   pointer compilation: size=128 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local 106:9 table: TypeTable (const)
@@ -50312,27 +50313,29 @@ function structDefinitions(compilation: Compilation): string[] -> @structDefinit
   callee 134:19 cStructName -> @cStructName
   callee 139:9 isCollectionStruct -> @isCollectionStruct
   callee 149:9 isSecretStruct -> @isSecretStruct
-  local 164:16 f: FieldInfo (const)
-  local 165:13 t: string (const)
-  callee 165:17 cFieldType -> @cFieldType
-  local 167:13 name: string (const)
-  callee 167:20 cParamName -> @cParamName
-  local 169:13 note: string (const)
-  callee 170:9 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 170:45 TypeTable.isRanged -> @TypeTable.isRanged
-  callee 171:31 tsKeyword -> @tsKeyword
-  callee 173:27 spaceAfter -> @spaceAfter
+  callee 159:9 secretFieldOf -> @secretFieldOf
+  local 174:16 f: FieldInfo (const)
+  local 175:13 t: string (const)
+  callee 175:17 cFieldType -> @cFieldType
+  local 177:13 name: string (const)
+  callee 177:20 cParamName -> @cParamName
+  local 179:13 note: string (const)
+  callee 180:9 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 180:45 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 181:31 tsKeyword -> @tsKeyword
+  callee 183:27 spaceAfter -> @spaceAfter
 function structFieldTypes(compilation: Compilation): i32[] -> @structFieldTypes
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: isCollectionStruct isSecretStruct nish_array_grow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isCollectionStruct isSecretStruct nish_array_grow secretFieldOf
   pointer compilation: size=128 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 183:9 out: i32[] (const)
-  local 184:14 unit: ModuleUnit (const)
-  local 185:16 info: StructInfo (const)
-  callee 187:11 isCollectionStruct -> @isCollectionStruct
-  callee 187:39 isSecretStruct -> @isSecretStruct
-  local 190:18 f: FieldInfo (const)
+  local 193:9 out: i32[] (const)
+  local 194:14 unit: ModuleUnit (const)
+  local 195:16 info: StructInfo (const)
+  callee 198:9 isCollectionStruct -> @isCollectionStruct
+  callee 199:9 isSecretStruct -> @isSecretStruct
+  callee 200:9 secretFieldOf -> @secretFieldOf
+  local 204:18 f: FieldInfo (const)
 function prototypeComment(table: TypeTable, fn: ExternalFunction): string -> @prototypeComment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via cFunctionName
@@ -50340,12 +50343,12 @@ function prototypeComment(table: TypeTable, fn: ExternalFunction): string -> @pr
   pointer table: size=96 writesThrough=false captured=false passedTo=tsSignatureLine#0 elementNotes#0
   pointer fn: size=32 writesThrough=false captured=false passedTo=elementNotes#1
   stackSites=0 stackLocals=0
-  local 204:9 name: CName (const)
-  callee 204:16 cFunctionName -> @cFunctionName
-  local 205:9 alias: string (const)
-  callee 205:46 cAliasReason -> @cAliasReason
-  callee 206:10 tsSignatureLine -> @tsSignatureLine
-  callee 206:59 elementNotes -> @elementNotes
+  local 218:9 name: CName (const)
+  callee 218:16 cFunctionName -> @cFunctionName
+  local 219:9 alias: string (const)
+  callee 219:46 cAliasReason -> @cAliasReason
+  callee 220:10 tsSignatureLine -> @tsSignatureLine
+  callee 220:59 elementNotes -> @elementNotes
 function generateHeader(compilation: Compilation, fns: ExternalFunction[], outFile: string): string -> @generateHeader [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via guardStem
@@ -50354,24 +50357,24 @@ function generateHeader(compilation: Compilation, fns: ExternalFunction[], outFi
   pointer compilation: size=128 writesThrough=false captured=false passedTo=banner#0 structDefinitions#0 structFieldTypes#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=resultDefinitions#1
   stackSites=1 stackLocals=1
-  local 214:9 table: TypeTable (const)
-  local 215:9 guard: string (const)
-  callee 215:43 guardStem -> @guardStem
-  local 216:9 lines: string[] (const)
-  callee 217:14 banner -> @banner
-  callee 239:3 pushAll -> @pushAll
-  callee 239:18 structDefinitions -> @structDefinitions
-  callee 241:3 pushAll -> @pushAll
-  callee 241:18 resultDefinitions -> @resultDefinitions
-  callee 241:48 structFieldTypes -> @structFieldTypes
-  local 245:7 lastPath: string (let)
-  local 246:7 anyModule: boolean (let)
-  local 247:14 fn: ExternalFunction (const)
-  callee 256:9 tsSignatureLine -> @tsSignatureLine
-  local 265:11 proto: string (const)
-  callee 265:19 cPrototype -> @cPrototype
-  callee 268:9 tsSignatureLine -> @tsSignatureLine
-  callee 272:16 prototypeComment -> @prototypeComment
+  local 228:9 table: TypeTable (const)
+  local 229:9 guard: string (const)
+  callee 229:43 guardStem -> @guardStem
+  local 230:9 lines: string[] (const)
+  callee 231:14 banner -> @banner
+  callee 253:3 pushAll -> @pushAll
+  callee 253:18 structDefinitions -> @structDefinitions
+  callee 255:3 pushAll -> @pushAll
+  callee 255:18 resultDefinitions -> @resultDefinitions
+  callee 255:48 structFieldTypes -> @structFieldTypes
+  local 259:7 lastPath: string (let)
+  local 260:7 anyModule: boolean (let)
+  local 261:14 fn: ExternalFunction (const)
+  callee 270:9 tsSignatureLine -> @tsSignatureLine
+  local 279:11 proto: string (const)
+  callee 279:19 cPrototype -> @cPrototype
+  callee 282:9 tsSignatureLine -> @tsSignatureLine
+  callee 286:16 prototypeComment -> @prototypeComment
 module src/interop-napi.ts
 import internalErrorFor from "./ice" -> function @internalErrorFor
 import CLI from "./branding" -> const CLI
