@@ -22,6 +22,14 @@ type message struct {
 	N       int64  `json:"n"`
 }
 
+// plain answers status with a text/plain body. ctx.Error would add
+// "; charset=utf-8", which no other twin sends.
+func plain(ctx *fasthttp.RequestCtx, status int, body string) {
+	ctx.SetStatusCode(status)
+	ctx.SetContentType("text/plain")
+	ctx.SetBodyString(body)
+}
+
 func answer(ctx *fasthttp.RequestCtx) {
 	n := requests.Add(1)
 	path := string(ctx.Path())
@@ -34,17 +42,18 @@ func answer(ctx *fasthttp.RequestCtx) {
 		ctx.SetContentType("application/json")
 		ctx.SetBody(body)
 	case ctx.IsPost() && path == "/json-echo":
-		var order Order
-		if err := json.Unmarshal(ctx.PostBody(), &order); err != nil {
-			ctx.Error("bad request", fasthttp.StatusBadRequest)
+		// A pointer, so that a body of `null` leaves it nil and is refused.
+		var order *Order
+		if err := json.Unmarshal(ctx.PostBody(), &order); err != nil || order == nil {
+			plain(ctx, fasthttp.StatusBadRequest, "bad request")
 			return
 		}
 		order.Revision++
-		body, _ := json.Marshal(&order)
+		body, _ := json.Marshal(order)
 		ctx.SetContentType("application/json")
 		ctx.SetBody(body)
 	default:
-		ctx.Error("not found", fasthttp.StatusNotFound)
+		plain(ctx, fasthttp.StatusNotFound, "not found")
 	}
 }
 

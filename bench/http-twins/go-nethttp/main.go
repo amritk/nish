@@ -34,19 +34,20 @@ func answer(w http.ResponseWriter, r *http.Request) {
 		h.Set("Content-Type", "application/json")
 		w.Write(body)
 	case r.Method == http.MethodPost && r.URL.Path == "/json-echo":
-		var order Order
+		// A pointer, so that a body of `null` leaves it nil and is refused.
+		var order *Order
 		in, err := io.ReadAll(r.Body)
 		if err == nil {
 			err = json.Unmarshal(in, &order)
 		}
-		if err != nil {
+		if err != nil || order == nil {
 			h.Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusBadRequest)
 			io.WriteString(w, "bad request")
 			return
 		}
 		order.Revision++
-		body, _ := json.Marshal(&order)
+		body, _ := json.Marshal(order)
 		h.Set("Content-Type", "application/json")
 		w.Write(body)
 	default:

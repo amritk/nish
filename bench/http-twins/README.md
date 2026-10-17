@@ -93,7 +93,9 @@ export NODE=/opt/node-v26.12.0-linux-x64/bin/node
 # Bun 1.4.3
 curl -fsSL https://bun.sh/install | bash -s bun-v1.4.3
 
-# Go: any Go 1.21 or later fetches the pinned go1.27.2 named in go.mod
+# Go: any Go 1.21 or later fetches the pinned go1.27.2 named in go.mod. Ubuntu
+# 24.04's golang-go (1.22) is new enough; 22.04's (1.18) is not, so there take
+# go.dev's tarball: https://go.dev/dl/go1.27.2.linux-amd64.tar.gz
 sudo apt-get install -y golang-go
 
 # Rust: rustup; build.sh installs the pinned 1.99.1 itself
@@ -113,7 +115,8 @@ the pinned version.
   keep-alive connection it sends `/plaintext`, `/json`, `/json-echo` and
   `/json-echo-doc`, and compares status, Content-Type and body byte for byte.
   On a mismatch it exits 1 and names the server, the request and the first
-  differing byte. Without `--payload` it reads `bench/http-payload.json`.
+  differing byte. Without names, a twin that is not built is a failure too, so
+  `build.sh && check.mjs` checks all eight. Without `--payload` it reads `bench/http-payload.json`.
 - `run.sh [http.mjs args]` times the servers.
   1. It builds `bench/http1-server.ts` twice, into `build/bench/h1` and
      `build/bench/h1-copy`, and refuses to go on unless the two are

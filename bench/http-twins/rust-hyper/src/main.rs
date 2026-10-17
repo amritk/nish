@@ -6,6 +6,7 @@ mod order;
 
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
@@ -57,12 +58,21 @@ async fn answer(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infalli
 
 fn main() {
     let port = std::env::args().nth(1).unwrap_or_else(|| "8080".into());
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_io().build().unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap();
     runtime.block_on(async {
         let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await.unwrap();
         println!("listening {port}");
         loop {
-            let Ok((stream, _)) = listener.accept().await else { continue };
+            let stream = match listener.accept().await {
+                Ok((stream, _)) => stream,
+                // EMFILE and its kind clear only once a connection closes:
+                // wait rather than spin on the one thread.
+                Err(e) => {
+                    eprintln!("accept: {e}");
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    continue;
+                }
+            };
             let _ = stream.set_nodelay(true);
             tokio::spawn(async move {
                 let _ = http1::Builder::new().serve_connection(TokioIo::new(stream), service_fn(answer)).await;

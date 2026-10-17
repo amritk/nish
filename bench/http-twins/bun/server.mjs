@@ -12,6 +12,9 @@ const echo = async (req) => {
   try {
     order = await req.json()
   } catch {
+    order = null
+  }
+  if (order === null || typeof order !== "object" || Array.isArray(order)) {
     return new Response("bad request", { status: 400, headers: text })
   }
   order.revision += 1

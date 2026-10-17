@@ -12,7 +12,8 @@
 // second request), and the payload with `"revision":7` made `"revision":8`.
 // /json-echo-doc must be a 404, and so must /json-echo from nginx, which has no
 // echo. The Nish server, build/bench/h1, is checked first when it is built. Exit
-// 1 names the server, the request and the first byte that differs.
+// 1 names the server, the request and the first byte that differs; with no
+// names given, a twin that is not built fails too.
 import { spawn } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { Agent, request } from "node:http"
@@ -29,6 +30,10 @@ let payloadFile = join(root, "bench", "http-payload.json")
 const names = []
 for (let k = 0; k < args.length; k++) {
   if (args[k] === "--payload") {
+    if (k + 1 === args.length) {
+      console.error("usage: check.mjs [--payload file] [name...]")
+      process.exit(2)
+    }
     payloadFile = args[++k]
   } else {
     names.push(args[k])
@@ -44,6 +49,7 @@ if (payload.toString("latin1").split(revision).length !== 2) {
 const echoed = Buffer.from(payload.toString("latin1").replace(revision, '"revision":8'), "latin1")
 
 const servers = []
+const missing = []
 const nish = join(root, "build", "bench", "h1")
 if (existsSync(nish)) {
   servers.push({ name: "nish", argv: [nish, "PORT", "1024"] })
@@ -60,7 +66,7 @@ for (const name of names.length > 0 ? names : twins) {
     console.error(`check.mjs: ${serve} is not built (bash bench/http-twins/build.sh ${name})`)
     process.exit(2)
   } else {
-    console.log(`skip ${name}: not built`)
+    missing.push(name)
   }
 }
 
@@ -174,4 +180,7 @@ for (const server of servers) {
     }
   }
 }
-process.exitCode = failed === 0 ? 0 : 1
+for (const name of missing) {
+  console.log(`FAIL ${name}: not built (bash bench/http-twins/build.sh ${name}, or name the twins to check)`)
+}
+process.exitCode = failed === 0 && missing.length === 0 && servers.length > 0 ? 0 : 1

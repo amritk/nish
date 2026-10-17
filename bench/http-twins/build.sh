@@ -58,8 +58,12 @@ script_twin() {
   chmod +x "$out/$name/serve"
 }
 
+# The interpreter is assigned before use: a `die` inside a `$(...)` passed as an
+# argument would not stop the build under `set -e`.
 build_node_http() {
-  script_twin node-http "$(pinned "${NODE:-}" node "$NODE_VERSION")"
+  local node
+  node=$(pinned "${NODE:-}" node "$NODE_VERSION")
+  script_twin node-http "$node"
 }
 
 # uWebSockets.js is not on npm; its GitHub tag carries the prebuilt addons. The
@@ -86,7 +90,9 @@ build_uws() {
 }
 
 build_bun() {
-  script_twin bun "$(pinned "${BUN:-}" bun "$BUN_VERSION")"
+  local bun
+  bun=$(pinned "${BUN:-}" bun "$BUN_VERSION")
+  script_twin bun "$bun"
 }
 
 # go.mod's `toolchain` line makes `go` fetch the pinned release when the
@@ -109,7 +115,7 @@ build_rust() {
   cp "$here/$name/cargo.toml" "$dir/Cargo.toml"
   cp "$here/rust-toolchain.toml" "$dir/rust-toolchain.toml"
   if command -v rustup >/dev/null; then
-    rustup toolchain install "$RUST_VERSION" --profile minimal >/dev/null 2>&1
+    rustup toolchain install "$RUST_VERSION" --profile minimal >/dev/null || die "rustup could not install Rust $RUST_VERSION"
   fi
   local got
   got=$(cd "$dir" && rustc --version)

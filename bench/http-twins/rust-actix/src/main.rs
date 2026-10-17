@@ -7,7 +7,9 @@
 mod order;
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
+use actix_web::http::KeepAlive;
 use actix_web::{App, HttpResponse, HttpServer, web};
 
 use order::{Message, Order};
@@ -55,6 +57,10 @@ async fn main() -> std::io::Result<()> {
             .default_service(web::to(not_found))
     })
     .workers(1)
+    // No timer closes an idle connection, as in the hyper, Go and Node twins:
+    // actix's 5 s defaults would drop bench/http.mjs's idle connections early.
+    .client_request_timeout(Duration::ZERO)
+    .keep_alive(KeepAlive::Os)
     .disable_signals()
     .bind(("127.0.0.1", port))?;
     println!("listening {port}");

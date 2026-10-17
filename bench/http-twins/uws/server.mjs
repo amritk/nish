@@ -14,6 +14,16 @@ const uws = createRequire(import.meta.url)(uwsPackage)
 const port = Number(process.argv[2] ?? 8080)
 let requests = 0
 
+/** The decoded order, or null when the body is not JSON or not an object. */
+const decode = (bytes) => {
+  try {
+    const order = JSON.parse(bytes.toString("utf8"))
+    return order !== null && typeof order === "object" && !Array.isArray(order) ? order : null
+  } catch {
+    return null
+  }
+}
+
 /** Copies each chunk (uWS reuses its buffer once the callback returns), then answers. */
 const echo = (res) => {
   const chunks = []
@@ -25,12 +35,7 @@ const echo = (res) => {
     if (!isLast) {
       return
     }
-    let order
-    try {
-      order = JSON.parse(Buffer.concat(chunks).toString("utf8"))
-    } catch {
-      order = null
-    }
+    const order = decode(Buffer.concat(chunks))
     if (res.aborted) {
       return
     }
