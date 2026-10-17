@@ -18,7 +18,7 @@
 //
 // The server is pinned to CPU 0 and h2load to CPUs 1-3, so the server's busy
 // share is one core's: 100% means it never waited.
-import { execFileSync, spawn, spawnSync } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import {
   copyFileSync,
   existsSync,
@@ -33,6 +33,8 @@ import { join, resolve } from "node:path"
 
 const root = resolve(import.meta.dirname, "..")
 const build = join(root, "build")
+// util-linux's taskset pins the server to CPU 0 and h2load to CPUs 1-3.
+const taskset = "taskset"
 
 /** h2load's shape per scenario: connections and requests in flight on each. */
 const SCENARIOS = {
@@ -237,7 +239,7 @@ const startServer = async (target, port, ctx) => {
       String(port),
     ]
   }
-  const child = spawn("taskset", ["-c", "0", ...args], { stdio: ["ignore", "pipe", "pipe"] })
+  const child = spawn(taskset, ["-c", "0", ...args], { stdio: ["ignore", "pipe", "pipe"] })
   let output = ""
   child.stdout.on("data", (d) => {
     output += d
@@ -316,7 +318,7 @@ const measure = async (target, scenario, ctx) => {
   const cpu0 = cpuTicks(server.pid)
   const t0 = process.hrtime.bigint()
   const h2 = await new Promise((finish) => {
-    const c = spawn("taskset", args, { stdio: ["ignore", "pipe", "pipe"] })
+    const c = spawn(taskset, args, { stdio: ["ignore", "pipe", "pipe"] })
     let out = ""
     c.stdout.on("data", (d) => {
       out += d
@@ -426,7 +428,7 @@ const main = async () => {
   if (opts.nginx === null) {
     opts.nginx = existsSync(nginx)
   }
-  if (spawnSync("taskset", ["-c", "0", "true"]).status !== 0) {
+  if (spawnSync(taskset, ["-c", "0", "true"]).status !== 0) {
     throw new Error("taskset -c 0 failed: the harness pins the server to CPU 0 and h2load to 1-3")
   }
 
@@ -434,7 +436,9 @@ const main = async () => {
   buildServer(root, server)
   const copy = join(build, "interop-server-copy")
   copyFileSync(server, copy)
-  execFileSync("cmp", [server, copy])
+  if (!readFileSync(server).equals(readFileSync(copy))) {
+    throw new Error(`${copy} differs from ${server}`)
+  }
   const targets = [
     { name: "nish", kind: "nish", bin: server },
     { name: "nish-copy", kind: "nish", bin: copy },
