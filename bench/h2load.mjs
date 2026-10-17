@@ -90,8 +90,24 @@ const start = (bin) =>
     child.on("exit", (code) => reject(new Error(`${bin} exited ${code} before listening: ${seen}`)))
   })
 
+/**
+ * Runs a command to its exit and resolves with its stdout. Asynchronous, not
+ * `spawnSync`, so the event loop keeps draining the servers' stdout pipes
+ * meanwhile: each closed HTTP/2 connection prints a line, and a full pipe
+ * would block the server mid-run.
+ */
+const output = (command, argv) =>
+  new Promise((resolve) => {
+    const child = spawn(command, argv, { stdio: ["ignore", "pipe", "ignore"] })
+    let out = ""
+    child.stdout.on("data", (d) => {
+      out += d
+    })
+    child.on("close", () => resolve(out))
+  })
+
 /** One h2load run; requests per second, or NaN with the reason when any request did not succeed. */
-const h2load = (extra, url, n) => {
+const h2load = async (extra, url, n) => {
   const argv = [
     "-c",
     clientCpus,
@@ -105,18 +121,18 @@ const h2load = (extra, url, n) => {
     ...extra,
     url,
   ]
-  const r = spawnSync("taskset", argv, { encoding: "utf8" })
-  const rps = Number(/finished in [\d.]+\w+, ([\d.]+) req\/s/.exec(r.stdout)?.[1] ?? Number.NaN)
-  const ok = Number(/(\d+) succeeded/.exec(r.stdout)?.[1] ?? 0)
+  const stdout = await output("taskset", argv)
+  const rps = Number(/finished in [\d.]+\w+, ([\d.]+) req\/s/.exec(stdout)?.[1] ?? Number.NaN)
+  const ok = Number(/(\d+) succeeded/.exec(stdout)?.[1] ?? 0)
   return ok === n ? { rps } : { rps: Number.NaN, why: `${ok} of ${n} succeeded` }
 }
 
 /** `bin h3-load`, on CPU 0; requests per second. */
-const h3Load = (bin) => {
-  const r = spawnSync("taskset", ["-c", "0", bin, "h3-load", String(requests)], { encoding: "utf8" })
-  const m = /h3 (\d+) requests in (\d+) ms, (\d+) failed/.exec(r.stdout)
+const h3Load = async (bin) => {
+  const stdout = await output("taskset", ["-c", "0", bin, "h3-load", String(requests)])
+  const m = /h3 (\d+) requests in (\d+) ms, (\d+) failed/.exec(stdout)
   if (m === null || m[3] !== "0") {
-    return { rps: Number.NaN, why: r.stdout.trim() }
+    return { rps: Number.NaN, why: stdout.trim() }
   }
   return { rps: (Number(m[1]) * 1000) / Math.max(1, Number(m[2])) }
 }
@@ -124,7 +140,7 @@ const h3Load = (bin) => {
 // Two processes even for one build, so the noise band includes a second server's.
 const servers = { a: await start(a), b: await start(b) }
 const h3Native = !Number.isNaN(
-  h2load(["--alpn-list=h3"], `https://127.0.0.1:${servers.a.quic}/hello.txt`, clients).rps
+  (await h2load(["--alpn-list=h3"], `https://127.0.0.1:${servers.a.quic}/hello.txt`, clients)).rps
 )
 if (!h3Native) {
   console.error(
@@ -161,7 +177,7 @@ for (let r = 0; r < rounds; r++) {
     const order = r % 2 === 0 ? ["a", "b"] : ["b", "a"]
     const got = {}
     for (const side of order) {
-      got[side] = scenario.run(servers[side], side === "a" ? a : b)
+      got[side] = await scenario.run(servers[side], side === "a" ? a : b)
       if (Number.isNaN(got[side].rps)) {
         results[k].failed = `${side}: ${got[side].why}`
       }
