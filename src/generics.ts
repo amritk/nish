@@ -32,6 +32,7 @@ import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectForeignPointer } from "./annotations"
 import { CheckContext } from "./context"
+import { Edit } from "./diagnostics"
 import { checkSignatureBody } from "./checker"
 import { collectFunctionSignature } from "./declarations"
 import { internalErrorFor } from "./ice"
@@ -51,6 +52,7 @@ import {
   isParallelEntry,
   isSpawnTemplate,
   isVoidSpawnTemplate,
+  letCaptureEdits,
   letCaptureMessage,
   nestedCaptureMessage,
   parallelRole,
@@ -2193,7 +2195,19 @@ export const captureOuter = (ctx: CheckContext, expr: Node, name: string): Local
     return null
   }
   if (outer.mutable) {
-    refuseOnce(ctx, expr, task ? taskLetCaptureMessage(name) : letCaptureMessage(name))
+    const message = task ? taskLetCaptureMessage(name) : letCaptureMessage(name)
+    // The fix binds the value to a `const`, which only a capture the rule then admits makes progress.
+    const host = ctx.arrowFns[0].captureHost
+    const kept = captureTypeMessage(ctx.program, ctx.table, name, ctx.arrowOuterScopes[0].typeOf(outer), task)
+    const edits: Edit[] =
+      host === null || kept.length > 0
+        ? []
+        : letCaptureEdits(ctx.source.text, host.decl, ctx.arrowFns[0].decl, name)
+    if (edits.length > 0) {
+      ctx.errorOnceFix(expr, message, edits)
+    } else {
+      refuseOnce(ctx, expr, message)
+    }
     return null
   }
   // A `const` cannot change, so a narrowing in force at the call holds for

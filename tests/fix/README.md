@@ -107,5 +107,30 @@ itself (`expr-nofix-logical-value`, `-argument`). A float, a `string | null`
 and a class that cannot be `null` have no comparison, and an `&&` with one such
 operand has no fix for the other either (`expr-nofix-logical-float`).
 
+The `thread-` cases are the `nish/threads` fixes, each a refusal whose
+replacement the source decides. `thread-using-scope` (NL2388) and
+`thread-using-lock` (NL2465) turn a `const` bound to `scope()` or `m.lock()`
+into `using`; a `let` is left alone (`thread-nofix-using-let-scope`, `-lock`),
+since a binding that is assigned again is not one `using` can take.
+`thread-destination` (NL2511) gives a `spawn` whose task answers a number or a
+`boolean` the destination it lacks, `const answer = new Array<T>(1)` above the
+scope's `using` and `, answer, 0` after the arguments; a `spawn` in a loop,
+where one slot would be written by every task (`thread-nofix-destination-loop`),
+and an answer that is not a number (`thread-nofix-destination-string`) get
+none. `thread-capture-task` (NL2506) and `thread-capture-map` (NL2500) read a
+`let` the arrow captures through a `const kNow = k` written just before the
+statement, which is the value the arrow would have read when it ran; a `let`
+another argument also names (`thread-nofix-capture-other-argument`) or one a
+`for` header declares (`thread-nofix-capture-for`), where no statement before
+the call is in the loop, keeps the refusal. `thread-hoist-channel` (NL2484)
+moves an arrow that uses a `Channel` to a `const` of its own above the
+top-level statement it is written in, named for the function and `Task`; an
+arrow that captures (`thread-nofix-hoist-capturing`) or leaves a type out
+(`thread-nofix-hoist-unannotated`) would not check at the top level, so it
+stays. Each input is an error, so none runs before its fix and none has a
+`.stdout`; the fixed programs print 25, 42, `joined`, 24, 66 and 3. The fixed
+program imports `nish/threads`, which is why the runner compiles it with
+`-o fixed/`: one `.ll` per module.
+
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.

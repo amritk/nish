@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 648
+export const RULE_COUNT: i32 = 650
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -61,6 +61,8 @@ export const RULE_COUNT: i32 = 648
  * contains.
  */
 const diagnosticRules = (): string[] => [
+  'This stores `null` through a guard: a store into a `string | null` slot of a `Mutex`\'s data copies the string into memory the `Mutex` owns and frees the copy it replaces, an exchange only a string takes part in, so a `null` cannot empty the slot; store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0`, or keep a `boolean` field beside it, `g.value.hasLast = false`',
+  "NL2523",
   "`using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, in this version: they are the values whose disposal the language defines — a scope joins its tasks, a guard releases its lock, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs",
   "NL2387",
   "`new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a `Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to it that skips the lock",
@@ -671,6 +673,8 @@ const diagnosticRules = (): string[] => [
   "NL2101",
   "` requires two operands of the same numeric type, got ",
   "NL2102",
+  "a guard is handed only to a function named at the call",
+  "NL2522",
   '"`) are not supported; modules have no top-level code',
   "NL2033",
   "Generic type parameters are forbidden on a method in ",
