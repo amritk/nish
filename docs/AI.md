@@ -1174,11 +1174,25 @@ export const main = (): i32 => {
 };
 ```
 
-- **Every position must be a scalar** — the integer and float widths, `boolean`,
-  `void`. A `string`, array, class or interface is rejected. That is not style:
-  a scalar boundary has no pointer for a foreign function to capture or free,
-  which is what lets the escape analysis stay correct without knowing anything
-  about the callee.
+- **A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
+  scalar or `CPtr`.** The scalars are the integer and float widths, `boolean`
+  and `void`. An array, class or interface is rejected, in either position.
+- **A `string` parameter is lent for the call.** C gets a NUL-terminated
+  `const char *` that it may read until it returns, and may neither keep nor
+  write; a C function that does either is declared to take a `CPtr` instead.
+  `string | null` passes `NULL` for `null`. A string with a NUL byte in it
+  panics (`ffi-nul`) before the call, because C would read only up to it; a
+  literal with no NUL is not checked.
+
+```ts nish:ok
+declare function puts(s: string): i32;
+
+export const main = (): i32 => {
+  puts("hello");
+  return 0;
+};
+```
+
 - **No body, and it cannot be `export`ed.**
 - **It costs the caller its attributes.** Nothing about a body the compiler
   cannot see is provable, so a function that calls C loses `readnone` and

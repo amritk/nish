@@ -1098,6 +1098,8 @@ const caseResults = caseRuns.map((run) => run.compiled)
     "  call void @nish_append_file(i8* %0, i8* %1)",
     "  call void @nish_random_fill(%struct.nish_array* %0)",
     "  call void @nish_write(i8* %0, i32 2, i1 true)\n  call void @nish_exit(i32 1)",
+    "ffi.nul:\n  call void @nish_panic(i8* %0)",
+    "ffi.nul.3:\n  call void @nish_panic(i8* %0)",
   ]
   const missed = paths.filter((line) => panicOracle(define([line]), clean, null).failures.length !== 1)
   const flagged = paths.filter((line) => panicOracle(define([line]), unproven, null).failures.length > 0)
