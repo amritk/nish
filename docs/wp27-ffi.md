@@ -348,8 +348,15 @@ calls `nish_panic` with a message built at compile time for that call site,
 then takes `s->data` with a `getelementptr` on the other arm
 (`emitForeignString`, `src/emit-strings.ts`). The cost is the same one pass;
 what moved is that each checked call carries a short block and its own message
-constant, instead of one shared runtime function. The message prints without
-§8c's `panic: ` prefix, as every runtime panic does
+constant, instead of one shared runtime function. Measured on a loop of 4M
+`strlen` calls over runtime strings of 1,024, 1,024 and 16 bytes in turn,
+folded into a printed checksum, at `--profile speed`: 19.2 ns a call with the
+check and 10.2 ns with its branch deleted from the same IR. A byte-identical
+copy of the checked build timed 19.6 ns in the same 21 interleaved rounds, so
+the noise band is about 2%. A C function that reads the whole string pays
+about twice as much per byte as it did without the check, and one that reads
+only a prefix pays more. A literal with no NUL in it is not checked. The
+message prints without §8c's `panic: ` prefix, as every runtime panic does
 (`slice out of range: [2, 5) of length 4`).
 
 ### 8d. Returns: copied, and `NULL` is the type's business
