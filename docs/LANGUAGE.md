@@ -3382,7 +3382,7 @@ element's arena, which a task does not share, and each rule is reported at the
   make, by a method of an [atomic](#atomics-atomici32-and-atomici64)
   (`tests/link/thread_atomic_tasks`), or by a `send` or a receive on a
   [`Channel`](#channels-channelt), neither of which is a write the rule counts:
-  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the guard of a `Mutex`, `using g = m.lock()` ``
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, `const t = new T()` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
@@ -3420,7 +3420,29 @@ element's arena, which a task does not share, and each rule is reported at the
   lead to the array only by keeping it, so that route is `_new`'s. A store through a `?:` with the
   array in one arm is a store into either (`_ternary`), and an element of a
   private array of arrays is the array it holds
-  (`reject_thread_task_private_nested`). A task inside a task, or
+  (`reject_thread_task_private_nested`). The same holds for the task's other
+  own memory: a method that writes only the fields of an object the task made,
+  `const h = new Holder(); h.poke()`; `set`, `add` and `delete` on a `Map` or
+  a `Set` it made; a store into an array field of an object it made, whose
+  constructor filled it with a fresh array; a second name for its array bound
+  in the same statement, `xs = new Array<i32>(n), ys = xs`; and a store
+  through what a helper answers when the helper answers its argument, the
+  task's own array, all write nothing shared
+  (`tests/link/thread_task_own_writes`). What the argument reaches is not the
+  task's own, even when the `spawn` made it there, because where an argument
+  was made is not tracked: an object the task makes that holds the argument's
+  array from its constructor on, has a field re-pointed at it, or is handed it
+  by a helper or a method, and a helper that may answer either its own array
+  or the caller's, all write the caller's memory
+  (`reject_thread_task_own_holds_param`, `_repointed`, `_helper_stores_param`,
+  `_method_adopts_param`, `_either_returned`), and so does a second name bound
+  in the same statement as a fresh array when it names the argument's
+  (`reject_thread_task_own_declarator_binds_arg`). A helper's fresh answer
+  that holds the caller's memory, `[ys]` or `new H(ys)`, is the task's at its
+  top level only, so a write below it is refused
+  (`reject_thread_task_own_fresh_holds_array`, `_new`, `_object`). That
+  refusal starts with what to write: `` make scratch only this task uses inside it, `const t = new T()`, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`, `using g = m.lock()`, and hand a value the parent needs back as the task's answer, `s.spawn(task, arg, out, i)` ``.
+  A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
   data-parallel call inside a task is refused by it too
@@ -3546,11 +3568,49 @@ breaks one is refused with that rule's own code:
   (`reject_mutex_using_lock_then_scope`). A `lock()` anywhere but a `using`
   initialiser is
   `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases ``
-  (NL2465, `reject_mutex_lock_not_using`).
+  (NL2465, `reject_mutex_lock_not_using`; `reject_mutex_lock_expr_body` for
+  an arrow whose expression body is `m.lock()`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
-  of another access.** Passed, bound, stored, returned or walked, a guard is
+  of another access.** Bound, stored, returned or walked, a guard is
   `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock ``
-  (NL2466, `reject_mutex_guard_passed`), and anything read through it that is
+  (NL2466, `reject_mutex_guard_helper_return`, `reject_mutex_guard_helper_field`,
+  `reject_mutex_guard_helper_ternary`). The one place a guard may go is to a
+  **guard helper**: a function named at the call, neither a method, a
+  constructor nor a generic, whose parameter in that position is declared as
+  the guard is, `MutexGuard<T>`, with the guard named once among the call's
+  arguments:
+
+  ```ts
+  const bump = (g: MutexGuard<Counter>): void => {
+    g.value.n = g.value.n + 1;
+  };
+
+  {
+    using g = m.lock();
+    bump(g);
+  }
+  ```
+
+  The helper's parameter is held to R3–R5 in its body exactly as `g` is in the
+  block, so it can only read and store through it, and R5 follows the call, so
+  a helper that locks, opens a scope, spawns or receives is refused at the call
+  (`reject_mutex_guard_helper_spawn`, `reject_mutex_guard_helper_receive`). A
+  helper that passes the guard on is judged by the same rule at that call
+  (`reject_mutex_guard_helper_forward`), through helpers that call each other
+  (`reject_mutex_guard_helper_mutual`) and across an import
+  (`link/reject_mutex_guard_helper_import`); a helper that locks a `Mutex`
+  it is handed is refused by R5 at the call
+  (`reject_mutex_guard_helper_second_lock`), and `g.value` handed beside the
+  guard by NL2467 (`reject_mutex_guard_helper_value_arg`). A helper has no
+  default, rest or destructured parameter, which Nish has none of
+  (`reject_mutex_guard_helper_default`, `_rest`, `_destructured`).
+  `link/thread_mutex_helper` is three helpers deep on four threads. Any other call is
+  `` `g` is passed to `push`, a method: a guard is handed only to a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared as the guard is, `MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; write the helper as `const f = (g: MutexGuard<T>): void => { g.value.n = g.value.n + 1 }` and call it as `f(g)` ``
+  (NL2536; `reject_mutex_guard_helper_array`, `_map`, `_method`, `_new`,
+  `_ctor_this`, `_generic`, `_twice`, `_nullable`, and `_callback` for a
+  helper that takes a function, which makes it a generic), because a method or a
+  constructor has `this` as a second way out, a generic's body treats `T` as any
+  value, and a guard passed twice is two names for one lock. Anything read through it that is
   not a number, a `boolean`, an enum or a `string` — `const c = g.value`,
   `g.value.xs` as a value, a `for...of` over it — is
   `` This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock ``
@@ -3558,7 +3618,16 @@ breaks one is refused with that rule's own code:
   `const b = g.value.bins`, which would race a guarded write once the block
   ends; `reject_mutex_guard_return` and `reject_mutex_guard_return_array` for a
   return; `reject_mutex_guard_store_field` and `reject_mutex_guard_store_element`
-  for a store; `reject_mutex_guard_for_of` for a walk). An arrow cannot capture
+  for a store; `reject_mutex_guard_for_of` for a walk). An arrow's expression
+  body is its answer and is judged as a `return` of it is, so a helper written
+  `(g: MutexGuard<Box>): Box => g.value` is refused as one that writes
+  `return g.value` (`reject_mutex_guard_helper_expr_value`, `_field`, `_paren`,
+  `_index`, `link/reject_mutex_guard_helper_expr_import`; `_call`, `_new` and
+  `_cond` for `g.value` handed to a call or a `new`, or written as an arm of
+  `? :`, inside the body), and
+  `reject_mutex_guard_helper_expr_churn` is the use-after-free it would open: the
+  object kept past the lock, its string replaced under a second lock, and
+  `churn()` reusing the memory before the old one is printed. An arrow cannot capture
   a guard (`reject_mutex_guard_capture`), and an arrow passed to a
   data-parallel form, which may read its function's `const` locals, may not
   read a guard among them (`reject_par_capture_guard`). A scalar read through the guard is a value like any other, `.length`
@@ -3571,7 +3640,17 @@ breaks one is refused with that rule's own code:
   field or an element of an array that already exists:
   `` This stores `string[]` through a guard, which stores only a number, a `boolean`, an enum or a `string`, which the store copies, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined ``
   (NL2468, `reject_mutex_guard_store`; `reject_mutex_guard_store_class` for a
-  class). A string stored through a guard is copied into memory the mutex
+  class). A `null` is not stored through a guard, into a `string | null` field,
+  element or `Mutex<string | null>` alike:
+  `` This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a `string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the `Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0` ``
+  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`, `_paren`
+  for `g.value.last = (null)`, and `_class` for a `Link | null` field, which
+  holds a pointer a guard stores in no form). The store's
+  exchange, `nish_guard_keep`, reads the length of the string it is given, so
+  a `null` handed to it would be dereferenced; written past it, the `null`
+  would leave the slot's copy allocated, one block per store. Admitting the
+  store would mean an exchange that frees the slot's copy and keeps nothing,
+  which the runtime does not have in this version. A string stored through a guard is copied into memory the mutex
   owns: `nish_guard_keep` `malloc`s the copy, records it, and frees the copy
   the slot held before, if that one was its own; a string read through a guard
   is copied out into the reader's arena (`.length` excepted, which keeps
@@ -3958,7 +4037,8 @@ sends and receives:
   compared, and no member but `send` is named:
   `` A `Channel` cannot be bound, stored, returned or compared here: a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and which tasks reach it is a question the checker can answer ``
   (NL2477, `reject_channel_bound`, `reject_channel_member`, `reject_channel_member_take`, `_ready`,
-  `_head` and `_state`, and `reject_channel_stored` for a class that holds one
+  `_head` and `_state`, `reject_channel_returned_expr` for an arrow whose
+  expression body is a channel, which is its answer, and `reject_channel_stored` for a class that holds one
   made anywhere but at the `spawn`; `reject_channel_nullable` for a task's
   argument whose channel may be `null`, which the `spawn` could not count as a
   sender). A type holds a channel only as exactly `Channel<T>`: never as one
@@ -4048,7 +4128,9 @@ sends and receives:
   never waits and may stay:
   `` A loop over a channel is reached while `g` holds its lock: a receive waits, and nothing waits while a lock is held, so there is no receive inside a guard's block, directly or through any function it calls (a `send` never waits, and may stay) ``
   (NL2482, `reject_channel_loop_held`, and `reject_channel_receive_held_call`
-  for a function that receives on a channel it is handed). A function that
+  for a function that receives on a channel it is handed;
+  `reject_channel_receive_held_expr` for one reached through an arrow whose
+  expression body calls it). A function that
   receives only on a channel of its own opens a scope to fill it, which R5
   refuses under a lock already.
 
@@ -4061,6 +4143,22 @@ for the lock. A task's channel is checked where it can be read, at the
 `spawn`; a parallel body has no way to reach one, because a task calls no
 `parallelMapInto` and a channel is made only beside a scope. `select` stays
 declined (wp29 §9).
+
+### What `nish --fix` writes for a thread program
+
+The thread refusals end with the code to write instead (each pinned whole by
+its `tests/wordings` case), and six of them carry a fix that `nish --fix` applies, each only where the source alone decides the
+replacement (`tests/fix/thread-*`; the refused shapes are its `thread-nofix-*`
+cases):
+
+| Refusal | The fix | Left alone |
+| --- | --- | --- |
+| NL2388, a `scope()` not bound by `using` | `const s = scope()` becomes `using s = scope()` | a `let`, which is assigned again |
+| NL2465, a `lock()` not bound by `using` | `const g = m.lock()` becomes `using g = m.lock()` | a `let` |
+| NL2511, a `spawn` with no destination, whose task answers a number or a `boolean` | `const answer = new Array<T>(1)` above the scope's `using`, and `, answer, 0` after the arguments | a `spawn` in a loop, where every task would write one slot; an answer that is not a number or a `boolean` |
+| NL2506, a task's arrow that captures a `let` | `const kNow = k` just before the statement, and the arrow reads `kNow`: the value it would have read when it ran | a `let` another argument names; a `let` a `for` header declares, where no statement before the call is in the loop |
+| NL2500, the same in a `parallelMap` | the same | the same |
+| NL2484, an arrow that uses a `Channel` | the arrow moves to a `const` above the top-level statement it is written in, named for the function and `Task` (`mainTask`), and the call names it | an arrow that captures, or leaves a parameter's or its result's type out, which would not check at the top level |
 
 ### Random numbers: `Rng` in `nish/random`
 

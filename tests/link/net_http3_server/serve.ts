@@ -129,7 +129,9 @@ export const serve = (count: i32, port: i32): i32 => {
   let closed: i32 = 0;
   while (closed < count) {
     pollWait(loop, ready, server.timeout(nowMs()));
-    const now: i64 = nowMs();
+    const nanos: i64 = monotonicNanos();
+    const now: i64 = nanos / n64(1000000);
+    server.clock(nanos / n64(1000));
     const key: Secret<u8[]> = secret(leafPrivate());
     server.receive(now, key);
     wipe(key);
