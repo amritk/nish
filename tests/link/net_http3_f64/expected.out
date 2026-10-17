@@ -106,6 +106,18 @@ PASS  and on one with 66 bytes, the filler's length written long to fill it exac
 PASS  and on one with 300
 PASS  each arrives after its body, the padding the server wrote to be told of room skipped as an unknown frame
 PASS  every request finished
+PASS  a final response carries one date, straight after :status
+PASS  trailers carry none
+PASS  a head with the program's own date
+PASS  a mixed-case Date, which HTTP/3 does not allow (§4.2): H3_INVALID
+PASS  goes out with that date alone, never two
+PASS  and nothing went out for the mixed case
+PASS  a connection with no server to keep the clock sends no date
+PASS  with no date, a head that fills the client's limit exactly goes
+PASS  with one, the same head is H3_TOO_LARGE: the date counts
+PASS  and :status with the date alone fill it exactly
+PASS  and arrive
+PASS  the server's own 431 is a final response too, and carries the date
 PASS  connected
 PASS  200 requests on a warm connection — HEADERS and DATA in, a 200 with a body out, ACKs and credit — keep no arena memory
 PASS  and every one was answered
@@ -117,4 +129,4 @@ PASS  each served its ten requests
 PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
 PASS  and from the second on, a handshake keeps nothing either: its state is the slot's (QUIC-3)
-http3: 119 passed, 0 failed, 0 skipped
+http3: 131 passed, 0 failed, 0 skipped
