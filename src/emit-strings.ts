@@ -12,12 +12,15 @@
 // `src/attributes.ts` reads: what a construct calls has to match what it
 // emits exactly, so both live beside the lowering they describe.
 
+import { unwrapBoundsParens } from "./bounds"
 import { Emitter } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
+import { emitPanicTail, panicTailCallees } from "./emit-builtins"
 import { templateParts } from "./emit-util"
-import { IRModule } from "./ir"
+import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL } from "./kernels"
-import { N_TEMPLATE_TEXT, Node } from "./nodes"
+import { N_NULL, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
+import { FunctionSig } from "./program"
 import { irEscape } from "./strings"
 import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
 
@@ -468,6 +471,85 @@ export const stringConstructCallees = (
     out.push("nish_str_at")
   }
   return out
+}
+
+// ---- A `string` handed to C ------------------------------------------------------
+
+/**
+ * Whether the argument a `declare function` takes as a `string` needs no NUL
+ * check (WP27 S3.1, `docs/wp27-ffi.md` §8c): a literal with no NUL byte in it,
+ * which the checker reads at compile time, or a `null` literal, which passes
+ * `NULL`. Everything else may hold a NUL that C would read as the end. The
+ * attribute pass asks this to record the `ffi-nul` site that the emitter makes.
+ */
+export const foreignStringIsNulFree = (arg: Node): boolean => {
+  const inner = unwrapBoundsParens(arg)
+  return inner.kind === N_NULL || (inner.kind === N_STRING && inner.text.indexOf(String.fromCharCode(0)) < 0)
+}
+
+/** The runtime symbols a checked string argument to C calls, for the attribute pass. */
+export const foreignStringCallees = (out: string[]): void => {
+  out.push("nish_str_index_of")
+  panicTailCallees(out)
+}
+
+/**
+ * Argument `index` of a call to the `declare function` `callee`, whose
+ * parameter is a `string` or `string | null`, lowered from `value` (the
+ * `nish_str` header) to C's `const char *` (§8a): the bytes 8 into the header,
+ * which the layout already ends with a NUL, so nothing is copied. `null` is
+ * `NULL`.
+ *
+ * A string that may hold a NUL is searched for one first, and a hit panics
+ * rather than hand C a shorter string than the program holds (§8c). The search
+ * is `nish_str_index_of` against a one-byte needle, which is `memchr` over the
+ * bytes the callee is about to read: it adds nothing to `runtime.c`, whose
+ * size budget a named `nish_ffi_cstr` would have had to grow by 45 bytes.
+ */
+export const emitForeignString = (
+  emitter: Emitter,
+  arg: Node,
+  value: string,
+  callee: FunctionSig,
+  index: i32
+): string => {
+  const fn = emitter.fn
+  if (unwrapBoundsParens(arg).kind === N_NULL) {
+    return "null"
+  }
+  if (foreignStringIsNulFree(arg)) {
+    return fn.emitValue(`getelementptr inbounds i8, i8* ${value}, i64 8`)
+  }
+  let nullBlock: IRBlock | null = null
+  let joinBlock: IRBlock | null = null
+  if (emitter.table.isNullable(emitter.typeOf(arg))) {
+    const join = fn.newBlock("ffi.join")
+    const someBlock = fn.newBlock("ffi.some")
+    nullBlock = fn.currentBlock()
+    joinBlock = join
+    const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
+    fn.emit(`br i1 ${isNull}, label %${join.label}, label %${someBlock.label}`)
+    fn.placeBlock(someBlock)
+  }
+  const nul = emitter.stringConstant(String.fromCharCode(0))
+  const at = fn.emitValue(`call i64 ${emitter.useRuntime("nish_str_index_of")}(i8* ${value}, i8* ${nul})`)
+  const holds = fn.emitValue(`icmp sge i64 ${at}, 0`)
+  const failBlock = fn.newBlock("ffi.nul")
+  const okBlock = fn.newBlock("ffi.ok")
+  fn.emit(`br i1 ${holds}, label %${failBlock.label}, label %${okBlock.label}`)
+  fn.placeBlock(failBlock)
+  const message =
+    `\`${callee.sourceName}\`: argument ${index + 1} (${callee.paramNames[index]}) holds a NUL byte, ` +
+    "which C would read as the end of the string"
+  emitPanicTail(emitter, emitter.stringConstant(message))
+  fn.placeBlock(okBlock)
+  const data = fn.emitValue(`getelementptr inbounds i8, i8* ${value}, i64 8`)
+  if (nullBlock === null || joinBlock === null) {
+    return data
+  }
+  fn.emit(`br label %${joinBlock.label}`)
+  fn.placeBlock(joinBlock)
+  return fn.emitValue(`phi i8* [ null, %${nullBlock.label} ], [ ${data}, %${okBlock.label} ]`)
 }
 
 // ---- Operators ----------------------------------------------------------------------

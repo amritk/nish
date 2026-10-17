@@ -125,7 +125,13 @@ import {
   isGuardedAccess,
   isLockMethod,
 } from "./parallel"
-import { addStringConstant, copyString, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
+import {
+  addStringConstant,
+  copyString,
+  emitForeignString,
+  emitIndexOfAnyKernel,
+  emitTemplate,
+} from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
@@ -1472,9 +1478,13 @@ export class Emitter {
       // as the word, exactly as a `return` of one is — or as the arms when the
       // callee uses the private ABI.
       const want = sig.paramTypes[i]
-      const value = this.table.resultByValue(want)
+      let value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
         : this.emitArgument(args.children[i], sig, i)
+      // WP27 S3.1: C takes the bytes, not the header (`emitForeignString`).
+      if (sig.foreign() && this.table.stripNull(want) === T_STRING) {
+        value = emitForeignString(this, args.children[i], value, sig, i)
+      }
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)

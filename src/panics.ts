@@ -68,6 +68,12 @@ const PANIC_OOM: i32 = 11
  */
 const PANIC_UNCHECKED: i32 = 12
 export const PANIC_OVERFLOW: i32 = 13
+/**
+ * A string handed to a `declare function` (WP27 S3.1) holds a NUL byte, which
+ * C would read as its end. Proven, with no check emitted, for a literal that
+ * holds none (`foreignStringIsNulFree` in `src/emit-strings.ts`).
+ */
+export const PANIC_FFI_NUL: i32 = 14
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -98,6 +104,8 @@ const panicKindName = (kind: i32): string => {
       return "unchecked"
     case PANIC_OVERFLOW:
       return "overflow"
+    case PANIC_FFI_NUL:
+      return "ffi-nul"
     default:
       return "oom"
   }
@@ -755,6 +763,11 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       )
     case PANIC_OVERFLOW:
       return overflowAdvice(program, table, node)
+    case PANIC_FFI_NUL:
+      return (
+        "a C function reads a string to its first NUL byte, so a string that holds one panics before the call: " +
+        "pass a literal with no NUL in it, which needs no check"
+      )
     default:
       // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.
       return ""
