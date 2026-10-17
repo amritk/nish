@@ -421,7 +421,8 @@ export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: Fac
   }
   return (
     `\`${fn.sourceName}\` writes memory its caller can see${where}, and \`${intrinsicName(sig)}\` runs it on several ` +
-    "threads at once: a parallel body may read what its caller owns and write nothing but its result"
+    "threads at once: a parallel body may read what its caller owns and write nothing but its result; make it " +
+    `answer what it computes and do the write after the call, \`${parallelCallOf(intrinsicName(sig), fn.lifted ? "f" : fn.sourceName)}\``
   )
 }
 
@@ -515,6 +516,28 @@ export const allocationWarning = (
   )
 }
 
+/** A call of `intrinsic` with `body`, for a remedy to show. */
+const parallelCallOf = (intrinsic: string, body: string): string => {
+  if (intrinsic === "parallelReduce") {
+    return `const total = parallelReduce(xs, ${body}, 0)`
+  }
+  if (intrinsic === "parallelFrom") {
+    return `const out = parallelFrom(n, ${body})`
+  }
+  if (intrinsic === "parallelMapInto") {
+    return `parallelMapInto(xs, out, ${body})`
+  }
+  return intrinsic === "spawn" ? `s.spawn(${body}, arg, out, i)` : `const out = parallelMap(xs, ${body})`
+}
+
+/** A body that answers a number or a string for `intrinsic`, written as an arrow. */
+const copiedAnswerOf = (intrinsic: string): string => {
+  if (intrinsic === "parallelReduce") {
+    return "(a, b) => a + b"
+  }
+  return intrinsic === "parallelFrom" ? "(i) => i * 2" : "(x) => x.name"
+}
+
 /** The refusal of a body answering `type`, which is not a number, a `boolean` or an enum, from `intrinsic`. */
 const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32): string => {
   if (isScalarArgument(table, type)) {
@@ -522,7 +545,8 @@ const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, typ
   }
   return (
     `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsic}\` hands back only a ` +
-    "number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory"
+    "number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory; " +
+    `answer a number and fold those, \`${parallelCallOf(intrinsic, copiedAnswerOf(intrinsic))}\``
   )
 }
 
@@ -547,7 +571,10 @@ const crossingWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, t
     "number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies " +
     "out of the worker's arena: anything else would point into memory the worker frees or reuses; answer the " +
     "number or string the caller needs, one result per field if it needs several, and build the object from " +
-    "them after the call"
+    "them after the call, " +
+    (intrinsic === "spawn"
+      ? "`s.spawn(task, arg, names, i)` with `task` answering a `string`"
+      : `\`${parallelCallOf(intrinsic, copiedAnswerOf(intrinsic))}\``)
   )
 }
 
@@ -866,7 +893,7 @@ export const capturesOf = (sig: FunctionSig): CaptureSlot[] => {
 export const letCaptureMessage = (name: string): string =>
   `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a data-parallel body may read only ` +
   "a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the " +
-  "value to a `const` before the call"
+  `value to a \`const\` before the call, \`const ${name}Now = ${name}\`, and read \`${name}Now\` in the arrow`
 
 /** The refusal for a name an arrow inside an arrow reads from outside both. */
 export const nestedCaptureMessage = (name: string): string =>
@@ -884,7 +911,8 @@ export const thisCaptureMessage = (): string =>
 export const taskLetCaptureMessage = (name: string): string =>
   `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a task's arrow may read only a ` +
   "`const` or a parameter of that function, which is handed to the task when it is spawned as its argument is " +
-  "and cannot change before it runs; bind the value to a `const` before the `spawn`"
+  "and cannot change before it runs; bind the value to a `const` before the `spawn`, " +
+  `\`const ${name}Now = ${name}\`, and read \`${name}Now\` in the arrow`
 
 /** The refusal for `this` in a task's arrow. */
 export const taskThisCaptureMessage = (): string =>
@@ -903,7 +931,8 @@ export const taskCaptureWriteMessage = (name: string): string =>
 export const captureWriteMessage = (name: string): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a data-parallel body ` +
   "reads a captured value and never writes it, because every thread reads the same one; answer the value from " +
-  "the body instead, and fold the answers with `parallelReduce` or after the call"
+  "the body instead, and fold the answers with `parallelReduce` or after the call, " +
+  `\`const ${name} = parallelReduce(xs, (a, b) => a + b, 0)\``
 
 /** Whether `info` is a class `nish/threads` declares: a scope, a lock, its guard or a channel. */
 const isThreadsLayout = (info: StructInfo): boolean => {
@@ -1219,6 +1248,52 @@ export class ScopeFinding {
   }
 }
 
+/**
+ * The source of `node` when it is short and on one line, so that a refusal's
+ * remedy can be written in the program's own names, or `fallback`.
+ */
+const shownSource = (program: CheckedProgram, node: Node, fallback: string): string => {
+  const text = program.source.text.slice(node.start, node.end)
+  return text.length > 0 && text.length <= 40 && text.indexOf("\n") < 0 ? text : fallback
+}
+
+/** The name `node` is bound to, when it is the initialiser of a declaration, or `fallback`. */
+const boundNameOf = (node: Node, parents: Node[], n: i32, fallback: string): string => {
+  const decl: Node | null = n > 0 ? parents[n - 1] : null
+  return decl !== null &&
+    decl.kind === N_VAR_DECL &&
+    decl.children[2] === node &&
+    decl.children[0].kind === N_IDENT
+    ? decl.children[0].text
+    : fallback
+}
+
+/** A field of the class `type` that a read or a store copies, a number or a string, for a remedy to name; or "". */
+const copiedFieldOf = (program: CheckedProgram, table: TypeTable, type: i32): string => {
+  const info = classLayoutOf(program, table, type)
+  if (info === null) {
+    return ""
+  }
+  for (const field of info.fields) {
+    if (isScalarArgument(table, field.type) || field.type === T_STRING) {
+      return field.name
+    }
+  }
+  return ""
+}
+
+/**
+ * A slot of a value of `type` reached by `chain`: an element of an array, the
+ * first number or string field of a class, or a placeholder field.
+ */
+const copiedSlot = (program: CheckedProgram, table: TypeTable, chain: string, type: i32): string => {
+  if (type >= 0 && table.isArray(type)) {
+    return `${chain}[i]`
+  }
+  const field = type >= 0 ? copiedFieldOf(program, table, type) : ""
+  return field.length > 0 ? `${chain}.${field}` : `${chain}.<field>`
+}
+
 /** A finding together with its fix. */
 const fixedFinding = (node: Node, message: string, edits: Edit[]): ScopeFinding => {
   const finding = new ScopeFinding(node, message)
@@ -1267,9 +1342,10 @@ const arenaBindingMessage = (name: string): string =>
   `\`${name}\` is the binding of a \`using\` declaration of \`arena()\` and cannot be read: it holds the mark ` +
   "its block releases to when it ends, and nothing but that release may see or move the mark"
 
-const scopeNotUsingMessage = (): string =>
+const scopeNotUsingMessage = (name: string): string =>
   "`scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that " +
-  "declares it ends, so a scope bound any other way would be one nobody joins"
+  "declares it ends, so a scope bound any other way would be one nobody joins; " +
+  `declare it as \`using ${name} = scope()\``
 
 const scopeEscapesMessage = (): string =>
   `A \`${THREAD_SCOPE}\` can only be the receiver of a \`spawn\` statement: passed, stored, returned or copied, ` +
@@ -1799,7 +1875,9 @@ export const voidTaskResultMessage = (table: TypeTable, fn: FunctionSig): string
   return (
     `${shown} answers \`${table.typeName(fn.returnType)}\`, and a \`spawn\` without a destination stores nothing: ` +
     "a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope " +
-    "joins, so make the task answer `void` or give it a destination"
+    "joins, so make the task answer `void` or give it a destination, " +
+    `\`s.spawn(${fn.lifted ? "task" : fn.sourceName}, arg, out, i)\` with \`out\`, ` +
+    `a \`${table.typeName(fn.returnType)}[]\` of one slot per task, declared before the scope's block`
   )
 }
 
@@ -1933,7 +2011,13 @@ const walkScopes = (
   if (!declaresName && node.kind !== N_PAREN && program.nodeTypes[node.id] === scopeType) {
     if (node.kind === N_CALL && isScopeCall(program, node, scopeType)) {
       if (!isUsingInitialiser(at, parents, depth)) {
-        out.push(fixedFinding(node, scopeNotUsingMessage(), usingEdits(program, at, parents, depth)))
+        out.push(
+          fixedFinding(
+            node,
+            scopeNotUsingMessage(boundNameOf(at, parents, depth, "s")),
+            usingEdits(program, at, parents, depth)
+          )
+        )
       }
     } else if (!(node.kind === N_IDENT && isSpawnReceiver(at, parents, depth))) {
       out.push(new ScopeFinding(node, scopeEscapesMessage()))
@@ -2954,7 +3038,8 @@ const siblingMessage = (later: SiblingSpawn, earlier: SiblingSpawn, what: string
   `This \`spawn\` on \`${later.scope.name}\` hands its task ${what}, which a task of \`${earlier.scope.name}\` ` +
   "also reaches: the scopes one `using` statement opens join one after the other natively, the last declared " +
   "first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no " +
-  "atomic and no destination; open the scopes in `using` statements of their own"
+  "atomic and no destination; open the scopes in `using` statements of their own, " +
+  `\`using ${earlier.scope.name} = scope()\` and \`using ${later.scope.name} = scope()\``
 
 /** The destination rule and every region of one function's body. */
 const checkBody = (
@@ -3159,9 +3244,10 @@ const threadsLiteralMessage = (table: TypeTable, type: i32): string =>
   "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
   "An object literal would be a plain record under Node, with none of the methods the class is used through"
 
-const lockNotUsingMessage = (): string =>
+const lockNotUsingMessage = (name: string, mutex: string): string =>
   "`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released " +
-  "when the block that declares it ends, so a guard bound any other way would be one nobody releases"
+  "when the block that declares it ends, so a guard bound any other way would be one nobody releases; " +
+  `declare it as \`using ${name} = ${mutex}.lock()\``
 
 const guardUseMessage = (name: string): string =>
   `A guard is used only as \`${name}.value\`, and \`${name}.value\` only as the base of a field or element ` +
@@ -3175,20 +3261,19 @@ const guardArgumentMessage = (name: string, why: string): string =>
   "`MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; " +
   `write the helper as \`const f = (g: MutexGuard<T>): void => { g.value.n = g.value.n + 1 }\` and call it as \`f(${name})\``
 
-const guardDerivedMessage = (table: TypeTable, type: i32): string =>
+const guardDerivedMessage = (table: TypeTable, type: i32, read: string): string =>
   `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
   "element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, " +
   "would outlive the block that holds the lock" +
   (table.isNullable(type)
     ? '; keep the field a `string` with `""` for none, or a `boolean` beside it that says whether it is set'
-    : "; read the numbers and strings it holds one at a time, `const n = g.value.h.n`, or do the work inside " +
-      "the guard's block")
+    : `; do the work inside the guard's block, or read the numbers and strings it holds one at a time, \`${read}\``)
 
-const guardStoreMessage = (table: TypeTable, type: i32): string =>
+const guardStoreMessage = (table: TypeTable, type: i32, store: string): string =>
   `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\`, an enum ` +
   "or a `string`, which the store copies, into a field or an element that already exists: anything else is a " +
-  "pointer, which may point into a task's arena, freed when the task is joined; store its fields one at a time, " +
-  "`g.value.h.n = v.n`, or make the value when the lock is, `new Mutex<T>(new T(new H()))`"
+  "pointer, which may point into a task's arena, freed when the task is joined; build the value into the one the " +
+  `\`Mutex\` is made with, or store what it holds one at a time into slots that already exist, \`${store}\``
 
 /**
  * A `null` stored through a guard, into any slot. The store into a
@@ -3205,12 +3290,14 @@ const GUARD_NULL_STORE_MESSAGE: string =
   'slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, ' +
   "and read it back as empty with `.length === 0`"
 
-const guardMethodMessage = (name: string): string =>
+const guardMethodMessage = (name: string, store: string): string =>
   `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
-  "a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined"
+  "a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined; " +
+  `write what it does as reads and stores through the guard, into slots that already exist, \`${store}\``
 
-const guardHeldMessage = (what: string, guard: string): string =>
-  `${what} is reached while \`${guard}\` holds its lock${GUARD_HELD_TAIL}`
+const guardHeldMessage = (what: string, guard: string, lock: string): string =>
+  `${what} is reached while \`${guard}\` holds its lock${GUARD_HELD_TAIL}; move it below the block that ` +
+  `releases the lock, \`{ using ${lock}; ... }\``
 
 /** R6, in `sharedWriteMessage`'s words for a task. */
 const TASK_WRITE_TAIL: string =
@@ -3229,7 +3316,8 @@ const regionLockMessage = (state: RegionState, what: string, path: string): stri
 const regionAtomicMessage = (state: RegionState, what: string, path: string): string =>
   `${what} reaches an atomic a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
   "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
-  "so the parent touches what they share only before the statement that holds the first `spawn` or after the join"
+  "so the parent touches what they share only before the statement that holds the first `spawn` or after the join; " +
+  `touch it before the \`using ${state.name} = scope()\` block, or after the block ends`
 
 const taskCaptureMutexMessage = (table: TypeTable, name: string, type: i32, path: string): string =>
   `The task's arrow reads \`${name}\`, which is \`${table.typeName(type)}\` and reaches a \`Mutex\` through ` +
@@ -3239,11 +3327,12 @@ const taskCaptureMutexMessage = (table: TypeTable, name: string, type: i32, path
 const taskMutexMessage = (table: TypeTable, type: i32, path: string): string =>
   `The argument of \`spawn\` is \`${table.typeName(type)}\`, which reaches a \`Mutex\` through \`${path}\`: ` +
   "a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so " +
-  "which tasks share a lock is a question the checker can answer"
+  `which tasks share a lock is a question the checker can answer; hand the task the \`Mutex\` itself, \`s.spawn(task, ${path})\``
 
 const bodyLockMessage = (sig: FunctionSig, fn: FunctionSig): string =>
   `\`${fn.sourceName}\` takes a \`Mutex\`'s lock, and \`${intrinsicName(sig)}\` runs it on several threads ` +
-  "at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body"
+  "at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body; " +
+  `run it as a scope's tasks instead, \`{ using s = scope(); s.spawn(${fn.lifted ? "task" : fn.sourceName}, x, out, i) }\``
 
 /**
  * Whether `init`, the argument of `new Mutex` or a part of it, is fresh all
@@ -3539,7 +3628,10 @@ const walkMutexes = (
     }
   } else if (isLockCall(program, node)) {
     if (!isUsingInitialiser(at, parents, depth)) {
-      out.push(fixedFinding(node, lockNotUsingMessage(), usingEdits(program, at, parents, depth)))
+      const callee = unwrapParens(node.children[0])
+      const mutex = callee.kind === N_MEMBER ? shownSource(program, callee.children[0], "m") : "m"
+      const message = lockNotUsingMessage(boundNameOf(at, parents, depth, "g"), mutex)
+      out.push(fixedFinding(node, message, usingEdits(program, at, parents, depth)))
     }
   } else if (isGuardType(program, table, type)) {
     const named = node.kind === N_IDENT ? node.text : "g"
@@ -3577,7 +3669,8 @@ const walkMutexes = (
       above.children[0] === parent &&
       type !== T_STRING
     ) {
-      out.push(new ScopeFinding(above, guardMethodMessage(parent.text)))
+      const slot = copiedSlot(program, table, shownSource(program, at, "g.value.items"), type)
+      out.push(new ScopeFinding(above, guardMethodMessage(parent.text, `${slot} = v`)))
     } else if (base) {
       // an access through it: judged where it ends
     } else if (parent !== null && isStoreTarget(at, parents, depth)) {
@@ -3586,10 +3679,19 @@ const walkMutexes = (
       if (parent.kind === N_BINARY && unwrapParens(parent.children[1]).kind === N_NULL) {
         out.push(new ScopeFinding(parent, GUARD_NULL_STORE_MESSAGE))
       } else if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
-        out.push(new ScopeFinding(parent, guardStoreMessage(table, stored)))
+        const target = shownSource(program, at, "g.value.x")
+        const from: Node | null = parent.kind === N_BINARY ? unwrapParens(parent.children[1]) : null
+        const named = from !== null && (from.kind === N_IDENT || from.kind === N_MEMBER)
+        const value = from !== null && named ? shownSource(program, from, "v") : "v"
+        const slot = copiedSlot(program, table, target, stored)
+        const store = `${slot} = ${value}${slot.slice(target.length)}`
+        out.push(new ScopeFinding(parent, guardStoreMessage(table, stored, store)))
       }
     } else if (type >= 0 && !isScalarArgument(table, type) && type !== T_STRING) {
-      out.push(new ScopeFinding(node, guardDerivedMessage(table, type)))
+      const slot = copiedSlot(program, table, shownSource(program, node, "g.value.x"), type)
+      const field = copiedFieldOf(program, table, type)
+      const read = `const ${field.length > 0 && !table.isArray(type) ? field : "x"} = ${slot}`
+      out.push(new ScopeFinding(node, guardDerivedMessage(table, type, read)))
       return
     }
   }
@@ -3727,6 +3829,7 @@ const walkHeld = (
   facts: FactsTable,
   node: Node,
   name: string,
+  lock: string,
   held: HeldContext,
   out: ScopeFinding[]
 ): void => {
@@ -3741,11 +3844,11 @@ const walkHeld = (
   }
   const what = heldWhat(program, facts, node, held.scopeType, held.scopeName)
   if (what.length > 0) {
-    out.push(new ScopeFinding(node, guardHeldMessage(what, name)))
+    out.push(new ScopeFinding(node, guardHeldMessage(what, name, lock)))
     return
   }
   for (const child of node.children) {
-    walkHeld(program, facts, child, name, held, out)
+    walkHeld(program, facts, child, name, lock, held, out)
   }
 }
 
@@ -3772,14 +3875,15 @@ const findGuardBlocks = (
         while (d < decls.length) {
           const name = decls[d].children[0].text
           if (isLockCall(program, unwrapParens(decls[d].children[2]))) {
+            const lock = shownSource(program, decls[d], `${name} = m.lock()`)
             let e = d + 1
             while (e < decls.length) {
-              walkHeld(program, facts, decls[e].children[2], name, held, out)
+              walkHeld(program, facts, decls[e].children[2], name, lock, held, out)
               e = e + 1
             }
             let j = i + 1
             while (j < node.children.length) {
-              walkHeld(program, facts, node.children[j], name, held, out)
+              walkHeld(program, facts, node.children[j], name, lock, held, out)
               j = j + 1
             }
           }
@@ -3926,7 +4030,8 @@ const CHANNEL_USE_TAIL: string =
 const CHANNEL_SENDERS_TAIL: string =
   ": a channel is reachable from the tasks of one scope, the parent sends on it only before the block that " +
   "holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every " +
-  "task that may send on it has returned"
+  "task that may send on it has returned; declare it in the function that opens the scope and send before the " +
+  "scope's block, `ch.send(x); { using s = scope(); s.spawn(task, ch) }`"
 
 /** C5. */
 const CHANNEL_RECEIVER_TAIL: string =
@@ -3941,6 +4046,10 @@ const CHANNEL_ORDER_TAIL: string =
   "block's statement order, before the one task that receives on it, which is also what keeps channels from " +
   "deadlocking; move the `spawn` of the receiving task below every `spawn` that sends"
 
+/** C6's order, with the remedy in the tasks' own names. */
+const channelOrderRemedy = (sender: string, receiver: string): string =>
+  `, \`s.spawn(${sender}, ...)\` above \`s.spawn(${receiver}, ...)\``
+
 /** C6's other half: one task's two roles on one channel. */
 const CHANNEL_BOTH_TAIL: string =
   ": no task both sends and receives on one channel, because a channel closes only once every task that may " +
@@ -3950,12 +4059,13 @@ const CHANNEL_BOTH_TAIL: string =
 /** C3: a channel takes no capacity. */
 export const channelCapacityMessage = (): string =>
   "`new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a " +
-  "scope's tasks run one at a time and nothing would drain a channel that was full"
+  "scope's tasks run one at a time and nothing would drain a channel that was full; write `new Channel<T>()`"
 
 const channelElementMessage = (table: TypeTable, type: i32): string =>
   "A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry " +
   `\`${table.typeName(type)}\`: a sender's arena is freed when its scope joins, and only a string is copied ` +
-  "out of it on the way, so anything else would point into freed memory"
+  "out of it on the way, so anything else would point into freed memory; send an index into data the receiver " +
+  "can read, or a string, `new Channel<i32>()`"
 
 const channelDeclareMessage = (what: string): string => `${what}${CHANNEL_DECLARE_TAIL}`
 
@@ -3964,13 +4074,16 @@ const channelUseMessage = (what: string): string => `${what}${CHANNEL_USE_TAIL}`
 /** A channel inside an arrow's body. */
 const channelArrowMessage = (): string =>
   "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel " +
-  "rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body"
+  "rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body; " +
+  "write the arrow as a module function, `const sendAll = (ch: Channel<i32>): void => { ch.send(1) }`, and pass " +
+  "`sendAll` where the arrow was"
 
 const channelSendersMessage = (what: string): string => `${what}${CHANNEL_SENDERS_TAIL}`
 
 const channelReceiverMessage = (what: string): string => `${what}${CHANNEL_RECEIVER_TAIL}`
 
-const channelOrderMessage = (what: string): string => `${what}${CHANNEL_ORDER_TAIL}`
+const channelOrderMessage = (what: string, sender: string, receiver: string): string =>
+  `${what}${CHANNEL_ORDER_TAIL}${channelOrderRemedy(sender, receiver)}`
 
 const channelBothMessage = (what: string): string => `${what}${CHANNEL_BOTH_TAIL}`
 
@@ -5283,6 +5396,7 @@ const checkChannel = (
   recordSeal(program, chosen.decl, decl)
   // The tasks: who may send, who may receive, in statement order.
   let receiver: Node | null = null
+  let receiverName = "receiver"
   let k = 0
   while (k < holders.length && k < paths.length) {
     const spawn = holders[k]
@@ -5325,7 +5439,9 @@ const checkChannel = (
           new ScopeFinding(
             spawn,
             channelOrderMessage(
-              `\`${entry.sourceName}\` may send on \`${local.name}\` and is spawned after its receiver`
+              `\`${entry.sourceName}\` may send on \`${local.name}\` and is spawned after its receiver`,
+              entry.lifted ? "sender" : entry.sourceName,
+              receiverName
             )
           )
         )
@@ -5333,6 +5449,7 @@ const checkChannel = (
       }
       if (receives) {
         receiver = spawn
+        receiverName = entry.lifted ? "receiver" : entry.sourceName
       }
     }
     k = k + 1

@@ -1,1 +1,1 @@
-`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases
+`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases; declare it as `using g = m.lock()`
