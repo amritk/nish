@@ -316,3 +316,76 @@ For the per-byte cost under load, separately from the stall:
 
 At 100 B, nish's c96m10 cost per request is 28 % above nginx's; that part
 is not per-byte, and this page leaves it open.
+
+## After the fix
+
+The fix follows the first direction alone: the pacer counts microseconds
+(`std/net/quic-recovery.ts`, `fineNow`, `pacerRefill`, `pacerDelay`;
+`std/net/http3-server.ts`, `clock`). Loss delay and the PTO still count
+milliseconds with the 1 ms kGranularity floor, and a burst is still at most
+the initial window.
+
+Pacing on the finer clock alone cost throughput under load. On a fast path
+the pacer earns credit for one datagram at a time, so each GSO flight held
+one datagram and took one send each. At c96m10 with a 4 kB body that was
+15.8k req/s against the base's 16.7k (noise ±0.6 %). So a paced flight now
+starts only when the pacer has earned one millisecond's worth of credit,
+between one datagram and four (`pacerQuantum`, `quicListenerFlightTime`).
+Before the first RTT sample, the pacer earns about 45 bytes per
+millisecond, so that minimum is one datagram and the handshake paces as
+before.
+
+The other two directions were not needed for the acceptance figures and
+were not taken:
+
+- **The burst cap** stays at the initial window.
+- **ACK-only datagrams** stay paced. The 100 B results show nothing for
+  exempting them to win.
+
+The figures come from `node bench/h3-latency.mjs --runs 9 --baseline
+249cbe9`, once with `--size 4096` and once with `--size 100`. `249cbe9`
+builds the same server as `5f983c9`, which differs from it only in
+`bench/` and `docs/`. Each cell is the median of the
+rounds. The noise band is nish against a byte-identical copy of itself, in
+the same interleaved rounds.
+
+4096-byte body:
+
+| scenario | target | p50 | p99 | req/s | server busy | CPU/req |
+| --- | --- | --- | --- | --- | --- | --- |
+| single | nish | 111 µs | 225 µs | 8.3k | 66% | 80.75 µs |
+| single | base | 181 µs | 1.55 ms | 2.0k | 24% | 118.29 µs |
+| single | nginx | 70 µs | 157 µs | 11.7k | 45% | 38.41 µs |
+| single | noise | ±0.0% | ±9.2% | ±0.8% | ±1.0% | ±0.7% |
+| c96 | nish | 4.54 ms | 8.48 ms | 13.7k | 99% | 71.87 µs |
+| c96 | base | 4.46 ms | 8.35 ms | 13.8k | 99% | 71.54 µs |
+| c96 | noise | ±2.6% | ±0.6% | ±3.5% | ±0.2% | ±3.3% |
+| c96m10 | nish | 12.43 ms | 143.62 ms | 15.9k | 98% | 61.49 µs |
+| c96m10 | base | 12.84 ms | 192.79 ms | 15.8k | 98% | 62.15 µs |
+| c96m10 | noise | ±0.2% | ±11.0% | ±1.0% | ±0.5% | ±0.4% |
+
+100-byte body:
+
+| scenario | target | p50 | p99 | req/s | server busy | CPU/req |
+| --- | --- | --- | --- | --- | --- | --- |
+| single | nish | 60 µs | 131 µs | 15.1k | 49% | 33.50 µs |
+| single | base | 61 µs | 151 µs | 13.4k | 47% | 34.28 µs |
+| single | nginx | 71 µs | 152 µs | 12.0k | 45% | 37.56 µs |
+| single | noise | ±1.6% | ±10.3% | ±9.1% | ±4.2% | ±0.5% |
+| c96 | nish | 1.90 ms | 3.78 ms | 32.9k | 98% | 29.70 µs |
+| c96 | base | 1.76 ms | 3.96 ms | 33.5k | 97% | 29.07 µs |
+| c96 | noise | ±3.3% | ±7.0% | ±0.1% | ±0.4% | ±0.2% |
+| c96m10 | nish | 6.28 ms | 10.62 ms | 96.4k | 98% | 10.11 µs |
+| c96m10 | base | 6.50 ms | 10.87 ms | 94.0k | 97% | 10.35 µs |
+| c96m10 | noise | ±0.8% | ±0.3% | ±0.8% | ±0.1% | ±0.8% |
+
+How these compare with the acceptance bounds:
+
+- **One connection's 4 kB p99** is 225 µs, against the base's 1.55 ms and
+  nginx's 157 µs. That is 1.43× nginx, inside the 2× bound with the ±9.2 %
+  noise band added.
+- **At c96** the server is 99 % busy.
+- **At c96m10** the throughput and the CPU per request are within the noise
+  band of the base, or better than it, at both sizes. The base's 4 kB
+  c96m10 runs also end some requests with no status (192 median against
+  nish's 131), so that predates the fix.
