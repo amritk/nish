@@ -1,10 +1,10 @@
 ---
 name: Server pools borrow their buffers
-overview: The HTTP/1.1, TLS, HTTP/2 and QUIC/HTTP/3 server pools stop preallocating every buffer per slot and borrow them from a pool their server shares, so the interop server serves 1,024 slots of all four protocols under 1 GB and listens within a second, with throughput, flat-arena guarantees and wiping unchanged.
+overview: The TLS, HTTP/2 and QUIC/HTTP/3 server pools stop preallocating every buffer per slot and borrow them from a pool their server shares, as PR 672's Http1OutputPool does for HTTP/1.1, so the interop server serves 1,024 slots of all four protocols under 1 GB and listens within a second, with throughput, flat-arena guarantees and wiping unchanged.
 stages:
   - id: interop-slots
     title: "test(interop): --slots sizes every pool, and the harness that measures memory and throughput"
-    goal: Make the cost measurable without editing source — one flag sizes all four pools, one script reports resident memory and time to listen, two scripts report throughput with a noise band — and record the baseline on main.
+    goal: Make the cost measurable without editing source — one flag sizes all four pools, one script reports resident memory and time to listen, one script reports h2load throughput with a noise band — and record the baseline on main.
     verification: node tests/run.js net_interop_server && npm run check && npm run lint && node bench/pool-rss.mjs --slots 16,64
     todos:
       - id: slots-flag
@@ -14,26 +14,22 @@ stages:
       - id: pool-rss
         content: Add bench/pool-rss.mjs, which starts the interop server per slot count, times exec to all four ports listening, and reads VmRSS and VmHWM — see Measurement harness
       - id: http-bench
-        content: Add bench/http.mjs (HTTP/1.1 keep-alive load against the h1 port) and bench/h2load.mjs (h2load against HTTPS/1.1, HTTP/2 and HTTP/3), both with interleaved A/A rounds for the noise band — see Measurement harness
+        content: Add bench/h2load.mjs (h2load against the interop server's HTTPS/1.1, HTTP/2 and HTTP/3 ports) with interleaved A/A rounds for the noise band — see Measurement harness
       - id: baseline
         content: Record the baseline on main in bench/README.md — RSS and time to listen at 16, 64, 256 and 1024 slots, per-pool attribution, and throughput with its noise band — see Measurement harness
-  - id: http1-pool
-    title: "perf(std): HTTP/1.1 slots borrow their output buffer from a pool"
-    goal: Introduce the shared byte-buffer pool and apply it to HTTP/1.1, which sets the borrow, give-back and wipe rules the other three stages copy.
-    verification: node tests/run.js net_http1 && node tests/run.js net_buffer_pool && npm run check && npm run lint
+  - id: buffer-pool
+    title: "perf(std): a shared byte-buffer pool that zeroes what it takes back"
+    goal: Add the pool primitive the TLS, HTTP/2 and QUIC stages borrow from — the shape of PR 672's Http1OutputPool (take, give, made) plus a ceiling and a give-back that zeroes the used extent.
+    verification: node tests/run.js net_buffer_pool && npm run check && npm run lint
     todos:
-      - id: buffer-pool
-        content: Add std/net/buffer-pool.ts, a pool of fixed-size byte buffers that lends on borrow, zeroes the used extent on give-back, grows to its high-water mark and then allocates nothing — see Buffer pool
-      - id: http1-output-pool
-        content: Add Http1OutputPool to std/net/http1-server.ts and make Http1Server and Http1TlsServer slots borrow their output buffer when they first need room and give it back once it is flushed — see HTTP/1.1
-      - id: http1-tests
-        content: Add tests/link/net_buffer_pool and extend tests/link/net_http1_server with the pool checks (flat arena on a warm slot, lent count, zeroed reuse) — see Tests
-      - id: http1-docs
-        content: Update docs/security/http1.md and the HTTP/1.1 server entry in docs/guide/using-nish/standard-library.md — see HTTP/1.1
+      - id: buffer-pool-module
+        content: Add std/net/buffer-pool.ts, a pool of fixed-size u8 buffers that hands back the last buffer given or a new one below its ceiling, and zeroes the used extent on give-back — see Buffer pool
+      - id: buffer-pool-tests
+        content: Add tests/link/net_buffer_pool with the reuse, ceiling, zeroed-extent and flat-arena checks — see Tests
   - id: tls-pool
     title: "perf(std): TLS record buffers are borrowed per connection and wiped when given back"
     goal: TlsTcpServer slots borrow their record output, plaintext, scratch and reader buffers from pools the server owns, so an idle or empty slot holds none of them.
-    verification: node tests/run.js net_tls && node tests/run.js net_http2_tls && node tests/run.js net_http1_server && npm run check && npm run lint
+    verification: node tests/run.js net_tls && node tests/run.js net_http2_tls && node tests/run.js net_http1_server && node tests/run.js net_interop_server && npm run check && npm run lint
     todos:
       - id: tls-borrow
         content: Make TlsRecordServer borrow output, plain, scratch and the TlsRecordReader buffer from pools owned by TlsTcpServer, keeping the public constructors unchanged — see TLS
@@ -46,7 +42,7 @@ stages:
   - id: http2-pool
     title: "perf(std): HTTP/2 connections borrow their frame buffers from the server's pool"
     goal: Http2Connection borrows its input, output and header-block buffers, so a slot with no connection or an idle connection holds none of them.
-    verification: node tests/run.js net_http2 && npm run check && npm run lint
+    verification: node tests/run.js net_http2 && node tests/run.js net_interop_server && npm run check && npm run lint
     todos:
       - id: h2-borrow
         content: Make Http2Connection borrow input, output and block from pools owned by Http2TlsServer, with a private pool for a standalone Http2Connection so its constructor is unchanged — see HTTP/2
@@ -88,25 +84,26 @@ The other estimated per-slot costs (read from the code, not measured; stage `int
 | HTTP/1.1 over TLS | TLS ~110 KB; `output` 8 KB (interop config) | ~121 KB |
 | HTTP/1.1 | `output` 8 KB; parser and WebSocket ~3 KB | ~11 KB |
 
-Two facts the request assumed are not true on `main` at 99b81d2:
-- **`Http1OutputPool` does not exist.** No branch or PR has it, and [http1-server.ts:1016](std/net/http1-server.ts) still allocates every slot's buffers in the constructor. Stage `http1-pool` builds it first, and the other stages copy its pattern.
-- **`--slots` sizes only HTTP/3.** `options.slots` ([server.ts:62](tests/link/net_interop_server/server.ts)) feeds the `Http3Server` alone. HTTP/2 is a literal 64 (`:158`), and both HTTP/1.1 pools are a literal 16 (`:156`). `bench/http.mjs` does not exist, and nothing in the repo runs h2load. Stage `interop-slots` adds both.
+Base: `main` at 249cbe9.
+- **HTTP/1.1 is done.** PR 672 (249cbe9, "perf(std): two system calls per keep-alive HTTP/1.1 request, and output buffers borrowed from a pool") added `Http1OutputPool` to [http1-server.ts](std/net/http1-server.ts) and `bench/http.mjs`. `Http1Connection` calls `acquire()` when it first needs output room, and the carriers' send and close call `release()`. `Http1TlsServer`'s connections already borrow from it. Its pool is `take(): u8[]` / `give(buf)` over a free list with a `made` count, and it zeroes nothing. This run does not touch HTTP/1.1.
+- One assumption in the request is not true on `main`:
+- **`--slots` sizes only HTTP/3.** `options.slots` ([server.ts:62](tests/link/net_interop_server/server.ts)) feeds the `Http3Server` alone. HTTP/2 is a literal 64 (`:158`), and both HTTP/1.1 pools are a literal 16 (`:156`). Nothing in the repo runs h2load. Stage `interop-slots` adds `bench/h2load.mjs`. `bench/http.mjs` is PR 672's.
 
 ## Approach
 
-**One pool primitive, one rule set, four consumers.** `std/net/buffer-pool.ts` lends fixed-size `u8` buffers. Every pool in this plan is an instance of it, owned by the *server* (`Http1Server`, `TlsTcpServer`, `Http2TlsServer`, `Http3Server`) and shared by that server's slots. The rules:
+**One pool primitive, one rule set, three consumers.** `std/net/buffer-pool.ts` lends fixed-size `u8` buffers in the shape of PR 672's `Http1OutputPool`, so the two read alike and HTTP/1.1 can move onto it in a later change. Every pool in this plan is an instance of it, owned by the *server* (`TlsTcpServer`, `Http2TlsServer`, `Http3Server`) and shared by that server's slots. The rules:
 
 1. **Borrow when the slot first needs room.** A slot or stream that has not written or received anything holds no buffer.
 2. **Give back once its bytes are done.** Output goes back when it has been sent, or, for QUIC send data, acknowledged. Input goes back when it has been consumed and no partial unit (record, frame, header block) is held. Everything goes back when the connection ends.
-3. **Zero what was used before giving it back.** The pool tracks how far into the buffer the borrower wrote, and the give-back zeroes `[0, used)`. TLS buffers use `secureZero` (they hold decrypted plaintext, and handshake bytes under handshake keys). The others use a plain fill. The cost scales with bytes moved, not with buffer size. **Nothing a connection wrote is readable by the next connection that borrows the buffer.**
+3. **Zero what was used before giving it back.** The borrower passes how far into the buffer it wrote, and the give-back zeroes `[0, used)`. TLS buffers use `secureZero` (they hold decrypted plaintext, and handshake bytes under handshake keys). The others use a plain fill. The cost scales with bytes moved, not with buffer size. **Nothing a connection wrote is readable by the next connection that borrows the buffer.**
 4. **The pool grows to its high-water mark, then allocates nothing.** It never shrinks. After warm-up a borrow pops a free list. That keeps `Arena.used()` flat on a warmed slot and keeps every record and datagram allocation-free: the existing 0-byte checks keep passing unchanged, and each stage adds one that runs *after* warm-up.
 5. **The pool never runs dry.** Its ceiling is what preallocation would have cost (slots × buffers per slot), so behaviour under full load is the old behaviour, and only idle capacity stops costing memory. A borrow therefore cannot fail, and no new error path or flow-control stall is introduced.
-6. **Public constructors keep their signatures.** A standalone `Http2Connection` or `QuicConnection` (as the unit tests build them) gets a private pool of its own. Only the server types share one. No guide page moves except the HTTP/1.1 one, if `Http1Config` gains anything.
+6. **Public constructors keep their signatures.** A standalone `Http2Connection` or `QuicConnection` (as the unit tests build them) gets a private pool of its own. Only the server types share one. No guide page moves.
 7. **Small key-bearing arrays stay per slot.** Traffic secrets, AES schedules and `TlsServer`'s secret pools are a few KB each, are already wiped by `wipeKeys` / `wipeHandshake` / `wipeAll`, and do not move between connections.
 
 ## Interop slots
 
-**Owns:** `tests/link/net_interop_server/**`, `bench/pool-rss.mjs`, `bench/http.mjs`, `bench/h2load.mjs`, `bench/README.md` (stage `interop-slots`, with Measurement harness below)
+**Owns:** `tests/link/net_interop_server/**`, `bench/pool-rss.mjs`, `bench/h2load.mjs`, `bench/README.md` (stage `interop-slots`, with Measurement harness below)
 
 - `cli.ts`: `--slots <n>` becomes another `else if` branch in `parseServe` (`cli.ts:44-76`). It parses with `decimal()`. A value outside 1 to 4096 is refused after the loop with `"--slots wants a count from 1 to 4096"` (exit 2, as the port refusals). The usage header in `main.ts:4-8` gains the line.
 - `server.ts`: `options.slots` sizes all four pools. The stale comment at `:58-61` is rewritten with the figures the `baseline` todo measures.
@@ -118,34 +115,29 @@ All of it lives in `bench/` and drives the interop server binary. Build the bina
 
 - **`bench/pool-rss.mjs --slots 16,64,256,1024 [--timeout 30]`**: for each count it starts `serve --slots N` on free ports and polls the four ports until each accepts (TCP connect for HTTP/1.1, HTTPS/1.1 and HTTP/2; for QUIC, either a UDP probe answered by Version Negotiation or a bind on the port that fails). It reports exec-to-listening time, then `VmRSS` and `VmHWM` from `/proc/<pid>/status`, and kills the server. A count that misses the timeout is reported as such, not dropped.
 - **Per-pool attribution**: the same script with `--only h1|h1s|h2|h3`, which passes `serve --only <pool>`. The interop CLI gains `--only` beside `--slots`: it builds just that pool, appears in the usage header, and refuses any other value with exit 2.
-- **`bench/http.mjs`**: HTTP/1.1 keep-alive load from Node's `http.Agent` against the h1 port, with C connections for D seconds (defaults 64 and 10), requests per second as the result. With `--against <bin2>` it interleaves rounds of two binaries. With the same binary on both sides it is the noise band, per CLAUDE.md's `Measured:` rule.
-- **`bench/h2load.mjs`**: the same interleaving around `h2load` for HTTPS/1.1 (`--h1`), HTTP/2, and HTTP/3 (`--alpn-list=h3`). `h2load` comes from `nghttp2-client` (`sudo apt-get install -y nghttp2-client`). If the installed `h2load` was built without HTTP/3, the script says so on stderr and drives HTTP/3 with the interop server's own client (`tests/link/net_interop_server/client.ts`) in a request loop instead. `bench/README.md` records which load generator produced each figure.
+- **`bench/http.mjs`** comes from PR 672 and is not this run's. It measures plain HTTP/1.1, which this run does not change, so it is only re-run once, at acceptance.
+- **`bench/h2load.mjs`**: interleaved A/B rounds of two binaries (`--against <bin2>`; the same binary twice is the noise band, per CLAUDE.md's `Measured:` rule) around `h2load` for HTTPS/1.1 (`--h1`), HTTP/2, and HTTP/3 (`--alpn-list=h3`). `h2load` comes from `nghttp2-client` (`sudo apt-get install -y nghttp2-client`). If the installed `h2load` was built without HTTP/3, the script says so on stderr and drives HTTP/3 with the interop server's own client (`tests/link/net_interop_server/client.ts`) in a request loop instead. `bench/README.md` records which load generator produced each figure.
 - **`baseline`**: run all three on `main` at 99b81d2 and record the tables in `bench/README.md`. Later stages copy figures from there, never from a PR body.
 
 ## Buffer pool
 
-**Owns:** `std/net/buffer-pool.ts`, `std/net/http1-server.ts`, `tests/link/net_buffer_pool/**`, `tests/link/net_http1_server*/**`, `docs/security/http1.md`, `docs/guide/using-nish/standard-library.md` (stage `http1-pool`, with HTTP/1.1 below)
+**Owns:** `std/net/buffer-pool.ts`, `tests/link/net_buffer_pool/**` (stage `buffer-pool`)
 
 ```ts
 // std/net/buffer-pool.ts — sketch; the stage settles names against .claude/typescript.md
 export class BufferPool {
-  constructor(bufferSize: i32, ceiling: i32)  // ceiling = most buffers ever lent at once
-  borrow(): i32                               // index of a lent buffer; grows the pool below the ceiling
-  bytes(index: i32): u8[]                     // the buffer itself
-  giveBack(index: i32, used: i32, secret: boolean): void  // zeroes [0, used), secureZero when secret
-  lent(): i32                                 // buffers out now
-  highWater(): i32                            // buffers ever allocated
+  constructor(size: i32, ceiling: i32)   // every buffer is `size` bytes; at most `ceiling` exist
+  take(): u8[]                            // the buffer given back last, or a new one while made < ceiling
+  give(buf: u8[], used: i32): void        // zeroes [0, used) with a plain fill, then frees it
+  giveSecret(buf: u8[], used: i32): void  // the same with secureZero, for buffers that held plaintext under TLS
+  made: i32                               // buffers ever allocated (the high-water mark)
+  lent(): i32                             // buffers out now
 }
 ```
 
-Indices rather than array references, so a slot holds an `i32` (-1 for none) and a double give-back or a use after give-back can be caught by a debug check. Sizes are fixed per pool. A server that needs two sizes owns two pools.
-
-## HTTP/1.1
-
-- `Http1OutputPool` wraps a `BufferPool` sized by `config.outputSize`, with the ceiling set to the pool's slot count. `Http1Server` and `Http1TlsServer` each own one.
-- A slot borrows `output` on its first write that needs room. It gives it back when every byte has been flushed to the socket and the connection is waiting for a next request, or when the connection ends. `data` stops aliasing a permanent buffer.
-- The parser and WebSocket buffers (~3 KB) stay per slot.
-- `docs/security/http1.md` "What is and is not wiped" says the output buffer is now zeroed over its used extent when it goes back. `standard-library.md` notes that a slot's output memory is lent, not reserved.
+- Same shape as `Http1OutputPool` (`take`/`give`/`made`, a `u8[][]` free list), so the two can merge later. This run does not edit `http1-server.ts`, which runs 671 and 673 are editing.
+- `take` past the ceiling is a programming error: a fatal panic naming the pool, not a silent allocation. The ceiling equals the old preallocation (rule 5), so reaching it means a buffer was not given back.
+- `give` of a buffer of the wrong length is the same kind of error.
 
 ## TLS
 
@@ -179,14 +171,14 @@ Every stage that touches `std/` also regenerates the generated goldens, `tests/s
 
 ## Tests
 
-Each pooled stage adds, in its own `tests/link/` directories:
-- **Flat after warm-up**: on a warmed slot, N more requests or connections through the pool move `Arena.used()` by 0 bytes. The existing 0-byte checks (`net_http1_server/checks.ts:423`, `net_tls_record_tcp/checks.ts:134`, `net_http2/checks.ts:527`, `net_http3/arena.ts`, `net_quic_memory/checks.ts:323`, `net_webtransport/arena.ts:211`) must pass unchanged.
+Stage `buffer-pool` pins the primitive in `tests/link/net_buffer_pool`: reuse returns the last buffer given, `made` stops at the high-water mark, the zeroed extent reads 0, and a warmed take/give loop moves the arena by 0 bytes. Each consumer stage adds, in its own `tests/link/` directories:
+- **Flat after warm-up**: on a warmed slot, N more requests or connections through the pool move `Arena.used()` by 0 bytes. The existing 0-byte checks (`net_tls_record_tcp/checks.ts:134`, `net_http2/checks.ts:527`, `net_http3/arena.ts`, `net_quic_memory/checks.ts:323`, `net_webtransport/arena.ts:211`) must pass unchanged.
 - **Idle holds nothing**: a server whose connections have all ended reports `lent() == 0`.
-- **Zeroed reuse**: connection A writes a known pattern, ends; connection B borrows the same index and reads zeros over A's used extent. This check must fail if the give-back's zeroing is removed. Run it once with zeroing disabled and say so in the PR.
-- **Memory at size**: a server built with 1,024 slots and no connections holds no pooled buffers (`highWater() == 0`).
+- **Zeroed reuse**: connection A writes a known pattern, ends; connection B takes the same buffer and reads zeros over A's used extent. This check must fail if the give-back's zeroing is removed. Run it once with zeroing disabled and say so in the PR.
+- **Memory at size**: a server built with 1,024 slots and no connections holds no pooled buffers (`made == 0`).
 - QUIC only: **no give-back before ack**. A stream whose last segment is lost and retransmitted still holds its send buffer until the ack arrives, and the retransmitted bytes match.
 
-Each stage records in its PR body the `bench/pool-rss.mjs --only <pool>` figures before and after, and the throughput delta with its noise band from `bench/http.mjs` or `bench/h2load.mjs`. The commit body carries the same figures as `Measured:`.
+Each stage records in its PR body the `bench/pool-rss.mjs --only <pool>` figures before and after, and the throughput delta with its noise band from `bench/h2load.mjs`. The commit body carries the same figures as `Measured:`.
 
 ## Out of scope
 
@@ -194,9 +186,22 @@ Each stage records in its PR body the `bench/pool-rss.mjs --only <pool>` figures
 - Shrinking a pool after a peak.
 - The interop app's own per-stream `InteropStream` input (80 × 1,024 B per slot, `app.ts:68`).
 - Any `src/` change. This is all `std/`, `tests/` and `bench/`.
+- HTTP/1.1. PR 672 pools its output buffer. Moving `Http1OutputPool` onto `BufferPool`, and zeroing what it takes back, is a follow-up once `buffer-pool` has landed.
 
 ## Verification
 
 Per stage, as in its `verification` line, plus the repo's definition of done: `npm run check` and an undegraded `npm test` (zero toolchain skips). `std/` changes move `tests/self/goldens/checked.txt`, which is regenerated with `node tests/self/goldens.js --update`, never edited.
 
-Merge order: `interop-slots` and `http1-pool` first, in either order. `tls-pool`, `http2-pool` and `quic-h3-pool` start once `http1-pool` has merged (they use `std/net/buffer-pool.ts`) and merge in any order.
+Merge order: `interop-slots` and `buffer-pool` first, in either order. `tls-pool`, `http2-pool` and `quic-h3-pool` start once `buffer-pool` has merged (they use `std/net/buffer-pool.ts`) and merge in any order.
+
+## Concurrent runs
+
+Three other `/feature` runs are open against the same files. Their PRs and this run's will conflict textually, and each conflict is resolved by merging `main` and regenerating the goldens, never by hand.
+
+| Run | Overlap with this plan |
+|---|---|
+| 670 `h3-ms-stalls` | its `h3-fix` stage owns all of `std/net/**` and `tests/link/net_*/**`, and is aimed at `quic.ts`, `quic-recovery.ts` and `http3-server.ts` |
+| 671 `http-date-header` | its `s2-date-h2-h3` stage edits `http2.ts`, `http2-tls.ts`, `http3.ts` and `http3-server.ts`, plus `docs/security/http2.md` and `http3.md` |
+| 673 `http-bench-twins` | edits `bench/README.md` and `bench/http.mjs` |
+
+`quic-h3-pool` is the most exposed stage. When it and 670's `h3-fix` are both open, whichever merges second re-runs `net_quic` and `net_http3` after merging `main`, plus 670's latency harness (`bench/h3-latency.mjs`) if it has landed.
