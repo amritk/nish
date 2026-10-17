@@ -60,9 +60,10 @@ export const isNishSpecifier = (specifier: string): boolean => specifier.startsW
 /**
  * `nish:unsafe`: the functions whose behaviour depends on the program being
  * right, where every other builtin checks. An unchecked element access is
- * undefined behaviour out of range, and a wrapping operation is defined where
- * the operator it replaces is not, so a call to either has to be visible where
- * it is written: the five are reached only through an import of this module
+ * undefined behaviour out of range, a wrapping operation is defined where
+ * the operator it replaces is not, and `readCString` (WP27 S3.3) reads a C
+ * address until a `NUL` nothing proves is there, so a call to any of them has
+ * to be visible where it is written: the six are reached only through an import of this module
  * (`isUnsafeExport`, and `checkBuiltinFunction` for the global spelling).
  */
 export const unsafeModule = (): string => `${BUILTIN_SCHEME}unsafe`
@@ -73,7 +74,8 @@ export const isUnsafeExport = (name: string): boolean =>
   name === "uncheckedSet" ||
   name === "wrappingAdd" ||
   name === "wrappingSub" ||
-  name === "wrappingMul"
+  name === "wrappingMul" ||
+  name === "readCString"
 
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
@@ -122,7 +124,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "netAddress, netLocalPort, tcpListen, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
   }
   if (specifier === unsafeModule()) {
-    return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul"
+    return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
   }
   return "write, writeError, panic"
 }

@@ -256,6 +256,54 @@ export const main = (): i32 => {
 };
 ```
 
+That is how a string C allocated comes back. Declare it `CPtr | null`, narrow
+it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
+yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
+how `realpath` is asked to allocate:
+
+```ts nish:ok
+import { readCString } from "nish:unsafe";
+
+declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
+declare function free(p: CPtr): void;
+
+export const main = (): i32 => {
+  const p = realpath(".", null);
+  if (p === null) {
+    return 1;
+  }
+  const dir = readCString(p);
+  free(p);
+  console.log(dir.length > 0 ? "resolved" : "empty");
+  return 0;
+};
+```
+
+The copy is an ordinary Nish string, so it outlives `free(p)`. `readCString`
+is in `nish:unsafe` because nothing proves the pointer is live or that its
+bytes end in a NUL: reading a freed or unterminated buffer is undefined
+behaviour, and the import is where a module says it takes that on. It takes a
+`CPtr`, not a `CPtr | null`, so an unnarrowed pointer is refused.
+
+A `NULL` reaches C only where the source spells it. A nullable pointer held in
+a variable is refused, because the path that passes it `NULL` is one nobody
+wrote on purpose:
+
+```ts nish:err NL2539
+declare function free(p: CPtr | null): void;
+declare function getcwd(buf: CPtr | null, size: u64): CPtr | null;
+
+export const main = (): i32 => {
+  const p = getcwd(null, 0);
+  free(p);
+  return 0;
+};
+```
+
+```console
+Argument 1 of `free` is a `CPtr | null` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested
+```
+
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and

@@ -170,6 +170,10 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       i = i + 1
       continue
     }
+    // S3.3: `CPtr | null` passes, because the call site is where a null is
+    // held to the literal one (`refuseForeignNullable` in `expressions.ts`,
+    // `docs/wp27-ffi.md` §8g): the declaration cannot tell `realpath(p, null)`
+    // from handing C back a null it gave out.
     if (ctx.table.isRanged(sig.paramTypes[i])) {
       refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
     } else if (!isForeignType(ctx.table, sig.paramTypes[i])) {
@@ -177,17 +181,6 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       ctx.error(
         decl,
         `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars and \`CPtr\` only, besides a \`string\` it borrows as \`const char *\``
-      )
-    } else if (ctx.table.isNullable(sig.paramTypes[i])) {
-      // A parameter cannot be `CPtr | null`, and the asymmetry with the return
-      // type is the rule §3 states as "`null` only from a foreign call": the
-      // callee is the only thing that can say "no address", so `null` arrives
-      // from C and is narrowed before it goes back. Without this a program
-      // could hand C a null it never got from C, which is the one thing the
-      // narrowing was there to stop.
-      ctx.error(
-        decl,
-        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` cannot be nullable: a foreign pointer is narrowed with \`!== null\` before it is passed back, because only the C function it came from can hand out a null one`
       )
     }
     i = i + 1

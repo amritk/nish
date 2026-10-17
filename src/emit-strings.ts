@@ -594,6 +594,18 @@ const foreignCopy = (newStr: string): string => {
 }
 
 /**
+ * The NUL-terminated bytes at `value`, an `i8*` that is not null, copied into
+ * the arena by the module's `@nish.ffi.str`: a `declare function`'s `string`
+ * result once it is known not to be `NULL`, and `readCString`'s argument
+ * (WP27 S3.3), which a `CPtr` type keeps from being null.
+ */
+export const emitCStringCopy = (emitter: Emitter, value: string): string => {
+  const copy = emitter.useRuntime("nish_str_new")
+  emitter.module.addRawDefinition(foreignCopy(copy))
+  return emitter.fn.emitValue(`call i8* @nish.ffi.str(i8* ${value})`)
+}
+
+/**
  * The `const char *` a call of the `declare function` `callee` answered,
  * `value`, as the `string` or `string | null` it is declared to return (§8d):
  * copied into the arena, so the string is the program's and C keeps its own,
@@ -604,8 +616,6 @@ const foreignCopy = (newStr: string): string => {
  */
 export const emitForeignStringResult = (emitter: Emitter, callee: FunctionSig, value: string): string => {
   const fn = emitter.fn
-  const copy = emitter.useRuntime("nish_str_new")
-  emitter.module.addRawDefinition(foreignCopy(copy))
   const nullable = emitter.table.isNullable(callee.returnType)
   const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
   const nullBlock = fn.newBlock(nullable ? "ffi.none" : "ffi.null")
@@ -616,11 +626,11 @@ export const emitForeignStringResult = (emitter: Emitter, callee: FunctionSig, v
     const message = `\`${callee.sourceName}\` returned NULL for a \`string\` result; declare it \`string | null\``
     emitPanicTail(emitter, emitter.stringConstant(message))
     fn.placeBlock(someBlock)
-    return fn.emitValue(`call i8* @nish.ffi.str(i8* ${value})`)
+    return emitCStringCopy(emitter, value)
   }
   const join = fn.newBlock("ffi.join")
   fn.placeBlock(someBlock)
-  const copied = fn.emitValue(`call i8* @nish.ffi.str(i8* ${value})`)
+  const copied = emitCStringCopy(emitter, value)
   const copiedFrom = fn.currentBlock()
   fn.emit(`br label %${join.label}`)
   fn.placeBlock(nullBlock)

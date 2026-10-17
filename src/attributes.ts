@@ -3455,9 +3455,10 @@ class FactCollector {
     // `nish:unsafe`: `uncheckedGet` is the load `xs[i]` is and
     // `uncheckedSet` the store `xs[i] = v` is (`collectArrayFacts`), less the
     // bounds check, so neither lists `nish_panic_index`. The store's receiver
-    // is a shared write above, through its `w`.
+    // is a shared write above, through its `w`. `readCString` reads C's bytes
+    // up to the `NUL` (WP27 S3.3).
     const name = builtinNameOf(this.unit.program, node)
-    if (name === "uncheckedGet") {
+    if (name === "uncheckedGet" || name === "readCString") {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet") {
       this.facts.effect = EFFECT_WRITE
