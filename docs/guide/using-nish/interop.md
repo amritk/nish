@@ -199,8 +199,10 @@ lists each checked call as an `ffi-nul` site.
 A `string` *result* crosses the other way, as a copy. C answers a
 `const char *` into a buffer it keeps, and the program copies the bytes into a
 string of its own at the call, so a later call that overwrites C's buffer
-changes nothing the program holds. A C function that may answer `NULL` is
-declared `string | null`, and `NULL` arrives as `null`:
+changes nothing the program holds. Each call makes a new copy, which lives
+like any other string the function makes, in a loop as anywhere else. A C
+function that may answer `NULL` is declared `string | null`, and `NULL` arrives
+as `null`:
 
 ```ts nish:ok
 declare function strerror(errnum: i32): string;

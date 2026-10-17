@@ -4477,10 +4477,16 @@ ffi.copy:
 - **The copy is one scan for the NUL and one `nish_str_new`**, in a private
   helper the module defines once (`@nish.ffi.str`). C's pointer is never held
   past it, so a buffer C reuses or frees later cannot reach the program.
+- **Every call's copy is new, and is the calling function's allocation**, as
+  `s.substring(...)` is: a loop that keeps one keeps it past the pass, and a
+  `using a = arena()` block that would release one held outside it is refused,
+  as it is for any fresh string (`tests/cases/ffi_string_loops`,
+  `reject_ffi_string_arena`).
 - **The copy follows the call, so a call with a `string` result is never a
   `tail` call**: a C function that answers a pointer into its argument
   (`strchr`, `strstr`) is read before that argument's arena scope is released.
-- **`string | null` reads `NULL` as `null`**, with no check and no site.
+- **`string | null` reads `NULL` as `null`**, tested before the copy but with
+  no panic site.
 - **A `string` result that is `NULL` panics after the call**, because a
   `string` cannot hold it: `` `getenv` returned NULL for a `string` result;
   declare it `string | null` `` (`tests/cases/panics_ffi_null`). That is the

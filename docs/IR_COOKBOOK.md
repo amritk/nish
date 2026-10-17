@@ -9659,7 +9659,7 @@ read before the argument's scope is released.
 `NULL` cannot be a `string`, so `strerror`'s result is tested and a cold
 `ffi.null` block panics, the [`ffi-null` site](LANGUAGE.md#panic-sites). The
 result declared `string | null` reads `NULL` as `null` instead: `getenv`'s
-`ffi.none` arm joins the copy in a `phi`, with no check and no site
+`ffi.none` arm joins the copy in a `phi`, tested but with no panic site
 (`tests/cases/ffi_string_return`, `panics_ffi_null`).
 
 <!-- cookbook:begin decl-ffi-string-result -->
