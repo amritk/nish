@@ -1,0 +1,29 @@
+PASS  a fresh pool has made nothing
+PASS  a fresh pool has lent nothing
+PASS  take returns a buffer of the pool's size
+PASS  a new buffer is all zeros
+PASS  the first take makes one buffer
+PASS  one buffer is lent
+PASS  give takes the buffer back
+PASS  give zeroes the used extent
+PASS  give leaves bytes past the used extent
+PASS  take returns the buffer given back last (its marker is there)
+PASS  a reused buffer reads 0 where it was used
+PASS  reuse makes no new buffer
+PASS  a second take while one is lent makes a second buffer
+PASS  the buffer given back last comes out first
+PASS  the buffer given back before it comes out next, used 0 having zeroed nothing
+PASS  both came off the free list
+PASS  give with used = size zeroes every byte
+PASS  the other buffer is zeroed too
+PASS  taking up to the ceiling makes exactly the ceiling
+PASS  all three are lent
+PASS  all three given back leaves none lent
+PASS  taking the ceiling again makes nothing new
+PASS  giveSecret zeroes the used extent
+PASS  giveSecret takes the buffer back
+PASS  a buffer given back by giveSecret is the next one lent
+PASS  giveSecret with used 0 still takes the buffer back
+PASS  a warmed take/give loop moves Arena.used() by 0
+PASS  the warmed loop made nothing past its warm-up
+buffer-pool: 28 passed, 0 failed, 0 skipped
