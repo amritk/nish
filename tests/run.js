@@ -5366,6 +5366,214 @@ if (!only || "ffi_string checks".includes(only)) {
     reachFfi.status === 1 && reachFfi.stderr.includes("calls strlen"),
     shown(reachFfi)
   )
+
+  // WP27 S3.2: a `string` result is copied out of C's `const char *` after the
+  // call, and `NULL` panics (`ffi-null`); `string | null` reads `NULL` as
+  // `null` and is no site. The second program reaches the copy through a
+  // constructor by `new`, inside a `using` block, and through `this` stored
+  // out of a constructor, then churns the arena before it prints each one, so
+  // a copy placed in a scope released too early prints other bytes.
+  const result = write(
+    "result.ts",
+    [
+      "declare function getenv(name: string): string;",
+      "declare function strchr(s: string, c: i32): string | null;",
+      "",
+      "export const main = (): i32 => {",
+      '  const a = getenv("HOME");',
+      '  const b = strchr("abc", 98);',
+      "  console.log(b === null ? a : b);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const resultSites = sitesOf(result)
+  const resultKinds = fnSites(resultSites.report, "main")
+    .map((p) => `${p.line}:${p.kind}`)
+    .join(",")
+  check(
+    "ffi_string: a `string` result is an `ffi-null` site and a `string | null` one is not, each an allowed `oom`",
+    resultKinds === "5:ffi-null,5:oom,6:oom",
+    resultSites.report === null ? shown(resultSites.r) : JSON.stringify(resultSites.report)
+  )
+  const resultDeny = compileFfi(result, ["--deny-panics"])
+  check(
+    "ffi_string: --deny-panics refuses a `string` result and names `string | null`",
+    resultDeny.status === 1 &&
+      resultDeny.stderr.includes("`ffi-null` may panic here") &&
+      resultDeny.stderr.includes("declare the result `string | null`"),
+    shown(resultDeny)
+  )
+  const nullable = write(
+    "nullable.ts",
+    [
+      "declare function getenv(name: string): string | null;",
+      "",
+      "export const main = (): i32 => {",
+      '  const a = getenv("HOME");',
+      '  console.log(a === null ? "unset" : "set");',
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const nullableDeny = compileFfi(nullable, ["--deny-panics"])
+  check(
+    "ffi_string: a `string | null` result compiles under --deny-panics, with no `ffi.null` block",
+    nullableDeny.status === 0 &&
+      irOf(nullable).includes("ffi.none:") &&
+      !irOf(nullable).includes("ffi.null:"),
+    `${shown(nullableDeny)}\n${irOf(nullable)}`
+  )
+
+  const kept = write(
+    "kept.ts",
+    [
+      'import { Mutex } from "nish/threads";',
+      "",
+      "declare function strerror(errnum: i32): string;",
+      "",
+      "class Counter {",
+      '  s: string = "";',
+      "}",
+      "",
+      "class Name {",
+      "  text: string;",
+      "  constructor(e: i32) {",
+      "    this.text = strerror(e);",
+      "  }",
+      "}",
+      "",
+      "class Holder {",
+      "  t: Tag | null = null;",
+      "}",
+      "",
+      "class Tag {",
+      "  constructor(h: Holder, e: i32) {",
+      "    h.t = this;",
+      "    this.label = strerror(e);",
+      "  }",
+      '  label: string = "";',
+      "}",
+      "",
+      "const churn = (n: i32): i32 => {",
+      "  const t: string[] = [];",
+      "  for (let i = 0; i < n; i++) {",
+      "    t.push(`${i}`);",
+      "  }",
+      '  return t.join("").length;',
+      "};",
+      "",
+      "export const main = (): i32 => {",
+      "  const m = new Mutex<Counter>(new Counter());",
+      "  const n = new Name(1);",
+      "  {",
+      "    using g = m.lock();",
+      "    g.value.s = strerror(2);",
+      "  }",
+      "  const h = new Holder();",
+      "  new Tag(h, 12);",
+      "  console.log(`${churn(4000) > 0}`);",
+      "  console.log(n.text);",
+      "  {",
+      "    using g = m.lock();",
+      "    console.log(g.value.s);",
+      "  }",
+      "  const t = h.t;",
+      '  console.log(t === null ? "none" : t.label);',
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const keptSites = sitesOf(kept)
+  check(
+    "ffi_string: a C string result in a constructor reached by `new` is an `ffi-null` site, and `new` a call site via it",
+    keptSites.report !== null &&
+      fnSites(keptSites.report, "Name.constructor").some(
+        (p) => p.kind === "ffi-null" && p.proven === false
+      ) &&
+      fnSites(keptSites.report, "Tag.constructor").some((p) => p.kind === "ffi-null" && p.proven === false) &&
+      fnSites(keptSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "Name.constructor" && p.via === "ffi-null"
+      ) &&
+      fnSites(keptSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "Tag.constructor" && p.via === "ffi-null"
+      ) &&
+      fnSites(keptSites.report, "main").filter((p) => p.kind === "ffi-null").length === 1,
+    keptSites.report === null ? shown(keptSites.r) : JSON.stringify(keptSites.report)
+  )
+  const keptExe = path.join(ffiDir, "kept.exe")
+  const keptBuilt = spawnSync(NISH, [kept, "-o", path.join(ffiDir, "kept") + path.sep, "--link", keptExe], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const keptRun = keptBuilt.status === 0 ? spawnSync(keptExe, [], { encoding: "utf8" }) : keptBuilt
+  check(
+    "ffi_string: C string results kept by a constructor, by a `using` block's guard and through `this` survive churn",
+    keptRun.status === 0 &&
+      keptRun.stdout === "true\nOperation not permitted\nNo such file or directory\nCannot allocate memory\n",
+    shown(keptRun)
+  )
+
+  // A `declare function` passed as a function parameter is called from the
+  // specialisation (`err<strerror>`), which holds the copy and the site.
+  const passed = write(
+    "passed.ts",
+    [
+      "declare function strerror(errnum: i32): string;",
+      "declare function getenv(name: string): string | null;",
+      "",
+      "function err(f: (n: i32) => string, n: i32): string {",
+      "  return f(n);",
+      "}",
+      "",
+      "function env(f: (name: string) => string | null, name: string): string {",
+      '  return f(name) ?? "unset";',
+      "}",
+      "",
+      "function churn(n: i32): i32 {",
+      "  const t: string[] = [];",
+      "  for (let i = 0; i < n; i++) {",
+      "    t.push(`${i}`);",
+      "  }",
+      '  return t.join("").length;',
+      "}",
+      "",
+      "export const main = (): i32 => {",
+      "  const a = err(strerror, 2);",
+      '  const b = env(getenv, "NISH_FFI_PASSED_UNSET");',
+      "  console.log(`${churn(4000) > 0}`);",
+      "  console.log(`${a}|${b}`);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const passedSites = sitesOf(passed)
+  check(
+    "ffi_string: a C string result through a function parameter is an `ffi-null` site in the specialisation",
+    passedSites.report !== null &&
+      fnSites(passedSites.report, "err<strerror>").some((p) => p.kind === "ffi-null" && p.proven === false) &&
+      !fnSites(passedSites.report, "env<getenv>").some((p) => p.kind === "ffi-null") &&
+      fnSites(passedSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "err<strerror>" && p.via === "ffi-null"
+      ),
+    passedSites.report === null ? shown(passedSites.r) : JSON.stringify(passedSites.report)
+  )
+  const passedExe = path.join(ffiDir, "passed.exe")
+  const passedBuilt = spawnSync(
+    NISH,
+    [passed, "-o", path.join(ffiDir, "passed") + path.sep, "--link", passedExe],
+    { cwd: root, encoding: "utf8" }
+  )
+  const passedRun = passedBuilt.status === 0 ? spawnSync(passedExe, [], { encoding: "utf8" }) : passedBuilt
+  check(
+    "ffi_string: C string results through a function parameter are copied and survive churn",
+    passedRun.status === 0 && passedRun.stdout === "true\nNo such file or directory|unset\n",
+    shown(passedRun)
+  )
 }
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
