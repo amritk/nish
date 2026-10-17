@@ -22287,8 +22287,8 @@ function isForeignType(table: TypeTable, t: i32): boolean -> @isForeignType [exp
   calls: TypeTable.stripNull isForeignScalar
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0
   stackSites=0 stackLocals=0
-  callee 89:3 isForeignScalar -> @isForeignScalar
-  callee 89:25 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 91:3 isForeignScalar -> @isForeignScalar
+  callee 91:25 TypeTable.stripNull -> @TypeTable.stripNull
 function isForeignScalar(t: i32): boolean -> @isForeignScalar
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -22307,14 +22307,14 @@ function isInteger(type: i32): boolean -> @isInteger [exported]
   escaping: type
   calls: intBits
   stackSites=0 stackLocals=0
-  callee 216:50 intBits -> @intBits
+  callee 218:50 intBits -> @intBits
 function isNumeric(type: i32): boolean -> @isNumeric [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: isFloat isInteger
   stackSites=0 stackLocals=0
-  callee 218:50 isInteger -> @isInteger
-  callee 218:69 isFloat -> @isFloat
+  callee 220:50 isInteger -> @isInteger
+  callee 220:69 isFloat -> @isFloat
 function DeclaredRange.constructor(this: DeclaredRange, lo: i64, hi: i64): void -> @DeclaredRange.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: hi lo
@@ -22325,9 +22325,9 @@ function TypeTable.constructor(this: TypeTable): void -> @TypeTable.constructor 
   calls: StringMap.constructor nish_alloc_struct nish_array_grow
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 293:18 new StringMap -> @StringMap.constructor
-  callee 294:20 new StringMap -> @StringMap.constructor
-  local 295:9 scalar: i32 (let)
+  callee 295:18 new StringMap -> @StringMap.constructor
+  callee 296:20 new StringMap -> @StringMap.constructor
+  local 297:9 scalar: i32 (let)
 function TypeTable.size(this: TypeTable): i32 -> @TypeTable.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false
@@ -22362,21 +22362,21 @@ function TypeTable.intern(this: TypeTable, kind: i32, ref: i32, name: string): i
   calls: TypeTable.internAll
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 338:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 340:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.internAll(this: TypeTable, kind: i32, ref: i32, name: string, err: i32, state: i32, ro: boolean): i32 -> @TypeTable.internAll [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 356:5
+  sharedWrite: 358:5
   escaping: err kind name ref ro state
   calls: StringMap.get StringMap.set TypeTable.derivedKey nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.derivedKey#0
   stackSites=0 stackLocals=0
-  local 346:11 base: string (const)
-  callee 349:11 TypeTable.derivedKey -> @TypeTable.derivedKey
-  local 350:11 key: string (const)
-  local 351:11 existing: i32 (const)
-  callee 351:22 StringMap.get -> @StringMap.get
-  local 355:11 id: i32 (const)
-  callee 363:5 StringMap.set -> @StringMap.set
+  local 348:11 base: string (const)
+  callee 351:11 TypeTable.derivedKey -> @TypeTable.derivedKey
+  local 352:11 key: string (const)
+  local 353:11 existing: i32 (const)
+  callee 353:22 StringMap.get -> @StringMap.get
+  local 357:11 id: i32 (const)
+  callee 365:5 StringMap.set -> @StringMap.set
 function TypeTable.arrayOf(this: TypeTable, elem: i32): i32 -> @TypeTable.arrayOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.intern
@@ -22384,7 +22384,7 @@ function TypeTable.arrayOf(this: TypeTable, elem: i32): i32 -> @TypeTable.arrayO
   calls: TypeTable.intern
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 368:12 TypeTable.intern -> @TypeTable.intern
+  callee 370:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.readonlyArrayOf(this: TypeTable, elem: i32): i32 -> @TypeTable.readonlyArrayOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.internAll
@@ -22392,7 +22392,7 @@ function TypeTable.readonlyArrayOf(this: TypeTable, elem: i32): i32 -> @TypeTabl
   calls: TypeTable.internAll
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 373:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 375:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.isReadonlyArray(this: TypeTable, type: i32): boolean -> @TypeTable.isReadonlyArray [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22406,10 +22406,10 @@ function TypeTable.structOf(this: TypeTable, name: string): i32 -> @TypeTable.st
   calls: TypeTable.intern
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 382:12 TypeTable.intern -> @TypeTable.intern
+  callee 384:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.setDisplayName(this: TypeTable, type: i32, display: string): void -> @TypeTable.setDisplayName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 387:5
+  sharedWrite: 389:5
   escaping: display type
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
@@ -22421,7 +22421,7 @@ function TypeTable.enumOf(this: TypeTable, name: string): i32 -> @TypeTable.enum
   calls: TypeTable.intern
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 392:12 TypeTable.intern -> @TypeTable.intern
+  callee 394:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.declaredEnumOf(this: TypeTable, name: string): i32 -> @TypeTable.declaredEnumOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.enumOf
@@ -22429,13 +22429,13 @@ function TypeTable.declaredEnumOf(this: TypeTable, name: string): i32 -> @TypeTa
   calls: StringMap.has TypeTable.derivedKey TypeTable.enumOf TypeTable.setDisplayName nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.derivedKey#0 TypeTable.enumOf#0 TypeTable.setDisplayName#0
   stackSites=0 stackLocals=0
-  local 407:9 symbol: string (let)
-  local 408:9 n: i32 (let)
-  callee 409:12 StringMap.has -> @StringMap.has
-  callee 409:27 TypeTable.derivedKey -> @TypeTable.derivedKey
-  local 413:11 id: i32 (const)
-  callee 413:16 TypeTable.enumOf -> @TypeTable.enumOf
-  callee 414:5 TypeTable.setDisplayName -> @TypeTable.setDisplayName
+  local 409:9 symbol: string (let)
+  local 410:9 n: i32 (let)
+  callee 411:12 StringMap.has -> @StringMap.has
+  callee 411:27 TypeTable.derivedKey -> @TypeTable.derivedKey
+  local 415:11 id: i32 (const)
+  callee 415:16 TypeTable.enumOf -> @TypeTable.enumOf
+  callee 416:5 TypeTable.setDisplayName -> @TypeTable.setDisplayName
 function TypeTable.isEnum(this: TypeTable, type: i32): boolean -> @TypeTable.isEnum [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22449,7 +22449,7 @@ function TypeTable.enumMemberOf(this: TypeTable, enumType: i32, value: i32, name
   calls: TypeTable.internAll
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 428:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 430:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.isEnumMemberType(this: TypeTable, type: i32): boolean -> @TypeTable.isEnumMemberType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22462,8 +22462,8 @@ function TypeTable.isEntered(this: TypeTable, type: i32): boolean -> @TypeTable.
   calls: TypeTable.isEnumMemberType TypeTable.isRanged
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0 TypeTable.isEnumMemberType#0
   stackSites=0 stackLocals=0
-  callee 443:12 TypeTable.isRanged -> @TypeTable.isRanged
-  callee 443:35 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee 445:12 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 445:35 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
 function TypeTable.memberValue(this: TypeTable, type: i32): i32 -> @TypeTable.memberValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22476,33 +22476,33 @@ function TypeTable.enumBase(this: TypeTable, type: i32): i32 -> @TypeTable.enumB
   calls: TypeTable.isEnum TypeTable.isEnumMemberType nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isEnum#0 TypeTable.isEnumMemberType#0
   stackSites=0 stackLocals=0
-  callee 453:9 TypeTable.isEnum -> @TypeTable.isEnum
-  callee 456:12 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee 455:9 TypeTable.isEnum -> @TypeTable.isEnum
+  callee 458:12 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
 function TypeTable.unionOf(this: TypeTable, variants: i32[], tags: i32[], tagEnum: i32, tagName: string): i32 -> @TypeTable.unionOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 496:5
+  sharedWrite: 498:5
   escaping: tagEnum tagName
   calls: StringMap.get StringMap.set TypeTable.intern nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
   pointer variants: size=0 writesThrough=false captured=false
   pointer tags: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 467:11 sorted: i32[] (const)
-  local 468:11 sortedTags: i32[] (const)
-  local 469:9 i: i32 (let)
-  local 471:13 variant: i32 (const)
-  local 472:13 tag: i32 (const)
-  local 475:11 at: i32 (let)
-  local 477:15 swap: i32 (const)
-  local 480:15 swapTag: i32 (const)
-  local 487:11 parts: string[] (const)
-  local 488:16 variant: i32 (const)
-  local 491:11 key: string (const)
-  local 492:11 existing: i32 (const)
-  callee 492:22 StringMap.get -> @StringMap.get
-  local 498:11 id: i32 (const)
-  callee 498:16 TypeTable.intern -> @TypeTable.intern
-  callee 500:5 StringMap.set -> @StringMap.set
+  local 469:11 sorted: i32[] (const)
+  local 470:11 sortedTags: i32[] (const)
+  local 471:9 i: i32 (let)
+  local 473:13 variant: i32 (const)
+  local 474:13 tag: i32 (const)
+  local 477:11 at: i32 (let)
+  local 479:15 swap: i32 (const)
+  local 482:15 swapTag: i32 (const)
+  local 489:11 parts: string[] (const)
+  local 490:16 variant: i32 (const)
+  local 493:11 key: string (const)
+  local 494:11 existing: i32 (const)
+  callee 494:22 StringMap.get -> @StringMap.get
+  local 500:11 id: i32 (const)
+  callee 500:16 TypeTable.intern -> @TypeTable.intern
+  callee 502:5 StringMap.set -> @StringMap.set
 function TypeTable.isUnion(this: TypeTable, type: i32): boolean -> @TypeTable.isUnion [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22539,21 +22539,21 @@ function TypeTable.hasVariant(this: TypeTable, type: i32, variant: i32): boolean
   calls: TypeTable.variantsOf
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0
   stackSites=0 stackLocals=0
-  local 531:11 variants: i32[] (const)
-  callee 531:22 TypeTable.variantsOf -> @TypeTable.variantsOf
-  local 532:9 i: i32 (let)
+  local 533:11 variants: i32[] (const)
+  callee 533:22 TypeTable.variantsOf -> @TypeTable.variantsOf
+  local 534:9 i: i32 (let)
 function TypeTable.unionWithin(this: TypeTable, from: i32, to: i32): boolean -> @TypeTable.unionWithin [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
   calls: TypeTable.hasVariant TypeTable.isUnion TypeTable.variantsOf
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isUnion#0 TypeTable.isUnion#0 TypeTable.variantsOf#0 TypeTable.hasVariant#0
   stackSites=0 stackLocals=0
-  callee 544:10 TypeTable.isUnion -> @TypeTable.isUnion
-  callee 544:33 TypeTable.isUnion -> @TypeTable.isUnion
-  local 547:11 variants: i32[] (const)
-  callee 547:22 TypeTable.variantsOf -> @TypeTable.variantsOf
-  local 548:9 i: i32 (let)
-  callee 550:12 TypeTable.hasVariant -> @TypeTable.hasVariant
+  callee 546:10 TypeTable.isUnion -> @TypeTable.isUnion
+  callee 546:33 TypeTable.isUnion -> @TypeTable.isUnion
+  local 549:11 variants: i32[] (const)
+  callee 549:22 TypeTable.variantsOf -> @TypeTable.variantsOf
+  local 550:9 i: i32 (let)
+  callee 552:12 TypeTable.hasVariant -> @TypeTable.hasVariant
 function TypeTable.nullableOf(this: TypeTable, inner: i32): i32 -> @TypeTable.nullableOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.intern
@@ -22561,7 +22561,7 @@ function TypeTable.nullableOf(this: TypeTable, inner: i32): i32 -> @TypeTable.nu
   calls: TypeTable.intern nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 563:12 TypeTable.intern -> @TypeTable.intern
+  callee 565:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.stripNull(this: TypeTable, type: i32): i32 -> @TypeTable.stripNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22575,7 +22575,7 @@ function TypeTable.maybeOf(this: TypeTable, value: i32): i32 -> @TypeTable.maybe
   calls: TypeTable.intern
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 573:12 TypeTable.intern -> @TypeTable.intern
+  callee 575:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.isMaybe(this: TypeTable, type: i32): boolean -> @TypeTable.isMaybe [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22589,7 +22589,7 @@ function TypeTable.rangedOf(this: TypeTable, lo: i32, hi: i32): i32 -> @TypeTabl
   calls: TypeTable.internAll
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 585:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 587:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.isRanged(this: TypeTable, type: i32): boolean -> @TypeTable.isRanged [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22614,30 +22614,30 @@ function TypeTable.entryIsFree(this: TypeTable, from: i32, to: i32): boolean -> 
   calls: TypeTable.isRanged nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
   stackSites=0 stackLocals=0
-  callee 610:9 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 612:9 TypeTable.isRanged -> @TypeTable.isRanged
 function TypeTable.baseOf(this: TypeTable, type: i32): i32 -> @TypeTable.baseOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isEnumMemberType TypeTable.isRanged nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isEnumMemberType#0 TypeTable.isRanged#0
   stackSites=0 stackLocals=0
-  callee 622:9 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
-  callee 625:12 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 624:9 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
+  callee 627:12 TypeTable.isRanged -> @TypeTable.isRanged
 function TypeTable.declaredRange(this: TypeTable, type: i32): DeclaredRange | null -> @TypeTable.declaredRange [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: DeclaredRange.constructor TypeTable.isRanged nish_alloc_struct nish_panic_index nish_panic_overflow
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isRanged#0
   stackSites=0 stackLocals=0
-  callee 638:9 TypeTable.isRanged -> @TypeTable.isRanged
-  callee 639:14 new DeclaredRange -> @DeclaredRange.constructor
-  callee 643:16 new DeclaredRange -> @DeclaredRange.constructor
+  callee 640:9 TypeTable.isRanged -> @TypeTable.isRanged
+  callee 641:14 new DeclaredRange -> @DeclaredRange.constructor
   callee 645:16 new DeclaredRange -> @DeclaredRange.constructor
   callee 647:16 new DeclaredRange -> @DeclaredRange.constructor
-  local 650:15 high: i64 (const)
-  local 651:15 shift: i64 (const)
-  local 652:15 low: i64 (const)
-  callee 653:16 new DeclaredRange -> @DeclaredRange.constructor
+  callee 649:16 new DeclaredRange -> @DeclaredRange.constructor
+  local 652:15 high: i64 (const)
+  local 653:15 shift: i64 (const)
+  local 654:15 low: i64 (const)
+  callee 655:16 new DeclaredRange -> @DeclaredRange.constructor
 function TypeTable.resultOf(this: TypeTable, ok: i32, err: i32, state: i32): i32 -> @TypeTable.resultOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.internAll
@@ -22645,7 +22645,7 @@ function TypeTable.resultOf(this: TypeTable, ok: i32, err: i32, state: i32): i32
   calls: TypeTable.internAll
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 663:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 665:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.isResult(this: TypeTable, type: i32): boolean -> @TypeTable.isResult [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22677,33 +22677,33 @@ function TypeTable.withState(this: TypeTable, type: i32, state: i32): i32 -> @Ty
   calls: TypeTable.resultOf nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.resultOf#0
   stackSites=0 stackLocals=0
-  callee 693:12 TypeTable.resultOf -> @TypeTable.resultOf
+  callee 695:12 TypeTable.resultOf -> @TypeTable.resultOf
 function TypeTable.mangle(this: TypeTable, type: i32): string -> @TypeTable.mangle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.mangle TypeTable.scalarName TypeTable.unionMangle nish_panic_index nish_str_concat signedBound
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.unionMangle#0 TypeTable.scalarName#0
   stackSites=0 stackLocals=0
-  callee 718:22 TypeTable.mangle -> @TypeTable.mangle
-  callee 719:20 TypeTable.mangle -> @TypeTable.mangle
-  callee 721:23 TypeTable.mangle -> @TypeTable.mangle
-  callee 733:22 signedBound -> @signedBound
-  callee 733:54 TypeTable.mangle -> @TypeTable.mangle
-  callee 735:23 TypeTable.mangle -> @TypeTable.mangle
-  callee 735:55 TypeTable.mangle -> @TypeTable.mangle
-  callee 740:23 signedBound -> @signedBound
-  callee 740:55 signedBound -> @signedBound
-  callee 744:16 TypeTable.unionMangle -> @TypeTable.unionMangle
-  callee 746:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee 720:22 TypeTable.mangle -> @TypeTable.mangle
+  callee 721:20 TypeTable.mangle -> @TypeTable.mangle
+  callee 723:23 TypeTable.mangle -> @TypeTable.mangle
+  callee 735:22 signedBound -> @signedBound
+  callee 735:54 TypeTable.mangle -> @TypeTable.mangle
+  callee 737:23 TypeTable.mangle -> @TypeTable.mangle
+  callee 737:55 TypeTable.mangle -> @TypeTable.mangle
+  callee 742:23 signedBound -> @signedBound
+  callee 742:55 signedBound -> @signedBound
+  callee 746:16 TypeTable.unionMangle -> @TypeTable.unionMangle
+  callee 748:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.unionMangle(this: TypeTable, type: i32): string -> @TypeTable.unionMangle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.joinedMangles TypeTable.variantsOf nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.variantsOf#0 TypeTable.joinedMangles#0
   stackSites=0 stackLocals=0
-  local 751:11 variants: i32[] (const)
-  callee 751:22 TypeTable.variantsOf -> @TypeTable.variantsOf
-  callee 752:35 TypeTable.joinedMangles -> @TypeTable.joinedMangles
+  local 753:11 variants: i32[] (const)
+  callee 753:22 TypeTable.variantsOf -> @TypeTable.variantsOf
+  callee 754:35 TypeTable.joinedMangles -> @TypeTable.joinedMangles
 function TypeTable.joinedMangles(this: TypeTable, variants: i32[], at: i32): string -> @TypeTable.joinedMangles [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -22711,26 +22711,26 @@ function TypeTable.joinedMangles(this: TypeTable, variants: i32[], at: i32): str
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.mangle#0 TypeTable.joinedMangles#0
   pointer variants: size=0 writesThrough=true captured=false passedTo=TypeTable.joinedMangles#1
   stackSites=0 stackLocals=0
-  callee 760:16 TypeTable.mangle -> @TypeTable.mangle
-  callee 760:44 TypeTable.joinedMangles -> @TypeTable.joinedMangles
+  callee 762:16 TypeTable.mangle -> @TypeTable.mangle
+  callee 762:44 TypeTable.joinedMangles -> @TypeTable.joinedMangles
 function TypeTable.elementName(this: TypeTable, element: i32): string -> @TypeTable.elementName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: element
   calls: TypeTable.isUnion TypeTable.stripNull TypeTable.typeName nish_str_concat
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.isUnion#0 TypeTable.stripNull#0
   stackSites=0 stackLocals=0
-  local 765:11 name: string (const)
-  callee 765:18 TypeTable.typeName -> @TypeTable.typeName
-  callee 766:12 TypeTable.isUnion -> @TypeTable.isUnion
-  callee 766:25 TypeTable.stripNull -> @TypeTable.stripNull
+  local 767:11 name: string (const)
+  callee 767:18 TypeTable.typeName -> @TypeTable.typeName
+  callee 768:12 TypeTable.isUnion -> @TypeTable.isUnion
+  callee 768:25 TypeTable.stripNull -> @TypeTable.stripNull
 function TypeTable.unionName(this: TypeTable, type: i32): string -> @TypeTable.unionName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.joinedNames TypeTable.variantsOf
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.joinedNames#0 TypeTable.variantsOf#0
   stackSites=0 stackLocals=0
-  callee 771:12 TypeTable.joinedNames -> @TypeTable.joinedNames
-  callee 771:29 TypeTable.variantsOf -> @TypeTable.variantsOf
+  callee 773:12 TypeTable.joinedNames -> @TypeTable.joinedNames
+  callee 773:29 TypeTable.variantsOf -> @TypeTable.variantsOf
 function TypeTable.joinedNames(this: TypeTable, variants: i32[], at: i32): string -> @TypeTable.joinedNames [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: at
@@ -22738,24 +22738,24 @@ function TypeTable.joinedNames(this: TypeTable, variants: i32[], at: i32): strin
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.joinedNames#0
   pointer variants: size=0 writesThrough=true captured=false passedTo=TypeTable.joinedNames#1
   stackSites=0 stackLocals=0
-  local 779:11 head: string (const)
-  callee 779:18 TypeTable.typeName -> @TypeTable.typeName
-  callee 780:52 TypeTable.joinedNames -> @TypeTable.joinedNames
+  local 781:11 head: string (const)
+  callee 781:18 TypeTable.typeName -> @TypeTable.typeName
+  callee 782:52 TypeTable.joinedNames -> @TypeTable.joinedNames
 function TypeTable.resultStructName(this: TypeTable, type: i32): string -> @TypeTable.resultStructName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.mangle nish_panic_index nish_str_concat
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.mangle#0 TypeTable.mangle#0
   stackSites=0 stackLocals=0
-  callee 785:27 TypeTable.mangle -> @TypeTable.mangle
-  callee 785:59 TypeTable.mangle -> @TypeTable.mangle
+  callee 787:27 TypeTable.mangle -> @TypeTable.mangle
+  callee 787:59 TypeTable.mangle -> @TypeTable.mangle
 function TypeTable.isPointer(this: TypeTable, type: i32): boolean -> @TypeTable.isPointer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 790:11 kind: i32 (const)
+  local 792:11 kind: i32 (const)
 function TypeTable.isNullable(this: TypeTable, type: i32): boolean -> @TypeTable.isNullable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22781,59 +22781,59 @@ function TypeTable.markSecret(this: TypeTable, secret: i32, inner: i32): void ->
   calls: StringMap.set nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 811:5 StringMap.set -> @StringMap.set
+  callee 813:5 StringMap.set -> @StringMap.set
 function TypeTable.secretInner(this: TypeTable, type: i32): i32 -> @TypeTable.secretInner [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: StringMap.get nish_panic_index nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 816:57 StringMap.get -> @StringMap.get
+  callee 818:57 StringMap.get -> @StringMap.get
 function TypeTable.isSecret(this: TypeTable, type: i32): boolean -> @TypeTable.isSecret [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.secretInner TypeTable.stripNull
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.secretInner#0 TypeTable.stripNull#0
   stackSites=0 stackLocals=0
-  callee 821:25 TypeTable.secretInner -> @TypeTable.secretInner
-  callee 821:42 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 823:25 TypeTable.secretInner -> @TypeTable.secretInner
+  callee 823:42 TypeTable.stripNull -> @TypeTable.stripNull
 function TypeTable.holdsSecret(this: TypeTable, type: i32): boolean -> @TypeTable.holdsSecret [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.holdsSecret TypeTable.isSecret nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isSecret#0 TypeTable.holdsSecret#0 TypeTable.holdsSecret#0 TypeTable.holdsSecret#0
   stackSites=0 stackLocals=0
-  callee 833:9 TypeTable.isSecret -> @TypeTable.isSecret
-  local 836:11 kind: i32 (const)
-  callee 838:14 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee 841:14 TypeTable.holdsSecret -> @TypeTable.holdsSecret
-  callee 841:51 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee 835:9 TypeTable.isSecret -> @TypeTable.isSecret
+  local 838:11 kind: i32 (const)
+  callee 840:14 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee 843:14 TypeTable.holdsSecret -> @TypeTable.holdsSecret
+  callee 843:51 TypeTable.holdsSecret -> @TypeTable.holdsSecret
 function TypeTable.holdsUnion(this: TypeTable, type: i32): boolean -> @TypeTable.holdsUnion [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.holdsUnion nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0 TypeTable.holdsUnion#0 TypeTable.holdsUnion#0
   stackSites=0 stackLocals=0
-  local 855:11 kind: i32 (const)
-  callee 860:14 TypeTable.holdsUnion -> @TypeTable.holdsUnion
-  callee 863:14 TypeTable.holdsUnion -> @TypeTable.holdsUnion
-  callee 863:50 TypeTable.holdsUnion -> @TypeTable.holdsUnion
+  local 857:11 kind: i32 (const)
+  callee 862:14 TypeTable.holdsUnion -> @TypeTable.holdsUnion
+  callee 865:14 TypeTable.holdsUnion -> @TypeTable.holdsUnion
+  callee 865:50 TypeTable.holdsUnion -> @TypeTable.holdsUnion
 function TypeTable.packablePayload(this: TypeTable, type: i32): boolean -> @TypeTable.packablePayload [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: nish_panic_index
   pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 876:11 kind: i32 (const)
+  local 878:11 kind: i32 (const)
 function TypeTable.resultByValue(this: TypeTable, type: i32): boolean -> @TypeTable.resultByValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isResult TypeTable.packablePayload nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isResult#0 TypeTable.packablePayload#0 TypeTable.packablePayload#0
   stackSites=0 stackLocals=0
-  callee 907:10 TypeTable.isResult -> @TypeTable.isResult
-  callee 910:12 TypeTable.packablePayload -> @TypeTable.packablePayload
-  callee 910:53 TypeTable.packablePayload -> @TypeTable.packablePayload
+  callee 909:10 TypeTable.isResult -> @TypeTable.isResult
+  callee 912:12 TypeTable.packablePayload -> @TypeTable.packablePayload
+  callee 912:53 TypeTable.packablePayload -> @TypeTable.packablePayload
 function TypeTable.llvmAbiType(this: TypeTable, type: i32, privateAbi: boolean): string -> @TypeTable.llvmAbiType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.llvmType
@@ -22841,8 +22841,8 @@ function TypeTable.llvmAbiType(this: TypeTable, type: i32, privateAbi: boolean):
   calls: TypeTable.llvmType TypeTable.resultByValue
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.llvmType#0
   stackSites=0 stackLocals=0
-  callee 920:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 923:12 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 922:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 925:12 TypeTable.llvmType -> @TypeTable.llvmType
 function TypeTable.llvmType(this: TypeTable, type: i32): string -> @TypeTable.llvmType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.llvmType
@@ -22850,10 +22850,10 @@ function TypeTable.llvmType(this: TypeTable, type: i32): string -> @TypeTable.ll
   calls: TypeTable.llvmType TypeTable.resultStructName internalErrorFor nish_exit nish_panic_index nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.llvmType#0 TypeTable.llvmType#0 TypeTable.resultStructName#0
   stackSites=0 stackLocals=0
-  callee 969:16 TypeTable.llvmType -> @TypeTable.llvmType
   callee 971:16 TypeTable.llvmType -> @TypeTable.llvmType
-  callee 973:27 TypeTable.resultStructName -> @TypeTable.resultStructName
-  callee 977:22 internalErrorFor -> @internalErrorFor
+  callee 973:16 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 975:27 TypeTable.resultStructName -> @TypeTable.resultStructName
+  callee 979:22 internalErrorFor -> @internalErrorFor
 function TypeTable.alignOf(this: TypeTable, type: i32): i32 -> @TypeTable.alignOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22866,15 +22866,15 @@ function TypeTable.typeName(this: TypeTable, type: i32): string -> @TypeTable.ty
   calls: TypeTable.elementName TypeTable.scalarName TypeTable.typeName TypeTable.unionName nish_panic_index nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.elementName#0 TypeTable.elementName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.unionName#0 TypeTable.scalarName#0
   stackSites=0 stackLocals=0
-  callee 1018:25 TypeTable.elementName -> @TypeTable.elementName
-  callee 1019:16 TypeTable.elementName -> @TypeTable.elementName
-  callee 1025:19 TypeTable.typeName -> @TypeTable.typeName
-  callee 1029:19 TypeTable.typeName -> @TypeTable.typeName
+  callee 1020:25 TypeTable.elementName -> @TypeTable.elementName
+  callee 1021:16 TypeTable.elementName -> @TypeTable.elementName
+  callee 1027:19 TypeTable.typeName -> @TypeTable.typeName
   callee 1031:19 TypeTable.typeName -> @TypeTable.typeName
-  callee 1035:26 TypeTable.typeName -> @TypeTable.typeName
-  callee 1035:61 TypeTable.typeName -> @TypeTable.typeName
-  callee 1037:16 TypeTable.unionName -> @TypeTable.unionName
-  callee 1039:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee 1033:19 TypeTable.typeName -> @TypeTable.typeName
+  callee 1037:26 TypeTable.typeName -> @TypeTable.typeName
+  callee 1037:61 TypeTable.typeName -> @TypeTable.typeName
+  callee 1039:16 TypeTable.unionName -> @TypeTable.unionName
+  callee 1041:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.scalarName(this: TypeTable, type: i32): string -> @TypeTable.scalarName [exported method]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -22886,17 +22886,17 @@ function TypeTable.assignable(this: TypeTable, from: i32, to: i32): boolean -> @
   calls: TypeTable.unionWithin TypeTable.widensToReadonlyArray nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.widensToReadonlyArray#0 TypeTable.unionWithin#0 TypeTable.widensToReadonlyArray#0 TypeTable.unionWithin#0
   stackSites=0 stackLocals=0
-  callee 1110:9 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
-  callee 1116:9 TypeTable.unionWithin -> @TypeTable.unionWithin
-  callee 1122:9 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
-  callee 1123:9 TypeTable.unionWithin -> @TypeTable.unionWithin
+  callee 1112:9 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
+  callee 1118:9 TypeTable.unionWithin -> @TypeTable.unionWithin
+  callee 1124:9 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
+  callee 1125:9 TypeTable.unionWithin -> @TypeTable.unionWithin
 function TypeTable.widensToReadonlyArray(this: TypeTable, from: i32, to: i32): boolean -> @TypeTable.widensToReadonlyArray [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from to
   calls: TypeTable.isReadonlyArray nish_panic_index
   pointer this: size=96 writesThrough=false captured=false passedTo=TypeTable.isReadonlyArray#0
   stackSites=0 stackLocals=0
-  callee 1136:10 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee 1138:10 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
 function signedBound(value: i32): string -> @signedBound
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32 nish_str_from_i64

@@ -9470,10 +9470,12 @@ that is the whole of what this compiler knows about it: not arena memory, not a
 compiler laid out would — no `dereferenceable`, no `align`, no `nonnull` — and
 it may not be dereferenced, indexed, or added to.
 
-`null` arrives **only from a foreign call**: a `declare function` may *return*
-`CPtr | null` and may not *take* one, so a pointer is narrowed with `!== null`
-before it goes back to C. The narrowed `if.end` block below is what that rule
-buys — `free` is reached with a value the program has proved is not null.
+`null` arrives **only from a foreign call** or **where the source spells it**:
+a `declare function` may *return* `CPtr | null`, and a `CPtr | null` parameter
+takes the literal `null` (WP27 S3.3) or a pointer narrowed with `!== null`, never
+a nullable pointer the program holds (NL2539). So a pointer is narrowed before
+it goes back to C. The narrowed `if.end` block below is what that rule buys —
+`free` is reached with a value the program has proved is not null.
 
 The arena is untouched by any of it, and that is the soundness argument rather
 than a happy accident: a `CPtr` is never a pointer this compiler allocated, so
