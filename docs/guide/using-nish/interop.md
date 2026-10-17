@@ -163,16 +163,47 @@ $ nish app.ts -o app.ll
 $ $NISH/scripts/build.sh app.ll $NISH/runtime/runtime.c mylib.c -o app
 ```
 
-Only scalars cross: the integer and float widths (`i32`, `u8`, `u64`, `f64`
-and the rest), `boolean` and `void`. A string, an array, a class or an
-interface is refused, because nothing the Nish compiler allocated may reach
-code it cannot see:
+Scalars cross: the integer and float widths (`i32`, `u8`, `u64`, `f64` and
+the rest), `boolean` and `void`. So does a `string` *parameter*, which C reads
+as a NUL-terminated `const char *`:
 
-```ts nish:err NL2322
+```ts nish:ok
 declare function puts(s: string): i32;
+declare function strlen(s: string): u64;
 
 export const main = (): i32 => {
   puts("hello");
+  const word = "nish" + "!";
+  console.log(`${strlen(word)}`); // 5
+  return 0;
+};
+```
+
+C *borrows* the string: it may read the bytes until it returns, and may not
+keep the address or write through it. Nothing is copied, so a C function that
+keeps its argument (`putenv`) or writes into it (`strtok`) must be declared to
+take a `CPtr` instead, and handed memory C allocated. A `string | null`
+parameter passes `NULL` for `null`.
+
+A Nish string can hold a NUL byte, and C would stop reading at it, so a string
+that holds one stops the program before the call instead:
+
+```console
+`strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string
+```
+
+A literal with no NUL in it is checked at compile time and costs nothing at run
+time; any other string is checked with one scan of its bytes. `--emit-panics`
+lists each checked call as an `ffi-nul` site.
+
+An array, a class or an interface is refused, in either direction, and so is a
+`string` return, because nothing else the Nish compiler allocated may reach
+code it cannot see:
+
+```ts nish:err NL2322
+declare function execvp(file: string, argv: string[]): i32;
+
+export const main = (): i32 => {
   return 0;
 };
 ```

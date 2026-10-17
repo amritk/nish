@@ -78,7 +78,7 @@ conservatism is the feature and the stages are small.
 | --- | --- | --- |
 | S1 | scalar-only `declare function`: `i32`, `i64`, `f64`, `boolean`, `void`, `u8`–`u64` | **built**, 0.2.0 |
 | S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
-| S3 | `string` ↔ `char *` marshalling, and who owns the bytes | planned, §8 |
+| S3 | `string` ↔ `char *` marshalling, and who owns the bytes | S3.1 (`string` parameters) **built**, §8; S3.2 and S3.3 planned |
 | S4 | C structs by layout declaration | proposed |
 | S5 | `errno`, and whether it is a builtin or a declared foreign global | proposed |
 
@@ -109,9 +109,10 @@ pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 
 A declared function with a body (`reject_ffi_body`), an exported one
 (`reject_ffi_export`, since `export` offers a function this module defines), a
-generic one (`reject_ffi_generic`), and a `string` parameter or return
-(`reject_ffi_string_param`, `reject_ffi_string_return`, S3's) are each refused
-by name.
+generic one (`reject_ffi_generic`), and a `string` return
+(`reject_ffi_string_return`, S3.2's) are each refused by name. A `string`
+parameter was refused too (`reject_ffi_string_param`) until S3.1 accepted it;
+a `string[]` one still is (`reject_ffi_string_array_param`).
 
 ## 5. What FFI costs the test strategy
 
@@ -224,9 +225,11 @@ apart from that cache.
 
 ## 8. S3 plan: `string` across the boundary
 
-**Status: planned, unbuilt.** This section is the design S3 is built from; the
-rules become normative in [LANGUAGE.md](LANGUAGE.md#calling-c) only as each
-step lands. §3 asked whether S3 should happen at all; this plan answers yes,
+**Status: S3.1 built; S3.2 and S3.3 planned.** This section is the design S3
+is built from; the rules become normative in
+[LANGUAGE.md](LANGUAGE.md#calling-c) only as each step lands, and S3.1's are
+there now. S3.1 departs from §8c in one place, the runtime call, and §8c says
+how. §3 asked whether S3 should happen at all; this plan answers yes,
 for a narrow reason: without it every C API that takes a name, a path or a
 message needs a hand-written C shim that turns the string into a scalar and
 back, so the shim — not the program — becomes where the bugs live.
@@ -335,6 +338,20 @@ test is `nish_cpath`'s (`strlen(s->data) == s->len`), one pass over bytes the
 callee is about to read anyway. Proving more strings NUL-free (a template of
 numbers, a concatenation of proved parts) is left for a measured need.
 
+**As built (S3.1), the check is lowered in the IR, not in a runtime call.**
+`runtime/runtime.c` is at its `.text*` ceiling (`RUNTIME_TEXT_BUDGET` in
+`tests/runtime-budgets.js`), and a ceiling raised to fit a feature is not a
+fix, so there is no `nish_ffi_cstr`. The emitter writes the test with a
+runtime function that already exists — `nish_str_index_of(s, "\0")`, a
+`memchr` over the same bytes — and branches to a cold `ffi.nul` block that
+calls `nish_panic` with a message built at compile time for that call site,
+then takes `s->data` with a `getelementptr` on the other arm
+(`emitForeignString`, `src/emit-strings.ts`). The cost is the same one pass;
+what moved is that each checked call carries a short block and its own message
+constant, instead of one shared runtime function. The message prints without
+§8c's `panic: ` prefix, as every runtime panic does
+(`slice out of range: [2, 5) of length 4`).
+
 ### 8d. Returns: copied, and `NULL` is the type's business
 
 A returned `char *` is copied into the arena at the call, for the reason
@@ -417,7 +434,7 @@ Still refused, each by name, each with a `reject_*` case:
 
 | Step | Delivers | Tests |
 | --- | --- | --- |
-| **S3.1** | `string` and `string \| null` parameters; the borrow rule in `src/escape.ts`; `nish_ffi_cstr` and the `ffi-nul` panic kind; the literal proof | `ffi_string_param` (golden `.ll` + native round trip against libc: `strlen`, `puts`, `atoi`, `setenv` then the runtime's `getenv`); `ffi_string_param_arena` (a concatenated string passed from a function whose arena scope releases after the call, linked against a C sidecar that copies what it read, so the output shows the bytes were live during the call); `panics_ffi_nul`; `reject_ffi_string_array_param` |
+| **S3.1** (built) | `string` and `string \| null` parameters; the borrow rule in `src/escape.ts`; the NUL check (lowered in the IR rather than `nish_ffi_cstr`, §8c) and the `ffi-nul` panic kind; the literal proof | `ffi_string_param` (golden `.ll` + native round trip against libc: `strlen`, `puts`, `atoi`, `setenv` then the runtime's `getenv`); `ffi_string_param_arena` (a concatenated string passed from a function whose arena scope releases after the call, linked against a C sidecar that copies what it read, so the output shows the bytes were live during the call); `panics_ffi_nul`; `reject_ffi_string_array_param` |
 | **S3.2** | `string` and `string \| null` returns; `nish_ffi_str` and the `ffi-null` panic kind | `ffi_string_return` (`getenv`, `strerror`, `setlocale` query); `panics_ffi_null`; a timing of `strerror` in a loop whose argument changes on every iteration, folded into a printed checksum, to state the copy's cost in the commit's `Measured:` trailer |
 | **S3.3** | `readCString` in `nish:unsafe`; the literal-`null` `CPtr \| null` parameter | `ffi_owned_string` (`strdup`/`free` and `realpath(p, null)`/`free` round trips); `reject_ffi_pointer_nullable_variable` (the narrowed-local rule kept); `reject_unsafe_no_import` extended |
 

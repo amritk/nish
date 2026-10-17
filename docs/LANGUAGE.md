@@ -4067,16 +4067,70 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**Every position must be a scalar or `CPtr`** — `i32`, `i64`, `u8`, `u16`,
-`u32`, `u64`, `f32`, `f64`, `boolean`, `void`, and the foreign pointer below. A
-`string`, an array, a class or an interface is rejected with
-`` and a declared C function takes scalars and `CPtr` only `` in a parameter
-(`tests/cases/reject_ffi_string_param`) and
+**A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
+scalar or `CPtr`** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`,
+`boolean`, `void`, the foreign pointer below, and in a parameter `string` and
+`string | null`. An array, a class or an interface is rejected with
+`` and a declared C function takes scalars and `CPtr` only, besides a `string`
+it borrows as `const char *` `` in a parameter
+(`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
+a `char **` the compiler built per call) and
 `` returns a scalar or `CPtr` only `` in the return position
-(`reject_ffi_string_return`). This is not a stylistic limit: **no pointer this
-compiler allocated crosses the boundary in either direction**, so there is
-nothing for a foreign function to capture or free, which is what lets the escape
-analysis stay correct without knowing anything about the callee.
+(`reject_ffi_string_return`). This is not a stylistic limit: **the only pointer
+this compiler allocated that crosses the boundary is a string C reads for the
+length of the call**, so there is nothing for a foreign function to capture or
+free, which is what lets the escape analysis stay correct without knowing
+anything about the callee.
+
+#### A `string` parameter: borrowed for the length of the call
+
+**A `string` parameter is C's NUL-terminated `const char *`, and C borrows it:
+a foreign function may read the bytes until it returns and may not keep the
+address.** A function that keeps its argument — `putenv`, `setvbuf`'s buffer, a
+callback's context — is declared to take a `CPtr` instead, and the program hands
+it a copy C made (`tests/cases/ffi_string_param`, `ffi_string_param_arena`,
+[cookbook](IR_COOKBOOK.md#a-string-parameter-borrowed-as-const-char-)):
+
+```ts
+declare function strdup(s: string): CPtr | null;
+declare function putenv(entry: CPtr): i32; // keeps the pointer: C's, not ours
+
+const kept = strdup("MODE=fast");
+if (kept !== null) {
+  putenv(kept);
+}
+```
+
+```llvm
+declare i8* @strdup(i8*)
+  %0 = getelementptr inbounds i8, i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i64 8
+  %1 = call i8* @strdup(i8* %0)
+```
+
+- **The argument is the string's own bytes, with no copy.** A `nish_str` stores
+  them NUL-terminated, a literal included, so the call passes the address eight
+  bytes into it. The escape analysis treats the argument as a read, the way it
+  treats a string `console.log` prints: an arena scope that holds it is released
+  after the call returns, and the call is never a `tail` call.
+- **C may not write through it.** A literal lives in read-only constant data and
+  an arena string is shared freely, so a C function that writes into its
+  argument (`strtok`, `mkstemp`) corrupts a value the program still holds, or
+  faults. Such a function takes a `CPtr` buffer allocated through C. The
+  compiler cannot check this rule; it is the declaration's author's word, like
+  the borrow.
+- **A string that holds a NUL byte panics before the call**, because C would
+  read the NUL as the end of the string — `"secret\0.txt"` would pass a
+  `.txt` check in the program and name `secret` in C. The message names the
+  callee, the argument's position and the parameter:
+  `` `strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of
+  the string `` (`tests/cases/panics_ffi_nul`). That is the
+  [`ffi-nul` panic site](#panic-sites). A literal with no NUL in it is proved
+  at compile time, so `puts("hello")` has no check and no site; every other
+  string is checked with one scan of the bytes C is about to read anyway.
+- **`string | null` passes `NULL` for `null`**, and checks only a string.
+- **The declaration carries no attribute** for a string parameter: `nocapture`
+  and `readonly` would restate the borrow as an LLVM fact the C body need not
+  honour, which would be a miscompile rather than a broken contract.
 
 #### `CPtr`: the pointer a C function hands back
 
@@ -8448,6 +8502,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `expect` | `r.expect(message)` on an `Err` | nothing; `unwrapOr` and `orReturn` are not sites (`tests/cases/panics_expect`) |
 | `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
+| `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
 | `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour | nothing, and nothing needs to: the call is the author's word that the index is in range, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
