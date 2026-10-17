@@ -552,6 +552,83 @@ export const emitForeignString = (
   return fn.emitValue(`phi i8* [ null, %${nullBlock.label} ], [ ${data}, %${okBlock.label} ]`)
 }
 
+/**
+ * The runtime symbols a `string` from a `declare function` calls (WP27 S3.2),
+ * for the attribute pass: the copy, and the panic tail when `NULL` cannot be
+ * answered as `null`.
+ */
+export const foreignResultCallees = (out: string[], nullable: boolean): void => {
+  out.push("nish_str_new")
+  if (!nullable) {
+    panicTailCallees(out)
+  }
+}
+
+/**
+ * The module's one copy of a C string into the arena, `@nish.ffi.str`: the
+ * bytes up to the NUL, counted here, then `nish_str_new`. It is a definition
+ * rather than a call of `strlen` because the program may declare `strlen`
+ * itself, with a signature of its own, and a module holds one `declare` per
+ * name; and it is not `runtime.c`'s, which has no bytes of its `.text`
+ * budget left (`tests/runtime-budgets.js`).
+ */
+const foreignCopy = (newStr: string): string => {
+  const lines: string[] = []
+  lines.push("define private i8* @nish.ffi.str(i8* %p) {")
+  lines.push("entry:")
+  lines.push("  br label %scan")
+  lines.push("")
+  lines.push("scan:")
+  lines.push("  %n = phi i64 [ 0, %entry ], [ %next, %scan ]")
+  lines.push("  %at = getelementptr inbounds i8, i8* %p, i64 %n")
+  lines.push("  %byte = load i8, i8* %at, align 1")
+  lines.push("  %next = add i64 %n, 1")
+  lines.push("  %end = icmp eq i8 %byte, 0")
+  lines.push("  br i1 %end, label %copy, label %scan")
+  lines.push("")
+  lines.push("copy:")
+  lines.push(`  %s = call i8* ${newStr}(i8* %p, i64 %n)`)
+  lines.push("  ret i8* %s")
+  lines.push("}")
+  return lines.join("\n")
+}
+
+/**
+ * The `const char *` a call of the `declare function` `callee` answered,
+ * `value`, as the `string` or `string | null` it is declared to return (§8d):
+ * copied into the arena, so the string is the program's and C keeps its own,
+ * which may be a static buffer the next call overwrites (`strerror`) or memory
+ * the environment owns (`getenv`). `NULL` is `null` for `string | null`, and
+ * for a `string` it is the `ffi-null` panic, because nothing the compiler can
+ * see says the C function never answers it.
+ */
+export const emitForeignStringResult = (emitter: Emitter, callee: FunctionSig, value: string): string => {
+  const fn = emitter.fn
+  const copy = emitter.useRuntime("nish_str_new")
+  emitter.module.addRawDefinition(foreignCopy(copy))
+  const nullable = emitter.table.isNullable(callee.returnType)
+  const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
+  const nullBlock = fn.newBlock(nullable ? "ffi.none" : "ffi.null")
+  const someBlock = fn.newBlock("ffi.copy")
+  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${someBlock.label}`)
+  if (!nullable) {
+    fn.placeBlock(nullBlock)
+    const message = `\`${callee.sourceName}\` returned NULL for a \`string\` result; declare it \`string | null\``
+    emitPanicTail(emitter, emitter.stringConstant(message))
+    fn.placeBlock(someBlock)
+    return fn.emitValue(`call i8* @nish.ffi.str(i8* ${value})`)
+  }
+  const join = fn.newBlock("ffi.join")
+  fn.placeBlock(someBlock)
+  const copied = fn.emitValue(`call i8* @nish.ffi.str(i8* ${value})`)
+  const copiedFrom = fn.currentBlock()
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(nullBlock)
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(join)
+  return fn.emitValue(`phi i8* [ ${copied}, %${copiedFrom.label} ], [ null, %${nullBlock.label} ]`)
+}
+
 // ---- Operators ----------------------------------------------------------------------
 
 /** `a === b` / `a !== b`, string-aware; the numeric lowering is unchanged. */

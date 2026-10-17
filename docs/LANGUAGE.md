@@ -4356,19 +4356,21 @@ The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
 **A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
-scalar or `CPtr`** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`,
-`boolean`, `void`, the foreign pointer below, and in a parameter `string` and
-`string | null`. An array, a class or an interface is rejected with
+scalar, a `CPtr` or a copied `string`** — `i32`, `i64`, `u8`, `u16`, `u32`,
+`u64`, `f32`, `f64`, `boolean`, `void`, the foreign pointer below, and
+`string` and `string | null` in either position. An array, a class or an
+interface is rejected with
 `` and a declared C function takes scalars and `CPtr` only, besides a `string`
 it borrows as `const char *` `` in a parameter
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
 a `char **` the compiler built per call) and
-`` returns a scalar or `CPtr` only `` in the return position
-(`reject_ffi_string_return`). This is not a stylistic limit: **the only pointer
-this compiler allocated that crosses the boundary is a string C reads for the
-length of the call**, so there is nothing for a foreign function to capture or
-free, which is what lets the escape analysis stay correct without knowing
-anything about the callee.
+`` returns a scalar, a `CPtr` or a `string` it copies from a `const char *` ``
+in the return position (`reject_ffi_string_array_return`). This is
+not a stylistic limit: **the only pointer this compiler allocated that crosses
+the boundary is a string C reads for the length of the call, and the only one
+C hands back that the program keeps is a copy it made**, so there is nothing for
+a foreign function to capture or free, which is what lets the escape analysis
+stay correct without knowing anything about the callee.
 
 #### A `string` parameter: borrowed for the length of the call
 
@@ -4419,6 +4421,49 @@ declare i8* @strdup(i8*)
 - **The declaration carries no attribute** for a string parameter: `nocapture`
   and `readonly` would restate the borrow as an LLVM fact the C body need not
   honour, which would be a miscompile rather than a broken contract.
+
+#### A `string` result: copied out of C's `const char *`
+
+**A `declare function` that returns `string` or `string | null` answers C's
+NUL-terminated `const char *`, and the program copies its bytes into the arena
+at the call.** C keeps its buffer — `strerror`'s table, `getenv`'s environment,
+`setlocale`'s static, which the next call may overwrite — and the copy is the
+program's own string from then on, placed, kept and released like any other
+allocation of the function that made the call (`tests/cases/ffi_string_return`,
+[cookbook](IR_COOKBOOK.md#a-string-result-copied-out-of-const-char-)):
+
+```ts
+declare function strerror(errnum: i32): string;
+declare function getenv(name: string): string | null;
+
+console.log(strerror(2)); // No such file or directory
+const home = getenv("HOME");
+```
+
+```llvm
+  %0 = call i8* @strerror(i32 2)
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.copy:
+  %2 = call i8* @nish.ffi.str(i8* %0)
+```
+
+- **The copy is one scan for the NUL and one `nish_str_new`**, in a private
+  helper the module defines once (`@nish.ffi.str`). C's pointer is never held
+  past it, so a buffer C reuses or frees later cannot reach the program.
+- **The copy follows the call, so a call with a `string` result is never a
+  `tail` call**: a C function that answers a pointer into its argument
+  (`strchr`, `strstr`) is read before that argument's arena scope is released.
+- **`string | null` reads `NULL` as `null`**, with no check and no site.
+- **A `string` result that is `NULL` panics after the call**, because a
+  `string` cannot hold it: `` `getenv` returned NULL for a `string` result;
+  declare it `string | null` `` (`tests/cases/panics_ffi_null`). That is the
+  [`ffi-null` panic site](#panic-sites). Declare the result `string | null`
+  whenever the C function's manual says it may answer `NULL`.
+- **A result C allocated for the caller to free (`strdup`, `realpath` with no
+  buffer) is a `CPtr`, not a `string`**: the copy would leave C's allocation
+  with no one to free it.
 
 #### `CPtr`: the pointer a C function hands back
 
@@ -8791,6 +8836,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
+| `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
 | `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour | nothing, and nothing needs to: the call is the author's word that the index is in range, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |

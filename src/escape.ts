@@ -487,7 +487,12 @@ class EscapeAnalysis {
     if (callee !== null) {
       if (this.isPointerResult(callee.returnType)) {
         const site = new Site(call, false)
-        site.callee = callee.name
+        // WP27 S3.2: a `string` from a `declare function` is copied into this
+        // function's arena at the call (`emitForeignStringResult`), so it is
+        // this function's allocation, as `s.substring(...)` is, and no callee's.
+        if (!callee.foreign()) {
+          site.callee = callee.name
+        }
         this.sites.push(site)
       } else if (this.table.resultByValue(callee.returnType)) {
         // WP17: a `Result` returned in a register is materialised by the

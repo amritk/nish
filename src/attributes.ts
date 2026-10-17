@@ -52,6 +52,7 @@ import { numericLiteralValue } from "./constants"
 import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
 import {
+  foreignResultCallees,
   foreignStringCallees,
   foreignStringIsNulFree,
   stringifyCallee,
@@ -196,6 +197,7 @@ import {
   PANIC_DIVIDE,
   PANIC_EXPECT,
   PANIC_FFI_NUL,
+  PANIC_FFI_NULL,
   PANIC_INDEX,
   PANIC_OVERFLOW,
   PANIC_PARALLEL_LENGTH,
@@ -2856,6 +2858,17 @@ class FactCollector {
         this.noteSite(arg, PANIC_FFI_NUL, false, "")
       }
       i = i + 1
+    }
+    // WP27 S3.2: a `string` result is copied out of C, and a `NULL` one that
+    // is not declared `string | null` panics (`emitForeignStringResult`).
+    if (this.table.stripNull(callee.returnType) === T_STRING) {
+      const nullable = this.table.isNullable(callee.returnType)
+      const copy: string[] = []
+      foreignResultCallees(copy, nullable)
+      this.addCallees(copy)
+      if (!nullable) {
+        this.noteSite(call, PANIC_FFI_NULL, false, "")
+      }
     }
   }
 

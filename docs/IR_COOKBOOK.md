@@ -9388,12 +9388,13 @@ could unwind, and a language with no `throw` and no landing pad can do nothing
 with that admission, so unwinding out of a foreign call is undefined here — the
 position clang already takes compiling C (`docs/wp27-ffi.md` §2).
 
-The boundary is scalars, `CPtr` and borrowed strings, and that is what makes it
-sound rather than merely small: with no pointer this compiler allocated among
-the results, and only a string C reads for the length of the call among the
-arguments, there is nothing for escape analysis to be wrong about
-(`tests/cases/ffi_scalar`, the `reject_ffi_*` cases, and
-[the string parameter](#a-string-parameter-borrowed-as-const-char-) below).
+The boundary is scalars, `CPtr` and strings, and that is what makes it sound
+rather than merely small: a string result is copied into the arena at the call,
+so no pointer C answered is kept, and only a string C reads for the length of
+the call is among the arguments, so there is nothing for escape analysis to be
+wrong about (`tests/cases/ffi_scalar`, the `reject_ffi_*` cases,
+[the string parameter](#a-string-parameter-borrowed-as-const-char-) and
+[the string result](#a-string-result-copied-out-of-const-char-) below).
 
 The listing is also where the two senses of the word `function` sit side by
 side. `declare function abs` is an *ambient* declaration and defines nothing, so
@@ -9629,6 +9630,35 @@ attributes #2 = { nounwind willreturn memory(argmem: read) }
 attributes #3 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end decl-ffi-string -->
+
+### A `string` result, copied out of `const char *`
+
+A `declare function` that returns `string` answers C's NUL-terminated
+`const char *` (WP27 S3.2), and the program does not keep C's pointer: it copies
+the bytes into the arena at the call. C owns its buffer — `strerror`'s table,
+`getenv`'s environment — and may overwrite or free it on a later call, so the
+copy is the only string the program ever holds. The copy is a private helper the
+module defines once, `@nish.ffi.str`: a byte loop to the NUL, then
+`nish_str_new`. It is lowered in the IR rather than as a runtime function
+because `runtime.c` has no room under its ceiling, and it does not call
+`strlen` because a program may declare `strlen` itself with a signature of its
+own.
+
+The copy is an allocation of the calling function, like `s.substring(...)`,
+so the escape analysis places it in that function's arena scope and keeps it
+when it leaves: `message` reads only its length, so its scope is released
+before it returns. The call is never a `tail` call, because the copy follows
+it: a C function that answers a pointer into its own argument (`strchr`) is
+read before the argument's scope is released.
+
+`NULL` cannot be a `string`, so `strerror`'s result is tested and a cold
+`ffi.null` block panics, the [`ffi-null` site](LANGUAGE.md#panic-sites). The
+result declared `string | null` reads `NULL` as `null` instead: `getenv`'s
+`ffi.none` arm joins the copy in a `phi`, with no check and no site
+(`tests/cases/ffi_string_return`, `panics_ffi_null`).
+
+<!-- cookbook:begin decl-ffi-string-result -->
+<!-- cookbook:end decl-ffi-string-result -->
 
 ### Numeric `enum`
 

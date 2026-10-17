@@ -129,6 +129,7 @@ import {
   addStringConstant,
   copyString,
   emitForeignString,
+  emitForeignStringResult,
   emitIndexOfAnyKernel,
   emitTemplate,
 } from "./emit-strings"
@@ -649,6 +650,13 @@ export class Emitter {
     }
     const callee = this.program.nodeCallees[inner.id]
     if (callee === null) {
+      return false
+    }
+    // WP27 S3.2: a `string` from C is copied after the call returns
+    // (`emitForeignStringResult`), so the call is not the last thing, and a
+    // release ahead of it would let the copy land on bytes C answered from
+    // inside one of its arguments (`strchr`).
+    if (callee.foreign() && this.table.stripNull(callee.returnType) === T_STRING) {
       return false
     }
     const argTypes: i32[] = []
@@ -1567,16 +1575,16 @@ export class Emitter {
     if (this.table.resultByValue(sig.returnType)) {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
-    if (keepSize >= 0) {
-      return keepElement(
-        this,
-        this.llvmAbi(sig.returnType, calleePrivate),
-        this.fn.emitValue(call),
-        keepSize,
-        mark
-      )
+    let answer = this.fn.emitValue(call)
+    // WP27 S3.2: C answers the bytes, and the program keeps a copy
+    // (`emitForeignStringResult`).
+    if (sig.foreign() && this.table.stripNull(sig.returnType) === T_STRING) {
+      answer = emitForeignStringResult(this, sig, answer)
     }
-    return this.endReclaim(mark, this.fn.emitValue(call))
+    if (keepSize >= 0) {
+      return keepElement(this, this.llvmAbi(sig.returnType, calleePrivate), answer, keepSize, mark)
+    }
+    return this.endReclaim(mark, answer)
   }
 
   /**

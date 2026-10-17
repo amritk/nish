@@ -196,9 +196,37 @@ A literal with no NUL in it is checked at compile time and costs nothing at run
 time; any other string is checked with one scan of its bytes. `--emit-panics`
 lists each checked call as an `ffi-nul` site.
 
-An array, a class or an interface is refused, in either direction, and so is a
-`string` return, because nothing else the Nish compiler allocated may reach
-code it cannot see:
+A `string` *result* crosses the other way, as a copy. C answers a
+`const char *` into a buffer it keeps, and the program copies the bytes into a
+string of its own at the call, so a later call that overwrites C's buffer
+changes nothing the program holds. A C function that may answer `NULL` is
+declared `string | null`, and `NULL` arrives as `null`:
+
+```ts nish:ok
+declare function strerror(errnum: i32): string;
+declare function getenv(name: string): string | null;
+
+export const main = (): i32 => {
+  console.log(strerror(2)); // No such file or directory
+  const home = getenv("HOME");
+  console.log(home === null ? "no HOME" : "HOME is set");
+  return 0;
+};
+```
+
+A result declared `string` that is `NULL` after all stops the program, because
+a `string` cannot hold it, and `--emit-panics` lists the call as an `ffi-null`
+site:
+
+```console
+`getenv` returned NULL for a `string` result; declare it `string | null`
+```
+
+A string C allocated for the caller to free (`strdup`) is a `CPtr`, not a
+`string`: the copy would leave C's allocation with no one to free it.
+
+An array, a class or an interface is refused, in either direction, because
+nothing else the Nish compiler allocated may reach code it cannot see:
 
 ```ts nish:err NL2322
 declare function execvp(file: string, argv: string[]): i32;

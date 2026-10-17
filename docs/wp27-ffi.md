@@ -1,7 +1,7 @@
 # WP27 — Calling C from Nish
 
-**Status:** S1 and S2 are built; of S3 (§8), S3.1, `string` parameters, is
-built and S3.2 and S3.3 are planned; S4 and S5 are proposed and unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
+**Status:** S1 and S2 are built; of S3 (§8), S3.1, `string` parameters, and
+S3.2, `string` returns, are built and S3.3 is planned; S4 and S5 are proposed and unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
 ([#62](https://github.com/amritk/nish/pull/62), `tests/cases/ffi_scalar`); S2,
 the opaque pointer `CPtr`, in 0.3.0 (`tests/cases/ffi_pointer`, §7), with its
 debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
@@ -78,7 +78,7 @@ conservatism is the feature and the stages are small.
 | --- | --- | --- |
 | S1 | scalar-only `declare function`: `i32`, `i64`, `f64`, `boolean`, `void`, `u8`–`u64` | **built**, 0.2.0 |
 | S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
-| S3 | `string` ↔ `char *` marshalling, and who owns the bytes | S3.1 (`string` parameters) **built**, §8; S3.2 and S3.3 planned |
+| S3 | `string` ↔ `char *` marshalling, and who owns the bytes | S3.1 (`string` parameters) and S3.2 (`string` returns) **built**, §8; S3.3 planned |
 | S4 | C structs by layout declaration | proposed |
 | S5 | `errno`, and whether it is a builtin or a declared foreign global | proposed |
 
@@ -93,7 +93,8 @@ stage is a real decision rather than a missing line:
   which means the arena, which means the escape question of §2 in its hardest
   form: a pointer the compiler allocated would cross into C, and "the arena
   cannot be released around the call" would start to bind. §8 plans it, and
-  S3.1 has built its parameter half: the borrow rule (§8b).
+  S3.1 has built its parameter half, the borrow rule (§8b), and S3.2 its
+  return half, the copy (§8d).
 - **S4, struct layout.** The first layout in the language the compiler did not
   choose, and so the first whose size and alignment it would be told rather
   than know.
@@ -110,10 +111,11 @@ pure Nish and chose pure Nish, partly because the C route needed S3 and S4.
 
 A declared function with a body (`reject_ffi_body`), an exported one
 (`reject_ffi_export`, since `export` offers a function this module defines), a
-generic one (`reject_ffi_generic`), and a `string` return
-(`reject_ffi_string_return`, S3.2's) are each refused by name. A `string`
-parameter was refused too (`reject_ffi_string_param`) until S3.1 accepted it;
-a `string[]` one still is (`reject_ffi_string_array_param`).
+and a generic one (`reject_ffi_generic`) are each refused by name. A `string`
+parameter was refused too (`reject_ffi_string_param`) until S3.1 accepted it,
+and a `string` return (`reject_ffi_string_return`) until S3.2 did; a
+`string[]` is refused in either position (`reject_ffi_string_array_param`,
+`reject_ffi_string_array_return`).
 
 ## 5. What FFI costs the test strategy
 
@@ -228,11 +230,11 @@ apart from that cache.
 
 ## 8. S3 plan: `string` across the boundary
 
-**Status: S3.1 built; S3.2 and S3.3 planned.** This section is the design S3
+**Status: S3.1 and S3.2 built; S3.3 planned.** This section is the design S3
 is built from; the rules become normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) only as each step lands, and S3.1's are
 there now. S3.1 departs from §8c in one place, the runtime call, and §8c says
-how. §3 asked whether S3 should happen at all; this plan answers yes,
+how; S3.2 departs from §8d in the same place, and §8d says how. §3 asked whether S3 should happen at all; this plan answers yes,
 for a narrow reason: without it every C API that takes a name, a path or a
 message needs a hand-written C shim that turns the string into a scalar and
 back, so the shim — not the program — becomes where the bugs live.
@@ -394,6 +396,32 @@ declare function free(block: CPtr): void;
 The second parameter needs §8f's one widening: today a `CPtr` parameter cannot
 be nullable, and `realpath(p, NULL)` is how C asks for the allocating form.
 
+**As built (S3.2), the copy is lowered in the IR, not in a runtime call.**
+`runtime/runtime.c` is still at its `.text*` ceiling, so there is no
+`nish_ffi_str` either. A module whose program declares a C function with a
+`string` or `string | null` result gets one private helper,
+`@nish.ffi.str(i8* %p)`: a byte loop that counts to the `NUL`, then
+`nish_str_new(p, n)`, the runtime's existing copy into the arena. It counts
+bytes itself rather than calling `strlen` because a program may declare
+`strlen` with its own signature, and a second declaration of one symbol is an
+IR error. Each call site tests the answer against `null` first: a `string`
+result branches to a cold `ffi.null` block that calls `nish_panic` with a
+message built at compile time (without the `panic: ` prefix, as in §8c), a
+`string | null` result to an `ffi.none` arm joined with the copy in a `phi`
+(`emitForeignStringResult`, `src/emit-strings.ts`). Two things outside the
+emitter moved with it. The escape analysis treats a foreign call as a local
+allocation site rather than a callee whose result is placed by the callee: the
+copy is made in the caller's arena scope, and the call is the `oom` site
+`--emit-panics` lists. And a call whose result is copied is never marked `tail`, since
+the copy runs after it returns. For `strchr`, which answers into its own
+argument, S3.1's rule already refuses the mark, because the call takes a
+string; the S3.2 refusal (`planTailCall`, `src/emit.ts`) covers a result
+copied from a call with no string argument, where sinking the release ahead of
+the copy is harmless today, so no test can tell it apart. It stays so that the
+copy is never inside a released scope by construction. Measured at `--profile speed` on 10^7 calls of
+`strerror(i % 134)`, each answer's length and first byte folded into a printed
+checksum: MEASURED_TBD.
+
 ### 8e. `readCString`, in `nish:unsafe`
 
 `readCString(p: CPtr): string` copies the NUL-terminated bytes at `p` into the
@@ -445,7 +473,7 @@ Still refused, each by name, each with a `reject_*` case:
 | Step | Delivers | Tests |
 | --- | --- | --- |
 | **S3.1** (built) | `string` and `string \| null` parameters; the borrow rule in `src/escape.ts`; the NUL check (lowered in the IR rather than `nish_ffi_cstr`, §8c) and the `ffi-nul` panic kind; the literal proof | `ffi_string_param` (golden `.ll` + native round trip against libc: `strlen`, `puts`, `atoi`, `setenv` then the runtime's `getenv`); `ffi_string_param_arena` (a concatenated string passed from a function whose arena scope releases after the call, linked against a C sidecar that copies what it read, so the output shows the bytes were live during the call); `panics_ffi_nul`; `reject_ffi_string_array_param` |
-| **S3.2** | `string` and `string \| null` returns; `nish_ffi_str` and the `ffi-null` panic kind | `ffi_string_return` (`getenv`, `strerror`, `setlocale` query); `panics_ffi_null`; a timing of `strerror` in a loop whose argument changes on every iteration, folded into a printed checksum, to state the copy's cost in the commit's `Measured:` trailer |
+| **S3.2** (built) | `string` and `string \| null` returns; the copy (lowered in the IR rather than `nish_ffi_str`, §8d) and the `ffi-null` panic kind | `ffi_string_return` (`getenv`, `strerror`, `setlocale` query, and `strchr` answering into its own argument, each copy kept across a churned arena); `panics_ffi_null`; `reject_ffi_string_array_return`; a timing of `strerror` in a loop whose argument changes on every iteration, folded into a printed checksum, to state the copy's cost in the commit's `Measured:` trailer |
 | **S3.3** | `readCString` in `nish:unsafe`; the literal-`null` `CPtr \| null` parameter | `ffi_owned_string` (`strdup`/`free` and `realpath(p, null)`/`free` round trips); `reject_ffi_pointer_nullable_variable` (the narrowed-local rule kept); `reject_unsafe_no_import` extended |
 
 Each step is a feature in the language, so each ships the full set the
