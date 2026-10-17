@@ -5517,6 +5517,180 @@ if (!only || "ffi_string checks".includes(only)) {
     shown(keptRun)
   )
 
+  // WP27 S3.3: `readCString` from `nish:unsafe` copies the bytes behind a
+  // `CPtr` into the arena. It is an allowed `unchecked` site, so it compiles
+  // under --deny-panics, and --deny unsafe and --deny ffi each refuse it; the
+  // literal `null` for a `CPtr | null` parameter is `i8* null` at the call.
+  // The second program keeps copies through a constructor reached by `new`,
+  // a `using` block's guard and `this` stored out of a constructor, then
+  // churns the arena before it prints each one.
+  const owned = write(
+    "owned.ts",
+    [
+      'import { readCString } from "nish:unsafe";',
+      "",
+      "declare function realpath(path: string, resolved: CPtr | null): CPtr | null;",
+      "declare function free(p: CPtr): void;",
+      "",
+      "export const main = (): i32 => {",
+      '  const p = realpath("/", null);',
+      "  if (p === null) {",
+      "    return 1;",
+      "  }",
+      "  const s = readCString(p);",
+      "  free(p);",
+      "  console.log(s);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const ownedSites = sitesOf(owned)
+  const ownedKinds = fnSites(ownedSites.report, "main")
+    .map((p) => `${p.line}:${p.kind}:${p.allowed}`)
+    .join(",")
+  check(
+    "ffi_owned_string: `readCString` is an allowed `unchecked` site and the copy's `oom`, and nothing else",
+    ownedKinds === "11:unchecked:true,11:oom:true",
+    ownedSites.report === null ? shown(ownedSites.r) : JSON.stringify(ownedSites.report)
+  )
+  check(
+    "ffi_owned_string: a literal `null` for a `CPtr | null` parameter is `i8* null`, and the copy is `@nish.ffi.str`",
+    /call i8\* @realpath\(i8\* %\d+, i8\* null\)/.test(irOf(owned)) &&
+      /call i8\* @nish\.ffi\.str\(i8\* %\d+\)/.test(irOf(owned)),
+    irOf(owned)
+  )
+  const ownedDenyPanics = compileFfi(owned, ["--deny-panics"])
+  check(
+    "ffi_owned_string: `readCString` compiles under --deny-panics",
+    ownedDenyPanics.status === 0,
+    shown(ownedDenyPanics)
+  )
+  const ownedUnsafe = compileFfi(owned, ["--deny", "unsafe"])
+  check(
+    "ffi_owned_string: --deny unsafe refuses `readCString` and names the call",
+    ownedUnsafe.status === 1 &&
+      ownedUnsafe.stderr.includes("reaches `unsafe`") &&
+      ownedUnsafe.stderr.includes("calls readCString"),
+    shown(ownedUnsafe)
+  )
+  const ownedFfi = compileFfi(owned, ["--deny", "ffi"])
+  check(
+    "ffi_owned_string: --deny ffi refuses a program that reads a C string",
+    ownedFfi.status === 1 &&
+      ownedFfi.stderr.includes("reaches `ffi`") &&
+      ownedFfi.stderr.includes("calls realpath"),
+    shown(ownedFfi)
+  )
+  const ownedChecked = spawnSync(NISH, [owned, "--emit-checked"], { cwd: root, encoding: "utf8" })
+  check(
+    "ffi_owned_string: --emit-checked records the `readCString` import and its call",
+    ownedChecked.status === 0 &&
+      ownedChecked.stdout.includes('unsafe import 1:10 readCString from "nish:unsafe"') &&
+      /unsafe call 11:13 readCString \(node \d+\)/.test(ownedChecked.stdout),
+    shown(ownedChecked)
+  )
+  const ownedKept = write(
+    "owned-kept.ts",
+    [
+      'import { Mutex } from "nish/threads";',
+      'import { readCString } from "nish:unsafe";',
+      "",
+      "declare function strdup(s: string): CPtr | null;",
+      "declare function free(p: CPtr): void;",
+      "",
+      "const copy = (s: string): string => {",
+      "  const p = strdup(s);",
+      "  if (p === null) {",
+      '    return "";',
+      "  }",
+      "  const r = readCString(p);",
+      "  free(p);",
+      "  return r;",
+      "};",
+      "",
+      "class Counter {",
+      '  s: string = "";',
+      "}",
+      "",
+      "class Name {",
+      "  text: string;",
+      "  constructor() {",
+      '    const p = strdup("from a constructor");',
+      '    this.text = p === null ? "" : readCString(p);',
+      "    if (p !== null) {",
+      "      free(p);",
+      "    }",
+      "  }",
+      "}",
+      "",
+      "class Holder {",
+      "  t: Tag | null = null;",
+      "}",
+      "",
+      "class Tag {",
+      "  constructor(h: Holder) {",
+      "    h.t = this;",
+      '    const p = strdup("through this");',
+      "    if (p !== null) {",
+      "      this.label = readCString(p);",
+      "      free(p);",
+      "    }",
+      "  }",
+      '  label: string = "";',
+      "}",
+      "",
+      "const churn = (n: i32): i32 => {",
+      "  const t: string[] = [];",
+      "  for (let i = 0; i < n; i++) {",
+      "    t.push(`${i}`);",
+      "  }",
+      '  return t.join("").length;',
+      "};",
+      "",
+      "export const main = (): i32 => {",
+      "  const m = new Mutex<Counter>(new Counter());",
+      "  const n = new Name();",
+      "  {",
+      "    using g = m.lock();",
+      '    const p = strdup("under a guard");',
+      "    if (p !== null) {",
+      "      g.value.s = readCString(p);",
+      "      free(p);",
+      "    }",
+      "  }",
+      "  const h = new Holder();",
+      "  new Tag(h);",
+      '  const c = copy("returned");',
+      "  console.log(`${churn(4000) > 0}`);",
+      "  console.log(n.text);",
+      "  {",
+      "    using g = m.lock();",
+      "    console.log(g.value.s);",
+      "  }",
+      "  const t = h.t;",
+      '  console.log(t === null ? "none" : t.label);',
+      "  console.log(c);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const ownedKeptExe = path.join(ffiDir, "owned-kept.exe")
+  const ownedKeptBuilt = spawnSync(
+    NISH,
+    [ownedKept, "-o", path.join(ffiDir, "owned-kept") + path.sep, "--link", ownedKeptExe],
+    { cwd: root, encoding: "utf8" }
+  )
+  const ownedKeptRun =
+    ownedKeptBuilt.status === 0 ? spawnSync(ownedKeptExe, [], { encoding: "utf8" }) : ownedKeptBuilt
+  check(
+    "ffi_owned_string: `readCString` copies kept by a constructor, by a `using` block's guard and through `this` survive churn",
+    ownedKeptRun.status === 0 &&
+      ownedKeptRun.stdout === "true\nfrom a constructor\nunder a guard\nthrough this\nreturned\n",
+    shown(ownedKeptRun)
+  )
+
   // A `declare function` passed as a function parameter is called from the
   // specialisation (`err<strerror>`), which holds the copy and the site.
   const passed = write(

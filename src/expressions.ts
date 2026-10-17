@@ -2484,7 +2484,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   while (i < args.children.length) {
     const arg = args.children[i]
     const got = checkExpression(ctx, arg, scope, sig.paramTypes[i])
-    if (got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
+    const refused = refuseForeignNullable(ctx, sig, i, arg, got, sig.name)
+    if (!refused && got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
       const wantName = ctx.table.typeName(sig.paramTypes[i])
       ctx.error(
         arg,
@@ -2495,6 +2496,40 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   }
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
+}
+
+/**
+ * A `CPtr | null` parameter of a `declare function` takes the literal `null`
+ * or a `CPtr`, never a `CPtr | null` the program holds (WP27 S3.3,
+ * `docs/wp27-ffi.md` §8g). The `null` written at the call is the program's
+ * own "no address", as a `string | null` parameter's is; a nullable pointer
+ * held in a variable, a field, a ternary or a `??` came from C and is narrowed
+ * with `!== null` before it goes back, so C is never handed a null it gave
+ * out by a path the program did not test. `true` when it reported.
+ */
+const refuseForeignNullable = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  i: i32,
+  arg: Node,
+  got: i32,
+  shown: string
+): boolean => {
+  if (!sig.foreign() || i >= sig.paramTypes.length) {
+    return false
+  }
+  const want = sig.paramTypes[i]
+  if (!ctx.table.isNullable(want) || ctx.table.stripNull(want) === T_STRING) {
+    return false
+  }
+  if (unwrapParens(arg).kind === N_NULL || got === T_ERROR || !ctx.table.isNullable(got)) {
+    return false
+  }
+  ctx.error(
+    arg,
+    `Argument ${i + 1} of \`${shown}\` is a \`CPtr | null\` the program holds: a nullable foreign parameter takes the literal \`null\` or a pointer narrowed with \`!== null\`, so C is never handed a null by a path nobody tested`
+  )
+  return true
 }
 
 /**
@@ -2526,6 +2561,7 @@ const checkDirectCall = (
   while (i < args.children.length && i < arity) {
     const want = sig.paramTypes[i]
     const got = checkExpression(ctx, args.children[i], scope, want)
+    refuseForeignNullable(ctx, sig, i, args.children[i], got, shown)
     if (bad < 0 && got !== T_ERROR && !ctx.table.assignable(got, want)) {
       bad = i
       badType = got
