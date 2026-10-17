@@ -178,4 +178,6 @@ There is no `instanceof` and no downcast either: a value's type is the one
 it was declared with. Where a function needs to tell kinds of thing apart,
 store the kind in a field — a numeric `enum` is the usual choice, and a
 `readonly` field of an [enum member type](types.md#enum-member-types) fixes
-it for every object of a class — and `switch` on it.
+it for every object of a class — and `switch` on it. A
+[discriminated union](unions.md) of such classes holds any one of them and
+reads that field to tell which.
