@@ -75,7 +75,23 @@ PASS  after a burst of the initial window the next waits 27 ms
 PASS  27 ms later it may go
 PASS  a long idle refills the budget only up to the initial window
 PASS  time handed in backwards earns nothing
-PASS  and restarts the pacer's clock there
+PASS  and restarts the pacer's clock there, in microseconds
+PASS  the pacer's RTT is the 200 µs the clock measured
+PASS  while the millisecond RTT is 0
+PASS  so the loss delay still floors at kGranularity, 1 ms (§6.1.2)
+PASS  and the probe timeout at kGranularity plus max_ack_delay: 5 + 1 + 25
+PASS  the pacer still holds the datagram past a burst of the initial window (§7.7)
+PASS  20 µs later, inside the same millisecond, it may go
+PASS  an idle of milliseconds refills only the initial window, though the window is 13200
+PASS  a micros outside the millisecond now names is not read
+PASS  and one inside it is
+PASS  a later sample less its ACK delay smooths in by 1/8: (7 × 200 + 1000) / 8
+PASS  an ACK delay past max_ack_delay counts only max_ack_delay once confirmed (§5.3)
+PASS  before confirmation a sub-millisecond Handshake probe timeout is kGranularity alone, no max_ack_delay
+PASS  with no micros a round trip inside one millisecond counts as kGranularity, as it always did
+PASS  before an RTT sample a flight starts on one datagram: 12000 × 5/4 per 333 ms is 45 bytes a millisecond
+PASS  at a 5 ms RTT on a millisecond's earning: 12000 × 5/4 / 5
+PASS  and under a millisecond on at most four datagrams
 PASS  a space index below 0 records nothing
 PASS  nor one past Application Data
 PASS  nor a packet of no bytes
@@ -146,6 +162,10 @@ PASS  ten full datagrams go at once: the initial window's burst
 PASS  the next waits 4 ms
 PASS  not a millisecond less
 PASS  and then goes
+PASS  with credit for two datagrams a fast connection starts no flight
+PASS  and waits for the next millisecond
+PASS  though one datagram alone may go
+PASS  with credit for four it sends the four together
 PASS  the first flight is one datagram, and the network loses it
 PASS  the probe timeout is 997 ms after it
 PASS  the first probe goes out, and the network loses it too
@@ -188,4 +208,4 @@ PASS  the server never sends more than three times what it received
 PASS  the other is still owed
 PASS  and goes once the client sends more
 PASS  still inside the limit
-quic recovery: 190 passed, 0 failed, 0 skipped
+quic recovery: 210 passed, 0 failed, 0 skipped

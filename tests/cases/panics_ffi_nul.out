@@ -1,0 +1,6 @@
+5
+6
+`strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string
+holdsNul exit 1
+`strcmp`: argument 2 (b) holds a NUL byte, which C would read as the end of the string
+nullableNul exit 1

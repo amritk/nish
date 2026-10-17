@@ -9393,10 +9393,12 @@ could unwind, and a language with no `throw` and no landing pad can do nothing
 with that admission, so unwinding out of a foreign call is undefined here — the
 position clang already takes compiling C (`docs/wp27-ffi.md` §2).
 
-The boundary is scalars only, and that is what makes it sound rather than merely
-small: with no pointer among the arguments or the result, there is nothing for
-escape analysis to be wrong about (`tests/cases/ffi_scalar`, and the four
-`reject_ffi_*` cases).
+The boundary is scalars, `CPtr` and borrowed strings, and that is what makes it
+sound rather than merely small: with no pointer this compiler allocated among
+the results, and only a string C reads for the length of the call among the
+arguments, there is nothing for escape analysis to be wrong about
+(`tests/cases/ffi_scalar`, the `reject_ffi_*` cases, and
+[the string parameter](#a-string-parameter-borrowed-as-const-char-) below).
 
 The listing is also where the two senses of the word `function` sit side by
 side. `declare function abs` is an *ambient* declaration and defines nothing, so
@@ -9473,9 +9475,10 @@ before it goes back to C. The narrowed `if.end` block below is what that rule
 buys — `free` is reached with a value the program has proved is not null.
 
 The arena is untouched by any of it, and that is the soundness argument rather
-than a happy accident: no pointer this compiler allocated crosses the boundary
-in either direction, so there is nothing for C to have captured when the scope
-releases.
+than a happy accident: a `CPtr` is never a pointer this compiler allocated, so
+there is nothing of the arena's for C to have captured when the scope releases.
+The one arena pointer that does cross, a `string` argument, is the next
+section's.
 
 <!-- cookbook:begin decl-ffi-pointer -->
 ```ts
@@ -9526,6 +9529,111 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
 ```
 <!-- cookbook:end decl-ffi-pointer -->
+
+### A `string` parameter, borrowed as `const char *`
+
+A `string` in a `declare function` parameter is C's NUL-terminated
+`const char *` (WP27 S3.1). A `nish_str` already stores its bytes with a NUL
+after them, so the argument is the address eight bytes into it — one
+`getelementptr`, no copy, no allocation — and the declaration
+says `i8*`, carrying no attribute: `nocapture` and `readonly` would be the
+borrow rule restated as an LLVM fact the C body need not honour.
+
+C borrows the bytes for the length of the call and may not keep the address,
+so the escape analysis treats the argument as a read. That is visible in
+`greet`: the concatenation lives in its arena scope, the scope is released
+*after* `strlen` returns, and the call is never a `tail` call, because a tail
+call would release the scope first.
+
+A Nish string may hold a NUL, and C would stop reading at it, so a string that
+is not a literal is checked before the call: one `nish_str_index_of` for the
+one-byte NUL string, and a cold `ffi.nul` block that panics with the callee,
+the argument and the parameter named. A literal with no NUL in it is proved at
+compile time, so `puts("hello")` has no check and is no
+[panic site](LANGUAGE.md#panic-sites). A `string | null` parameter passes
+`NULL` for `null` and checks only the other arm (`tests/cases/ffi_string_param`,
+`ffi_string_param_arena`, `panics_ffi_nul`).
+
+<!-- cookbook:begin decl-ffi-string -->
+```ts
+declare function puts(s: string): i32
+declare function strlen(s: string): u64
+
+const greet = (name: string): u64 => strlen(`hi ${name}`)
+
+export const main = (): i32 => {
+  puts("hello")
+  return greet("ada") === 6 ? 0 : 1
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"hi \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [87 x i8] } { i64 86, [87 x i8] c"`strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"hello\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"ada\00" }, align 8
+
+declare i32 @puts(i8*)
+declare i64 @strlen(i8*)
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+
+define internal noundef i64 @greet(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_concat(i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8* %name)
+  %1 = call i64 @nish_str_index_of(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %2 = icmp sge i64 %1, 0
+  br i1 %2, label %ffi.nul, label %ffi.ok
+
+ffi.nul:
+  call void @nish_panic(i8* bitcast ({ i64, [87 x i8] }* @.str.2 to i8*))
+  unreachable
+
+ffi.ok:
+  %3 = getelementptr inbounds i8, i8* %0, i64 8
+  %4 = call i64 @strlen(i8* %3)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i64 %4
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %0 = getelementptr inbounds i8, i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*), i64 8
+  %1 = call i32 @puts(i8* %0)
+  %2 = call i64 @greet(i8* bitcast ({ i64, [4 x i8] }* @.str.4 to i8*))
+  %3 = icmp eq i64 %2, 6
+  br i1 %3, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %4 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  ret i32 %4
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn memory(argmem: read) }
+attributes #3 = { nounwind noreturn cold }
+```
+<!-- cookbook:end decl-ffi-string -->
 
 ### Numeric `enum`
 

@@ -1098,6 +1098,8 @@ const caseResults = caseRuns.map((run) => run.compiled)
     "  call void @nish_append_file(i8* %0, i8* %1)",
     "  call void @nish_random_fill(%struct.nish_array* %0)",
     "  call void @nish_write(i8* %0, i32 2, i1 true)\n  call void @nish_exit(i32 1)",
+    "ffi.nul:\n  call void @nish_panic(i8* %0)",
+    "ffi.nul.3:\n  call void @nish_panic(i8* %0)",
   ]
   const missed = paths.filter((line) => panicOracle(define([line]), clean, null).failures.length !== 1)
   const flagged = paths.filter((line) => panicOracle(define([line]), unproven, null).failures.length > 0)
@@ -5201,6 +5203,168 @@ if (!only || "c_symbol_private_libm".includes(only)) {
     "link/c_symbol_private_libm: Node prints what the native binary prints",
     run.status === 0 && run.stdout === want,
     `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
+// WP27 S3.1: a `string` handed to a `declare function` is borrowed as
+// `const char *`, and one that holds a NUL panics before the call (`ffi-nul`,
+// docs/wp27-ffi.md §8c). A literal with no NUL is proved and is no site;
+// anything else is a site in the function that makes the call, which
+// `--deny-panics` refuses and `--emit-panics` names through every caller --
+// a constructor reached by `new` included -- and the call is `ffi` under
+// `--deny ffi` whether it passes a string or a scalar. The last program puts
+// the call inside a `using` block and reads the string back through `this`
+// stored out of a constructor, the two other ways CLAUDE.md names for a value
+// to reach a rule from where its tests do not write it.
+if (!only || "ffi_string checks".includes(only)) {
+  const ffiDir = path.join(buildDir, "ffi-string")
+  fs.mkdirSync(ffiDir, { recursive: true })
+  const write = (name, text) => {
+    const file = path.join(ffiDir, name)
+    fs.writeFileSync(file, text)
+    return file
+  }
+  const compileFfi = (file, extra) =>
+    spawnSync(NISH, [file, "-o", path.join(ffiDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  const sitesOf = (file) => {
+    const json = path.join(ffiDir, `${path.basename(file, ".ts")}.panics.json`)
+    const r = compileFfi(file, ["--emit-panics", json])
+    return { r, report: r.status === 0 ? JSON.parse(fs.readFileSync(json, "utf8")) : null }
+  }
+  const irOf = (file) => {
+    const ll = path.join(ffiDir, path.basename(file, ".ts"), `${path.basename(file, ".ts")}.ll`)
+    return fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+  }
+  const fnSites = (report, name) => (report?.functions ?? []).find((f) => f.name === name)?.panics ?? []
+
+  const literal = write(
+    "literal.ts",
+    'declare function puts(s: string): i32;\n\nexport const main = (): i32 => {\n  puts("hello");\n  return 0;\n};\n'
+  )
+  const lit = sitesOf(literal)
+  check(
+    'ffi_string: `puts("hello")` has no `ffi-nul` site and no NUL check in its IR',
+    lit.report !== null &&
+      fnSites(lit.report, "main").every((p) => p.kind !== "ffi-nul") &&
+      !irOf(literal).includes("@nish_str_index_of(") &&
+      /= getelementptr inbounds i8, i8\* bitcast \(\{ i64, \[6 x i8\] \}\* @\.str\.\d+ to i8\*\), i64 8\n\s+%\d+ = call i32 @puts\(/.test(
+        irOf(literal)
+      ),
+    lit.report === null ? shown(lit.r) : irOf(literal)
+  )
+  const litDeny = compileFfi(literal, ["--deny-panics"])
+  check("ffi_string: a NUL-free literal compiles under --deny-panics", litDeny.status === 0, shown(litDeny))
+  const litFfi = compileFfi(literal, ["--deny", "ffi"])
+  check(
+    "ffi_string: --deny ffi refuses a call that passes only a string",
+    litFfi.status === 1 && litFfi.stderr.includes("reaches `ffi`") && litFfi.stderr.includes("calls puts"),
+    shown(litFfi)
+  )
+
+  const ctor = write(
+    "ctor.ts",
+    [
+      "declare function strlen(s: string): u64;",
+      "",
+      "class Name {",
+      "  len: u64;",
+      "  constructor(s: string) {",
+      "    this.len = strlen(s);",
+      "  }",
+      "}",
+      "",
+      "export const main = (): i32 => {",
+      `  const n = new Name("ab" + \`\${toI32(Date.now()) % 10}\`);`,
+      '  console.log(n.len > 0 ? "some" : "none");',
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const ctorSites = sitesOf(ctor)
+  check(
+    "ffi_string: a constructor's string argument to C is an `ffi-nul` site, and `new` is a call site via it",
+    ctorSites.report !== null &&
+      fnSites(ctorSites.report, "Name.constructor").some((p) => p.kind === "ffi-nul" && p.proven === false) &&
+      fnSites(ctorSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "Name.constructor" && p.via === "ffi-nul"
+      ),
+    ctorSites.report === null ? shown(ctorSites.r) : JSON.stringify(ctorSites.report)
+  )
+  const ctorDeny = compileFfi(ctor, ["--deny-panics"])
+  check(
+    "ffi_string: --deny-panics refuses a string that is not a literal, handed to C in a constructor",
+    ctorDeny.status === 1 && ctorDeny.stderr.includes("`ffi-nul` may panic here"),
+    shown(ctorDeny)
+  )
+  const ctorFfi = compileFfi(ctor, ["--deny", "ffi"])
+  check(
+    "ffi_string: --deny ffi refuses a string call reached from a constructor by `new`",
+    ctorFfi.status === 1 &&
+      ctorFfi.stderr.includes("calls Name.constructor") &&
+      ctorFfi.stderr.includes("calls strlen"),
+    shown(ctorFfi)
+  )
+
+  const reach = write(
+    "reach.ts",
+    [
+      'import { Mutex } from "nish/threads";',
+      "",
+      "declare function strlen(s: string): u64;",
+      "",
+      "class Counter {",
+      "  n: i32 = 0;",
+      "}",
+      "",
+      "class Holder {",
+      "  t: Tag | null = null;",
+      "}",
+      "",
+      "class Tag {",
+      "  label: string;",
+      "  constructor(h: Holder, s: string) {",
+      "    this.label = s;",
+      "    h.t = this;",
+      "  }",
+      "}",
+      "",
+      "export const main = (): i32 => {",
+      "  const m = new Mutex<Counter>(new Counter());",
+      `  const name: string = "n" + \`\${toI32(Date.now()) % 10}\`;`,
+      "  {",
+      "    using g = m.lock();",
+      "    g.value.n = toI32(strlen(name));",
+      "  }",
+      "  const h = new Holder();",
+      '  new Tag(h, name + "!");',
+      "  const t = h.t;",
+      "  if (t !== null) {",
+      '    console.log(strlen(t.label) > 0 ? "some" : "none");',
+      "  }",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const reachSites = sitesOf(reach)
+  const reachLines = fnSites(reachSites.report, "main")
+    .filter((p) => p.kind === "ffi-nul" && p.proven === false)
+    .map((p) => p.line)
+    .join(",")
+  check(
+    "ffi_string: a string handed to C inside a `using` block, and one read through `this` stored out of a constructor, are each an `ffi-nul` site",
+    reachSites.report !== null && reachLines === "26,32",
+    reachSites.report === null ? shown(reachSites.r) : JSON.stringify(reachSites.report)
+  )
+  const reachFfi = compileFfi(reach, ["--deny", "ffi"])
+  check(
+    "ffi_string: --deny ffi refuses a string call inside a `using` block",
+    reachFfi.status === 1 && reachFfi.stderr.includes("calls strlen"),
+    shown(reachFfi)
   )
 }
 
