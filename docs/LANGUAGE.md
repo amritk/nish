@@ -2937,9 +2937,11 @@ from the whole-program facts, and each rule is reported there:
   that builds a 1 MB temporary does not fault it in again on every call: 200
   tasks that each build one took 48 ms on 1 thread, against 314 ms when every
   release trimmed the heap. A worker that then finds no work for a second
-  gives the memory back to the kernel before it parks: after ten rounds of 8
-  tasks that each build a 16 MB temporary, an idle program holds 52 MB rather
-  than 68 MB. With no worker (one CPU, or `NISH_NUM_THREADS=1`) nothing
+  gives the memory back to the kernel before it parks, its own heap included:
+  after ten rounds of 8 tasks that each build a 16 MB temporary, an idle
+  program holds 2.3 MB rather than 68 MB, and after four maps of 1.2 million
+  strings on four threads, 2.3 MB rather than 82 MB
+  (`tests/link/par_map_idle`). With no worker (one CPU, or `NISH_NUM_THREADS=1`) nothing
   parks, so nothing gives memory back early: what a join freed is kept up to
   the 64 MB at which glibc returns the top of the heap by itself. A region below its grain runs as the loop it would
   have been, on the calling thread, and keeps that loop's costs: 200 elements

@@ -4137,6 +4137,7 @@ const INDEX_OF_ANY_REFUSALS = [
  */
 const LINK_READ_LATER = [
   "par_dst_short",
+  "par_map_idle",
   "par_map_join_small",
   "par_map_release",
   "range_export",
@@ -4699,6 +4700,40 @@ if (!only || "par_map_release".includes(only)) {
       `link/par_map_release: a million 2 KB temporaries on ${threads} thread(s) peak under 256 MB`,
       kb > 0 && kb < 256 * 1024,
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
+// A worker that finds the queue empty for a second lowers glibc's trim
+// threshold, frees a 16 MB block through its own arena so the arena's top is
+// cut back, and trims (`nish_pool_drain`). `par_map_idle` runs four maps of
+// 1.2 million short strings and then spins; two seconds after its first line
+// it holds 2.3 MB on four threads and on eight. With the 64 MB threshold left
+// in place it held 82 MB on either, every worker's arena keeping the burst's
+// top. The bound is 16 MB, read from `/proc/<pid>/status` while it spins, so
+// the check runs on Linux alone.
+if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
+  const fixture = linkTests.includes("par_map_idle")
+  const exe = path.join(buildDir, "link", "par_map_idle", "app")
+  const sample =
+    'o=$(mktemp); "$1" > "$o" & p=$!; ' +
+    'until [ -s "$o" ] || ! kill -0 $p 2>/dev/null; do sleep 0.05; done; ' +
+    'sleep 2; grep VmRSS /proc/$p/status; wait $p; s=$?; rm -f "$o"; exit $s'
+  for (const threads of ["4", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe)
+        ? spawnSync("sh", ["-c", sample, "sh", exe], {
+            encoding: "utf8",
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+        : null
+    const m = run !== null ? /VmRSS:\s*(\d+)/.exec(run.stdout) : null
+    const kb = run !== null && run.status === 0 && m !== null ? Number(m[1]) : -1
+    const missing = fixture ? `no such binary: ${exe}` : "no such fixture"
+    check(
+      `link/par_map_idle: a parked pool on ${threads} threads holds under 16 MB`,
+      kb > 0 && kb < 16 * 1024,
+      run !== null ? `exit ${run.status}, idle ${kb} KB\n${run.stdout}${run.stderr}` : missing
     )
   }
 }

@@ -202,8 +202,20 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * waits for its next job with a one-second timeout and calls `malloc_trim(0)` when it
  * runs out, so a parked pool hands a burst's temporaries back to the kernel (an idle
  * 68 MB after ten rounds of 8 tasks that each build 16 MB, 52 MB with the trim).
+ *
+ * Raised to 2,944 by the trim reaching the workers' arenas, measured **2,900 bytes** on
+ * 2026-10-17 with clang 18.1.3 on linux-x64, 95 more: `malloc_trim(0)` cuts back only
+ * the main arena's top, and a worker's arena keeps a burst's top below the 64 MB trim
+ * threshold, so the parked worker lowers the threshold, frees a 16 MB block through its
+ * own arena and then trims, and the next region restores the threshold
+ * (`nish_pool_drain` 381 → 441 bytes, `nish_jobs_run` 572 → 607). Four maps of 1.2
+ * million strings on four threads idled at 82 MB before and 2.3 MB after
+ * (`tests/link/par_map_idle`), the ten rounds of 16 MB tasks at 52 MB and 2.3 MB. The
+ * file had nothing to give: the bytes are the pool's, and dropping the 64 MB threshold
+ * instead cost the bursts it was set for (586-700 ms against 440-466 ms on the 1.2
+ * million strings).
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2944
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
