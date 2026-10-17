@@ -262,7 +262,10 @@ static void nish_cpu_relax(void) {
  * 16 MB block through its arena to make that cut, and then trims. The
  * threshold stays low until the next region starts (`nish_jobs_run`), so the
  * blocks a join adopted from a worker's arena go back to the system too when
- * the caller frees them later. */
+ * the caller frees them later. The lowering and the restore both run under the
+ * pool lock, so a region never runs with the low threshold; the free and the
+ * trim run outside it, and a region that starts meanwhile only makes that free
+ * keep its block in the arena, to be trimmed after the next job it runs. */
 static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
 #ifdef __GLIBC__
   int held = 0;
