@@ -231,6 +231,15 @@ export class PointerParamFacts {
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee. */
   captured: boolean
   /**
+   * `captured`, less a parallel region's hold on it: escape analysis's
+   * question, where `captured` is LLVM's. A region entry hands every
+   * parameter to other threads and joins them before it returns
+   * (`markParallelEntry`), so the address is kept, and no `nocapture` may be
+   * claimed, but not past the call: an array the caller made and passed in is
+   * still the caller's alone once the call has returned.
+   */
+  outlives: boolean
+  /**
    * WP29: the function writes memory reachable from the pointer, its own slots
    * or anything deeper, directly or via a callee (fixpoint). `writesThrough`
    * is LLVM's narrower question: a store through `p.inner.x` writes through a
@@ -259,6 +268,7 @@ export class PointerParamFacts {
     this.align = align
     this.writesThrough = false
     this.captured = false
+    this.outlives = false
     this.writesReach = false
     this.writesDeep = false
     this.keptInThis = false
@@ -1875,6 +1885,7 @@ class FactCollector {
       this.facts.escaping.add(name)
       if (pointer !== null) {
         pointer.captured = true
+        pointer.outlives = true
         pointer.writesThrough = true // an alias may be written through later
       }
       return
@@ -3573,10 +3584,10 @@ const collectFacts = (
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
   if (isRegionEntry(sig)) {
-    markParallelEntry(facts, "nish_parallel_range")
+    markParallelEntry(facts, "nish_parallel_range", true)
   }
   if (isSpawnEntry(sig)) {
-    markParallelEntry(facts, "nish_scope_spawn") // WP29 P2: the payload is kept until the join
+    markParallelEntry(facts, "nish_scope_spawn", false) // WP29 P2: the payload is kept until the join
   }
   if (isMapRoute(sig)) {
     markMapRoute(table, sig, facts)
@@ -3626,21 +3637,32 @@ const collectFacts = (
  *
  * Both are claims LLVM would act on, and what each would buy is nothing: the
  * instance is called once per region, and the loop inside it is the chunk
- * function, whose own facts are unaffected. *
+ * function, whose own facts are unaffected.
+ *
+ * What the copy does not do is outlive the call: `nish_parallel_range` keeps
+ * its jobs on its own stack and returns once every chunk has, so a region
+ * entry (`joined`) leaves `outlives` as its source walk found it. An array the
+ * caller made and handed to `parallelMapInto` is then the caller's alone
+ * again, and the frame or the pass that made it releases it as it would after
+ * a sequential loop; without this every `parallelMap` let its result out of
+ * the caller's frame, and a function that called one and answered a scalar
+ * never reclaimed it (`tests/link/par_map_reclaim`).
+ *
  * A `spawn` instance (WP29 P2) is the same shape with a longer wait: its
  * payload — the argument and the destination — is copied into the scope's
  * task and read when the scope joins, after `spawn` has returned. So every
- * parameter escapes there too, which is also what keeps an argument out of a
- * stack slot a later pass of a loop would reuse and out of a loop pass the
- * arena would release before the join.
+ * parameter outlives the call there, which is also what keeps an argument out
+ * of a stack slot a later pass of a loop would reuse and out of a loop pass
+ * the arena would release before the join.
  */
-const markParallelEntry = (facts: FunctionFacts, runtime: string): void => {
+const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolean): void => {
   facts.callees.add(runtime)
   for (const name of facts.paramNames) {
     facts.escaping.add(name)
   }
   for (const pp of facts.pointerParams) {
     pp.captured = true
+    pp.outlives = pp.outlives || !joined
     pp.writesThrough = true
   }
 }
@@ -3806,7 +3828,7 @@ const markJsonRoute = (
     facts.allocEscapes = true
     facts.resizesArray = true
     facts.callees.add("nish_array_grow")
-    markParallelEntry(facts, "nish_alloc_struct")
+    markParallelEntry(facts, "nish_alloc_struct", false)
   }
 }
 
@@ -4296,11 +4318,13 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
           const g = facts.get(pp.passedToCallees[i])
           let writes = true
           let captures = true
+          let outlives = true
           if (g !== null) {
             const target = g.pointerParamAt(pp.passedToIndices[i])
             if (target !== null) {
               writes = target.writesThrough
               captures = target.captured
+              outlives = target.outlives
             }
           }
           if (writes && !pp.writesThrough) {
@@ -4309,6 +4333,10 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
           }
           if (captures && !pp.captured) {
             pp.captured = true
+            changed = true
+          }
+          if (outlives && !pp.outlives) {
+            pp.outlives = true
             changed = true
           }
           i = i + 1

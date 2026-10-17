@@ -200,8 +200,9 @@ const channel = (): string => {
 
 // Adoption inside a `using a = arena()` block: strings of 64 KB or more
 // received from a channel in the block are adopted after its mark, so its
-// release frees them, and only a number leaves. (The block refuses a map, or a
-// call reaching one, since a map stores what it answers.) The string made
+// release frees them, and only a number leaves. (The block refuses a map that
+// answers strings, or a call reaching one, since such a map stores each string
+// it answers into its result.) The string made
 // before the block is below its mark and survives, and so does one adopted
 // before a block whose mark then sits at the end of that full block.
 const inArena = (): string => {
@@ -310,9 +311,9 @@ const into = (n: i32): string => {
 // One element of an adopted block of many, answered by a function, directly
 // and through one more call. Neither call is reclaimed (WP9's
 // `nish_arena_keep`, which moves the newest value down to the mark and assumes
-// it ends the arena): a function that runs a map stores what the map answers,
-// and so does every function that reaches one, which is what the reclaim
-// refuses. The golden pins it: `picked` brackets neither call with
+// it ends the arena): a function that runs a map of strings stores what the
+// map answers, and so does every function that reaches one, which is what the
+// reclaim refuses. The golden pins it: `picked` brackets neither call with
 // `nish_arena_keep`, which `reclaimAfter` does around `fetchBig`, whose task's
 // answer is a block of its own.
 const pick = (n: i32, k: i32): string => {

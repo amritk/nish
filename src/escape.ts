@@ -95,7 +95,7 @@ import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
 import { Options } from "./options"
-import { isSpawnEntry } from "./parallel"
+import { isParallelEntry, isSpawnEntry } from "./parallel"
 import { CheckedProgram, elementStride, FunctionSig } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
@@ -636,7 +636,11 @@ class EscapeAnalysis {
     }
   }
 
-  /** Whether `callee` retains the pointer passed as parameter `index` (`this` is 0). */
+  /**
+   * Whether `callee` retains the pointer passed as parameter `index` (`this`
+   * is 0) past the call: `outlives` rather than `captured`, so an array handed
+   * to a parallel region is not kept by it (`markParallelEntry`).
+   */
   calleeCaptures(callee: FunctionSig, index: i32): boolean {
     const g = this.facts.get(callee.name)
     if (g === null || index < 0 || index >= g.paramNames.length) {
@@ -644,7 +648,7 @@ class EscapeAnalysis {
     }
     const name = g.paramNames[index]
     const pointer = g.pointerParam(name)
-    return pointer !== null ? pointer.captured : g.escaping.has(name)
+    return pointer !== null ? pointer.outlives : g.escaping.has(name)
   }
 
   /**
@@ -2038,10 +2042,21 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
     )
   }
   if (why === LOOP_CALLEE_STORES) {
-    return (
+    const stores =
       `\`${scope.name}\` is called inside ${block} and stores an allocation into memory, where this analysis stops ` +
       "following it: what it stores may be the block's and outlive the release"
-    )
+    // A map that answers strings stores each one into its result. A function
+    // that runs the map and answers what the block needs gives the map's
+    // result back when it returns, which is what the block was for.
+    const callee: FunctionSig | null = at.kind === N_CALL ? unit.program.nodeCallees[at.id] : null
+    if (callee !== null && isParallelEntry(callee)) {
+      return (
+        stores +
+        " (a map stores each string or array it answers into its result: run the map in a function that answers what the " +
+        "block needs, and the function's frame gives the map's result back when it returns)"
+      )
+    }
+    return stores
   }
   if (why === LOOP_UNSEEN) {
     return (
