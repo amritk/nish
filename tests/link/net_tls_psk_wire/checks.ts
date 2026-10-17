@@ -8,8 +8,11 @@
 // salt, and the ServerHello that accepts identity 0. Rows 10-13 are pinned at
 // the codec and through a `TlsServer`: a PSK without modes is
 // `missing_extension`, a PSK that is not last or whose counts differ is
-// `illegal_parameter`, and a malformed offer or mode list is `decode_error`,
-// which wins over both.
+// `illegal_parameter`, and a malformed offer or mode list is `decode_error`.
+// A PSK that is not last is refused before its body is read, so it is
+// `illegal_parameter` however malformed; any other malformed offer is
+// `decode_error`, which wins over counts that differ and over missing modes.
+// Each new function also runs once at `TLS_AES_256_GCM_SHA384`'s 48 octets.
 import { Suite } from "nish/testing";
 import { HkdfScratch } from "nish/crypto/hkdf";
 import {
@@ -31,6 +34,7 @@ import {
 } from "nish/net/tls/codec";
 import {
   TLS_AES_128_GCM_SHA256,
+  TLS_AES_256_GCM_SHA384,
   tlsBinderKey,
   tlsBinderKeyInto,
   tlsBinderVerify,
@@ -41,6 +45,7 @@ import {
   tlsPskEarlySecretInto,
   tlsResumptionPsk,
   tlsResumptionPskInto,
+  tlsSuiteHashLength,
 } from "nish/net/tls/schedule";
 import { Secret, secret, wipe } from "nish:secret";
 import { TlsServer } from "nish/net/tls";
@@ -109,6 +114,15 @@ const slice = (bytes: u8[], from: i32, n: i32): u8[] => {
   return out;
 };
 
+/** `n` bytes counting up from `first`, so every window of them is distinct. */
+const fill = (n: i32, first: i32): u8[] => {
+  const out: u8[] = [];
+  for (let k: i32 = 0; k < n; k++) {
+    out.push(toU8((first + k) & 255));
+  }
+  return out;
+};
+
 /** A `pre_shared_key` extension offering `identities`, each with age 0, and `binders`. */
 const psk = (identities: u8[][], binders: u8[][]): u8[] => {
   const ids: u8[][] = [];
@@ -165,20 +179,25 @@ export const pskWireChecks = (): i32 => {
   const extra: u8[] = fromHex("002a000400000400");
   const lifetime: u32 = toU32(0x1e);
   const ageAdd: u32 = 0xfad6aac5;
-  t.eqI32("RFC 8448 §3's NewSessionTicket is 205 octets", toI32(nst.length), 205);
+  t.eqI32("RFC 8448 §3's NewSessionTicket is 205 octets", toI32(nst.length), toI32(205));
   t.eqStr(
     "tlsEncodeNewSessionTicket writes RFC 8448 §3's NewSessionTicket",
     toHex(tlsEncodeNewSessionTicket(lifetime, ageAdd, nonce, ticket, extra)),
     NST
   );
   const placed: u8[] = new Array<u8>(212);
+  for (let k: i32 = 0; k < 212; k++) {
+    placed[k] = toU8(0xee);
+  }
   const five: i32 = 5;
   t.eqI32(
     "tlsWriteNewSessionTicket at offset 5 answers where it ended",
     tlsWriteNewSessionTicket(placed, five, lifetime, ageAdd, nonce, zero, 2, ticket, zero, 178, extra),
-    210
+    toI32(210)
   );
   t.eqStr("and wrote the same bytes there", toHex(slice(placed, five, 205)), NST);
+  t.eqStr("and left the five bytes before it alone", toHex(slice(placed, zero, five)), "eeeeeeeeee");
+  t.eqStr("and the two after it", toHex(slice(placed, 210, 2)), "eeee");
   const resMaster: Secret<u8[]> = secret(fromHex(RES_MASTER));
   const pskSecret: Secret<u8[]> = tlsResumptionPsk(H, resMaster, nonce);
   t.eqStr("tlsResumptionPsk gives RFC 8448 §3's PSK for nonce 0000", secretHex(pskSecret), PSK);
@@ -206,7 +225,7 @@ export const pskWireChecks = (): i32 => {
 
   // --- RFC 8448 §4: the resumed ClientHello ---------------------------------
   const ch: u8[] = fromHex(CH);
-  t.eqI32("RFC 8448 §4's ClientHello is 512 octets", toI32(ch.length), 512);
+  t.eqI32("RFC 8448 §4's ClientHello is 512 octets", toI32(ch.length), toI32(512));
   const view: TlsClientHelloView = viewOf(ch);
   t.eqI32("it parses", view.alert, zero);
   t.ok("with a pre_shared_key", view.hasPreSharedKey);
@@ -214,7 +233,7 @@ export const pskWireChecks = (): i32 => {
   t.ok("offering psk_dhe_ke", view.pskDheKe);
   t.eqI32("one identity", view.pskIdentityCount, one);
   t.eqI32("one binder", view.pskBinderCount, one);
-  t.eqI32("the binders list's prefix is at octet 477", view.pskBindersPrefixAt, 477);
+  t.eqI32("the binders list's prefix is at octet 477", view.pskBindersPrefixAt, toI32(477));
   const truncated: u8[] = transcriptHash(H, slice(ch, zero, view.pskBindersPrefixAt));
   t.eqStr("the hello up to it hashes to RFC 8448 §4's truncated hash", toHex(truncated), TRUNCATED);
   t.eqStr(
@@ -236,6 +255,34 @@ export const pskWireChecks = (): i32 => {
     "and refuses it with its last bit flipped",
     !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, flipped, view.pskBinderAt, view.pskBinderLength)
   );
+  const flippedFirst: u8[] = fromHex(CH);
+  flippedFirst[view.pskBinderAt] = toU8(toI32(flippedFirst[view.pskBinderAt]) ^ 0x80);
+  t.ok(
+    "or its first bit",
+    !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, flippedFirst, view.pskBinderAt, view.pskBinderLength)
+  );
+  const middle: i32 = view.pskBinderAt + 15;
+  const flippedMiddle: u8[] = fromHex(CH);
+  flippedMiddle[middle] = toU8(toI32(flippedMiddle[middle]) ^ 0x10);
+  t.ok(
+    "or a bit of its middle byte",
+    !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, flippedMiddle, view.pskBinderAt, view.pskBinderLength)
+  );
+  const paddedHash: u8[] = cat([fromHex("ffff"), truncated]);
+  const two: i32 = 2;
+  t.ok(
+    "tlsBinderVerify reads the hash from hashOff",
+    tlsBinderVerify(kdf, H, binderKeyPlain, paddedHash, two, ch, view.pskBinderAt, view.pskBinderLength)
+  );
+  t.ok(
+    "and not from 0",
+    !tlsBinderVerify(kdf, H, binderKeyPlain, paddedHash, zero, ch, view.pskBinderAt, view.pskBinderLength)
+  );
+  const longBinder: u8[] = cat([fromHex(BINDER), fromHex("00")]);
+  t.ok(
+    "it refuses a window one byte longer whose first 32 are the binder",
+    !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, longBinder, zero, H + one)
+  );
   t.ok(
     "or cut to 31 bytes",
     !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, ch, view.pskBinderAt, view.pskBinderLength - one)
@@ -248,7 +295,7 @@ export const pskWireChecks = (): i32 => {
   t.eqStr("the ticket", toHex(parsed.pskIdentities[0]), toHex(ticket));
   t.ok("its age", parsed.pskTicketAges[0] === 0xfad6aacb);
   t.eqStr("its binder", toHex(parsed.pskBinders[0]), BINDER);
-  t.eqI32("the binders' prefix, from the body", parsed.pskBindersPrefix, 473);
+  t.eqI32("the binders' prefix, from the body", parsed.pskBindersPrefix, toI32(473));
   t.eqStr("and the modes", toHex(parsed.pskModes), "01");
   t.ok("psk_dhe_ke among them", parsed.pskDheKe);
 
@@ -267,6 +314,52 @@ export const pskWireChecks = (): i32 => {
     ),
     SH
   );
+
+  // --- The same functions at TLS_AES_256_GCM_SHA384's 48 octets -------------
+  const h48: i32 = tlsSuiteHashLength(TLS_AES_256_GCM_SHA384);
+  t.eqI32("TLS_AES_256_GCM_SHA384 hashes to 48 octets", h48, toI32(48));
+  const resMaster48Plain: u8[] = fill(h48, 0x40);
+  const resMaster48: Secret<u8[]> = secret(fill(h48, 0x40));
+  const psk48: Secret<u8[]> = tlsResumptionPsk(h48, resMaster48, nonce);
+  const psk48Plain: u8[] = secretCopy(psk48);
+  t.eqI32("tlsResumptionPsk gives 48 octets", toI32(psk48Plain.length), h48);
+  const psk48Into: u8[] = new Array<u8>(h48);
+  tlsResumptionPskInto(kdf, h48, resMaster48Plain, nonceWindow, one, 2, psk48Into);
+  t.eqStr("and tlsResumptionPskInto the same 48", toHex(psk48Into), toHex(psk48Plain));
+  const early48: Secret<u8[]> = tlsPskEarlySecret(h48, psk48);
+  const early48Plain: u8[] = secretCopy(early48);
+  t.eqI32("tlsPskEarlySecret gives 48 octets", toI32(early48Plain.length), h48);
+  const early48Into: u8[] = new Array<u8>(h48);
+  tlsPskEarlySecretInto(kdf, h48, psk48Plain, early48Into);
+  t.eqStr("and tlsPskEarlySecretInto the same 48", toHex(early48Into), toHex(early48Plain));
+  const binderKey48: Secret<u8[]> = tlsBinderKey(h48, early48);
+  const binderKey48Plain: u8[] = secretCopy(binderKey48);
+  t.eqI32("tlsBinderKey gives 48 octets", toI32(binderKey48Plain.length), h48);
+  const binderKey48Into: u8[] = new Array<u8>(h48);
+  tlsBinderKeyInto(kdf, h48, early48Plain, binderKey48Into);
+  t.eqStr("and tlsBinderKeyInto the same 48", toHex(binderKey48Into), toHex(binderKey48Plain));
+  const salt48: Secret<u8[]> = tlsHandshakeSalt(h48, early48);
+  const salt48Plain: u8[] = secretCopy(salt48);
+  t.eqI32("tlsHandshakeSalt gives 48 octets", toI32(salt48Plain.length), h48);
+  const salt48Into: u8[] = new Array<u8>(h48);
+  tlsHandshakeSaltInto(kdf, h48, early48Plain, salt48Into);
+  t.eqStr("and tlsHandshakeSaltInto the same 48", toHex(salt48Into), toHex(salt48Plain));
+  const truncated48: u8[] = transcriptHash(h48, slice(ch, zero, view.pskBindersPrefixAt));
+  const binder48: u8[] = tlsFinishedVerifyData(h48, binderKey48, truncated48);
+  t.eqI32("a binder under it is 48 octets", toI32(binder48.length), h48);
+  t.ok(
+    "and tlsBinderVerify accepts it at 48",
+    tlsBinderVerify(kdf, h48, binderKey48Plain, truncated48, zero, binder48, zero, h48)
+  );
+  t.ok(
+    "but not its first 32 octets as a SHA-256 binder",
+    !tlsBinderVerify(kdf, H, binderKey48Plain, truncated48, zero, binder48, zero, H)
+  );
+  wipe(salt48);
+  wipe(binderKey48);
+  wipe(early48);
+  wipe(psk48);
+  wipe(resMaster48);
   wipe(salt);
   wipe(binderKey);
   wipe(early);
@@ -336,6 +429,26 @@ export const pskWireChecks = (): i32 => {
   t.eqI32("a mode list past its extension is decode_error with no pre_shared_key", codecAlert(modesPastEnd), TLS_ALERT_DECODE_ERROR);
   t.eqI32("and the server answers it", serverAlert(modesPastEnd), TLS_ALERT_DECODE_ERROR);
 
+  const noIdentities: u8[] = hello([
+    modes(dhe),
+    extension(TLS_EXT_PRE_SHARED_KEY, cat([fromHex("0000"), vec16(vec8(binder32))])),
+  ]);
+  t.eqI32("an empty identity list is decode_error", codecAlert(noIdentities), TLS_ALERT_DECODE_ERROR);
+  t.eqI32("and the server answers it", serverAlert(noIdentities), TLS_ALERT_DECODE_ERROR);
+  const sixBytes: u8[] = hello([
+    modes(dhe),
+    extension(TLS_EXT_PRE_SHARED_KEY, cat([vec16(fromHex("000101000000")), vec16(vec8(binder32))])),
+  ]);
+  t.eqI32("a 6-byte identity list is decode_error", codecAlert(sixBytes), TLS_ALERT_DECODE_ERROR);
+  const sevenBytes: TlsClientHelloView = viewOf(
+    hello([
+      modes(dhe),
+      extension(TLS_EXT_PRE_SHARED_KEY, cat([vec16(fromHex("00010100000000")), vec16(vec8(binder32))])),
+    ])
+  );
+  t.eqI32("and the 7-byte one parses", sevenBytes.alert, zero);
+  t.eqI32("with its one identity", sevenBytes.pskIdentityCount, one);
+
   // --- Which refusal wins ---------------------------------------------------
   t.eqI32(
     "a malformed offer whose counts differ is decode_error",
@@ -348,12 +461,50 @@ export const pskWireChecks = (): i32 => {
     TLS_ALERT_DECODE_ERROR
   );
   t.eqI32(
+    "a malformed offer that is not last is illegal_parameter",
+    codecAlert(clientHello([SUITE], [modes(dhe), psk([id], [binder31]), standardExtensions()[0], standardExtensions()[1], standardExtensions()[2], standardExtensions()[3]])),
+    TLS_ALERT_ILLEGAL_PARAMETER
+  );
+  t.eqI32(
     "counts that differ without modes are illegal_parameter",
     codecAlert(hello([psk([id, id], [binder32])])),
     TLS_ALERT_ILLEGAL_PARAMETER
   );
 
   // --- What is accepted -----------------------------------------------------
+  const binder33: TlsClientHelloView = viewOf(hello([modes(dhe), psk([id], [new Array<u8>(33)])]));
+  t.eqI32("a 33-byte binder parses", binder33.alert, zero);
+  t.ok("and selects with its length", tlsSelectPskIdentity(binder33, zero) && binder33.pskBinderLength === 33);
+  const binder255: TlsClientHelloView = viewOf(hello([modes(dhe), psk([id], [new Array<u8>(255)])]));
+  t.eqI32("so does a 255-byte one", binder255.alert, zero);
+  t.ok("and selects with its length", tlsSelectPskIdentity(binder255, zero) && binder255.pskBinderLength === 255);
+  const idA: u8[] = fromHex("a1");
+  const idB: u8[] = fromHex("b1b2b3");
+  const binderA: u8[] = fill(32, 0x10);
+  const binderB: u8[] = fill(40, 0x80);
+  const twoMessage: u8[] = hello([
+    modes(dhe),
+    extension(
+      TLS_EXT_PRE_SHARED_KEY,
+      cat([
+        vec16(cat([vec16(idA), fromHex("11223344"), vec16(idB), fromHex("55667788")])),
+        vec16(cat([vec8(binderA), vec8(binderB)])),
+      ])
+    ),
+  ]);
+  const pair: TlsClientHelloView = viewOf(twoMessage);
+  t.eqI32("two identities and two binders parse", pair.alert, zero);
+  t.eqI32("as two identities", pair.pskIdentityCount, toI32(2));
+  t.eqI32("and two binders", pair.pskBinderCount, toI32(2));
+  t.ok("tlsSelectPskIdentity finds identity 1", tlsSelectPskIdentity(pair, one));
+  t.eqStr("which is the second identity", toHex(slice(twoMessage, pair.pskIdentityAt, pair.pskIdentityLength)), toHex(idB));
+  t.ok("with the second age", pair.pskTicketAge === 0x55667788);
+  t.eqStr("and the second binder", toHex(slice(twoMessage, pair.pskBinderAt, pair.pskBinderLength)), toHex(binderB));
+  t.ok("identity 0 is still found", tlsSelectPskIdentity(pair, zero));
+  t.eqStr("as the first identity", toHex(slice(twoMessage, pair.pskIdentityAt, pair.pskIdentityLength)), toHex(idA));
+  t.ok("with the first age", pair.pskTicketAge === 0x11223344);
+  t.eqStr("and the first binder", toHex(slice(twoMessage, pair.pskBinderAt, pair.pskBinderLength)), toHex(binderA));
+  t.ok("and there is no identity 2", !tlsSelectPskIdentity(pair, 2));
   const keOnly: TlsClientHelloView = viewOf(hello([modes([toU8(0)]), offer]));
   t.eqI32("psk_ke alone parses", keOnly.alert, zero);
   t.ok("and is not psk_dhe_ke", !keOnly.pskDheKe);

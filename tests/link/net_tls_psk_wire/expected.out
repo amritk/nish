@@ -2,6 +2,8 @@ PASS  RFC 8448 §3's NewSessionTicket is 205 octets
 PASS  tlsEncodeNewSessionTicket writes RFC 8448 §3's NewSessionTicket
 PASS  tlsWriteNewSessionTicket at offset 5 answers where it ended
 PASS  and wrote the same bytes there
+PASS  and left the five bytes before it alone
+PASS  and the two after it
 PASS  tlsResumptionPsk gives RFC 8448 §3's PSK for nonce 0000
 PASS  tlsResumptionPskInto gives it from a window of the nonce
 PASS  tlsPskEarlySecret gives RFC 8448 §4's early secret
@@ -26,6 +28,11 @@ PASS  with its obfuscated age
 PASS  and binder 0 is §4's binder
 PASS  tlsBinderVerify accepts it
 PASS  and refuses it with its last bit flipped
+PASS  or its first bit
+PASS  or a bit of its middle byte
+PASS  tlsBinderVerify reads the hash from hashOff
+PASS  and not from 0
+PASS  it refuses a window one byte longer whose first 32 are the binder
 PASS  or cut to 31 bytes
 PASS  there is no identity 1
 PASS  or identity -1
@@ -38,6 +45,18 @@ PASS  the binders' prefix, from the body
 PASS  and the modes
 PASS  psk_dhe_ke among them
 PASS  tlsEncodeServerHelloPsk writes RFC 8448 §4's ServerHello
+PASS  TLS_AES_256_GCM_SHA384 hashes to 48 octets
+PASS  tlsResumptionPsk gives 48 octets
+PASS  and tlsResumptionPskInto the same 48
+PASS  tlsPskEarlySecret gives 48 octets
+PASS  and tlsPskEarlySecretInto the same 48
+PASS  tlsBinderKey gives 48 octets
+PASS  and tlsBinderKeyInto the same 48
+PASS  tlsHandshakeSalt gives 48 octets
+PASS  and tlsHandshakeSaltInto the same 48
+PASS  a binder under it is 48 octets
+PASS  and tlsBinderVerify accepts it at 48
+PASS  but not its first 32 octets as a SHA-256 binder
 PASS  a pre_shared_key without psk_key_exchange_modes is missing_extension
 PASS  and the server answers it
 PASS  a well-formed pre_shared_key that is not last is illegal_parameter
@@ -64,13 +83,35 @@ PASS  so it is with no pre_shared_key
 PASS  and the server answers it
 PASS  a mode list past its extension is decode_error with no pre_shared_key
 PASS  and the server answers it
+PASS  an empty identity list is decode_error
+PASS  and the server answers it
+PASS  a 6-byte identity list is decode_error
+PASS  and the 7-byte one parses
+PASS  with its one identity
 PASS  a malformed offer whose counts differ is decode_error
 PASS  so is a malformed offer without modes
+PASS  a malformed offer that is not last is illegal_parameter
 PASS  counts that differ without modes are illegal_parameter
+PASS  a 33-byte binder parses
+PASS  and selects with its length
+PASS  so does a 255-byte one
+PASS  and selects with its length
+PASS  two identities and two binders parse
+PASS  as two identities
+PASS  and two binders
+PASS  tlsSelectPskIdentity finds identity 1
+PASS  which is the second identity
+PASS  with the second age
+PASS  and the second binder
+PASS  identity 0 is still found
+PASS  as the first identity
+PASS  with the first age
+PASS  and the first binder
+PASS  and there is no identity 2
 PASS  psk_ke alone parses
 PASS  and is not psk_dhe_ke
 PASS  an unknown mode is passed over
 PASS  and psk_dhe_ke after it still counts
 PASS  the server goes on without the PSK
 PASS  a hello with no PSK at all still parses
-tls psk wire: 75 passed, 0 failed, 0 skipped
+tls psk wire: 116 passed, 0 failed, 0 skipped
