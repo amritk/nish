@@ -246,7 +246,7 @@ is its plan. [README.md](README.md) indexes them.
 | 26 | The standard library | landed, and growing | [wp26](wp26-stdlib.md) |
 | 27 | Calling C | S1 and S2 built; S3 planned | [wp27](wp27-ffi.md) |
 | 28 | Compatibility mode | proposed | [wp28](wp28-compatibility-mode.md) |
-| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks, wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await; deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values, the serial copy-in at the join (#686) | [wp29](wp29-thread-surface.md) |
+| 29 | The thread surface | complete: P1, P2 and P3 (lock, channel, atomics), copy-at-join for strings and scalar arrays, guard helpers, `nish --fix`; declined: detached spawn and `Arc`, `select`, bounded channels, a configurable pool or `scope(n)`, general closure capture outside parallel forms and tasks, wasm threads, work stealing and nested parallel regions, decorators, stored task handles, async/await; deferred: `parallelSort`, `parallelFilter`, copy-at-join for class values | [wp29](wp29-thread-surface.md) |
 | 30 | Bytes across the interop boundary | landed | [wp30](wp30-bytes-interop.md) |
 | 31 | Ranged integers | landed in 0.13.0 | [wp31](wp31-ranged-integers.md) |
 | 32 | `Map` and `Set` | landed in 0.11.0 and 0.12.0; a `Map` read in a parallel body (§9.3) is still open | [wp32](wp32-map.md) |

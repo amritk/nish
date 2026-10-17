@@ -12,8 +12,9 @@ configurable pool or `scope(n)`, decorators, a stored task handle and
 async/await, for the reasons §9 gives; and general closure capture outside the
 parallel forms and tasks, wasm threads, and work stealing and nested parallel
 regions ([wp20](wp20-threads.md)). Deferred, not declined: `parallelSort`,
-`parallelFilter`, copy-at-join for class values, and the serial copy-in at the
-join, which [#686](https://github.com/amritk/nish/pull/686) addresses. Class
+`parallelFilter`, and copy-at-join for class values. The serial copy-in at the
+join is gone: [#686](https://github.com/amritk/nish/pull/686) moves each map
+element into a block on its own thread and takes the blocks whole. Class
 values, nested arrays, `string[]`, `Map` and `Set` still do not cross (§7). The
 user guide's [threads page](guide/using-nish/threads.md) teaches the finished
 surface.
