@@ -69,7 +69,9 @@
  * `quicKeysUpdateInto`, `quicKeyUpdateSecretInto`, `quicInitialSecretsInto`):
  * its keys live in arrays the slot owns, which `QuicKeysSlot.wipe` zeroes
  * with stores no optimiser removes, AES schedules included, and the
- * derivation's own temporaries go with its arena block. Sealing and opening
+ * derivation's own temporaries go with its arena block. A slot whose traffic
+ * secret is held as a `Secret` derives with `quicKeysHeldInto`, and ratchets
+ * the secret in place with `quicKeyUpdateSecretHeldInto`. Sealing and opening
  * a packet wipe the nonce, which gives the IV away, and the
  * header-protection mask once each is used (QUIC-2).
  *
@@ -103,10 +105,13 @@ import { chacha20HeaderMask, chacha20Poly1305Open, chacha20Poly1305Seal } from "
 import { timingSafeEqual } from "nish/crypto/ct"
 import {
   HkdfScratch,
+  hkdfExpandLabelHeldInto,
   hkdfExpandLabelInto,
   hkdfExpandLabelSha256,
+  hkdfExpandLabelSha256Held,
   hkdfExpandLabelSha256Secret,
   hkdfExpandLabelSha384,
+  hkdfExpandLabelSha384Held,
   hkdfExpandLabelSha384Secret,
   hkdfExtractInto,
   hkdfExtractSha256,
@@ -1320,6 +1325,58 @@ export const quicKeyUpdateSecretInto = (kdf: HkdfScratch, aead: i32, secret: u8[
   using _scope = arena()
   const none: u8[] = []
   hkdfExpandLabelInto(kdf, length, secret, "quic ku", none, 0, 0, out, 0, length)
+  return true
+}
+
+/**
+ * `quicKeysInto` from a traffic secret held as a `Secret`: the packet key, IV
+ * and header-protection key derived from it straight into the slot's arrays,
+ * the plain output of each derivation wiped, and the AES schedules expanded
+ * in place inside an arena block. Answers the slot's keys, or `null`,
+ * deriving nothing, where `quicKeys` answers `null`.
+ */
+export const quicKeysHeldInto = (slot: QuicKeysSlot, aead: i32, secret: Secret<u8[]>): QuicKeys | null => {
+  if (!quicPacketHeldFits(aead, secret)) {
+    return null
+  }
+  quicPacketPoint(slot, aead)
+  const keys: QuicKeys = slot.keys
+  const hashLength: i32 = quicPacketSecretLength(aead)
+  const keyLength: i32 = quicPacketKeyLength(aead)
+  const none: u8[] = []
+  hkdfExpandLabelHeldInto(hashLength, secret, "quic key", none, keys.key, 0, keyLength)
+  hkdfExpandLabelHeldInto(hashLength, secret, "quic iv", none, keys.iv, 0, QUIC_IV_SIZE)
+  hkdfExpandLabelHeldInto(hashLength, secret, "quic hp", none, keys.hp, 0, keyLength)
+  using _scope = arena()
+  const packetAes: AesKey | null = keys.packetAes
+  if (packetAes !== null) {
+    aesKeyInto(keys.key, packetAes)
+  }
+  const hpAes: AesKey | null = keys.hpAes
+  if (hpAes !== null) {
+    aesKeyInto(keys.hp, hpAes)
+  }
+  return keys
+}
+
+/**
+ * `quicKeyUpdateSecret` from one held secret into another (RFC 9001 §6.1):
+ * HKDF-Expand-Label(`src`, `quic ku`, "", Hash.length) written over `dst`'s
+ * bytes in place, under SHA-384 for a 48-byte secret and SHA-256 for a
+ * 32-byte one. `dst` may be `src`, which ratchets it. Answers whether it
+ * derived: not unless both hold 32 bytes or both 48.
+ */
+export const quicKeyUpdateSecretHeldInto = (dst: Secret<u8[]>, src: Secret<u8[]>): boolean => {
+  const length: i32 = expose(src, quicPacketBytesLength)
+  if ((length !== 32 && length !== 48) || expose(dst, quicPacketBytesLength) !== length) {
+    return false
+  }
+  const none: u8[] = []
+  if (length === 48) {
+    hkdfExpandLabelSha384Held(dst, src, "quic ku", none)
+  } else {
+    hkdfExpandLabelSha256Held(dst, src, "quic ku", none)
+  }
   return true
 }
 

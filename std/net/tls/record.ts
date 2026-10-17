@@ -48,7 +48,9 @@
  * of its round keys (the kernels' powers of H included) and of H. The key and
  * IV are derived straight into place, in an HKDF scratch that is wiped after
  * each derivation, and the schedule is expanded into place by `aesKeyInto`
- * (TLS-2 in `docs/security/tls.md`).
+ * (TLS-2 in `docs/security/tls.md`). A caller that holds the traffic secret
+ * as a `Secret` installs it with `installHeld` and ratchets it in place with
+ * `advanceHeld`, so the secret itself is never plain outside `exposeWith`.
  *
  * The record layer is sans-IO: `nish/net/tls/record-server` runs it over a
  * stream for `TlsServer`, and `nish/net/tls-tcp` puts that on a socket.
@@ -61,7 +63,12 @@ import {
   TLS_ALERT_UNEXPECTED_MESSAGE,
   TLS_LEGACY_VERSION,
 } from "nish/net/tls/codec"
-import { HkdfScratch, hkdfExpandLabelInto } from "nish/crypto/hkdf"
+import {
+  HkdfScratch,
+  hkdfExpandLabelInto,
+  hkdfExpandLabelSha256Held,
+  hkdfExpandLabelSha384Held,
+} from "nish/crypto/hkdf"
 import { SHA384_SIZE } from "nish/crypto/sha512"
 import {
   TLS_CHACHA20_POLY1305_SHA256,
@@ -69,9 +76,10 @@ import {
   tlsExpandLabel,
   tlsSuiteHashLength,
   tlsSuiteKeyLength,
+  tlsTrafficKeysFromHeld,
   tlsTrafficKeysInto,
 } from "nish/net/tls/schedule"
-import { Secret } from "nish:secret"
+import { Secret, expose } from "nish:secret"
 
 // ---- The wire's constants ------------------------------------------------------
 
@@ -431,6 +439,54 @@ export class TlsRecordProtection {
     }
     secureZero(next)
     return this.install(suite, secret)
+  }
+
+  /**
+   * `install` from a traffic secret the caller holds as a `Secret`: the key
+   * and IV are derived from it straight into this direction's arrays, the
+   * plain output of each derivation wiped, and the AES key schedule expanded
+   * into place inside an arena block, as `derive`'s is. `false`, leaving the
+   * direction cleartext, where `install` answers it.
+   */
+  installHeld(suite: i32, secret: Secret<u8[]>): boolean {
+    this.clear()
+    const hashLength: i32 = tlsSuiteHashLength(suite)
+    if (hashLength === 0 || expose(secret, (bytes: u8[]): i32 => toI32(bytes.length)) !== hashLength) {
+      return false
+    }
+    this.reserve(suite)
+    tlsTrafficKeysFromHeld(suite, secret, this.key, this.iv)
+    const aes: AesKey | null = this.aes
+    if (aes !== null && suite !== TLS_CHACHA20_POLY1305_SHA256) {
+      using _scope = arena()
+      aesKeyInto(this.key, aes)
+    }
+    this.suite = suite
+    return true
+  }
+
+  /**
+   * `advance` on a traffic secret the caller holds as a `Secret`: the next
+   * traffic secret (§7.2) is written over `secret`'s bytes in place, a
+   * ratchet that leaves no copy of either, and the keys are installed from
+   * it with `installHeld`. False, as `advance` answers, when the keys do not
+   * install; a secret that is not its hash's length is left as it was.
+   */
+  advanceHeld(secret: Secret<u8[]>): boolean {
+    const suite: i32 = this.suite
+    const hashLength: i32 = tlsSuiteHashLength(suite)
+    if (hashLength === 0) {
+      return false
+    }
+    if (expose(secret, (bytes: u8[]): i32 => toI32(bytes.length)) === hashLength) {
+      const none: u8[] = []
+      if (hashLength === SHA384_SIZE) {
+        hkdfExpandLabelSha384Held(secret, secret, "traffic upd", none)
+      } else {
+        hkdfExpandLabelSha256Held(secret, secret, "traffic upd", none)
+      }
+    }
+    return this.installHeld(suite, secret)
   }
 
   /** The per-record nonce (§5.3): the IV with the sequence number XORed into its last eight bytes, big-endian. */
