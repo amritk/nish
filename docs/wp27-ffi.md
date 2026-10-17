@@ -1,7 +1,8 @@
 # WP27 — Calling C from Nish
 
-**Status:** S1 and S2 are built; of S3 (§8), S3.1, `string` parameters, and
-S3.2, `string` returns, are built and S3.3 is planned; S4 and S5 are proposed and unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
+**Status:** S1 and S2 are built; S3 (§8) is built: S3.1, `string`
+parameters, S3.2, `string` returns, and S3.3, `readCString` and the
+literal-`null` `CPtr | null` parameter; S4 and S5 are proposed and unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
 ([#62](https://github.com/amritk/nish/pull/62), `tests/cases/ffi_scalar`); S2,
 the opaque pointer `CPtr`, in 0.3.0 (`tests/cases/ffi_pointer`, §7), with its
 debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
@@ -78,7 +79,7 @@ conservatism is the feature and the stages are small.
 | --- | --- | --- |
 | S1 | scalar-only `declare function`: `i32`, `i64`, `f64`, `boolean`, `void`, `u8`–`u64` | **built**, 0.2.0 |
 | S2 | an opaque pointer type, `null` only from a foreign call, no arithmetic | **built**, 0.3.0, §7 |
-| S3 | `string` ↔ `char *` marshalling, and who owns the bytes | S3.1 (`string` parameters) and S3.2 (`string` returns) **built**, §8; S3.3 planned |
+| S3 | `string` ↔ `char *` marshalling, and who owns the bytes | **built**, §8: S3.1 (`string` parameters), S3.2 (`string` returns), S3.3 (`readCString`, the literal-`null` `CPtr \| null` parameter) |
 | S4 | C structs by layout declaration | proposed |
 | S5 | `errno`, and whether it is a builtin or a declared foreign global | proposed |
 
@@ -151,9 +152,12 @@ struct, not a `nish_str *`.
 - **Opaque.** No dereference, index, member or arithmetic. What is left is
   `=== null`, `!== null`, comparing two `CPtr`s, assignment, and passing one
   back to a foreign function.
-- **`null` only from a foreign call.** A `declare function` may *return*
-  `CPtr | null` and may not *take* one, so a pointer is narrowed with
-  `!== null` before it goes back (`reject_ffi_pointer_nullable_param`).
+- **`null` back to C only as the literal.** A `declare function` may return
+  and, since S3.3 (§8f), take `CPtr | null`; a call passes such a parameter the
+  literal `null` or a pointer narrowed with `!== null`, and a nullable pointer
+  the program holds is refused at the call (NL2539,
+  `reject_ffi_pointer_nullable_variable`). S2 refused the parameter in the
+  declaration (`reject_ffi_pointer_nullable_param`, NL2324, both retired).
 - **Nowhere but a foreign signature and a local.** A field, an array element, a
   `Result` arm, a type argument, and the parameters and return of a function
   this program defines are refused with one message
@@ -230,11 +234,12 @@ apart from that cache.
 
 ## 8. S3 plan: `string` across the boundary
 
-**Status: S3.1 and S3.2 built; S3.3 planned.** This section is the design S3
+**Status: S3.1, S3.2 and S3.3 built.** This section is the design S3
 is built from; the rules become normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) only as each step lands, and S3.1's are
 there now. S3.1 departs from §8c in one place, the runtime call, and §8c says
-how; S3.2 departs from §8d in the same place, and §8d says how. §3 asked whether S3 should happen at all; this plan answers yes,
+how; S3.2 departs from §8d in the same place, and §8d says how; S3.3 departs
+from §8e in that place too, and §8e says how. §3 asked whether S3 should happen at all; this plan answers yes,
 for a narrow reason: without it every C API that takes a name, a path or a
 message needs a hand-written C shim that turns the string into a scalar and
 back, so the shim — not the program — becomes where the bugs live.
@@ -441,6 +446,40 @@ It is the one place S3 dereferences a `CPtr`, and it does so in the runtime,
 not in the IR: §7a's "no dereference" stays true of the language, and the
 `CPtr` keeps getting no pointer attributes.
 
+**As built (S3.3), the copy is the IR helper S3.2 built, not a runtime
+function.** `runtime/runtime.c` is still at its `.text*` ceiling, so
+`readCString(p)` lowers to `call i8* @nish.ffi.str(i8* %p)`, the private
+byte-loop-and-`nish_str_new` helper of §8d, which a module now defines when it
+declares a C function with a `string` result *or* calls `readCString`. The
+dereference is therefore in the IR after all, but only inside that helper,
+which the program cannot spell; §7a's "no dereference" stays true of the
+language, and the `CPtr` still gets no pointer attributes. There is no `NULL`
+test at the call: the parameter is a non-null `CPtr`, so a `CPtr | null` must
+be narrowed first (`reject_unsafe_read_cstring`). What the compiler trusts is
+a `declare function` that declares a `CPtr` result: it gets no `ffi-null`
+check, as a `string` result does, so a declaration that says `CPtr` for a C
+function that may answer `NULL` hands `readCString` a `NULL` it reads through.
+The runtime's security record states the trust (RT-16). The copy is a fresh
+allocation of the calling function (`isAllocatingBuiltin` in
+`src/escape.ts`), and the call is an allowed `unchecked` site with the copy's
+`oom` beside it, under `--deny-panics` as for `uncheckedGet`
+(`tests/cases/ffi_owned_string`, `reject_ffi_owned_string_arena`). On wasm32
+the helper is the same IR, and needs only `nish_str_new`.
+
+**As built (S3.3), the literal-`null` rule is a call-site rule.** The nullable
+branch of `checkForeignSignature` is gone, so the declaration accepts
+`CPtr | null` in a parameter, and `refuseForeignNullable`
+(`src/expressions.ts`) refuses, at each call of a foreign function, an argument
+of a nullable type that is not the literal `null`, after parentheses are
+unwrapped (NL2539). The rule reads the argument's checked type, so it covers a
+local, a ternary or `??` that may answer `null`, a call in a constructor
+reached by `new` or in a method, and a call through a function parameter a
+`declare function` is passed to, each pinned in
+`reject_ffi_pointer_nullable_variable` and
+`reject_ffi_pointer_nullable_specialised`. A `string | null` parameter keeps
+S3.1's rule, under which `null` passes `NULL` from any expression: a string
+argument is lent and then checked, while a pointer argument is C's own handle.
+
 ### 8f. What S3 widens and what it still refuses
 
 Widened:
@@ -478,7 +517,7 @@ Still refused, each by name, each with a `reject_*` case:
 | --- | --- | --- |
 | **S3.1** (built) | `string` and `string \| null` parameters; the borrow rule in `src/escape.ts`; the NUL check (lowered in the IR rather than `nish_ffi_cstr`, §8c) and the `ffi-nul` panic kind; the literal proof | `ffi_string_param` (golden `.ll` + native round trip against libc: `strlen`, `puts`, `atoi`, `setenv` then the runtime's `getenv`); `ffi_string_param_arena` (a concatenated string passed from a function whose arena scope releases after the call, linked against a C sidecar that copies what it read, so the output shows the bytes were live during the call); `panics_ffi_nul`; `reject_ffi_string_array_param` |
 | **S3.2** (built) | `string` and `string \| null` returns; the copy (lowered in the IR rather than `nish_ffi_str`, §8d) and the `ffi-null` panic kind | `ffi_string_return` (`getenv`, `strerror`, `setlocale` query, and `strchr` answering into its own argument, each copy kept across a churned arena); `panics_ffi_null`; `reject_ffi_string_array_return`; a timing of `strerror` in a loop whose argument changes on every iteration, folded into a printed checksum, to state the copy's cost in the commit's `Measured:` trailer |
-| **S3.3** | `readCString` in `nish:unsafe`; the literal-`null` `CPtr \| null` parameter | `ffi_owned_string` (`strdup`/`free` and `realpath(p, null)`/`free` round trips); `reject_ffi_pointer_nullable_variable` (the narrowed-local rule kept); `reject_unsafe_no_import` extended |
+| **S3.3** (built) | `readCString` in `nish:unsafe` (lowered to S3.2's IR helper rather than a runtime function, §8e); the literal-`null` `CPtr \| null` parameter | `ffi_owned_string` (`strdup`/`free` and `realpath(p, null)`/`free` round trips, each copy kept across a churned arena); `reject_ffi_pointer_nullable_variable` and `reject_ffi_pointer_nullable_specialised` (the narrowed-local rule kept); `reject_unsafe_read_cstring`; `reject_ffi_owned_string_arena`; `reject_unsafe_no_import` extended |
 
 Each step is a feature in the language, so each ships the full set the
 definition of done names: the golden `.ll`, `llvm-as`, the native round trip,

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 666
+export const RULE_COUNT: i32 = 667
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -169,6 +169,8 @@ const diagnosticRules = (): string[] => [
   "NL2368",
   "` cannot be a `Secret`: a field of a class or interface outlives the function that made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter",
   "NL2430",
+  "` is a `CPtr | null` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested",
+  "NL2539",
   "`, which belongs to the function it is written in: a task reads a captured value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument",
   "NL2508",
   " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it",

@@ -1,0 +1,2 @@
+`readCString(p)` may be allocated inside the `using arena()` block
+`readCString(q)` may be allocated inside the `using arena()` block
