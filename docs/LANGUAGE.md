@@ -3005,7 +3005,7 @@ from the whole-program facts, and each rule is reported there:
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
   strings or objects is refused at the call:
-  `` `(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
+  `` `(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory; answer a number and fold those, or run it on the thread that called it, `let joined: string = ""; for (const b of words) { const a = joined; joined = a + b }` ``
   (NL2348, `tests/cases/reject_par_reduce_result_type`, and
   `reject_par_reduce_result_class` for a class). Map the strings to numbers
   first — `parallelReduce(parallelMap(names, (s) => s.length), ...)`.
@@ -3060,7 +3060,7 @@ export const main = (): i32 => {
   `_reduce_write` and `_into_write` for the other forms). So is handing it to a
   function or a method that writes it (`_helper`, `_method`). Assigning to the
   name itself is
-  `` The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one; answer the value from the body instead, and fold the answers with `parallelReduce` or after the call, `const k = parallelReduce(xs, (a, b) => a + b, 0)` ``
+  `` The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one; answer the value from the body instead, and read the answers from the array the call gives back, `const kValues = parallelMap([1, 2], (x): i32 => x)` ``
   (`reject_par_capture_assign`, and `reject_par_capture_update` for a `k++`
   after a read).
 - **A `let` is not captured**, since it could change between the call and a
@@ -3165,7 +3165,7 @@ export const main = (): i32 => {
   reaches, or through a [`Channel`](#channels-channelt) it sends on
   (`tests/link/thread_task_void`, `thread_task_arrow`). A block body is `void`
   without an annotation. An entry that answers a value is
-  `` `sumOf` answers `i32`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination, `const answer = new Array<i32>(1)` above the scope's block and `s.spawn(sumOf, arg, answer, 0)` ``
+  `` `sumOf` answers `i32`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination, `const answer2 = new Array<i32>(1)` above the scope's block and `s.spawn(sumOf, xs, answer2, 0)` ``
   (NL2511, `tests/cases/reject_thread_task_void_result`, and `_arrow` for
   `() => sumOf(xs)`). TypeScript would spell the three forms as overloads;
   the checker picks `ThreadScope`'s method by the number of arguments,
@@ -3407,7 +3407,7 @@ element's arena, which a task does not share, and each rule is reported at the
   make, by a method of an [atomic](#atomics-atomici32-and-atomici64)
   (`tests/link/thread_atomic_tasks`), or by a `send` or a receive on a
   [`Channel`](#channels-channelt), neither of which is a write the rule counts:
-  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, `const t = new T()` ``
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; hand a value the parent needs back as the task's answer, or run it on the thread that called it, `out[0] = bump(c)` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
@@ -3466,7 +3466,7 @@ element's arena, which a task does not share, and each rule is reported at the
   that holds the caller's memory, `[ys]` or `new H(ys)`, is the task's at its
   top level only, so a write below it is refused
   (`reject_thread_task_own_fresh_holds_array`, `_new`, `_object`). That
-  refusal starts with what to write: `` make scratch only this task uses inside it, `const t = new T()`, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`, `using g = m.lock()`, and hand a value the parent needs back as the task's answer, `s.spawn(task, arg, out, i)` ``.
+  refusal starts with what to write: `` make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; hand a value the parent needs back as the task's answer, or run it on the thread that called it, `out[0] = bump(c)` ``.
   A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
@@ -3592,7 +3592,7 @@ breaks one is refused with that rule's own code:
   lock, `using g = m.lock(), s = scope()`, is R5's
   (`reject_mutex_using_lock_then_scope`). A `lock()` anywhere but a `using`
   initialiser is
-  `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases; declare it as `using g = m.lock()` ``
+  `` `lock()` must be the initialiser of a `using` declaration: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases; declare it as `using g = m.lock()` ``
   (NL2465, `reject_mutex_lock_not_using`; `reject_mutex_lock_expr_body` for
   an arrow whose expression body is `m.lock()`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
@@ -3690,13 +3690,13 @@ breaks one is refused with that rule's own code:
   stores through two different `Mutex`es wait on each other while it is held.
   `push` — which can move the array into the task's arena — and every other
   method are
-  `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined; write what it does as reads and stores through the guard, into slots that already exist, `g.value.xs[i] = v` ``
+  `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined; write what it does as reads and stores through the guard, into slots that already exist, `g.value.xs[0] = 1` ``
   (NL2469, `reject_mutex_guard_push`). So a `Mutex<i32[]>` or a class with an
   `i32[]` field holds a histogram, sized when it is made.
 - **R5: one lock at a time, and nothing waited on while it is held.** Inside a
   guard's block — directly, or through any function it calls — a second
   `lock()`, `scope()`, `spawn`, `parallelMapInto` or `parallelReduce` is
-  `` A second `lock()` is reached while `ga` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held; move it below the block that releases the lock, `{ using ga = a.lock(); ... }` ``
+  `` A second `lock()` is reached while `ga` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held; move `b.lock()` below the end of the block that opens with `using ga = a.lock()`, which releases the lock ``
   (NL2470; `reject_mutex_nested_lock`, and `reject_mutex_using_two_locks` and
   `reject_mutex_using_two_mutexes` for a second declarator of the same `using`;
   `reject_mutex_lock_through_call` for a callee that locks, and
@@ -3716,7 +3716,7 @@ breaks one is refused with that rule's own code:
   (`reject_mutex_region_lock_loop`).
   Natively the tasks have not run yet there, and under Node each has run at its
   spawn, so the parent would see a different value:
-  `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join ``
+  `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join; move `m.lock()` above the block that opens with `using s = scope()`, or below the end of that block ``
   (NL2472, `reject_mutex_region_lock`; `reject_mutex_region_lock_field` for a
   `Mutex` the task reaches as a field of its argument;
   `reject_mutex_region_lock_call` for a call that takes the lock, and
@@ -3727,7 +3727,7 @@ breaks one is refused with that rule's own code:
 - **R8: a `Mutex` reaches a task as its argument, or as a field of the class
   its argument is.** An array of them, a deeper field, or a `Mutex` inside
   another's data is
-  `` The argument of `spawn` is `Mutex<Counter>[]`, which reaches a `Mutex` through `arg[i]`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer; hand the task the `Mutex` itself, `s.spawn(task, arg[i])` ``
+  `` The argument of `spawn` is `Mutex<Counter>[]`, which reaches a `Mutex` through `ms[i]`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer; hand the task the `Mutex` itself, `s.spawn(first, ms[i], done, 0)`, and declare its parameter a `Mutex` of the same data ``
   (NL2473, `reject_mutex_task_array`; `reject_mutex_task_nested` for a `Mutex`
   inside another's data, `reject_mutex_task_deep` for one two classes deep,
   `reject_mutex_task_nullable` for a nullable carrier, `reject_mutex_task_map`
@@ -3736,7 +3736,7 @@ breaks one is refused with that rule's own code:
 
 And a lock is a scope's: the body of `parallelMapInto` or `parallelReduce`,
 which runs on many threads at once, takes none
-(`` `tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body; run it as a scope's tasks instead, `{ using s = scope(); s.spawn(tally, x, out, i) }` ``,
+(`` `tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body; run it as a scope's tasks instead, `{ using s2 = scope(); for (let i = 0; i < src.length; i++) { s2.spawn(tally, src[i], dst, i) } }` ``,
 NL2474, `reject_mutex_parallel_body`; `reject_mutex_parallel_body_call` and
 `reject_mutex_parallel_body_new` for a lock taken in a callee or a
 constructor).
@@ -3858,7 +3858,7 @@ answer the same natively and under Node:
   or by a data-parallel call that does — `Mutex`'s R7, for the same reason:
   natively the tasks have not run there, and under Node each has run at its
   spawn, so a `load()` would answer differently:
-  `` This `load()` reaches an atomic a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join; touch it before the `using s = scope()` block, or after the block ends ``
+  `` This `load()` reaches an atomic a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join; move `a.load()` above the block that opens with `using s = scope()`, or below the end of that block ``
   (NL2513, `reject_atomic_region_direct`; `reject_atomic_region_capture` for
   an arrow task that captures it; `reject_atomic_region_field`,
   `reject_atomic_region_array`, `reject_atomic_region_map` and
@@ -3885,7 +3885,7 @@ answer the same natively and under Node:
   `spawn` on one of them whose task shares a destination, an atomic or a lock
   with a task of another scope of the same statement is refused, naming the
   other scope and the path it shares:
-  `` This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open the scopes in `using` statements of their own, `using s = scope()` and `using t = scope()` ``
+  `` This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open each scope in a block of its own, so the first joins before the second opens, `{ using s = scope(); s.spawn(() => { a.add(1); }) } { using t = scope(); t.spawn(() => { b.store(a.load()); }) }` ``
   (NL2516). A destination is shared when two scopes' spawns name the same
   array, at the same slot or at different ones
   (`reject_thread_sibling_destination`, `_slots`, `_arrow` for arrow tasks,
@@ -4038,7 +4038,7 @@ sends and receives:
   never takes — the loop that left with `break` — stays in the buffer, which
   is itself given back only once it has been drained closed, so the two leak
   together. Anything else would be a pointer into the sender's arena:
-  `` A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry `string[]`: a sender's arena is freed when its scope joins, and only a string is copied out of it on the way, so anything else would point into freed memory; send an index into data the receiver can read, or a string, `new Channel<i32>()` ``
+  `` A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry `string[]`: a sender's arena is freed when its scope joins, and only a string is copied out of it on the way, so anything else would point into freed memory; keep the values in an array the receiver can read and send each one's index, `const words = new Channel<i32>()` ``
   (NL2475, `tests/cases/reject_channel_element`). A `Channel<string>`
   pipeline — two producers, a rewriting stage and a consumer that keeps what
   it receives in an array — matches Node (`tests/link/thread_channel_string`). An `f64` channel
@@ -4087,13 +4087,13 @@ sends and receives:
   channel type an arrow writes but never uses).
 - **C3: a channel is unbounded**, so `send` never waits, because under Node a
   scope's tasks run one at a time and nothing would drain a full one:
-  `` `new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full; write `new Channel<T>()` ``
+  `` `new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full; write `new Channel<i32>()` ``
   (NL2478, `reject_channel_capacity`).
 - **C4: one scope's tasks reach a channel, and the parent sends on it only
   before that scope's block.** After the join it only receives. "May send" is
   the call graph from a task's entry reaching `send` on a channel its argument
   holds, so an over-count only closes the channel later:
-  `` This sends on `ch` once its scope's block has begun: a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned; declare it in the function that opens the scope and send before the scope's block, `ch.send(x); { using s = scope(); s.spawn(task, ch) }` ``
+  `` This sends on `ch` once its scope's block has begun: a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned; move `ch.send(7)` above the block that opens with `using s = scope()` ``
   (NL2479, `reject_channel_parent_send`, `reject_channel_send_after_join` for a
   send through a call after the join, and `reject_channel_two_scopes` for the
   two scopes of one `using`). A `spawn` hands its task only a channel the
@@ -4139,10 +4139,10 @@ sends and receives:
   spawned first would find the channel empty, and the same order makes the
   graph from senders to receivers acyclic, so **channels cannot deadlock**
   either:
-  `` `produce` may send on `ch` and is spawned after its receiver: under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking; move the `spawn` of the receiving task below every `spawn` that sends, `s.spawn(produce, ...)` above `s.spawn(consume, ...)` ``
+  `` `produce` may send on `ch` and is spawned after its receiver: under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking; move the `spawn` of the receiving task below every `spawn` that sends, `s.spawn(produce, new Pipe(ch, 3), out, 1)` above `s.spawn(consume, new Pipe(ch, 0), out, 0)` ``
   (NL2481, `reject_channel_receiver_first`). And no task both sends and
   receives on one channel:
-  `` `echo` may both send and receive on `ch`: no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return ``
+  `` `echo` may both send and receive on `ch`: no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return; split it into a task that sends and a task that receives, or answer the result through a second channel ``
   (NL2483, `reject_channel_send_and_receive`,
   `reject_channel_both_through_new` for a send made by a constructor a `new`
   runs, and `reject_channel_both_untraceable` for a task that reaches a
