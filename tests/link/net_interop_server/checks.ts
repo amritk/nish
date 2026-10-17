@@ -28,7 +28,7 @@ import { WtLimits, wtClientParams, wtClientSettingIds, wtClientSettingValues, wt
 import { H2TlsClient, QuicClient, h3Answer } from "./client";
 import { parseServe, serve } from "./cli";
 import { certificateHash, loadChain, loadKey, mintCertificate, mintKey } from "./identity";
-import { InteropOptions, InteropServer, supportedTestcase } from "./server";
+import { InteropOptions, InteropServer, poolSlots, supportedTestcase } from "./server";
 
 /** The file the checks ask for, and what it holds. */
 export const FILE: string = "/hello.txt";
@@ -87,6 +87,16 @@ const identityChecks = (t: Suite): void => {
   t.eqStr("--slots past 4096 is refused", parseServe(["main", "serve", "--slots", "4097"]).error, "--slots wants a count from 1 to 4096");
   t.eqStr("--slots x is refused", parseServe(["main", "serve", "--slots", "x"]).error, "--slots wants a count from 1 to 4096");
   t.eqStr("an --only that names no pool is refused", parseServe(["main", "serve", "--only", "h4"]).error, "--only wants h1, h1s, h2 or h3");
+  const one = new InteropOptions();
+  one.slots = n32(600);
+  one.only = "h1s";
+  const all = new InteropOptions();
+  all.slots = n32(600);
+  t.ok(
+    "--slots 600 --only h1s: HTTPS/1.1 stops at 500 and the other pools take one slot",
+    poolSlots(one, "h1s") === n32(500) && poolSlots(one, "h1") === n32(1) && poolSlots(one, "h2") === n32(1) && poolSlots(one, "h3") === n32(1)
+  );
+  t.ok("--slots 600: QUIC and HTTP/2 take 600, both HTTP/1.1 pools 500", poolSlots(all, "h3") === n32(600) && poolSlots(all, "h2") === n32(600) && poolSlots(all, "h1") === n32(500) && poolSlots(all, "h1s") === n32(500));
   t.eqI32("serve exits 2 for a command line it cannot read", serve(["main", "serve", "--h2-port", "x"]), n32(2));
   t.eqI32("127 for a test case it does not take, the runner's unsupported", serve(["main", "serve", "--testcase", "zerortt"]), n32(127));
   t.eqI32("3 for a certificate directory with nothing in it", serve(["main", "serve", "--certs", "tests/link/net_interop_server/www"]), n32(3));

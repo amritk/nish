@@ -15,6 +15,10 @@
 // second and the median of the per-round ratios b / a, with their spread (min
 // to max). With no `--against` the build is measured against itself: its
 // spread is the noise band a difference between two builds is read against.
+// `--rounds` is 5 by default and at least 3, since a spread of one or two
+// ratios is no band; widen it when the band is wider than the difference.
+//
+// Linux only (`taskset`), run from the repository root (the `www` path).
 //
 // HTTP/3: h2load speaks it only when built with ngtcp2 and nghttp3, which
 // Ubuntu's nghttp2-client is not. The script asks it for one request first;
@@ -67,21 +71,51 @@ if (a === null) {
   process.exit(2)
 }
 b = b ?? a
+const cpus = availableParallelism()
+const threads = Math.max(1, Math.min(cpus - 1, 4))
+const counts = { rounds, requests, clients, streams, "h3-requests": h3Requests, slots }
+for (const [name, n] of Object.entries(counts)) {
+  if (!Number.isInteger(n) || n < 1) {
+    console.error(`--${name} wants a whole number from 1`)
+    process.exit(2)
+  }
+}
+if (rounds < 3) {
+  console.error("--rounds wants at least 3: the spread of fewer ratios is no noise band")
+  process.exit(2)
+}
+if (clients < threads) {
+  console.error(`--clients wants at least ${threads}, h2load's thread count here`)
+  process.exit(2)
+}
 if (spawnSync("h2load", ["--version"]).error) {
   console.error("h2load is not installed (apt-get install nghttp2-client)")
   process.exit(2)
 }
 
-const cpus = availableParallelism()
 const clientCpus = cpus > 1 ? `1-${cpus - 1}` : "0"
-const threads = String(Math.max(1, Math.min(cpus - 1, 4)))
 const www = "tests/link/net_interop_server/www"
+
+/** The servers started so far, killed on the way out however the script ends. */
+const live = []
+const stopAll = () => {
+  for (const child of live) {
+    child.removeAllListeners("exit")
+    child.kill("SIGINT")
+  }
+  live.length = 0
+}
+process.once("SIGINT", () => {
+  stopAll()
+  process.exit(130)
+})
 
 /** Starts `bin` serving on CPU 0; resolves with the process and its ports once it prints them. */
 const start = (bin) =>
   new Promise((resolve, reject) => {
     const argv = ["-c", "0", bin, "serve", "--host", "127.0.0.1", "--www", www, "--slots", String(slots)]
     const child = spawn("taskset", argv, { stdio: ["ignore", "pipe", "inherit"] })
+    live.push(child)
     let seen = ""
     child.stdout.on("data", (d) => {
       seen += d
@@ -118,7 +152,7 @@ const h2load = async (extra, url, n) => {
     clientCpus,
     "h2load",
     "-t",
-    threads,
+    String(threads),
     "-c",
     String(clients),
     "-n",
@@ -142,59 +176,68 @@ const h3Load = async (bin) => {
   return { rps: (Number(m[1]) * 1000) / Math.max(1, Number(m[2])) }
 }
 
-// Two processes even for one build, so the noise band includes a second server's.
-const servers = { a: await start(a), b: await start(b) }
-const h3Native = !Number.isNaN(
-  (await h2load(["--alpn-list=h3"], `https://127.0.0.1:${servers.a.quic}/hello.txt`, clients)).rps
-)
-if (!h3Native) {
-  console.error(
-    "h2load: no HTTP/3 (built without ngtcp2/nghttp3); HTTP/3 is `main h3-load`, the server and its scripted client in one process"
-  )
-}
-
-const scenarios = [
-  {
-    name: `HTTPS/1.1 h2load --h1 c=${clients}`,
-    run: (s) => h2load(["--h1"], `https://127.0.0.1:${s.h1s}/hello`, requests),
-  },
-  {
-    name: `HTTP/2 h2load c=${clients} m=${streams}`,
-    run: (s) => h2load(["-m", String(streams)], `https://127.0.0.1:${s.h2}/hello.txt`, requests),
-  },
-  h3Native
-    ? {
-        name: `HTTP/3 h2load c=${clients}`,
-        run: (s) => h2load(["--alpn-list=h3"], `https://127.0.0.1:${s.quic}/hello.txt`, requests),
-      }
-    : { name: `HTTP/3 main h3-load c=1, ${h3Requests} requests, in process`, run: (_s, bin) => h3Load(bin) },
-]
-
 const median = (xs) => {
   const s = [...xs].sort((x, y) => x - y)
   const mid = s.length >> 1
   return s.length % 2 === 1 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 
-const results = scenarios.map(() => ({ a: [], b: [], ratio: [], failed: "" }))
-for (let r = 0; r < rounds; r++) {
-  for (const [k, scenario] of scenarios.entries()) {
-    const order = r % 2 === 0 ? ["a", "b"] : ["b", "a"]
-    const got = {}
-    for (const side of order) {
-      got[side] = await scenario.run(servers[side], side === "a" ? a : b)
-      if (Number.isNaN(got[side].rps)) {
-        results[k].failed = `${side}: ${got[side].why}`
+const results = []
+const scenarios = []
+
+/** Starts both servers and runs every round of every scenario into `results`. */
+const measure = async () => {
+  // Two server processes even for one build, so the h2load rows' noise band
+  // includes a second server's. The HTTP/3 fallback uses neither: each run is a
+  // fresh `h3-load` process, the server and the client together.
+  const servers = { a: await start(a), b: await start(b) }
+  const h3Native = !Number.isNaN(
+    (await h2load(["--alpn-list=h3"], `https://127.0.0.1:${servers.a.quic}/hello.txt`, clients)).rps
+  )
+  if (!h3Native) {
+    console.error(
+      "h2load: no HTTP/3 (built without ngtcp2/nghttp3); HTTP/3 is `main h3-load`, the server and its scripted client in one process"
+    )
+  }
+
+  scenarios.push(
+    {
+      name: `HTTPS/1.1 h2load --h1 c=${clients}`,
+      run: (s) => h2load(["--h1"], `https://127.0.0.1:${s.h1s}/hello`, requests),
+    },
+    {
+      name: `HTTP/2 h2load c=${clients} m=${streams}`,
+      run: (s) => h2load(["-m", String(streams)], `https://127.0.0.1:${s.h2}/hello.txt`, requests),
+    },
+    h3Native
+      ? {
+          name: `HTTP/3 h2load c=${clients}`,
+          run: (s) => h2load(["--alpn-list=h3"], `https://127.0.0.1:${s.quic}/hello.txt`, requests),
+        }
+      : { name: `HTTP/3 main h3-load c=1, ${h3Requests} requests, in process`, run: (_s, bin) => h3Load(bin) }
+  )
+  results.push(...scenarios.map(() => ({ a: [], b: [], ratio: [], failed: "" })))
+  for (let r = 0; r < rounds; r++) {
+    for (const [k, scenario] of scenarios.entries()) {
+      const order = r % 2 === 0 ? ["a", "b"] : ["b", "a"]
+      const got = {}
+      for (const side of order) {
+        got[side] = await scenario.run(servers[side], side === "a" ? a : b)
+        if (Number.isNaN(got[side].rps)) {
+          results[k].failed = `${side}: ${got[side].why}`
+        }
       }
+      results[k].a.push(got.a.rps)
+      results[k].b.push(got.b.rps)
+      results[k].ratio.push(got.b.rps / got.a.rps)
     }
-    results[k].a.push(got.a.rps)
-    results[k].b.push(got.b.rps)
-    results[k].ratio.push(got.b.rps / got.a.rps)
   }
 }
-for (const s of [servers.a.child, servers.b.child]) {
-  s.removeAllListeners("exit")
-  s.kill("SIGINT")
+
+try {
+  await measure()
+} finally {
+  stopAll()
 }
 
 console.log(`a ${a}, b ${b}: ${rounds} rounds, ${requests} requests each, ${slots} slots`)

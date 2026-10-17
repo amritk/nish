@@ -15,14 +15,17 @@
 //
 // A count that does not listen within `--timeout` seconds is reported as a
 // timeout, and one whose resident memory passes `--cap` MB (three quarters of
-// the memory available at the start, by default) is killed and reported as
+// the memory free when that run starts, by default) is killed and reported as
 // out of memory, so a count too large for the machine ends the row instead of
-// the container.
+// the container. One killed by SIGKILL before it listens is reported as a
+// possible OOM kill: the kernel's, when it got there before the cap.
 //
 // `--per-pool` adds a row per pool and count with `--only`, that pool at the
 // count and the others at one slot, and divides its growth over the one-slot
 // server by the slots added: what one slot of that pool costs. Each figure is
 // the median of `--runs` runs, beside their spread (min to max): the noise band.
+//
+// Linux only (`/proc`), run from the repository root.
 import { spawn } from "node:child_process"
 import { createSocket } from "node:dgram"
 import { readFileSync } from "node:fs"
@@ -62,8 +65,24 @@ if (counts.some((n) => !Number.isInteger(n) || n < 1 || n > 4096)) {
   process.exit(2)
 }
 
-/** The memory a server may grow to before it is killed, in kB. */
-const capKb = cap > 0 ? cap * 1024 : Math.floor((freemem() / 1024) * 0.75)
+/** The memory a server may grow to before it is killed, in kB: `--cap`, or three quarters of what is free now. */
+const capNowKb = () => (cap > 0 ? cap * 1024 : Math.floor((freemem() / 1024) * 0.75))
+
+/** The server being measured, killed on the way out however the script ends. */
+let running = null
+const stop = () => {
+  if (running !== null) {
+    running.removeAllListeners("exit")
+    running.kill("SIGKILL")
+    running = null
+  }
+}
+process.once("SIGINT", () => {
+  stop()
+  process.exit(130)
+})
+// An exception ends the script through "exit" too, and `kill` is synchronous.
+process.once("exit", stop)
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -130,8 +149,10 @@ const measure = (slots, only) =>
     if (only !== null) {
       argv.push("--only", only)
     }
+    const capKb = capNowKb()
     const started = process.hrtime.bigint()
     const child = spawn(bin, argv, { stdio: ["ignore", "pipe", "ignore"] })
+    running = child
     let out = ""
     let settled = false
     let peak = 0
@@ -142,7 +163,7 @@ const measure = (slots, only) =>
       settled = true
       clearInterval(watch)
       clearTimeout(timer)
-      child.kill("SIGKILL")
+      stop()
       resolve(result)
     }
     const watch = setInterval(() => {
@@ -160,7 +181,14 @@ const measure = (slots, only) =>
       () => finish({ failed: `timeout (${timeout} s, ${Math.round(peak / 1024)} MB resident)` }),
       timeout * 1000
     )
-    child.once("exit", (code, signal) => finish({ failed: `exited ${code ?? signal} before listening` }))
+    child.once("exit", (code, signal) =>
+      finish({
+        failed:
+          signal === "SIGKILL"
+            ? `killed by SIGKILL before listening (possible OOM kill, ${Math.round(peak / 1024)} MB resident)`
+            : `exited ${code ?? signal} before listening`,
+      })
+    )
     child.stdout.on("data", async (chunk) => {
       out += chunk
       const ports = /ports quic (\d+) h1 (\d+) h1s (\d+) h2 (\d+)/.exec(out)
@@ -208,7 +236,8 @@ const row = async (slots, only) => {
 
 const spread = (s, fmt) => `${fmt(s.median)} (${fmt(s.min)}–${fmt(s.max)})`
 
-console.log(`${bin}, ${runs} runs each, killed past ${mb(capKb)} MB or ${timeout} s`)
+const capText = cap > 0 ? `${cap} MB` : `three quarters of free memory (${mb(capNowKb())} MB now)`
+console.log(`${bin}, ${runs} runs each, killed past ${capText} or ${timeout} s`)
 console.log("| pools | slots | VmRSS MB | VmHWM MB | listening ms | per slot |")
 console.log("| --- | ---: | ---: | ---: | ---: | ---: |")
 const configurations = [null, ...(perPool ? ["h1", "h1s", "h2", "h3"] : [])]

@@ -682,8 +682,9 @@ connect to each TCP port, and a QUIC packet of a reserved version, which only
 the running loop answers with Version Negotiation), then reads `VmRSS` and
 `VmHWM` and kills it. A server that does not answer within `--timeout`
 seconds is reported as a timeout, and one past `--cap` MB resident (three
-quarters of the free memory, by default) as out of memory, so a count too
-large for the machine ends its row rather than the container. `--per-pool`
+quarters of the memory free when the run starts, by default) as out of memory, so a count too
+large for the machine ends its row rather than the container; a server the
+kernel kills first is reported as a possible OOM kill. `--per-pool`
 sizes one pool at a time with `--only`, the others at one slot, and divides
 its growth over the all-one-slot server by the slots added.
 
@@ -697,12 +698,18 @@ CPU 0, one connection with 2,000 requests one after another. Its figure is the
 server's and the client's work together: it compares builds, and is not
 comparable to h2load's rows. Rounds alternate which build goes first; each row
 gives the median requests a second and the median per-round ratio b / a with
-its spread.
+its spread. `--rounds` is 5 by default and may not go below 3, and
+`--clients` not below h2load's thread count.
+
+Both scripts need Linux (`/proc` for the memory, `taskset` for the pinning)
+and are run from the repository root, where the `www` directory and the
+default `build/interop` path resolve.
 
 ### Baseline
 
-Measured on 4 CPUs and 16 GB with no swap, 3 runs a count. Each figure is the
-median, with the runs' spread (min–max) as its noise band.
+Measured with `build/interop` built from this branch on top of `main` at
+`249cbe9`, on 4 CPUs and 16 GB with no swap, 3 runs a count. Each figure is
+the median, with the runs' spread (min–max) as its noise band.
 
 | slots | VmRSS MB | VmHWM MB | listening ms | load generator |
 | ---: | ---: | ---: | ---: | --- |
@@ -727,7 +734,8 @@ Per pool, `--per-pool` at 64 and 256 slots against the all-one-slot server
 | HTTP/1.1 | 15.4 (15.4–15.4) | 16.1 (16.1–16.1) | 4 kB | 19 (19–19) |
 
 The QUIC pool is 97% of the 64-slot server's memory. The per-slot figures
-agree between 64 and 256 to within 2%, and the runs' RSS spread is under
+agree between 64 and 256 to within 3%, HTTPS/1.1 the widest (164 kB a slot
+at 64, 160 kB at 256), and the runs' RSS spread is under
 0.1 MB, so their noise is below the precision shown.
 
 Throughput, `h2load.mjs` with the build against itself at 64 slots, 5 rounds.

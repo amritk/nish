@@ -79,7 +79,7 @@ export class InteropOptions {
 const H1_SLOT_LIMIT: i32 = TLS_SLOTS;
 
 /** The slots `pool` gets under `options`. */
-const poolSlots = (options: InteropOptions, pool: string): i32 => {
+export const poolSlots = (options: InteropOptions, pool: string): i32 => {
   if (options.only !== "" && options.only !== pool) {
     return 1;
   }
@@ -144,9 +144,11 @@ const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
 
 /**
  * HTTP/1.1's loop with each pool sized by `poolSlots`. `H1Loop` takes one
- * size for both, so when they differ it starts at one slot and the larger
- * pool, and the program's slot states, are replaced: the one-slot pool left
- * behind is a constant few kilobytes.
+ * size for both pools, so when the two differ it is built at one slot, and
+ * each pool wanting more, with the app's slot states, is replaced by one of
+ * its own size. A replaced pool's one-slot original stays allocated: about
+ * 4 kB for plain HTTP/1.1 and 160 kB for HTTPS/1.1 (bench/README.md, "Pool
+ * memory").
  */
 const newH1Loop = (options: InteropOptions): H1Loop => {
   const plain: i32 = poolSlots(options, "h1");
