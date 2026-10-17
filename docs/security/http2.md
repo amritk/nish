@@ -180,8 +180,9 @@ side.
 `_f64` twins; written against `main` at `f8643b9`, cited by function rather
 than by line). `encodeStatus` puts the connection's `date` straight after
 `:status` on every final head, an error's 431 included, and never on a 1xx or
-trailers; a program's own `date`, in any ASCII case (`http2NamesHoldDate`), is
-sent instead, so a head never carries two. The field goes as a literal without
+trailers; a program's own `date` (`http2NamesHoldDate`, which matches any ASCII
+case) is sent instead, so a head never carries two. A mixed-case `Date` never
+reaches it: `sendHead` refuses an uppercase name with `H2_INVALID` (§8.2.1). The field goes as a literal without
 indexing, the static table's name and a value Huffman-coded when that is
 shorter, so the dynamic table stays empty: the encoder's table holds no entry
 after a dated response. `sendHead` counts the field in its bound before it
