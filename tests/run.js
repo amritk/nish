@@ -17425,12 +17425,11 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
   // follows the last `; ` outside backticks or, in a message with none, what follows
   // the rule, the text up to the first `: `. The code is a backticked fragment that
   // is more than one word (`using g = m.lock()`, `a.load()`), so a remedy that only
-  // names a keyword, "bind the value to a `const`", is prose. A refusal with no
-  // sound rewrite goes on `noCodeRemedy`, with the reason, rather than passing.
+  // names a keyword, "bind the value to a `const`", is prose; and code the user can
+  // paste, so no fragment of the clause holds a placeholder: `...`, `<field>`, or a
+  // single-letter type, `Channel<T>`, `new T()`.
   const threadsPage = "docs/guide/using-nish/threads.md"
   const threadRefusals = new Map()
-  /** @type {Map<string, string>} */
-  const noCodeRemedy = new Map()
   /** The remedy of a refusal: its text after the last `; `, or after the rule's `: `. */
   const lastClause = (message) => {
     let inside = false
@@ -17448,7 +17447,22 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     return message.slice(from < 0 ? rule : from)
   }
   /** Whether a clause holds a backticked fragment of code rather than a single word. */
-  const holdsCode = (clause) => [...clause.matchAll(/`([^`]+)`/g)].some((m) => /[\s(=.[]/.test(m[1]))
+  const holdsCode = (clause) => {
+    const fragments = [...clause.matchAll(/`([^`]+)`/g)].map((m) => m[1])
+    return fragments.some((f) => /[\s(=.[]/.test(f)) && !fragments.some(isPlaceholder)
+  }
+  /** The type names a `<...>` may hold that are spelled in lower case. */
+  const lowerTypes = new Set(["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "number", "string", "boolean", "void", "null"])
+  /** Whether a fragment of code stands in for code rather than being it. */
+  const isPlaceholder = (fragment) =>
+    /\.\.\.|…/.test(fragment) ||
+    /\bnew [A-Z]\b/.test(fragment) ||
+    [...fragment.matchAll(/<([^<>]+)>/g)].some((m) =>
+      m[1].split(/[,|]/).some((arg) => {
+        const name = arg.trim().replace(/\[\]$/, "")
+        return /^[A-Z]$/.test(name) || (/^[a-z]+$/.test(name) && !lowerTypes.has(name))
+      })
+    )
 
   for (const page of docPages) {
     const rel = path.relative(root, page).split(path.sep).join("/")
@@ -17514,13 +17528,6 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
   )) {
     check(`${threadsPage}: ${code} has a row in the refusal table`, tableCodes.includes(code), "no row")
   }
-  for (const code of noCodeRemedy.keys()) {
-    check(
-      `${threadsPage}: ${code} without a code remedy is a row in the table`,
-      tableCodes.includes(code),
-      "no row"
-    )
-  }
   for (const code of tableCodes) {
     const message = threadRefusals.get(code)
     if (message === undefined) {
@@ -17530,9 +17537,22 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     const clause = lastClause(message)
     check(
       `${threadsPage}: ${code} ends with the code to write`,
-      noCodeRemedy.has(code) || holdsCode(clause),
+      holdsCode(clause),
       `last clause: ${clause}`
     )
+  }
+  // Every pinned wording of a thread refusal, not only the page's example of it: a
+  // code reached several ways (NL2479 from a spawn, a constructor, two scopes and a
+  // late send) builds its remedy several ways, and each one ends with the code.
+  const wordingDir = path.join(root, "tests", "wordings")
+  const remedyCodes = /^nl(2345|2348|2465|246[7-9]|247\d|2503|2511|2513|2516)_/
+  for (const file of fs.readdirSync(wordingDir).sort()) {
+    if (!file.endsWith(".err") || !remedyCodes.test(file)) {
+      continue
+    }
+    const message = fs.readFileSync(path.join(wordingDir, file), "utf8").split("\n")[0]
+    const clause = lastClause(message)
+    check(`tests/wordings/${file} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
   }
 }
 

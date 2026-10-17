@@ -35,6 +35,7 @@ import {
 import { CheckContext } from "./context"
 import {
   captureWriteMessage,
+  captureWriteRemedy,
   taskCaptureWriteMessage,
   taskThisCaptureMessage,
   thisCaptureMessage,
@@ -837,7 +838,7 @@ const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
   if (task) {
     message = taskCaptureWriteMessage(target.text)
   } else if (parallel) {
-    message = captureWriteMessage(target.text)
+    message = captureWriteMessage(target.text, captureWriteRemedy(ctx.program, target))
   }
   refuseOnce(ctx, target, message)
   return T_ERROR

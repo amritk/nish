@@ -1680,11 +1680,11 @@ export class Compilation {
         const args = call.node.children[1].children
         const identity = args.length > 2 ? args[2] : call.node
         const messages: string[] = []
-        messages.push(resultMessage(this.table, sig, fn, result))
+        messages.push(resultMessage(program, this.table, sig, fn, result, call.node))
         messages.push(reachesDstMessage(this.table, program, sig, fn))
         messages.push(captureReachesDstMessage(this.table, program, sig, fn, call.dst))
-        messages.push(sharedWriteMessage(sig, fn, facts))
-        messages.push(bodyLockMessageFor(sig, fn, facts))
+        messages.push(sharedWriteMessage(program, this.table, sig, fn, facts, call.node))
+        messages.push(bodyLockMessageFor(program, this.table, call.node, sig, fn, facts))
         messages.push(arenaMessage(sig, fn, facts))
         messages.push(escapeMessage(sig, fn, facts))
         messages.push(
@@ -1786,14 +1786,14 @@ export class Compilation {
         }
         const messages: string[] = []
         messages.push(taskArgumentMessage(this.table, call.sig))
-        messages.push(taskMutexMessageFor(this.table, program, call.sig))
+        messages.push(taskMutexMessageFor(this.table, program, call.sig, call.node))
         // A task with no destination answers nothing; one with a destination answers a scalar.
         messages.push(
           isVoidSpawn(call.sig)
-            ? voidTaskResultMessage(this.table, fn)
-            : taskResultMessage(this.table, call.sig, fn, fn.returnType)
+            ? voidTaskResultMessage(program, this.table, fn, call.node)
+            : taskResultMessage(program, this.table, call.sig, fn, fn.returnType, call.node)
         )
-        messages.push(sharedWriteMessage(call.sig, fn, facts))
+        messages.push(sharedWriteMessage(program, this.table, call.sig, fn, facts, call.node))
         messages.push(arenaMessage(call.sig, fn, facts))
         // The one with a fix: a scalar answer nothing stores gets a destination to store it in.
         const none: Edit[] = []
