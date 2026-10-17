@@ -4141,6 +4141,7 @@ const LINK_READ_LATER = [
   "par_dst_short",
   "par_map_idle",
   "par_map_join_small",
+  "par_map_reclaim",
   "par_map_release",
   "range_export",
   "range_export_dts",
@@ -4706,6 +4707,42 @@ if (!only || "par_map_release".includes(only)) {
   }
 }
 
+// A function that runs a map and answers a scalar frees the map's result, and
+// the blocks a string map adopts from its workers, when it returns, as its
+// sequential twin does; `using a = arena()` frees a map run in main's own frame.
+// `par_map_reclaim` runs five loops of maps in frames that give them back:
+// 24 int maps over 2^21 elements, 72 string maps over 2^17 (blocks linked in),
+// 8000 string maps over 512 (blocks copied in), 64 int maps over 2^19 (below
+// the grain, on the calling thread), and 24 int maps over 2^21 in a
+// `using a = arena()` block in main. It peaks at 21 to 23 MB on 1, 2 and 8
+// threads. Each of the first four loops alone, built by main at efbbd8c8,
+// peaked at 206, 232, 112 and 143 MB on 1 and 8 threads, and main refused the
+// block, so each would pass the 64 MB bound on its own.
+if (!only || "par_map_reclaim".includes(only)) {
+  const fixture = linkTests.includes("par_map_reclaim")
+  const dir = path.join(buildDir, "link", "par_map_reclaim")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/par_map_reclaim: 8184 maps in returning frames, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
+      kb > 0 && kb < 64 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
 // A worker that finds the queue empty for a second lowers glibc's trim
 // threshold, frees a 16 MB block through its own arena so the arena's top is
 // cut back, and trims (`nish_pool_drain`). `par_map_idle` runs four maps of
@@ -5047,6 +5084,17 @@ if (!only || "par_alloc".includes(only)) {
 // channels and store them through guards; and `thread_adopt_lifetime`, whose
 // answers the caller adopts and then releases. Each reads what crossed after
 // `churn()`, and prints only what every task order agrees on.
+//
+// And the frames that free a map's result: `par_map_reclaim`, whose helper
+// functions and `using` block give each map back, `mem_using_arena_map`,
+// whose blocks free a map of numbers and one of strings and fill an outer
+// array of numbers, and
+// `par_map_reclaim_escapes`, whose results are returned, stored into a field
+// and into an outer array, captured by a later task, answered as strings and
+// as `string[][]`, chosen by a ternary, pushed, put in a `Map` or a `Set`,
+// sent on a channel, stored through a mutex guard, handed to a callee that
+// keeps them, aliased, and carried into the next iteration, each read after
+// `churn()`.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -5102,6 +5150,9 @@ for (const name of [
   "thread_channel_string",
   "thread_mutex_string",
   "thread_adopt_lifetime",
+  "par_map_reclaim",
+  "par_map_reclaim_escapes",
+  "mem_using_arena_map",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -5886,6 +5937,15 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // whose transfer block carries a tag in its pointer's low bit on a 32-bit
 // pointer as on a 64-bit one; `thread_adopt_lifetime` adopts those blocks, and
 // a 24-byte transfer state, on wasm32 as on a 64-bit target.
+// `par_map_reclaim` and `par_map_reclaim_escapes` free a map's result, and
+// the blocks it adopted, with the frame or block that ran it, and keep every
+// result that escapes it, on a 32-bit target as on a 64-bit one.
+// Node runs them with `--no-turbo-fast-api-calls`: the escapes fixture grows its
+// memory to some 120 MB, and Node 22 then collects garbage inside the fast
+// call of WASI's `fd_write`, whose frame walk segfaults
+// (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24 (three of
+// three crashed without the flag, none of six with it). The slow call is the
+// whole difference.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -5900,6 +5960,8 @@ for (const name of [
   "thread_channel_string",
   "thread_mutex_string",
   "thread_adopt_lifetime",
+  "par_map_reclaim",
+  "par_map_reclaim_escapes",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
@@ -5914,7 +5976,7 @@ for (const name of [
     )
     const ran =
       built.status === 0
-        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+        ? spawnSync("node", ["--no-warnings", "--no-turbo-fast-api-calls", "examples/wasi-host.mjs", wasm], {
             cwd: root,
             encoding: "utf8",
           })

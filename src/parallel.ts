@@ -335,6 +335,16 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
 }
 
 /**
+ * Whether `sig` is an instance of one of the three forms that fill an array
+ * with what their body answers (`parallelMapInto`, `parallelMap`,
+ * `parallelFrom`): `parallelReduce` and `spawn` are not maps.
+ */
+export const isMapEntry = (sig: FunctionSig): boolean => {
+  const role = parallelRoleOf(sig)
+  return role === PAR_MAP || role === PAR_MAP_NEW || role === PAR_FROM
+}
+
+/**
  * Whether `sig` is an instance whose call to its chunk loop the emitter turns
  * into a region: every form but `parallelMap`, which reaches its region
  * through the `parallelMapInto` it calls.
@@ -342,6 +352,25 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
 export const isRegionEntry = (sig: FunctionSig): boolean => {
   const role = parallelRoleOf(sig)
   return role === PAR_MAP || role === PAR_REDUCE || role === PAR_FROM
+}
+
+/**
+ * The index of the parameter a map's chunk loop stores its answers into:
+ * `dst`, 1 for `mapRange` and 0 for `fromRange`, or -1 for any other
+ * function. Neither loop does anything with `dst` but store into it and read
+ * its length, which is what lets escape.ts hand those stores to the caller
+ * (`EscapeResult.fillsParam`).
+ */
+export const chunkDstIndex = (sig: FunctionSig): i32 => {
+  const instance = sig.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  if (template === null || parallelRoleOf(sig) !== PAR_CHUNK) {
+    return -1
+  }
+  if (template.sourceName === "mapRange") {
+    return 1
+  }
+  return template.sourceName === "fromRange" ? 0 : -1
 }
 
 /**
