@@ -26,6 +26,154 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-17
+
+### Breaking changes
+
+- crypto: TLS and QUIC one-shot key derivations take and answer Secret ([#665](https://github.com/amritk/nish/pull/665))
+
+### Added
+
+- checker: Warn when a loop drops an allocation on every pass ([#533](https://github.com/amritk/nish/pull/533))
+- net: Derive the TLS resumption master secret, completing RFC 8448 §3 ([#539](https://github.com/amritk/nish/pull/539))
+- crypto: Run Wycheproof for HMAC and HKDF, and wipe their state ([#542](https://github.com/amritk/nish/pull/542))
+- cli: Refuse retained arena memory with --deny-retention ([#544](https://github.com/amritk/nish/pull/544))
+- cli: Report where every allocation's memory goes with --emit-arena ([#547](https://github.com/amritk/nish/pull/547))
+- checker: Fixes for !xs.length and non-boolean && / || operands, and code-checked nofix cases ([#550](https://github.com/amritk/nish/pull/550))
+- crypto: A native-only helper that draws the key and serial for x509MintSelfSigned ([#540](https://github.com/amritk/nish/pull/540))
+- checker: Mutex<T>, a lock that owns its data, in nish/threads ([#562](https://github.com/amritk/nish/pull/562))
+- checker: Channel<T> of scalars, closed when its senders return, in nish/threads ([#566](https://github.com/amritk/nish/pull/566))
+- std: A JSON writer that writes into a byte buffer, in nish/json ([#580](https://github.com/amritk/nish/pull/580))
+- std: A streaming JSON tokenizer over u8[], in nish/json-tokenizer ([#582](https://github.com/amritk/nish/pull/582))
+- std: Decode JSON into a class and encode it back, with code the compiler writes ([#593](https://github.com/amritk/nish/pull/593))
+- runtime: Runtime-aes.c, AES-GCM on AES-NI/PCLMULQDQ and ARMv8 AES/PMULL ([#594](https://github.com/amritk/nish/pull/594))
+- checker: Accept `??` on a nullable value ([#596](https://github.com/amritk/nish/pull/596))
+- checker: Accept a `?.` chain that ends in `??` ([#603](https://github.com/amritk/nish/pull/603))
+- codegen: A builtin that makes a string from a byte range in one allocation ([#606](https://github.com/amritk/nish/pull/606))
+- std: Pretty-printed output and a strict non-finite mode for JsonWriter ([#604](https://github.com/amritk/nish/pull/604))
+- std: JsonValue, a dynamic JSON tree with lossless numbers, in nish/json-value ([#617](https://github.com/amritk/nish/pull/617))
+- codegen: U64, enum and Map fields, and key dispatch by length, in typed JSON ([#622](https://github.com/amritk/nish/pull/622))
+- codegen: Renamed and optional-with-default fields, and lossless number fields, in typed JSON ([#630](https://github.com/amritk/nish/pull/630))
+- checker: ParallelMap, parallelFrom and arrows that read the enclosing function's consts ([#609](https://github.com/amritk/nish/pull/609))
+- checker: Arrow tasks with captures, tasks without a destination, and a seeded Rng ([#644](https://github.com/amritk/nish/pull/644))
+- cli: --cpu x86-64-v3 links module and runtime at one CPU level (WP38 S2) ([#660](https://github.com/amritk/nish/pull/660))
+- checker: AtomicI32 and AtomicI64 in nish/threads ([#654](https://github.com/amritk/nish/pull/654))
+- checker: Enum member types such as Kind.Array ([#655](https://github.com/amritk/nish/pull/655))
+- checker: Strings and scalar arrays cross threads by copy-at-join ([#669](https://github.com/amritk/nish/pull/669))
+- net: HTTP/1.1 responses carry a Date header ([#675](https://github.com/amritk/nish/pull/675))
+- checker: Discriminated union types ([#682](https://github.com/amritk/nish/pull/682))
+- net: HTTP/2 and HTTP/3 responses carry a date field ([#692](https://github.com/amritk/nish/pull/692))
+- crypto: HKDF, TLS schedule and QUIC derivations into a held Secret ([#684](https://github.com/amritk/nish/pull/684))
+- checker: Guard helpers, thread diagnostics that say what to write, and --fix for them ([#691](https://github.com/amritk/nish/pull/691))
+- bench: POST /json-echo, a JSON request body through std/json ([#689](https://github.com/amritk/nish/pull/689))
+- bench: The cross-runtime HTTP twins under bench/http-twins ([#677](https://github.com/amritk/nish/pull/677))
+- interop: String parameters on declare function ([#695](https://github.com/amritk/nish/pull/695))
+- interop: Copy string results out of declare function ([#701](https://github.com/amritk/nish/pull/701))
+
+### Fixed
+
+- codegen: Do not hoist a loop's array header across a new whose constructor resizes it ([#541](https://github.com/amritk/nish/pull/541))
+- checker: A method of a non-exported class called from another module links ([#543](https://github.com/amritk/nish/pull/543))
+- checker: The diagnostic-fix-2 follow-ups — NL9007 wording, uncheckedGet in the range analysis, one-round migration ([#548](https://github.com/amritk/nish/pull/548))
+- checker: NL9007 and NL2457 offer only a guard that compiles and is credited ([#552](https://github.com/amritk/nish/pull/552))
+- cli: Check the owner of the run cache root and the package root, and take the first executable nish on PATH ([#546](https://github.com/amritk/nish/pull/546))
+- checker: Close the constructor hole in scope regions and admit a task's private writes ([#590](https://github.com/amritk/nish/pull/590))
+- checker: Admit a scope region's writes to a function's own Map, Set and array contents ([#608](https://github.com/amritk/nish/pull/608))
+- codegen: Give a hidden function a symbol C cannot spell ([#616](https://github.com/amritk/nish/pull/616))
+- build: Make the size report print the ceilings the runtime-budget gate applies ([#636](https://github.com/amritk/nish/pull/636))
+- checker: Let a scoped task read a shared Map or Set, and let only the first panic of a process print ([#621](https://github.com/amritk/nish/pull/621))
+- crypto: Wipe AES key schedules, H and ChaCha state with the volatile wipe ([#639](https://github.com/amritk/nish/pull/639))
+- checker: Refuse an exported function that takes a C symbol, and spell private ones apart ([#640](https://github.com/amritk/nish/pull/640))
+- checker: A moved secret's aliases are moved too ([#642](https://github.com/amritk/nish/pull/642))
+- tls: Wipe every key a TLS connection holds when it ends ([#652](https://github.com/amritk/nish/pull/652))
+- quic: Wipe a connection's packet keys and AES schedules when a level, generation or connection ends ([#653](https://github.com/amritk/nish/pull/653))
+- quic: Wipe the stateless-reset and Retry token keys and the listener seed when the server is released ([#664](https://github.com/amritk/nish/pull/664))
+- checker: Every thread refusal ends with the code to write ([#702](https://github.com/amritk/nish/pull/702))
+
+### Performance
+
+- std: Skip JSON string bodies with a memchr search ([#532](https://github.com/amritk/nish/pull/532))
+- codegen: Release a loop pass whose own string goes to a parts + join callee ([#549](https://github.com/amritk/nish/pull/549))
+- cli: Cache the compiled runtime between links ([#557](https://github.com/amritk/nish/pull/557))
+- checker: Prove an offset index `xs[i + c]` from a guard on the sum ([#561](https://github.com/amritk/nish/pull/561))
+- checker: Warn on an offset index that keeps its bounds check ([#565](https://github.com/amritk/nish/pull/565))
+- checker: Prove a computed index from the range of values it can take ([#581](https://github.com/amritk/nish/pull/581))
+- runtime: A persistent FIFO worker pool, an affinity-aware core count and NISH_NUM_THREADS ([#586](https://github.com/amritk/nish/pull/586))
+- checker: Give a call the length of the fresh array its helper returns ([#595](https://github.com/amritk/nish/pull/595))
+- runtime: AES-GCM on AES-NI and PMULL, with the bitsliced path as fallback ([#598](https://github.com/amritk/nish/pull/598))
+- checker: Keep a helper's array length through a call that keeps it ([#605](https://github.com/amritk/nish/pull/605))
+- codegen: Retune the parallel map's grain for the worker pool ([#607](https://github.com/amritk/nish/pull/607))
+- std: Scan JSON string bodies, whitespace and numbers in bulk ([#614](https://github.com/amritk/nish/pull/614))
+- std: Test dst's length in parallelMapInto's loop condition, so the element loop vectorises ([#645](https://github.com/amritk/nish/pull/645))
+- bench: Measure S3's bar kernels without a nish:simd surface (WP38 S3a) ([#658](https://github.com/amritk/nish/pull/658))
+- crypto: P-256 multiplies the base point by a precomputed table ([#663](https://github.com/amritk/nish/pull/663))
+- std: Two system calls per keep-alive HTTP/1.1 request, and output buffers borrowed from a pool ([#672](https://github.com/amritk/nish/pull/672))
+- std: Pace HTTP/3 in microseconds so loopback responses stop waiting for the next millisecond ([#694](https://github.com/amritk/nish/pull/694))
+- runtime: A thread's arena adopts what a worker copied out, and keeps freed memory ([#686](https://github.com/amritk/nish/pull/686))
+
+### Changed
+
+- std: Give std/crypto/aes.ts four private seams, each called from one place ([#592](https://github.com/amritk/nish/pull/592))
+
+### Documentation
+
+- Record that WP38's --cpu bar is met once the noise is measured ([#527](https://github.com/amritk/nish/pull/527))
+- security: Record the readdirSync listing fixes from #520 in CG-5 ([#529](https://github.com/amritk/nish/pull/529))
+- Record that WP38's S4, the lexer on indexOfAny, is declined for now ([#530](https://github.com/amritk/nish/pull/530))
+- Record WP38 S1's bench/json measurement ([#538](https://github.com/amritk/nish/pull/538))
+- interop: Plan WP27 S3, strings across the C boundary ([#545](https://github.com/amritk/nish/pull/545))
+- security: Recount the README rows after the sweep ([#551](https://github.com/amritk/nish/pull/551))
+- Record six review lessons in CLAUDE.md ([#553](https://github.com/amritk/nish/pull/553))
+- Record the issue-sweep-2 review lessons and correct two stale records ([#554](https://github.com/amritk/nish/pull/554))
+- Name the wasi section, not the web filter, as the check that links src/ as nish.wasm ([#556](https://github.com/amritk/nish/pull/556))
+- Restate WP38's S3 bar after checking a portable-SIMD benchmark against LLVM 18 ([#558](https://github.com/amritk/nish/pull/558))
+- threads: Decide WP29 P3, the lock and the channel ([#560](https://github.com/amritk/nish/pull/560))
+- Record three review lessons from the runtime cache in CLAUDE.md ([#563](https://github.com/amritk/nish/pull/563))
+- threads: Mark WP29 P3 built, with a measured example ([#568](https://github.com/amritk/nish/pull/568))
+- Name the checker's recurring escape routes, and where a Measured figure comes from ([#569](https://github.com/amritk/nish/pull/569))
+- Plan the HTTP server beyond the relay, from a TechEmpower entry to every version (WP39) ([#578](https://github.com/amritk/nish/pull/578))
+- guide: Add the user guide skeleton and its Scalar config ([#576](https://github.com/amritk/nish/pull/576))
+- guide: Write the error handling, generics, modules and memory pages ([#587](https://github.com/amritk/nish/pull/587))
+- guide: Write the CLI, standard library, interop and threads pages ([#583](https://github.com/amritk/nish/pull/583))
+- Require the user guide to move with the language ([#585](https://github.com/amritk/nish/pull/585))
+- guide: Write the getting-started pages ([#589](https://github.com/amritk/nish/pull/589))
+- simd: Measure AES-GCM and write WP38's S5 row with its bar ([#584](https://github.com/amritk/nish/pull/584))
+- guide: Write the language basics pages ([#588](https://github.com/amritk/nish/pull/588))
+- Mark the optional-chain stage of the nullish plan completed ([#623](https://github.com/amritk/nish/pull/623))
+- bench: Re-record json-compare on main after the json-parity stages ([#632](https://github.com/amritk/nish/pull/632))
+- bench: Nish/threads against Rust and Go on the same parallel kernels ([#615](https://github.com/amritk/nish/pull/615))
+- simd: Plan S6, the JSON tokenizer on vectors and Eisel-Lemire ([#634](https://github.com/amritk/nish/pull/634))
+- Record the AES-GCM kernel run's conventions in CLAUDE.md ([#633](https://github.com/amritk/nish/pull/633))
+- wp38: Measure what reading every --cpu level costs, and recommend S2, S3a and S7 ([#638](https://github.com/amritk/nish/pull/638))
+- bench: Re-time the bitsliced AES fallback against the ce9d394 baseline ([#637](https://github.com/amritk/nish/pull/637))
+- Record the worker pool's ceiling, the AES fallback's drift caveat, and the moved-fact rule ([#647](https://github.com/amritk/nish/pull/647))
+- wp38: Take Q7 to Q9, record S7 as built by #561, and plan S3a and the --cpu flag ([#650](https://github.com/amritk/nish/pull/650))
+- crypto: P-256's share of a TLS 1.3 handshake, the baseline and the bar ([#641](https://github.com/amritk/nish/pull/641))
+- crypto: P-256's fixed-base table against the bar ([#666](https://github.com/amritk/nish/pull/666))
+- security: Anchor the P-256 comb's record at 6e11fa6 ([#667](https://github.com/amritk/nish/pull/667))
+- security: Threat model for TLS 1.3 session resumption ([#635](https://github.com/amritk/nish/pull/635))
+- perf: Measure a 64x64-to-128 multiply on Poly1305; the bar is missed on wasm32 ([#687](https://github.com/amritk/nish/pull/687))
+- guide: Which thread tool to reach for, and the finished thread surface ([#697](https://github.com/amritk/nish/pull/697))
+
+### Tests
+
+- ct: Hold the x25519 timing to its domain and re-measure CT-13 ([#537](https://github.com/amritk/nish/pull/537))
+- std: Compare indexOfAny's non-ASCII byte offset between native and --profile wasi ([#536](https://github.com/amritk/nish/pull/536))
+- std: Test262- and V8-derived JSON conformance, and the JSONTestSuite round trip through the writer ([#600](https://github.com/amritk/nish/pull/600))
+- std: JSON against serde_json, simdjson, yyjson, RapidJSON and Go on the same machine ([#601](https://github.com/amritk/nish/pull/601))
+- std: Hold the JSON conformance corpus's indented cases to JSON.stringify, and render the json-value cookbook entry ([#631](https://github.com/amritk/nish/pull/631))
+- checker: Pin that a guard on one array's length does not prove an offset access into another ([#659](https://github.com/amritk/nish/pull/659))
+- std: An h2load harness for HTTP/3 latency, and the cause of the 1 ms stalls ([#676](https://github.com/amritk/nish/pull/676))
+
+### Build
+
+- Regenerate package-lock.json for v0.18.0 ([#526](https://github.com/amritk/nish/pull/526))
+
+### Internal
+
+- Compact agent sessions at 200k and cut the calls a pull request spends ([#648](https://github.com/amritk/nish/pull/648))
+
+
 ## [0.18.0] - 2026-10-09
 
 ### Added
@@ -780,3 +928,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.16.0]: https://github.com/amritk/nish/releases/tag/v0.16.0
 [0.17.0]: https://github.com/amritk/nish/releases/tag/v0.17.0
 [0.18.0]: https://github.com/amritk/nish/releases/tag/v0.18.0
+[0.19.0]: https://github.com/amritk/nish/releases/tag/v0.19.0
