@@ -5766,6 +5766,12 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `par_map_reclaim` and `par_map_reclaim_escapes` free a map's result, and
 // the blocks it adopted, with the frame or block that ran it, and keep every
 // result that escapes it, on a 32-bit target as on a 64-bit one.
+// Node runs them with `--no-turbo-fast-api-calls`: the escapes fixture grows its
+// memory to some 120 MB, and Node 22 then collects garbage inside the fast
+// call of WASI's `fd_write`, whose frame walk segfaults
+// (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24 (three of
+// three crashed without the flag, none of six with it). The slow call is the
+// whole difference.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -5796,7 +5802,7 @@ for (const name of [
     )
     const ran =
       built.status === 0
-        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+        ? spawnSync("node", ["--no-warnings", "--no-turbo-fast-api-calls", "examples/wasi-host.mjs", wasm], {
             cwd: root,
             encoding: "utf8",
           })
