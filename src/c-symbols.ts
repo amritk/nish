@@ -306,6 +306,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "lstat64" ||
   name === "malloc" ||
   name === "malloc_usable_size" ||
+  name === "mallopt" ||
   name === "memalign" ||
   name === "memccpy" ||
   name === "memchr" ||
