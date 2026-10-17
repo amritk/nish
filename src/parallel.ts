@@ -335,6 +335,16 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
 }
 
 /**
+ * Whether `sig` is an instance of one of the three forms that fill an array
+ * with what their body answers (`parallelMapInto`, `parallelMap`,
+ * `parallelFrom`): `parallelReduce` and `spawn` are not maps.
+ */
+export const isMapEntry = (sig: FunctionSig): boolean => {
+  const role = parallelRoleOf(sig)
+  return role === PAR_MAP || role === PAR_MAP_NEW || role === PAR_FROM
+}
+
+/**
  * Whether `sig` is an instance whose call to its chunk loop the emitter turns
  * into a region: every form but `parallelMap`, which reaches its region
  * through the `parallelMapInto` it calls.

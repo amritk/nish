@@ -4,10 +4,14 @@
 // Each function below answers a number too, but lets what the map made outlive
 // the call by another way, so its frame must not release it: returned,
 // stored into a field or an outer array, left in an array the caller made,
-// handed to a task, kept as an element of an adopted block, or nested in an
-// array of arrays. Each reads what must survive after `churn()`, which reuses
+// handed to a task, kept as an element of an adopted block, nested in an
+// array of arrays, chosen by a ternary, pushed onto an array the frame answers,
+// stored into a `Map` and a `Set`, sent on a channel, stored through a guard,
+// kept by a callee (a generic one too), kept through an alias, carried into the
+// next iteration, or read after a nested call that releases its own frame.
+// Each reads what must survive after `churn()`, which reuses
 // the memory a frame released too early would leave a value in.
-import { parallelFrom, parallelMap, parallelMapInto, scope } from "nish/threads";
+import { Channel, Mutex, parallelFrom, parallelMap, parallelMapInto, scope } from "nish/threads";
 
 // Each string is kept, so the loop writes over the whole of what was freed
 // rather than over the one string a rewound iteration reuses.
@@ -227,6 +231,252 @@ const picked = (xs: i32[]): string => {
   return `${last} ${t}`;
 };
 
+// Chosen by a ternary: either map's array is answered.
+const choose = (xs: i32[], c: boolean): i32[] => {
+  const ys = parallelMap(xs, (x) => x + 1);
+  const zs = parallelMap(xs, (x) => x + 2);
+  return c ? ys : zs;
+};
+
+const chooseWords = (xs: i32[], c: boolean): string[] => {
+  const ys = parallelMap(xs, (x) => word(x + 1));
+  const zs = parallelMap(xs, (x) => word(x + 2));
+  return c ? ys : zs;
+};
+
+const ternary = (xs: i32[]): string => {
+  const a = choose(xs, true);
+  const b = choose(xs, false);
+  const c = chooseWords(xs, true);
+  const d = chooseWords(xs, false);
+  churn();
+  return `${a[0]} ${b[xs.length - 1]} ${c[0]} ${d[xs.length - 1]} ${sum(a) + sum(b)} ${wordsSum(c) + wordsSum(d)}`;
+};
+
+// Pushed onto an array of the same frame, which the frame answers.
+const pushed = (xs: i32[]): i32[][] => {
+  const rows: i32[][] = [];
+  for (let r = 0; r < 3; r++) {
+    const q = r;
+    const ys = parallelMap(xs, (x) => x * q);
+    rows.push(ys);
+  }
+  return rows;
+};
+
+const pushedWords = (xs: i32[]): string[] => {
+  const strs: string[] = [];
+  for (let r = 0; r < 3; r++) {
+    const q = r;
+    const ws = parallelMap(xs, (x) => word(x * q));
+    strs.push(ws[xs.length - 1]);
+  }
+  return strs;
+};
+
+const push = (xs: i32[]): string => {
+  const rows = pushed(xs);
+  const strs = pushedWords(xs);
+  churn();
+  return `${rows.length} ${rows[2][xs.length - 1]} ${sum(rows[1])} ${strs[0]} ${strs[2]}`;
+};
+
+// Stored into a Map and a Set older than the call.
+const intoMap = (m: Map<i32, i32[]>, s: Set<string>, xs: i32[], k: i32): i32 => {
+  const ys = parallelMap(xs, (x) => x + k);
+  const ws = parallelMap(xs, (x) => word(x + k));
+  m.set(k, ys);
+  s.add(ws[0]);
+  s.add(ws[xs.length - 1]);
+  return ys.length;
+};
+
+const maps = (xs: i32[]): string => {
+  const m = new Map<i32, i32[]>();
+  const s = new Set<string>();
+  let n = 0;
+  for (let k = 0; k < 3; k++) {
+    n = n + intoMap(m, s, xs, k);
+  }
+  churn();
+  const two = m.get(2);
+  const last = word(xs[xs.length - 1] + 2);
+  return `${n} ${two === undefined ? -1 : sum(two)} ${s.size} ${s.has(last)}`;
+};
+
+// Sent on a channel the parent receives after the scope.
+const sender = (ch: Channel<string>): i32 => {
+  ch.send("t");
+  return 1;
+};
+
+const sendWords = (xs: i32[], got: string[], k: i32): i32 => {
+  const ws = parallelMap(xs, (x) => word(x + k));
+  const ch = new Channel<string>();
+  ch.send(ws[0]);
+  ch.send(ws[xs.length - 1]);
+  const n: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(sender, ch, n, 0);
+  }
+  for (const w of ch) {
+    got.push(w);
+  }
+  return ws.length;
+};
+
+const channel = (xs: i32[]): string => {
+  const got: string[] = [];
+  let n = 0;
+  for (let k = 0; k < 3; k++) {
+    n = n + sendWords(xs, got, k);
+  }
+  churn();
+  return `${n} ${got.length} ${wordsSum(got)}`;
+};
+
+// Stored through a Mutex guard.
+class Slot {
+  s: string;
+  n: i32;
+
+  constructor() {
+    this.s = "";
+    this.n = 0;
+  }
+}
+
+const guarded = (m: Mutex<Slot>, xs: i32[], k: i32): i32 => {
+  const ws = parallelMap(xs, (x) => word(x * k));
+  const ys = parallelMap(xs, (x) => x * k);
+  using g = m.lock();
+  g.value.s = ws[xs.length - 1];
+  g.value.n = ys[xs.length - 1];
+  return ws.length;
+};
+
+const mutex = (xs: i32[]): string => {
+  const m = new Mutex<Slot>(new Slot());
+  let n = 0;
+  for (let k = 1; k <= 3; k++) {
+    n = n + guarded(m, xs, k);
+  }
+  churn();
+  using g = m.lock();
+  return `${n} ${g.value.s} ${g.value.n}`;
+};
+
+class Sink {
+  ys: i32[];
+  w: string;
+
+  constructor() {
+    this.ys = [];
+    this.w = "";
+  }
+}
+
+const keepYs = (h: Sink, ys: i32[]): void => {
+  h.ys = ys;
+};
+
+const keepWord = (h: Sink, w: string): void => {
+  h.w = w;
+};
+
+class Cell<T> {
+  v: T;
+
+  constructor(v: T) {
+    this.v = v;
+  }
+}
+
+const keepAny = <T>(c: Cell<T>, v: T): void => {
+  c.v = v;
+};
+
+// Handed to a callee that stores its parameter, plain and generic.
+const sunk = (h: Sink, c: Cell<i32[]>, d: Cell<string>, xs: i32[], k: i32): i32 => {
+  const ys = parallelMap(xs, (x) => x + k);
+  const ws = parallelMap(xs, (x) => word(x + k));
+  const zs = parallelMap(xs, (x) => x - k);
+  keepYs(h, ys);
+  keepWord(h, ws[1]);
+  keepAny(c, zs);
+  keepAny(d, ws[xs.length - 1]);
+  return ys.length;
+};
+
+const callee = (xs: i32[]): string => {
+  const h = new Sink();
+  const c = new Cell<i32[]>([]);
+  const d = new Cell<string>("");
+  let n = 0;
+  for (let k = 0; k < 3; k++) {
+    n = n + sunk(h, c, d, xs, k);
+  }
+  churn();
+  return `${n} ${sum(h.ys)} ${h.w} ${sum(c.v)} ${d.v}`;
+};
+
+// An alias of the map's array, or of one of its strings, that escapes.
+const aliased = (h: Sink, xs: i32[], k: i32): i32 => {
+  const ys = parallelMap(xs, (x) => x * 2 + k);
+  const zs = ys;
+  h.ys = zs;
+  const ws = parallelMap(xs, (x) => word(x + k));
+  const w = ws[xs.length - 1];
+  const v = w;
+  h.w = v;
+  return ys.length;
+};
+
+const alias = (xs: i32[]): string => {
+  const h = new Sink();
+  let n = 0;
+  for (let k = 0; k < 3; k++) {
+    n = n + aliased(h, xs, k);
+  }
+  churn();
+  return `${n} ${sum(h.ys)} ${h.ys[0]} ${h.w}`;
+};
+
+// The result of one iteration read in the next.
+const carried = (xs: i32[]): string => {
+  let prev: i32[] = [];
+  let prevWords: string[] = [];
+  let t = 0;
+  for (let r = 0; r < 4; r++) {
+    if (r > 0) {
+      t = (t + sum(prev) + wordsSum(prevWords)) % 1000003;
+    }
+    const q = r;
+    prev = parallelMap(xs, (x) => x + q);
+    prevWords = parallelMap(xs, (x) => word(x + q));
+    churn();
+  }
+  return `${t} ${prev[xs.length - 1]} ${prevWords[0]}`;
+};
+
+// Read after a nested call that marks and releases its own frame.
+const reclaims = (xs: i32[], k: i32): i32 => {
+  const ys = parallelMap(xs, (x) => x * k);
+  return sum(ys);
+};
+
+const afterNested = (xs: i32[]): string => {
+  const ys = parallelMap(xs, (x) => x + 5);
+  const ws = parallelMap(xs, (x) => word(x + 5));
+  let t = 0;
+  for (let k = 0; k < 3; k++) {
+    t = (t + reclaims(xs, k)) % 1000003;
+  }
+  churn();
+  return `${t} ${sum(ys)} ${ys[xs.length - 1]} ${wordsSum(ws)} ${ws[0]}`;
+};
+
 export const main = (): i32 => {
   for (const n of [37, 70000]) {
     const xs = parallelFrom(n, (i) => (i * 7919) % 10007);
@@ -237,6 +487,15 @@ export const main = (): i32 => {
     console.log(task(xs));
     console.log(nested(xs));
     console.log(picked(xs));
+    console.log(ternary(xs));
+    console.log(push(xs));
+    console.log(maps(xs));
+    console.log(channel(xs));
+    console.log(mutex(xs));
+    console.log(callee(xs));
+    console.log(alias(xs));
+    console.log(carried(xs));
+    console.log(afterNested(xs));
   }
   return 0;
 };

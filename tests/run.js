@@ -4710,12 +4710,14 @@ if (!only || "par_map_release".includes(only)) {
 // A function that runs a map and answers a scalar frees the map's result, and
 // the blocks a string map adopts from its workers, when it returns, as its
 // sequential twin does; `using a = arena()` frees a map run in main's own frame.
-// `par_map_reclaim` runs 24 rounds each of an int map over 2^21 elements and a
-// string map over 2^17 in helper functions, and of an int map over 2^21 inside
-// a block in main. It
-// peaks at 18 to 20 MB on one thread and on eight; main at efbbd8c8 refused
-// the block, and without it peaked at 281 MB on 1, 4 and 8 threads. The bound
-// is 64 MB.
+// `par_map_reclaim` runs five loops of maps in frames that give them back:
+// 24 int maps over 2^21 elements, 72 string maps over 2^17 (blocks linked in),
+// 8000 string maps over 512 (blocks copied in), 64 int maps over 2^19 (below
+// the grain, on the calling thread), and 24 int maps over 2^21 in a
+// `using a = arena()` block in main. It peaks at 21 to 23 MB on 1, 2 and 8
+// threads. Each of the first four loops alone, built by main at efbbd8c8,
+// peaked at 206, 232, 112 and 143 MB on 1 and 8 threads, and main refused the
+// block, so each would pass the 64 MB bound on its own.
 if (!only || "par_map_reclaim".includes(only)) {
   const fixture = linkTests.includes("par_map_reclaim")
   const dir = path.join(buildDir, "link", "par_map_reclaim")
@@ -4734,7 +4736,7 @@ if (!only || "par_map_reclaim".includes(only)) {
       ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
       : "no such fixture"
     check(
-      `link/par_map_reclaim: 72 maps in returning frames and a using block on ${threads} thread(s) peak under 64 MB`,
+      `link/par_map_reclaim: 8184 maps in returning frames, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
       kb > 0 && kb < 64 * 1024,
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
     )
@@ -5087,8 +5089,11 @@ if (!only || "par_alloc".includes(only)) {
 // functions and `using` block give each map back, `mem_using_arena_map`,
 // whose blocks free a map of numbers and one of strings, and
 // `par_map_reclaim_escapes`, whose results are returned, stored into a field
-// and into an outer array, captured by a later task, and answered as strings
-// and as `string[][]`, each read after `churn()`.
+// and into an outer array, captured by a later task, answered as strings and
+// as `string[][]`, chosen by a ternary, pushed, put in a `Map` or a `Set`,
+// sent on a channel, stored through a mutex guard, handed to a callee that
+// keeps them, aliased, and carried into the next iteration, each read after
+// `churn()`.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",

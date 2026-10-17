@@ -200,11 +200,11 @@ const channel = (): string => {
 
 // Adoption inside a `using a = arena()` block: strings of 64 KB or more
 // received from a channel in the block are adopted after its mark, so its
-// release frees them, and only a number leaves. (The block refuses a map that
-// answers strings, or a call reaching one, since such a map stores each string
-// it answers into its result.) The string made
-// before the block is below its mark and survives, and so does one adopted
-// before a block whose mark then sits at the end of that full block.
+// release frees them, and only a number leaves. (A map that answers strings
+// may run in the block too, so long as none of its strings outlives it:
+// `tests/link/mem_using_arena_map`.) The string made before the block is below
+// its mark and survives, and so does one adopted before a block whose mark
+// then sits at the end of that full block.
 const inArena = (): string => {
   const before = word(7);
   const ch = new Channel<string>();

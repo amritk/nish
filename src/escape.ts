@@ -95,7 +95,7 @@ import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
 import { Options } from "./options"
-import { chunkDstIndex, isParallelEntry, isSpawnEntry } from "./parallel"
+import { chunkDstIndex, isMapEntry, isSpawnEntry } from "./parallel"
 import { CheckedProgram, elementStride, FunctionSig, ROLE_FUNCTION } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
@@ -2245,9 +2245,10 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
       "following it: what it stores may be the block's and outlive the release"
     // A map whose body answers arrays stores each one into its result, as a
     // loop that pushes arrays would; one that answers numbers or strings is
-    // followed (`storedIntoChunkDst`) and may stay in the block.
+    // followed (`storedIntoChunkDst`) and may stay in the block. A `spawn`
+    // that stores its task's array gets the plain message.
     const callee: FunctionSig | null = at.kind === N_CALL ? unit.program.nodeCallees[at.id] : null
-    if (callee !== null && isParallelEntry(callee)) {
+    if (callee !== null && isMapEntry(callee)) {
       return (
         stores +
         " (a map whose body answers arrays stores each one into its result, which the block cannot follow: run that map " +
