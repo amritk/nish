@@ -888,6 +888,186 @@ arrow that captures a local or leaves a parameter's or its result's type out,
 which would not check at the top level; those stay refused for you to fix by hand. The reference lists each case:
 [What `nish --fix` writes for a thread program](../../LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
 
+## Refused, and what to write instead
+
+Every refusal on this page ends with the code to write in its place, in your
+program's own names where the compiler has them. This table pairs each one
+with an example on this page that compiles.
+
+| Code | Refused | Write instead |
+|---|---|---|
+| NL2345 | `f` of a parallel call writes what its caller can see, or prints | `f` answers the value and the write comes after the call, `parallelMapInto(xs, out, (x) => x * 2)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| NL2348 | an element answer that is an array of strings or arrays, an object, a `Map` or a `Set` | answer a string or a number per element and build the structure after the call: [`parallelFrom`](#a-new-array-parallelmap-and-parallelfrom) |
+| NL2503 | a parallel arrow writes a local of its function | answer the value and fold it, `const total = parallelReduce(xs, (a, b) => a + b, 0)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| NL2500 | a parallel arrow reads a `let` | a `const` snapshot before the call, `const kNow = k`: [below](#a-let-read-by-a-parallel-arrow) |
+| NL2388 | `scope()` bound without `using` | `using s = scope()`: [below](#a-scope-bound-without-using) |
+| NL2506 | an arrow task reads a `let` | a `const` snapshot before the `spawn`, `const kNow = k`: [`nish --fix`](#letting-nish---fix-write-it) |
+| NL2511 | a task that answers a value has no destination | `const answer = new Array<i32>(1)` above the scope and `s.spawn(twice, arg, answer, 0)`: [below](#a-task-answer-with-nowhere-to-go) |
+| NL2465 | `m.lock()` bound without `using` | `using g = m.lock()`: [`Mutex<T>`](#sharing-a-value-mutext) |
+| NL2536 | a guard handed to a method, a constructor or a generic function | a top-level helper, `const note = (g: MutexGuard<Stats>, x: i32): void => ...`: [the helper](#sharing-a-value-mutext) |
+| NL2513 | an atomic read inside the scope's block after a `spawn` | read it after the block, `a.load()`: [atomics](#counting-without-a-lock-atomici32-and-atomici64) |
+| NL2516 | two scopes of one `using` share an atomic | one `using` per scope, `using s = scope()` and `using t = scope()`: [below](#two-scopes-that-share-an-atomic) |
+| NL2481 | a channel's receiver spawned before a sender | spawn every sender first, `s.spawn(produce, ...)` above `s.spawn(consume, ...)`: [`Channel<T>`](#passing-values-channelt) |
+| NL2484 | an arrow that uses a channel | a module function the `spawn` names, `const sendOne = (c: Channel<i32>): void => ...`: [below](#a-channel-in-an-arrow) |
+
+### A `let` read by a parallel arrow
+
+```ts nish:err NL2500
+import { parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  k = k + 1;
+  const xs: i32[] = [1, 2, 3];
+  const ys = parallelMap(xs, (x: i32): i32 => x * k); // `k` is a `let`
+  return ys[0];
+};
+```
+
+Snapshot it in a `const` before the call, as `nish --fix` does:
+
+```ts nish:ok
+import { parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  k = k + 1;
+  const xs: i32[] = [1, 2, 3];
+  const kNow = k;
+  const ys = parallelMap(xs, (x: i32): i32 => x * kNow);
+  console.log(`${ys[2]}`); // 12
+  return 0;
+};
+```
+
+### A scope bound without `using`
+
+```ts nish:err NL2388
+import { scope } from "nish/threads";
+
+const twice = (n: i32): i32 => n * 2;
+
+export const main = (): i32 => {
+  const out: i32[] = [0];
+  {
+    const s = scope(); // never joined: its task might never run
+    s.spawn(twice, 21, out, 0);
+  }
+  return out[0];
+};
+```
+
+Declare it with `using`, so the block's end joins it, as `nish --fix` does:
+`using s = scope()`, as in [the first scope example](#different-tasks-at-once-using-s--scope).
+
+### A task answer with nowhere to go
+
+```ts nish:err NL2511
+import { scope } from "nish/threads";
+
+const twice = (n: i32): i32 => n * 2;
+
+export const main = (): i32 => {
+  {
+    using s = scope();
+    s.spawn(twice, 21); // the answer has nowhere to go
+  }
+  return 0;
+};
+```
+
+Give the answer a one-slot destination above the scope, as `nish --fix` does,
+and read it after the block:
+
+```ts nish:ok
+import { scope } from "nish/threads";
+
+const twice = (n: i32): i32 => n * 2;
+
+export const main = (): i32 => {
+  const answer = new Array<i32>(1);
+  {
+    using s = scope();
+    s.spawn(twice, 21, answer, 0);
+  }
+  console.log(`${answer[0]}`); // 42
+  return 0;
+};
+```
+
+### Two scopes that share an atomic
+
+The [NL2516 example](#counting-without-a-lock-atomici32-and-atomici64) opens two
+scopes in one `using`. Give each scope its own block, so the first one's tasks
+have finished before the second one's start, natively and under Node alike:
+
+```ts nish:ok
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+const peek = (a: AtomicI32): i32 => a.load();
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const bumped: i32[] = [0];
+  const seen: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(bump, a, bumped, 0);
+  }
+  {
+    using t = scope();
+    t.spawn(peek, a, seen, 0);
+  }
+  console.log(`${seen[0]}`); // 1
+  return 0;
+};
+```
+
+### A channel in an arrow
+
+```ts nish:err NL2484
+import { Channel, scope } from "nish/threads";
+
+export const main = (): i32 => {
+  const ch = new Channel<i32>();
+  {
+    using s = scope();
+    s.spawn((c: Channel<i32>): void => { c.send(1); }, ch); // an arrow with a channel
+  }
+  let total: i32 = 0;
+  for (const v of ch) {
+    total = total + v;
+  }
+  return total;
+};
+```
+
+Write the task as a module function and name it in the `spawn`, as
+`nish --fix` does with `mainTask`:
+
+```ts nish:ok
+import { Channel, scope } from "nish/threads";
+
+const sendOne = (c: Channel<i32>): void => {
+  c.send(1);
+};
+
+export const main = (): i32 => {
+  const ch = new Channel<i32>();
+  {
+    using s = scope();
+    s.spawn(sendOne, ch);
+  }
+  let total: i32 = 0;
+  for (const v of ch) {
+    total = total + v;
+  }
+  console.log(`${total}`); // 1
+  return 0;
+};
+```
+
 The full rules, and the code each one is refused with, are in the reference:
 [Data parallelism](../../LANGUAGE.md#data-parallelism-nishthreads),
 [Scoped tasks](../../LANGUAGE.md#scoped-tasks-using-s--scope),

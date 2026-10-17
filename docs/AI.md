@@ -891,7 +891,10 @@ export const main = (): i32 => {
 
 - **`f` writes nothing its caller can see.** No field or element store
   through its argument and no `console.log` — each is refused at the call,
-  naming the write. Reading is fine; so are a bounds check, an integer
+  naming the write (NL2345): answer the value and write after the call. An
+  arrow may read the `const` locals and parameters around it, never write
+  them (NL2503: fold instead, `const total = parallelReduce(xs, (a, b) => a + b, 0)`)
+  and never read a `let` (NL2500: snapshot it first, `const kNow = k`). Reading is fine; so are a bounds check, an integer
   division and `panic`.
 - **What `f` allocates is freed after every element.** A string, array or
   object built on the way to the result compiles, with performance warning
@@ -901,7 +904,8 @@ export const main = (): i32 => {
 - **A map's result is a number, a `boolean`, an enum, a `string` or an array
   of numbers, booleans or enums**: a string or a scalar array is copied out of
   the worker's arena at the join. An array of strings, a nested array, a class,
-  a `Map` or a `Set` is refused (NL2348). **A reduce's `T` stays a number, a
+  a `Map` or a `Set` is refused (NL2348): answer a string or a number per
+  element and build the structure after the call. **A reduce's `T` stays a number, a
   `boolean` or an enum**: map strings to numbers first.
 - **`dst` may not be reachable from an element of `src`**: mapping `Row[]` into
   `f64[]` is refused when `Row` holds an `f64[]`, because it could be `dst`.
@@ -953,15 +957,17 @@ export const main = (): i32 => {
   end, don't read a destination, and don't write memory a task could read (a
   store into an argument, a call that writes through its argument).
 - **`using` takes only `scope()`**, a `Mutex`'s `lock()` (below), or `arena()`
-  (under [Memory](#memory)), and `scope()` only comes from `using`.
+  (under [Memory](#memory)), and `scope()` only comes from `using`
+  (NL2388): `using s = scope()`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
 - **The task is a top-level function named in the `spawn`, or an arrow written
   there.** `s.spawn(entry, arg)` with no destination runs an entry that
   answers `void`; `s.spawn(() => work(a, b))` runs an arrow that reads the
-  `const` locals and parameters around it (never a `let` or `this`: bind a
-  `const` first) and answers `void`. An entry that answers a value has a
-  destination. Either follows the
+  `const` locals and parameters around it (never a `let` or `this` (NL2506):
+  bind a `const` first, `const kNow = k`) and answers `void`. An entry that
+  answers a value has a destination (NL2511): `const answer = new Array<i32>(1)`
+  above the scope and `s.spawn(entry, arg, answer, 0)`. Either follows the
   data-parallel rules: it writes nothing anybody else can see but what it
   writes through a `Mutex`'s guard or sends on a `Channel` (below), answers a number,
   a `boolean`, an enum, a `string` or an array of numbers, booleans or enums
@@ -1044,7 +1050,7 @@ export const main = (): i32 => {
   (NL2536): `this` or `T` would be a way to keep the guard.
 - **Make the data fresh all the way down**: `new Mutex<Hist>(new Hist())`, not
   `new Hist(bins)` with a `bins` you still hold.
-- **`lock()` only as `using g = m.lock()`**, one lock per `using`. The lock is
+- **`lock()` only as `using g = m.lock()`** (NL2465), one lock per `using`. The lock is
   released at every exit of the block, and at a `return` after the returned
   value is computed, so `return g.value.n` reads under the lock.
 - **One lock at a time, and no waiting while it is held**: inside the guard's
@@ -1121,7 +1127,8 @@ export const main = (): i32 => {
   value held just before it. No field to read.
 - **Not inside a scope's block after the first `spawn`** (NL2513): read it
   before, or after the block. Two scopes of one `using` share no atomic
-  (NL2516).
+  (NL2516): give each scope a block of its own, `{ using s = scope(); … }`
+  then `{ using t = scope(); … }`.
 - **Make the updates commute** — `add`, `sub`, `min`, `max` — or native and
   Node differ.
 - **Add once per batch**: count into a local array, then one `add` per bin.
@@ -1207,15 +1214,18 @@ export const main = (): i32 => {
   hands a task only a channel the function itself declared, never one the
   function was handed, and no task gets one channel in two fields. Hold it
   only as `Channel<T>` (no `| null`, no `Channel<T>[]`, no `Map` of them), and
-  use it only in a top-level function's body, never inside an arrow.
+  use it only in a top-level function's body, never inside an arrow
+  (NL2484): write the task as a module function,
+  `const sendAll = (ch: Channel<i32>): void => { … }`, and spawn that.
   `new Channel<i32>()` takes no capacity: it is unbounded.
 - **One scope, one receiver.** Only one scope's tasks use a channel. Its one
   receiver is either a single task spawned outside any loop, or the parent
   after the scope's block; never both, never two. The parent sends only before
   the scope's block, and receives nothing inside it.
 - **Senders before the receiver.** Spawn every task that may send before the
-  task that receives, and never let one task both send and receive on the same
-  channel. So channels cannot deadlock.
+  task that receives (NL2481: `s.spawn(produce, …)` above
+  `s.spawn(consume, …)`), and never let one task both send and receive on the
+  same channel. So channels cannot deadlock.
 - **No receive while a lock is held**, even through a call. A `send` under a
   guard is fine.
 - **Print what the interleaving cannot change**: two senders' values arrive in
@@ -1268,6 +1278,10 @@ export const main = (): i32 => {
   leaves to you a `spawn` in a loop, a `let` another argument names or a `for`
   header declares, and a channel arrow that captures or leaves a parameter's or
   its result's type out.
+- **Every thread refusal ends with the code to write**, in your names where
+  the compiler has them; the guide's
+  [refusal table](guide/using-nish/threads.md#refused-and-what-to-write-instead)
+  pairs each code with an example that compiles.
 
 ```ts nish:err NL2506
 import { scope } from "nish/threads";

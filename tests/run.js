@@ -17420,6 +17420,36 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     return paragraphs.length === 2 && paragraphs[0].startsWith("# ") && !/^(#|```)/m.test(paragraphs[1])
   }
 
+  // The threads page's refusal table: each code's `nish:err` example must be refused
+  // with a message whose last clause holds the code to write. The clause is what
+  // follows the last `; ` outside backticks or, in a message with none, what follows
+  // the rule, the text up to the first `: `. The code is a backticked fragment that
+  // is more than one word (`using g = m.lock()`, `a.load()`), so a remedy that only
+  // names a keyword, "bind the value to a `const`", is prose. A refusal with no
+  // sound rewrite goes on `noCodeRemedy`, with the reason, rather than passing.
+  const threadsPage = "docs/guide/using-nish/threads.md"
+  const threadRefusals = new Map()
+  /** @type {Map<string, string>} */
+  const noCodeRemedy = new Map()
+  /** The remedy of a refusal: its text after the last `; `, or after the rule's `: `. */
+  const lastClause = (message) => {
+    let inside = false
+    let from = -1
+    let rule = 0
+    for (let i = 0; i < message.length; i++) {
+      if (message[i] === "`") {
+        inside = !inside
+      } else if (!inside && message[i + 1] === " " && message[i] === ";") {
+        from = i + 2
+      } else if (!inside && message[i + 1] === " " && message[i] === ":" && rule === 0) {
+        rule = i + 2
+      }
+    }
+    return message.slice(from < 0 ? rule : from)
+  }
+  /** Whether a clause holds a backticked fragment of code rather than a single word. */
+  const holdsCode = (clause) => [...clause.matchAll(/`([^`]+)`/g)].some((m) => /[\s(=.[]/.test(m[1]))
+
   for (const page of docPages) {
     const rel = path.relative(root, page).split(path.sep).join("/")
     const text = fs.readFileSync(page, "utf8")
@@ -17456,6 +17486,12 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         .map((line) => JSON.parse(line))
       const errors = diagnostics.filter((d) => d.severity === "error")
       const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      if (rel === threadsPage && s.kind === "err") {
+        const refused = errors.find((e) => e.code === s.code)
+        if (refused && !threadRefusals.has(s.code)) {
+          threadRefusals.set(s.code, refused.message)
+        }
+      }
       if (s.kind === "ok") {
         check(`${rel}:${s.line} compiles`, run.status === 0, detail || run.stderr)
       } else {
@@ -17466,6 +17502,37 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         )
       }
     }
+  }
+
+  const threadsText = fs.readFileSync(path.join(root, threadsPage), "utf8")
+  const tableCodes = [...threadsText.matchAll(/^\| (NL\d{4}) \|/gm)].map((m) => m[1])
+  check(`${threadsPage} has a refusal table`, tableCodes.length > 0, "no `| NLxxxx |` row")
+  for (const code of new Set(
+    markedSnippets(threadsText)
+      .filter((s) => s.kind === "err")
+      .map((s) => s.code)
+  )) {
+    check(`${threadsPage}: ${code} has a row in the refusal table`, tableCodes.includes(code), "no row")
+  }
+  for (const code of noCodeRemedy.keys()) {
+    check(
+      `${threadsPage}: ${code} without a code remedy is a row in the table`,
+      tableCodes.includes(code),
+      "no row"
+    )
+  }
+  for (const code of tableCodes) {
+    const message = threadRefusals.get(code)
+    if (message === undefined) {
+      check(`${threadsPage}: ${code} has a nish:err example`, false, "no fence refused with it")
+      continue
+    }
+    const clause = lastClause(message)
+    check(
+      `${threadsPage}: ${code} ends with the code to write`,
+      noCodeRemedy.has(code) || holdsCode(clause),
+      `last clause: ${clause}`
+    )
   }
 }
 
