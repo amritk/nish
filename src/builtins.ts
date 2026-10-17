@@ -22,6 +22,8 @@ import {
   isNetExport,
   isNetWrittenLetter,
   isUnsafeExport,
+  arithModule,
+  isArithExport,
   NET_STRING,
   NET_WORDS,
   netSignature,
@@ -158,6 +160,8 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "lstatOwnerModeSync" ||
     name === "geteuid" ||
     name === "isExecutableSync" ||
+    name === "mulHigh" ||
+    name === "mulLow" ||
     isNetExport(name) ||
     isUnsafeExport(name)
   )
@@ -363,6 +367,23 @@ const checkUncheckedAccess = (ctx: CheckContext, call: Node, scope: Scope, name:
  */
 const unsafeImportMessage = (name: string): string =>
   `\`${name}\` is a \`${unsafeModule()}\` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add \`import { ${name} } from "${unsafeModule()}"\``
+
+/**
+ * A `nish:arith` function called by its global name. It is declared in
+ * `runtime/nish.d.ts` beside the module, as every `nish:` export is, but the
+ * import is the only way in, so that the two names are not globals of every
+ * program.
+ */
+const arithImportMessage = (name: string): string =>
+  `\`${name}\` is a \`${arithModule()}\` function and is reached only through an import of that module: add \`import { ${name} } from "${arithModule()}"\``
+
+/**
+ * `mulHigh(a, b)` and `mulLow(a, b)`, from `nish:arith`: two `u64` operands
+ * and a `u64` answer, the high or the low half of their 128-bit product. A
+ * bare literal operand takes `u64`, as it does for `ctSelect`.
+ */
+const checkMulWide = (ctx: CheckContext, call: Node, scope: Scope, name: string, args: Node): i32 =>
+  checkOneWordType(ctx, call, scope, name, args, 2, T_U64, T_U64, "u64 operands (convert with toU64)")
 
 // ---- Namespace properties -----------------------------------------------------------
 
@@ -738,6 +759,9 @@ export const checkBuiltinFunction = (ctx: CheckContext, call: Node, scope: Scope
   if (isUnsafeExport(name)) {
     return ctx.errorType(call.children[0], unsafeImportMessage(name))
   }
+  if (isArithExport(name)) {
+    return ctx.errorType(call.children[0], arithImportMessage(name))
+  }
   return checkBuiltinFunctionNamed(ctx, call, scope, name)
 }
 
@@ -784,6 +808,9 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     return name === "uncheckedGet" || name === "uncheckedSet"
       ? checkUncheckedAccess(ctx, call, scope, name, args)
       : checkWrapping(ctx, call, scope, name, args)
+  }
+  if (isArithExport(name)) {
+    return checkMulWide(ctx, call, scope, name, args)
   }
   if (name === "parseInt" || name === "parseFloat") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {

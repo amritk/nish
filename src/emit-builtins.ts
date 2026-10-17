@@ -33,6 +33,7 @@ import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
 import {
+  isArithExport,
   isNetExport,
   isUnsafeExport,
   NET_INT,
@@ -48,6 +49,7 @@ import { CheckedProgram, FunctionSig } from "./program"
 import { rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
+import { isWasmBuild } from "./visibility"
 import {
   intBits,
   isFloat,
@@ -292,6 +294,66 @@ const emitCtSelect = (emitter: Emitter, expr: Node): string => {
   const inverse = emitter.fn.emitValue(`xor ${ty} ${hidden}, -1`)
   const fromB = emitter.fn.emitValue(`and ${ty} ${b}, ${inverse}`)
   return emitter.fn.emitValue(`or ${ty} ${fromA}, ${fromB}`)
+}
+
+/**
+ * `mulHigh(a, b)` and `mulLow(a, b)` from `nish:arith`: the high and the low
+ * half of the 128-bit product of two `u64`s. The low half is `mul i64`, which
+ * wraps, as `a * b` on `u64` does.
+ *
+ * The high half is `mul i128` of the zero-extended operands, shifted down: one
+ * `mulq` on x86-64 and one `umulh` on aarch64. A 32-bit target has no such
+ * instruction, and LLVM lowers the `i128` multiply there to a `__multi3` call,
+ * which the freestanding wasm link (`-nostdlib`) does not have. So a wasm build
+ * gets the schoolbook product of the 32-bit halves instead (`emitMulHighHalves`),
+ * and IR compiled for the host carries both, chosen by the width of a pointer:
+ * the choice is a constant once the target's data layout is known, so `opt`
+ * keeps the `i128` arm on a 64-bit target and the halves on wasm32, which is how
+ * `scripts/build.sh --profile wasm` links host IR without a `__multi3`. Both
+ * arms are straight-line arithmetic on the operands, with no branch or table
+ * lookup, so neither depends on the values for its time.
+ */
+const emitMulWide = (emitter: Emitter, expr: Node, name: string): string => {
+  const args = expr.children[1].children
+  const a = emitter.emitExpression(args[0])
+  const b = emitter.emitExpression(args[1])
+  if (name === "mulLow") {
+    return emitter.fn.emitValue(`mul i64 ${a}, ${b}`)
+  }
+  const halves = emitMulHighHalves(emitter, a, b)
+  if (isWasmBuild(emitter.opts)) {
+    return halves
+  }
+  const wideA = emitter.fn.emitValue(`zext i64 ${a} to i128`)
+  const wideB = emitter.fn.emitValue(`zext i64 ${b} to i128`)
+  const product = emitter.fn.emitValue(`mul i128 ${wideA}, ${wideB}`)
+  const shifted = emitter.fn.emitValue(`lshr i128 ${product}, 64`)
+  const wide = emitter.fn.emitValue(`trunc i128 ${shifted} to i64`)
+  const word = emitter.fn.emitValue(`icmp eq i64 ptrtoint (i8** getelementptr (i8*, i8** null, i32 1) to i64), 8`)
+  return emitter.fn.emitValue(`select i1 ${word}, i64 ${wide}, i64 ${halves}`)
+}
+
+/**
+ * The high 64 bits of `a * b` from four 32×32→64 products. Neither sum can
+ * carry out of 64 bits: `(2^32 - 1)^2 + 2 * (2^32 - 1)` is `2^64 - 1`.
+ */
+const emitMulHighHalves = (emitter: Emitter, a: string, b: string): string => {
+  const aLo = emitter.fn.emitValue(`and i64 ${a}, 4294967295`)
+  const aHi = emitter.fn.emitValue(`lshr i64 ${a}, 32`)
+  const bLo = emitter.fn.emitValue(`and i64 ${b}, 4294967295`)
+  const bHi = emitter.fn.emitValue(`lshr i64 ${b}, 32`)
+  const ll = emitter.fn.emitValue(`mul i64 ${aLo}, ${bLo}`)
+  const lh = emitter.fn.emitValue(`mul i64 ${aLo}, ${bHi}`)
+  const hl = emitter.fn.emitValue(`mul i64 ${aHi}, ${bLo}`)
+  const hh = emitter.fn.emitValue(`mul i64 ${aHi}, ${bHi}`)
+  const carry = emitter.fn.emitValue(`lshr i64 ${ll}, 32`)
+  const mid = emitter.fn.emitValue(`add i64 ${hl}, ${carry}`)
+  const midLo = emitter.fn.emitValue(`and i64 ${mid}, 4294967295`)
+  const midHi = emitter.fn.emitValue(`lshr i64 ${mid}, 32`)
+  const cross = emitter.fn.emitValue(`add i64 ${midLo}, ${lh}`)
+  const crossHi = emitter.fn.emitValue(`lshr i64 ${cross}, 32`)
+  const top = emitter.fn.emitValue(`add i64 ${hh}, ${midHi}`)
+  return emitter.fn.emitValue(`add i64 ${top}, ${crossHi}`)
 }
 
 /**
@@ -677,6 +739,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "ctEq") {
     return emitCtEq(emitter, expr)
   }
+  if (isArithExport(name)) {
+    return emitMulWide(emitter, expr, name)
+  }
   // `nish:unsafe`: an element access with no bounds check, and `+ - *` with no
   // `nsw`. Neither calls anything.
   if (name === "uncheckedGet" || name === "uncheckedSet") {
@@ -1038,6 +1103,10 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   if (isUnsafeExport(name)) {
+    return out
+  }
+  // `nish:arith`: integer instructions, with nothing to call on any target.
+  if (isArithExport(name)) {
     return out
   }
   return out

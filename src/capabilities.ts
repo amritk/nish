@@ -171,6 +171,8 @@ export const builtinCapability = (name: string): i32 => {
     name === "bitsToF64" ||
     name === "ctSelect" ||
     name === "ctEq" ||
+    name === "mulHigh" ||
+    name === "mulLow" ||
     name === "secureZero" ||
     name === "parseInt" ||
     name === "parseFloat" ||
