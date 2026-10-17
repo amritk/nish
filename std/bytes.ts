@@ -20,13 +20,13 @@
  * has no bit cast for one.
  *
  * Each access is an ordinary index, so an offset whose bytes do not all lie in
- * the array panics `index`, naming the first byte that does not, and a writer
- * that panics has written the bytes before it. A guard in the caller does not
- * yet remove these checks: in a loop guarded by `off + 3 < b.length`, the
- * checker proves an index it can see but not one inside a call, and after
- * `getU32LE` inlines, LLVM keeps the checks on `off + 1` to `off + 3`, because
- * the guard compares the length truncated to `i32` and the checks compare it
- * unsigned at 64 bits. A loop that needs them gone indexes the bytes itself.
+ * the array panics `index`, naming the first byte that does not. A guard in
+ * the caller does not yet remove these checks: in a loop guarded by
+ * `off + 3 < b.length`, the checker proves an index it can see but not one
+ * inside a call, and after `getU32LE` inlines, LLVM keeps the checks on
+ * `off + 1` to `off + 3`, because the guard compares the length truncated to
+ * `i32` and the checks compare it unsigned at 64 bits. A loop that needs them
+ * gone indexes the bytes itself.
  *
  * The in-range answers are byte for byte those of the copies `std/` keeps for
  * itself: `sha256LoadWord` (`std/crypto/sha256.ts`) for `getU32BE`,
@@ -38,15 +38,16 @@
  * TLS word helpers read zero past the end and drop bytes written there, which
  * their callers rely on, where this module panics.
  *
- * Under Node (`docs/RUN_UNDER_NODE.md`) the `u16` and `u32` functions answer
- * as they do natively, because the top byte of a `u32` is multiplied in
- * rather than shifted and each byte written is masked before its `toU8`:
- * there `<<` turns bit 31 into a sign and the prelude's `toU8` and `toU32`
- * saturate, and natively the multiply and the mask fold into the shift and
- * the truncation. The others do not yet answer there: the `i32` functions
- * cross between signed and unsigned with `toI32` and `toU32`, which the
- * prelude saturates too (`setI32LE(b, 0, -2)` writes zeros), and the 64-bit
- * functions and `f64` meet its BigInt `u64` and `i64`, which `toU8` refuses.
+ * Under Node (`docs/RUN_UNDER_NODE.md`) the `u16` and `u32` functions are
+ * expected to answer as they do natively, because the top byte of a `u32` is
+ * multiplied in rather than shifted and each byte written is masked before
+ * its `toU8`: there `<<` turns bit 31 into a sign and the prelude's `toU8`
+ * and `toU32` saturate, and natively the multiply and the mask fold into the
+ * shift and the truncation. The others do not yet answer there: the `i32`
+ * functions cross between signed and unsigned with `toI32` and `toU32`, which
+ * the prelude saturates too (`setI32LE(b, 0, -2)` writes zeros), and the
+ * 64-bit functions and `f64` meet its BigInt `u64` and `i64`, which `toU8`
+ * refuses.
  */
 
 /** The `u16` whose low byte is `b[off]` and high byte `b[off + 1]`. */

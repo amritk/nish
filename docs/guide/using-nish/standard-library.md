@@ -723,13 +723,13 @@ export const main = (): i32 => {
 
 Every access is an ordinary index. An offset whose bytes do not all lie in the
 array panics with `index out of range`, naming the first byte that is not
-there, and a write that panics has already written the bytes before that one.
-A guard in your own loop, such as `off + 3 < b.length`, does not yet remove
-these checks, so a hot loop that needs them gone indexes the bytes itself.
+there. A guard in your own loop, such as `off + 3 < b.length`, does not yet
+remove these checks, so a hot loop that needs them gone indexes the bytes
+itself.
 
 Natively every function answers for every value. Under Node the `u16` and
-`u32` functions answer the same, but the 64-bit ones, the `i32` ones and `f64`
-do not yet: the Node prelude's conversions saturate where native ones wrap.
+`u32` functions are expected to answer the same, but the 64-bit ones, the
+`i32` ones and `f64` do not yet: the Node prelude's conversions saturate where native ones wrap.
 
 ## `nish/threads`
 
