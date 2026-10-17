@@ -1,0 +1,1 @@
+Union variants `Circle` and `Ball` both have the tag `Kind.Circle`, so it cannot tell them apart

@@ -788,33 +788,58 @@ export const http1Checks = (): i32 => {
   const names: u8[][] = [bytesOf("Content-Type")];
   const values: u8[][] = [bytesOf("text/plain")];
   const at: i32 = 7;
-  const headEnd: i32 = http1WriteResponseHead(out, at, ok, "OK", names, values, five, "close");
+  const noDate: u8[] = [];
+  const headEnd: i32 = http1WriteResponseHead(out, at, ok, "OK", names, values, five, "close", noDate);
   t.eqStr(
     "http1WriteResponseHead writes the head at its offset, with the Connection field last",
     headEnd < 0 ? "refused" : textOf(out, at, headEnd - at),
     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\nConnection: close\r\n\r\n"
   );
   const none: u8[][] = [];
-  const chunkedEnd: i32 = http1WriteResponseHead(out, zero, ok, "OK", none, none, HTTP1_CHUNKED, "");
+  const chunkedEnd: i32 = http1WriteResponseHead(out, zero, ok, "OK", none, none, HTTP1_CHUNKED, "", noDate);
   t.eqStr("and a chunked head with no Connection field", textOf(out, zero, chunkedEnd), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
   const exact: u8[] = new Array<u8>(headEnd - at);
-  t.eqI32("a buffer exactly the head's size holds it", http1WriteResponseHead(exact, zero, ok, "OK", names, values, five, "close"), headEnd - at);
+  t.eqI32("a buffer exactly the head's size holds it", http1WriteResponseHead(exact, zero, ok, "OK", names, values, five, "close", noDate), headEnd - at);
   const short: u8[] = new Array<u8>(headEnd - at - 1);
   short.fill(toU8(120));
   t.ok(
     "one byte short is HTTP1_NO_ROOM, and nothing is written",
-    http1WriteResponseHead(short, zero, ok, "OK", names, values, five, "close") === HTTP1_NO_ROOM && short[0] === toU8(120)
+    http1WriteResponseHead(short, zero, ok, "OK", names, values, five, "close", noDate) === HTTP1_NO_ROOM && short[0] === toU8(120)
   );
-  t.eqI32("an offset past the buffer is HTTP1_NO_ROOM", http1WriteResponseHead(out, toI32(201), ok, "OK", none, none, zero, ""), HTTP1_NO_ROOM);
-  t.eqI32("refused: a Connection field beside the server's", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("connection")], [bytesOf("x")], zero, "close"), HTTP1_REFUSED);
-  t.eqI32("refused: a CR in the connection value", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "close\r\nX: y"), HTTP1_REFUSED);
-  t.eqI32("refused: a LF in a value's octets", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [bytesOf("b\nc")], zero, ""), HTTP1_REFUSED);
-  t.eqI32("refused: a name that is not a token", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a b")], [bytesOf("c")], zero, ""), HTTP1_REFUSED);
-  t.eqI32("refused: the caller's Transfer-Encoding", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("Transfer-Encoding")], [bytesOf("gzip")], zero, ""), HTTP1_REFUSED);
-  t.eqI32("refused: names and values of different lengths", http1WriteResponseHead(out, zero, ok, "OK", names, none, zero, ""), HTTP1_REFUSED);
-  t.eqI32("refused: status 600", http1WriteResponseHead(out, zero, s600, "OK", none, none, zero, ""), HTTP1_REFUSED);
-  t.eqI32("refused: 204 with a length", http1WriteResponseHead(out, zero, noContent, "No Content", none, none, zero, ""), HTTP1_REFUSED);
-  t.eqI32("refused: a reason with a LF", http1WriteResponseHead(out, zero, ok, "O\nK", none, none, zero, ""), HTTP1_REFUSED);
+  t.eqI32("an offset past the buffer is HTTP1_NO_ROOM", http1WriteResponseHead(out, toI32(201), ok, "OK", none, none, zero, "", noDate), HTTP1_NO_ROOM);
+  t.eqI32("refused: a Connection field beside the server's", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("connection")], [bytesOf("x")], zero, "close", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: a CR in the connection value", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "close\r\nX: y", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: a LF in a value's octets", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a")], [bytesOf("b\nc")], zero, "", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: a name that is not a token", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("a b")], [bytesOf("c")], zero, "", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: the caller's Transfer-Encoding", http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("Transfer-Encoding")], [bytesOf("gzip")], zero, "", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: names and values of different lengths", http1WriteResponseHead(out, zero, ok, "OK", names, none, zero, "", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: status 600", http1WriteResponseHead(out, zero, s600, "OK", none, none, zero, "", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: 204 with a length", http1WriteResponseHead(out, zero, noContent, "No Content", none, none, zero, "", noDate), HTTP1_REFUSED);
+  t.eqI32("refused: a reason with a LF", http1WriteResponseHead(out, zero, ok, "O\nK", none, none, zero, "", noDate), HTTP1_REFUSED);
+
+  const date: u8[] = bytesOf("Fri, 16 Oct 2026 08:11:54 GMT");
+  const datedEnd: i32 = http1WriteResponseHead(out, zero, ok, "OK", names, values, five, "close", date);
+  t.eqStr(
+    "a date goes on a final response after the caller's fields and before the framing",
+    datedEnd < 0 ? "refused" : textOf(out, zero, datedEnd),
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nDate: Fri, 16 Oct 2026 08:11:54 GMT\r\nContent-Length: 5\r\nConnection: close\r\n\r\n"
+  );
+  const dateLine: i32 = 37;
+  t.eqI32("and costs the head 37 bytes", datedEnd - (headEnd - at), dateLine);
+  const informational: i32 = 103;
+  const earlyEnd: i32 = http1WriteResponseHead(out, zero, informational, "Early Hints", none, none, HTTP1_NO_BODY, "", date);
+  t.eqStr("a 1xx carries no date", textOf(out, zero, earlyEnd), "HTTP/1.1 103 Early Hints\r\n\r\n");
+  const ownLower: i32 = http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("date")], [bytesOf("x")], zero, "", date);
+  t.eqStr("the program's own date field replaces the writer's", textOf(out, zero, ownLower), "HTTP/1.1 200 OK\r\ndate: x\r\nContent-Length: 0\r\n\r\n");
+  const ownMixed: i32 = http1WriteResponseHead(out, zero, ok, "OK", [bytesOf("dAtE")], [bytesOf("y")], zero, "", date);
+  t.eqStr("in any case", textOf(out, zero, ownMixed), "HTTP/1.1 200 OK\r\ndAtE: y\r\nContent-Length: 0\r\n\r\n");
+  const dated: u8[] = new Array<u8>(datedEnd - dateLine);
+  t.eqI32("a head that fits exactly without its date is HTTP1_NO_ROOM with it", http1WriteResponseHead(dated, zero, ok, "OK", names, values, five, "close", date), HTTP1_NO_ROOM);
+  const datedExact: u8[] = new Array<u8>(datedEnd);
+  t.eqI32("and fits a buffer exactly its size", http1WriteResponseHead(datedExact, zero, ok, "OK", names, values, five, "close", date), datedEnd);
+  t.eqI32("refused: a date that is not field text", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "", bytesOf("a\r\nX: y")), HTTP1_REFUSED);
+  const badEarlyEnd: i32 = http1WriteResponseHead(out, zero, informational, "Early Hints", none, none, HTTP1_NO_BODY, "", bytesOf("a\r\nX: y"));
+  t.eqStr("but not on a 1xx, which sends no date", badEarlyEnd < 0 ? "refused" : textOf(out, zero, badEarlyEnd), "HTTP/1.1 103 Early Hints\r\n\r\n");
 
   const chunkEnd: i32 = http1WriteChunk(out, toI32(3), digits, one, seventeen);
   t.eqStr("http1WriteChunk writes the chunk at its offset", textOf(out, toI32(3), chunkEnd - 3), "11\r\n123456789abcdefgh\r\n");
