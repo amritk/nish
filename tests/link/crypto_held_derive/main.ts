@@ -101,7 +101,7 @@ const sealed = (p: TlsRecordProtection): string => {
   const out: u8[] = new Array<u8>(64);
   const n: i32 = p.seal(TLS_CONTENT_APPLICATION_DATA, data, 0, toI32(data.length), 0, out, 0);
   const record: u8[] = new Array<u8>(n);
-  for (let k: i32 = 0; k < n; k++) {
+  for (let k: i32 = 0; k < toI32(record.length) && k < toI32(out.length); k++) {
     record[k] = out[k];
   }
   return toHex(record);

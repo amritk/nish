@@ -532,7 +532,7 @@ const tlsHeldCopy = (held: u8[], from: u8[]): void => {
 /** `transcriptHash[hashOff .. hashOff + hashLength)` in a fresh array: the context a held form hands HKDF. */
 const tlsHeldWindow = (hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] => {
   const window: u8[] = new Array<u8>(hashLength)
-  for (let k: i32 = 0; k < hashLength; k++) {
+  for (let k: i32 = 0; k < toI32(window.length); k++) {
     window[k] = transcriptHash[hashOff + k]
   }
   return window

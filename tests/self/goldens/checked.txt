@@ -71868,7 +71868,7 @@ function tlsHeldCopy(held: u8[], from: u8[]): void -> @nish.tlsHeldCopy
   stackSites=0 stackLocals=0
   local 527:12 k: i32 (let)
 function tlsHeldWindow(hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] -> @nish.tlsHeldWindow
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hashLength
   calls: nish_panic nish_panic_index nish_panic_overflow
   pointer transcriptHash: size=0 writesThrough=false captured=false
@@ -106419,7 +106419,7 @@ function tlsHeldCopy(held: u8[], from: u8[]): void -> @nish.tlsHeldCopy
   stackSites=0 stackLocals=0
   local 527:12 k: i32 (let)
 function tlsHeldWindow(hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[] -> @nish.tlsHeldWindow
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hashLength
   calls: nish_panic nish_panic_index nish_panic_overflow
   pointer transcriptHash: size=0 writesThrough=false captured=false
