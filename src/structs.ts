@@ -15,7 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
-import { secretFieldMessage } from "./secret"
+import { admitsSecretField, checkHolderReleaser, secretFieldMessage } from "./secret"
 import {
   DISPOSE_METHOD,
   disposeElsewhereMessage,
@@ -541,8 +541,12 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return
   }
-  // `nish:secret`: a field outlives the function that made the secret.
-  if (ctx.table.holdsSecret(type)) {
+  // `nish:secret`: a field outlives the function that made the secret, unless
+  // it is a holder's `readonly` field, which its `wipe()` ends (`secret.ts`).
+  if (
+    ctx.table.holdsSecret(type) &&
+    !admitsSecretField(ctx, owner, type, (decl.flags & FLAG_READONLY) !== 0)
+  ) {
     ctx.error(decl.children[1], secretFieldMessage(name))
     return
   }
@@ -846,6 +850,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
         collectConstructor(ctx, info, member)
       }
     }
+    checkHolderReleaser(ctx, info)
   } else {
     for (const member of decl.children[1].children) {
       if (member.kind === N_FIELD) {

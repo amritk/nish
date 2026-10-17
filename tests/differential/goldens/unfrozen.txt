@@ -377,6 +377,9 @@ cases/rng_entry_range_panic added after R6: no rewriter to freeze it with
 cases/rng_generic added after R6: no rewriter to freeze it with
 cases/rng_param added after R6: no rewriter to freeze it with
 cases/rng_widen added after R6: no rewriter to freeze it with
+cases/secret_field added after R6: no rewriter to freeze it with
+cases/secret_field_wipe_o2 added after R6: no rewriter to freeze it with
+cases/secret_field_wipe_o2_plain added after R6: no rewriter to freeze it with
 cases/secret_flow added after R6: no rewriter to freeze it with
 cases/secret_wipe added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2 added after R6: no rewriter to freeze it with

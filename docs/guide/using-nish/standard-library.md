@@ -761,6 +761,70 @@ export const main = (): i32 => {
 
 The rules are in [Secrets](../../LANGUAGE.md#secrets-nishsecret).
 
+### Keeping a key in an object
+
+A key that lives as long as a connection or a session can be a field. The
+field is `readonly` and exactly `Secret<T>`, the class is not generic, and the
+class has a `wipe(): void` that calls `wipe(this.field)` for every such field
+on every path: the checker reads that method, and a field it can leave
+unwiped is a compile error.
+
+```ts nish:ok
+import { Secret, expose, secret, wipe } from "nish:secret";
+
+const count = (k: u8[]): i32 => toI32(k.length);
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32)); // set once, from `secret(...)`
+  }
+  size(): i32 {
+    return expose(this.key, count); // lent to `expose`, not copied out
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  console.log(`${s.size()}-byte key`); // 32-byte key
+  s.wipe();
+  return 0;
+};
+```
+
+The field is set only in the constructor, only from `secret(...)`, and only
+once. It may be read only to lend it: as an argument of a call or of `new`, or
+as an operand of `===` or `!==`. Copying it into a local, returning it, or
+storing it anywhere else is refused:
+
+```ts nish:err NL2526
+import { Secret, secret, wipe } from "nish:secret";
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32));
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  const k = s.key; // a second name for the key, outside the holder
+  s.wipe();
+  return 0;
+};
+```
+
+Calling `wipe()` is the program's job: the compiler checks that the method
+wipes every field, not that something calls it. The rules are in
+[A `Secret` field](../../LANGUAGE.md#a-secret-field).
+
 ## `nish/crypto`
 
 One module per primitive, each imported by its own name, each written in Nish

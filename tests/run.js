@@ -6574,6 +6574,18 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       wiped.ok && plain.ok && (volatileZeros === 8 || volatileMemset) && plainStores === 0,
       `wiped: ${volatileZeros} volatile zero stores, volatile memset ${volatileMemset}\n${wiped.text}\n--- plain: ${plainStores} stores\n${plain.text}`
     )
+    // A holder's key lives in the arena, which `opt` cannot see freed, so the
+    // twin's `fill(0)` is not deleted here: what the pair shows is that the
+    // holder's `wipe()` reaches `-O2` as a volatile memset, which no pass may
+    // drop, where the plain zeroing of the same bytes is an ordinary one.
+    const held = optimisedMain("secret_field_wipe_o2")
+    const heldPlain = optimisedMain("secret_field_wipe_o2_plain")
+    const volatileSet = /call void @llvm\.memset[^\n]*, i1 true\)/
+    check(
+      "nish:secret: a holder's wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is an ordinary one",
+      held.ok && heldPlain.ok && volatileSet.test(held.text) && !volatileSet.test(heldPlain.text),
+      `held:\n${held.text}\n--- plain:\n${heldPlain.text}`
+    )
   }
 }
 

@@ -110,3 +110,106 @@ The checks in `tests/run.js` that hold the above:
 - `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
   for `docs/guide/using-nish/standard-library.md`: the alias refused with
   NL2512, and the copy accepted.
+
+## The field rule: a `Secret` held by a class
+
+NL2430 refused every `Secret` field. The field rule (#668) admits one shape,
+and this part of the record says what that shape is held to and how. Its rows
+name functions rather than lines: the rule is new code on `main` `461489b`, so
+no base line describes it.
+
+### Scope
+
+| File | What |
+| --- | --- |
+| `src/secret.ts` | `admitsSecretField` and `secretFieldOf` (the declaration), `checkHolderReleaser` (the releaser's signature), `SecretFlow.collectSlots`, `fieldRead`, `fieldStore` and `storedType` (the walk over a holder's constructor, its `wipe()` and every other body) |
+| `src/structs.ts` | where a field's type is admitted, and where `checkHolderReleaser` runs once a class's members are known |
+| `src/members.ts` | the object literal of a holder (NL2527) |
+
+### Threat model
+
+As above: the rule is a promise to the program's author, and the failure is a
+program that compiles while the key stays readable, or unwiped, where the
+language says it is not. A field adds two roads a local does not have: the
+holder outlives the function that made the key, and every method of the class
+can name the field.
+
+### Method
+
+- Listed each way in: a field declared on an interface, on a generic class,
+  without `readonly`, as `Secret<T> | null`, inside an array, a `Result` or
+  another `Secret`; a releaser missing, with a parameter or with another
+  return type; a `wipe()` that skips the field on one branch, in a loop, after
+  an early `return`, or by calling a helper; a constructor that sets the field
+  from a local, a parameter or a call, from an aliased array, twice, or in a
+  loop; a store from a method, from outside the class, by a compound
+  assignment, or through `this` handed out of the constructor; a read into a
+  local, a `let`, a return value, a ternary, a `??`, an optional chain, a
+  chained member, an index, a template, `console.log`, a condition and
+  `secret(h.k)`; the holder as an object literal, a JSON encode or decode
+  target, a data-parallel capture, a task's argument wiped in its scope, and a
+  `using` binding.
+- Wrote a program for each and compiled it with the branch's `build/nish`.
+
+### Properties verified
+
+- A `Secret` field is `readonly`, typed exactly `Secret<T>`, on a non-generic
+  class; any other declaration is NL2430, and a `Secret` inside an array, a
+  `Result` or another `Secret` is NL2429.
+- A class with such a field has `wipe(): void` with no parameters (NL2522),
+  and that method calls `wipe(this.f)` for every field on every path out of it
+  (NL2523): a branch, a loop body, an early `return` and a helper that wipes it
+  are each refused.
+- The field is set only in the constructor, only from `secret(...)` (NL2524),
+  and only once (NL2525); `secret(...)` there keeps the sole-reference rule
+  (NL2512). A store anywhere else is NL2181.
+- A read of the field is a loan: an argument of a call or of `new`, or an
+  operand of `===` or `!==`. Anything else is NL2526, and the existing rules
+  (NL2428, NL2431 to NL2436, NL2439) still refuse what they refused of a local.
+- A holder made by an object literal is NL2527, and JSON encode and decode of
+  one are NL2485.
+- The `wipe()` of a holder is the same volatile `llvm.memset` a local's is, and
+  it survives `opt -O2` where a plain `fill(0)` of the twin's field is an
+  ordinary one (on the arena, `opt` keeps both; the check pins the volatile
+  flag).
+- What the rule leaves out: nothing makes a program call `wipe()`, so a holder
+  that is never wiped leaves its key in memory, unzeroed; the rule does
+  not follow a second reference to the holder itself, which is a loan of the
+  whole object rather than of the key; and a key made per packet or per record
+  is a local, held to NL2448 and NL2450, not a field.
+
+### Tests
+
+- `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, for
+  `reject_secret_field`, `reject_secret_field_interface`,
+  `reject_secret_field_generic_class`, `reject_secret_field_not_readonly`,
+  `reject_secret_field_nullable`, `reject_secret_field_array`,
+  `reject_secret_field_array_literal`, `reject_secret_field_result`,
+  `reject_secret_field_holder_payload`, `reject_secret_field_no_wipe`,
+  `reject_secret_field_wipe_signature`, `reject_secret_field_wipe_missing`,
+  `reject_secret_field_wipe_branch`, `reject_secret_field_wipe_loop`,
+  `reject_secret_field_wipe_return`, `reject_secret_field_wipe_helper`,
+  `reject_secret_field_local`, `reject_secret_field_param`,
+  `reject_secret_field_call`, `reject_secret_field_alias_raw`,
+  `reject_secret_field_twice`, `reject_secret_field_ctor_loop`,
+  `reject_secret_field_store_method`, `reject_secret_field_store_outside`,
+  `reject_secret_field_compound`, `reject_secret_field_this_escape`,
+  `reject_secret_field_assign_local`, `reject_secret_field_bind`,
+  `reject_secret_field_return`, `reject_secret_field_ternary`,
+  `reject_secret_field_nullish`, `reject_secret_field_optional_chain`,
+  `reject_secret_field_chain`, `reject_secret_field_index`,
+  `reject_secret_field_member`, `reject_secret_field_template`,
+  `reject_secret_field_console`, `reject_secret_field_condition`,
+  `reject_secret_field_equality`, `reject_secret_field_secret_arg`,
+  `reject_secret_field_new_arg`, `reject_secret_field_object_literal`,
+  `reject_secret_field_json`, `reject_secret_field_json_decode`,
+  `reject_secret_field_capture`, `reject_secret_field_task_wipe` and
+  `reject_secret_field_using`: one road each.
+- `${name}: IR matches golden` and `${name}: native output matches .out`, for
+  `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.
+- `nish:secret: a holder's wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is an ordinary one`.
+- `codes: every registry code is provoked by a program, declared, or explained (${wordingsSummary})`:
+  NL2522 to NL2527 each have their `tests/wordings/` program.
+- `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
+  for `docs/AI.md` and `docs/guide/using-nish/standard-library.md`: a holder
+  accepted, and a field copied into a local refused with NL2526.
