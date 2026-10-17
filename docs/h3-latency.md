@@ -386,7 +386,14 @@ How these compare with the acceptance bounds:
 - **One connection's 4 kB p99** is 225 µs, against the base's 1.55 ms and
   nginx's 157 µs. That is 1.43× nginx, inside the 2× bound with the ±9.2 %
   noise band added.
-- **At c96** the server is 99 % busy.
+- **At c96** the server is 99 % busy at 4 kB and 98 % at 100 B.
+- **At c96, 100 B** the fix costs a little against the base: 32.9k req/s
+  against 33.5k (−1.8 %, band ±0.1 %), 29.70 µs of CPU per request against
+  29.07 (+2.2 %, band ±0.2 %), and a p50 of 1.90 ms against 1.76 (+8 %, band
+  ±3.3 %). The p99, 3.78 ms against 3.96, is inside its ±7.0 % band. The
+  likely cause is the pacer's work per flight, which a small response pays
+  on every request. Acceptance criterion 3 bounds c96m10, below, not this
+  row.
 - **At c96m10** the throughput and the CPU per request are within the noise
   band of the base, or better than it, at both sizes. The base's 4 kB
   c96m10 runs also end some requests with no status, more of them than
