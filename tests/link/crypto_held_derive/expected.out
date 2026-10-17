@@ -1,0 +1,63 @@
+PASS  hkdfExpandLabelSha256Held: RFC 9001 A.1 client_initial_secret
+PASS  and it is what hkdfExpandLabelSha256 answers
+PASS  the source is left as it was
+PASS  into its own source: RFC 9001 A.1 server_initial_secret
+PASS  a 16-byte destination: RFC 9001 A.1 client key
+PASS  hkdfExpandLabelSha384Held is hkdfExpandLabelSha384
+PASS  and into its own source
+PASS  hkdfExpandLabelHeldInto at out[3] is hkdfExpandLabelInto there
+PASS  and leaves the bytes either side of its window zero
+PASS  and under SHA-384, 48 bytes at out[3]
+PASS  which are hkdfExpandLabelSha384's
+PASS  tlsHandshakeSecretHeld: RFC 8448 extract secret "handshake"
+PASS  and into its own early secret
+PASS  tlsDeriveSecretHeld: RFC 8448 "tls13 s hs traffic"
+PASS  and it is what tlsDeriveSecretInto writes
+PASS  tlsMasterSecretHeld: RFC 8448 extract secret "master"
+PASS  and it is what tlsMasterSecretInto writes
+PASS  and into its own handshake secret
+PASS  tlsFinishedVerifyDataHeld is tlsFinishedVerifyDataInto
+PASS  tlsTrafficKeysFromHeld derives for AES-128-GCM
+PASS  RFC 8448 server handshake key
+PASS  RFC 8448 server handshake iv
+PASS  and they are what tlsTrafficKeysInto writes
+PASS  it refuses a key of the wrong length, writing nothing
+PASS  and a secret that is not its hash's length
+PASS  tlsDeriveSecretHeld under SHA-384 is tlsDeriveSecretInto
+PASS  tlsMasterSecretHeld under SHA-384 is tlsMasterSecretInto
+PASS  tlsFinishedVerifyDataHeld under SHA-384 is tlsFinishedVerifyDataInto
+PASS  tlsTrafficKeysFromHeld under AES-256-GCM-SHA384 is tlsTrafficKeysInto
+PASS  installHeld installs AES-128-GCM
+PASS  RFC 8448 server application key
+PASS  RFC 8448 server application iv
+PASS  and its record is install's, byte for byte
+PASS  advanceHeld moves to the next key
+PASS  the held secret is ratcheted in place to advance's next secret
+PASS  the keys are advance's
+PASS  and so is the record
+PASS  installHeld refuses a secret that is not its hash's length
+PASS  leaving the direction cleartext
+PASS  advanceHeld refuses on a cleartext direction
+PASS  installHeld under ChaCha20-Poly1305 seals what install seals
+PASS  and under AES-256-GCM-SHA384
+PASS  advanceHeld under SHA-384 ratchets as advance does
+PASS  and seals as it does
+PASS  advanceHeld refuses a secret that is not its suite's hash length
+PASS  and leaves that secret as it was
+PASS  installHeld refuses a suite it does not know
+PASS  leaving the direction cleartext
+PASS  quicKeysHeldInto: RFC 9001 A.1 client key, iv and hp
+PASS  and they are quicKeysInto's
+PASS  quicKeysHeldInto: RFC 9001 A.5 key, iv and hp
+PASS  and they are quicKeysInto's
+PASS  quicKeyUpdateSecretHeldInto derives
+PASS  RFC 9001 A.5 ku
+PASS  and it is quicKeyUpdateSecretInto's
+PASS  into its own source, a ratchet in place
+PASS  gives the same next secret
+PASS  quicKeysHeldInto under AES-256-GCM is quicKeysInto
+PASS  quicKeyUpdateSecretHeldInto under SHA-384 is quicKeyUpdateSecretInto
+PASS  quicKeysHeldInto refuses a secret that is not its hash's length
+PASS  quicKeyUpdateSecretHeldInto refuses lengths that differ
+PASS  and a length that is no hash's
+crypto held derive: 62 passed, 0 failed, 0 skipped
