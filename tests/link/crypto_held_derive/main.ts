@@ -120,7 +120,6 @@ const placed = (bytes: u8[], at: i32): u8[] => {
   return out;
 };
 
-/** Whether two key sets carry the same suite, key, IV and header-protection key. */
 /** Whether two expanded AES keys hold the same schedule and H, or are both absent. */
 const sameAes = (got: AesKey | null, want: AesKey | null): boolean => {
   if (got === null || want === null) {
