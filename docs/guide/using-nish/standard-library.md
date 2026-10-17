@@ -30,6 +30,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
+| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -686,6 +687,49 @@ A generator is an ordinary object you step, so a task or a parallel body that
 makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
 in the reference.
+
+## `nish/bytes`
+
+A file header, a network packet or a hash's input is a `u8[]` with numbers
+laid out in it. `nish/bytes` reads one from, or writes one into, the array at
+an offset, in either byte order: `LE` (little-endian) puts the least
+significant byte at the offset, `BE` (big-endian, network order) the most
+significant.
+
+| Width | Read | Write |
+| --- | --- | --- |
+| `u16` | `getU16LE`, `getU16BE` | `setU16LE`, `setU16BE` |
+| `u32` | `getU32LE`, `getU32BE` | `setU32LE`, `setU32BE` |
+| `u64` | `getU64LE`, `getU64BE` | `setU64LE`, `setU64BE` |
+| `i32` | `getI32LE`, `getI32BE` | `setI32LE`, `setI32BE` |
+| `i64` | `getI64LE`, `getI64BE` | `setI64LE`, `setI64BE` |
+| `f64` | `getF64LE`, `getF64BE` | `setF64LE`, `setF64BE` |
+
+A signed width is the same bytes read as two's complement, and an `f64` is
+its IEEE 754 bits. There is no `f32`.
+
+```ts nish:ok
+import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
+
+export const main = (): i32 => {
+  const b: u8[] = [0, 0, 1, 0, 0, 0, 0, 0];
+  console.log(`${getU32BE(b, 0)}`); // 256
+  setU32LE(b, 4, toU32(513));
+  console.log(`${b[4]} ${b[5]}`); // 1 2
+  console.log(`${getU16LE(b, 4)}`); // 513
+  return 0;
+};
+```
+
+Every access is an ordinary index. An offset whose bytes do not all lie in the
+array panics with `index out of range`, naming the first byte that is not
+there, and a write that panics has already written the bytes before that one.
+A guard in your own loop, such as `off + 3 < b.length`, does not yet remove
+these checks, so a hot loop that needs them gone indexes the bytes itself.
+
+Natively every function answers for every value. Under Node the `u16` and
+`u32` functions answer the same, but the 64-bit ones, the `i32` ones and `f64`
+do not yet: the Node prelude's conversions saturate where native ones wrap.
 
 ## `nish/threads`
 
