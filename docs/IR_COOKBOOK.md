@@ -9782,6 +9782,150 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end decl-ffi-string-result -->
 
+### `readCString`: a string out of a buffer C owns
+
+A string C allocated for the caller to free (`realpath` with no buffer,
+`strdup`) cannot be a `string` result, because the copy would leave C's buffer
+with no one to free it. It is declared `CPtr | null`, narrowed, and copied with
+`readCString` from `nish:unsafe` (WP27 S3.3), and the program passes the
+pointer back to `free` itself. The copy is the same `@nish.ffi.str` helper a
+`string` result calls — a byte loop to the NUL, then `nish_str_new` — so
+`readCString` adds no runtime function: `runtime.c` has no room under its
+ceiling, and the helper was already in the module's reach. Here it is
+`%7 = call i8* @nish.ffi.str(i8* %6)`, with no `NULL` test, because the
+parameter is a `CPtr` and the `if (p === null)` above it is what proved it.
+
+`readCString` is a fresh allocation of the calling function, so the escape
+analysis keeps `out` past `free(p)` and returns it. The literal `null` handed
+to `realpath`'s `CPtr | null` parameter is `i8* null`; a nullable pointer held
+in a variable is refused at the call instead
+(`reject_ffi_pointer_nullable_variable`), so every `NULL` C sees is spelt in
+the source (`tests/cases/ffi_owned_string`).
+
+<!-- cookbook:begin decl-ffi-owned-string -->
+```ts
+import { readCString } from "nish:unsafe"
+
+declare function realpath(path: string, resolved: CPtr | null): CPtr | null
+declare function free(p: CPtr): void
+
+const resolve = (path: string): string => {
+  const p = realpath(path, null)
+  if (p === null) {
+    return ""
+  }
+  const out = readCString(p)
+  free(p)
+  return out
+}
+
+export const main = (): i32 => (resolve("/").length === 1 ? 0 : 1)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [92 x i8] } { i64 91, [92 x i8] c"`realpath`: argument 1 (path) holds a NUL byte, which C would read as the end of the string\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"/\00" }, align 8
+
+declare i8* @realpath(i8*, i8*)
+declare void @free(i8*)
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
+declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+
+define private i8* @nish.ffi.str(i8* %p) {
+entry:
+  br label %scan
+
+scan:
+  %n = phi i64 [ 0, %entry ], [ %next, %scan ]
+  %at = getelementptr inbounds i8, i8* %p, i64 %n
+  %byte = load i8, i8* %at, align 1
+  %next = add i64 %n, 1
+  %end = icmp eq i8 %byte, 0
+  br i1 %end, label %copy, label %scan
+
+copy:
+  %s = call i8* @nish_str_new(i8* %p, i64 %n)
+  ret i8* %s
+}
+
+define internal noundef nonnull align 8 i8* @resolve(i8* noundef nonnull noalias readonly align 8 %path) #0 {
+entry:
+  %p.addr = alloca i8*, align 8
+  %out.addr = alloca i8*, align 8
+  %0 = call i64 @nish_str_index_of(i8* %path, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %1 = icmp sge i64 %0, 0
+  br i1 %1, label %ffi.nul, label %ffi.ok
+
+ffi.nul:
+  call void @nish_panic(i8* bitcast ({ i64, [92 x i8] }* @.str.1 to i8*))
+  unreachable
+
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %path, i64 8
+  %3 = call i8* @realpath(i8* %2, i8* null)
+  store i8* %3, i8** %p.addr, align 8
+  %4 = load i8*, i8** %p.addr, align 8
+  %5 = icmp eq i8* %4, null
+  br i1 %5, label %if.then, label %if.end
+
+if.then:
+  ret i8* bitcast ({ i64, [1 x i8] }* @.str.2 to i8*)
+
+if.end:
+  %6 = load i8*, i8** %p.addr, align 8
+  %7 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %7, i8** %out.addr, align 8
+  %8 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %8)
+  %9 = load i8*, i8** %out.addr, align 8
+  ret i8* %9
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i64 @nish_arena_mark()
+  %1 = call i8* @resolve(i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
+  %3 = bitcast i8* %2 to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = trunc i64 %4 to i32
+  %6 = icmp eq i32 %5, 1
+  br i1 %6, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %7 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %7
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn memory(argmem: read) }
+attributes #3 = { nounwind noreturn cold }
+```
+<!-- cookbook:end decl-ffi-owned-string -->
+
 ### Numeric `enum`
 
 An enum is a **distinct type with `i32` representation**, so the type system

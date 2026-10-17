@@ -227,7 +227,8 @@ compatible only when their types are identical.
 the site: `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of
 numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
-Calling one without the import is NL2456. `--unchecked-indexing` and
+The sixth export, `readCString`, copies a C string out of a `CPtr`
+([Calling C](#calling-c)). Calling one without the import is NL2456. `--unchecked-indexing` and
 `--wrapping` are deprecated (NL9014, NL9015) and reach only your own package,
 never a dependency or `nish/`. To migrate off `--unchecked-indexing`, run
 `nish --unchecked-indexing --fix` on your files: each index the flag leaves
@@ -1331,6 +1332,33 @@ export const main = (): i32 => {
   console.log(strerror(2));
   const home = getenv("HOME");
   console.log(home === null ? "unset" : "set");
+  return 0;
+};
+```
+
+- **A buffer C allocated is read with `readCString` from `nish:unsafe`, then
+  freed.** `readCString(p: CPtr): string` copies the NUL-terminated bytes at
+  `p` into a new string; a dangling or unterminated `p` is undefined
+  behaviour, which is why it needs the import. It takes a `CPtr`, so narrow a
+  `CPtr | null` with `!== null` first.
+- **A `CPtr | null` parameter takes the literal `null` or a narrowed pointer.**
+  `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
+  is NL2539, so C is never handed a `NULL` by accident.
+
+```ts nish:ok
+import { readCString } from "nish:unsafe";
+
+declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
+declare function free(p: CPtr): void;
+
+export const main = (): i32 => {
+  const p = realpath(".", null);
+  if (p === null) {
+    return 1;
+  }
+  const dir = readCString(p);
+  free(p);
+  console.log(dir.startsWith("/") ? "absolute" : "relative");
   return 0;
 };
 ```
