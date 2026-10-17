@@ -5087,7 +5087,8 @@ if (!only || "par_alloc".includes(only)) {
 //
 // And the frames that free a map's result: `par_map_reclaim`, whose helper
 // functions and `using` block give each map back, `mem_using_arena_map`,
-// whose blocks free a map of numbers and one of strings, and
+// whose blocks free a map of numbers and one of strings and fill an outer
+// array of numbers, and
 // `par_map_reclaim_escapes`, whose results are returned, stored into a field
 // and into an outer array, captured by a later task, answered as strings and
 // as `string[][]`, chosen by a ternary, pushed, put in a `Map` or a `Set`,
