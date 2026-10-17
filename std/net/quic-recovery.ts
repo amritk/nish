@@ -31,6 +31,17 @@
  * adjusted_rtt) / 8`, `rttvar = (3 × rttvar + |smoothed_rtt −
  * adjusted_rtt|) / 4`, each division truncating. Sizes are bytes.
  *
+ * **The pacer's clock.** Pacing is not a timer, and on a path whose round
+ * trip is under a millisecond a pacer that counts whole milliseconds earns
+ * nothing until the next one starts, and then waits a whole one. So a
+ * caller with a finer clock sets `micros` to the same instant in
+ * microseconds before it calls in, and the pacer, its budget and its own
+ * smoothed RTT (`pacerRtt`) count microseconds; loss detection and the
+ * probe timeout still count milliseconds, at least
+ * `QUIC_RECOVERY_GRANULARITY`. A `micros` outside the millisecond `now`
+ * names, a stale one or none, is not read: the pacer counts `now × 1000`
+ * then, and paces as a millisecond clock always did.
+ *
  * **What the server leaves out.** It is written for the server side of a
  * connection: there is no client anti-deadlock probe (§6.2.2.1), since a
  * server never has to send to unblock its peer, and nothing reads ECN
@@ -111,6 +122,16 @@ const QUIC_RECOVERY_ACKED: i32 = 2
 const QUIC_RECOVERY_LOST: i32 = 3
 const QUIC_RECOVERY_LOST_NOW: i32 = 4
 
+/** Microseconds in a millisecond: the pacer's clock against the caller's `now`. */
+const QUIC_RECOVERY_MICROS: i64 = 1000
+
+/**
+ * The most window the pacer earns by, in bytes: 4 GiB a round trip, faster
+ * than any path such a window could be on. It and the minute `pacerRefill`
+ * counts at most keep the product of the two inside an `i64`.
+ */
+const QUIC_RECOVERY_PACER_WINDOW: i64 = 4294967296
+
 /** The larger of two times or durations. */
 const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
 
@@ -125,6 +146,8 @@ const quicRecoveryMax = (a: i64, b: i64): i64 => (a > b ? a : b)
 export class QuicSentPackets {
   pn: i64[]
   timeSent: i64[]
+  /** When each packet was sent on the pacer's clock, in microseconds. */
+  fineSent: i64[]
   size: i32[]
   state: u8[]
   /** The slots the last `onAck` acknowledged, `ackedCount` of them, oldest first. */
@@ -153,6 +176,7 @@ export class QuicSentPackets {
     this.capacity = capacity
     this.pn = new Array<i64>(capacity)
     this.timeSent = new Array<i64>(capacity)
+    this.fineSent = new Array<i64>(capacity)
     this.size = new Array<i32>(capacity)
     this.state = new Array<u8>(capacity)
     this.acked = new Array<i32>(capacity)
@@ -187,6 +211,11 @@ export class QuicSentPackets {
   /** When the packet in slot `s` was sent, or -1. */
   timeAt(s: i32): i64 {
     return s >= 0 && s < toI32(this.timeSent.length) ? this.timeSent[s] : -1
+  }
+
+  /** When the packet in slot `s` was sent on the pacer's clock, in microseconds, or -1. */
+  fineAt(s: i32): i64 {
+    return s >= 0 && s < toI32(this.fineSent.length) ? this.fineSent[s] : -1
   }
 
   /** The size of the packet in slot `s`, or 0. */
@@ -313,9 +342,13 @@ export class QuicRecovery {
   ssthresh: i64 = 0
   /** congestion_recovery_start_time (B.2), or -1 outside recovery. */
   recoveryStart: i64 = -1
-  /** The pacer's credit in bytes (§7.7), and the time it was last topped up, or -1. */
+  /** The pacer's credit in bytes (§7.7), and the time it was last topped up in microseconds, or -1. */
   pacerBudget: i64 = 0
   pacerTime: i64 = -1
+  /** The smoothed RTT the pacer's rate is taken from, in microseconds: `smoothedRtt` on the pacer's clock. */
+  pacerRtt: i64 = 0
+  /** The caller's clock in microseconds, which it sets before each call when it keeps one, or -1. */
+  micros: i64 = -1
   /** pto_count (A.3): how many probe timeouts fired since the last acknowledgement. */
   ptoCount: i32 = 0
   /** The space the last `onTimeout` acted on, or -1. */
@@ -355,6 +388,8 @@ export class QuicRecovery {
     this.recoveryStart = -1
     this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
     this.pacerTime = -1
+    this.pacerRtt = QUIC_RECOVERY_INITIAL_RTT * QUIC_RECOVERY_MICROS
+    this.micros = -1
     this.ptoCount = 0
     this.timeoutSpace = -1
     this.congestionEvents = 0
@@ -400,11 +435,18 @@ export class QuicRecovery {
       return -1
     }
     const s: i32 = sp.slot(sp.count)
-    if (s < 0 || s >= toI32(sp.pn.length) || s >= toI32(sp.timeSent.length) || s >= toI32(sp.size.length)) {
+    if (
+      s < 0 ||
+      s >= toI32(sp.pn.length) ||
+      s >= toI32(sp.timeSent.length) ||
+      s >= toI32(sp.fineSent.length) ||
+      s >= toI32(sp.size.length)
+    ) {
       return -1
     }
     sp.pn[s] = pn
     sp.timeSent[s] = now
+    sp.fineSent[s] = this.fineNow(now)
     sp.size[s] = size
     sp.setState(s, QUIC_RECOVERY_SENT)
     sp.count = sp.count + 1
@@ -467,7 +509,10 @@ export class QuicRecovery {
       this.latestRtt = quicRecoveryMax(now - sp.timeAt(sampleAt), 0)
       // §5.3: the Initial space's ACKs are not delayed by the peer, so their delay is ignored.
       const none: i64 = 0
-      this.updateRtt(space === QUIC_RECOVERY_INITIAL ? none : quicRecoveryMax(ackDelay, none), now)
+      const delay: i64 = space === QUIC_RECOVERY_INITIAL ? none : quicRecoveryMax(ackDelay, none)
+      const first: boolean = this.firstSampleTime < 0
+      this.updateRtt(delay, now)
+      this.updatePacerRtt(this.fineSample(now, sp.fineAt(sampleAt)), delay, first)
     }
     this.detectLoss(sp, now)
     this.packetsLost(sp, now)
@@ -491,10 +536,7 @@ export class QuicRecovery {
     if (latest < this.minRtt) {
       this.minRtt = latest
     }
-    let delay: i64 = ackDelay
-    if (this.handshakeConfirmed && delay > this.maxAckDelay) {
-      delay = this.maxAckDelay
-    }
+    const delay: i64 = this.boundAckDelay(ackDelay)
     // The delay is taken off only where that leaves the sample at or above min_rtt.
     let adjusted: i64 = latest
     if (latest >= this.minRtt + delay) {
@@ -503,6 +545,52 @@ export class QuicRecovery {
     const gap: i64 = this.smoothedRtt > adjusted ? this.smoothedRtt - adjusted : adjusted - this.smoothedRtt
     this.rttVar = (3 * this.rttVar + gap) / 4
     this.smoothedRtt = (7 * this.smoothedRtt + adjusted) / 8
+  }
+
+  /** The peer's ACK delay in milliseconds as §5.3 counts it: at most max_ack_delay once the handshake is confirmed. */
+  boundAckDelay(ackDelay: i64): i64 {
+    return this.handshakeConfirmed && ackDelay > this.maxAckDelay ? this.maxAckDelay : ackDelay
+  }
+
+  /**
+   * `now` on the pacer's clock: `micros` when it falls inside the
+   * millisecond `now` names, and `now × 1000` otherwise.
+   */
+  fineNow(now: i64): i64 {
+    const coarse: i64 = now * QUIC_RECOVERY_MICROS
+    return this.micros >= coarse && this.micros < coarse + QUIC_RECOVERY_MICROS ? this.micros : coarse
+  }
+
+  /**
+   * The pacer's RTT sample, in microseconds, for a packet sent at `sent` on
+   * its clock: at least a microsecond on a fine clock, and at least
+   * `QUIC_RECOVERY_GRANULARITY` on a millisecond one, where a sample of 0
+   * says only that the round trip was under a millisecond.
+   */
+  fineSample(now: i64, sent: i64): i64 {
+    const at: i64 = this.fineNow(now)
+    const floor: i64 = at === this.micros ? 1 : QUIC_RECOVERY_GRANULARITY * QUIC_RECOVERY_MICROS
+    return quicRecoveryMax(at - sent, floor)
+  }
+
+  /**
+   * UpdateRtt (§5.3) for the pacer's RTT, in microseconds: `sample` the
+   * sample, `ackDelay` the peer's delay in milliseconds, `first` whether it
+   * is the connection's first. min_rtt is the millisecond one, at most the
+   * true minimum, so a delay is taken off a little more readily than
+   * `updateRtt` takes it.
+   */
+  updatePacerRtt(sample: i64, ackDelay: i64, first: boolean): void {
+    if (first) {
+      this.pacerRtt = sample
+      return
+    }
+    const delay: i64 = this.boundAckDelay(ackDelay) * QUIC_RECOVERY_MICROS
+    let adjusted: i64 = sample
+    if (sample >= this.minRtt * QUIC_RECOVERY_MICROS + delay) {
+      adjusted = sample - delay
+    }
+    this.pacerRtt = (7 * this.pacerRtt + adjusted) / 8
   }
 
   /** The loss delay (§6.1.2): 9/8 of the larger of the latest and the smoothed RTT, at least the granularity. */
@@ -800,34 +888,43 @@ export class QuicRecovery {
     this.ptoCount = 0
   }
 
+  /** The congestion window the pacer earns by: at most `QUIC_RECOVERY_PACER_WINDOW`. */
+  pacerWindow(): i64 {
+    return this.congestionWindow < QUIC_RECOVERY_PACER_WINDOW
+      ? this.congestionWindow
+      : QUIC_RECOVERY_PACER_WINDOW
+  }
+
   /**
-   * Tops the pacer up to `now` (§7.7): it earns 5/4 of the window per
-   * smoothed RTT, and holds at most the initial window, which is the largest
-   * burst it allows.
+   * Tops the pacer up to `now` (§7.7), on its clock: it earns 5/4 of the
+   * window per `pacerRtt`, and holds at most the initial window, which is the
+   * largest burst it allows.
    */
   pacerRefill(now: i64): void {
-    if (this.pacerTime < 0 || now < this.pacerTime) {
-      this.pacerTime = now
+    const at: i64 = this.fineNow(now)
+    if (this.pacerTime < 0 || at < this.pacerTime) {
+      this.pacerTime = at
       return
     }
     // A minute is far past what fills the budget, and keeps the product in range.
-    let elapsed: i64 = now - this.pacerTime
-    if (elapsed > 60000) {
-      elapsed = 60000
+    let elapsed: i64 = at - this.pacerTime
+    if (elapsed > 60000000) {
+      elapsed = 60000000
     }
-    const rtt: i64 = quicRecoveryMax(this.smoothedRtt, QUIC_RECOVERY_GRANULARITY)
-    const earned: i64 = (elapsed * this.congestionWindow * 5) / (rtt * 4)
+    const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
+    const earned: i64 = (elapsed * this.pacerWindow() * 5) / (rtt * 4)
     this.pacerBudget = this.pacerBudget + earned
     if (this.pacerBudget > QUIC_RECOVERY_INITIAL_WINDOW) {
       this.pacerBudget = QUIC_RECOVERY_INITIAL_WINDOW
     }
-    this.pacerTime = now
+    this.pacerTime = at
   }
 
   /**
    * How many milliseconds after `now` the pacer lets a datagram of `size`
-   * bytes go: 0 when it may go now, else at least 1. The rate is 5/4 of the
-   * window per smoothed RTT (§7.7's N of 1.25).
+   * bytes go: 0 when it may go now, else at least 1, its wait in
+   * microseconds rounded up. The rate is 5/4 of the window per `pacerRtt`
+   * (§7.7's N of 1.25).
    */
   pacerDelay(now: i64, size: i32): i64 {
     this.pacerRefill(now)
@@ -835,10 +932,10 @@ export class QuicRecovery {
     if (need <= 0) {
       return 0
     }
-    const rtt: i64 = quicRecoveryMax(this.smoothedRtt, QUIC_RECOVERY_GRANULARITY)
-    const rate: i64 = quicRecoveryMax(this.congestionWindow * 5, 1)
+    const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
+    const rate: i64 = quicRecoveryMax(this.pacerWindow() * 5, 1)
     const wait: i64 = (need * rtt * 4 + rate - 1) / rate
-    return quicRecoveryMax(wait, 1)
+    return quicRecoveryMax((wait + QUIC_RECOVERY_MICROS - 1) / QUIC_RECOVERY_MICROS, 1)
   }
 
   /** Charges the pacer for a datagram of `size` bytes sent at `now`. */

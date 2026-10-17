@@ -153,6 +153,13 @@ const quiet = (t: Suite): void => {
   t.ok("the pacer holds the slot back, short of its idle deadline", delay > n64(0) && c.now + delay < quic.deadline());
   t.ok("the slot is filed for now + the pacer's delay", server.wheel.dueAt[slot] === c.now + delay);
   t.eqI64("and the server's timeout is that delay", toI64(server.timeout(c.now)), delay);
+  // The clock in microseconds, 999 µs into the same millisecond: the pacer counts it.
+  const micros: i64 = c.now * n64(1000) + n64(999);
+  server.clock(micros);
+  server.touch(slot);
+  server.flush(c.now);
+  t.eqI64("the server hands its clock in microseconds to the connection's pacer", quic.recovery.pacerTime, micros);
+  server.clock(n64(-1));
   const none: string[] = [];
   const start: i64 = c.now;
   p.send(n64(0), p.headers("GET", "/big/300000", none, none), true);

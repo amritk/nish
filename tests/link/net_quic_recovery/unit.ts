@@ -1,7 +1,8 @@
 // `nish/net/quic-recovery` on its own, with no connection: every figure is
 // worked by hand from RFC 9002's Appendix A (the RTT estimate, loss
 // detection, the probe timeout) and Appendix B (NewReno), in the module's
-// integer milliseconds, and written beside the check that pins it.
+// integer milliseconds (the pacer's microseconds), and written beside the
+// check that pins it.
 import { Suite } from "nish/testing";
 import { QUIC_MAX_VARINT } from "nish/net/quic-packet";
 import {
@@ -255,7 +256,64 @@ const rcPacerChecks = (t: Suite): void => {
   t.eqI64("a long idle refills the budget only up to the initial window", r.pacerBudget, QUIC_RECOVERY_INITIAL_WINDOW);
   r.onPaced(n64(100000), FULL);
   t.eqI64("time handed in backwards earns nothing", r.pacerDelay(n64(50), FULL), n64(0));
-  t.eqI64("and restarts the pacer's clock there", r.pacerTime, n64(50));
+  t.eqI64("and restarts the pacer's clock there, in microseconds", r.pacerTime, n64(50000));
+};
+
+/**
+ * The pacer on a microsecond clock: a round trip of 200 µs, all of it inside
+ * the 5th millisecond, so every millisecond figure is 0 and only `micros`
+ * tells the pacer how long it was.
+ */
+const rcFinePacerChecks = (t: Suite): void => {
+  const r = rcConfirmed();
+  r.micros = n64(5100);
+  r.onPacketSent(APP, n64(0), FULL, n64(5));
+  r.micros = n64(5300);
+  r.onAck(APP, rcRange(n64(0), n64(0)), n32(1), n64(0), n64(5));
+  t.eqI64("the pacer's RTT is the 200 µs the clock measured", r.pacerRtt, n64(200));
+  t.eqI64("while the millisecond RTT is 0", r.smoothedRtt, n64(0));
+  t.eqI64("so the loss delay still floors at kGranularity, 1 ms (§6.1.2)", r.lossDelay(), n64(1));
+  r.onPacketSent(APP, n64(1), FULL, n64(5));
+  // 5 + 0 + max(4 × 0, kGranularity) + max_ack_delay 25.
+  t.eqI64("and the probe timeout at kGranularity plus max_ack_delay: 5 + 1 + 25", r.deadline(false), n64(31));
+  for (let k: i32 = 0; k < 10; k++) {
+    r.onPaced(n64(5), FULL);
+  }
+  // 1200 bytes at 5/4 × 13200 bytes per 200 µs: 1200 × 200 × 4 / 66000 = 14.5 µs, a millisecond on the timer wheel.
+  t.eqI64("the pacer still holds the datagram past a burst of the initial window (§7.7)", r.pacerDelay(n64(5), FULL), n64(1));
+  r.micros = n64(5320);
+  t.eqI64("20 µs later, inside the same millisecond, it may go", r.pacerDelay(n64(5), FULL), n64(0));
+  r.micros = n64(9000);
+  r.pacerDelay(n64(9), FULL);
+  t.eqI64("an idle of milliseconds refills only the initial window, though the window is 13200", r.pacerBudget, QUIC_RECOVERY_INITIAL_WINDOW);
+  t.eqI64("a micros outside the millisecond now names is not read", r.fineNow(n64(7)), n64(7000));
+  t.eqI64("and one inside it is", r.fineNow(n64(9)), n64(9000));
+
+  // A second sample of 3 ms with an ACK delay of 2 ms: 1000 µs once the delay is off, smoothed with 200.
+  r.micros = n64(5200);
+  r.onPacketSent(APP, n64(2), FULL, n64(5));
+  r.micros = n64(8200);
+  r.onAck(APP, rcRange(n64(1), n64(2)), n32(1), n64(2), n64(8));
+  t.eqI64("a later sample less its ACK delay smooths in by 1/8: (7 × 200 + 1000) / 8", r.pacerRtt, n64(300));
+  // 30 ms with a delay of 28: bounded to max_ack_delay 25 once confirmed, so (7 × 300 + 5000) / 8.
+  r.micros = n64(10000);
+  r.onPacketSent(APP, n64(3), FULL, n64(10));
+  r.micros = n64(40000);
+  r.onAck(APP, rcRange(n64(3), n64(3)), n32(1), n64(28), n64(40));
+  t.eqI64("an ACK delay past max_ack_delay counts only max_ack_delay once confirmed (§5.3)", r.pacerRtt, n64(887));
+
+  const h = new QuicRecovery();
+  h.micros = n64(5100);
+  h.onPacketSent(QUIC_RECOVERY_HANDSHAKE, n64(0), FULL, n64(5));
+  h.micros = n64(5300);
+  h.onAck(QUIC_RECOVERY_HANDSHAKE, rcRange(n64(0), n64(0)), n32(1), n64(0), n64(5));
+  h.onPacketSent(QUIC_RECOVERY_HANDSHAKE, n64(1), FULL, n64(5));
+  t.eqI64("before confirmation a sub-millisecond Handshake probe timeout is kGranularity alone, no max_ack_delay", h.deadline(false), n64(6));
+
+  const coarse = new QuicRecovery();
+  coarse.onPacketSent(APP, n64(0), FULL, n64(5));
+  coarse.onAck(APP, rcRange(n64(0), n64(0)), n32(1), n64(0), n64(5));
+  t.eqI64("with no micros a round trip inside one millisecond counts as kGranularity, as it always did", coarse.pacerRtt, n64(1000));
 };
 
 /** Everything `nish/net/quic-recovery` refuses, and its full ring. */
@@ -317,6 +375,7 @@ export const recoveryUnitChecks = (t: Suite): void => {
   rcPtoChecks(t);
   rcCongestionChecks(t);
   rcPacerChecks(t);
+  rcFinePacerChecks(t);
   rcRefusalChecks(t);
   rcResetChecks(t);
 };
