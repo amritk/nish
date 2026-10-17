@@ -1446,6 +1446,14 @@ export class CheckedProgram {
    */
   newTypeArgumentIds: StringMap
   newTypeArguments: Node[]
+  /**
+   * The members an enum-typed read can hold, where that is fewer than its
+   * enum's: node id -> a union whose tag the node reads, or the member type
+   * a read of one was widened from; -1 for every other node. `===`, `!==` and `case`
+   * compare these sets, because TypeScript refuses a comparison between two
+   * that share no member (TS2367, TS2678).
+   */
+  memberSets: i32[]
   /** `isCollections()`, decided once: the package and the path never change. */
   collectionsLibrary: boolean
   /** `isSecretLibrary()`, decided once, as `collectionsLibrary` is. */
@@ -1649,10 +1657,12 @@ export class CheckedProgram {
     this.nodeProvenRange = new Array<boolean>(nodeCount)
     this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
     this.nodeDisjointCopy = new Array<boolean>(nodeCount)
+    this.memberSets = new Array<i32>(nodeCount)
     let i = 0
     while (i < nodeCount) {
       this.nodeTypes[i] = -1
       this.nodeCoercions[i] = -1
+      this.memberSets[i] = -1
       // `new Array<string>(n)` is refused — it would zero-fill with null
       // strings — so the empty name every node starts at is pushed instead.
       this.nodeBuiltins.push("")

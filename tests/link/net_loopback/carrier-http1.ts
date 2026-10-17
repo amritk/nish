@@ -15,6 +15,9 @@ import { CARRIER_H1, TcpLoop } from "./tcp";
 import { TlsClient } from "./tls-client";
 import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
+/** The instant the GET's response is dated, so that its bytes are fixed. */
+const H1_PINNED_MS: i64 = 1792138314000;
+
 /** The next response client `c` reads, whole or as far as the stream went, its bytes taken off `plain`. */
 export const h1Response = (c: TlsClient): ClientReader => {
   const r = new ClientReader(false);
@@ -47,12 +50,14 @@ export const http1Checks = (t: Suite): void => {
   const c = new TlsClient(lp);
   t.ok("http/1.1: a TLS handshake offering http/1.1 across loopback", c.handshake([H1_ALPN]));
   t.eqStr("http/1.1: ALPN chose it", lp.h1.alpn(toI32(0)), "http/1.1");
+  lp.h1.date.pin(H1_PINNED_MS);
   c.send(ascii("GET /hello HTTP/1.1\r\nHost: loopback\r\n\r\n"));
   const hello: ClientReader = h1Response(c);
+  lp.h1.date.unpin();
   t.eqStr(
     "http/1.1: a GET is answered with its length",
     `${hello.head}\r\n${hello.text()}`,
-    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 20\r\n\r\nhello over loopback\n"
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nDate: Fri, 16 Oct 2026 08:11:54 GMT\r\nContent-Length: 20\r\n\r\nhello over loopback\n"
   );
 
   const body: u8[] = h3Pattern(toI32(300000));

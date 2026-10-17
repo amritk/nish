@@ -1,0 +1,1 @@
+`Sheet.first` is `Circle | Square | null`, which holds a union no sidecar can describe: a union has no C spelling in this version

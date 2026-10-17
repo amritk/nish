@@ -17,8 +17,12 @@ import {
   checkCondition,
   checkExpression,
   clearNarrowingsAssignedIn,
+  memberSetName,
+  memberSetOf,
+  membersDisjoint,
   narrow,
   refuseExpressionForm,
+  refuseNarrowingStore,
   resolveMaybeAnnotation,
   unproven,
   WANT_INFERRED,
@@ -278,6 +282,9 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
         initializer,
         `Cannot initialize ${ctx.table.typeName(declared)} variable \`${name}\` with ${ctx.table.typeName(initType)}`
       )
+    }
+    if (declared >= 0 && initType !== T_ERROR) {
+      refuseNarrowingStore(ctx, initializer, declared, `The variable \`${name}\``)
     }
     if (type === T_VOID) {
       ctx.error(decl, "Cannot declare a variable of type void")
@@ -899,6 +906,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     )
   }
   const clauses = stmt.children[1].children
+  const members = memberSetOf(ctx, stmt.children[0])
   const seen: i64[] = []
   let hasDefault = false
   let lastTerminates = false
@@ -913,7 +921,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
       }
       hasDefault = true
     } else {
-      checkCaseLabel(ctx, clause, scope, discriminant, seen)
+      checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
     }
     for (const statement of body.children) {
       if (statement.kind === N_VAR) {
@@ -953,6 +961,7 @@ const checkCaseLabel = (
   clause: Node,
   scope: Scope,
   discriminant: i32,
+  members: i32[],
   seen: i64[]
 ): void => {
   const label = clause.children[0]
@@ -961,6 +970,14 @@ const checkCaseLabel = (
     ctx.error(
       label,
       `\`case\` label is ${ctx.table.typeName(type)} but the discriminant is ${ctx.table.typeName(discriminant)}`
+    )
+    return
+  }
+  const labelMembers = memberSetOf(ctx, label)
+  if (membersDisjoint(ctx, members, labelMembers)) {
+    ctx.error(
+      label,
+      `\`case ${ctx.textOf(label)}\` can never match: the discriminant is \`${memberSetName(ctx, members)}\``
     )
     return
   }
