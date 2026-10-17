@@ -112,8 +112,8 @@ response to HEAD, a 204 and a 304 carry no body whatever the program writes; a
 chunked response to HTTP/1.0 goes unframed and ends with the connection.
 
 **One Date, from one clock read a second** (`net_http_date`, `_f64`;
-`net_http1`, `net_http1_server` and their `_f64` twins; added against `main`
-at `99b81d2`, cited by function rather than by line). Every final response,
+`net_http1`, `net_http1_server` and their `_f64` twins; written against `main`
+at `249cbe9`, cited by function rather than by line). Every final response,
 an error included, carries a `Date` (RFC 9110 §6.6.1) and a 1xx carries none;
 a program's own `date` field, in any case, is sent instead of the server's, so
 a response never carries two. `http1WriteResponseHead` refuses a date that is
