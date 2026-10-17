@@ -3294,7 +3294,7 @@ const checkSiblingScopes = (
     let earlier: SiblingSpawn | null = null
     let i = 0
     while (i < j && i < spawns.length && earlier === null) {
-      if (spawns[i].scope !== later.scope) {
+      if (spawns[i].scope !== later.scope && siblingsShare(spawns[i], later)) {
         earlier = spawns[i]
       }
       i = i + 1
@@ -3478,6 +3478,23 @@ const heldReaches = (
   for (const field of info.fields) {
     heldReaches(program, table, field.type, `${root}.${field.name}`, locks, atomics, seen, out)
   }
+}
+
+/** Whether two spawns on sibling scopes share a destination, a lock or an atomic. */
+const siblingsShare = (earlier: SiblingSpawn, later: SiblingSpawn): boolean => {
+  const destination = later.destination
+  const shared = earlier.destination
+  if (destination !== null && shared !== null && destination === shared) {
+    return true
+  }
+  for (const reach of later.reaches) {
+    for (const other of earlier.reaches) {
+      if (reach.meets(other)) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 /** The refusal of `later`, a `spawn` on a scope sibling to `earlier`'s, when their tasks share something, or "". */
