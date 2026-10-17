@@ -1,0 +1,2 @@
+define void @nish.BufferPool.giveSecret(
+call void @nish_wipe(%struct.nish_array* %buf)
