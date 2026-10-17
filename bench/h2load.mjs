@@ -22,7 +22,9 @@
 // instead, the server and `client.ts`'s QUIC client in one process on CPU 0,
 // one connection with the requests one after another. That figure is the
 // server's and the client's work together, so it compares builds; it is not
-// h2load's number.
+// h2load's number. Its rate falls as the one connection's streams pile up
+// (some 13,000 requests a second over 2,000 requests, 1,900 over 20,000), so
+// it runs `--h3-requests` (2,000) rather than `--requests`.
 import { spawn, spawnSync } from "node:child_process"
 import { availableParallelism } from "node:os"
 
@@ -34,6 +36,7 @@ let requests = 20000
 let clients = 16
 let streams = 8
 let slots = 64
+let h3Requests = 2000
 for (let k = 0; k < args.length; k++) {
   const arg = args[k]
   if (arg === "--bin") {
@@ -48,6 +51,8 @@ for (let k = 0; k < args.length; k++) {
     clients = Number(args[++k])
   } else if (arg === "--streams") {
     streams = Number(args[++k])
+  } else if (arg === "--h3-requests") {
+    h3Requests = Number(args[++k])
   } else if (arg === "--slots") {
     slots = Number(args[++k])
   } else {
@@ -57,7 +62,7 @@ for (let k = 0; k < args.length; k++) {
 }
 if (a === null) {
   console.error(
-    "usage: node bench/h2load.mjs --bin <server> [--against <server>] [--rounds n] [--requests n] [--clients n] [--streams n] [--slots n]"
+    "usage: node bench/h2load.mjs --bin <server> [--against <server>] [--rounds n] [--requests n] [--clients n] [--streams n] [--h3-requests n] [--slots n]"
   )
   process.exit(2)
 }
@@ -129,7 +134,7 @@ const h2load = async (extra, url, n) => {
 
 /** `bin h3-load`, on CPU 0; requests per second. */
 const h3Load = async (bin) => {
-  const stdout = await output("taskset", ["-c", "0", bin, "h3-load", String(requests)])
+  const stdout = await output("taskset", ["-c", "0", bin, "h3-load", String(h3Requests)])
   const m = /h3 (\d+) requests in (\d+) ms, (\d+) failed/.exec(stdout)
   if (m === null || m[3] !== "0") {
     return { rps: Number.NaN, why: stdout.trim() }
@@ -162,7 +167,7 @@ const scenarios = [
         name: `HTTP/3 h2load c=${clients}`,
         run: (s) => h2load(["--alpn-list=h3"], `https://127.0.0.1:${s.quic}/hello.txt`, requests),
       }
-    : { name: "HTTP/3 main h3-load c=1, in process", run: (_s, bin) => h3Load(bin) },
+    : { name: `HTTP/3 main h3-load c=1, ${h3Requests} requests, in process`, run: (_s, bin) => h3Load(bin) },
 ]
 
 const median = (xs) => {

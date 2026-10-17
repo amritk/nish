@@ -13,10 +13,10 @@
 // `--only` sizes just the one named, the others at one slot, for
 // `bench/pool-rss.mjs`. It prints `ports quic <p> h1 <p> h1s <p> h2 <p>` and
 // `sha256 <hex>` (the QUIC certificate's, also written to `--hash-file`),
-// then serves until SIGTERM or SIGINT, and exits 0. A `--testcase` the server does not take
-// exits 127 at once, the quic-interop-runner's "unsupported"; a malformed
-// command line exits 2, a certificate directory it cannot use 3, and a QUIC
-// port it cannot bind 1.
+// then serves until SIGTERM or SIGINT, and exits 0. A `--testcase` the server
+// does not take exits 127 at once, the quic-interop-runner's "unsupported"; a
+// malformed command line exits 2, a certificate directory it cannot use 3,
+// and a QUIC port it cannot bind 1.
 //
 //   main h3-load <requests>
 //

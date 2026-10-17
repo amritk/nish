@@ -58,10 +58,10 @@ export class InteropOptions {
    * lossy cases open one QUIC connection per file, and a connection whose
    * CONNECTION_CLOSE was lost keeps its slot until the idle timeout: with 8,
    * eight of those refused every new connection for the rest of the 30
-   * seconds. 64 covers the runner's 50. A QUIC slot is the costly one, about
-   * 12 MB resident against some 230 KB for an HTTP/2 slot, 120 KB for an
-   * HTTPS/1.1 one and 11 KB for plain HTTP/1.1: 64 slots start at 1.1 GB
-   * resident (`bench/README.md`, "Pool memory").
+   * seconds. 64 covers the runner's 50. A QUIC slot is the costly one, some
+   * 12.2 MB resident against 278 KB for an HTTP/2 slot, 160 KB for an
+   * HTTPS/1.1 one and 4 KB for plain HTTP/1.1: 64 slots start at 809 MB
+   * resident and 256 at 3.2 GB (`bench/README.md`, "Pool memory").
    */
   slots: i32 = 64;
   /**
