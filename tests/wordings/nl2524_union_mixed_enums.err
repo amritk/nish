@@ -1,0 +1,1 @@
+Union variants must take their tags from one enum: `Circle.kind` is a `Kind` and `Dot.kind` is a `Other`

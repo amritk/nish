@@ -49,6 +49,7 @@ Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385
   [functions](language/functions.md), [control flow](language/control-flow.md),
   [arrays and strings](language/arrays-and-strings.md),
   [classes and interfaces](language/classes-and-interfaces.md),
+  [discriminated unions](language/unions.md),
   [errors and `Result`](language/errors.md),
   [maps and sets](language/maps-and-sets.md), [generics](language/generics.md),
   [modules](language/modules.md) and [memory](language/memory.md).
