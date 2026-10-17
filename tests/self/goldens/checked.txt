@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1043 programs, 132999 dump lines.
+# 1046 programs, 133130 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -16110,6 +16110,87 @@ function run(n: i32): i32 -> @run [exported]
   callee 34:24 isNull -> @isNull
   callee 34:31 maybe -> @maybe
   callee 35:17 churn -> @churn
+program tests/cases/ffi_string_return.ts
+module tests/cases/ffi_string_return.ts (entry)
+function strerror(errnum: i32): string -> @strerror
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function getenv(name: string): string | null -> @getenv
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function setenv(name: string, value: string, overwrite: i32): i32 -> @setenv
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function setlocale(category: i32, locale: string | null): string | null -> @setlocale
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function strchr(s: string, c: i32): string | null -> @strchr
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function digits(n: i32): string -> @digits
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_from_i32
+  stackSites=0 stackLocals=0
+function noise(n: i32): i32 -> @noise
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 21:7 t: string (let)
+  local 22:7 i: i32 (let)
+function churn(): i32 -> @churn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow noise
+  stackSites=0 stackLocals=0
+  local 31:7 t: i32 (let)
+  local 32:7 i: i32 (let)
+  callee 34:13 noise -> @noise
+function describe(e: i32): string -> @describe
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via strerror
+  escaping: e
+  calls: nish_panic nish_str_new noise strerror
+  stackSites=0 stackLocals=0
+  local 41:9 k: i32 (const)
+  callee 41:13 noise -> @noise
+  local 42:9 s: string (const)
+  callee 42:13 strerror -> @strerror
+function after(n: i32): string | null -> @after
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via strchr
+  escaping: n
+  calls: digits nish_panic nish_str_concat nish_str_index_of nish_str_new strchr
+  stackSites=0 stackLocals=0
+  local 47:9 s: string (const)
+  callee 47:22 digits -> @digits
+  callee 48:10 strchr -> @strchr
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: after churn describe digits getenv nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_concat nish_str_index_of nish_str_new setenv setlocale strchr strerror
+  stackSites=1 stackLocals=1
+  callee 52:15 strerror -> @strerror
+  local 53:9 name: string (const)
+  callee 54:15 getenv -> @getenv
+  callee 55:7 setenv -> @setenv
+  callee 55:25 digits -> @digits
+  local 58:9 back: string | null (const)
+  callee 58:16 getenv -> @getenv
+  local 62:9 locale: string | null (const)
+  callee 62:18 setlocale -> @setlocale
+  local 64:9 kept: string (const)
+  callee 64:16 describe -> @describe
+  local 65:9 both: string[] (const)
+  callee 65:17 strerror -> @strerror
+  callee 65:30 strerror -> @strerror
+  local 66:9 tail: string | null (const)
+  callee 66:16 after -> @after
+  callee 67:18 churn -> @churn
+  callee 71:15 strchr -> @strchr
 program tests/cases/fn_arrow.ts
 module tests/cases/fn_arrow.ts (entry)
 function double(n: i32): i32 -> @double
@@ -48862,6 +48943,34 @@ function nullableNul(): i32 -> @nullableNul [exported]
   local 19:9 b: string | null (const)
   callee 19:28 withNul -> @withNul
   callee 20:10 strcmp -> @strcmp
+program tests/cases/panics_ffi_null.ts
+module tests/cases/panics_ffi_null.ts (entry)
+function getenv(name: string): string -> @getenv
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function strchr(s: string, c: i32): string | null -> @strchr
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function present(): i32 -> @present [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via getenv
+  calls: getenv nish_arena_mark nish_arena_release nish_panic nish_str_new
+  stackSites=0 stackLocals=0
+  callee 10:35 getenv -> @getenv
+function nullable(): i32 -> @nullable [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via strchr
+  calls: nish_arena_mark nish_arena_release nish_str_new strchr
+  stackSites=0 stackLocals=0
+  callee 12:36 strchr -> @strchr
+function absent(): i32 -> @absent [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via getenv
+  calls: getenv nish_arena_mark nish_arena_release nish_panic nish_str_new
+  stackSites=0 stackLocals=0
+  callee 14:34 getenv -> @getenv
 program tests/cases/panics_generic.ts
 module tests/cases/panics_generic.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -84070,6 +84179,31 @@ function main(): i32 -> @nish_main [exported entry]
   local 5:9 block: CPtr | null (const)
   callee 5:17 calloc -> @calloc
   callee 9:3 free -> @free
+program docs/cookbook/decl-ffi-string-result.ts
+module docs/cookbook/decl-ffi-string-result.ts (entry)
+function strerror(errnum: i32): string -> @strerror
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function getenv(name: string): string | null -> @getenv
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function message(e: i32): u64 -> @message
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via strerror
+  escaping: e
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_new strerror
+  stackSites=0 stackLocals=0
+  callee 4:40 strerror -> @strerror
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via getenv
+  calls: getenv message nish_arena_mark nish_arena_release nish_str_new
+  stackSites=0 stackLocals=0
+  local 7:9 home: string | null (const)
+  callee 7:16 getenv -> @getenv
+  callee 8:27 message -> @message
 program docs/cookbook/decl-ffi-string.ts
 module docs/cookbook/decl-ffi-string.ts (entry)
 function puts(s: string): i32 -> @puts
