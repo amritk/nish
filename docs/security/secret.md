@@ -13,8 +13,9 @@ lines, because it moves every line below them.
 | `src/compilation.ts` | `Compilation.checkSecrets`, which asks the whole-program questions |
 | `src/program.ts` | `SecretNeed` and `CheckedProgram.secretNeeds`, the questions a body leaves for it |
 
-Read but not owned: `src/attributes.ts` (`PointerParamFacts.captured`, the fact
-the rule reads for "keeps its parameter").
+Read here, audited for this rule by the field section below: `src/attributes.ts`
+(`PointerParamFacts.captured`, the fact the sole-reference rule reads for "keeps
+its parameter"; its `markWipe` is in the field section's Scope).
 
 ## Threat model
 
@@ -127,6 +128,8 @@ no base line describes it.
 | `src/members.ts` | the object literal of a holder (NL2541) |
 | `src/interop-header.ts` | `structDefinitions` and `structFieldTypes`: a `Secret` (`isSecretStruct`) and a holder (`secretFieldOf`) are opaque in an `--emit-header` sidecar |
 | `src/attributes.ts` | `markWipe`: a `wipe` marks what its argument reaches as written, for the region rule of a scope |
+| `src/codes.ts` | the field rule's diagnostics, NL2536 to NL2544, with their fragments and advice |
+| `src/types.ts` | `TypeTable.holdsSecret`, which does not look inside a struct: a holder travels as a value, since its own `wipe()` ends its field |
 
 ### Threat model
 
@@ -259,7 +262,9 @@ each row names functions rather than base lines.
   `reject_secret_field_nested`, `reject_secret_field_launder_method`,
   `reject_secret_field_launder_ternary`, `reject_secret_field_wipe_param_new`,
   `reject_secret_field_wipe_param_method`, `reject_secret_field_wipe_nested`
-  and `reject_secret_field_wipe_other`: one road each.
+  `reject_secret_field_wipe_other`, and, for a caller's own local in place of
+  a field, `reject_secret_field_launder_local` and
+  `reject_secret_field_wipe_param_local`: one road each.
 - `nish:secret: --emit-header keeps a Secret and its holder opaque, and --emit-dts / --emit-napi bridge neither`.
 - `${name}: IR matches golden` and `${name}: native output matches .out`, for
   `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.

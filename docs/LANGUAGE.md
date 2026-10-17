@@ -5879,9 +5879,12 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
 - A `Secret` parameter is borrowed. The callee may read it through `expose`
   or hand it on, and owes nothing: the caller wipes what it made. It neither
   returns it, which would give the caller a second name for a key it already
-  owns (NL2542, `reject_secret_field_launder_function`), nor wipes it, which
-  would leave the caller reading zeroes and wiping it again (NL2544,
-  `reject_secret_field_wipe_param`).
+  owns (NL2542, `reject_secret_field_launder_function` and its siblings, among
+  them `reject_secret_field_launder_local` for a caller's own local), nor
+  wipes it, which would leave the caller reading zeroes and wiping it again
+  (NL2544, `reject_secret_field_wipe_param` and its siblings, among them
+  `reject_secret_field_wipe_param_local`). The cases are listed under
+  [A `Secret` field](#a-secret-field).
 
   **This narrows 0.18.0.** Up to 0.18.0 a callee could also return or wipe a
   borrowed `Secret`; from the release after it, both are refused, for every
@@ -5947,7 +5950,7 @@ class Session {
 - **Reads.** `h.f` is borrowed, as a `Secret` parameter is: it is an argument
   of a call or a `new` — `expose`, `exposeWith`, or a function that
   takes a `Secret`, and `wipe` only in the holder's own `wipe()` (NL2543) — or an operand of `===` or `!==` against another `Secret`
-  or `null`. Bound to a local, assigned, returned, chosen by a ternary or `??`,
+  (a field is never `null`, so `h.k === null` is a type error, NL2024). Bound to a local, assigned, returned, chosen by a ternary or `??`,
   or read through `?.` or a chain of fields, it would be a second owner of the
   key, and is `` `k` is a `Secret` field, which is read only as a call's
   argument or an `===`/`!==` operand `` (NL2540, `reject_secret_field_bind`,
@@ -5958,8 +5961,10 @@ class Session {
   caller a second name for the holder's key, and is
   `` `s` is a `Secret` parameter, which its caller owns and wipes: returned ``
   (NL2542, `reject_secret_field_launder_function`, `_launder_arrow`,
-  `_launder_generic`); one that wipes it is NL2544
-  (`reject_secret_field_wipe_param`). Every place a `Secret` may not go is closed to the field too:
+  `_launder_generic`, `_launder_method`, `_launder_ternary`, and
+  `_launder_local` for a caller's own local); one that wipes it is NL2544
+  (`reject_secret_field_wipe_param`, `_wipe_param_new`, `_wipe_param_method`,
+  and `_wipe_param_local` for a caller's own local). Every place a `Secret` may not go is closed to the field too:
   `reject_secret_field_console` (NL2432), `_template` (NL2431), `_equality`
   (NL2433), `_condition` (NL2434), `_index` (NL2435), `_member` (NL2436),
   `_array`, `_array_literal` and `_result` (NL2429), `_new_arg` (NL2439: a
