@@ -1,0 +1,1 @@
+The element is `Circle | Square` and is given a `Circle`: TypeScript narrows it to `Circle` from here on, which this version does not track, so declare it as that type or give it a value of the whole union

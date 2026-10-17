@@ -124,7 +124,7 @@ no base line describes it.
 | --- | --- |
 | `src/secret.ts` | `admitsSecretField` and `secretFieldOf` (the declaration), `checkHolderReleaser` (the releaser's signature), `SecretFlow.collectSlots`, `fieldRead`, `fieldStore` and `storedType` (the walk over a holder's constructor, its `wipe()` and every other body) |
 | `src/structs.ts` | where a field's type is admitted, and where `checkHolderReleaser` runs once a class's members are known |
-| `src/members.ts` | the object literal of a holder (NL2527) |
+| `src/members.ts` | the object literal of a holder (NL2541) |
 
 ### Threat model
 
@@ -156,23 +156,23 @@ can name the field.
 - A `Secret` field is `readonly`, typed exactly `Secret<T>`, on a non-generic
   class; any other declaration is NL2430, and a `Secret` inside an array, a
   `Result` or another `Secret` is NL2429.
-- A class with such a field has `wipe(): void` with no parameters (NL2522),
+- A class with such a field has `wipe(): void` with no parameters (NL2536),
   and that method calls `wipe(this.f)` for every field on every path out of it
-  (NL2523): a branch, a loop body, an early `return` and a helper that wipes it
+  (NL2537): a branch, a loop body, an early `return` and a helper that wipes it
   are each refused.
-- The field is set only in the constructor, only from `secret(...)` (NL2524),
-  and only once (NL2525); `secret(...)` there keeps the sole-reference rule
+- The field is set only in the constructor, only from `secret(...)` (NL2538),
+  and only once (NL2539); `secret(...)` there keeps the sole-reference rule
   (NL2512). A store anywhere else is NL2181, and the store is a statement of its
-  own: its value bound to a local is NL2526.
+  own: its value bound to a local is NL2540.
 - A scope's parent may not wipe a holder while a task of the scope may read
   its key: `wipe` marks what its argument reaches as written
   (`markWipe`, `src/attributes.ts`), so `h.wipe()`, a helper that wipes
   `h.k`, and a constructor reached by `new` that does are each the region
   rule's write before the join, as `wipe(h.k)` written in the block is.
 - A read of the field is a loan: an argument of a call or of `new`, or an
-  operand of `===` or `!==`. Anything else is NL2526, and the existing rules
+  operand of `===` or `!==`. Anything else is NL2540, and the existing rules
   (NL2428, NL2431 to NL2436, NL2439) still refuse what they refused of a local.
-- A holder made by an object literal is NL2527, and JSON encode and decode of
+- A holder made by an object literal is NL2541, and JSON encode and decode of
   one are NL2485.
 - The `wipe()` of a holder is the same volatile `llvm.memset` a local's is, and
   it survives `opt -O2` where a plain `fill(0)` of the twin's field is an
@@ -221,7 +221,7 @@ can name the field.
   `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.
 - `nish:secret: a holder's wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is an ordinary one`.
 - `codes: every registry code is provoked by a program, declared, or explained (${wordingsSummary})`:
-  NL2522 to NL2527 each have their `tests/wordings/` program.
+  NL2536 to NL2541 each have their `tests/wordings/` program.
 - `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
   for `docs/AI.md` and `docs/guide/using-nish/standard-library.md`: a holder
-  accepted, and a field copied into a local refused with NL2526.
+  accepted, and a field copied into a local refused with NL2540.

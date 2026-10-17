@@ -169,7 +169,7 @@ rejects. This table is the highest-value part of the page.
 | `{ m() { … } }`, `{ "a": 1 }`, `const C = class { }` | ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` / `Object literal keys must be plain identifiers` / `Classes must be named` | fields with identifier keys, a top-level function over the interface, a named top-level class |
 | `{ ...base, x: 1 }`, `{ [k]: v }`, `[k]: i32` in a class or interface | `Object spread is forbidden in Nish (set each field by name)` / `Computed property names are forbidden in Nish (member names are fixed at compile time)` | every field written by name (`{ x: 1, y: base.y }`); a `Map` for a keyed table |
 | `type Pair = { a: i32 }` (inline object type) | `` Unsupported type `{ a: i32 }` `` | declare an `interface` |
-| `A \| B` unions | `` Union types other than `T \| null` are forbidden `` | one type, or an `interface` prefix |
+| `A \| B` unions of anything but tagged classes and interfaces | `` Union types other than `T \| null` are forbidden `` | a [discriminated union](#discriminated-unions): a tag field first in each variant |
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
@@ -219,6 +219,7 @@ compatible only when their types are identical.
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
 | `K.M` | an enum member type: the one member `K.M`, as `i32` | holds only that member; a read is a `K` |
 | `T \| null` | `T` a class, interface, array, or string | a scalar can never be nullable |
+| `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read |
 | `Result<T, E>` | the only way to report failure | `E` may not be `void` |
 | `void` | return type only | |
 
@@ -1411,6 +1412,96 @@ export const main = (): i32 => (pick(Kind.Array) === Kind.Array ? 0 : 1);
   re-export an enum or alias it imported.
 - Both are top-level only.
 
+### Discriminated unions
+
+```ts nish:ok
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 3;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 4;
+}
+
+type Shape = Circle | Square;
+
+const pick = (round: boolean): Shape => (round ? new Circle() : new Square());
+
+export const main = (): i32 => {
+  const shapes: Shape[] = [pick(true), new Square()];
+  let circles = 0;
+  for (const s of shapes) {
+    if (s.kind === Kind.Circle) {
+      circles = circles + 1;
+    }
+  }
+  return circles === 1 ? 0 : 1;
+};
+```
+
+- A **variant** is a class or interface, not generic, whose **first field is
+  its tag**, of one enum member type: `readonly kind: Kind.Circle =
+  Kind.Circle`. All variants of a union take their tags from one enum, under
+  one field name, with different members; a union names at least two. Each
+  broken rule has its code (NL2522–NL2527); a tag that is not `readonly` is
+  NL2535. Any other union is still NL1053.
+- A union is a local, parameter, field, return, array element, or nullable
+  (`Shape | null`). An alias may name another union, which is flattened. A
+  variant, or a smaller union, converts into it wherever the union is
+  expected — argument, `return`, `push`, an annotated array literal, a
+  ternary arm or `??` default whose other side is the union. A class that
+  implements an interface variant converts to that interface first. A union
+  crosses modules but not a sidecar (NL4009).
+- **The tag is the only member** (NL2528 for anything else, even a field every
+  variant has). It reads as the enum: `const k: Kind = s.kind` — annotate it,
+  `const k = s.kind` is NL2530. Compare `k` only with the variants' members:
+  `tsc` narrows it to those, so `k === Kind.C` with no `C` variant is TS2367
+  there and compiles here. A union is read-only, even for a field every
+  variant has (NL2529). Comparing the tag with a member no variant has is
+  NL2531, a `case` for one NL2532.
+- **Not yet:** narrowing by `if`/`switch`. Until it lands, a second test of a
+  tag already ruled out (`if (s.kind === Kind.A) { return }` then
+  `s.kind === Kind.A`) compiles here and is TS2367 in `tsc`: do not write
+  one. The same holds for a `const k: Kind = s.kind` from the start.
+- **Refused by design:** union type arguments (`Box<Shape>`,
+  `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
+  union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
+  is not `Shape[]`), and inferred unions (an unannotated ternary or array of
+  two variants).
+- **Declare what you store.** A store of a value that is only some of the
+  variants into a union slot is NL2534, because `tsc` would narrow the slot
+  from there on. Declare the slot as the variant, or store a value of the
+  whole union (a call returning `Shape`):
+
+```ts nish:err NL2534
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+}
+
+type Shape = Circle | Square;
+
+export const main = (): i32 => {
+  const s: Shape = new Circle(); // tsc treats `s` as a Circle from here
+  return s.kind === Kind.Circle ? 0 : 1;
+};
+```
+
 ### Modules
 
 - `export` goes on `const` (function or constant), `class`, `interface`,
@@ -1630,7 +1721,7 @@ through `exposeWith`; read `this.k` only as a call or `new` argument (`expose`,
 `exposeWith`, `wipe`, a function taking a `Secret`) or a `===`/`!==` operand —
 never bind, return or store it. The class declares `wipe(): void`, no
 parameters, calling `wipe(this.k)` itself for every such field on every path
-(NL2522, NL2523). Nothing checks that `wipe()` is called: call it when the
+(NL2536, NL2537). Nothing checks that `wipe()` is called: call it when the
 holder is done.
 
 ```ts nish:ok
@@ -1659,7 +1750,7 @@ export const main = (): i32 => {
 };
 ```
 
-```ts nish:err NL2526
+```ts nish:err NL2540
 import { Secret, secret, wipe } from "nish:secret";
 
 class Session {
@@ -1674,7 +1765,7 @@ class Session {
 
 export const main = (): i32 => {
   const s = new Session();
-  const k = s.key; // NL2526: a second owner of the key
+  const k = s.key; // NL2540: a second owner of the key
   s.wipe();
   return 0;
 };
