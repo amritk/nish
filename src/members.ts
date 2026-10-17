@@ -191,9 +191,31 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
   if (ctx.table.isStruct(receiver)) {
     return checkStructProperty(ctx, expr, receiver)
   }
+  if (ctx.table.isUnion(receiver)) {
+    return checkUnionTag(ctx, expr, receiver)
+  }
   ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`)
   return T_ERROR
 }
+
+/**
+ * `shape.kind` on a union: its tag, the one member every variant keeps in the
+ * same place. The read is the tag's enum, and the node remembers the union so
+ * a comparison can tell which members it may hold.
+ */
+const checkUnionTag = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
+  const tag = ctx.table.tagNameOf(receiver)
+  if (expr.text !== tag) {
+    ctx.errorAtProperty(expr, unionMemberMessage(ctx, receiver, expr.text))
+    return T_ERROR
+  }
+  ctx.program.memberSets[expr.id] = receiver
+  return ctx.table.tagEnumOf(receiver)
+}
+
+/** Every member of a union but its tag, read, written or called. */
+const unionMemberMessage = (ctx: CheckContext, union: i32, name: string): string =>
+  `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\`: its tag \`${ctx.table.tagNameOf(union)}\` is the one member a union has in this version`
 
 /** `Kind.If`: the member's integer, recorded for the emitter, and the enum's type (WP23). */
 const checkEnumMember = (ctx: CheckContext, expr: Node, info: EnumInfo): i32 => {
@@ -307,6 +329,10 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     return T_ERROR
   }
   if (refuseParameterMember(ctx, receiverExpr, receiver, access, "call", true, scope)) {
+    return T_ERROR
+  }
+  if (ctx.table.isUnion(receiver)) {
+    ctx.errorAtProperty(access, unionMemberMessage(ctx, receiver, access.text))
     return T_ERROR
   }
   if (receiver === T_STRING) {
@@ -728,6 +754,14 @@ export const checkMemberAssignment = (ctx: CheckContext, expr: Node, scope: Scop
   }
   if (refuseSecretMember(ctx, receiver, target)) {
     return T_ERROR
+  }
+  if (ctx.table.isUnion(receiver)) {
+    // tsc writes a union's member at the intersection of its variants'
+    // types, which for a tag is \`never\`.
+    return ctx.errorType(
+      target,
+      `Cannot assign to \`${target.text}\` through the union \`${ctx.table.typeName(receiver)}\`: a union is read-only, so assign to the variant itself`
+    )
   }
   if (ctx.table.isArray(receiver) && target.text === "length") {
     return ctx.errorType(

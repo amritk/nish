@@ -50,6 +50,11 @@
  *   that disagree (`HTTP_FIELDS_BAD_CONTENT_LENGTH`). Matching it against
  *   the body is the version's job, since only it sees the body.
  *
+ * **The date.** `httpDateWrite` writes a second since 1970 as an IMF-fixdate
+ * (RFC 9110 §5.6.7), `Fri, 16 Oct 2026 08:11:54 GMT`, the form every version's
+ * `Date` field takes. It reads no clock, so a wasm32 build can import it; the
+ * caller supplies the second.
+ *
  * Names and values are octets (`u8[]`), as HPACK and QPACK answer them. A
  * section that passes keeps references to the caller's arrays, not copies, so
  * it is valid for as long as they are.
@@ -601,4 +606,92 @@ export class HttpFields {
     const seen: i32 = this.readSection(names, values, HTTP_FIELDS_ZERO)
     return seen < 0 ? seen : HTTP_FIELDS_OK
   }
+}
+
+// ---- The date ------------------------------------------------------------------
+
+/** An IMF-fixdate's length: `Sun, 06 Nov 1994 08:49:37 GMT` (RFC 9110 §5.6.7). */
+export const HTTP_DATE_SIZE: i32 = 29
+
+/** The last second an IMF-fixdate can name, 9999-12-31T23:59:59Z, in seconds since 1970. */
+export const HTTP_DATE_LAST_SECOND: i64 = 253402300799
+
+/** The day names from Sunday, then the month names from January, three letters each. */
+const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJulAugSepOctNovDec"
+
+/** Writes the three letters at `HTTP_FIELDS_DATE_NAMES[3 * index ..)` at `out[at ..)`. */
+const httpFieldsPutName = (out: u8[], at: i32, index: i32): void => {
+  for (let k: i32 = 0; k < 3; k++) {
+    out[at + k] = toU8(HTTP_FIELDS_DATE_NAMES.charCodeAt(3 * index + k))
+  }
+}
+
+/** Writes `n`, 0 to 99, as two digits at `out[at ..)`. */
+const httpFieldsPutTwo = (out: u8[], at: i32, n: i32): void => {
+  const tens: i32 = n / 10
+  const ones: i32 = n % 10
+  out[at] = toU8(48 + tens)
+  out[at + 1] = toU8(48 + ones)
+}
+
+/**
+ * Writes the IMF-fixdate of `seconds` since 1970-01-01T00:00:00Z at
+ * `out[at .. at + HTTP_DATE_SIZE)` and answers where it ends; -1, with nothing
+ * written, for a second before 1970 or after `HTTP_DATE_LAST_SECOND`, whose
+ * year has no four digits, or for an `out` without the room. It reads no
+ * clock, so it compiles for wasm32 too: `HttpDate` in `nish/net/http1-server`
+ * is the cache that reads one and calls this at most once a second.
+ *
+ * The date follows Howard Hinnant's `civil_from_days` ("chrono-Compatible
+ * Low-Level Date Algorithms"), step for step and with its constants, which
+ * its author donated to the public domain: days are counted from 0000-03-01,
+ * so a leap day is the last day of its year and a 400-year era is always
+ * 146,097 days long. Every step
+ * is `i64` arithmetic on numbers that are not negative, so `--number-mode
+ * f64` writes the same bytes.
+ */
+export const httpDateWrite = (out: u8[], at: i32, seconds: i64): i32 => {
+  if (
+    seconds < 0 ||
+    seconds > HTTP_DATE_LAST_SECOND ||
+    at < 0 ||
+    toI64(at) + toI64(HTTP_DATE_SIZE) > toI64(out.length)
+  ) {
+    return -1
+  }
+  const days: i64 = seconds / 86400
+  const inDay: i32 = toI32(seconds - days * 86400)
+  // 1970-01-01 was a Thursday, and 0 is Sunday.
+  const weekday: i32 = toI32((days + 4) % 7)
+  // From 0000-03-01 to 1970-01-01 is 719,468 days.
+  const z: i64 = days + 719468
+  const era: i64 = z / 146097
+  const dayOfEra: i64 = z - era * 146097
+  const yearOfEra: i64 = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365
+  const dayOfYear: i64 = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100)
+  // Months from March, each 30 or 31 days by the 153-day rule.
+  const marchMonth: i64 = (5 * dayOfYear + 2) / 153
+  const day: i32 = toI32(dayOfYear - (153 * marchMonth + 2) / 5 + 1)
+  const month: i32 = toI32(marchMonth < 10 ? marchMonth + 3 : marchMonth - 9)
+  const year: i32 = toI32(yearOfEra + era * 400) + (month <= 2 ? 1 : 0)
+  httpFieldsPutName(out, at, weekday)
+  out[at + 3] = 44
+  out[at + 4] = 32
+  httpFieldsPutTwo(out, at + 5, day)
+  out[at + 7] = 32
+  httpFieldsPutName(out, at + 8, 6 + month)
+  out[at + 11] = 32
+  httpFieldsPutTwo(out, at + 12, year / 100)
+  httpFieldsPutTwo(out, at + 14, year % 100)
+  out[at + 16] = 32
+  httpFieldsPutTwo(out, at + 17, inDay / 3600)
+  out[at + 19] = 58
+  httpFieldsPutTwo(out, at + 20, (inDay / 60) % 60)
+  out[at + 22] = 58
+  httpFieldsPutTwo(out, at + 23, inDay % 60)
+  out[at + 25] = 32
+  out[at + 26] = 71
+  out[at + 27] = 77
+  out[at + 28] = 84
+  return at + HTTP_DATE_SIZE
 }

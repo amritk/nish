@@ -1,0 +1,1 @@
+`Map<string, Circle | Square>` cannot take a union as a type argument: in this version a union is the type of a local, a parameter, a field, a return value or an array element, and not of a generic's, a `Map`'s, a `Set`'s or a `Result`'s type argument
