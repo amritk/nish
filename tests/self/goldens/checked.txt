@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1048 programs, 133375 dump lines.
+# 1049 programs, 133403 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -84408,6 +84408,35 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 19:9 k: Kind (const)
   callee 20:27 weight -> @weight
+program docs/cookbook/decl-ffi-owned-string.ts
+module docs/cookbook/decl-ffi-owned-string.ts (entry)
+import readCString from "nish:unsafe" -> builtin readCString
+unsafe import 1:10 readCString from "nish:unsafe"
+unsafe call 11:15 readCString (node 70)
+function realpath(path: string, resolved: CPtr | null): CPtr | null -> @realpath
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function free(p: CPtr): void -> @free
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function resolve(path: string): string -> @resolve
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via realpath
+  escaping: path
+  calls: free nish_panic nish_str_index_of nish_str_new realpath
+  stackSites=0 stackLocals=0
+  local 7:9 p: CPtr | null (const)
+  callee 7:13 realpath -> @realpath
+  local 11:9 out: string (const)
+  callee 12:3 free -> @free
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via resolve
+  calls: nish_arena_mark nish_arena_release resolve
+  stackSites=0 stackLocals=0
+  callee 16:33 resolve -> @resolve
 program docs/cookbook/decl-ffi-pointer.ts
 module docs/cookbook/decl-ffi-pointer.ts (entry)
 function calloc(count: u64, size: u64): CPtr | null -> @calloc

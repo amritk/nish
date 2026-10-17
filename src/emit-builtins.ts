@@ -35,7 +35,6 @@ import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
 import {
   isNetExport,
-  isUnsafeExport,
   NET_INT,
   NET_RANGE,
   NET_STRING,
@@ -1048,7 +1047,10 @@ export const identifierBuiltinCalleesNamed = (
   if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
     return out
   }
-  if (isUnsafeExport(name)) {
+  if (name === "uncheckedGet" || name === "uncheckedSet") {
+    return out
+  }
+  if (name === "wrappingAdd" || name === "wrappingSub" || name === "wrappingMul") {
     return out
   }
   return out

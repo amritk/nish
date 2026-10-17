@@ -9017,7 +9017,12 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   const namesTestedIn = (text) => [...(text ?? "").matchAll(/name === "([^"]+)"/g)].map((m) => m[1])
 
   const builtinsDecl = declarationOf(selfSource("builtins.ts"), "isBuiltinFunction")
-  const builtins = namesTestedIn(builtinsDecl)
+  // `nish:unsafe`'s exports are builtins through `isUnsafeExport`, and
+  // `readCString` among them allocates, so they are read from there too.
+  const builtins = [
+    ...namesTestedIn(builtinsDecl),
+    ...namesTestedIn(declarationOf(selfSource("nish-modules.ts"), "isUnsafeExport")),
+  ]
   const emitBuiltins = selfSource("emit-builtins.ts")
   const calleesDecl = declarationOf(emitBuiltins, "identifierBuiltinCalleesNamed")
   /** The module's string constants, so `out.push(PARSE_RUNTIME)` reads as the symbol it names. */
@@ -9170,6 +9175,37 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     return parts.every((p) => p.startsWith("i8*")) ? parts.length : undefined
   }
   for (const [builtin, symbol] of allocating) {
+    // `readCString` takes a `CPtr`, which only a foreign call answers, and its
+    // `@nish_str_new` is inside `@nish.ffi.str`, so its probe is written out.
+    if (builtin === "readCString") {
+      const probeSrc = [
+        'import { readCString } from "nish:unsafe";',
+        "declare function getcwd(buf: CPtr | null, size: u64): CPtr | null;",
+        "export const probe = (arg0: string): string => {",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+        "  const label = `probe ${arg0}`;",
+        "  console.log(label);",
+        "  const p = getcwd(null, 0);",
+        '  return p === null ? "" : readCString(p);',
+        "};",
+        "",
+      ].join("\n")
+      const probeTs = path.join(buildDir, "alloc_probe_readCString.ts")
+      const probeLl = path.join(buildDir, "alloc_probe_readCString.ll")
+      fs.writeFileSync(probeTs, probeSrc)
+      const r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root, encoding: "utf8" })
+      const ir = r.status === 0 ? fs.readFileSync(probeLl, "utf8") : r.stderr
+      const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? ""
+      check(
+        "readCString: a function returning its result keeps the arena (no nish_arena_release before the ret)",
+        r.status === 0 &&
+          body.includes("@nish.ffi.str(") &&
+          body.includes("@nish_str_concat(") &&
+          !body.includes("nish_arena_release"),
+        `${probeSrc}\n${ir}`
+      )
+      continue
+    }
     const fn = runtimeByName.get(symbol)
     const returnTypes = nishReturnTypes(fn)
     const arity = stringArity(fn)
