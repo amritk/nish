@@ -6,7 +6,7 @@ import { InteropOptions, InteropServer, supportedTestcase } from "./server";
 import { certificateHash, loadChain, loadKey, mintCertificate, mintKey } from "./identity";
 
 /** The decimal number `text` spells, or -1. */
-const decimal = (text: string): i32 => {
+export const decimal = (text: string): i32 => {
   let n: i32 = 0;
   const length: i32 = toI32(text.length);
   if (length === 0 || length > 6) {
@@ -68,6 +68,10 @@ export const parseServe = (argv: string[]): ServeArgs => {
       o.h1sPort = port(value);
     } else if (flag === "--h2-port") {
       o.h2Port = port(value);
+    } else if (flag === "--slots") {
+      o.slots = decimal(value);
+    } else if (flag === "--only") {
+      o.only = value;
     } else if (flag === "--hash-file") {
       out.hashFile = value;
     } else {
@@ -77,6 +81,12 @@ export const parseServe = (argv: string[]): ServeArgs => {
   }
   if (out.error === "" && (o.quicPort < 0 || o.h1Port < 0 || o.h1sPort < 0 || o.h2Port < 0)) {
     out.error = "a port outside 0 to 65535";
+  }
+  if (out.error === "" && (o.slots < 1 || o.slots > 4096)) {
+    out.error = "--slots wants a count from 1 to 4096";
+  }
+  if (out.error === "" && o.only !== "" && o.only !== "h1" && o.only !== "h1s" && o.only !== "h2" && o.only !== "h3") {
+    out.error = "--only wants h1, h1s, h2 or h3";
   }
   return out;
 };

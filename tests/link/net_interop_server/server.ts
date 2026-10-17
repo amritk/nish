@@ -26,10 +26,10 @@ import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 import { H3_ALPN, Http3Config } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
 import { WebTransport, WebTransportConfig } from "nish/net/webtransport";
-import { H1_ALPN } from "nish/net/http1-server";
+import { H1_ALPN, Http1Server, Http1TlsServer } from "nish/net/http1-server";
 import { tcpConfig } from "../net_tls_common/server";
 import { testConfig } from "../net_http1_server/checks";
-import { H1Loop } from "../net_http1_server/harness";
+import { App, H1Loop, TLS_SLOTS } from "../net_http1_server/harness";
 import { HQ_ALPN, InteropApp } from "./app";
 import { InteropFiles } from "./files";
 import { H2_LISTEN_TOKEN, H2_SLOT_TOKEN, InteropH2 } from "./h2";
@@ -53,14 +53,41 @@ export class InteropOptions {
   h1sPort: i32 = 0;
   h2Port: i32 = 0;
   /**
-   * QUIC connections served at once. The runner's lossy cases open one
-   * connection per file, and a connection whose CONNECTION_CLOSE was lost
-   * keeps its slot until the idle timeout: with 8, eight of those refused
-   * every new connection for the rest of the 30 seconds. 64 covers the
-   * runner's 50 at about 6.6 MB of memory each (495 MB resident, 122 MB with 8).
+   * Connections each pool serves at once: QUIC's, HTTP/2's and both
+   * HTTP/1.1 pools', the last two no more than `H1_SLOT_LIMIT`. The runner's
+   * lossy cases open one QUIC connection per file, and a connection whose
+   * CONNECTION_CLOSE was lost keeps its slot until the idle timeout: with 8,
+   * eight of those refused every new connection for the rest of the 30
+   * seconds. 64 covers the runner's 50. A QUIC slot is the costly one, some
+   * 12.2 MB resident against 278 KB for an HTTP/2 slot, 160 KB for an
+   * HTTPS/1.1 one and 4 KB for plain HTTP/1.1: 64 slots start at 809 MB
+   * resident and 256 at 3.2 GB (`bench/README.md`, "Pool memory").
    */
   slots: i32 = 64;
+  /**
+   * One pool to size from `slots` alone: "h1", "h1s", "h2" or "h3", each
+   * other pool at a single slot, so `bench/pool-rss.mjs` can tell the
+   * pools' memory apart. "" sizes them all.
+   */
+  only: string = "";
 }
+
+/**
+ * The most slots an HTTP/1.1 pool takes: `H1Loop`'s tokens put a plain slot
+ * below `TLS_SLOTS` and a TLS slot from it up to the plain listener's token.
+ */
+const H1_SLOT_LIMIT: i32 = TLS_SLOTS;
+
+/** The slots `pool` gets under `options`. */
+export const poolSlots = (options: InteropOptions, pool: string): i32 => {
+  if (options.only !== "" && options.only !== pool) {
+    return 1;
+  }
+  if ((pool === "h1" || pool === "h1s") && options.slots > H1_SLOT_LIMIT) {
+    return H1_SLOT_LIMIT;
+  }
+  return options.slots;
+};
 
 /** Milliseconds on the monotonic clock. */
 const nowMs = (): i64 => monotonicNanos() / toI64(1000000);
@@ -115,6 +142,31 @@ const interopQuicConfig = (chain: u8[][], retry: boolean): QuicServerConfig => {
   };
 };
 
+/**
+ * HTTP/1.1's loop with each pool sized by `poolSlots`. `H1Loop` takes one
+ * size for both pools, so when the two differ it is built at one slot, and
+ * each pool wanting more, with the app's slot states, is replaced by one of
+ * its own size. A replaced pool's one-slot original stays allocated: about
+ * 4 kB for plain HTTP/1.1 and 160 kB for HTTPS/1.1 (bench/README.md, "Pool
+ * memory").
+ */
+const newH1Loop = (options: InteropOptions): H1Loop => {
+  const plain: i32 = poolSlots(options, "h1");
+  const tls: i32 = poolSlots(options, "h1s");
+  if (plain === tls) {
+    return new H1Loop(testConfig(), tcpConfig([H1_ALPN]), plain, options.h1Port, options.h1sPort);
+  }
+  const h1 = new H1Loop(testConfig(), tcpConfig([H1_ALPN]), 1, options.h1Port, options.h1sPort);
+  h1.app = new App(plain > tls ? plain : tls);
+  if (plain > 1) {
+    h1.plain = new Http1Server(testConfig(), h1.plainListener, plain);
+  }
+  if (tls > 1) {
+    h1.secure = new Http1TlsServer(tcpConfig([H1_ALPN]), testConfig(), h1.tlsListener, tls);
+  }
+  return h1;
+};
+
 /** The loop and every server in it. */
 export class InteropServer {
   h1: H1Loop;
@@ -144,7 +196,7 @@ export class InteropServer {
       interopQuicConfig(chain, options.testcase === "retry"),
       h3Config,
       this.udp,
-      options.slots,
+      poolSlots(options, "h3"),
       randomBytes(QUIC_LISTENER_ENTROPY_SIZE)
     );
     const wts: WebTransport[] = [];
@@ -153,9 +205,9 @@ export class InteropServer {
     }
     const files = new InteropFiles(options.www);
     this.app = new InteropApp(this.h3, wts, files);
-    this.h1 = new H1Loop(testConfig(), tcpConfig([H1_ALPN]), 16, options.h1Port, options.h1sPort);
+    this.h1 = newH1Loop(options);
     this.h1.serving = true;
-    this.h2 = new InteropH2(this.loop, "127.0.0.1", options.h2Port, chain, files, toI32(64));
+    this.h2 = new InteropH2(this.loop, "127.0.0.1", options.h2Port, chain, files, poolSlots(options, "h2"));
     if (this.udp >= 0) {
       pollAdd(this.loop, this.udp, 1, TOKEN_QUIC);
     }

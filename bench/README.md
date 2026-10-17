@@ -661,6 +661,98 @@ the count, in one process, and fails if the checksum differs from the one
 pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
 must keep printing it.
 
+## Pool memory
+
+The interop server (`tests/link/net_interop_server`, the runner's endpoint)
+builds a connection pool per carrier before it listens: QUIC for HTTP/3,
+HTTP/2, HTTPS/1.1 and plain HTTP/1.1, each `--slots` connections deep (1 to
+4096, 64 by default; the two HTTP/1.1 pools stop at 500, where `H1Loop`'s
+event tokens run out). Two scripts measure what that costs and what it serves:
+
+```bash
+build/nish tests/link/net_interop_server/main.ts -o build/interop.ir/ --link build/interop
+node bench/pool-rss.mjs --bin build/interop --slots 16,64,256,1024    # memory and time to listen
+node bench/pool-rss.mjs --bin build/interop --slots 64,256 --per-pool # what one slot of each pool costs
+node bench/h2load.mjs --bin build/interop                             # throughput against itself: the noise band
+node bench/h2load.mjs --bin build/interop-a --against build/interop-b
+```
+
+`pool-rss.mjs` times each server from exec until all four ports answer (a TCP
+connect to each TCP port, and a QUIC packet of a reserved version, which only
+the running loop answers with Version Negotiation), then reads `VmRSS` and
+`VmHWM` and kills it. A server that does not answer within `--timeout`
+seconds is reported as a timeout, and one past `--cap` MB resident (three
+quarters of the memory free when the run starts, by default) as out of memory, so a count too
+large for the machine ends its row rather than the container; a server the
+kernel kills first is reported as a possible OOM kill. `--per-pool`
+sizes one pool at a time with `--only`, the others at one slot, and divides
+its growth over the all-one-slot server by the slots added.
+
+`h2load.mjs` runs each build as its own server pinned to CPU 0, and h2load
+(nghttp2 1.59.0, Ubuntu's `nghttp2-client`) on the other CPUs: HTTPS/1.1 with
+`--h1` and HTTP/2 with eight streams a connection, 16 connections and 20,000
+requests a run. That h2load is built without ngtcp2 and nghttp3 and cannot
+speak HTTP/3, which the script reports on stderr; HTTP/3 is instead `main
+h3-load`, the server and `client.ts`'s scripted QUIC client in one process on
+CPU 0, one connection with 2,000 requests one after another. Its figure is the
+server's and the client's work together: it compares builds, and is not
+comparable to h2load's rows. Rounds alternate which build goes first; each row
+gives the median requests a second and the median per-round ratio b / a with
+its spread. `--rounds` is 5 by default and may not go below 3, and
+`--clients` not below h2load's thread count.
+
+Both scripts need Linux (`/proc` for the memory, `taskset` for the pinning)
+and are run from the repository root, where the `www` directory and the
+default `build/interop` path resolve.
+
+### Baseline
+
+Measured with `build/interop` built from this branch on top of `main` at
+`249cbe9`, on 4 CPUs and 16 GB with no swap, 3 runs a count. Each figure is
+the median, with the runs' spread (min–max) as its noise band.
+
+| slots | VmRSS MB | VmHWM MB | listening ms | load generator |
+| ---: | ---: | ---: | ---: | --- |
+| 16 | 204.2 (204.2–204.2) | 204.2 (204.2–204.2) | 172 (158–174) | `pool-rss.mjs` |
+| 64 | 808.6 (808.6–808.6) | 808.6 (808.6–808.6) | 607 (576–629) | `pool-rss.mjs` |
+| 256 | 3,226.5 (3,226.5–3,226.5) | 3,226.5 (3,226.5–3,226.5) | 4,595 (3,666–13,185) | `pool-rss.mjs` |
+| 1024 | timeout at 30 s, 6,701 MB resident; with `--timeout 120`, out of memory past the 11,590 MB cap | | | `pool-rss.mjs` |
+
+256 slots fit; 1024 do not on this machine. At 12,460 kB a slot, the QUIC
+pool alone wants about 12,460 MB, more than three quarters of 16 GB, and the
+cap stops it there instead of the kernel's OOM killer. The 256-slot start's
+wide time spread is one run of the three, which took 13 s.
+
+Per pool, `--per-pool` at 64 and 256 slots against the all-one-slot server
+(15.1 MB, 15.1–15.1; listening in 22 ms, 20–32):
+
+| pool | VmRSS MB at 64 | VmRSS MB at 256 | per slot | listening ms at 256 |
+| --- | ---: | ---: | ---: | ---: |
+| QUIC (HTTP/3) | 781.8 (781.7–781.8) | 3,118.0 (3,118.0–3,118.0) | 12,460 kB | 2,241 (2,190–3,005) |
+| HTTP/2 | 32.3 (32.3–32.3) | 84.4 (84.4–84.4) | 278 kB | 74 (72–114) |
+| HTTPS/1.1 | 25.2 (25.2–25.2) | 54.9 (54.9–54.9) | 160 kB | 56 (55–59) |
+| HTTP/1.1 | 15.4 (15.4–15.4) | 16.1 (16.1–16.1) | 4 kB | 19 (19–19) |
+
+The QUIC pool is 97% of the 64-slot server's memory. The per-slot figures
+agree between 64 and 256 to within 3%, HTTPS/1.1 the widest (164 kB a slot
+at 64, 160 kB at 256), and the runs' RSS spread is under
+0.1 MB, so their noise is below the precision shown.
+
+Throughput, `h2load.mjs` with the build against itself at 64 slots, 5 rounds.
+The b / a spread is the noise band for a comparison between two builds:
+
+| scenario | load generator | a req/s | b req/s | b / a (min–max) |
+| --- | --- | ---: | ---: | ---: |
+| HTTPS/1.1, c=16 | h2load `--h1` | 47,354 | 45,476 | 0.960 (0.916–1.085) |
+| HTTP/2, c=16, m=8 | h2load | 74,411 | 76,258 | 1.025 (0.797–1.182) |
+| HTTP/3, one connection, 2,000 requests | `main h3-load` (in process) | 13,245 | 13,423 | 1.034 (0.886–1.081) |
+
+A difference between two builds counts only outside that band: about ±10% for
+HTTPS/1.1 and HTTP/3 and ±20% for HTTP/2 on this machine. HTTP/3 runs 2,000
+requests rather than 20,000 because its rate falls as the one connection's
+streams pile up (about 1,900 requests a second over 20,000), and a longer run
+would measure that build-up rather than a request.
+
 ## HTTP/3 latency
 
 `h3-latency.mjs` times `std/net`'s HTTP/3 server, run as
