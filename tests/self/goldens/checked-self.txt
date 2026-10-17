@@ -508,7 +508,7 @@ struct SecretExitTarget (class) size=24 align=8
   field breaks: FlowState index=2 offset=8
   field continues: FlowState index=3 offset=16
   constructor -> @SecretExitTarget.constructor
-struct SecretFlow (class) size=104 align=8
+struct SecretFlow (class) size=96 align=8
   field ctx: CheckContext index=0 offset=0
   field vars: Local[] index=1 offset=8
   field owned: boolean[] index=2 offset=16
@@ -516,12 +516,12 @@ struct SecretFlow (class) size=104 align=8
   field declBlocks: Node[] index=4 offset=32
   field declDepths: i32[] index=5 offset=40
   field slots: string[] index=6 offset=48
-  field building: boolean index=7 offset=56
-  field movable: Local[] index=8 offset=64
-  field sites: Node[] index=9 offset=72
-  field targets: SecretExitTarget[] index=10 offset=80
-  field report: boolean index=11 offset=88
-  field reported: boolean[] index=12 offset=96
+  field movable: Local[] index=7 offset=56
+  field sites: Node[] index=8 offset=64
+  field targets: SecretExitTarget[] index=9 offset=72
+  field building: boolean index=10 offset=80
+  field report: boolean index=11 offset=81
+  field reported: boolean[] index=12 offset=88
   constructor -> @SecretFlow.constructor
   method fresh -> @SecretFlow.fresh
   method varIndex -> @SecretFlow.varIndex
@@ -920,33 +920,33 @@ function SecretExitTarget.constructor(this: SecretExitTarget, isSwitch: boolean,
 function SecretFlow.constructor(this: SecretFlow, ctx: CheckContext): void -> @SecretFlow.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: ctx
-  pointer this: size=104 writesThrough=true captured=false
+  pointer this: size=96 writesThrough=true captured=false
   pointer ctx: size=224 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function SecretFlow.fresh(this: SecretFlow): FlowState -> @SecretFlow.fresh [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via FlowState.constructor
   calls: FlowState.constructor nish_alloc_struct
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 653:12 new FlowState -> @FlowState.constructor
 function SecretFlow.varIndex(this: SecretFlow, local: Local | null): i32 -> @SecretFlow.varIndex [method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 660:9 i: i32 (let)
 function SecretFlow.slotIndex(this: SecretFlow, member: Node): i32 -> @SecretFlow.slotIndex [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   pointer member: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 672:9 unwrapSecretNode -> @unwrapSecretNode
   local 675:9 i: i32 (let)
 function SecretFlow.movableIndex(this: SecretFlow, local: Local | null): i32 -> @SecretFlow.movableIndex [method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 689:9 i: i32 (let)
@@ -955,7 +955,7 @@ function SecretFlow.error(this: SecretFlow, node: Node, message: string): void -
   sharedWrite: 704:7
   escaping: message
   calls: CheckContext.error nish_array_grow nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee 710:5 CheckContext.error -> @CheckContext.error
@@ -963,14 +963,14 @@ function SecretFlow.typeName(this: SecretFlow, i: i32): string -> @SecretFlow.ty
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: TypeTable.typeName
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee 716:12 TypeTable.typeName -> @TypeTable.typeName
 function SecretFlow.checkExit(this: SecretFlow, state: FlowState, at: Node, depth: i32, keep: i32): void -> @SecretFlow.checkExit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SecretFlow.error
   calls: SecretFlow.endMessage SecretFlow.error nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.error#0 SecretFlow.endMessage#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.error#0 SecretFlow.endMessage#0
   pointer state: size=32 writesThrough=false captured=false
   pointer at: size=40 writesThrough=false captured=false passedTo=SecretFlow.error#1
   stackSites=0 stackLocals=0
@@ -982,7 +982,7 @@ function SecretFlow.checkScopeEnd(this: SecretFlow, state: FlowState, block: Nod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 752:9
   calls: SecretFlow.endMessage SecretFlow.error nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.error#0 SecretFlow.endMessage#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.error#0 SecretFlow.endMessage#0
   pointer state: size=32 writesThrough=false captured=false
   pointer block: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -994,7 +994,7 @@ function SecretFlow.endMessage(this: SecretFlow, i: i32, atExit: boolean): strin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: i
   calls: SecretFlow.typeName exitMessage nish_panic_index nish_str_eq releaseMessage scopeEndMessage
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.typeName#0 SecretFlow.typeName#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.typeName#0 SecretFlow.typeName#0
   stackSites=0 stackLocals=0
   local 763:11 name: string (const)
   callee 765:14 releaseMessage -> @releaseMessage
@@ -1006,7 +1006,7 @@ function SecretFlow.statements(this: SecretFlow, list: Node[], state: FlowState,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SecretFlow.statement
   calls: SecretFlow.statement
-  pointer this: size=104 writesThrough=true captured=false passedTo=SecretFlow.statement#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=SecretFlow.statement#0
   pointer list: size=0 writesThrough=false captured=false
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.statement#2
   pointer block: size=40 writesThrough=true captured=true passedTo=SecretFlow.statement#3
@@ -1017,7 +1017,7 @@ function SecretFlow.statement(this: SecretFlow, stmt: Node, state: FlowState, bl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 793:11
   calls: SecretFlow.checkScopeEnd SecretFlow.declarations SecretFlow.expression SecretFlow.forStatement SecretFlow.ifStatement SecretFlow.leave SecretFlow.loop SecretFlow.returnValue SecretFlow.statements SecretFlow.switchStatement nish_panic_index terminatesControlFlow
-  pointer this: size=104 writesThrough=true captured=false passedTo=SecretFlow.statements#0 SecretFlow.checkScopeEnd#0 SecretFlow.declarations#0 SecretFlow.expression#0 SecretFlow.returnValue#0 SecretFlow.expression#0 SecretFlow.ifStatement#0 SecretFlow.loop#0 SecretFlow.loop#0 SecretFlow.forStatement#0 SecretFlow.expression#0 SecretFlow.loop#0 SecretFlow.switchStatement#0 SecretFlow.leave#0 SecretFlow.leave#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=SecretFlow.statements#0 SecretFlow.checkScopeEnd#0 SecretFlow.declarations#0 SecretFlow.expression#0 SecretFlow.returnValue#0 SecretFlow.expression#0 SecretFlow.ifStatement#0 SecretFlow.loop#0 SecretFlow.loop#0 SecretFlow.forStatement#0 SecretFlow.expression#0 SecretFlow.loop#0 SecretFlow.switchStatement#0 SecretFlow.leave#0 SecretFlow.leave#0
   pointer stmt: size=40 writesThrough=true captured=true passedTo=SecretFlow.statements#3 SecretFlow.checkScopeEnd#2 SecretFlow.declarations#1 SecretFlow.returnValue#1 SecretFlow.ifStatement#1 SecretFlow.loop#1 SecretFlow.loop#1 SecretFlow.forStatement#1 SecretFlow.loop#1 SecretFlow.switchStatement#1 SecretFlow.leave#1 SecretFlow.leave#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.statements#2 SecretFlow.checkScopeEnd#1 SecretFlow.declarations#2 SecretFlow.expression#3 SecretFlow.returnValue#3 SecretFlow.expression#3 SecretFlow.ifStatement#2 SecretFlow.loop#6 SecretFlow.loop#6 SecretFlow.forStatement#2 SecretFlow.expression#3 SecretFlow.loop#6 SecretFlow.switchStatement#2 SecretFlow.leave#2 SecretFlow.leave#2
   pointer block: size=40 writesThrough=true captured=true passedTo=SecretFlow.declarations#3 SecretFlow.ifStatement#3 SecretFlow.loop#7 SecretFlow.loop#7 SecretFlow.forStatement#3 SecretFlow.loop#7
@@ -1043,7 +1043,7 @@ function SecretFlow.declarations(this: SecretFlow, stmt: Node, state: FlowState,
   sharedWrite: 845:9
   escaping: block
   calls: SecretFlow.expression SecretFlow.movableIndex SecretFlow.varIndex isMemberRead mayHoldSecret nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.varIndex#0 SecretFlow.movableIndex#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.varIndex#0 SecretFlow.movableIndex#0
   pointer stmt: size=40 writesThrough=false captured=false
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3
   pointer block: size=40 writesThrough=true captured=true
@@ -1062,7 +1062,7 @@ function SecretFlow.returnValue(this: SecretFlow, at: Node, value: Node, state: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 865:5
   calls: SecretFlow.checkExit SecretFlow.expression SecretFlow.varIndex nish_panic_index unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.varIndex#0 SecretFlow.expression#0 SecretFlow.checkExit#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.varIndex#0 SecretFlow.expression#0 SecretFlow.checkExit#0
   pointer at: size=40 writesThrough=false captured=false passedTo=SecretFlow.checkExit#2
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapSecretNode#0 SecretFlow.expression#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3 SecretFlow.checkExit#1
@@ -1077,7 +1077,7 @@ function SecretFlow.ifStatement(this: SecretFlow, stmt: Node, state: FlowState, 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 880:7
   calls: SecretFlow.expression SecretFlow.narrowNull SecretFlow.statement assign copyState mergeInto nish_panic_index
-  pointer this: size=104 writesThrough=true captured=false passedTo=SecretFlow.expression#0 SecretFlow.narrowNull#0 SecretFlow.statement#0 SecretFlow.statement#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=SecretFlow.expression#0 SecretFlow.narrowNull#0 SecretFlow.statement#0 SecretFlow.statement#0
   pointer stmt: size=40 writesThrough=false captured=false
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3 copyState#0 copyState#0 assign#0
   pointer block: size=40 writesThrough=true captured=true passedTo=SecretFlow.statement#3 SecretFlow.statement#3
@@ -1097,7 +1097,7 @@ function SecretFlow.narrowNull(this: SecretFlow, cond: Node, whenTrue: FlowState
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 903:7
   calls: SecretFlow.varIndex nish_panic_index nish_str_eq unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.varIndex#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.varIndex#0
   pointer cond: size=40 writesThrough=true captured=true passedTo=unwrapSecretNode#0
   pointer whenTrue: size=32 writesThrough=false captured=false
   pointer whenFalse: size=32 writesThrough=false captured=false
@@ -1116,7 +1116,7 @@ function SecretFlow.forStatement(this: SecretFlow, stmt: Node, state: FlowState,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SecretFlow.declarations
   calls: SecretFlow.checkScopeEnd SecretFlow.declarations SecretFlow.expression SecretFlow.loop nish_panic_index
-  pointer this: size=104 writesThrough=true captured=false passedTo=SecretFlow.declarations#0 SecretFlow.expression#0 SecretFlow.loop#0 SecretFlow.checkScopeEnd#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=SecretFlow.declarations#0 SecretFlow.expression#0 SecretFlow.loop#0 SecretFlow.checkScopeEnd#0
   pointer stmt: size=40 writesThrough=true captured=true passedTo=SecretFlow.declarations#3 SecretFlow.loop#1 SecretFlow.checkScopeEnd#2
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.declarations#2 SecretFlow.expression#3 SecretFlow.loop#6 SecretFlow.checkScopeEnd#1
   pointer block: size=40 writesThrough=true captured=true passedTo=SecretFlow.loop#7
@@ -1132,7 +1132,7 @@ function SecretFlow.loop(this: SecretFlow, stmt: Node, cond: Node | null, body: 
   sharedWrite: 945:5
   escaping: once
   calls: SecretFlow.pass assign copyState mergeInto sameState
-  pointer this: size=104 writesThrough=true captured=false passedTo=SecretFlow.pass#0 SecretFlow.pass#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=SecretFlow.pass#0 SecretFlow.pass#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=SecretFlow.pass#1 SecretFlow.pass#1
   pointer cond: size=40 writesThrough=true captured=true passedTo=SecretFlow.pass#2 SecretFlow.pass#2
   pointer body: size=40 writesThrough=true captured=true passedTo=SecretFlow.pass#3 SecretFlow.pass#3
@@ -1160,7 +1160,7 @@ function SecretFlow.pass(this: SecretFlow, stmt: Node, cond: Node | null, body: 
   sharedWrite: 979:5
   escaping: head
   calls: LoopPass.constructor SecretExitTarget.constructor SecretFlow.checkScopeEnd SecretFlow.expression SecretFlow.fresh SecretFlow.statement isLiteralTrue mergeInto nish_alloc_struct nish_array_grow nish_panic_index
-  pointer this: size=104 writesThrough=true captured=false passedTo=SecretFlow.fresh#0 SecretFlow.expression#0 SecretFlow.statement#0 SecretFlow.checkScopeEnd#0 SecretFlow.expression#0 SecretFlow.expression#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=SecretFlow.fresh#0 SecretFlow.expression#0 SecretFlow.statement#0 SecretFlow.checkScopeEnd#0 SecretFlow.expression#0 SecretFlow.expression#0
   pointer stmt: size=40 writesThrough=false captured=false
   pointer cond: size=40 writesThrough=true captured=true passedTo=SecretFlow.expression#1 isLiteralTrue#0 SecretFlow.expression#1 isLiteralTrue#0
   pointer body: size=40 writesThrough=true captured=true passedTo=SecretFlow.statement#1 SecretFlow.checkScopeEnd#2
@@ -1190,7 +1190,7 @@ function SecretFlow.switchStatement(this: SecretFlow, stmt: Node, state: FlowSta
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1013:5
   calls: SecretExitTarget.constructor SecretFlow.checkScopeEnd SecretFlow.expression SecretFlow.fresh SecretFlow.statements assign copyState mergeInto nish_alloc_struct nish_array_grow nish_panic_index
-  pointer this: size=104 writesThrough=true captured=false passedTo=SecretFlow.expression#0 SecretFlow.fresh#0 SecretFlow.expression#0 SecretFlow.statements#0 SecretFlow.checkScopeEnd#0
+  pointer this: size=96 writesThrough=true captured=false passedTo=SecretFlow.expression#0 SecretFlow.fresh#0 SecretFlow.expression#0 SecretFlow.statements#0 SecretFlow.checkScopeEnd#0
   pointer stmt: size=40 writesThrough=false captured=false
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3 copyState#0 assign#0
   stackSites=0 stackLocals=0
@@ -1218,7 +1218,7 @@ function SecretFlow.leave(this: SecretFlow, stmt: Node, state: FlowState, isCont
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1050:7
   calls: SecretFlow.checkExit mergeInto nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.checkExit#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.checkExit#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=SecretFlow.checkExit#2
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.checkExit#1 mergeInto#1
   stackSites=0 stackLocals=0
@@ -1232,7 +1232,7 @@ function SecretFlow.expression(this: SecretFlow, node: Node, role: i32, state: F
   sharedWrite: via SecretFlow.expression
   escaping: role
   calls: SecretFlow.binary SecretFlow.call SecretFlow.expression SecretFlow.fieldRead SecretFlow.name SecretFlow.produced TypeTable.isSecret assign capturedReads copyState isBorrowable mergeInto nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.name#0 SecretFlow.name#0 SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.binary#0 SecretFlow.call#0 SecretFlow.expression#0 SecretFlow.produced#0 SecretFlow.fieldRead#0 SecretFlow.expression#0 SecretFlow.produced#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.name#0 SecretFlow.name#0 SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.binary#0 SecretFlow.call#0 SecretFlow.expression#0 SecretFlow.produced#0 SecretFlow.fieldRead#0 SecretFlow.expression#0 SecretFlow.produced#0
   pointer node: size=40 writesThrough=true captured=true passedTo=SecretFlow.name#1 capturedReads#1 SecretFlow.binary#1 SecretFlow.call#1 SecretFlow.produced#1 SecretFlow.fieldRead#1 SecretFlow.produced#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3 SecretFlow.name#3 SecretFlow.name#3 SecretFlow.expression#3 copyState#0 copyState#0 assign#0 SecretFlow.binary#2 SecretFlow.call#3 SecretFlow.expression#3 SecretFlow.fieldRead#3 SecretFlow.expression#3
   stackSites=1 stackLocals=1
@@ -1268,7 +1268,7 @@ function SecretFlow.produced(this: SecretFlow, node: Node, role: i32): void -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SecretFlow.error
   calls: SecretFlow.error TypeTable.isSecret discardMessage nish_panic_index
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.error#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=SecretFlow.error#1
   stackSites=0 stackLocals=0
   local 1130:11 type: i32 (const)
@@ -1279,7 +1279,7 @@ function SecretFlow.fieldRead(this: SecretFlow, node: Node, role: i32, state: Fl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1164:7
   calls: SecretFlow.error SecretFlow.expression SecretFlow.slotIndex fieldReadMessage nish_panic_index wipedMessage
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.error#0 SecretFlow.slotIndex#0 SecretFlow.error#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.error#0 SecretFlow.slotIndex#0 SecretFlow.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=SecretFlow.error#1 SecretFlow.slotIndex#1 SecretFlow.error#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3
   stackSites=0 stackLocals=0
@@ -1295,7 +1295,7 @@ function SecretFlow.fieldStore(this: SecretFlow, target: Node, value: Node, stat
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1191:7
   calls: SecretFlow.call SecretFlow.error SecretFlow.expression SecretFlow.slotIndex SecretFlow.varIndex fieldReadMessage fieldSourceMessage nish_panic_index nish_str_eq refillMessage secretRoleOf unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.slotIndex#0 SecretFlow.expression#0 SecretFlow.call#0 SecretFlow.error#0 SecretFlow.expression#0 SecretFlow.error#0 SecretFlow.varIndex#0 SecretFlow.error#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.slotIndex#0 SecretFlow.expression#0 SecretFlow.call#0 SecretFlow.error#0 SecretFlow.expression#0 SecretFlow.error#0 SecretFlow.varIndex#0 SecretFlow.error#0
   pointer target: size=40 writesThrough=false captured=false passedTo=SecretFlow.slotIndex#1 SecretFlow.error#1
   pointer value: size=40 writesThrough=true captured=true passedTo=SecretFlow.expression#1 unwrapSecretNode#0 SecretFlow.error#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3 SecretFlow.call#3 SecretFlow.expression#3
@@ -1321,7 +1321,7 @@ function SecretFlow.name(this: SecretFlow, node: Node, role: i32, state: FlowSta
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1227:7
   calls: SecretFlow.error SecretFlow.movableIndex SecretFlow.varIndex TypeTable.isSecret copyMessage movedMessage movedOutMessage nish_panic_index sourceLocal wipedMessage
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.movableIndex#0 SecretFlow.error#0 SecretFlow.varIndex#0 SecretFlow.error#0 SecretFlow.error#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.movableIndex#0 SecretFlow.error#0 SecretFlow.varIndex#0 SecretFlow.error#0 SecretFlow.error#0
   pointer node: size=40 writesThrough=false captured=false passedTo=SecretFlow.error#1 SecretFlow.error#1 SecretFlow.error#1
   pointer state: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1343,7 +1343,7 @@ function SecretFlow.binary(this: SecretFlow, node: Node, state: FlowState): void
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via SecretFlow.assignment
   calls: SecretFlow.assignment SecretFlow.expression nish_panic_index nish_str_eq unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.assignment#0 SecretFlow.expression#0 SecretFlow.expression#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.assignment#0 SecretFlow.expression#0 SecretFlow.expression#0
   pointer node: size=40 writesThrough=false captured=false passedTo=SecretFlow.assignment#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.assignment#2 SecretFlow.expression#3 SecretFlow.expression#3
   stackSites=0 stackLocals=0
@@ -1359,7 +1359,7 @@ function SecretFlow.binary(this: SecretFlow, node: Node, state: FlowState): void
 function SecretFlow.storedType(this: SecretFlow, target: Node): i32 -> @SecretFlow.storedType [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct StructInfo.field TypeTable.nameOf TypeTable.stripNull nish_panic_index unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false
+  pointer this: size=96 writesThrough=false captured=false
   pointer target: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 1281:11 program: CheckedProgram (const)
@@ -1378,7 +1378,7 @@ function SecretFlow.assignment(this: SecretFlow, node: Node, state: FlowState): 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1324:7
   calls: SecretFlow.error SecretFlow.expression SecretFlow.fieldStore SecretFlow.movableIndex SecretFlow.storedType SecretFlow.varIndex TypeTable.isSecret isMemberRead mayHoldSecret nish_panic_index overwriteMessage unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.storedType#0 SecretFlow.fieldStore#0 SecretFlow.expression#0 SecretFlow.varIndex#0 SecretFlow.expression#0 SecretFlow.error#0 SecretFlow.movableIndex#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.storedType#0 SecretFlow.fieldStore#0 SecretFlow.expression#0 SecretFlow.varIndex#0 SecretFlow.expression#0 SecretFlow.error#0 SecretFlow.movableIndex#0
   pointer node: size=40 writesThrough=false captured=false
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.fieldStore#3 SecretFlow.expression#3 SecretFlow.expression#3
   stackSites=0 stackLocals=0
@@ -1405,7 +1405,7 @@ function SecretFlow.call(this: SecretFlow, node: Node, role: i32, state: FlowSta
   sharedWrite: via SecretFlow.expression
   escaping: role
   calls: SecretFlow.checkExit SecretFlow.expression SecretFlow.move SecretFlow.produced TypeTable.isResult TypeTable.stripNull isBorrowable nish_panic_index nish_str_eq secretRoleOf
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.move#0 SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.checkExit#0 SecretFlow.produced#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.move#0 SecretFlow.expression#0 SecretFlow.expression#0 SecretFlow.checkExit#0 SecretFlow.produced#0
   pointer node: size=40 writesThrough=false captured=false passedTo=SecretFlow.checkExit#2 SecretFlow.produced#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3 SecretFlow.expression#3 SecretFlow.move#2 SecretFlow.expression#3 SecretFlow.expression#3 SecretFlow.checkExit#1
   stackSites=0 stackLocals=0
@@ -1432,7 +1432,7 @@ function SecretFlow.move(this: SecretFlow, arg: Node, state: FlowState): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1394:9
   calls: SecretFlow.error SecretFlow.expression SecretFlow.movableIndex SecretFlow.move assign copyState mergeInto movedMessage nish_panic_index unmovableMessage unwrapSecretNode
-  pointer this: size=104 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.move#0 SecretFlow.move#0 SecretFlow.error#0 SecretFlow.movableIndex#0 SecretFlow.error#0 SecretFlow.error#0 SecretFlow.expression#0
+  pointer this: size=96 writesThrough=false captured=false passedTo=SecretFlow.expression#0 SecretFlow.move#0 SecretFlow.move#0 SecretFlow.error#0 SecretFlow.movableIndex#0 SecretFlow.error#0 SecretFlow.error#0 SecretFlow.expression#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapSecretNode#0 SecretFlow.expression#1
   pointer state: size=32 writesThrough=true captured=false passedTo=SecretFlow.expression#3 copyState#0 copyState#0 assign#0 SecretFlow.expression#3
   stackSites=0 stackLocals=0
@@ -1511,7 +1511,7 @@ function collectFlow(flow: SecretFlow, node: Node): void -> @collectFlow
   sharedWrite: 1470:7
   escaping: node
   calls: SecretFlow.movableIndex SecretFlow.varIndex TypeTable.isSecret collectFlow collectMoved nish_array_grow nish_panic_index nish_str_eq secretRoleOf unwrapSecretNode
-  pointer flow: size=104 writesThrough=false captured=false passedTo=SecretFlow.varIndex#0 SecretFlow.varIndex#0 SecretFlow.movableIndex#0 collectMoved#0 collectFlow#0
+  pointer flow: size=96 writesThrough=false captured=false passedTo=SecretFlow.varIndex#0 SecretFlow.varIndex#0 SecretFlow.movableIndex#0 collectMoved#0 collectFlow#0
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local 1462:9 program: CheckedProgram (const)
@@ -1537,7 +1537,7 @@ function collectMoved(flow: SecretFlow, arg: Node): void -> @collectMoved
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 1538:5
   calls: SecretFlow.movableIndex collectMoved nish_array_grow nish_panic_index unwrapSecretNode
-  pointer flow: size=104 writesThrough=false captured=false passedTo=collectMoved#0 collectMoved#0 SecretFlow.movableIndex#0
+  pointer flow: size=96 writesThrough=false captured=false passedTo=collectMoved#0 collectMoved#0 SecretFlow.movableIndex#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapSecretNode#0
   stackSites=0 stackLocals=0
   local 1527:9 named: Node (const)
@@ -1575,7 +1575,7 @@ function collectSlots(flow: SecretFlow, body: Node): boolean -> @collectSlots
   sharedWrite: 1592:3
   escaping: body
   calls: Local.constructor StructInfo.method TypeTable.isSecret nish_alloc_struct nish_array_grow nish_str_concat secretFieldOf
-  pointer flow: size=104 writesThrough=true captured=false
+  pointer flow: size=96 writesThrough=true captured=false
   pointer body: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local 1582:9 sig: FunctionSig | null (const)

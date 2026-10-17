@@ -623,12 +623,12 @@ class SecretFlow {
    * (owned and live from the start: ended on every path).
    */
   slots: string[]
-  /** The body is a holder's constructor, whose slots are set rather than ended. */
-  building: boolean
   movable: Local[]
   /** Every `secret(...)` call in the body, which the sole-reference rule judges. */
   sites: Node[]
   targets: SecretExitTarget[]
+  /** The body is a holder's constructor, whose slots are set rather than ended. */
+  building: boolean
   report: boolean
   /** Node ids already reported, so a node reached twice in one pass says it once. */
   reported: boolean[]
