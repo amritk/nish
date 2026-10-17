@@ -21,7 +21,7 @@ import { functionTypeHereMessage, isFunctionParameter } from "./generics"
 import { isThreadsSource } from "./parallel"
 import { FLAG_COMPUTED, FLAG_EXPORTED, FLAG_TYPE_ONLY, N_EMPTY, N_IDENT, N_LIST, Node } from "./nodes"
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program"
-import { isForeignType, T_ERROR, T_I32, T_VOID } from "./types"
+import { isForeignType, T_ERROR, T_I32, T_STRING, T_VOID } from "./types"
 
 /** Symbol the entry module's `export function main` is emitted under. */
 const ENTRY_MAIN_SYMBOL: string = "nish_main"
@@ -140,14 +140,15 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
 }
 
 /**
- * The rules a `declare function` adds (WP27 S1, widened by S2): no body, not
- * exported, and a scalar or a `CPtr` in every position.
+ * The rules a `declare function` adds (WP27 S1, widened by S2 and S3.1): no
+ * body, not exported, a scalar or a `CPtr` in every position, and a `string`
+ * or `string | null` as a parameter.
  *
- * The rule is what makes this sound rather than merely small, and S2 does not
- * weaken it: no pointer *this compiler allocated* crosses the boundary in
- * either direction, so there is still nothing for the escape analysis to be
- * wrong about. What S2 adds is a pointer coming back that the compiler must
- * never mistake for one of its own (`docs/wp27-ffi.md` §2, §3).
+ * S2 adds a pointer coming back that the compiler must never mistake for one
+ * of its own (`docs/wp27-ffi.md` §2, §3). S3.1 is the first pointer this
+ * compiler allocated to cross the boundary, and it crosses under a decision
+ * rather than a proof: C borrows a string for the length of the call and may
+ * not keep it (§8b), which is what `src/escape.ts` reads a foreign argument as.
  */
 const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void => {
   if (sig.body() !== null) {
@@ -161,13 +162,21 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
   }
   let i = 0
   while (i < sig.paramTypes.length) {
+    if (ctx.table.stripNull(sig.paramTypes[i]) === T_STRING) {
+      // S3.1: C's `const char *`, borrowed for the call (`docs/wp27-ffi.md`
+      // §8b), and `string | null` passes `NULL`. Unlike a `CPtr`'s, this null
+      // is the program's to give: it names no address, so there is no
+      // provenance for C to be wrong about.
+      i = i + 1
+      continue
+    }
     if (ctx.table.isRanged(sig.paramTypes[i])) {
       refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
     } else if (!isForeignType(ctx.table, sig.paramTypes[i])) {
       const spelled = ctx.table.typeName(sig.paramTypes[i])
       ctx.error(
         decl,
-        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars and \`CPtr\` only`
+        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars and \`CPtr\` only, besides a \`string\` it borrows as \`const char *\``
       )
     } else if (ctx.table.isNullable(sig.paramTypes[i])) {
       // A parameter cannot be `CPtr | null`, and the asymmetry with the return

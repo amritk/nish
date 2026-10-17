@@ -710,6 +710,14 @@ class EscapeAnalysis {
       ) {
         return new Outcome(FLOW_LOCAL, true, false)
       }
+      // WP27 S3.1: a `string` handed to a `declare function` is borrowed for
+      // the length of the call, and the C function may not keep its address
+      // (`docs/wp27-ffi.md` §8b). Nothing about a C body can be proved, so
+      // this is the decision read as a fact: a read, as `console.log`'s is,
+      // and the arena scope may release once the call has returned.
+      if (callee !== null && callee.foreign()) {
+        return new Outcome(FLOW_LOCAL, true, false)
+      }
       const captures = callee === null ? true : this.calleeCaptures(callee, found.index)
       return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true, captures)
     }
@@ -1319,8 +1327,10 @@ export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
  *    store and `push` (`reject_argv_assign`, `reject_argv_push`). A callee can
  *    reach no more than it is handed, and what it is handed is either one of
  *    these parameters, something reached through them, or memory allocated
- *    during the call. No pointer this compiler allocated crosses the C
- *    boundary either (`docs/wp27-ffi.md` §7), so C holds none of them.
+ *    during the call. C holds none of them past a call either: the only
+ *    pointer this compiler allocated that crosses the C boundary is a
+ *    `string` lent to a `declare function` for the length of that call, and
+ *    the C function may not keep it (WP27 S3.1, `docs/wp27-ffi.md` §8b).
  *  - **None of that memory has a slot a pointer fits in.** A pointer outlives
  *    a call only by being stored, and a scalar field has no room for one. A
  *    string is immutable. An array is refused even of numbers, because a

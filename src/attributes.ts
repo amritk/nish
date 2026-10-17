@@ -51,7 +51,12 @@ import { isBuiltinFunction } from "./builtins"
 import { numericLiteralValue } from "./constants"
 import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
-import { stringifyCallee, stringConstructCallees } from "./emit-strings"
+import {
+  foreignStringCallees,
+  foreignStringIsNulFree,
+  stringifyCallee,
+  stringConstructCallees,
+} from "./emit-strings"
 import { unlabelledBuiltinError } from "./ice"
 import {
   analyzeEscapes,
@@ -190,6 +195,7 @@ import {
   PANIC_CALL,
   PANIC_DIVIDE,
   PANIC_EXPECT,
+  PANIC_FFI_NUL,
   PANIC_INDEX,
   PANIC_OVERFLOW,
   PANIC_PARALLEL_LENGTH,
@@ -2837,6 +2843,20 @@ class FactCollector {
     if (this.known !== null) {
       this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
     }
+    // WP27 S3.1: a string that may hold a NUL is searched for one before C
+    // reads it, and a hit panics (`emitForeignString`).
+    const args = call.children[1].children
+    let i = 0
+    while (i < args.length && i < callee.paramTypes.length) {
+      const arg = args[i]
+      if (this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
+        const checks: string[] = []
+        foreignStringCallees(checks)
+        this.addCallees(checks)
+        this.noteSite(arg, PANIC_FFI_NUL, false, "")
+      }
+      i = i + 1
+    }
   }
 
   /**
@@ -3507,8 +3527,9 @@ const collectFacts = (
   // which miscompiles rather than pessimises. So a foreign function asserts the
   // worst of everything it cannot be seen to avoid, and the fixpoint carries
   // that outward exactly as it carries any other impurity. `escaping` and the
-  // pointer facts stay empty because S1's boundary is scalars only, so a
-  // foreign callee has no pointer to capture (`docs/wp27-ffi.md` §3).
+  // pointer facts stay empty: S1's boundary was scalars only, and the one
+  // pointer S3.1 lets in, a `string` argument, is borrowed for the call and
+  // never kept, by the rule `docs/wp27-ffi.md` §8b decides rather than proves.
   if (sig.foreign()) {
     facts.effect = EFFECT_WRITE
     facts.sharedWrite = true // no site and no callee to name: the body is C

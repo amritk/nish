@@ -9,6 +9,7 @@
  *     // quicConfig.alpn is ["h3"]; pollAdd(loop, fd, 1, 0)
  *     // each time round the loop, with `now` in milliseconds:
  *     pollWait(loop, ready, server.timeout(now));
+ *     server.clock(micros);                      // the same instant in microseconds, for the pacer
  *     server.receive(now, key);                  // every datagram waiting; signs handshakes with `key`
  *     server.tick(now);                          // the connections' timers
  *     let slot: i32 = server.ready();
@@ -40,6 +41,10 @@
  * **Sending.** `flush` writes each touched slot's datagrams with
  * `quicListenerTakeFlight`, a paced flight at a time in one `udpSendTo` with
  * GSO where the platform has it and one datagram at a time where it does not.
+ * The pacer counts the microseconds `clock` gives it, so on a path whose
+ * round trip is under a millisecond it neither waits for the next
+ * millisecond to earn credit nor holds a slot back for a whole one; without
+ * `clock` it counts whole milliseconds.
  * A slot whose HTTP/3 side sent GOAWAY and whose requests have all finished,
  * every byte acknowledged, is closed with H3_NO_ERROR; a closed slot is freed
  * once its CONNECTION_CLOSE is out.
@@ -91,7 +96,7 @@ import {
   QuicFlight,
   QuicListener,
   QuicListenerAnswer,
-  quicListenerPaceTime,
+  quicListenerFlightTime,
   quicListenerTakeFlight,
 } from "nish/net/quic-listener"
 import { TlsP256Signer } from "nish/net/tls"
@@ -442,6 +447,8 @@ export class Http3Server {
   queued: i32[]
   /** When the answer budget was last topped up, -1 before the first answer. */
   answerRefilled: i64 = -1
+  /** The caller's clock in microseconds, from `clock`, or -1: what each connection's pacer counts. */
+  micros: i64 = -1
   fd: i32 = -1
   readyHead: i32 = 0
   readyCount: i32 = 0
@@ -737,9 +744,21 @@ export class Http3Server {
     return true
   }
 
+  /**
+   * Gives the server the caller's monotonic clock in microseconds: the
+   * instant the `now` of the calls that follow names, `monotonicNanos() /
+   * 1000` where `now` is `monotonicNanos() / 1000000`. The pacer counts it;
+   * every timer still counts `now`. One that is not inside `now`'s
+   * millisecond is not read.
+   */
+  clock(micros: i64): void {
+    this.micros = micros
+  }
+
   /** Hands `slot`'s connection a datagram, signs when the handshake asks, and refiles its IDs and timer. */
   serve(slot: i32, buf: u8[], at: i32, len: i32, now: i64, key: Secret<u8[]>): void {
     const quic: QuicConnection = this.quics[slot]
+    quic.recovery.micros = this.micros
     quic.receiveWindow(buf, at, len, now)
     const input: u8[] | null = quic.signatureInput()
     if (input !== null) {
@@ -825,6 +844,7 @@ export class Http3Server {
   /** `flush` of one slot. */
   flushSlot(slot: i32, now: i64): void {
     const quic: QuicConnection = this.quics[slot]
+    quic.recovery.micros = this.micros
     if (this.conns[slot].isDone() && !quic.closed()) {
       quic.close(H3_NO_ERROR)
     }
@@ -867,7 +887,7 @@ export class Http3Server {
     // The pacer answers a time, not a delay: the slot wakes at it when it
     // comes before the connection's own deadline.
     let due: i64 = quic.deadline()
-    const paced: i64 = quicListenerPaceTime(quic, now)
+    const paced: i64 = quicListenerFlightTime(quic, now)
     if (paced > now && (due < 0 || paced < due)) {
       due = paced
     }
