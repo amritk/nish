@@ -310,9 +310,19 @@ and the `_range` pair a copy-out per slot needed.
 Under glibc, `nish_pool_ready` raises `M_MMAP_THRESHOLD` to 32 MB and
 `M_TRIM_THRESHOLD` to 64 MB, so a 1 MB temporary a task or an element builds,
 freed at its release, is not returned to the kernel and faulted back in by the
-next one: 200 such tasks took 314 ms at one thread and take 48 ms. A region
-below its grain runs as the loop it would have been, and keeps that loop's
-cost. It costs 30 bytes of the threads build's `runtime-parallel.c`.
+next one: 200 such tasks took 314 ms at one thread and take 48 ms. These are
+the values glibc's sliding thresholds reach by themselves once a chunk of 32 MB
+is unmapped on a 64-bit target, so they move when memory is kept rather than
+how much: the 0.18.0 release, which never set them, idled at 118–135 MB after
+ten rounds of 8 tasks that each build a 16 MB temporary on 4 CPUs, and this
+runtime idles at 68 MB before its trim. A worker that frees an arena larger
+than one chunk waits for its next job with a one-second timeout, and on the
+timeout calls `malloc_trim(0)` once before it parks for good: the same burst
+then idles at 52 MB, and a 1 MB burst at 5.0 MB rather than 6.0, with no
+change to the burst's own time (36–45 ms against 39–43). A region below its
+grain runs as the loop it would have been, and keeps that loop's cost. The
+thresholds cost 30 bytes of the threads build's `runtime-parallel.c` and the
+trim 110 more.
 
 It is an eighth unit rather than more of `runtime-parallel.c`: folded in, the
 copies took that file from 610 bytes to 1,786 against its ceiling of 768, and

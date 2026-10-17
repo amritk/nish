@@ -48,7 +48,7 @@
 #include <pthread.h>
 #include <sched.h>
 #ifdef __GLIBC__
-#include <malloc.h> /* `mallopt`, for `nish_pool_ready` */
+#include <malloc.h> /* `mallopt` and `malloc_trim`, for the pool */
 #endif
 #endif
 
@@ -251,9 +251,14 @@ static void nish_cpu_relax(void) {
  * stores through a guard is copied out before the job returns (runtime-cross.c),
  * and the language refuses every other result that would point into the arena
  * -- so it is rewound for the next one rather than freed, and kept only when it
- * is one ordinary chunk, so a job that allocated a large block does not leave
- * a parked worker holding it. */
+ * is one ordinary chunk. A larger one goes back to malloc, which under glibc
+ * keeps it for the next job (`nish_pool_ready`'s thresholds); a worker that
+ * then finds the queue empty for a second trims the heaps once before it sleeps
+ * for good, so a parked pool does not hold a burst's temporaries. */
 static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
+#ifdef __GLIBC__
+  int held = 0;
+#endif
   pthread_mutex_lock(&nish_pool.mu);
   for (;;) {
     nish_job *j = nish_job_take();
@@ -262,7 +267,12 @@ static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
       j->run(j);
       if (worker) {
         nish_reset_arena();
-        if (nish_arena.cap > 65536) nish_free_arena();
+        if (nish_arena.cap > 65536) {
+          nish_free_arena();
+#ifdef __GLIBC__
+          held = 1;
+#endif
+        }
       }
       pthread_mutex_lock(&nish_pool.mu);
       nish_job_done(j);
@@ -275,7 +285,22 @@ static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
            i++)
         nish_cpu_relax();
       pthread_mutex_lock(&nish_pool.mu);
-      if (*pending != 0 && !nish_pool.head) pthread_cond_wait(cv, &nish_pool.mu);
+      if (*pending != 0 && !nish_pool.head) {
+#ifdef __GLIBC__
+        if (held) {
+          struct timespec t;
+          clock_gettime(CLOCK_REALTIME, &t);
+          t.tv_sec++;
+          if (pthread_cond_timedwait(cv, &nish_pool.mu, &t) != 0) {
+            held = 0;
+            pthread_mutex_unlock(&nish_pool.mu);
+            malloc_trim(0);
+            pthread_mutex_lock(&nish_pool.mu);
+          }
+        } else
+#endif
+          pthread_cond_wait(cv, &nish_pool.mu);
+      }
     }
   }
   pthread_mutex_unlock(&nish_pool.mu);
@@ -324,9 +349,12 @@ static int nish_pool_ready(void) {
     /* glibc otherwise trims the heap top, or unmaps, every chunk of 128 KB or
      * more an arena release frees, and a task or element that builds a 1 MB
      * temporary then pays a page fault per 4 KB of it on every call: 200 such
-     * tasks took 314 ms at one thread, 48 ms with these. Fixed rather than
-     * glibc's sliding threshold, which moves on frees from the main thread
-     * only. Set here, once a program first runs work on other threads; a
+     * tasks took 314 ms at one thread, 48 ms with these. glibc's own threshold
+     * starts at 128 KB and rises only once an mmapped chunk is freed, to at
+     * most 32 MB on a 64-bit target with a trim threshold of twice that, so
+     * these are the values it reaches by itself, from the first call on; a
+     * worker's idle trim in `nish_pool_drain` hands the memory back once the
+     * pool parks. Set here, once a program first runs work on other threads; a
      * region below its grain, or at one thread, runs as the loop it would have
      * been and keeps that loop's costs. */
     mallopt(M_MMAP_THRESHOLD, 32 << 20);

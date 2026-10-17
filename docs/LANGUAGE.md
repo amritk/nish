@@ -2746,7 +2746,10 @@ from the whole-program facts, and each rule is reported there:
   gives back rather than returning it to the kernel, so an element or a task
   that builds a 1 MB temporary does not fault it in again on every call: 200
   tasks that each build one took 48 ms on 1 thread, against 314 ms when every
-  release trimmed the heap. A region below its grain runs as the loop it would
+  release trimmed the heap. A worker that then finds no work for a second
+  gives the memory back to the kernel before it parks: after ten rounds of 8
+  tasks that each build a 16 MB temporary, an idle program holds 52 MB rather
+  than 68 MB. A region below its grain runs as the loop it would
   have been, on the calling thread, and keeps that loop's costs: 200 elements
   that each build a 1 MB temporary take some 320 ms, as the loop does. It
   compiles with a performance warning,

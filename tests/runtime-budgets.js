@@ -196,6 +196,12 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * release no longer hands a task's 1 MB temporary back to the kernel and faults it in
  * again on the next call (200 such tasks: 314 ms at one thread before, 48 ms after).
  * Only under glibc: WASI and darwin compile none of it.
+ *
+ * Its idle trim measured **2,805 bytes** on 2026-10-17 with clang 18.1.3 on linux-x64,
+ * 110 more, inside the same ceiling: a worker that freed an arena larger than one chunk
+ * waits for its next job with a one-second timeout and calls `malloc_trim(0)` when it
+ * runs out, so a parked pool hands a burst's temporaries back to the kernel (an idle
+ * 68 MB after ten rounds of 8 tasks that each build 16 MB, 52 MB with the trim).
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
 /**

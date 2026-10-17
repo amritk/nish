@@ -305,6 +305,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "lstat" ||
   name === "lstat64" ||
   name === "malloc" ||
+  name === "malloc_trim" ||
   name === "malloc_usable_size" ||
   name === "mallopt" ||
   name === "memalign" ||
@@ -355,6 +356,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "pthread_cond_destroy" ||
   name === "pthread_cond_init" ||
   name === "pthread_cond_signal" ||
+  name === "pthread_cond_timedwait" ||
   name === "pthread_cond_wait" ||
   name === "pthread_create" ||
   name === "pthread_detach" ||

@@ -4,7 +4,7 @@
 // exactly when a copied value would have been. Each shape below adopts, then
 // lets a release run, and reads what must survive after `churn()`, which
 // reuses the memory a block released too early would leave a value in.
-import { Channel, Mutex, parallelFrom, parallelMap, scope } from "nish/threads";
+import { Channel, Mutex, parallelFrom, parallelMap, parallelMapInto, scope } from "nish/threads";
 
 // Each string is kept, so the loop writes over the whole of what was freed
 // rather than over the one string a rewound iteration reuses.
@@ -198,6 +198,43 @@ const channel = (): string => {
   return `${sent[0]} ${got.length} ${got[2].length} ${t}`;
 };
 
+// Adoption inside a `using a = arena()` block: strings of 64 KB or more
+// received from a channel in the block are adopted after its mark, so its
+// release frees them, and only a number leaves. (The block refuses a map, or a
+// call reaching one, since a map stores what it answers.) The string made
+// before the block is below its mark and survives, and so does one adopted
+// before a block whose mark then sits at the end of that full block.
+const inArena = (): string => {
+  const before = word(7);
+  const ch = new Channel<string>();
+  const sent: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(send, new Pipe(ch, 3), sent, 0);
+  }
+  let t = 0;
+  {
+    using a = arena();
+    for (const got of ch) {
+      t = t + sumOf(got);
+    }
+    churn();
+  }
+  churn();
+  const late = new Channel<string>();
+  {
+    using s = scope();
+    s.spawn(send, new Pipe(late, 2), sent, 0);
+  }
+  let u = 0;
+  for (const got of late) {
+    using a = arena();
+    churn();
+    u = u + sumOf(got);
+  }
+  return `${before} ${sent[0]} ${t} ${u}`;
+};
+
 class Slot {
   m: Mutex<string>;
   id: i32;
@@ -237,6 +274,68 @@ const guard = (): string => {
   return `${lens[0] + lens[1] + lens[2]} ${v.length} ${sumOf(v)}`;
 };
 
+// Every shape a body takes is kept by the chunk, whatever its own lowering:
+// a named function, an arrow whose call to a helper is its last act (a tail
+// call inside the arrow), and an arrow answering one of two calls.
+const label = (i: i32): string => `L${i}`;
+
+const shapes = (n: i32): string => {
+  const xs = parallelFrom(n, (i) => i);
+  const a = parallelMap(xs, word);
+  const b = parallelFrom(n, label);
+  const c = parallelMap(xs, (x) => label(x + 1));
+  const d = parallelMap(xs, (x) => (x % 3 === 0 ? word(x) : big("e", 1 + (x % 4))));
+  churn();
+  return `${a[n - 1]} ${b[n - 1]} ${c[n - 1]} ${d[n - 1]} ${wordsSum(a) + wordsSum(b) + wordsSum(c) + wordsSum(d)}`;
+};
+
+// A map into a destination its caller made, so older than every mark the map
+// takes: the adopted blocks outlive the call that adopted them.
+const fill = (xs: i32[], dst: string[]): i32 => {
+  parallelMapInto(xs, dst, (x) => word(x * 7));
+  return dst.length;
+};
+
+const into = (n: i32): string => {
+  const dst: string[] = [];
+  for (let i = 0; i < n; i++) {
+    dst.push("");
+  }
+  const xs = parallelFrom(n, (i) => i);
+  const len = fill(xs, dst);
+  churn();
+  return `${len} ${dst[0]} ${dst[n - 1]} ${wordsSum(dst)}`;
+};
+
+// One element of an adopted block of many, answered by a function, directly
+// and through one more call. Neither call is reclaimed (WP9's
+// `nish_arena_keep`, which moves the newest value down to the mark and assumes
+// it ends the arena): a function that runs a map stores what the map answers,
+// and so does every function that reaches one, which is what the reclaim
+// refuses. The golden pins it: `picked` brackets neither call with
+// `nish_arena_keep`, which `reclaimAfter` does around `fetchBig`, whose task's
+// answer is a block of its own.
+const pick = (n: i32, k: i32): string => {
+  const xs = parallelFrom(n, (i) => i + k);
+  const ws = parallelMap(xs, (x) => word(x));
+  return ws[n / 2];
+};
+
+const relay = (n: i32, k: i32): string => {
+  const s = pick(n, k + 10);
+  return s;
+};
+
+const picked = (n: i32): string => {
+  const kept: string[] = [];
+  for (let k = 0; k < 4; k++) {
+    kept.push(pick(n, k));
+    kept.push(relay(n, k));
+  }
+  churn();
+  return `${kept[0]} ${kept[7]} ${wordsSum(kept)}`;
+};
+
 export const main = (): i32 => {
   console.log(reclaimable(500));
   console.log(reclaimable(80000));
@@ -246,5 +345,10 @@ export const main = (): i32 => {
   console.log(reclaimAfter());
   console.log(channel());
   console.log(guard());
+  console.log(shapes(500));
+  console.log(shapes(80000));
+  console.log(inArena());
+  console.log(into(80000));
+  console.log(picked(80000));
   return 0;
 };
