@@ -42,9 +42,16 @@
  * decoding (`docs/security/http2.md`, H2-1). The caps are the
  * `Http2Config`'s, one for every slot, so a program sets them once.
  *
+ * **The Date.** Every final response carries one `date` field (RFC 9110
+ * §6.6.1) from the pool's `HttpDate`, which formats the IMF-fixdate at most
+ * once a second for every slot; a 1xx and trailers carry none, and a program
+ * that sends its own `date` sends that one instead. `server.date.pin(unixMs)`
+ * fixes it, for a test that compares bytes.
+ *
  * Written from RFC 9113 §3 and §9.2, not ported from another implementation.
  */
 import { Secret } from "nish:secret"
+import { HttpDate } from "nish/net/http1-server"
 import { H2_ERROR, H2_NEED_MORE, Http2Config, Http2Connection } from "nish/net/http2"
 import { TlsServerConfig } from "nish/net/tls"
 import { TLS_RECORD_DONE, TLS_RECORD_STATE_OPEN, TLS_RECORD_WANT_WRITE } from "nish/net/tls/record-server"
@@ -63,6 +70,12 @@ export const H2_ALPN: string = "h2"
 export class Http2TlsServer {
   tls: TlsTcpServer
   connections: Http2Connection[]
+  /**
+   * The `date` every slot's responses carry, formatted once a second for all
+   * of them: each slot's `Http2Connection.date` is its bytes, refreshed by
+   * `connection` and `next`. `date.pin` fixes its clock.
+   */
+  date: HttpDate
 
   /**
    * A pool of `size` slots, at least one, serving HTTP/2 under `config` over
@@ -72,8 +85,13 @@ export class Http2TlsServer {
   constructor(tlsConfig: TlsServerConfig, config: Http2Config, listener: i32, size: i32) {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
     this.connections = []
+    this.date = new HttpDate()
+    // Formatted once now, so no slot ever sends the bytes before a first format.
+    const date: u8[] = this.date.current()
     for (let k: i32 = 0; k < this.tls.size(); k++) {
-      this.connections.push(new Http2Connection(config))
+      const conn: Http2Connection = new Http2Connection(config)
+      conn.date = date
+      this.connections.push(conn)
     }
   }
 
@@ -97,8 +115,9 @@ export class Http2TlsServer {
     return this.tls.fd(slot)
   }
 
-  /** The HTTP/2 connection of `slot`; a slot out of range names the first. */
+  /** The HTTP/2 connection of `slot`, its `date` brought up to now; a slot out of range names the first. */
   connection(slot: i32): Http2Connection {
+    this.date.current()
     const at: i32 = slot >= 0 && slot < toI32(this.connections.length) ? slot : H2_TLS_ZERO
     return this.connections[at]
   }
@@ -154,6 +173,7 @@ export class Http2TlsServer {
     if (!this.holds(slot) || this.refused(slot)) {
       return H2_ERROR
     }
+    this.date.current()
     const conn: Http2Connection = this.connections[slot]
     // TLS decrypts straight into the connection's input, so a byte is
     // copied once on its way in.

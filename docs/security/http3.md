@@ -209,6 +209,32 @@ a slot the pacer holds back is filed at `now + pacerDelay` (H3-6).
 The clock the carrier is given in microseconds reaches each connection's
 pacer (H3-8).
 
+**One date on every final head** (`net_http3`, `dates.ts`; `net_http3_server`;
+and their `_f64` twins; written against `main` at `f8643b9`, cited by function
+rather than by line). `writeHead` puts the connection's `date` straight after
+`:status` on every final head, a refusal's 431 included, and never on trailers
+(HTTP/3 has no 1xx for a program to send); a program's own `date`
+(`http3NamesHoldDate`, which matches any ASCII case) is sent instead, so a head
+never carries two. A mixed-case `Date` never reaches it: `respond` refuses an
+uppercase name with `H3_INVALID` (§4.2). The date counts against the client's
+SETTINGS_MAX_FIELD_SECTION_SIZE as any field does, 65 bytes (RFC 9114 §4.2.2): a
+head that fits a limit of 107 bytes exactly without it is refused with
+`H3_TOO_LARGE` with it. The server's own 431 counts 42 bytes bare and 107 with
+the date, so `answerTooLarge` sends it without the date to a client whose limit
+has room only for the bare one, rather than resetting the stream with
+H3_EXCESSIVE_LOAD. QPACK's dynamic table has capacity 0, so the field is a
+literal and the encoder's streams carry nothing for it. A bare `Http3Connection`
+has no clock and sends none. `Http3Server` points every slot at its one
+`HttpDate`, refreshed at `connection(slot)` and `ready()`, so a date is at most
+one turn of the program's loop stale. Connection after connection through one
+slot, the pinned clock a second on for each, keeps the arena at zero after the
+first; two slots answered in one second share one format.
+Tests:
+`link/net_http3: exits with 0 and stdout matches expected.out`,
+`link/net_http3_f64: exits with 0 and stdout matches expected.out`,
+`link/net_http3_server: exits with 0 and stdout matches expected.out`,
+`link/net_http3_server_f64: exits with 0 and stdout matches expected.out`.
+
 **Caps, all fixed at start-up** (`Http3Config`, the QUIC configuration, the
 pool's size): the field section (`maxFieldSectionSize`, 16,384, which must fit
 half a QUIC stream buffer with a frame header — checked when the connection
