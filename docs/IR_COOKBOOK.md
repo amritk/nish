@@ -9737,6 +9737,165 @@ attributes #2 = { nounwind willreturn }
 ```
 <!-- cookbook:end decl-enum-member -->
 
+### Discriminated unions
+
+A union of tagged variants is one LLVM type for every union,
+`%union.tagged = type { i32 }`: the tag each variant begins with, behind a
+pointer. A variant converts to it by a `bitcast`, and `s.kind` is a
+`getelementptr` to field 0 and an `i32` load, whichever variant `s` holds
+(`tests/cases/union_types`).
+
+<!-- cookbook:begin decl-union -->
+```ts
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle
+  r: i32 = 3
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square
+  side: i32 = 4
+}
+
+type Shape = Circle | Square
+
+const pick = (round: boolean): Shape => (round ? new Circle() : new Square())
+
+const name = (s: Shape): string => (s.kind === Kind.Circle ? "circle" : "square")
+
+export const main = (): number => {
+  console.log(name(pick(true)))
+  return 0
+}
+```
+
+```llvm
+%struct.Circle = type { i32, i32 }
+%struct.Square = type { i32, i32 }
+%union.tagged = type { i32 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"circle\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"square\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef %union.tagged* @pick(i1 noundef zeroext %round) #0 {
+entry:
+  br i1 %round, label %cond.true, label %cond.false
+
+cond.true:
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Circle*
+  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !4
+  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 1
+  store i32 3, i32* %3, align 4, !tbaa !5
+  %4 = bitcast %struct.Circle* %1 to %union.tagged*
+  br label %cond.end
+
+cond.false:
+  %5 = call i8* @nish_alloc_struct(i64 8)
+  %6 = bitcast i8* %5 to %struct.Square*
+  %7 = getelementptr inbounds %struct.Square, %struct.Square* %6, i32 0, i32 0
+  store i32 1, i32* %7, align 4, !tbaa !7
+  %8 = getelementptr inbounds %struct.Square, %struct.Square* %6, i32 0, i32 1
+  store i32 4, i32* %8, align 4, !tbaa !8
+  %9 = bitcast %struct.Square* %6 to %union.tagged*
+  br label %cond.end
+
+cond.end:
+  %10 = phi %union.tagged* [ %4, %cond.true ], [ %9, %cond.false ]
+  ret %union.tagged* %10
+}
+
+define internal noundef nonnull align 8 i8* @name(%union.tagged* noundef %s) #1 {
+entry:
+  %0 = getelementptr inbounds %union.tagged, %union.tagged* %s, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  %2 = icmp eq i32 %1, 0
+  br i1 %2, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %3 = phi i8* [ bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), %cond.true ], [ bitcast ({ i64, [7 x i8] }* @.str.1 to i8*), %cond.false ]
+  ret i8* %3
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %union.tagged* @pick(i1 true)
+  %1 = call i8* @name(%union.tagged* %0)
+  call void @nish_print(i8* %1)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Circle", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
+!6 = !{!"Square", !2, i64 0, !2, i64 4}
+!7 = !{!6, !2, i64 0}
+!8 = !{!6, !2, i64 4}
+```
+<!-- cookbook:end decl-union -->
+
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that

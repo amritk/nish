@@ -266,6 +266,8 @@ export class H1Loop {
   /** While set, how far the servers' calls and the program's answers moved the arena, summed. */
   measuring: boolean = false;
   growth: i64 = 0;
+  /** How many times a plain slot's interest changed and was re-armed with `pollModify`. */
+  rearmed: i32 = 0;
   /** Serve mode, for a third-party client: randomness from the system and a line for every connection closed. */
   serving: boolean = false;
 
@@ -395,7 +397,11 @@ export class H1Loop {
   /** Accepts every waiting plain connection. */
   acceptPlain(): void {
     while (true) {
+      const before: i64 = Arena.used();
       const slot: i32 = this.plain.accept();
+      if (this.measuring) {
+        this.growth = this.growth + (Arena.used() - before);
+      }
       if (slot >= 0) {
         this.accepted = this.accepted + 1;
         pollAdd(this.loop, this.plain.fd(slot), H1_WANT_READ, slot);
@@ -460,7 +466,10 @@ export class H1Loop {
       this.closed = this.closed + 1;
       return;
     }
-    pollModify(this.loop, this.plain.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot);
+    if (this.plain.rearm(slot, wants)) {
+      this.rearmed = this.rearmed + 1;
+      pollModify(this.loop, this.plain.fd(slot), wants & (H1_WANT_READ | H1_WANT_WRITE), slot);
+    }
   }
 
   /** A TLS connection's descriptor is ready: the same, with a signature when the handshake asks for one. */
