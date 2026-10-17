@@ -3001,6 +3001,18 @@ from the whole-program facts, and each rule is reported there:
   8 (63 and 67 MB before adoption), where it used to hold every element's
   temporaries until its chunk ended and peaked at 2.1 GB
   (`tests/link/par_map_release`).
+- **A frame that runs a map gives its result back when it returns.** A
+  function that calls `parallelMap`, `parallelFrom` or `parallelMapInto` and
+  lets nothing the map made outlive it frees the result array, and the blocks
+  a string map adopted from its workers, when it returns, as the same loop
+  written sequentially does. A result that is returned, stored into a field
+  or an outer array, captured by a later task, or nested in an array of arrays
+  is kept with whatever holds it (`tests/link/par_map_reclaim_escapes`). A
+  function that maps 2^22 elements and answers one of them, called 40 times
+  on 4 threads, takes 147 ms and peaks at 34 MB, where it took 477 ms and
+  peaked at 658 MB (main against a byte-identical copy of itself: 5 to 8%);
+  the sequential loop takes 284 ms. One call over 2^25 elements is unchanged,
+  239 against 231 ms, inside that band (`tests/link/par_map_reclaim`).
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
