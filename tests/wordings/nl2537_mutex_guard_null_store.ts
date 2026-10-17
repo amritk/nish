@@ -1,4 +1,4 @@
-// NL2523: a `null` stored through a guard: the store copies a string into
+// NL2537: a `null` stored through a guard: the store copies a string into
 // memory the `Mutex` owns, and a `null` takes no part in that exchange.
 import { Mutex } from "nish/threads"
 

@@ -17,11 +17,14 @@
 import { containerMessage as secretContainerMessage } from "./secret"
 import { LANGUAGE } from "./branding"
 import { CheckContext, NUMBER_MODE_I32 } from "./context"
-import { AliasInfo } from "./program"
+import { AliasInfo, STRUCT_CLASS, StructInfo } from "./program"
 import { isFractional, numericLiteralValue, parseIntegerLiteral } from "./constants"
 import { deferInstantiation, instantiateWritten } from "./generics"
 import {
   FLAG_DEFAULT,
+  FLAG_READONLY,
+  FLAG_STATIC,
+  N_FIELD,
   N_IDENT,
   N_LIST,
   N_TYPE_ARRAY,
@@ -191,7 +194,7 @@ export const resolveType = (node: Node, ctx: CheckContext): i32 => {
     case N_TYPE_READONLY:
       return resolveReadonly(node, ctx)
     case N_TYPE_UNION:
-      return resolveNullableUnion(node, ctx)
+      return resolveUnion(node, ctx)
     case N_TYPE_REF:
       return resolveReference(node, ctx)
     case N_TYPE_FUNCTION:
@@ -525,6 +528,12 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
     const spelled = `Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`
     return ctx.errorType(node, secretContainerMessage(spelled))
   }
+  if (ctx.table.holdsUnion(ok) || ctx.table.holdsUnion(err)) {
+    return ctx.errorType(
+      node,
+      unionArgumentMessage(`Result<${ctx.table.typeName(ok)}, ${ctx.table.typeName(err)}>`)
+    )
+  }
   if (err === T_VOID) {
     return ctx.errorType(
       args.children[1],
@@ -534,30 +543,243 @@ const resolveResult = (node: Node, args: Node, argc: i32, ctx: CheckContext): i3
   return ctx.table.resultOf(ok, err, R_UNKNOWN)
 }
 
+const UNION_REFUSED: string = "Union types other than `T | null` are forbidden in "
+
 /**
- * `T | null`. The validator already refuses every other union, so this only
- * has to find the non-null member and require it to be a pointer type — a
- * scalar has no null value to add.
+ * A union where a type argument would carry it: `Box<Shape>`, `Map<string,
+ * Shape>`, `Result<Shape, string>`, or a type parameter a call binds to one.
+ * Narrower than TypeScript, which allows all of them (docs/LANGUAGE.md,
+ * Discriminated unions).
  */
-const resolveNullableUnion = (node: Node, ctx: CheckContext): i32 => {
-  let inner = -1
+export const unionArgumentMessage = (spelled: string): string =>
+  `\`${spelled}\` cannot take a union as a type argument: in this version a union is the type of a local, ` +
+  "a parameter, a field, a return value or an array element, and not of a generic's, a `Map`'s, a `Set`'s or a `Result`'s type argument"
+
+/**
+ * `T | null`, or a discriminated union of tagged classes and interfaces,
+ * nullable or not. The validator has refused every other shape it can see;
+ * what it cannot see is what a name is, so a member that turns out not to be
+ * a class or an interface gets its sentence here.
+ */
+const resolveUnion = (node: Node, ctx: CheckContext): i32 => {
   let nulls = 0
+  const members: Node[] = []
   for (const member of node.children) {
     if (member.kind === N_TYPE_NULL) {
       nulls = nulls + 1
-    } else if (inner < 0) {
-      inner = ctx.table.stripNull(resolveType(member, ctx))
     } else {
-      inner = -2 // a second non-null member: not `T | null` at all
+      members.push(member)
     }
   }
-  if (inner < 0 || nulls !== 1 || node.children.length !== 2) {
+  if (members.length === 1 && nulls === 1) {
+    return nullableOfChecked(ctx, node, ctx.table.stripNull(resolveType(members[0], ctx)))
+  }
+  if (members.length < 2 || nulls > 1) {
+    return ctx.errorType(node, UNION_REFUSED + LANGUAGE + " (values have one fixed layout)")
+  }
+  const variants: i32[] = []
+  const spelledAt: Node[] = []
+  for (const member of members) {
+    const type = resolveType(member, ctx)
+    if (type === T_ERROR) {
+      return T_ERROR
+    }
+    if (ctx.table.isUnion(type)) {
+      for (const variant of ctx.table.variantsOf(type)) {
+        variants.push(variant)
+        spelledAt.push(member)
+      }
+    } else if (ctx.table.isStruct(type)) {
+      variants.push(type)
+      spelledAt.push(member)
+    } else {
+      return ctx.errorType(member, UNION_REFUSED + LANGUAGE + " (values have one fixed layout)")
+    }
+  }
+  const distinct: i32[] = []
+  const tags: i32[] = []
+  let firstVariant = -1
+  let firstTag = -1
+  let tagName = ""
+  let i = 0
+  while (i < variants.length && i < spelledAt.length) {
+    const variant = variants[i]
+    const info = ctx.program.struct(ctx.table.nameOf(variant))
+    if (info === null) {
+      return ctx.errorType(spelledAt[i], UNION_REFUSED + LANGUAGE + " (values have one fixed layout)")
+    }
+    if (info.poisoned) {
+      return T_ERROR
+    }
+    const tag = variantTagOf(ctx, spelledAt[i], variant, info)
+    if (tag === T_ERROR) {
+      return T_ERROR
+    }
+    if (firstVariant < 0) {
+      firstVariant = variant
+      firstTag = tag
+      tagName = variantTagName(info)
+    } else if (tagsDisagree(ctx, node, firstVariant, firstTag, tagName, variant, tag, variantTagName(info))) {
+      return T_ERROR
+    }
+    if (distinct.indexOf(variant) < 0) {
+      const other = clashingTag(ctx, distinct, tags, tag)
+      if (other >= 0) {
+        return reportTagClash(ctx, node, other, variant, tag)
+      }
+      distinct.push(variant)
+      tags.push(tag)
+    }
+    i = i + 1
+  }
+  if (distinct.length < 2) {
     return ctx.errorType(
       node,
-      "Union types other than `T | null` are forbidden in " + LANGUAGE + " (values have one fixed layout)"
+      `A union needs two different variants: this one names only \`${ctx.table.typeName(distinct[0])}\`, so write that type itself`
     )
   }
-  return nullableOfChecked(ctx, node, inner)
+  const union = ctx.table.unionOf(distinct, tags, ctx.table.baseOf(firstTag), tagName)
+  return nulls === 1 ? ctx.table.nullableOf(union) : union
+}
+
+/**
+ * The tag of `variant`, spelled at `at`: a member type, or `T_ERROR` once it
+ * has reported why the class or interface cannot be a variant.
+ */
+const variantTagOf = (ctx: CheckContext, at: Node, variant: i32, info: StructInfo): i32 => {
+  if (info.instance !== null) {
+    return ctx.errorType(
+      at,
+      `\`${ctx.table.typeName(variant)}\` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself`
+    )
+  }
+  const tag = variantTag(ctx, info)
+  if (!ctx.table.isEnumMemberType(tag)) {
+    return ctx.errorType(
+      at,
+      `\`${ctx.table.typeName(variant)}\` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as \`readonly kind: Kind.Circle = Kind.Circle\``
+    )
+  }
+  if (!variantTagReadonly(info)) {
+    // Stricter than tsc, which accepts a mutable tag: a tag fixed once the
+    // variant is built is what lets the union tell its variants apart.
+    return ctx.errorType(
+      at,
+      `\`${ctx.table.typeName(variant)}\` cannot be a union variant: its tag \`${variantTagName(info)}\` must be \`readonly\`, because the union tells its variants apart by it`
+    )
+  }
+  return tag
+}
+
+/**
+ * Refuses `variant` when its tag, the field `tagName`, comes from another enum
+ * than the first variant's or has another name. True once it has reported.
+ */
+const tagsDisagree = (
+  ctx: CheckContext,
+  node: Node,
+  first: i32,
+  firstTag: i32,
+  firstTagName: string,
+  variant: i32,
+  tag: i32,
+  tagName: string
+): boolean => {
+  const firstName = ctx.table.typeName(first)
+  const name = ctx.table.typeName(variant)
+  const tagEnum = ctx.table.baseOf(firstTag)
+  if (ctx.table.baseOf(tag) !== tagEnum) {
+    ctx.error(
+      node,
+      `Union variants must take their tags from one enum: \`${firstName}.${firstTagName}\` is a \`${ctx.table.typeName(tagEnum)}\` and \`${name}.${tagName}\` is a \`${ctx.table.typeName(ctx.table.baseOf(tag))}\``
+    )
+    return true
+  }
+  if (tagName !== firstTagName) {
+    ctx.error(
+      node,
+      `Union variants must give their tag one name: the first field of \`${firstName}\` is \`${firstTagName}\` and the first field of \`${name}\` is \`${tagName}\``
+    )
+    return true
+  }
+  return false
+}
+
+/** The variant among `distinct` whose tag has `tag`'s value, or -1. */
+const clashingTag = (ctx: CheckContext, distinct: i32[], tags: i32[], tag: i32): i32 => {
+  let j = 0
+  while (j < distinct.length && j < tags.length) {
+    if (ctx.table.memberValue(tags[j]) === ctx.table.memberValue(tag)) {
+      return distinct[j]
+    }
+    j = j + 1
+  }
+  return -1
+}
+
+/** Refuses `variant`, whose tag `tag` is also the tag of the variant `other`. */
+const reportTagClash = (ctx: CheckContext, node: Node, other: i32, variant: i32, tag: i32): i32 =>
+  ctx.errorType(
+    node,
+    `Union variants \`${ctx.table.typeName(other)}\` and \`${ctx.table.typeName(variant)}\` both have the tag \`${ctx.table.typeName(tag)}\`, so it cannot tell them apart`
+  )
+
+/**
+ * The field declarations of `info`, in order: a class keeps its members after
+ * its `extends` and `implements` clauses, an interface straight after its name.
+ */
+const declaredMembers = (info: StructInfo): Node[] =>
+  info.kind === STRUCT_CLASS ? info.decl.children[3].children : info.decl.children[1].children
+
+/** A variant's first instance field, as declared; `null` when it declares none. */
+const firstField = (info: StructInfo): Node | null => {
+  for (const member of declaredMembers(info)) {
+    if (member.kind === N_FIELD && (member.flags & FLAG_STATIC) === 0) {
+      return member
+    }
+  }
+  return null
+}
+
+/**
+ * The type of a variant's tag, its first field, or -1. A variant collected
+ * already has the field; one that is not yet is a later declaration of this
+ * module (or the struct whose fields are being collected, `next: A | B`), and
+ * its first field is read from the declaration, where only an enum member type
+ * is worth resolving — it names an enum, never a struct, so resolving it cannot
+ * come back here.
+ */
+const variantTag = (ctx: CheckContext, info: StructInfo): i32 => {
+  if (info.collected) {
+    return info.fields.length > 0 ? info.fields[0].type : -1
+  }
+  const field = firstField(info)
+  if (field === null || info.origin !== ctx.source) {
+    return -1
+  }
+  const annotation = field.children[1]
+  if (annotation.kind !== N_TYPE_REF || annotation.text.indexOf(".") < 0) {
+    return -1
+  }
+  return resolveType(annotation, ctx)
+}
+
+/** The name of a variant's tag field, whose type `variantTag` has found to be a member type. */
+const variantTagName = (info: StructInfo): string => {
+  if (info.collected) {
+    return info.fields[0].name
+  }
+  const field = firstField(info)
+  return field === null ? "" : field.children[0].text
+}
+
+/** Whether a variant's tag, its first field, is declared `readonly`. */
+const variantTagReadonly = (info: StructInfo): boolean => {
+  if (info.collected) {
+    return info.fields.length > 0 && info.fields[0].readonly
+  }
+  const field = firstField(info)
+  return field !== null && (field.flags & FLAG_READONLY) !== 0
 }
 
 /**

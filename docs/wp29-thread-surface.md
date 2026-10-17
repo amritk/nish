@@ -720,7 +720,7 @@ file at commit `c3529665`.
   `MutexGuard<T>`, takes the guard once per call. No escape analysis is
   needed: `walkMutexes` already holds every expression of guard type to R3 and
   R4 wherever it is declared, so the parameter is held to them in the helper's
-  body, and R5 follows the call into it (NL2522,
+  body, and R5 follows the call into it (NL2536,
   [LANGUAGE.md R3](LANGUAGE.md#a-lock-that-owns-its-data-mutext)).
 - ~~How P3 fits P2's rule.~~ **Closed by P3's design (§4.3).** A task may write
   shared memory only through a guard or by a channel's `send` and receive

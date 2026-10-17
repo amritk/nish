@@ -25,7 +25,8 @@ and H1-3 (Low), the memory each WebSocket upgrade leaves behind.
 | File | Functions |
 | --- | --- |
 | `std/net/http1.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
-| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`; `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused` |
+| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
+| `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload` |
 
 Out of scope: TLS (`docs/security/tls.md`, whose TLS-3 and TLS-4 the TLS
@@ -110,6 +111,31 @@ byte, so `HTTP1_NO_ROOM` and `HTTP1_REFUSED` leave the buffer untouched. A
 response to HEAD, a 204 and a 304 carry no body whatever the program writes; a
 chunked response to HTTP/1.0 goes unframed and ends with the connection.
 
+**One Date, from one clock read a second** (`net_http_date`, `_f64`;
+`net_http1`, `net_http1_server` and their `_f64` twins; written against `main`
+at `249cbe9`, cited by function rather than by line). Every final response,
+an error included, carries a `Date` (RFC 9110 §6.6.1) and a 1xx carries none;
+a program's own `date` field, in any case, is sent instead of the server's, so
+a response never carries two. On a final status `http1WriteResponseHead`
+refuses a date that is not field text, so the date cannot split the head (a
+1xx never sends it, so there it is not read), and counts its 37 bytes
+before it writes, so `HTTP1_NO_ROOM` still leaves the buffer untouched. The
+largest head `fail` writes — 431's status line, the date, `Content-Length: 0`
+and `Connection: close` — is 123 bytes, inside the 256 kept for what the
+connection writes itself. `httpDateWrite` agrees with a calendar counted a
+day at a time on every day from 1970 to 2399 and refuses, writing nothing, a
+second it cannot name in four digits or a buffer without the room. `HttpDate`
+formats once a second however often it is read, in either direction of a
+clock step, with `Arena.used()` flat; a pool's slots share one. Tests:
+`link/net_http_date: exits with 0 and stdout matches expected.out`,
+`link/net_http_date_f64: exits with 0 and stdout matches expected.out`,
+`link/net_http1: exits with 0 and stdout matches expected.out`,
+`link/net_http1_f64: exits with 0 and stdout matches expected.out`,
+`link/net_http1_server: exits with 0 and stdout matches expected.out`,
+`link/net_http1_server_f64: exits with 0 and stdout matches expected.out` —
+each the template `link/${name}: exits with ${wantCode} and stdout matches
+expected.out` in `tests/run.js`.
+
 **Connection management** (`net_http1_server`): `Connection: close` in a
 request is answered with it, and the connection closes; HTTP/1.0 closes unless
 it asked for keep-alive, which is then answered with `Connection: keep-alive`;
@@ -134,7 +160,8 @@ not be sent are refused.
 (`maxHeaderBytes`, 16,384) and its fields (`maxHeaders`, 100), a request body
 (`maxBody`, 2^30), the most body one `H1_BODY` hands over and one read takes
 (`chunkSize`, 16,384), the output (`outputSize`, 64 KiB, of which 256 bytes are
-kept for what the connection writes itself), a WebSocket message
+kept for what the connection writes itself; a pool's slots borrow it from one
+`Http1OutputPool` while they write, below), a WebSocket message
 (`maxMessage`, 1 MiB) and the idle timeout (`idleTimeout`, 60 s, read by
 `expire`). The slots are the pool's size. A cap out of range panics when the
 connection is made (`net_http1_server_bad_config`). The input the connection
@@ -157,7 +184,11 @@ POSTs on one plain connection, and fifty of each over TLS, move `Arena.used()`
 across the servers' calls and the program's answers by 0 bytes
 (`net_http1_server`). The parser keeps the head as spans in a buffer it grows
 to the largest head it has seen and keeps; `restart` and `reset` allocate
-nothing, so a slot is reused for the next connection as it is.
+nothing, so a slot is reused for the next connection as it is. The output is
+borrowed, not kept: a slot holds a buffer only while it has bytes the socket
+has not taken, so the plain checks run on one buffer and a slot whose client
+stops reading holds one until it drains, then gives it back; fifty
+connections in a row leave the pool's buffers all free (`net_http1_server`).
 
 **ALPN** (`net_http1_server`): a TLS handshake that chose `http/1.1`, or none,
 is served; one that chose `h2` is shut down with `close_notify` before any
@@ -182,4 +213,10 @@ HTTP/1.1 holds no key material: over TLS the record keys are TLS's
 parser's `head` and input buffers, bodies in the input and output buffers,
 WebSocket messages in the decoder's — which may carry credentials (`cookie`,
 `authorization`). None of it is wiped: each buffer is overwritten by the next
-request and zeroed by nothing, and it stays in the slot until then.
+request and zeroed by nothing, and it stays in the slot until then. An output
+buffer is the exception to staying in its slot: a pool's slots borrow it from
+an `Http1OutputPool` and give it back once sent, so the next connection to
+write, on any slot, writes over the last one's response from the start. A
+carrier sends only `output[outputStart .. outputEnd)`, the bytes this
+connection wrote, so what lies past `outputEnd` is never sent; it is in the
+process's memory as it was before, in a buffer that moves between slots.

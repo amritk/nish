@@ -1,4 +1,4 @@
-// NL2522: a guard is handed only to a function named at the call, which a
+// NL2536: a guard is handed only to a function named at the call, which a
 // method is not: `this` is a second way out that the parameter's rule does not cover.
 import { Channel, Mutex, MutexGuard, scope } from "nish/threads";
 

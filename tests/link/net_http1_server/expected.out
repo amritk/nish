@@ -6,6 +6,10 @@ PASS  a 2 MiB body with a length streams through 4 KiB chunks and an 8 KiB outpu
 PASS  and no H1_BODY was larger than chunkSize (4096 bytes)
 PASS  three hundred chunks in come back as chunks
 PASS  a 2 MiB chunked response goes out through an 8 KiB output as the socket drains
+PASS  the stalled slot holds one output buffer, borrowed from the pool
+PASS  four 2 MiB responses to a client that reads none fill the socket, and rearm asks for writing
+PASS  read again, all four arrive whole, and rearm asks for reading once the slot has drained
+PASS  and drained, it has given the buffer back
 PASS  HEAD has the length of the GET and no body
 PASS  so the next response on the connection is read right
 PASS  Expect: 100-continue is answered with 100 before the body is sent
@@ -29,6 +33,9 @@ PASS  a message past maxMessage is answered with close 1009
 PASS  a handshake the server cannot accept gets the program's 400
 PASS  a warmed slot answers a hundred GETs and a hundred chunked POSTs
 PASS  and the server's calls and its program's answers moved the arena not at all (0 bytes)
+PASS  and its interest never changed, so rearm never asked for a pollModify
+PASS  the date crossed a second among them and was formatted once for the two hundred
+PASS  the server's slots share one date: a second set through one is formatted once and read through another
 PASS  refused with 431: a header section past maxHeaderBytes
 PASS  refused with 400: a chunk size that is not hex
 PASS  a bad chunk size once the response has started: no second response, and the connection ends
@@ -46,8 +53,18 @@ PASS  a slot that has just moved is not idle
 PASS  past idleTimeout it is closed
 PASS  and its client sees the end
 PASS  four clients fill the pool
+PASS  one of them hangs up
+PASS  the slot it freed is the one the next connection takes
+PASS  rearm: a slot's interest as accepted needs no pollModify
+PASS  rearm: a new interest does, once
+PASS  rearm: H1_DONE is not interest
+PASS  rearm: and back to what the loop holds
 PASS  a fifth is accepted and shed
 PASS  and they all close
+PASS  rearm: a free slot never needs a pollModify
+PASS  fifty connections, one after another, each answered
+PASS  every output buffer is back in the pool, and it made no more than the most slots ever writing at once (1)
+PASS  and accepting and freeing their slots moved the arena not at all (0 bytes)
 PASS  a free slot answers H1_ERROR to next and done to the rest
 PASS  a slot out of range names the first connection
 PASS  a client offering http/1.1 completes the handshake, the server's signature and Finished verified
@@ -55,6 +72,7 @@ PASS  ALPN chose http/1.1
 PASS  a GET over TLS
 PASS  a chunked POST echoed over TLS
 PASS  fifty exchanges over TLS on the warmed slot
+PASS  and between them the TLS slot holds no output buffer
 PASS  and the arena did not move (0 bytes)
 PASS  Connection: close over TLS ends with close_notify
 PASS  a client offering no ALPN completes the handshake
@@ -107,6 +125,10 @@ PASS  a write that only partly fits takes what fits
 PASS  and the last chunk still fits beside it
 PASS  a write to a response to HEAD takes everything
 PASS  and sends no body, not even the last chunk
+PASS  a program's own date field, in any case, is the response's only Date
+PASS  and so is one named date
+PASS  and so is one named dAtE
+PASS  an interim 1xx carries no Date, and the final status after it does
 PASS  a 204 takes HTTP1_NO_BODY
 PASS  a body sent to the close ends the connection with its exchange
 PASS  once sent
@@ -135,4 +157,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 137 passed, 0 failed, 0 skipped
+http1 server: 159 passed, 0 failed, 0 skipped
