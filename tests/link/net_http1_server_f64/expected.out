@@ -34,6 +34,8 @@ PASS  a handshake the server cannot accept gets the program's 400
 PASS  a warmed slot answers a hundred GETs and a hundred chunked POSTs
 PASS  and the server's calls and its program's answers moved the arena not at all (0 bytes)
 PASS  and its interest never changed, so rearm never asked for a pollModify
+PASS  the date crossed a second among them and was formatted once for the two hundred
+PASS  the server's slots share one date: a second set through one is formatted once and read through another
 PASS  refused with 431: a header section past maxHeaderBytes
 PASS  refused with 400: a chunk size that is not hex
 PASS  a bad chunk size once the response has started: no second response, and the connection ends
@@ -123,6 +125,10 @@ PASS  a write that only partly fits takes what fits
 PASS  and the last chunk still fits beside it
 PASS  a write to a response to HEAD takes everything
 PASS  and sends no body, not even the last chunk
+PASS  a program's own date field, in any case, is the response's only Date
+PASS  and so is one named date
+PASS  and so is one named dAtE
+PASS  an interim 1xx carries no Date, and the final status after it does
 PASS  a 204 takes HTTP1_NO_BODY
 PASS  a body sent to the close ends the connection with its exchange
 PASS  once sent
@@ -151,4 +157,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 153 passed, 0 failed, 0 skipped
+http1 server: 159 passed, 0 failed, 0 skipped

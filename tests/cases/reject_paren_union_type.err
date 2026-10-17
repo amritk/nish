@@ -1,1 +1,1 @@
-Union types other than `T | null` are forbidden in Nish
+`A` cannot be a union variant: its first field must be its tag

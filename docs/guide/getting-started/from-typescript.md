@@ -142,8 +142,10 @@ const show = (x: i32 | string): void => {
 ```
 
 Name the real type. When a function has to take more than one, write one
-function per type. The one union Nish allows is `T | null`, where `T` is a
-class, an interface, an array or a string; the next section covers it.
+function per type. Nish allows two kinds of union. One is `T | null`, where
+`T` is a class, an interface, an array or a string; the next section covers
+it. The other is a union of classes and interfaces that each start with a tag
+field, a [discriminated union](../language/unions.md).
 `undefined` is refused in the same way: use `null`. The one place `undefined`
 appears is in checking the result of `Map.get`, as in
 `m.get(key) === undefined`.

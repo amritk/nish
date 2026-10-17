@@ -2872,6 +2872,8 @@ class FactCollector {
    * Class constructs: a field read is a read, a field store a write, and a
    * `new` or object literal an allocator call plus whatever the constructor
    * does. A stack object is the function's own alloca and is none of those.
+   * A union's tag read is a load through the variant's pointer, and a `new`
+   * checked into a union is still its class's allocation.
    */
   collectClassFacts(node: Node): void {
     const program = this.unit.program
@@ -2879,7 +2881,14 @@ class FactCollector {
     if (node.kind === N_MEMBER) {
       const receiver = node.children[0]
       const type = program.nodeTypes[receiver.id]
-      if (type < 0 || !table.isStruct(type)) {
+      if (type < 0) {
+        return
+      }
+      if (table.isUnion(table.stripNull(type))) {
+        this.facts.readsMemory = true
+        return
+      }
+      if (!table.isStruct(type)) {
         return
       }
       const above = this.unit.parents.parentOf(node)
@@ -2905,7 +2914,7 @@ class FactCollector {
       return
     }
     if (node.kind === N_NEW) {
-      const type = program.nodeTypes[node.id]
+      const type = intrinsicType(program, node)
       if (type < 0 || !table.isStruct(type)) {
         return
       }

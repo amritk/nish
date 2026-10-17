@@ -1,0 +1,1 @@
+`Circle` cannot be a union variant: its tag `kind` must be `readonly`, because the union tells its variants apart by it

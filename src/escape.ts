@@ -466,7 +466,8 @@ class EscapeAnalysis {
   }
 
   visitNew(node: Node): void {
-    const type = this.unit.program.nodeTypes[node.id]
+    // A `new` checked into a union is recorded as the union; it allocates its class.
+    const type = intrinsicType(this.unit.program, node)
     if (type >= 0 && this.table.isStruct(type)) {
       this.sites.push(new Site(node, true))
       return
@@ -570,6 +571,7 @@ class EscapeAnalysis {
     return (
       this.table.isStruct(inner) ||
       this.table.isArray(inner) ||
+      this.table.isUnion(inner) ||
       inner === T_STRING ||
       (this.table.isResult(inner) && !this.table.resultByValue(inner))
     )

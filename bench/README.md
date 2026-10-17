@@ -661,6 +661,56 @@ the count, in one process, and fails if the checksum differs from the one
 pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
 must keep printing it.
 
+## HTTP/3 latency
+
+`h3-latency.mjs` times `std/net`'s HTTP/3 server, run as
+`tests/link/net_interop_server serve`, against nginx, with h2load over HTTP/3.
+It is [issue #670](https://github.com/amritk/nish/issues/670)'s measure, and
+[docs/h3-latency.md](../docs/h3-latency.md) records its figures and what
+they showed. It is not in this suite's tables. The tools are not
+dependencies of nish: `h3-latency/build-tools.sh` builds them once, into
+`~/.cache/nish-h3-bench` by default, from pinned and checksummed tarballs:
+OpenSSL, ngtcp2, nghttp3, h2load (nghttp2) with HTTP/3, and nginx with
+`http_v3`. It needs gcc-14, libev, c-ares and zlib; its header names the
+packages.
+
+```bash
+bash bench/h3-latency/build-tools.sh                # once; a second run skips what is installed
+node bench/h3-latency.mjs --runs 5                  # single, c96 and c96m10, against nginx
+node bench/h3-latency.mjs --runs 9 --size 4096      # a 4 kB body, where the pacer's stall shows
+node bench/h3-latency.mjs --scenario single         # one scenario
+node bench/h3-latency.mjs --baseline main           # also the server built from another rev
+node bench/h3-latency.mjs --json out.json           # every run's figures, for a script
+```
+
+There are three scenarios: `single` is one connection with one request in
+flight (`-c1 -m1`), `c96` is 96 connections (`-c96 -m1`), and `c96m10` is 96
+connections with ten requests in flight on each (`-c96 -m10`). Each target
+serves one file of `--size` bytes, 100 by default. The targets are the
+interop server built by this checkout, a byte-identical copy of it, nginx
+when `build-tools.sh` installed it, and with `--baseline REV` the server
+built from REV in a worktree under `build/`. The copy is the noise band:
+whatever separates the server from its copy is the machine, and the report
+prints that spread beside the figures.
+
+Each round runs every target on every scenario once, in turn, for
+`--duration` seconds (5 by default) after a 1 s warm-up. The server is
+pinned to CPU 0 and h2load to CPUs 1–3, so a busy share of 100 % means the
+server never waited. p50 and p99 come from h2load's per-request log, and
+server CPU from `/proc/<pid>/stat`. The busy share and CPU time cover h2load's
+whole run (its spawn, the handshakes, the warm-up and the teardown), not only
+the measured seconds. The report gives each figure's median and minimum over
+the rounds: latency, req/s, the server's busy share and its CPU time per
+request.
+
+Only 2xx rows of the log count. Against nish, h2load logs a run's first
+requests with status 0 while its summary counts them succeeded; the harness
+drops those rows and reports how many in a `no status` column. A run stops
+with an error when h2load reports a failed request, when the log holds any
+other non-2xx row, when its row count differs from the requests h2load says
+it completed, or when more than 5 % of rows have no status. Results gathered
+before the error are still written and reported.
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
