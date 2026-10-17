@@ -125,7 +125,9 @@ const worse = (a: i32, b: i32): i32 => (a >= b ? a : b)
  * a use-after-free rather than a missed optimisation, so the three `mem_*_scope`
  * cases pin one each. stage0's `src/codegen/escape.ts` holds the same four names in a
  * `Set`; a module constant in this language is a scalar or a string, so the set
- * is a function here and the two are read side by side.
+ * is a function here and the two are read side by side. `readCString` (WP27
+ * S3.3) copies C's bytes into the arena at the call, as a `declare function`'s
+ * `string` result does, and `ffi_owned_string` pins it after `churn()`.
  */
 const isAllocatingBuiltin = (name: string): boolean =>
   name === "readFileSync" ||
@@ -133,7 +135,8 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "readFileBytesSync" ||
   name === "getenv" ||
   name === "readdirSync" ||
-  name === "realpathSync"
+  name === "realpathSync" ||
+  name === "readCString"
 
 /**
  * Whether the builtin `name` answers an array whose elements were allocated by
