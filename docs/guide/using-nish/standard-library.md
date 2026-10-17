@@ -832,10 +832,15 @@ and no `pollModify`. A slot borrows its output buffer only while it writes, so
 an idle connection costs a few KiB, not `outputSize`; `bench/http.mjs`
 load-tests that loop on one core.
 
-Every final response an `Http1Connection` sends carries a `Date` field. Its
-`HttpDate` formats the date at most once a second, and a pool's slots share
-one. Set your own `date` field and it is sent instead. In a test that compares
-the bytes, call `date.pin(unixMs)` on the server, or on a lone connection. The
+Every final response an `Http1Connection` sends carries a `Date` field, and so
+does every final response an `Http2TlsServer` or `Http3Server` slot sends, as
+a lowercase `date` field straight after `:status`. A 1xx response and trailers
+carry none. Each server's `HttpDate` formats the date at most once a second,
+and a pool's slots share one. Set your own `date` field, in any case, and it
+is sent instead. On HTTP/3 the date counts against the client's field-section
+limit like any other field. In a test that compares the bytes, call
+`date.pin(unixMs)` on the server, or on a lone HTTP/1.1 connection; give a lone
+`Http2Connection` or `Http3Connection` the bytes to send in its `date`. The
 formatter itself, `httpDateWrite` in `nish/net/http-fields`, reads no clock,
 so a wasm32 build can use it.
 
