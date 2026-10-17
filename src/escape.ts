@@ -945,7 +945,9 @@ class EscapeAnalysis {
           this.result.carriers.push(v)
           continue
         }
-      } else if (v !== null && this.freshArrayLocal(arg) === v && this.onlyFilled(v)) {
+      }
+      const made: Local | null = v === null ? null : this.freshArrayLocal(arg)
+      if (v !== null && made !== null && made === v && this.onlyFilled(v)) {
         const fresh: Local[] = []
         const outcome = this.localOutcome(v, fresh)
         if (!outcome.escapes && outcome.flow !== FLOW_LEAKS) {
@@ -969,7 +971,7 @@ class EscapeAnalysis {
       node = list
       list = this.unit.parents.parentOf(node)
     }
-    const call = list === null ? null : this.unit.parents.parentOf(list)
+    const call: Node | null = list === null ? null : this.unit.parents.parentOf(list)
     if (
       list === null ||
       call === null ||
@@ -1560,7 +1562,8 @@ const holdsNoPointerSlot = (program: CheckedProgram, table: TypeTable, type: i32
 
 /** Every identifier under `node` that names `local`, arrow bodies included. */
 const identRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[]): void => {
-  if (node.kind === N_IDENT && program.nodeLocals[node.id] === local) {
+  const named: Local | null = node.kind === N_IDENT ? program.nodeLocals[node.id] : null
+  if (named !== null && named === local) {
     out.push(node)
   }
   for (const child of node.children) {
@@ -2233,15 +2236,15 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
     const stores =
       `\`${scope.name}\` is called inside ${block} and stores an allocation into memory, where this analysis stops ` +
       "following it: what it stores may be the block's and outlive the release"
-    // A map that answers strings stores each one into its result. A function
-    // that runs the map and answers what the block needs gives the map's
-    // result back when it returns, which is what the block was for.
+    // A map whose body answers arrays stores each one into its result, as a
+    // loop that pushes arrays would; one that answers numbers or strings is
+    // followed (`storedIntoChunkDst`) and may stay in the block.
     const callee: FunctionSig | null = at.kind === N_CALL ? unit.program.nodeCallees[at.id] : null
     if (callee !== null && isParallelEntry(callee)) {
       return (
         stores +
-        " (a map stores each string or array it answers into its result: run the map in a function that answers what the " +
-        "block needs, and the function's frame gives the map's result back when it returns)"
+        " (a map whose body answers arrays stores each one into its result, which the block cannot follow: run that map " +
+        "outside the block, or answer numbers or strings, which a map inside a block may)"
       )
     }
     return stores
