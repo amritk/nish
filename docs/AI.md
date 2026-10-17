@@ -1299,7 +1299,7 @@ export const main = (): i32 => {
 ```
 
 - **A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
-  scalar or `CPtr`.** The scalars are the integer and float widths, `boolean`
+  scalar, a `CPtr` or a copied `string`.** The scalars are the integer and float widths, `boolean`
   and `void`. An array, class or interface is rejected, in either position.
 - **A `string` parameter is lent for the call.** C gets a NUL-terminated
   `const char *` that it may read until it returns, and may neither keep nor
@@ -1313,6 +1313,24 @@ declare function puts(s: string): i32;
 
 export const main = (): i32 => {
   puts("hello");
+  return 0;
+};
+```
+
+- **A `string` result is copied out of C's `const char *`** into the arena at
+  the call, so it lives like any other string and C may reuse its buffer.
+  `string | null` maps `NULL` to `null`; a `string` result that comes back
+  `NULL` panics (`ffi-null`). The copy never frees: a result the caller must
+  `free` (`strdup`) is declared `CPtr | null` instead.
+
+```ts nish:ok
+declare function strerror(errnum: i32): string;
+declare function getenv(name: string): string | null;
+
+export const main = (): i32 => {
+  console.log(strerror(2));
+  const home = getenv("HOME");
+  console.log(home === null ? "unset" : "set");
   return 0;
 };
 ```

@@ -46,3 +46,5 @@ cases/mem_scope_dynamic_array  # prints the arena delta across scoped calls
 cases/ffi_scalar           # declare function abs/labs: libc, with no JS equivalent
 cases/ffi_pointer          # declare function calloc/realloc/free: the same, with a CPtr (WP27 S2)
 cases/ffi_string_param     # declare function strlen/atoi/setenv/puts: libc string calls (WP27 S3.1)
+cases/ffi_string_return    # declare function strerror/getenv/setlocale/strchr: libc string results (WP27 S3.2)
+cases/ffi_string_loops     # declare function strerror/getenv in loops: libc string results (WP27 S3.2)
