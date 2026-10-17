@@ -860,11 +860,11 @@ export const main = (): i32 => {
 `parallelReduce(src, f, identity)` folds `src` with `f` — each on as many
 threads as the array is long enough for. `f` is a [function parameter](#function-parameters).
 Importing the module compiles the program with `--threads`; there is nothing
-else to switch on and no thread count to choose. (A plain block: a program
-importing `nish/threads` writes two `.ll` files, so this one is compiled by
-`tests/link/par_map` and `tests/link/par_reduce` instead.)
+else to switch on and no thread count to choose. `parallelMap(src, f)` and
+`parallelFrom(n, f)` answer a new array instead (`f(src[i])`, `f(i)`), under
+the same rules for `f`.
 
-```ts
+```ts nish:ok
 import { parallelMapInto, parallelReduce } from "nish/threads";
 
 const square = (x: f64): f64 => x * x;
@@ -875,6 +875,17 @@ export const main = (): i32 => {
   parallelMapInto(src, dst, square);
   const total = parallelReduce(dst, (a, b) => a + b, 0.0);   // 14, the same bits on any core count
   return toI32(total);
+};
+```
+
+```ts nish:ok
+import { parallelFrom, parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  const names = parallelFrom(3, (i) => `w${i}`);    // each string copied out at the join
+  const lens = parallelMap(names, (n) => n.length); // 2 2 2
+  console.log(`${names[2]} ${lens[0]}`);            // w2 2
+  return 0;
 };
 ```
 
@@ -913,10 +924,9 @@ export const main = (): i32 => parallelReduce([1, 2, 3], (a, b) => a + b, 1);   
 
 Different functions at once, one thread each: open a scope with `using`, give
 it tasks with `spawn(entry, arg, dst, at)`, and every task has run and stored
-`entry(arg)` into `dst[at]` when the block ends. (A plain block, for the same
-reason as the one above: `tests/link/thread_scope_basic` compiles it.)
+`entry(arg)` into `dst[at]` when the block ends.
 
-```ts
+```ts nish:ok
 import { scope } from "nish/threads";
 
 const sumOf = (xs: f64[]): f64 => xs[0] + xs[1];
@@ -946,7 +956,12 @@ export const main = (): i32 => {
   (under [Memory](#memory)), and `scope()` only comes from `using`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
-- **The task is a named top-level function**, not an arrow, and it follows the
+- **The task is a top-level function named in the `spawn`, or an arrow written
+  there.** `s.spawn(entry, arg)` with no destination runs an entry that
+  answers `void`; `s.spawn(() => work(a, b))` runs an arrow that reads the
+  `const` locals and parameters around it (never a `let` or `this`: bind a
+  `const` first) and answers `void`. An entry that answers a value has a
+  destination. Either follows the
   data-parallel rules: it writes nothing anybody else can see but what it
   writes through a `Mutex`'s guard or sends on a `Channel` (below), answers a number,
   a `boolean`, an enum, a `string` or an array of numbers, booleans or enums
@@ -1018,8 +1033,15 @@ export const main = (): i32 => {
 - **Only `g.value`, and only as the base of a field or element access.** Read
   a number, a `boolean`, an enum or a `string` through it, or store one into a
   field or an element that already exists (a string is copied each way) (for a `Mutex<i32>`, `g.value = g.value + 1`).
-  Don't bind `g`, `g.value` or an array it holds, don't pass them, and call no
-  method through them (no `push`).
+  Don't bind, store, return or walk `g` itself (NL2466), nor bind, store, return
+  or walk `g.value` or an array it holds (NL2467); store only a scalar or a
+  `string` into it (NL2468), never `null` (NL2537), and call no method
+  through it (no `push`).
+- **A guard goes only to a helper**: a top-level function named at the call,
+  whose parameter is `MutexGuard<T>`, once per call — `note(g, x)` with
+  `const note = (g: MutexGuard<Stats>, x: i32): void => { … }`. The helper is
+  held to the block's rules. A method, a constructor or a generic is refused
+  (NL2536): `this` or `T` would be a way to keep the guard.
 - **Make the data fresh all the way down**: `new Mutex<Hist>(new Hist())`, not
   `new Hist(bins)` with a `bins` you still hold.
 - **`lock()` only as `using g = m.lock()`**, one lock per `using`. The lock is
@@ -1052,6 +1074,75 @@ export const main = (): i32 => {
   using g = m.lock();
   const c = g.value;   // what the guard reaches would outlive the lock
   return c.n;
+};
+```
+
+```ts nish:ok
+import { Mutex, MutexGuard } from "nish/threads";
+
+class Stats {
+  count: i32 = 0;
+}
+
+const bump = (g: MutexGuard<Stats>): void => {
+  g.value.count = g.value.count + 1;   // a helper: the block's rules, the block's lock
+};
+
+export const main = (): i32 => {
+  const m = new Mutex<Stats>(new Stats());
+  using g = m.lock();
+  bump(g);
+  return g.value.count - 1;            // 0
+};
+```
+
+### Counters without a lock: `AtomicI32` and `AtomicI64`
+
+A shared counter, minimum, maximum or flag is an atomic: `new AtomicI32(0)`,
+`new AtomicI64(toI64(0))`, updated from any task or parallel `f` by one
+indivisible method call.
+
+```ts nish:ok
+import { AtomicI32, parallelMapInto } from "nish/threads";
+
+export const main = (): i32 => {
+  const hits = new AtomicI32(0);
+  const top = new AtomicI32(0);
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => hits.add(1) + top.max(x)); // each answers the old value
+  console.log(`${hits.load()} ${top.load()}`);              // 3 9
+  return 0;
+};
+```
+
+- **Only its methods**: `load`, `store`, `add`, `sub`, `min`, `max`,
+  `exchange`, `compareExchange(expected, desired)`; each update answers the
+  value held just before it. No field to read.
+- **Not inside a scope's block after the first `spawn`** (NL2513): read it
+  before, or after the block. Two scopes of one `using` share no atomic
+  (NL2516).
+- **Make the updates commute** — `add`, `sub`, `min`, `max` — or native and
+  Node differ.
+- **Add once per batch**: count into a local array, then one `add` per bin.
+  One `add` per value makes the cores wait on each other.
+- **`AtomicI64` takes `i64` values**, exact under Node within ±2^53.
+
+```ts nish:err NL2513
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const done: i32[] = [0];
+  let seen: i32 = 0;
+  {
+    using s = scope();
+    s.spawn(bump, a, done, 0);
+    seen = a.load();   // the task may not have run yet
+  }
+  return seen;
 };
 ```
 
@@ -1154,6 +1245,38 @@ export const main = (): i32 => {
     using s = scope();
     s.spawn(drain, ch, out, 0);   // the receiver first: under Node it finds nothing
     s.spawn(one, ch, out, 1);
+  }
+  return out[0];
+};
+```
+
+### What crosses between threads, and `nish --fix`
+
+- **Crosses, by copy:** a number, a `boolean`, an enum, a `string`, an array
+  of numbers, booleans or enums — a task's answer, a `parallelMap` element, a
+  `Channel<string>` value, a string stored through a guard. The worker copies
+  an answer out on its own thread and the joining thread copies it in, one
+  value at a time, so cheap work that answers
+  strings can be slower threaded than sequential.
+- **Doesn't cross:** a class value, a nested array, a `string[]`, a `Map`, a
+  `Set`. Answer what it is built from, and build it after the join.
+- **`nish --fix` writes the usual repair**: `const` to `using` for a scope or a
+  guard (NL2388, NL2465), a destination for a number or `boolean` answer
+  (NL2511), a `const kNow = k` snapshot of a `let` an arrow reads (NL2506,
+  NL2500), and a channel arrow hoisted to a top-level `const` (NL2484). It
+  leaves to you a `spawn` in a loop, a `let` another argument names or a `for`
+  header declares, and a channel arrow that captures or leaves a parameter's or
+  its result's type out.
+
+```ts nish:err NL2506
+import { scope } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  const out: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn((n: i32): i32 => n + k, 1, out, 0);   // --fix: `const kNow = k;` above, the arrow reads `kNow`
   }
   return out[0];
 };
