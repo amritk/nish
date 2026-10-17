@@ -17628,6 +17628,87 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     return paragraphs.length === 2 && paragraphs[0].startsWith("# ") && !/^(#|```)/m.test(paragraphs[1])
   }
 
+  // The threads page's refusal table: each code's `nish:err` example must be refused
+  // with a message whose last clause holds the code to write. The clause is what
+  // follows the last `; ` outside backticks or, in a message with none, the start of
+  // its last sentence, or after its last `: `. The code is a backticked fragment that
+  // is more than one word (`using g = m.lock()`, `a.load()`), so a remedy that only
+  // names a keyword, "bind the value to a `const`", is prose; and code the user can
+  // paste, so no fragment of the clause holds a placeholder: `...`, `<field>`, or a
+  // single-letter type, `Channel<T>`, `new T()`.
+  const threadsPage = "docs/guide/using-nish/threads.md"
+  /** @type {Map<string, string>} the first message each `nish:err` code of the page is refused with */
+  const threadRefusals = new Map()
+  /** The remedy of a refusal: its text after the last `; `, else its last sentence, else after its last `: `. */
+  const lastClause = (message) => {
+    // A span opens with a run of backticks and closes with a run as long, as in
+    // Markdown, so ``[`row-${i}`]`` is one span.
+    let open = 0
+    let clause = -1
+    let sentence = -1
+    let colon = 0
+    for (let i = 0; i < message.length; i++) {
+      if (message[i] === "`") {
+        let run = 1
+        while (message[i + run] === "`") {
+          run++
+        }
+        if (open === 0) {
+          open = run
+        } else if (open === run) {
+          open = 0
+        }
+        i += run - 1
+      } else if (open === 0 && message[i + 1] === " ") {
+        if (message[i] === ";") {
+          clause = i + 2
+        } else if (message[i] === ".") {
+          sentence = i + 2
+        } else if (message[i] === ":") {
+          colon = i + 2
+        }
+      }
+    }
+    if (clause >= 0) {
+      return message.slice(clause)
+    }
+    return message.slice(sentence >= 0 ? sentence : colon)
+  }
+  /** Whether a clause holds a backticked fragment of code rather than a single word. */
+  const holdsCode = (clause) => {
+    const fragments = [...clause.matchAll(/(`+)(?!`)(.+?)(?<!`)\1(?!`)/g)].map((m) => m[2].trim())
+    return fragments.some((f) => /[\s(=.[]/.test(f)) && !fragments.some(isPlaceholder)
+  }
+  /** The type names a `<...>` may hold that are spelled in lower case. */
+  const lowerTypes = new Set([
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "f32",
+    "f64",
+    "number",
+    "string",
+    "boolean",
+    "void",
+    "null",
+  ])
+  /** Whether a fragment of code stands in for code rather than being it. */
+  const isPlaceholder = (fragment) =>
+    /\.\.\.|…/.test(fragment) ||
+    /\bnew [A-Z]\b/.test(fragment) ||
+    /:\s*[A-Z](?![\w<])/.test(fragment) ||
+    [...fragment.matchAll(/<([^<>]+)>/g)].some((m) =>
+      m[1].split(/[,|]/).some((arg) => {
+        const name = arg.trim().replace(/\[\]$/, "")
+        return /^[A-Z]$/.test(name) || (/^[a-z]+$/.test(name) && !lowerTypes.has(name))
+      })
+    )
+
   for (const page of docPages) {
     const rel = path.relative(root, page).split(path.sep).join("/")
     const text = fs.readFileSync(page, "utf8")
@@ -17664,6 +17745,12 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         .map((line) => JSON.parse(line))
       const errors = diagnostics.filter((d) => d.severity === "error")
       const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      if (rel === threadsPage && s.kind === "err") {
+        const refused = errors.find((e) => e.code === s.code)
+        if (refused && !threadRefusals.has(s.code)) {
+          threadRefusals.set(s.code, refused.message)
+        }
+      }
       if (s.kind === "ok") {
         check(`${rel}:${s.line} compiles`, run.status === 0, detail || run.stderr)
       } else {
@@ -17674,6 +17761,55 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         )
       }
     }
+  }
+
+  const threadsText = fs.readFileSync(path.join(root, threadsPage), "utf8")
+  const tableCodes = [...threadsText.matchAll(/^\| (NL\d{4}) \|/gm)].map((m) => m[1])
+  check(`${threadsPage} has a refusal table`, tableCodes.length > 0, "no `| NLxxxx |` row")
+  for (const code of new Set(
+    markedSnippets(threadsText)
+      .filter((s) => s.kind === "err")
+      .map((s) => s.code)
+  )) {
+    check(`${threadsPage}: ${code} has a row in the refusal table`, tableCodes.includes(code), "no row")
+  }
+  for (const code of tableCodes) {
+    const message = threadRefusals.get(code)
+    if (message === undefined) {
+      check(`${threadsPage}: ${code} has a nish:err example`, false, "no fence refused with it")
+      continue
+    }
+    const clause = lastClause(message)
+    check(`${threadsPage}: ${code} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
+  }
+  // Each row's "write instead" cell quotes code the page compiles: every fragment of
+  // more than one word is in a `nish:ok` fence, and the cell links to an example.
+  const okSources = markedSnippets(threadsText)
+    .filter((s) => s.kind === "ok")
+    .map((s) => s.source)
+  for (const row of threadsText.matchAll(/^\| (NL\d{4}) \|.*\| (.*) \|$/gm)) {
+    // A link's text names the section it points to, not code to write.
+    const cell = row[2].replace(/\[[^\]]*\]\([^)]*\)/g, "")
+    const fragments = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter((f) => /[\s(=.[]/.test(f))
+    const missing = fragments.filter((f) => !okSources.some((source) => source.includes(f)))
+    check(
+      `${threadsPage}: ${row[1]}'s cell quotes code a nish:ok fence compiles`,
+      fragments.length > 0 && missing.length === 0 && /\]\(#/.test(row[2]),
+      fragments.length === 0 ? "no code in the cell" : `not in a fence: ${missing.join(" | ") || "(no link)"}`
+    )
+  }
+  // Every pinned wording of a thread refusal, not only the page's example of it: a
+  // code reached several ways (NL2479 from a spawn, a constructor, two scopes and a
+  // late send) builds its remedy several ways, and each one ends with the code.
+  const wordingDir = path.join(root, "tests", "wordings")
+  const remedyCodes = /^nl(2345|2348|2388|2465|246[6-9]|247\d|248[14]|2500|2503|2506|2511|2513|2516|2536)_/
+  for (const file of fs.readdirSync(wordingDir).sort()) {
+    if (!file.endsWith(".err") || !remedyCodes.test(file)) {
+      continue
+    }
+    const message = fs.readFileSync(path.join(wordingDir, file), "utf8").split("\n")[0]
+    const clause = lastClause(message)
+    check(`tests/wordings/${file} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
   }
 }
 

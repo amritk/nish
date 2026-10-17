@@ -1,1 +1,1 @@
-`push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined
+`push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined; write what it does as reads and stores through the guard, into slots that already exist, `g.value.xs[0] = 1`
