@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1039 programs, 130091 dump lines.
+# 1039 programs, 130092 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -94857,95 +94857,96 @@ function bytesOf(s: string): u8[] -> @bytesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
   stackSites=0 stackLocals=0
-  local 106:9 out: u8[] (const)
-  local 107:12 k: i32 (let)
+  local 110:9 out: u8[] (const)
+  local 111:12 k: i32 (let)
 function Bench.constructor(this: Bench, listener: i32, slots: i32): void -> @Bench.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: 158:7
+  sharedWrite: 148:5
   escaping: listener slots
   calls: Order.constructor bytesOf nish.Http1Server.constructor nish.JsonDecoder.constructor nish.JsonDocument.constructor nish.JsonLimits.constructor nish.JsonWriter.constructor nish_alloc_struct nish_array_grow nish_panic nish_poll_create
   pointer this: size=160 writesThrough=true captured=false
   stackSites=2 stackLocals=0
-  callee 143:19 new Http1Server -> @nish.Http1Server.constructor
-  callee 146:22 bytesOf -> @bytesOf
-  callee 147:23 bytesOf -> @bytesOf
-  callee 147:42 bytesOf -> @bytesOf
-  callee 148:24 bytesOf -> @bytesOf
-  callee 148:41 bytesOf -> @bytesOf
-  callee 149:23 bytesOf -> @bytesOf
-  callee 149:42 bytesOf -> @bytesOf
-  callee 150:24 bytesOf -> @bytesOf
-  callee 150:41 bytesOf -> @bytesOf
-  callee 151:21 bytesOf -> @bytesOf
-  callee 153:19 new JsonWriter -> @nish.JsonWriter.constructor
-  local 157:14 k: i32 (let)
-  callee 160:18 new Order -> @Order.constructor
-  callee 161:20 new JsonDecoder -> @nish.JsonDecoder.constructor
-  callee 161:62 new JsonLimits -> @nish.JsonLimits.constructor
-  callee 162:16 new JsonDocument -> @nish.JsonDocument.constructor
-  callee 162:33 new JsonLimits -> @nish.JsonLimits.constructor
-  callee 163:23 bytesOf -> @bytesOf
-  callee 164:21 bytesOf -> @bytesOf
+  local 147:11 config: Http1Config (const)
+  callee 149:19 new Http1Server -> @nish.Http1Server.constructor
+  callee 152:22 bytesOf -> @bytesOf
+  callee 153:23 bytesOf -> @bytesOf
+  callee 153:42 bytesOf -> @bytesOf
+  callee 154:24 bytesOf -> @bytesOf
+  callee 154:41 bytesOf -> @bytesOf
+  callee 155:23 bytesOf -> @bytesOf
+  callee 155:42 bytesOf -> @bytesOf
+  callee 156:24 bytesOf -> @bytesOf
+  callee 156:41 bytesOf -> @bytesOf
+  callee 157:21 bytesOf -> @bytesOf
+  callee 159:19 new JsonWriter -> @nish.JsonWriter.constructor
+  local 163:14 k: i32 (let)
+  callee 166:18 new Order -> @Order.constructor
+  callee 167:20 new JsonDecoder -> @nish.JsonDecoder.constructor
+  callee 167:62 new JsonLimits -> @nish.JsonLimits.constructor
+  callee 168:16 new JsonDocument -> @nish.JsonDocument.constructor
+  callee 168:33 new JsonLimits -> @nish.JsonLimits.constructor
+  callee 169:23 bytesOf -> @bytesOf
+  callee 170:21 bytesOf -> @bytesOf
 function Bench.begin(this: Bench, slot: i32, conn: Http1Connection): void -> @Bench.begin [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 177:5
+  sharedWrite: 183:5
   escaping: slot
   calls: Bench.answer nish.Http1Parser.methodIs nish.Http1Parser.targetIs nish_panic nish_panic_index
   pointer this: size=160 writesThrough=true captured=false passedTo=Bench.answer#0
   pointer conn: size=144 writesThrough=true captured=false passedTo=Bench.answer#1
   stackSites=0 stackLocals=0
-  local 169:9 route: i32 (let)
-  callee 170:9 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  callee 171:11 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
-  callee 173:18 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
-  callee 180:7 Bench.answer -> @Bench.answer
+  local 175:9 route: i32 (let)
+  callee 176:9 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  callee 177:11 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  callee 179:18 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  callee 186:7 Bench.answer -> @Bench.answer
 function Bench.gather(this: Bench, slot: i32, conn: Http1Connection): void -> @Bench.gather [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 194:7
+  sharedWrite: 200:7
   escaping: slot
   calls: nish_panic_index nish_panic_overflow
   pointer this: size=160 writesThrough=false captured=false
   pointer conn: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 191:11 have: i32 (const)
-  local 192:11 n: i32 (const)
-  local 197:11 body: u8[] (const)
-  local 198:11 data: u8[] (const)
-  local 199:14 k: i32 (let)
+  local 197:11 have: i32 (const)
+  local 198:11 n: i32 (const)
+  local 203:11 body: u8[] (const)
+  local 204:11 data: u8[] (const)
+  local 205:14 k: i32 (let)
 function Bench.finish(this: Bench, slot: i32, conn: Http1Connection): void -> @Bench.finish [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 211:5
+  sharedWrite: 217:5
   escaping: slot
   calls: Bench.echo Bench.echoDoc Bench.reply nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.JsonWriter.reset nish_panic_index nish_panic_overflow
   pointer this: size=160 writesThrough=true captured=false passedTo=Bench.reply#0 Bench.echo#0 Bench.echoDoc#0 Bench.reply#0
   pointer conn: size=144 writesThrough=true captured=false passedTo=Bench.reply#1 Bench.reply#1 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
-  local 207:11 route: i32 (const)
-  local 213:11 length: i32 (const)
-  callee 215:7 Bench.reply -> @Bench.reply
-  local 218:11 w: JsonWriter (const)
-  callee 219:5 JsonWriter.reset -> @nish.JsonWriter.reset
-  local 220:11 ok: boolean (const)
-  callee 222:11 Bench.echo -> @Bench.echo
-  callee 223:11 Bench.echoDoc -> @Bench.echoDoc
-  callee 225:7 Bench.reply -> @Bench.reply
-  callee 228:5 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee 229:5 Http1Connection.write -> @nish.Http1Connection.write
-  callee 230:5 Http1Connection.end -> @nish.Http1Connection.end
+  local 213:11 route: i32 (const)
+  local 219:11 length: i32 (const)
+  callee 221:7 Bench.reply -> @Bench.reply
+  local 224:11 w: JsonWriter (const)
+  callee 225:5 JsonWriter.reset -> @nish.JsonWriter.reset
+  local 226:11 ok: boolean (const)
+  callee 228:11 Bench.echo -> @Bench.echo
+  callee 229:11 Bench.echoDoc -> @Bench.echoDoc
+  callee 231:7 Bench.reply -> @Bench.reply
+  callee 234:5 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee 235:5 Http1Connection.write -> @nish.Http1Connection.write
+  callee 236:5 Http1Connection.end -> @nish.Http1Connection.end
 function Bench.echo(this: Bench, body: u8[], length: i32, w: JsonWriter): boolean -> @Bench.echo [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 241:5
+  sharedWrite: 247:5
   escaping: length
   calls: nish.JsonDecoder.reset nish.jsonDecode$$Order nish.jsonEncode$$Order nish_panic_overflow
   pointer this: size=160 writesThrough=false captured=false
   pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonDecoder.reset#1
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonEncode$$Order#0
   stackSites=0 stackLocals=0
-  local 235:11 d: JsonDecoder (const)
-  callee 236:5 JsonDecoder.reset -> @nish.JsonDecoder.reset
-  local 237:11 order: Order (const)
-  callee 238:9 jsonDecode<Order> -> @nish.jsonDecode$$Order
-  callee 242:5 jsonEncode<Order> -> @nish.jsonEncode$$Order
+  local 241:11 d: JsonDecoder (const)
+  callee 242:5 JsonDecoder.reset -> @nish.JsonDecoder.reset
+  local 243:11 order: Order (const)
+  callee 244:9 jsonDecode<Order> -> @nish.jsonDecode$$Order
+  callee 248:5 jsonEncode<Order> -> @nish.jsonEncode$$Order
 function Bench.echoDoc(this: Bench, body: u8[], length: i32, w: JsonWriter): boolean -> @Bench.echoDoc [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.JsonDocument.parse
@@ -94955,18 +94956,18 @@ function Bench.echoDoc(this: Bench, body: u8[], length: i32, w: JsonWriter): boo
   pointer body: size=0 writesThrough=true captured=true passedTo=nish.JsonDocument.parse#1
   pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonDocument.write#2
   stackSites=0 stackLocals=0
-  local 248:11 doc: JsonDocument (const)
-  local 249:11 root: i32 (const)
-  callee 249:23 JsonDocument.parse -> @nish.JsonDocument.parse
-  local 253:11 revision: i32 (const)
-  callee 253:27 JsonDocument.get -> @nish.JsonDocument.get
-  callee 257:8 JsonDocument.isI64 -> @nish.JsonDocument.isI64
-  callee 258:7 JsonDocument.i64 -> @nish.JsonDocument.i64
-  callee 259:7 JsonDocument.i64 -> @nish.JsonDocument.i64
-  callee 263:9 JsonDocument.set -> @nish.JsonDocument.set
-  callee 263:35 JsonDocument.newI64 -> @nish.JsonDocument.newI64
-  callee 263:46 JsonDocument.i64 -> @nish.JsonDocument.i64
-  callee 266:5 JsonDocument.write -> @nish.JsonDocument.write
+  local 254:11 doc: JsonDocument (const)
+  local 255:11 root: i32 (const)
+  callee 255:23 JsonDocument.parse -> @nish.JsonDocument.parse
+  local 259:11 revision: i32 (const)
+  callee 259:27 JsonDocument.get -> @nish.JsonDocument.get
+  callee 263:8 JsonDocument.isI64 -> @nish.JsonDocument.isI64
+  callee 264:7 JsonDocument.i64 -> @nish.JsonDocument.i64
+  callee 265:7 JsonDocument.i64 -> @nish.JsonDocument.i64
+  callee 269:9 JsonDocument.set -> @nish.JsonDocument.set
+  callee 269:35 JsonDocument.newI64 -> @nish.JsonDocument.newI64
+  callee 269:46 JsonDocument.i64 -> @nish.JsonDocument.i64
+  callee 272:5 JsonDocument.write -> @nish.JsonDocument.write
 function Bench.reply(this: Bench, conn: Http1Connection, status: i32, body: u8[]): void -> @Bench.reply [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Connection.respond
@@ -94976,44 +94977,44 @@ function Bench.reply(this: Bench, conn: Http1Connection, status: i32, body: u8[]
   pointer conn: size=144 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.Http1Connection.write#1
   stackSites=0 stackLocals=0
-  callee 271:5 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee 272:5 Http1Connection.write -> @nish.Http1Connection.write
-  callee 273:5 Http1Connection.end -> @nish.Http1Connection.end
+  callee 277:5 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee 278:5 Http1Connection.write -> @nish.Http1Connection.write
+  callee 279:5 Http1Connection.end -> @nish.Http1Connection.end
 function Bench.answer(this: Bench, conn: Http1Connection): void -> @Bench.answer [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 278:5
+  sharedWrite: 284:5
   calls: nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish.Http1Parser.targetIs nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish_panic_overflow
   pointer this: size=160 writesThrough=true captured=false
   pointer conn: size=144 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0 nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
-  callee 279:9 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
-  local 280:13 w: JsonWriter (const)
-  callee 281:7 JsonWriter.reset -> @nish.JsonWriter.reset
-  callee 282:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
-  callee 283:7 JsonWriter.key -> @nish.JsonWriter.key
-  callee 284:7 JsonWriter.string -> @nish.JsonWriter.string
-  callee 285:7 JsonWriter.key -> @nish.JsonWriter.key
-  callee 286:7 JsonWriter.i32 -> @nish.JsonWriter.i32
-  callee 287:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
-  callee 288:7 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee 289:7 Http1Connection.write -> @nish.Http1Connection.write
-  callee 290:7 Http1Connection.end -> @nish.Http1Connection.end
-  callee 291:16 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
-  callee 292:7 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee 293:7 Http1Connection.write -> @nish.Http1Connection.write
-  callee 294:7 Http1Connection.end -> @nish.Http1Connection.end
-  callee 296:7 Http1Connection.respond -> @nish.Http1Connection.respond
-  callee 297:7 Http1Connection.write -> @nish.Http1Connection.write
-  callee 298:7 Http1Connection.end -> @nish.Http1Connection.end
+  callee 285:9 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  local 286:13 w: JsonWriter (const)
+  callee 287:7 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee 288:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee 289:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee 290:7 JsonWriter.string -> @nish.JsonWriter.string
+  callee 291:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee 292:7 JsonWriter.i32 -> @nish.JsonWriter.i32
+  callee 293:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  callee 294:7 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee 295:7 Http1Connection.write -> @nish.Http1Connection.write
+  callee 296:7 Http1Connection.end -> @nish.Http1Connection.end
+  callee 297:16 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  callee 298:7 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee 299:7 Http1Connection.write -> @nish.Http1Connection.write
+  callee 300:7 Http1Connection.end -> @nish.Http1Connection.end
+  callee 302:7 Http1Connection.respond -> @nish.Http1Connection.respond
+  callee 303:7 Http1Connection.write -> @nish.Http1Connection.write
+  callee 304:7 Http1Connection.end -> @nish.Http1Connection.end
 function Bench.acceptAll(this: Bench): void -> @Bench.acceptAll [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Server.accept
   calls: nish.Http1Server.accept nish.Http1Server.fd nish_poll_add
   pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 304:13 slot: i32 (const)
-  callee 304:25 Http1Server.accept -> @nish.Http1Server.accept
-  callee 306:28 Http1Server.fd -> @nish.Http1Server.fd
+  local 310:13 slot: i32 (const)
+  callee 310:25 Http1Server.accept -> @nish.Http1Server.accept
+  callee 312:28 Http1Server.fd -> @nish.Http1Server.fd
 function Bench.serve(this: Bench, slot: i32, events: i32): void -> @Bench.serve [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Server.readable
@@ -95021,46 +95022,46 @@ function Bench.serve(this: Bench, slot: i32, events: i32): void -> @Bench.serve 
   calls: Bench.begin Bench.finish Bench.gather nish.Http1Server.close nish.Http1Server.connection nish.Http1Server.fd nish.Http1Server.flush nish.Http1Server.holds nish.Http1Server.next nish.Http1Server.readable nish.Http1Server.rearm nish.Http1Server.writable nish_poll_modify
   pointer this: size=160 writesThrough=true captured=false passedTo=Bench.begin#0 Bench.gather#0 Bench.finish#0
   stackSites=0 stackLocals=0
-  callee 314:10 Http1Server.holds -> @nish.Http1Server.holds
-  local 317:9 wants: i32 (let)
-  callee 317:43 Http1Server.readable -> @nish.Http1Server.readable
-  callee 317:72 Http1Server.writable -> @nish.Http1Server.writable
-  local 318:11 conn: Http1Connection (const)
-  callee 318:35 Http1Server.connection -> @nish.Http1Server.connection
-  local 319:9 event: i32 (let)
-  callee 319:22 Http1Server.next -> @nish.Http1Server.next
-  callee 322:9 Bench.begin -> @Bench.begin
-  callee 324:9 Bench.gather -> @Bench.gather
-  callee 326:9 Bench.finish -> @Bench.finish
-  callee 328:15 Http1Server.next -> @nish.Http1Server.next
-  callee 330:13 Http1Server.flush -> @nish.Http1Server.flush
-  callee 332:7 Http1Server.close -> @nish.Http1Server.close
-  callee 335:9 Http1Server.rearm -> @nish.Http1Server.rearm
-  callee 336:29 Http1Server.fd -> @nish.Http1Server.fd
+  callee 320:10 Http1Server.holds -> @nish.Http1Server.holds
+  local 323:9 wants: i32 (let)
+  callee 323:43 Http1Server.readable -> @nish.Http1Server.readable
+  callee 323:72 Http1Server.writable -> @nish.Http1Server.writable
+  local 324:11 conn: Http1Connection (const)
+  callee 324:35 Http1Server.connection -> @nish.Http1Server.connection
+  local 325:9 event: i32 (let)
+  callee 325:22 Http1Server.next -> @nish.Http1Server.next
+  callee 328:9 Bench.begin -> @Bench.begin
+  callee 330:9 Bench.gather -> @Bench.gather
+  callee 332:9 Bench.finish -> @Bench.finish
+  callee 334:15 Http1Server.next -> @nish.Http1Server.next
+  callee 336:13 Http1Server.flush -> @nish.Http1Server.flush
+  callee 338:7 Http1Server.close -> @nish.Http1Server.close
+  callee 341:9 Http1Server.rearm -> @nish.Http1Server.rearm
+  callee 342:29 Http1Server.fd -> @nish.Http1Server.fd
 function Bench.run(this: Bench): void -> @Bench.run [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 343:22
+  sharedWrite: 349:22
   calls: Bench.acceptAll Bench.serve nish_panic_index nish_panic_overflow nish_poll_add nish_poll_wait
   pointer this: size=160 writesThrough=true captured=false passedTo=Bench.acceptAll#0 Bench.serve#0
   stackSites=0 stackLocals=0
-  local 343:13 n: i32 (const)
-  local 344:16 k: i32 (let)
-  local 345:15 token: i32 (const)
-  local 346:15 events: i32 (const)
-  callee 348:11 Bench.acceptAll -> @Bench.acceptAll
-  callee 350:11 Bench.serve -> @Bench.serve
+  local 349:13 n: i32 (const)
+  local 350:16 k: i32 (let)
+  local 351:15 token: i32 (const)
+  local 352:15 events: i32 (const)
+  callee 354:11 Bench.acceptAll -> @Bench.acceptAll
+  callee 356:11 Bench.serve -> @Bench.serve
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_tcp_listen
   calls: Bench.constructor Bench.run llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic_index nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_tcp_listen
   stackSites=1 stackLocals=1
-  local 358:9 port: i32 (const)
-  local 359:9 slots: i32 (const)
-  local 360:9 limit: i32 (const)
-  local 361:9 listener: i32 (const)
-  local 366:9 bench: Bench (const)
-  callee 366:24 new Bench -> @Bench.constructor
-  callee 371:3 Bench.run -> @Bench.run
+  local 364:9 port: i32 (const)
+  local 365:9 slots: i32 (const)
+  local 366:9 limit: i32 (const)
+  local 367:9 listener: i32 (const)
+  local 372:9 bench: Bench (const)
+  callee 372:24 new Bench -> @Bench.constructor
+  callee 377:3 Bench.run -> @Bench.run
 module std/net/http1-server.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import netClose from "nish:net" -> builtin netClose
