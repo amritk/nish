@@ -67,6 +67,9 @@
  * header section with the framing field the body needs, and `http1Chunk` and
  * `http1LastChunk` for a chunked body. It refuses (`null`) anything that would
  * let a caller's string end a line early — the response-splitting shape.
+ * `http1WriteResponseHead` writes the same head into a caller's buffer with
+ * nothing allocated, and adds a `Date` field from the bytes it is given
+ * (`httpDateWrite` in `nish/net/http-fields` makes them) to a final response.
  *
  * Field names are kept in lowercase, the form RFC 9110 §5.1 says they compare
  * in and the form HTTP/2 sends them in. Strings in the language are bytes, so a
@@ -1410,11 +1413,16 @@ const http1PutDecimal = (out: u8[], at: i32, n: i32): i32 => {
  * `http1ResponseHead`'s status line and header section, written into `out`
  * at `at` with nothing allocated: field names and values are octets (as
  * `nish/net/http-fields` holds them), and `connection`, when not empty, is
- * sent as a `Connection` field after the caller's. Answers where the head
- * ends; `HTTP1_REFUSED` for everything `http1ResponseHead` refuses, a
- * `Connection` among the caller's fields when `connection` is given, and a
- * `connection` that is not field text; `HTTP1_NO_ROOM` when it is well formed
- * but does not fit. Either way `out` is untouched.
+ * sent as a `Connection` field after the caller's. `date`, when not empty, is
+ * sent as a `Date` field between the caller's fields and the framing ones
+ * (RFC 9110 §6.6.1), on a final status only, and not when the caller's fields
+ * already hold a `date` in any case: the caller's wins, so a response carries
+ * one. Answers where the head ends; `HTTP1_REFUSED` for everything
+ * `http1ResponseHead` refuses, a `Connection` among the caller's fields when
+ * `connection` is given, a `connection` that is not field text, and a `date`
+ * that is not field text on a final status, the only one it is sent on;
+ * `HTTP1_NO_ROOM` when it is well formed but does not fit, the `Date` line
+ * counted when it is sent. Either way `out` is untouched.
  */
 export const http1WriteResponseHead = (
   out: u8[],
@@ -1424,9 +1432,13 @@ export const http1WriteResponseHead = (
   names: u8[][],
   values: u8[][],
   bodyLength: i32,
-  connection: string
+  connection: string,
+  date: u8[]
 ): i32 => {
   if (status < 100 || status > 599 || !http1IsFieldText(reason) || !http1IsFieldText(connection)) {
+    return HTTP1_REFUSED
+  }
+  if (status >= 200 && !http1BytesAreFieldText(date)) {
     return HTTP1_REFUSED
   }
   if (bodyLength < HTTP1_NO_BODY || ((status < 200 || status === 204) && bodyLength !== HTTP1_NO_BODY)) {
@@ -1440,6 +1452,7 @@ export const http1WriteResponseHead = (
   // field, the connection field and the empty line: counted before anything
   // is written, in 64 bits so that no caller's lengths can wrap the sum.
   let need: i64 = toI64(17) + toI64(reason.length)
+  let sendDate: boolean = status >= 200 && toI32(date.length) > 0
   for (let i: i32 = 0; i < count && i < toI32(values.length); i += 1) {
     const name: u8[] = names[i]
     const value: u8[] = values[i]
@@ -1452,7 +1465,14 @@ export const http1WriteResponseHead = (
     if (toI32(connection.length) > 0 && http1BytesAre(name, "connection")) {
       return HTTP1_REFUSED
     }
+    if (http1BytesAre(name, "date")) {
+      sendDate = false
+    }
     need = need + toI64(name.length) + toI64(value.length) + toI64(4)
+  }
+  if (sendDate) {
+    // "Date: " value CRLF: 37 bytes for an IMF-fixdate.
+    need = need + toI64(8) + toI64(date.length)
   }
   if (bodyLength >= 0) {
     need = need + toI64(18 + http1DecimalDigits(bodyLength))
@@ -1474,6 +1494,11 @@ export const http1WriteResponseHead = (
     end = http1PutBytes(out, end, names[i])
     end = http1PutText(out, end, ": ")
     end = http1PutBytes(out, end, values[i])
+    end = http1PutText(out, end, "\r\n")
+  }
+  if (sendDate) {
+    end = http1PutText(out, end, "Date: ")
+    end = http1PutBytes(out, end, date)
     end = http1PutText(out, end, "\r\n")
   }
   if (bodyLength >= 0) {

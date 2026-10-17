@@ -1,0 +1,1 @@
+Union variants must give their tag one name: the first field of `Circle` is `kind` and the first field of `Dot` is `tag`

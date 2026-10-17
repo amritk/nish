@@ -65,6 +65,13 @@
  * §15.4.5). A 1xx before the final response (100 Continue) is allowed; 101 is
  * `acceptWebSocket`'s.
  *
+ * **The Date.** Every final response, an error included, carries a `Date`
+ * field (RFC 9110 §6.6.1) from `HttpDate`, which formats the IMF-fixdate at
+ * most once a second; a 1xx carries none. The pool's slots share one, so a
+ * busy server formats a second once, not once a slot. A program that sets its
+ * own `date` field sends that one instead, so a response has one `Date`.
+ * `date.pin(unixMs)` fixes it, for a test that compares bytes.
+ *
  * **Refusals.** Every refusal of `nish/net/http1`'s parser — the smuggling
  * shapes, a `Content-Length` with a `Transfer-Encoding`, two that disagree,
  * a malformed chunk size — is answered with its status (400, 413, 414, 431,
@@ -135,6 +142,7 @@ import {
   websocketWriteFrame,
 } from "nish/net/websocket"
 import { TlsServerConfig } from "nish/net/tls"
+import { HTTP_DATE_LAST_SECOND, HTTP_DATE_SIZE, httpDateWrite } from "nish/net/http-fields"
 import { TLS_RECORD_DONE, TLS_RECORD_STATE_OPEN, TLS_RECORD_WANT_WRITE } from "nish/net/tls/record-server"
 import { TlsTcpServer } from "nish/net/tls-tcp"
 
@@ -233,6 +241,82 @@ const http1ServerCopy = (out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 =
     }
   }
   return at + n
+}
+
+/**
+ * The `Date` field an origin server with a clock sends on every final
+ * response (RFC 9110 §6.6.1): the IMF-fixdate of now, in 29 bytes the object
+ * owns and rewrites in place, at most once a second.
+ *
+ * It reads the wall clock, `Date.now()`, which a wasm32 build has no host for,
+ * so it lives here, in a module that is native already, while the formatting
+ * it calls, `httpDateWrite`, stays in `nish/net/http-fields`, which compiles
+ * for wasm32 (the split `nish/crypto/x509` and `x509-random` make). `pin`
+ * replaces the clock with one instant, which is how a test asserts a response
+ * byte for byte.
+ */
+export class HttpDate {
+  /** The IMF-fixdate of `second`: what `current` answers, made once. */
+  bytes: u8[]
+  /** The second `bytes` holds, since 1970; -1 before the first `current`. */
+  second: i64 = -1
+  /** The instant `pin` fixed, in milliseconds since 1970, while `pinned`. */
+  pinnedMs: i64 = 0
+  /** How many times `bytes` has been rewritten. */
+  rewrites: i64 = 0
+  pinned: boolean = false
+
+  /** A date on the wall clock, with nothing formatted yet. */
+  constructor() {
+    this.bytes = new Array<u8>(HTTP_DATE_SIZE)
+  }
+
+  /**
+   * The 29 bytes for now, which are rewritten only when the second differs
+   * from the one they hold — earlier as well as later, since a corrected clock
+   * steps back. It allocates nothing, and the array is the same one each time,
+   * so a caller copies it out rather than keeping it. A wall clock before 1970
+   * or past 9999 answers the nearer of the two ends.
+   */
+  current(): u8[] {
+    const ms: i64 = this.pinned ? this.pinnedMs : toI64(Date.now())
+    let second: i64 = ms / 1000
+    if (ms < 0) {
+      second = 0
+    } else if (second > HTTP_DATE_LAST_SECOND) {
+      second = HTTP_DATE_LAST_SECOND
+    }
+    if (second !== this.second) {
+      httpDateWrite(this.bytes, 0, second)
+      this.second = second
+      this.rewrites += 1
+    }
+    return this.bytes
+  }
+
+  /**
+   * Makes `current` answer `unixMs`, milliseconds since 1970, until `unpin`.
+   * False, and nothing changed, for an instant before 1970-01-01T00:00:00Z or
+   * after 9999-12-31T23:59:59.999Z, which an IMF-fixdate cannot name.
+   */
+  pin(unixMs: i64): boolean {
+    if (unixMs < 0 || unixMs / 1000 > HTTP_DATE_LAST_SECOND) {
+      return false
+    }
+    this.pinnedMs = unixMs
+    this.pinned = true
+    return true
+  }
+
+  /** Puts `current` back on the wall clock. */
+  unpin(): void {
+    this.pinned = false
+  }
+
+  /** How many times the bytes have been rewritten: one per second that `current` was asked for, at most. */
+  formats(): i64 {
+    return this.rewrites
+  }
 }
 
 /**
@@ -365,6 +449,13 @@ export class Http1Connection {
   // References, then 64-bit fields, then 32-bit ones, then flags: the order
   // the layout packs without padding.
   config: Http1Config
+  /**
+   * The `Date` every final response carries. The connection makes its own;
+   * `Http1Server` and `Http1TlsServer` put theirs here, so that every slot of a
+   * pool shares one and the pool formats at most once a second. A program may
+   * put another, to share it or to pin its clock.
+   */
+  date: HttpDate
   /** The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is the last `H1_REQUEST`'s. */
   parser: Http1Parser
   /** The frame decoder, once the slot has switched to WebSocket. */
@@ -449,6 +540,7 @@ export class Http1Connection {
       big - H1_LINE_OVERHEAD
     )
     this.config = config
+    this.date = new HttpDate()
     this.parser = new Http1Parser(config.maxTarget, config.maxHeaderBytes, config.maxHeaders, config.maxBody)
     this.parser.keepText = false
     this.parser.maxChunk = config.chunkSize
@@ -737,7 +829,8 @@ export class Http1Connection {
         this.noFields,
         this.noFields,
         H1_ZERO,
-        "close"
+        "close",
+        this.date.current()
       )
       if (end >= 0) {
         this.outputEnd = end
@@ -889,7 +982,8 @@ export class Http1Connection {
       names,
       values,
       framing,
-      connection
+      connection,
+      this.date.current()
     )
     if (end === HTTP1_REFUSED) {
       return H1_INVALID
@@ -1099,6 +1193,8 @@ export class Http1Connection {
 export class Http1Server {
   config: Http1Config
   connections: Http1Connection[]
+  /** The `Date` every slot's responses carry, formatted once a second for all of them. `date.pin` fixes its clock. */
+  date: HttpDate
   /** Each slot's descriptor, or -1 while it is free. */
   fds: i32[]
   /** Each slot's interest as the loop last armed it, for `rearm`. */
@@ -1131,10 +1227,12 @@ export class Http1Server {
     this.armed = []
     this.free = []
     this.outputs = new Http1OutputPool(config.outputSize)
+    this.date = new HttpDate()
     const slots: i32 = size < 1 ? 1 : size
     for (let k: i32 = 0; k < slots; k++) {
       const conn: Http1Connection = new Http1Connection(config)
       conn.pool = this.outputs
+      conn.date = this.date
       this.connections.push(conn)
       this.fds.push(H1_FREE)
       this.armed.push(H1_WANT_READ)
@@ -1371,6 +1469,8 @@ export class Http1Server {
 export class Http1TlsServer {
   tls: TlsTcpServer
   connections: Http1Connection[]
+  /** The `Date` every slot's responses carry, as `Http1Server.date` is. */
+  date: HttpDate
   /** Where TLS decrypts into before the connection takes the bytes. */
   scratch: u8[]
   /** The output buffers the slots borrow while they write. */
@@ -1381,9 +1481,11 @@ export class Http1TlsServer {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
     this.connections = []
     this.outputs = new Http1OutputPool(config.outputSize)
+    this.date = new HttpDate()
     for (let k: i32 = 0; k < this.tls.size(); k++) {
       const conn: Http1Connection = new Http1Connection(config)
       conn.pool = this.outputs
+      conn.date = this.date
       this.connections.push(conn)
     }
     this.scratch = new Array<u8>(config.chunkSize)

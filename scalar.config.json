@@ -61,6 +61,7 @@
             "title": "Classes and interfaces",
             "filepath": "docs/guide/language/classes-and-interfaces.md"
           },
+          "/unions": { "type": "page", "title": "Discriminated unions", "filepath": "docs/guide/language/unions.md" },
           "/errors": { "type": "page", "title": "Errors and Result", "filepath": "docs/guide/language/errors.md" },
           "/maps-and-sets": {
             "type": "page",

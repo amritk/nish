@@ -1,6 +1,6 @@
-// The parentheses group, they do not widen: `(A | B)[]` is still a union that
-// is not `T | null`, and it is refused with the same message the unparenthesised
-// form gets.
+// The parentheses group, they do not widen: `(A | B)[]` is still the union
+// `A | B`, and untagged `A` is refused as a variant with the message the
+// unparenthesised form gets.
 class A {
   x: i32 = 0;
 }

@@ -26,6 +26,7 @@
 // syntax TypeScript refuses as syntax too, listed case by case in
 // `tests/self/parser-refusals.txt`.
 
+import { builtinTypeName } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { CheckContext } from "./context"
 import { Edit } from "./diagnostics"
@@ -786,15 +787,28 @@ const rejectForbiddenAssertion = (ctx: CheckContext, node: Node): void => {
   }
 }
 
-/** `T | null` is the only union; anything else is refused with one message. */
+/**
+ * `T | null`, and a union of named types with at most one `null`, which the
+ * resolver checks is a discriminated union of classes and interfaces
+ * (`resolveUnion`). Anything else, a keyword or a scalar among the members, a
+ * second `null`, `undefined`, is refused here with one message.
+ */
 const checkNullUnion = (ctx: CheckContext, node: Node): void => {
   let nulls = 0
+  let named = 0
   for (const member of node.children) {
     if (member.kind === N_TYPE_NULL) {
       nulls = nulls + 1
+    } else if (
+      member.kind === N_TYPE_REF &&
+      !builtinTypeName(member.text) &&
+      (member.children.length === 0 || member.children[0].children.length === 0)
+    ) {
+      named = named + 1
     }
   }
-  if (nulls !== 1 || node.children.length !== 2) {
+  const tagged = nulls <= 1 && named >= 2 && named + nulls === node.children.length
+  if (!tagged && (nulls !== 1 || node.children.length !== 2)) {
     ctx.error(
       node,
       "Union types other than `T | null` are forbidden in " + LANGUAGE + " (values have one fixed layout)"

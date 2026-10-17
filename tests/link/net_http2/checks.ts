@@ -17,6 +17,8 @@
 //   8. What the program's writes refuse.
 //   9. The arena: a thousand frames each way move it not at all; a restart
 //      reuses the connection.
+//  10. The Date: one on every final head, none on a 1xx or trailers, the
+//      program's own in its place, and none on a connection without a server.
 //
 // The checks live here so that `tests/link/net_http2_f64` runs every one
 // again under `--number-mode f64`; the refusals are `tests/link/net_http2_errors`.
@@ -530,5 +532,80 @@ export const http2Checks = (): i32 => {
   r.wire.headers(toI32(1), getOf("/again"), H2_FLAG_END_STREAM);
   r.send();
   t.eqStr("stream 1 is new again", r.takeEvents(), "request 1 GET /again end");
+
+  // --- 10. The Date ----------------------------------------------------------------------------------------
+  const pinned = "Fri, 16 Oct 2026 08:11:54 GMT";
+  const dt = new Client(defaults());
+  dt.conn.date = httpFieldBytes(pinned);
+  dt.open();
+  dt.wire.headers(toI32(1), getOf("/dated"), H2_FLAG_END_STREAM);
+  dt.send();
+  dt.takeEvents();
+  dt.conn.respond(toI32(1), toI32(200), namesOf(["content-type", "text/plain"]), valuesOf(["content-type", "text/plain"]), true);
+  t.eqStr("a final response carries one date, straight after :status", dt.takeFrames(), `HEADERS 1 end :status=200 date=${pinned} content-type=text/plain`);
+  dt.wire.headers(toI32(3), postOf("/early", 0), ZERO);
+  dt.send();
+  dt.takeEvents();
+  dt.conn.respond(toI32(3), toI32(103), namesOf(["link", "</s.css>"]), valuesOf(["link", "</s.css>"]), false);
+  dt.conn.respond(toI32(3), toI32(200), namesOf(none()), valuesOf(none()), false);
+  dt.conn.writeTrailers(toI32(3), namesOf(["grpc-status", "0"]), valuesOf(["grpc-status", "0"]));
+  t.eqStr(
+    "a 103 and the trailers carry none, the 200 between them one",
+    dt.takeFrames(),
+    `HEADERS 3 :status=103 link=</s.css>; HEADERS 3 :status=200 date=${pinned}; HEADERS 3 end grpc-status=0`
+  );
+  const own: string[] = ["date", "Thu, 01 Jan 1970 00:00:00 GMT"];
+  dt.wire.headers(toI32(5), getOf("/own"), H2_FLAG_END_STREAM);
+  dt.send();
+  dt.takeEvents();
+  t.eqI32("a head with the program's own date", dt.conn.respond(toI32(5), toI32(200), namesOf(own), valuesOf(own), true), ZERO);
+  t.eqStr("goes out with that date alone, never two", dt.takeFrames(), "HEADERS 5 end :status=200 date=Thu, 01 Jan 1970 00:00:00 GMT");
+  dt.wire.headers(toI32(7), getOf("/mixed"), H2_FLAG_END_STREAM);
+  dt.send();
+  dt.takeEvents();
+  const mixed: string[] = ["Date", "Thu, 01 Jan 1970 00:00:00 GMT"];
+  t.eqI32("a mixed-case Date, which HTTP/2 does not allow (§8.2.1): H2_INVALID", dt.conn.respond(toI32(7), toI32(200), namesOf(mixed), valuesOf(mixed), true), H2_INVALID);
+  t.eqStr("and nothing went out for it", dt.takeFrames(), "");
+  t.eqI32("the date never enters the HPACK dynamic table", dt.conn.encoder.table.count(), ZERO);
+
+  const bare = new Client(defaults());
+  bare.open();
+  bare.wire.headers(toI32(1), getOf("/bare"), H2_FLAG_END_STREAM);
+  bare.send();
+  bare.takeEvents();
+  bare.conn.respond(toI32(1), toI32(200), namesOf(none()), valuesOf(none()), true);
+  t.eqStr("a connection with no server to keep the clock sends no date", bare.takeFrames(), "HEADERS 1 end :status=200");
+
+  const dated = new Http2Config();
+  dated.maxHeaderListSize = 200;
+  const v = new Client(dated);
+  v.conn.date = httpFieldBytes(pinned);
+  v.open();
+  v.wire.headers(toI32(1), [":method", "GET", ":scheme", "https", ":path", "/", "x-big", longValue.join("").substring(0, 300)], H2_FLAG_END_STREAM);
+  v.send();
+  t.eqStr("the server's own 431 is a final response too, and carries the date", v.takeFrames(), `HEADERS 1 end :status=431 date=${pinned}`);
+
+  // A head whose bound fills the output room exactly: 48 + 6 + 822 + 11
+  // bytes of fields and a 9-byte frame header are the 896 bytes a 1,024-byte
+  // output leaves above its control reserve, and the date's 44 do not fit.
+  const tight = new Http2Config();
+  tight.outputSize = 1024;
+  const roomFill: u8[][] = [filler(822)];
+  const roomBare = new Client(tight);
+  roomBare.open();
+  roomBare.wire.headers(toI32(1), getOf("/room"), H2_FLAG_END_STREAM);
+  roomBare.send();
+  roomBare.takeEvents();
+  roomBare.takeFrames();
+  t.eqI32("a head that fills the output room exactly, with no date: sent", roomBare.conn.respond(toI32(1), toI32(200), namesOf(["x-fill", "v"]), roomFill, true), ZERO);
+  const roomDated = new Client(tight);
+  roomDated.conn.date = httpFieldBytes(pinned);
+  roomDated.open();
+  roomDated.wire.headers(toI32(1), getOf("/room"), H2_FLAG_END_STREAM);
+  roomDated.send();
+  roomDated.takeEvents();
+  roomDated.takeFrames();
+  t.eqI32("the same head with the date counted against the room: H2_INVALID", roomDated.conn.respond(toI32(1), toI32(200), namesOf(["x-fill", "v"]), roomFill, true), H2_INVALID);
+  t.eqStr("and nothing went out for the head the date overfills", roomDated.takeFrames(), "");
   return t.done();
 };
