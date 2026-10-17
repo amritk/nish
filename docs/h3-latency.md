@@ -41,7 +41,10 @@ and nghttp3 1.18.0, and nginx 1.31.7, all against OpenSSL 3.6.5.
 ### 100-byte body: the reported shape does not reproduce
 
 `node bench/h3-latency.mjs --runs 9`: 9 rounds of 5 s each, plus a 1 s warm-up.
-Each cell is median / min over the rounds.
+Each cell is median / min over the rounds. These runs predate the harness
+dropping rows h2load logs with no status (the first requests of a run, about
+0.5 % of them at c96m10 against nish, none against nginx); its `no status`
+column now counts them.
 
 | scenario | target | p50 | p99 | req/s | server busy | CPU/req |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -58,8 +61,8 @@ Each cell is median / min over the rounds.
 | c96m10 | nginx | 6.62 ms / 6.21 ms | 113.61 ms / 108.28 ms | 70.1k / 67.6k | 98% / 98% | 13.91 µs / 12.95 µs |
 | c96m10 | noise (nish vs copy) | ±5.0% | ±4.7% | ±4.1% | ±0.5% | ±3.4% |
 
-**Single.** nish's p99 is 203 µs against nginx's 223 µs, both inside the
-noise band. The tail is thin: of 44,219 requests in one 5 s run, 30 took
+**Single.** nish's p99 is 203 µs against nginx's 223 µs: 9.8 % lower,
+outside the ±3.0 % band, so nish is not worse here. The tail is thin: of 44,219 requests in one 5 s run, 30 took
 0.9 ms or more (0.07 %).
 
 **c96.** Both servers saturate the one core they are pinned to, at 98 %
@@ -202,8 +205,9 @@ so it is never held for a timer.
 ### Per-byte cost: the throughput gap under load
 
 The pacer explains the single-client tail, not the c96 gap at 4 kB and up.
-At c96 the unpaced server is no faster than the stock one; both saturate
-their core:
+From 4 kB up the unpaced server is no faster at c96 than the stock one;
+both saturate their core. At 100 B the unpaced range is higher, which this
+page does not explain: the counter shows the pacer parks nothing at 100 B.
 
 | body | c96 req/s paced | c96 req/s unpaced | c96 req/s nginx |
 | --- | --- | --- | --- |
@@ -224,7 +228,7 @@ loops that touch the body one byte at a time:
 - Each ring index is `offset % size` on 64-bit integers, per byte
   (`std/net/quic-stream.ts:272`, about 8 % of instructions).
 - Acknowledged data is kept as one bit per byte: an ACK marks its range bit
-  by bit (`std/net/quic-stream.ts:1524`, the setter at :192), and the send
+  by bit (`std/net/quic-stream.ts:1524`, the setter at :187), and the send
   base advances by testing one bit per byte (`std/net/quic-stream.ts:1528`,
   the test at :183). The two bitmap helpers are about 10 %.
 - `quicPacketCopy` copies a STREAM frame's payload into the datagram one
@@ -282,14 +286,23 @@ before and after.
 - **Pace on a finer clock.** Keep the pacer's time and RTT in microseconds,
   so it earns credit between millisecond ticks and uses the real RTT rather
   than a 1 ms floor. A wake that is due sooner than the wheel's 1 ms
-  resolution sends at once instead of being filed for the next tick.
+  resolution sends at once instead of being filed for the next tick. Loss
+  delay and the PTO keep RFC 9002's 1 ms kGranularity floor
+  (`QUIC_RECOVERY_GRANULARITY`, applied in `lossDelay` at
+  `std/net/quic-recovery.ts:511` and in `ptoBase` at :653); they read the
+  same `smoothedRtt`, so the finer units must not lower their floor.
 - **Let the burst follow the window.** Cap the budget at `max(initial
   window, cwnd)`, as the second lead measured. It is not enough alone, but
-  needed for large bodies once the clock is fixed.
+  needed for large bodies once the clock is fixed. RFC 9002 §7.7 says a
+  sender SHOULD NOT send a burst larger than the initial window unless it
+  knows the path can absorb it, and `pacerRefill`'s comment
+  (`std/net/quic-recovery.ts:803`) calls the initial window the largest
+  burst it allows; a larger cap has to state that knowledge.
 - **Don't pace what isn't a burst.** Skip the credit check for an ACK-only
   datagram, or for a response's datagrams while nothing else is in flight.
   This would need its own measurement; the 100 B results here give no reason
-  to expect a gain.
+  to expect a gain. The §7.7 limit above applies here too: a skipped check
+  may not let a burst past the initial window.
 
 For the per-byte cost under load, separately from the stall:
 

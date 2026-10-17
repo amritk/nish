@@ -136,7 +136,17 @@ if ! installed nginx "$nginx_ver"; then
   echo "$nginx_ver" >"${stamps}/nginx"
 fi
 
-# h2load prints no HTTP/3 line in --version, so the check is that it accepts h3.
+# h2load prints no HTTP/3 line in --version, and its help lists --h3 either
+# way, so the check is that it links ngtcp2, which only an HTTP/3 build does;
+# nginx's is its configure arguments.
 "${prefix}/bin/h2load" --version
+if ! ldd "${prefix}/bin/h2load" | grep -q "libngtcp2"; then
+  echo "build-tools.sh: ${prefix}/bin/h2load was built without HTTP/3" >&2
+  exit 1
+fi
 "${prefix}/nginx/sbin/nginx" -V 2>&1 | head -1
+if ! "${prefix}/nginx/sbin/nginx" -V 2>&1 | grep -q -- "--with-http_v3_module"; then
+  echo "build-tools.sh: ${prefix}/nginx/sbin/nginx was built without http_v3" >&2
+  exit 1
+fi
 echo "tools in ${prefix}: bin/h2load, nginx/sbin/nginx"

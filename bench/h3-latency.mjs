@@ -24,8 +24,10 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import { homedir, tmpdir } from "node:os"
@@ -113,6 +115,14 @@ const run = (cmd, args, cwd = root) => {
   return r.stdout
 }
 
+/** The newest modification time of any file under `dir`, in ms. */
+const newestSource = (dir) =>
+  Math.max(
+    ...readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => statSync(join(e.parentPath, e.name)).mtimeMs)
+  )
+
 /**
  * Builds the interop server of the checkout at `dir` into `out`. Each checkout
  * builds its own compiler, because the compiler reads `nish/` modules from the
@@ -121,7 +131,7 @@ const run = (cmd, args, cwd = root) => {
  */
 const buildServer = (dir, out) => {
   const nish = join(dir, "build", "nish")
-  if (!existsSync(nish)) {
+  if (!existsSync(nish) || newestSource(join(dir, "src")) > statSync(nish).mtimeMs) {
     const seed = process.env.NISH_BOOTSTRAP || join(root, "build", "seed", "bin", "nish")
     if (!existsSync(seed)) {
       throw new Error("no seed: run bash scripts/fetch-seed.sh --force, or set NISH_BOOTSTRAP")
@@ -294,6 +304,15 @@ const measure = async (target, scenario, ctx) => {
   const { connections, streams } = SCENARIOS[scenario]
   const port = freePort()
   const server = await startServer(target, port, ctx)
+  try {
+    return await drive(target, scenario, ctx, server, port, connections, streams)
+  } finally {
+    await stopServer(server)
+  }
+}
+
+/** The h2load half of `measure`, run while the server is up; `measure` stops it. */
+const drive = async (target, scenario, ctx, server, port, connections, streams) => {
   const log = join(ctx.tmp, "requests.log")
   rmSync(log, { force: true })
   const threads = Math.min(3, connections)
@@ -326,29 +345,49 @@ const measure = async (target, scenario, ctx) => {
     c.stderr.on("data", (d) => {
       out += d
     })
+    c.on("error", (e) => finish({ code: -1, out: `${out}${e.message}\n` }))
     c.on("exit", (code) => finish({ code, out }))
   })
   const wall = Number(process.hrtime.bigint() - t0) / 1e9
   const cpu = (cpuTicks(server.pid) - cpu0) / ticksPerSecond
-  await stopServer(server)
   const done = /requests: \d+ total, \d+ started, (\d+) done, (\d+) succeeded/.exec(h2.out)
   const rate = /finished in [\d.]+\w+, ([\d.]+) req\/s/.exec(h2.out)
   const row = /time for request:\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/.exec(h2.out)
   if (h2.code !== 0 || done === null || rate === null) {
     throw new Error(`h2load against ${target.name} failed (${h2.code}):\n${h2.out}`)
   }
+  const requests = Number(done[2])
+  const failed = Number(done[1]) - requests
   // Each log line is: start time (µs since the epoch), status, latency (µs).
-  const latencies = readFileSync(log, "utf8")
+  // Only 2xx answers are timed. Status 0 is a request h2load completed and
+  // counted as succeeded but logged with no status: against nish, the run's
+  // first requests (one at single, some 0.5% of rows at c96m10), and none
+  // against nginx. They are dropped from the latencies and counted in the
+  // table's "no status" column.
+  const rows = readFileSync(log, "utf8")
     .split("\n")
     .filter((l) => l !== "")
-    .map((l) => Number(l.split("\t")[2]))
+    .map((l) => l.split("\t"))
+  const latencies = rows
+    .filter((f) => /^2\d\d$/.test(f[1]))
+    .map((f) => Number(f[2]))
     .sort((a, b) => a - b)
-  const requests = Number(done[2])
+  const noStatus = rows.filter((f) => f[1] === "0").length
+  const other = rows.length - latencies.length - noStatus
+  // A run with failures, or whose log does not hold the requests the summary
+  // counted, is not a latency sample, so it stops the run rather than print.
+  if (failed > 0 || other > 0 || rows.length !== requests || noStatus > rows.length * 0.05) {
+    throw new Error(
+      `${target.name} ${scenario}: ${failed} failed; the log holds ${rows.length} rows for ` +
+        `${requests} succeeded, ${other} non-2xx and ${noStatus} with no status`
+    )
+  }
   return {
     target: target.name,
     scenario,
     succeeded: requests,
-    failed: Number(done[1]) - requests,
+    failed,
+    noStatus,
     reqPerSec: Number(rate[1]),
     p50: percentile(latencies, 50),
     p99: percentile(latencies, 99),
@@ -374,8 +413,9 @@ const METRICS = [
   { key: "p50", head: "p50", fmt: fmtUs },
   { key: "p99", head: "p99", fmt: fmtUs },
   { key: "reqPerSec", head: "req/s", fmt: (v) => `${(v / 1000).toFixed(1)}k` },
-  { key: "serverBusy", head: "server busy", fmt: (v) => `${(v * 100).toFixed(0)}%` },
+  { key: "serverBusy", head: "server busy†", fmt: (v) => `${(v * 100).toFixed(0)}%` },
   { key: "cpuPerRequest", head: "CPU/req", fmt: (v) => `${v.toFixed(2)} µs` },
+  { key: "noStatus", head: "no status", fmt: (v) => String(v), count: true },
 ]
 
 /**
@@ -397,6 +437,9 @@ const report = (results, opts, targets) => {
     const by = (name) => results.filter((r) => r.scenario === scenario && r.target === name)
     for (const t of targets) {
       const rs = by(t.name)
+      if (rs.length === 0) {
+        continue
+      }
       const cells = METRICS.map((m) => {
         const xs = rs.map((r) => r[m.key])
         return `${m.fmt(median(xs))} / ${m.fmt(Math.min(...xs))}`
@@ -407,6 +450,9 @@ const report = (results, opts, targets) => {
     const b = by("nish-copy")
     if (a.length > 0 && b.length > 0) {
       const cells = METRICS.map((m) => {
+        if (m.count) {
+          return "—"
+        }
         const x = median(a.map((r) => r[m.key]))
         const y = median(b.map((r) => r[m.key]))
         return `±${((Math.abs(x - y) / y) * 100).toFixed(1)}%`
@@ -414,6 +460,10 @@ const report = (results, opts, targets) => {
       lines.push(`| ${scenario} | noise (nish vs copy) | ${cells.join(" | ")} |`)
     }
   }
+  lines.push(
+    "",
+    "† over h2load's whole run (spawn, handshakes, warm-up, teardown), not only the measured seconds"
+  )
   return lines.join("\n")
 }
 
@@ -482,18 +532,21 @@ const main = async () => {
           console.error(
             `round ${round} ${scenario} ${t.name}: p50 ${fmtUs(r.p50)} p99 ${fmtUs(r.p99)} ` +
               `${Math.round(r.reqPerSec)} req/s busy ${(r.serverBusy * 100).toFixed(0)}%` +
-              (r.failed > 0 ? ` (${r.failed} failed)` : "")
+              (r.noStatus > 0 ? ` (${r.noStatus} with no status)` : "")
           )
         }
       }
     }
   } finally {
     rmSync(tmp, { recursive: true, force: true })
+    // A throw part-way keeps what the finished runs measured.
+    if (opts.json !== "") {
+      writeFileSync(opts.json, `${JSON.stringify(results, null, 2)}\n`)
+    }
+    if (results.length > 0) {
+      console.log(report(results, opts, targets))
+    }
   }
-  if (opts.json !== "") {
-    writeFileSync(opts.json, `${JSON.stringify(results, null, 2)}\n`)
-  }
-  console.log(report(results, opts, targets))
 }
 
 main().catch((e) => {

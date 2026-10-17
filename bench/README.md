@@ -585,9 +585,19 @@ Each round runs every target on every scenario once, in turn, for
 `--duration` seconds (5 by default) after a 1 s warm-up. The server is
 pinned to CPU 0 and h2load to CPUs 1–3, so a busy share of 100 % means the
 server never waited. p50 and p99 come from h2load's per-request log, and
-server CPU from `/proc/<pid>/stat`. The report gives each figure's median and
-minimum over the rounds: latency, req/s, the server's busy share and its CPU
-time per request.
+server CPU from `/proc/<pid>/stat`. The busy share and CPU time cover h2load's
+whole run (its spawn, the handshakes, the warm-up and the teardown), not only
+the measured seconds. The report gives each figure's median and minimum over
+the rounds: latency, req/s, the server's busy share and its CPU time per
+request.
+
+Only 2xx rows of the log count. Against nish, h2load logs a run's first
+requests with status 0 while its summary counts them succeeded; the harness
+drops those rows and reports how many in a `no status` column. A run stops
+with an error when h2load reports a failed request, when the log holds any
+other non-2xx row, when its row count differs from the requests h2load says
+it completed, or when more than 5 % of rows have no status. Results gathered
+before the error are still written and reported.
 
 ## Other files
 
