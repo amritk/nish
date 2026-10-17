@@ -23,9 +23,10 @@
 //
 // Out of memory is listed (`oom`, at each arena allocation the escape analysis
 // places) but never counts: no source-level guard removes it. Nor does an
-// `unchecked` site, a `nish:unsafe` `uncheckedGet` or `uncheckedSet`: it
-// cannot panic, and the import its module must write is the visible opt-in to
-// the undefined behaviour an index out of range would be. Stack overflow
+// `unchecked` site, a `nish:unsafe` `uncheckedGet`, `uncheckedSet` or
+// `readCString`: it cannot panic, and the import its module must write is the
+// visible opt-in to the undefined behaviour an index out of range, or an
+// address that is not a C string, would be. Stack overflow
 // is not a site at all: it has no runtime handler and no check in the IR.
 // Signed overflow is a site (`overflow`) at every checked `+ - *`, negation and
 // step, proven where the bounds walk proved the result fits and the emitter
@@ -59,9 +60,9 @@ export const PANIC_PARALLEL_LENGTH: i32 = 9
 export const PANIC_CALL: i32 = 10
 const PANIC_OOM: i32 = 11
 /**
- * `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check, so nothing
- * panics, but nothing is proven either, and an index out of range is
- * undefined behaviour. Listed so that a reader can find every one, and
+ * `uncheckedGet`, `uncheckedSet` and `readCString` from `nish:unsafe`: no
+ * check, so nothing panics, but nothing is proven either, and an index out of
+ * range, or a `CPtr` that is not a live C string, is undefined behaviour. Listed so that a reader can find every one, and
  * allowed, as `oom` is: a call is accepted only through a `nish:unsafe`
  * import (`unsafeImportMessage` in `src/builtins.ts`), and that import at the
  * top of its module is the opt-in the no-panic scope asks for.
@@ -196,7 +197,7 @@ export const builtinPanicKind = (name: string): i32 => {
   ) {
     return PANIC_IO_EXIT
   }
-  if (name === "uncheckedGet" || name === "uncheckedSet") {
+  if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
     return PANIC_UNCHECKED
   }
   // `netRead` and its siblings check the range of their buffer the way

@@ -4496,7 +4496,9 @@ ffi.copy:
   whenever the C function's manual says it may answer `NULL`.
 - **A result C allocated for the caller to free (`strdup`, `realpath` with no
   buffer) is a `CPtr`, not a `string`**: the copy would leave C's allocation
-  with no one to free it.
+  with no one to free it. Declare it `CPtr | null`, copy it with
+  [`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns), and pass the
+  pointer back to `free`.
 
 #### `CPtr`: the pointer a C function hands back
 
@@ -4527,14 +4529,22 @@ declare function free(block: CPtr): void;
   `CPtr` is refused by whichever member rule the monomorphised class reaches
   (`reject_ffi_pointer_type_argument`), which is every shape that lays the type
   out — see `docs/wp27-ffi.md` §7a for the one that does not.
-- **`null` comes only from a foreign call.** A `declare function` may *return*
-  `CPtr | null` and may not *take* one
-  (`` cannot be nullable: a foreign pointer is narrowed with `!== null` before
-  it is passed back ``, `reject_ffi_pointer_nullable_param`), so a pointer is
-  narrowed with `if (p !== null)` before it goes back to C. The narrowing is the
-  ordinary nullable one (WP6); a `CPtr | null` local may also hold the literal
-  `null`, which is the only `CPtr` value that did not come from C and the only
-  one that cannot be passed to it.
+- **A `null` reaches C only as the literal.** A `declare function` may return
+  `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
+  either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
+  manual's "pass NULL to have it allocated" — or a pointer narrowed with
+  `if (p !== null)`. A nullable pointer the program holds is
+  `` Argument 1 of `free` is a `CPtr | null` the program holds: a nullable
+  foreign parameter takes the literal `null` or a pointer narrowed with
+  `!== null`, so C is never handed a null by a path nobody tested ``
+  (NL2539, `reject_ffi_pointer_nullable_variable`), wherever it is held: a
+  local, a parenthesised one, a ternary or `??` that may answer it, inside a
+  constructor reached by `new` or a method, and through a function parameter
+  a `declare function` is passed to (`reject_ffi_pointer_nullable_specialised`).
+  So every `NULL` C receives is one the source spells, and a pointer that may
+  be `NULL` because C said so is narrowed before it goes back. The narrowing
+  is the ordinary nullable one (WP6). The literal lowers to `i8* null`
+  (`tests/cases/ffi_owned_string`).
 - **No arithmetic, no dereference, no index, no member.** `p + 1` is
   `` Operator `+` requires two operands of the same numeric type ``
   (`reject_ffi_pointer_arithmetic`) and `p[0]` is
@@ -4546,6 +4556,70 @@ declare function free(block: CPtr): void;
   out, and it laid out none of this; `isPointerParam` in
   `src/attributes.ts` is an allow-list so that a `CPtr` falls out of it
   by construction rather than by a case somebody remembered to write.
+
+#### `readCString`: a string out of a buffer C owns
+
+**`readCString(p: CPtr): string`, from
+[`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), copies the
+NUL-terminated bytes at `p` into a new string of the program's own.** It is the
+copy a `string` result makes, offered for the pointers a `string` result cannot
+be: the ones C allocated for the caller to free. The program copies, then frees
+C's buffer itself (`tests/cases/ffi_owned_string`,
+[cookbook](IR_COOKBOOK.md#readcstring-a-string-out-of-a-buffer-c-owns)):
+
+```ts
+import { readCString } from "nish:unsafe";
+
+declare function strdup(s: string): CPtr | null;
+declare function free(p: CPtr): void;
+
+function owned(s: string): string {
+  const p = strdup(s);
+  if (p === null) {
+    return "";
+  }
+  const copy = readCString(p);
+  free(p);
+  return copy;
+}
+```
+
+```llvm
+if.end:
+  %6 = load i8*, i8** %p.addr, align 8
+  %7 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %7, i8** %copy.addr, align 8
+  %8 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %8)
+```
+
+- **It is `nish:unsafe` because nothing proves the bytes end.** The copy scans
+  for the NUL with the `@nish.ffi.str` helper a `string` result uses, and a
+  pointer that is dangling, already freed, or to a buffer with no NUL is
+  undefined behaviour: the import is the author's word, as `uncheckedGet`'s is.
+  So the call is an `unchecked` [panic site](#panic-sites) that is allowed
+  under `--deny-panics`, beside the copy's `oom`; it is an `unsafe` call to
+  `--deny unsafe`, and the `CPtr` it reads came from a `declare function`,
+  which is `ffi`.
+- **`NULL` cannot reach it from a `CPtr | null`.** The parameter is `CPtr`, so
+  an unnarrowed pointer is
+  `` `readCString` expects an argument of type CPtr, got CPtr | null ``
+  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first. What the
+  compiler trusts is the declaration: a `declare function` whose result is
+  declared `CPtr` gets no check after the call, so a C function that may
+  answer `NULL` and is declared `CPtr` hands `readCString` a `NULL` it reads
+  through. Declare such a result `CPtr | null`.
+- **The copy is new on every call and is the calling function's allocation**,
+  as a `string` result's is: kept past a loop's pass, returned, stored by a
+  constructor and released with its owner, and refused inside a `using a =
+  arena()` block that would release one held outside it (`` `readCString(p)` may
+  be allocated inside the `using arena()` block ``,
+  `reject_ffi_owned_string_arena`). C's buffer is never held past the call, so
+  `free(p)` straight after it is safe.
+- **On wasm32 it lowers to the same helper.** `@nish.ffi.str` is a byte scan and
+  a `nish_str_new`, which every runtime has, so `readCString` adds nothing to
+  the link; whether the program links there is the `declare function`'s
+  question, answered by the libc the target has.
 
 **A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
 `export`ed** (`reject_ffi_export`), because `export` offers other modules a
@@ -5478,7 +5552,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
-| `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
+| `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -5584,9 +5658,10 @@ never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 Two things the language otherwise never does are each a decision about one
 site: reading or writing an element without the bounds check, and letting a
 signed `+ - *` wrap. `nish:unsafe` holds the five functions that make them,
-and a program reaches them only through an import, so every module that gives
-up a check or defines a wrap says so at its top and every site that does is a
-call a reader can find.
+and a sixth, `readCString`, that reads a C string through a pointer nothing
+proves. A program reaches them only through an import, so every module that
+gives up a check or defines a wrap says so at its top and every site that does
+is a call a reader can find.
 
 ```ts
 import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
@@ -5603,8 +5678,9 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
 | `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
+| `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
 
-- **The import is required.** The five are declared as globals in
+- **The import is required.** The six are declared as globals in
   `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
   spelling; the compiler refuses the global one with
   `` `uncheckedGet` is a `nish:unsafe` function and is called only through an import of it ``
@@ -5642,7 +5718,10 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   `xs[i]`, `xs[i] = v`, `(a + b) | 0`, `(a - b) | 0` and `Math.imul` on an
   `i32`, and `BigInt.asIntN(64, …)` on the BigInt an `i64` is there; a program
   that stays in range prints the same as natively (`unsafe_get_set` and
-  `unsafe_wrapping` are run both ways by `tests/run.js`).
+  `unsafe_wrapping` are run both ways by `tests/run.js`). `readCString` has no
+  Node form: its `CPtr` comes only from a `declare function`, which Node cannot
+  call, so a program that reads one is native only, as every FFI program is
+  outside the differential oracle (`docs/wp27-ffi.md` §5).
 - **Every import and every call is a recorded fact.** `--emit-checked` prints,
   per module, an `unsafe import <line>:<col> <name> from "nish:unsafe"` line for
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
@@ -5653,8 +5732,9 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
-  `deny_panics_unsafe`). The `wrapping*` three are not sites at all: they are
-  defined for every pair.
+  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
+  same terms, with its copy's `oom` beside it (`ffi_owned_string`). The
+  `wrapping*` three are not sites at all: they are defined for every pair.
 - **`--unchecked-indexing` and `--wrapping` are deprecated**, and reach only
   the **entry package**: the modules in the entry's own package, never a
   `node_modules` dependency and never a `nish/` standard-library module. A
@@ -7757,7 +7837,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | the five `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul` (`tests/link/caps_policy_deny_unsafe`) |
+| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`) |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
@@ -8871,7 +8951,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
 | `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
-| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour | nothing, and nothing needs to: the call is the author's word that the index is in range, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
+| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
 
 - **`--unchecked-indexing` is not a proof.** It removes a check and makes the
