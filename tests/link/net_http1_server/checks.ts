@@ -750,7 +750,7 @@ export const serverChecks = (): i32 => {
   t.eqStr(
     "an interim 1xx carries no Date, and the final status after it does",
     sent(early.conn),
-    `HTTP/1.1 103 Early Hints\r\n\r\nHTTP/1.1 200 OK\r\n${PINNED_DATE}Content-Length: 0\r\n\r\n`
+    `HTTP/1.1 103 Status\r\n\r\nHTTP/1.1 200 OK\r\n${PINNED_DATE}Content-Length: 0\r\n\r\n`
   );
   const noContent = new Driven(config, get);
   t.ok("a 204 takes HTTP1_NO_BODY", noContent.conn.respond(toI32(204), none, none, HTTP1_NO_BODY) === 0 && noContent.conn.end() === 0);
