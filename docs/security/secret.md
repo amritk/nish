@@ -261,7 +261,7 @@ each row names functions rather than base lines.
   `reject_secret_field_wipe_param`, `reject_secret_field_wipe_new`,
   `reject_secret_field_nested`, `reject_secret_field_launder_method`,
   `reject_secret_field_launder_ternary`, `reject_secret_field_wipe_param_new`,
-  `reject_secret_field_wipe_param_method`, `reject_secret_field_wipe_nested`
+  `reject_secret_field_wipe_param_method`, `reject_secret_field_wipe_nested`,
   `reject_secret_field_wipe_other`, and, for a caller's own local in place of
   a field, `reject_secret_field_launder_local` and
   `reject_secret_field_wipe_param_local`: one road each.

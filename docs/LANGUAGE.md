@@ -6059,10 +6059,12 @@ class Session {
   caller a second name for the holder's key, and is
   `` `s` is a `Secret` parameter, which its caller owns and wipes: returned ``
   (NL2544, `reject_secret_field_launder_function`, `_launder_arrow`,
-  `_launder_generic`, `_launder_method`, `_launder_ternary`, and
-  `_launder_local` for a caller's own local); one that wipes it is NL2546
-  (`reject_secret_field_wipe_param`, `_wipe_param_new`, `_wipe_param_method`,
-  and `_wipe_param_local` for a caller's own local). Every place a `Secret` may not go is closed to the field too:
+  `_launder_generic`, `_launder_method`, and `_launder_local` for a caller's
+  own local); one that wipes it is NL2546 (`reject_secret_field_wipe_param`,
+  `_wipe_param_new`, `_wipe_param_method`, and `_wipe_param_local` for a
+  caller's own local). A ternary that picks one of two borrowed parameters to
+  return is refused before it gets there, as a copy (NL2444,
+  `reject_secret_field_launder_ternary`). Every place a `Secret` may not go is closed to the field too:
   `reject_secret_field_console` (NL2432), `_template` (NL2431), `_equality`
   (NL2433), `_condition` (NL2434), `_index` (NL2435), `_member` (NL2436),
   `_array`, `_array_literal` and `_result` (NL2429), `_new_arg` (NL2439: a
