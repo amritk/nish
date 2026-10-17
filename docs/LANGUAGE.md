@@ -3568,7 +3568,8 @@ breaks one is refused with that rule's own code:
   (`reject_mutex_using_lock_then_scope`). A `lock()` anywhere but a `using`
   initialiser is
   `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases ``
-  (NL2465, `reject_mutex_lock_not_using`).
+  (NL2465, `reject_mutex_lock_not_using`; `reject_mutex_lock_expr_body` for
+  an arrow whose expression body is `m.lock()`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
   of another access.** Bound, stored, returned or walked, a guard is
   `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock ``
@@ -3621,7 +3622,9 @@ breaks one is refused with that rule's own code:
   body is its answer and is judged as a `return` of it is, so a helper written
   `(g: MutexGuard<Box>): Box => g.value` is refused as one that writes
   `return g.value` (`reject_mutex_guard_helper_expr_value`, `_field`, `_paren`,
-  `_index`, `link/reject_mutex_guard_helper_expr_import`), and
+  `_index`, `link/reject_mutex_guard_helper_expr_import`; `_call`, `_new` and
+  `_cond` for `g.value` handed to a call or a `new`, or written as an arm of
+  `? :`, inside the body), and
   `reject_mutex_guard_helper_expr_churn` is the use-after-free it would open: the
   object kept past the lock, its string replaced under a second lock, and
   `churn()` reusing the memory before the old one is printed. An arrow cannot capture
@@ -3639,13 +3642,15 @@ breaks one is refused with that rule's own code:
   (NL2468, `reject_mutex_guard_store`; `reject_mutex_guard_store_class` for a
   class). A `null` is not stored through a guard, into a `string | null` field,
   element or `Mutex<string | null>` alike:
-  `` This stores `null` through a guard: a store into a `string | null` slot of a `Mutex`'s data copies the string into memory the `Mutex` owns and frees the copy it replaces, an exchange only a string takes part in, so a `null` cannot empty the slot; store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0`, or keep a `boolean` field beside it, `g.value.hasLast = false` ``
-  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`, and `_paren`
-  for `g.value.last = (null)`). The store's
-  exchange, `nish_guard_keep`, copies the string it is given, so it has no
-  `null` to copy; admitting the store would mean an exchange that frees the
-  slot's copy and keeps nothing, which the runtime does not have in this
-  version. A string stored through a guard is copied into memory the mutex
+  `` This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a `string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the `Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0` ``
+  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`, `_paren`
+  for `g.value.last = (null)`, and `_class` for a `Link | null` field, which
+  holds a pointer a guard stores in no form). The store's
+  exchange, `nish_guard_keep`, reads the length of the string it is given, so
+  a `null` handed to it would be dereferenced; written past it, the `null`
+  would leave the slot's copy allocated, one block per store. Admitting the
+  store would mean an exchange that frees the slot's copy and keeps nothing,
+  which the runtime does not have in this version. A string stored through a guard is copied into memory the mutex
   owns: `nish_guard_keep` `malloc`s the copy, records it, and frees the copy
   the slot held before, if that one was its own; a string read through a guard
   is copied out into the reader's arena (`.length` excepted, which keeps
@@ -4123,7 +4128,9 @@ sends and receives:
   never waits and may stay:
   `` A loop over a channel is reached while `g` holds its lock: a receive waits, and nothing waits while a lock is held, so there is no receive inside a guard's block, directly or through any function it calls (a `send` never waits, and may stay) ``
   (NL2482, `reject_channel_loop_held`, and `reject_channel_receive_held_call`
-  for a function that receives on a channel it is handed). A function that
+  for a function that receives on a channel it is handed;
+  `reject_channel_receive_held_expr` for one reached through an arrow whose
+  expression body calls it). A function that
   receives only on a channel of its own opens a scope to fill it, which R5
   refuses under a lock already.
 

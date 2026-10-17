@@ -97,6 +97,7 @@ import {
   N_RETURN,
   N_STRING,
   N_THIS,
+  N_TEMPLATE,
   N_TRUE,
   N_UNARY,
   N_BINARY,
@@ -1282,18 +1283,18 @@ const usingPlaceMessage = (): string =>
 const DESTINATION_ELEMENTS: string = "|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|number|boolean|"
 
 /**
- * The `skip + 1`th of `answer`, `answer2`, ... that is not a word anywhere in
- * `text`, so the declaration shadows nothing, and each `spawn` the fix gives
- * a destination in one round has a slot of its own.
+ * The `skip + 1`th of `base`, `base2`, ... that is not a word anywhere in
+ * `text`, so the declaration shadows nothing, and each statement the fix
+ * rewrites in one round, from the same unmodified text, has a name of its own.
  */
-const freshAnswerName = (text: string, skip: i32): string => {
+const freshName = (text: string, base: string, skip: i32): string => {
   let left = skip
-  let name = "answer"
+  let name = base
   for (let n = 2; containsWord(text, name) || left > 0; n++) {
     if (!containsWord(text, name)) {
       left = left - 1
     }
-    name = `answer${n}`
+    name = `${base}${n}`
   }
   return name
 }
@@ -1460,7 +1461,7 @@ const scopeDestinationEdits = (
   if (indent === null) {
     return edits
   }
-  const name = freshAnswerName(text, earlier)
+  const name = freshName(text, "answer", earlier)
   const semi = text.slice(scope.start, scope.end).endsWith(";") ? ";" : ""
   edits.push(new Edit(scope.start, scope.start, `const ${name} = new Array<${element}>(1)${semi}\n${indent}`))
   edits.push(new Edit(last.end, last.end, `, ${name}, 0`))
@@ -1500,6 +1501,32 @@ const identsNamed = (node: Node, name: string, out: Node[]): boolean => {
 }
 
 /** Whether `node` assigns `name`, `name = v`, `name += v` or `name++`: the fix's `const` could not take the write. */
+/** Whether an `N_IDENT` spelled `name` is anywhere under `node`. */
+const mentionsName = (node: Node, name: string): boolean => {
+  for (const child of node.children) {
+    if ((child.kind === N_IDENT && child.text === name) || mentionsName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** How many arrows under `node` that mention `name` start before `at`: the bound names the fix gives the statements ahead of the one at `at`. */
+const arrowsNamingBefore = (node: Node, name: string, at: i32): i32 => {
+  let count = 0
+  for (const child of node.children) {
+    if (child.start >= at) {
+      continue
+    }
+    if (child.kind === N_ARROW && mentionsName(child, name)) {
+      count = count + 1
+    } else {
+      count = count + arrowsNamingBefore(child, name, at)
+    }
+  }
+  return count
+}
+
 const assignsName = (node: Node, name: string): boolean => {
   if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
     const target = unwrapParens(node.children[0])
@@ -1530,7 +1557,8 @@ const assignsName = (node: Node, name: string): boolean => {
  * with the arrow as one of its arguments, is rewritten, and only when nothing
  * else in the statement names the `let`, so the value bound is the one the
  * arrow read: a call in a loop's header or a condition would bind it at
- * another time, and an argument that assigns the `let` would change it after.
+ * another time, and an argument that assigns the `let` would change it after. Each statement rewritten from the same text takes a name of
+ * its own, `kNow`, `kNow2`, ..., counted by the capturing arrows before it.
  * An arrow that assigns the `let` itself is left alone: the write would land on
  * the `const`.
  */
@@ -1578,10 +1606,10 @@ export const letCaptureEdits = (text: string, host: Node, arrow: Node, name: str
     }
   }
   const indent = indentBefore(text, stmt.start)
-  const bound = `${name}Now`
-  if (indent === null || containsWord(text, bound)) {
+  if (indent === null) {
     return edits
   }
+  const bound = freshName(text, `${name}Now`, arrowsNamingBefore(host, name, stmt.start))
   const semi = text.slice(stmt.start, stmt.end).endsWith(";") ? ";" : ""
   edits.push(new Edit(stmt.start, stmt.start, `const ${bound} = ${name}${semi}\n${indent}`))
   for (const use of uses) {
@@ -1615,8 +1643,34 @@ const commentLineAbove = (text: string, at: i32): i32 => {
   return code === 47 || code === 42 ? start : -1
 }
 
-/** `text` with up to `width` leading spaces taken off every line after its first. */
-const dedentAfterFirst = (text: string, width: i32): string => {
+/** Every template literal's span under `node`, as `start, end` pairs relative to `base`, into `out`. */
+const templateSpans = (node: Node, base: i32, out: i32[]): void => {
+  for (const child of node.children) {
+    if (child.kind === N_TEMPLATE) {
+      out.push(child.start - base)
+      out.push(child.end - base)
+    } else {
+      templateSpans(child, base, out)
+    }
+  }
+}
+
+/** Whether `at` is strictly inside one of the `start, end` pairs in `spans`. */
+const insideSpan = (spans: i32[], at: i32): boolean => {
+  for (let i = 0; i + 1 < spans.length; i = i + 2) {
+    if (spans[i] < at && at < spans[i + 1]) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * `text` with up to `width` leading spaces taken off every line after its
+ * first, except a line that starts inside one of `spans`: a template
+ * literal's text, whose spaces are part of its string.
+ */
+const dedentAfterFirst = (text: string, width: i32, spans: i32[]): string => {
   const out: string[] = []
   let from = 0
   let first = true
@@ -1626,6 +1680,7 @@ const dedentAfterFirst = (text: string, width: i32): string => {
     let skip = from
     while (
       !first &&
+      !insideSpan(spans, from) &&
       skip >= 0 &&
       skip < end &&
       skip < text.length &&
@@ -1715,7 +1770,9 @@ const hoistArrowEdits = (program: CheckedProgram, sig: FunctionSig, arrow: Node,
   }
   const lineIndent = indentOfLine(text, arrow.start)
   const semi = text.slice(top.start, top.end).endsWith(";") ? ";" : ""
-  const body = dedentAfterFirst(text.slice(arrow.start, arrow.end), lineIndent)
+  const spans: i32[] = []
+  templateSpans(arrow, arrow.start, spans)
+  const body = dedentAfterFirst(text.slice(arrow.start, arrow.end), lineIndent, spans)
   edits.push(new Edit(at, at, `const ${name} = ${body}${semi}\n\n`))
   edits.push(new Edit(arrow.start, arrow.end, name))
   return edits
@@ -3134,16 +3191,19 @@ const guardStoreMessage = (table: TypeTable, type: i32): string =>
   "`g.value.h.n = v.n`, or make the value when the lock is, `new Mutex<T>(new T(new H()))`"
 
 /**
- * A `null` stored through a guard. The store into a `string | null` slot is
- * `nish_guard_keep`'s exchange of one kept copy for another, which takes a
- * string; a `null` written past it would leave the copy it replaces allocated,
- * one block per store rather than one per slot.
+ * A `null` stored through a guard, into any slot. The store into a
+ * `string | null` slot is `nish_guard_keep`'s exchange of one kept copy for
+ * another, which reads the length of the string it is given, so a `null`
+ * handed to it would be dereferenced; written past it, the `null` would leave
+ * the copy it replaces allocated, one block per store rather than one per
+ * slot. Any other nullable slot holds a pointer, which a guard stores in no form.
  */
 const GUARD_NULL_STORE_MESSAGE: string =
-  "This stores `null` through a guard: a store into a `string | null` slot of a `Mutex`'s data copies the " +
-  "string into memory the `Mutex` owns and frees the copy it replaces, an exchange only a string takes part in, " +
-  'so a `null` cannot empty the slot; store an empty string, `g.value.last = ""`, and read it back as empty with ' +
-  "`.length === 0`, or keep a `boolean` field beside it, `g.value.hasLast = false`"
+  "This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a " +
+  "`string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the " +
+  "`Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the " +
+  'slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, ' +
+  "and read it back as empty with `.length === 0`"
 
 const guardMethodMessage = (name: string): string =>
   `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
