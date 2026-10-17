@@ -5448,6 +5448,64 @@ if (!only || "ffi_string checks".includes(only)) {
       keptRun.stdout === "true\nOperation not permitted\nNo such file or directory\nCannot allocate memory\n",
     shown(keptRun)
   )
+
+  // A `declare function` passed as a function parameter is called from the
+  // specialisation (`err<strerror>`), which holds the copy and the site.
+  const passed = write(
+    "passed.ts",
+    [
+      "declare function strerror(errnum: i32): string;",
+      "declare function getenv(name: string): string | null;",
+      "",
+      "function err(f: (n: i32) => string, n: i32): string {",
+      "  return f(n);",
+      "}",
+      "",
+      "function env(f: (name: string) => string | null, name: string): string {",
+      '  return f(name) ?? "unset";',
+      "}",
+      "",
+      "function churn(n: i32): i32 {",
+      "  const t: string[] = [];",
+      "  for (let i = 0; i < n; i++) {",
+      "    t.push(`${i}`);",
+      "  }",
+      '  return t.join("").length;',
+      "}",
+      "",
+      "export const main = (): i32 => {",
+      "  const a = err(strerror, 2);",
+      '  const b = env(getenv, "NISH_FFI_PASSED_UNSET");',
+      "  console.log(`${churn(4000) > 0}`);",
+      "  console.log(`${a}|${b}`);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const passedSites = sitesOf(passed)
+  check(
+    "ffi_string: a C string result through a function parameter is an `ffi-null` site in the specialisation",
+    passedSites.report !== null &&
+      fnSites(passedSites.report, "err<strerror>").some((p) => p.kind === "ffi-null" && p.proven === false) &&
+      !fnSites(passedSites.report, "env<getenv>").some((p) => p.kind === "ffi-null") &&
+      fnSites(passedSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "err<strerror>" && p.via === "ffi-null"
+      ),
+    passedSites.report === null ? shown(passedSites.r) : JSON.stringify(passedSites.report)
+  )
+  const passedExe = path.join(ffiDir, "passed.exe")
+  const passedBuilt = spawnSync(
+    NISH,
+    [passed, "-o", path.join(ffiDir, "passed") + path.sep, "--link", passedExe],
+    { cwd: root, encoding: "utf8" }
+  )
+  const passedRun = passedBuilt.status === 0 ? spawnSync(passedExe, [], { encoding: "utf8" }) : passedBuilt
+  check(
+    "ffi_string: C string results through a function parameter are copied and survive churn",
+    passedRun.status === 0 && passedRun.stdout === "true\nNo such file or directory|unset\n",
+    shown(passedRun)
+  )
 }
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
