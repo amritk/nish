@@ -3556,6 +3556,16 @@ const collectFacts = (
     // do. S2 widening the type check must revisit the block rather than
     // inherit a `false` nobody re-derived.
     facts.resizesArray = true
+    // WP27 S3.2: a `string` result is a fresh arena copy at every call
+    // (`emitForeignStringResult`), so the call allocates and answers what it
+    // allocated, as a body that returns `s.substring(...)` does. Every caller
+    // that asks whether a call's result is fresh, a loop pass or a `using a =
+    // arena()` block deciding what it may release, reads it here.
+    if (table.stripNull(sig.returnType) === T_STRING) {
+      facts.allocates = true
+      facts.allocatesItself = true
+      facts.returnsAllocation = true
+    }
     return facts
   }
 
