@@ -75,19 +75,6 @@ export const isUnsafeExport = (name: string): boolean =>
   name === "wrappingSub" ||
   name === "wrappingMul"
 
-/**
- * `nish:arith`: integer arithmetic the operators do not reach. `mulHigh(a, b)`
- * and `mulLow(a, b)` are the two halves of the 128-bit product of two `u64`s,
- * which no `u64` operator gives: `a * b` is the low half alone. Like
- * `nish:unsafe`'s functions, the two are reached only through the import
- * (`isArithExport`, and `checkBuiltinFunction` for the global spelling), so
- * neither adds a global name to every program.
- */
-export const arithModule = (): string => `${BUILTIN_SCHEME}arith`
-
-/** Whether `nish:arith` exports `name`. */
-export const isArithExport = (name: string): boolean => name === "mulHigh" || name === "mulLow"
-
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}fs` ||
@@ -95,12 +82,11 @@ export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}io` ||
   specifier === `${BUILTIN_SCHEME}net` ||
   specifier === unsafeModule() ||
-  specifier === arithModule() ||
   isNishSourceModule(specifier)
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}secret, ${unsafeModule()}, ${arithModule()}`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}secret, ${unsafeModule()}`
 
 /**
  * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
@@ -137,9 +123,6 @@ export const nishModuleExports = (specifier: string): string => {
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul"
-  }
-  if (specifier === arithModule()) {
-    return "mulHigh, mulLow"
   }
   return "write, writeError, panic"
 }
@@ -309,9 +292,6 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
   }
   if (specifier === unsafeModule()) {
     return isUnsafeExport(name) ? new BuiltinExport("", name, false) : null
-  }
-  if (specifier === arithModule()) {
-    return isArithExport(name) ? new BuiltinExport("", name, false) : null
   }
   return null
 }

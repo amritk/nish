@@ -1,8 +1,11 @@
 # WP41: a 64×64→128 multiply, measured on Poly1305 before it is built
 
-**Status: bar committed; not yet measured.** This note is the record of stage
-s8 of the FFI-reach run (#678). It states the bar first, before any kernel is
-timed, and the figures and the decision follow it once they exist. It adds no
+**Status: measured; the bar is missed, and nothing ships but this record.**
+This note is the record of stage s8 of the FFI-reach run (#678). It states the
+bar first, as it was committed before any kernel was timed, then the figures
+and the decision. The radix-2^64 kernel is 14–21% faster natively on x86-64
+and 19–23% slower on wasm32, and the bar counts a wasm32 loss outside the noise
+band as a miss. It adds no
 rule to [LANGUAGE.md](LANGUAGE.md); where they disagree, LANGUAGE.md wins.
 
 ## 1. The question
@@ -34,3 +37,104 @@ Committed before any kernel is timed, verbatim from the plan:
   ship, with the figures of §4 in the commit's `Measured:` trailer.
 - **Bar missed.** The builtin and the kernel are dropped, and this record
   ships alone with the figures, as WP38 recorded S3a.
+
+## 4. The figures
+
+The measured tree is commit `8cceabe` on this record's pull request. It holds
+everything the bar needed, and the commit after it takes all of it out again:
+
+- the `nish:arith` builtins. `mulHigh(a, b)` lowers to a `zext`, `mul i128`,
+  `lshr 64` and `trunc`. IR compiled for the host carries the 32-bit-halves
+  sequence as well, picked by the pointer width, so `opt` folds it to the
+  `i128` arm on x86-64 and to the halves on wasm32. `mulLow` is `mul i64`.
+- the radix-2^64 Poly1305 kernel.
+- `bench/mul-wide.ts`, `bench/mul-wide-kernels.ts` and `bench/mul-wide.mjs`.
+
+On x86-64 a `mulHigh` and `mulLow` pair on the same operands fused into one
+`mulq`, so the block function made four `mulq` where radix 2^26 makes 25
+`imul`. The wasm module, linked with `scripts/build.sh --profile wasm`, has no
+`__multi3` and no imports.
+
+The kernel was correct. `tests/link/crypto_chacha20poly1305`, with the RFC 8439
+vectors and the Wycheproof AEAD set, printed its expected output byte for byte.
+Both kernels gave the bench's checksum.
+
+**The workload.** It is the bar's: 2^12 MACs, each over a 64 KiB message with
+one byte changed from the last, under one key. Every tag is folded into an
+FNV-1a checksum, which is printed (`checksum 2156522685`, the same for every
+column).
+
+**The columns.** There are three:
+
+- `base`, the radix-2^26 kernel frozen from `main`
+- `std`, the radix-2^64 kernel
+- `base (copy)`, a byte-identical copy of `base` that measures the noise band
+
+Natively the copy is a copied binary. Under wasm it is a second instance of a
+copied module. The columns ran in 30 interleaved rounds of three after a
+warm-up, with the first column rotating. Only `macRun` is timed, not process
+start.
+
+`node bench/mul-wide.mjs --runs 30` at `8cceabe`, on an Intel Xeon at 2.10 GHz
+(x64), Node v22.22.0:
+
+| | column | min ms | median ms | min against base | median against base |
+|---|---|---:|---:|---:|---:|
+| native | base | 201.8 | 236.4 | | |
+| native | **std (radix 2^64)** | 173.2 | 191.3 | **−14.2%** | **−19.1%** |
+| native | base (copy): the band | 204.1 | 235.4 | +1.1% | −0.4% |
+| wasm32 | base | 301.4 | 325.2 | | |
+| wasm32 | **std (radix 2^64)** | 358.2 | 398.7 | **+18.8%** | **+22.6%** |
+| wasm32 | base (copy): the band | 299.1 | 319.8 | −0.8% | −1.7% |
+
+The two earlier runs at the same tree agree:
+
+| run | native std, min / median | native band | wasm32 std, min / median | wasm32 band |
+|---|---|---|---|---|
+| 15 rounds | −18.2% / −14.7% | +0.2% / +1.4% | +22.2% / +27.3% | +2.7% / +4.0% |
+| 30 rounds | −18.4% / −21.1% | −0.5% / −2.8% | +24.2% / +19.3% | +0.3% / −0.9% |
+
+**Radix 2^44.** The bar also allowed radix 2^44, and it was measured over 15
+rounds. It is a three-limb kernel that takes each product's bits above 2^44 as
+`(lo >>> 44) | (mulHigh << 20)`, so no 128-bit carry is ever tested. Its nine
+full products made it no faster natively: +0.1% / −4.0% against base, inside a
+band of −1.2% / −2.4%. On wasm32 it was +95.5% / +93.5% slower.
+
+## 5. Why wasm32 loses
+
+wasm has no 64×64→128 multiply, so each `mulHigh` on wasm32 is the
+schoolbook product of the 32-bit halves: four `i64.mul` and eight shifts, masks
+and adds. The radix-2^64 block needs four 128-bit products. That is about 64
+operations on wasm32 where x86-64 needs four instructions.
+
+The cost of those operations was measured directly. The halves were replaced
+with a single, wrong `(a >>> 32) * (b >>> 32)`, and that kernel ran in about
+300–310 ms on wasm32, level with `base`. The halves are the whole of the loss.
+The carry detection the radix-2^64 kernel needs, `((a & b) | ((a | b) & ~s))
+>>> 63` at seven points per block, is not where the time goes.
+
+No cheaper sequence exists for a general `mulHigh`. A Poly1305-specific one
+does exist: the clamp keeps each 32-bit half of `r` below 2^29, so the middle
+sum cannot overflow and the masks could go. But that sequence would have to be
+written in the kernel itself. Nothing in the language picks a sequence by
+target, and that kernel would then lose the single `mulq` natively.
+
+## 6. The decision
+
+The bar is missed. The native win is real and outside the band: −14.2% /
+−19.1% against a band of +1.1% / −0.4%. The wasm32 loss is also outside its
+band: +18.8% / +22.6% against −0.8% / −1.7%. The bar says a wasm32 loss
+outside the band is a miss.
+
+By §3, the builtin and the kernel are dropped. `std/` keeps the radix-2^26
+kernel, nothing in `src/` changes, and this record is all that lands. The bench
+went with the kernel, since it measured that kernel against `main`'s. It can be
+rebuilt from `8cceabe`.
+
+**What would reopen this.** Either of two things:
+
+- A way for `std/` to choose a kernel by target, which would let wasm32 keep
+  radix 2^26 while x86-64 and aarch64 take radix 2^64.
+- A bar that judges native and wasm32 separately.
+
+Either one makes this stage's code, at `8cceabe`, the place to start.
