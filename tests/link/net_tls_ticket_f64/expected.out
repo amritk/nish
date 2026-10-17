@@ -32,6 +32,8 @@ PASS  a ticket opened with another key under its own key's id: refused
 PASS  the untouched ticket opens again
 PASS  the right key under a record of another key id: refused
 PASS  before the key is read, so the PSK opened before it is untouched
+PASS  a ticket whose key id and record are both relabelled: refused
+PASS  by the tag, the key id being its additional data, so the PSK array reads zero
 PASS  a ticket opens at its issue time
 PASS  and not 1 ns before it
 PASS  it opens at its expiry, issue time plus 7200 s
@@ -90,6 +92,7 @@ PASS  an id is taken at its home slot
 PASS  and an id with the same home after it
 PASS  once the first has expired, the second, still held, is refused
 PASS  and is recorded once
+PASS  the farthest an id has been recorded from its home is 1 slot
 PASS  while a third id takes the expired slot
 PASS  recorded once
 PASS  with no more slots used
@@ -97,4 +100,4 @@ PASS  a resumption opens its ticket
 PASS  and strikes its id
 PASS  the same ticket opens again
 PASS  but its id is struck, so the replay is refused
-tls tickets: 99 passed, 0 failed, 0 skipped
+tls tickets: 102 passed, 0 failed, 0 skipped

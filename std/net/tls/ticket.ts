@@ -489,6 +489,8 @@ export class TlsTicketStrikes {
   capacity: i32
   /** How many ids are held or were held and expired: slots ever used. */
   filled: i32
+  /** The farthest from its home slot any id has been recorded: no entry of an id lies further along its chain. */
+  longest: i32
 
   constructor(capacity: i32) {
     if (capacity < 1) {
@@ -499,6 +501,7 @@ export class TlsTicketStrikes {
     this.expires = new Array<i64>(capacity)
     this.used = new Array<u8>(capacity)
     this.filled = 0
+    this.longest = 0
     this.refusedFull = 0
   }
 
@@ -547,10 +550,13 @@ export class TlsTicketStrikes {
   /**
    * Records `id` until `min(expiresAt, now + 7200 s)` and answers true; false
    * when `id` is still held, or when no entry is free, which is counted in
-   * `refusedFull`. The whole probe chain is scanned for a live entry of `id`
-   * before an expired slot on it is reused, so an expired entry ahead of the
-   * id's live one cannot let it be recorded twice. An id of another length
-   * than a nonce is refused, uncounted.
+   * `refusedFull`. The probe chain is scanned for a live entry of `id` as far
+   * as `longest`, the farthest any id has been recorded from its home, before
+   * an expired slot on it is reused, so an expired entry ahead of the id's
+   * live one cannot let it be recorded twice. Past that bound the scan only
+   * looks for a free slot and stops at the first, so a `take` costs the
+   * longest probe so far, not the capacity. An id of another length than a
+   * nonce is refused, uncounted.
    */
   take(id: u8[], expiresAt: i64, now: i64): boolean {
     if (toI32(id.length) !== TLS_TICKET_NONCE_SIZE) {
@@ -572,8 +578,11 @@ export class TlsTicketStrikes {
         if (free < 0) {
           free = slot
         }
-      } else if (this.holds(slot, id)) {
+      } else if (n <= this.longest && this.holds(slot, id)) {
         return false
+      }
+      if (free >= 0 && n >= this.longest) {
+        break
       }
     }
     if (free < 0) {
@@ -589,6 +598,13 @@ export class TlsTicketStrikes {
       this.ids[at + k] = id[k]
     }
     this.expires[free] = until
+    let distance: i32 = free - home
+    if (distance < 0) {
+      distance = distance + this.capacity
+    }
+    if (distance > this.longest) {
+      this.longest = distance
+    }
     return true
   }
 }

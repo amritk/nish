@@ -168,6 +168,9 @@ const tampering = (t: Suite): void => {
   renamed.id[0] = toU8(toI32(renamed.id[0]) ^ 1);
   t.ok("the right key under a record of another key id: refused", !tlsTicketOpen(key, renamed, ticket, START, out));
   t.eqI32("before the key is read, so the PSK opened before it is untouched", held(out.psk, 48), toI32(48));
+  const relabelled: u8[] = flipped(ticket, 0);
+  t.ok("a ticket whose key id and record are both relabelled: refused", !tlsTicketOpen(key, renamed, relabelled, START, out));
+  t.eqI32("by the tag, the key id being its additional data, so the PSK array reads zero", held(out.psk, 48), toI32(0));
   wipe(other);
   wipe(key);
 };
@@ -340,6 +343,7 @@ const strikes = (t: Suite): void => {
   t.ok("and an id with the same home after it", chain.take(y, START + HOUR, START));
   t.ok("once the first has expired, the second, still held, is refused", !chain.take(y, START + HOUR, START + MINUTE * 2));
   t.eqI32("and is recorded once", chain.count(y), toI32(1));
+  t.eqI32("the farthest an id has been recorded from its home is 1 slot", chain.longest, toI32(1));
   const third: u8[] = collidingId(chain, y, x);
   t.ok("while a third id takes the expired slot", chain.take(third, START + HOUR, START + MINUTE * 2));
   t.eqI32("recorded once", chain.count(third), toI32(1));
