@@ -1,1 +1,1 @@
-A `Channel` carries a number, a `boolean` or an enum, and this one would carry `string`: a sender's arena is freed when its scope joins, so anything else would point into freed memory
+A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry `string[]`: a sender's arena is freed when its scope joins, and only a string is copied out of it on the way, so anything else would point into freed memory

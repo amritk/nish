@@ -274,9 +274,11 @@ entry:
   %0 = bitcast i8* %p to { %struct.Leaf*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Leaf*, %struct.nish_array*, i32, i32 }, { %struct.Leaf*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Leaf*, %struct.Leaf** %1
-  %3 = call i32 @read$(%struct.Leaf* %2)
-  %4 = getelementptr inbounds { %struct.Leaf*, %struct.nish_array*, i32, i32 }, { %struct.Leaf*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @read$(%struct.Leaf* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Leaf*, %struct.nish_array*, i32, i32 }, { %struct.Leaf*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 
@@ -344,9 +346,11 @@ entry:
   %0 = bitcast i8* %p to { %struct.Leaf*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Leaf*, %struct.nish_array*, i32, i32 }, { %struct.Leaf*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Leaf*, %struct.Leaf** %1
-  %3 = call i32 @write$(%struct.Leaf* %2)
-  %4 = getelementptr inbounds { %struct.Leaf*, %struct.nish_array*, i32, i32 }, { %struct.Leaf*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @write$(%struct.Leaf* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Leaf*, %struct.nish_array*, i32, i32 }, { %struct.Leaf*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 
@@ -414,9 +418,11 @@ entry:
   %0 = bitcast i8* %p to { %struct.nish_array*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.nish_array*, %struct.nish_array*, i32, i32 }, { %struct.nish_array*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.nish_array*, %struct.nish_array** %1
-  %3 = call i32 @free$(%struct.nish_array* %2)
-  %4 = getelementptr inbounds { %struct.nish_array*, %struct.nish_array*, i32, i32 }, { %struct.nish_array*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @free$(%struct.nish_array* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.nish_array*, %struct.nish_array*, i32, i32 }, { %struct.nish_array*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 

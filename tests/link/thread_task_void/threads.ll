@@ -22,6 +22,7 @@ declare void @produce$(%struct.Pipe* noundef nonnull readonly align 8 dereferenc
 declare noundef i32 @consume$(%struct.Pipe* noundef nonnull readonly align 8 dereferenceable(16) nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
@@ -396,7 +397,9 @@ entry:
   %0 = bitcast i8* %p to { %struct.Job* }*
   %1 = getelementptr inbounds { %struct.Job* }, { %struct.Job* }* %0, i32 0, i32 0
   %2 = load %struct.Job*, %struct.Job** %1
+  %3 = call i64 @nish_arena_mark()
   call void @addAll$(%struct.Job* %2)
+  call void @nish_arena_release(i64 %3)
   ret void
 }
 
@@ -421,11 +424,13 @@ entry:
   %0 = bitcast i8* %p to { %struct.Pipe* }*
   %1 = getelementptr inbounds { %struct.Pipe* }, { %struct.Pipe* }* %0, i32 0, i32 0
   %2 = load %struct.Pipe*, %struct.Pipe** %1
+  %3 = call i64 @nish_arena_mark()
   call void @produce$(%struct.Pipe* %2)
-  %3 = getelementptr inbounds %struct.Pipe, %struct.Pipe* %2, i32 0, i32 0
-  %4 = load %struct.Channel$i32*, %struct.Channel$i32** %3
-  %5 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %4, i32 0, i32 2
-  call void @nish_channel_count(i64* %5, i64 -1)
+  call void @nish_arena_release(i64 %3)
+  %4 = getelementptr inbounds %struct.Pipe, %struct.Pipe* %2, i32 0, i32 0
+  %5 = load %struct.Channel$i32*, %struct.Channel$i32** %4
+  %6 = getelementptr inbounds %struct.Channel$i32, %struct.Channel$i32* %5, i32 0, i32 2
+  call void @nish_channel_count(i64* %6, i64 -1)
   ret void
 }
 
@@ -454,9 +459,11 @@ entry:
   %0 = bitcast i8* %p to { %struct.Pipe*, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load %struct.Pipe*, %struct.Pipe** %1
-  %3 = call i32 @consume$(%struct.Pipe* %2)
-  %4 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @consume$(%struct.Pipe* %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { %struct.Pipe*, %struct.nish_array*, i32, i32 }, { %struct.Pipe*, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 

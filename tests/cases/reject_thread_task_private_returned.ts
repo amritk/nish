@@ -1,6 +1,7 @@
-// A task's own array is private only while nothing hands it out: `build`
-// returns the array it fills, so its stores are to memory its caller holds,
-// and the task that calls it writes what `build` writes.
+// A returned array is the callee's own until the `return`, so `build` may fill
+// it and answer it. The caller holds the answer as a call result, memory it
+// does not know: its own stores into it are shared writes, and the task that
+// makes them writes memory its caller can see.
 import { scope } from "nish/threads";
 
 const build = (n: i32): i32[] => {
@@ -11,6 +12,7 @@ const build = (n: i32): i32[] => {
 
 const first = (n: i32): i32 => {
   const ys = build(n);
+  ys[0] = n + 1;
   return ys[0];
 };
 

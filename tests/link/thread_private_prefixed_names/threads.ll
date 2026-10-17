@@ -16,6 +16,7 @@ declare noundef i32 @_task$(i32 noundef) #1
 declare noundef i32 @napi_square$(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
@@ -326,9 +327,11 @@ entry:
   %0 = bitcast i8* %p to { i32, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load i32, i32* %1
-  %3 = call i32 @_task$(i32 %2)
-  %4 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @_task$(i32 %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 
@@ -396,9 +399,11 @@ entry:
   %0 = bitcast i8* %p to { i32, %struct.nish_array*, i32, i32 }*
   %1 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 0
   %2 = load i32, i32* %1
-  %3 = call i32 @napi_square$(i32 %2)
-  %4 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
-  store i32 %3, i32* %4
+  %3 = call i64 @nish_arena_mark()
+  %4 = call i32 @napi_square$(i32 %2)
+  call void @nish_arena_release(i64 %3)
+  %5 = getelementptr inbounds { i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 3
+  store i32 %4, i32* %5
   ret void
 }
 

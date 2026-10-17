@@ -17,7 +17,7 @@
 //      `acceptWebSocket`, `sendFrame` and `closeWebSocket`.
 //
 // A third-party client drives the same servers in `serve` mode (`main.ts`).
-import { netShutdown } from "nish:net";
+import { netShutdown, pollModify } from "nish:net";
 import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1";
 import {
   H1_AGAIN,
@@ -30,6 +30,8 @@ import {
   H1_INVALID,
   H1_NEED_MORE,
   H1_REQUEST,
+  H1_WANT_READ,
+  H1_WANT_WRITE,
   H1_WRITE,
   H1_WS_CLOSE,
   H1_WS_MESSAGE,
@@ -344,6 +346,38 @@ export const serverChecks = (): i32 => {
     big.done && big.received === BIG_SIZE && !big.patternMismatch && big.chunks > 1
   );
 
+  // Loopback's buffers take a 2 MiB response whole, so only a client that
+  // stops reading fills the socket: the slot's interest turns to writing,
+  // and back to reading once the client drains it.
+  const stall: i32 = lb.connect(false);
+  const rearmedStall: i32 = lb.rearmed;
+  const stallPeer = lb.peers[stall];
+  pollModify(lb.loop, stallPeer.fd, ZERO, stallPeer.token);
+  const fourBig: string[] = [];
+  for (let k: i32 = 0; k < 4; k++) {
+    fourBig.push("GET /big HTTP/1.1\r\nHost: a\r\n\r\n");
+  }
+  lb.send(stall, ascii(fourBig.join("")));
+  lb.settle();
+  const outputs = lb.plain.outputs;
+  t.eqI32("the stalled slot holds one output buffer, borrowed from the pool", outputs.made - toI32(outputs.free.length), toI32(1));
+  t.ok("four 2 MiB responses to a client that reads none fill the socket, and rearm asks for writing", lb.rearmed - rearmedStall >= 1);
+  pollModify(lb.loop, stallPeer.fd, toI32(1), stallPeer.token);
+  let wholes: i32 = 0;
+  for (let k: i32 = 0; k < 4; k++) {
+    const r = new ClientReader(false);
+    r.keep = false;
+    lb.read(stall, r);
+    lb.peers[stall].take(r.pos);
+    if (r.done && r.received === BIG_SIZE && !r.patternMismatch) {
+      wholes = wholes + 1;
+    }
+  }
+  lb.settle();
+  t.ok("read again, all four arrive whole, and rearm asks for reading once the slot has drained", wholes === 4 && lb.rearmed - rearmedStall >= 2);
+  t.eqI32("and drained, it has given the buffer back", outputs.made - toI32(outputs.free.length), ZERO);
+  lb.hangUp(stall);
+
   lb.send(a, ascii(`HEAD /hello HTTP/1.1\r\nHost: a\r\n\r\n${get}`));
   const head = lb.response(a, true);
   t.ok("HEAD has the length of the GET and no body", head.status === 200 && head.has("Content-Length: 26"));
@@ -429,6 +463,7 @@ export const serverChecks = (): i32 => {
   }
   const formatted: i64 = lb.plain.date.formats();
   lb.measuring = true;
+  const rearmedWarm: i32 = lb.rearmed;
   let answered: i32 = 0;
   for (let k: i32 = 0; k < 100; k++) {
     if (k === 50) {
@@ -442,6 +477,7 @@ export const serverChecks = (): i32 => {
   lb.measuring = false;
   t.eqI32("a warmed slot answers a hundred GETs and a hundred chunked POSTs", answered, toI32(100));
   t.ok(`and the server's calls and its program's answers moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0));
+  t.eqI32("and its interest never changed, so rearm never asked for a pollModify", lb.rearmed - rearmedWarm, ZERO);
   t.ok("the date crossed a second among them and was formatted once for the two hundred", lb.plain.date.formats() - formatted === toI64(1));
   lb.hangUp(warm);
   const shared: i64 = lb.plain.date.formats();
@@ -520,6 +556,21 @@ export const serverChecks = (): i32 => {
   }
   lb.settle();
   t.eqI32("four clients fill the pool", lb.plain.busy(), toI32(4));
+  lb.hangUp(pool[1]);
+  t.ok("one of them hangs up", lb.awaitClosed(lb.closed + 1) && lb.plain.busy() === 3);
+  let freed: i32 = -1;
+  for (let k: i32 = 0; k < 4; k++) {
+    if (!lb.plain.holds(k)) {
+      freed = k;
+    }
+  }
+  pool[1] = lb.connect(false);
+  lb.settle();
+  t.ok("the slot it freed is the one the next connection takes", freed >= 0 && lb.plain.holds(freed) && lb.plain.busy() === 4);
+  t.ok("rearm: a slot's interest as accepted needs no pollModify", !lb.plain.rearm(freed, H1_WANT_READ));
+  t.ok("rearm: a new interest does, once", lb.plain.rearm(freed, H1_WANT_READ | H1_WANT_WRITE) && !lb.plain.rearm(freed, H1_WANT_READ | H1_WANT_WRITE));
+  t.ok("rearm: H1_DONE is not interest", !lb.plain.rearm(freed, H1_WANT_READ | H1_WANT_WRITE | H1_DONE));
+  t.ok("rearm: and back to what the loop holds", lb.plain.rearm(freed, H1_WANT_READ));
   const refusedBefore: i32 = lb.refused;
   const shed: i32 = lb.connect(false);
   t.ok("a fifth is accepted and shed", lb.awaitEnd(shed) && lb.refused === refusedBefore + 1);
@@ -529,6 +580,26 @@ export const serverChecks = (): i32 => {
   }
   lb.settle();
   t.ok("and they all close", lb.plain.busy() === 0);
+  t.ok("rearm: a free slot never needs a pollModify", !lb.plain.rearm(ZERO, H1_WANT_WRITE) && !lb.plain.rearm(toI32(9), H1_WANT_WRITE));
+  lb.growth = 0;
+  lb.measuring = true;
+  let churned: i32 = 0;
+  for (let k: i32 = 0; k < 50; k++) {
+    const c: i32 = lb.connect(false);
+    lb.send(c, ascii("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n"));
+    if (lb.response(c, false).status === 200 && lb.awaitEnd(c)) {
+      churned = churned + 1;
+    }
+    lb.hangUp(c);
+  }
+  lb.settle();
+  lb.measuring = false;
+  t.eqI32("fifty connections, one after another, each answered", churned, toI32(50));
+  t.ok(
+    `every output buffer is back in the pool, and it made no more than the most slots ever writing at once (${lb.plain.outputs.made})`,
+    lb.plain.outputs.made === toI32(lb.plain.outputs.free.length) && lb.plain.outputs.made <= lb.plain.size()
+  );
+  t.ok(`and accepting and freeing their slots moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0) && lb.plain.busy() === 0);
   t.ok(
     "a free slot answers H1_ERROR to next and done to the rest",
     lb.plain.next(ZERO) === H1_ERROR && (lb.plain.flush(ZERO) & H1_DONE) !== 0 && (lb.plain.readable(ZERO) & H1_DONE) !== 0 && lb.plain.fd(ZERO) === -1 && !lb.plain.holds(toI32(9))
@@ -556,6 +627,7 @@ export const serverChecks = (): i32 => {
   }
   lb.measuring = false;
   t.eqI32("fifty exchanges over TLS on the warmed slot", tlsAnswered, toI32(50));
+  t.eqI32("and between them the TLS slot holds no output buffer", lb.secure.outputs.made - toI32(lb.secure.outputs.free.length), ZERO);
   t.ok(`and the arena did not move (${lb.growth} bytes)`, lb.growth === toI64(0));
   s.send("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
   s.response(new ClientReader(false));

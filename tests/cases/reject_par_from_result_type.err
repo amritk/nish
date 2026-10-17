@@ -1,1 +1,1 @@
-`(i) => ...` answers `string`, and `parallelFrom` hands back only a number, a `boolean` or an enum
+`(i) => ...` answers `i32[][]`, and `parallelFrom` hands back only a number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies out of the worker's arena: anything else would point into memory the worker frees or reuses

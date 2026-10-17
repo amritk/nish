@@ -443,7 +443,7 @@ dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,712 bytes. The runtime is five translation units
+`hello.ts` with `--link` is 4,712 bytes. The runtime is eight translation units
 with a measured ceiling each, so that the core does not grow every time the
 language reaches further into the operating system, and section GC drops
 whatever a program does not call: `runtime.c` is the 3,606 bytes every program
@@ -451,9 +451,11 @@ touches (one chunked bump arena with O(1) reset and mark/release, strings,
 JavaScript-exact number formatting, string parsing, `Math.random`,
 `process.argv`, array growth, the panic paths), `runtime-os.c` the 1,530 bytes
 that wrap a system call (exit, files, directories, subprocesses, the
-environment, the clock), and `runtime-parallel.c`, `runtime-host.c` and
-`runtime-net.c` hold threads, the host calls (wall clock, entropy, signals) and
-`nish:net`'s sockets — see
+environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
+`runtime-host.c`, `runtime-net.c`, `runtime-simd.c` and `runtime-aes.c` hold
+threads, the copies that cross between their arenas, the host calls (wall
+clock, entropy, signals), `nish:net`'s sockets, the vector text search and
+AES-GCM — see
 [docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for the
 budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
 stay `readnone`.

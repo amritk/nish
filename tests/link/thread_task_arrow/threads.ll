@@ -24,6 +24,7 @@ declare void @nish_main$arrow1(%struct.Mutex$$Tally* noundef nonnull readonly al
 declare void @nish_main$arrow2(i8* noundef nonnull noalias readonly align 8 nocapture, %struct.Mutex$$Tally* noundef nonnull readonly align 8 dereferenceable(8) nocapture, i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #4
@@ -315,9 +316,11 @@ entry:
   %4 = load %struct.nish_array*, %struct.nish_array** %3
   %5 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }* %0, i32 0, i32 4
   %6 = load %struct.Weights*, %struct.Weights** %5
-  %7 = call i32 @Weights.scaledSum$arrow0(i32 %2, %struct.nish_array* %4, %struct.Weights* %6)
-  %8 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }* %0, i32 0, i32 5
-  store i32 %7, i32* %8
+  %7 = call i64 @nish_arena_mark()
+  %8 = call i32 @Weights.scaledSum$arrow0(i32 %2, %struct.nish_array* %4, %struct.Weights* %6)
+  call void @nish_arena_release(i64 %7)
+  %9 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }* %0, i32 0, i32 5
+  store i32 %8, i32* %9
   ret void
 }
 
@@ -393,9 +396,11 @@ entry:
   %4 = load %struct.nish_array*, %struct.nish_array** %3
   %5 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 4
   %6 = load i32, i32* %5
-  %7 = call i32 @scaledParts$arrow0(i32 %2, %struct.nish_array* %4, i32 %6)
-  %8 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 5
-  store i32 %7, i32* %8
+  %7 = call i64 @nish_arena_mark()
+  %8 = call i32 @scaledParts$arrow0(i32 %2, %struct.nish_array* %4, i32 %6)
+  call void @nish_arena_release(i64 %7)
+  %9 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 5
+  store i32 %8, i32* %9
   ret void
 }
 
@@ -471,9 +476,11 @@ entry:
   %4 = load %struct.nish_array*, %struct.nish_array** %3
   %5 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 4
   %6 = load i32, i32* %5
-  %7 = call i32 @scaledParts$arrow1(i32 %2, %struct.nish_array* %4, i32 %6)
-  %8 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 5
-  store i32 %7, i32* %8
+  %7 = call i64 @nish_arena_mark()
+  %8 = call i32 @scaledParts$arrow1(i32 %2, %struct.nish_array* %4, i32 %6)
+  call void @nish_arena_release(i64 %7)
+  %9 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, i32, i32 }* %0, i32 0, i32 5
+  store i32 %8, i32* %9
   ret void
 }
 
@@ -549,9 +556,11 @@ entry:
   %4 = load %struct.nish_array*, %struct.nish_array** %3
   %5 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }* %0, i32 0, i32 4
   %6 = load %struct.Weights*, %struct.Weights** %5
-  %7 = call i32 @weighted$arrow0(i32 %2, %struct.nish_array* %4, %struct.Weights* %6)
-  %8 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }* %0, i32 0, i32 5
-  store i32 %7, i32* %8
+  %7 = call i64 @nish_arena_mark()
+  %8 = call i32 @weighted$arrow0(i32 %2, %struct.nish_array* %4, %struct.Weights* %6)
+  call void @nish_arena_release(i64 %7)
+  %9 = getelementptr inbounds { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }, { i32, %struct.nish_array*, i32, %struct.nish_array*, %struct.Weights*, i32 }* %0, i32 0, i32 5
+  store i32 %8, i32* %9
   ret void
 }
 
@@ -625,7 +634,9 @@ entry:
   %2 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %1
   %3 = getelementptr inbounds { %struct.Mutex$$Tally*, %struct.nish_array* }, { %struct.Mutex$$Tally*, %struct.nish_array* }* %0, i32 0, i32 1
   %4 = load %struct.nish_array*, %struct.nish_array** %3
+  %5 = call i64 @nish_arena_mark()
   call void @nish_main$arrow0(%struct.Mutex$$Tally* %2, %struct.nish_array* %4)
+  call void @nish_arena_release(i64 %5)
   ret void
 }
 
@@ -656,7 +667,9 @@ entry:
   %4 = load %struct.nish_array*, %struct.nish_array** %3
   %5 = getelementptr inbounds { %struct.Mutex$$Tally*, %struct.nish_array*, i32 }, { %struct.Mutex$$Tally*, %struct.nish_array*, i32 }* %0, i32 0, i32 2
   %6 = load i32, i32* %5
+  %7 = call i64 @nish_arena_mark()
   call void @nish_main$arrow1(%struct.Mutex$$Tally* %2, %struct.nish_array* %4, i32 %6)
+  call void @nish_arena_release(i64 %7)
   ret void
 }
 
@@ -689,7 +702,9 @@ entry:
   %4 = load %struct.Mutex$$Tally*, %struct.Mutex$$Tally** %3
   %5 = getelementptr inbounds { i8*, %struct.Mutex$$Tally*, i32 }, { i8*, %struct.Mutex$$Tally*, i32 }* %0, i32 0, i32 2
   %6 = load i32, i32* %5
+  %7 = call i64 @nish_arena_mark()
   call void @nish_main$arrow2(i8* %2, %struct.Mutex$$Tally* %4, i32 %6)
+  call void @nish_arena_release(i64 %7)
   ret void
 }
 

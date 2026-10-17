@@ -1,5 +1,6 @@
-// NL2475, C1: a channel carries a number, a `boolean` or an enum. A string is a
-// pointer into the arena of the task that built it, which is freed at the join.
+// NL2475, C1: a channel carries a number, a `boolean`, an enum or a `string`, which
+// a send copies in and a receive copies out. An array of strings is a pointer
+// into the arena of the task that built it, and its elements are pointers too.
 import { Channel, scope } from "nish/threads";
 
 class Pipe {
@@ -30,13 +31,13 @@ const consume = (p: Pipe): i32 => {
 export const main = (): i32 => {
   const out: i32[] = [0];
   const ch = new Channel<i32>();
-  const words = new Channel<string>();
+  const words = new Channel<string[]>();
   {
     using s = scope();
     s.spawn(produce, new Pipe(ch, 1), out, 0);
   }
   for (const w of words) {
-    console.log(w);
+    console.log(w[0]);
   }
   return out[0];
 };
