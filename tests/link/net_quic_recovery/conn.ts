@@ -25,7 +25,7 @@ import {
 import { QUIC_RECOVERY_APPLICATION_CAPACITY } from "nish/net/quic-recovery";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_STATE_CONNECTED, QUIC_STATE_TIMED_OUT, QuicConnection } from "nish/net/quic";
-import { quicListenerPaceTime, quicListenerTakePaced } from "nish/net/quic-listener";
+import { QUIC_LISTENER_FLIGHT_QUANTUM, QuicFlight, quicListenerFlightTime, quicListenerPaceTime, quicListenerTakeFlight, quicListenerTakePaced } from "nish/net/quic-listener";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
@@ -427,6 +427,30 @@ const rcPacing = (t: Suite): void => {
   t.ok("and then goes", quicListenerTakePaced(conn, c.now + n64(4)) !== null);
 };
 
+/** A paced flight waits for a millisecond's earning before it starts, at most four datagrams. */
+const rcFlightQuantum = (t: Suite): void => {
+  const conn: QuicConnection = qcServer(qcDefaultConfig());
+  const c: QcClient = rcOpened(conn);
+  conn.recovery.congestionWindow = n64(100000);
+  // A sub-millisecond path: 5/4 of 100000 bytes per 200 µs earns far past four datagrams a millisecond.
+  conn.recovery.pacerRtt = n64(200);
+  const text: string[] = [];
+  for (let k: i32 = 0; k < 1600; k++) {
+    text.push("0123456789");
+  }
+  conn.writeStream(n64(0), bytesOf(text.join("")), false);
+  conn.recovery.pacerDelay(c.now, n32(0));
+  conn.recovery.pacerBudget = n64(2400);
+  const buf: u8[] = new Array<u8>(65536);
+  const flight = new QuicFlight();
+  t.eqI32("with credit for two datagrams a fast connection starts no flight", quicListenerTakeFlight(conn, c.now, buf, n32(0), toI32(buf.length), flight), n32(0));
+  t.eqI64("and waits for the next millisecond", quicListenerFlightTime(conn, c.now), c.now + n64(1));
+  t.ok("though one datagram alone may go", quicListenerPaceTime(conn, c.now) === c.now);
+  conn.recovery.pacerBudget = toI64(QUIC_LISTENER_FLIGHT_QUANTUM);
+  quicListenerTakeFlight(conn, c.now, buf, n32(0), toI32(buf.length), flight);
+  t.eqI32("with credit for four it sends the four together", flight.count, n32(4));
+};
+
 /** Every check of loss recovery inside the connection. */
 export const recoveryConnChecks = (t: Suite): void => {
   rcLostFlight(t);
@@ -438,4 +462,5 @@ export const recoveryConnChecks = (t: Suite): void => {
   rcWindow(t);
   rcFullRecord(t);
   rcPacing(t);
+  rcFlightQuantum(t);
 };
