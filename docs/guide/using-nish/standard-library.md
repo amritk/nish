@@ -772,7 +772,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
 | `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time |
-| `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way |
+| `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded |
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
@@ -832,12 +832,18 @@ and no `pollModify`. A slot borrows its output buffer only while it writes, so
 an idle connection costs a few KiB, not `outputSize`; `bench/http.mjs`
 load-tests that loop on one core.
 
-Every final response an `Http1Connection` sends carries a `Date` field. Its
-`HttpDate` formats the date at most once a second, and a pool's slots share
-one. Set your own `date` field and it is sent instead. In a test that compares
-the bytes, call `date.pin(unixMs)` on the server, or on a lone connection. The
-formatter itself, `httpDateWrite` in `nish/net/http-fields`, reads no clock,
-so a wasm32 build can use it.
+Every final response an `Http1Connection` sends carries a `Date` field, and so
+does every final response an `Http2TlsServer` or `Http3Server` slot sends, as
+a lowercase `date` field straight after `:status`. A 1xx response and trailers
+carry none. Each server's `HttpDate` formats the date at most once a second,
+and a pool's slots share one. Set your own `date` field and it is sent
+instead: in any case on HTTP/1.1, and lowercase on HTTP/2 and HTTP/3, which
+refuse an uppercase field name (`H2_INVALID`, `H3_INVALID`). On HTTP/3 the
+date counts against the client's field-section limit like any other field. In
+a test that compares the bytes, call `date.pin(unixMs)` on the server, or on a
+lone HTTP/1.1 connection; give a lone `Http2Connection` or `Http3Connection`
+the bytes to send in its `date`. The formatter itself, `httpDateWrite` in
+`nish/net/http-fields`, reads no clock, so a wasm32 build can use it.
 
 When an `Http3Server` shuts down, call its `stop()`: it releases every
 connection and wipes the stateless reset and Retry token keys of the
