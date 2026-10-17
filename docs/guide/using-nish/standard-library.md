@@ -889,7 +889,12 @@ never read a socket or a clock themselves, so you drive them from your own
 loop over [`nish:net`](../../LANGUAGE.md#builtin-modules-nish). The ones
 that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 `Http1Server` and `Http1TlsServer` pools), `nish/net/http2-tls` and
-`nish/net/http3-server`; like `nish:net` itself, they are native only. When
+`nish/net/http3-server`; like `nish:net` itself, they are native only. Your
+loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
+its interest changed, so a keep-alive request costs one `recv` and one `send`
+and no `pollModify`. A slot borrows its output buffer only while it writes, so
+an idle connection costs a few KiB, not `outputSize`; `bench/http.mjs`
+load-tests that loop on one core. When
 an `Http3Server` shuts down, call its `stop()`: it releases every connection
 and wipes the stateless reset and Retry token keys of the `QuicServerConfig`
 it was made with, so keep no other copy of them, or wipe yours with
