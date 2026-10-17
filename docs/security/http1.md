@@ -25,7 +25,7 @@ and H1-3 (Low), the memory each WebSocket upgrade leaves behind.
 | File | Functions |
 | --- | --- |
 | `std/net/http1.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
-| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`; `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused` |
+| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm` |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload` |
 
 Out of scope: TLS (`docs/security/tls.md`, whose TLS-3 and TLS-4 the TLS
@@ -134,7 +134,8 @@ not be sent are refused.
 (`maxHeaderBytes`, 16,384) and its fields (`maxHeaders`, 100), a request body
 (`maxBody`, 2^30), the most body one `H1_BODY` hands over and one read takes
 (`chunkSize`, 16,384), the output (`outputSize`, 64 KiB, of which 256 bytes are
-kept for what the connection writes itself), a WebSocket message
+kept for what the connection writes itself; a pool's slots borrow it from one
+`Http1OutputPool` while they write, below), a WebSocket message
 (`maxMessage`, 1 MiB) and the idle timeout (`idleTimeout`, 60 s, read by
 `expire`). The slots are the pool's size. A cap out of range panics when the
 connection is made (`net_http1_server_bad_config`). The input the connection
@@ -157,7 +158,11 @@ POSTs on one plain connection, and fifty of each over TLS, move `Arena.used()`
 across the servers' calls and the program's answers by 0 bytes
 (`net_http1_server`). The parser keeps the head as spans in a buffer it grows
 to the largest head it has seen and keeps; `restart` and `reset` allocate
-nothing, so a slot is reused for the next connection as it is.
+nothing, so a slot is reused for the next connection as it is. The output is
+borrowed, not kept: a slot holds a buffer only while it has bytes the socket
+has not taken, so the plain checks run on one buffer and a slot whose client
+stops reading holds one until it drains, then gives it back; fifty
+connections in a row leave the pool's buffers all free (`net_http1_server`).
 
 **ALPN** (`net_http1_server`): a TLS handshake that chose `http/1.1`, or none,
 is served; one that chose `h2` is shut down with `close_notify` before any
@@ -182,4 +187,10 @@ HTTP/1.1 holds no key material: over TLS the record keys are TLS's
 parser's `head` and input buffers, bodies in the input and output buffers,
 WebSocket messages in the decoder's — which may carry credentials (`cookie`,
 `authorization`). None of it is wiped: each buffer is overwritten by the next
-request and zeroed by nothing, and it stays in the slot until then.
+request and zeroed by nothing, and it stays in the slot until then. An output
+buffer is the exception to staying in its slot: a pool's slots borrow it from
+an `Http1OutputPool` and give it back once sent, so the next connection to
+write, on any slot, writes over the last one's response from the start. A
+carrier sends only `output[outputStart .. outputEnd)`, the bytes this
+connection wrote, so what lies past `outputEnd` is never sent; it is in the
+process's memory as it was before, in a buffer that moves between slots.
