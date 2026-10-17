@@ -2731,11 +2731,12 @@ class FactCollector {
     const args = call.children[1].children
     let i = 0
     while (i < args.length && i < callee.paramTypes.length) {
-      if (this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(args[i])) {
+      const arg = args[i]
+      if (this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
         const checks: string[] = []
         foreignStringCallees(checks)
         this.addCallees(checks)
-        this.noteSite(args[i], PANIC_FFI_NUL, false, "")
+        this.noteSite(arg, PANIC_FFI_NUL, false, "")
       }
       i = i + 1
     }
