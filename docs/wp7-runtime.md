@@ -178,13 +178,13 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,885 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,885 (2026-10-16) |
 | `runtime/runtime-os.c` | syscall wrappers: files, directories, subprocesses, `getenv`, the clock, `realpath`, platform | 1,536 (`RUNTIME_OS_TEXT_BUDGET`) | 1,530 |
 | `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 610 (2026-10-16) |
-| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,816 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,665 (2026-10-16) |
+| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,816 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,805 (2026-10-17) |
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, UDP, the readiness loop | 2,304 (`NET_TEXT_BUDGET`) | 2,303 |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
-| `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,280 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,170 (2026-10-16) |
-| `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,280 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,235 (2026-10-16) |
+| `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
+| `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 
 **How the ceilings moved.**
 
@@ -210,7 +210,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-16 | `nish_write` retries `EINTR` (#611), so a panic's message is not cut short by a handler without `SA_RESTART`: core 3,622 → 3,656, threads 3,840 → 3,860 | core 3,656, threads 3,860 |
 | 2026-10-16 | the newline too, and `nish_die` through the same loop rather than `fputs` (#611): core 3,656 → 3,684, threads 3,860 → 3,885 | core 3,684, threads 3,885 |
 | 2026-10-16 | `runtime-cross.c` (1,170 / 1,235), threads-complete's copy-at-join; folded into `runtime-parallel.c` it measured 1,786 / 3,889 | cross 1,280 / 1,280 |
-| 2026-10-17 | threads-complete's adoption (#686): 1,196 / 1,277 → 1,433 / 1,514. The join's copy-back below 64 KB, so a small map in a loop stops growing the caller's chunk list, is 205 of the 237 bytes (`nish_cross_adopt` 51 → 256); `nish_cross_end` recording a block's use and `nish_cross_keep`'s doubling sizes are the rest. Nothing shrank first: the file already sat at 1,277 of 1,280 threaded, and its next largest function, the guard's kept set (`nish_kept_put`, 225), is the `Mutex` stage's, unchanged here. `runtime-parallel.c`'s thresholds and idle trim (30 and 110 bytes; 2,805 threaded) fit its ceiling | cross 1,536 / 1,536 |
+| 2026-10-17 | threads-complete's adoption (#686): 1,196 / 1,277 → 1,427 / 1,508. The join's copy-back below 64 KB, so a small map in a loop stops growing the caller's chunk list, is 205 of the 231 bytes (`nish_cross_adopt` 51 → 256); `nish_cross_end` recording a block's use and `nish_cross_keep`'s doubling sizes are the rest. Nothing shrank first: the file already sat at 1,277 of 1,280 threaded, and its next largest function, the guard's kept set (`nish_kept_put`, 225), is the `Mutex` stage's, unchanged here. `runtime-parallel.c`'s thresholds and idle trim (30 and 110 bytes; 2,805 threaded) fit its ceiling | cross 1,536 / 1,536 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -308,7 +308,7 @@ copying a large region's answers in costs one link per block, and a single answe
 the copy. Adoption measured 1,196 bytes of `.text` (1,277 in the threads build,
 where the transfer state is thread-local), and retired the sorted span table
 and the `_range` pair a copy-out per slot needed; the copy-back for a small
-join and the doubling block sizes took it to 1,433 (1,514).
+join and the doubling block sizes took it to 1,427 (1,508).
 
 Under glibc, `nish_pool_ready` raises `M_MMAP_THRESHOLD` to 32 MB and
 `M_TRIM_THRESHOLD` to 64 MB, so a 1 MB temporary a task or an element builds,
@@ -325,7 +325,12 @@ then idles at 52 MB, and a 1 MB burst at 5.0 MB rather than 6.0, with no
 change to the burst's own time (36–45 ms against 39–43). A region below its
 grain runs as the loop it would have been, and keeps that loop's cost. The
 thresholds cost 30 bytes of the threads build's `runtime-parallel.c` and the
-trim 110 more.
+trim 110 more. A pool with no worker, at one CPU or `NISH_NUM_THREADS=1`,
+has no thread that parks, so nothing trims: what a join freed stays with the
+process up to the 64 MB at which glibc trims the heap top itself. Trimming at
+the end of each join instead took that idle 18 MB to 2 MB, but took ten joins of
+eight 16 MB tasks from 93 ms to 121–138 ms, since each join faulted its
+temporaries in again, and it did not fit the threads build's ceiling.
 
 It is an eighth unit rather than more of `runtime-parallel.c`: folded in, the
 copies took that file from 610 bytes to 1,786 against its ceiling of 768, and

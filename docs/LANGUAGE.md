@@ -2939,7 +2939,9 @@ from the whole-program facts, and each rule is reported there:
   release trimmed the heap. A worker that then finds no work for a second
   gives the memory back to the kernel before it parks: after ten rounds of 8
   tasks that each build a 16 MB temporary, an idle program holds 52 MB rather
-  than 68 MB. A region below its grain runs as the loop it would
+  than 68 MB. With no worker (one CPU, or `NISH_NUM_THREADS=1`) nothing
+  parks, so nothing gives memory back early: what a join freed is kept up to
+  the 64 MB at which glibc returns the top of the heap by itself. A region below its grain runs as the loop it would
   have been, on the calling thread, and keeps that loop's costs: 200 elements
   that each build a 1 MB temporary take some 320 ms, as the loop does. It
   compiles with a performance warning,

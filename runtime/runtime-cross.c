@@ -93,10 +93,8 @@ static uint64_t nish_cross_size(const void *v, uint64_t esize) {
   return (n + 7) & ~(uint64_t)7;
 }
 
-/* `v` copied to `at`, flat (an array's elements follow its header); answers
- * the end of the copy. */
-static char *nish_cross_put(char *at, const void *v, uint64_t esize) {
-  uint64_t n = nish_cross_size(v, esize);
+/* `v` copied to `at`, flat (an array's elements follow its header). */
+static void nish_cross_put(char *at, const void *v, uint64_t esize) {
   if (esize == 0) {
     memcpy(at, v, (size_t)(8 + ((const nish_str *)v)->len + 1));
   } else {
@@ -106,7 +104,6 @@ static char *nish_cross_put(char *at, const void *v, uint64_t esize) {
     c->data = (char *)(c + 1);
     if (a->len) memcpy(c->data, a->data, (size_t)(a->len * esize));
   }
-  return at + n;
 }
 
 /* `n` bytes after a chunk header, so the block can become a chunk of the arena
@@ -118,8 +115,8 @@ static nish_xchunk *nish_cross_chunk(uint64_t n) {
   return c;
 }
 
-/* Links the chunks `first` .. `last` (by `next`) into this thread's arena as
- * its newest, and bumps from `first`, which is full. A chunk grown here would
+/* Links the block `c` into this thread's arena as its newest chunk, and bumps
+ * from it, full to its `cap`. A chunk grown here would
  * sit in the same place, so a release, a keep and a reset treat these as they
  * treat it: whatever rewinds the arena past this point frees them. */
 static void nish_cross_link(nish_xchunk *c) {

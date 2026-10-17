@@ -234,8 +234,8 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
  * 64 KB or more. That retired the `_range` pair and the sorted span table, and paid for
  * the transfer list and the adoption.
  *
- * The copy-back join measured **1,433 bytes** on 2026-10-17 with clang 18.1.3 on
- * linux-x64, 237 more, and the ceiling moves to 1,536. Every chunk took a 64 KB block
+ * The copy-back join measured **1,427 bytes** on 2026-10-17 with clang 18.1.3 on
+ * linux-x64, 231 more, and the ceiling moves to 1,536. Every chunk took a 64 KB block
  * however little it kept, and adopting it left the caller's current chunk behind, so a
  * small map run in a loop grew without bound (`link/par_map_join_small`). Blocks now
  * start at 4 KB and double to 64 KB, each records what it used when its chunk ends, and
@@ -254,8 +254,8 @@ const RUNTIME_CROSS_TEXT_BUDGET = 1536
  * chunk's transfer state thread-local here, which takes 16 bytes more to reach than
  * the row above's plain static.
  *
- * The copy-back join measured **1,514 bytes** on 2026-10-17 with clang 18.1.3 on
- * linux-x64, 237 more, and the ceiling moves to 1,536: the row above's change.
+ * The copy-back join measured **1,508 bytes** on 2026-10-17 with clang 18.1.3 on
+ * linux-x64, 231 more, and the ceiling moves to 1,536: the row above's change.
  */
 const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1536
 /**

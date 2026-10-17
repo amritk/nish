@@ -356,7 +356,12 @@ static int nish_pool_ready(void) {
      * worker's idle trim in `nish_pool_drain` hands the memory back once the
      * pool parks. Set here, once a program first runs work on other threads; a
      * region below its grain, or at one thread, runs as the loop it would have
-     * been and keeps that loop's costs. */
+     * been and keeps that loop's costs. A pool with no worker, at one CPU or
+     * `NISH_NUM_THREADS=1`, has nothing that parks to trim, and keeps what a
+     * join freed up to the 64 MB at which glibc trims the heap top itself.
+     * Trimming at the end of each join instead took that idle 18 MB to 2 MB,
+     * but took ten joins of eight 16 MB tasks from 93 ms to 121-138 ms, since
+     * every join faulted its temporaries in again. */
     mallopt(M_MMAP_THRESHOLD, 32 << 20);
     mallopt(M_TRIM_THRESHOLD, 64 << 20);
 #endif

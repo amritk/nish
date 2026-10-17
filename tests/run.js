@@ -4675,8 +4675,8 @@ if (!only || "par_map_join_small".includes(only)) {
 
 // A map's chunk loop keeps each element its body answers and gives back the
 // rest (`nish_cross_keep`). `par_map_release` builds a 2 KB string per element
-// of a million and answers 4 bytes cut from it; it peaks at 64 MB on one thread
-// and 68 MB on eight, and without the keep at 2.1 GB on either. The bound is
+// of a million and answers 4 bytes cut from it; it peaks at 32 MB on one thread
+// and on eight, and without the keep at 2.1 GB on either. The bound is
 // 256 MB.
 if (!only || "par_map_release".includes(only)) {
   const fixture = linkTests.includes("par_map_release")
