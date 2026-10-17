@@ -727,6 +727,8 @@ export class FunctionFacts {
   returnsAllocation: boolean
   /** The returned array may hold elements the call allocated (escape.ts, `isListingCall`). */
   returnsFreshElements: boolean
+  /** The parameter whose elements the call fills with strings it allocated, or -1 (escape.ts, `fillsParam`). */
+  fillsParam: i32
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
   usesArenaControl: boolean
   /**
@@ -892,6 +894,7 @@ export class FunctionFacts {
     this.allocEscapes = false
     this.returnsAllocation = false
     this.returnsFreshElements = false
+    this.fillsParam = -1
     this.usesArenaControl = false
     this.readsArenaState = false
     this.opensArena = false
@@ -3480,6 +3483,7 @@ const collectFacts = (
     facts.allocEscapes = memory.allocEscapes
     facts.returnsAllocation = memory.returnsAllocation
     facts.returnsFreshElements = memory.returnsFreshElements
+    facts.fillsParam = memory.fillsParam
     facts.usesArenaControl = memory.usesArenaControl
     facts.callSites = memory.callSites
     facts.escapingNodes = memory.escapingNodes
@@ -3857,7 +3861,10 @@ const analyzeInstanceEscapes = (
   return result
 }
 
-/** Record in `known` each function whose result now says it returns fresh elements; answer the new ones. */
+/**
+ * Record in `known` each function whose result now says it returns fresh
+ * elements or fills a parameter; answer the new ones.
+ */
 const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: FactsTable): StringSet => {
   const added = new StringSet()
   for (const sig of sigs) {
@@ -3867,8 +3874,27 @@ const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: Facts
       f.returnsFreshElements = true
       added.add(sig.name)
     }
+    if (result !== null && f !== null && result.fillsParam >= 0 && f.fillsParam < 0) {
+      f.fillsParam = result.fillsParam
+      added.add(sig.name)
+    }
   }
   return added
+}
+
+/** `f` calls one of `names`, for any result: a call that fills a parameter answers nothing. */
+const callsAnyCallee = (f: FunctionFacts | null, names: StringSet): boolean => {
+  if (f === null) {
+    return false
+  }
+  let c = 0
+  while (c < f.callees.size()) {
+    if (names.has(f.callees.at(c))) {
+      return true
+    }
+    c = c + 1
+  }
+  return false
 }
 
 /** `result`'s function calls one of `names` for a pointer. */
@@ -3921,7 +3947,7 @@ export const analyzeFunctions = (
   while (added.size() > 0) {
     let i = 0
     while (i < sigs.length && i < owners.length) {
-      if (callsAnyOf(escapes.get(sigs[i].name), added)) {
+      if (callsAnyOf(escapes.get(sigs[i].name), added) || callsAnyCallee(first.get(sigs[i].name), added)) {
         escapes.set(sigs[i].name, analyzeInstanceEscapes(owners[i], table, sigs[i], first, opts))
       }
       i = i + 1
@@ -3938,7 +3964,9 @@ export const analyzeFunctions = (
   propagateCapabilities(facts)
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl
-    f.contained = f.contained || !f.allocEscapes
+    // What a function stores into a parameter it fills is its caller's, so
+    // no scope of its own may release it.
+    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0
   }
   scopeParallelBodies(units, facts)
   settleCalleeScopes(facts)
