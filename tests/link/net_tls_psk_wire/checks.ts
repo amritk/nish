@@ -190,9 +190,13 @@ export const pskWireChecks = (): i32 => {
     placed[k] = toU8(0xee);
   }
   const five: i32 = 5;
+  // The nonce and the ticket sit inside padding of other bytes, so a writer
+  // that ignored nonceOff or ticketOff would copy the padding instead.
+  const paddedNonce: u8[] = cat([fromHex("a5a5a5"), nonce, fromHex("5a5a")]);
+  const paddedTicket: u8[] = cat([fill(7, toI32(0xc0)), ticket, fill(3, toI32(0x30))]);
   t.eqI32(
-    "tlsWriteNewSessionTicket at offset 5 answers where it ended",
-    tlsWriteNewSessionTicket(placed, five, lifetime, ageAdd, nonce, zero, 2, ticket, zero, 178, extra),
+    "tlsWriteNewSessionTicket at offset 5, from nonce offset 3 and ticket offset 7, answers where it ended",
+    tlsWriteNewSessionTicket(placed, five, lifetime, ageAdd, paddedNonce, toI32(3), 2, paddedTicket, toI32(7), 178, extra),
     toI32(210)
   );
   t.eqStr("and wrote the same bytes there", toHex(slice(placed, five, 205)), NST);
@@ -287,6 +291,14 @@ export const pskWireChecks = (): i32 => {
     "or cut to 31 bytes",
     !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, ch, view.pskBinderAt, view.pskBinderLength - one)
   );
+  t.ok(
+    "and returns false, not a panic, for a binder that runs past its array",
+    !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, ch, toI32(ch.length) - 16, H)
+  );
+  t.ok(
+    "even by one octet",
+    !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, fromHex(BINDER), one, H)
+  );
   t.ok("there is no identity 1", !tlsSelectPskIdentity(view, one));
   t.ok("or identity -1", !tlsSelectPskIdentity(view, -1));
   const parsed: TlsClientHello = tlsParseClientHello(ch, 4, 508);
@@ -352,8 +364,8 @@ export const pskWireChecks = (): i32 => {
     tlsBinderVerify(kdf, h48, binderKey48Plain, truncated48, zero, binder48, zero, h48)
   );
   t.ok(
-    "but not its first 32 octets as a SHA-256 binder",
-    !tlsBinderVerify(kdf, H, binderKey48Plain, truncated48, zero, binder48, zero, H)
+    "but refuses it at SHA-256's 32, whose length it is not",
+    !tlsBinderVerify(kdf, H, binderKeyPlain, truncated, zero, binder48, zero, h48)
   );
   wipe(salt48);
   wipe(binderKey48);
