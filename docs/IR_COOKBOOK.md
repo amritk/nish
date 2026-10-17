@@ -9393,12 +9393,13 @@ could unwind, and a language with no `throw` and no landing pad can do nothing
 with that admission, so unwinding out of a foreign call is undefined here — the
 position clang already takes compiling C (`docs/wp27-ffi.md` §2).
 
-The boundary is scalars, `CPtr` and borrowed strings, and that is what makes it
-sound rather than merely small: with no pointer this compiler allocated among
-the results, and only a string C reads for the length of the call among the
-arguments, there is nothing for escape analysis to be wrong about
-(`tests/cases/ffi_scalar`, the `reject_ffi_*` cases, and
-[the string parameter](#a-string-parameter-borrowed-as-const-char-) below).
+The boundary is scalars, `CPtr` and strings, and that is what makes it sound
+rather than merely small: a string result is copied into the arena at the call,
+so no pointer C answered is kept, and only a string C reads for the length of
+the call is among the arguments, so there is nothing for escape analysis to be
+wrong about (`tests/cases/ffi_scalar`, the `reject_ffi_*` cases,
+[the string parameter](#a-string-parameter-borrowed-as-const-char-) and
+[the string result](#a-string-result-copied-out-of-const-char-) below).
 
 The listing is also where the two senses of the word `function` sit side by
 side. `declare function abs` is an *ambient* declaration and defines nothing, so
@@ -9634,6 +9635,152 @@ attributes #2 = { nounwind willreturn memory(argmem: read) }
 attributes #3 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end decl-ffi-string -->
+
+### A `string` result, copied out of `const char *`
+
+A `declare function` that returns `string` answers C's NUL-terminated
+`const char *` (WP27 S3.2), and the program does not keep C's pointer: it copies
+the bytes into the arena at the call. C owns its buffer — `strerror`'s table,
+`getenv`'s environment — and may overwrite or free it on a later call, so the
+copy is the only string the program ever holds. The copy is a private helper the
+module defines once, `@nish.ffi.str`: a byte loop to the NUL, then
+`nish_str_new`. It is lowered in the IR rather than as a runtime function
+because `runtime.c` has no room under its ceiling, and it does not call
+`strlen` because a program may declare `strlen` itself with a signature of its
+own.
+
+The copy is an allocation of the calling function, like `s.substring(...)`,
+so the escape analysis places it in that function's arena scope and keeps it
+when it leaves: `message` reads only its length, so its scope is released
+before it returns. The call is never a `tail` call, because the copy follows
+it: a C function that answers a pointer into its own argument (`strchr`) is
+read before the argument's scope is released.
+
+`NULL` cannot be a `string`, so `strerror`'s result is tested and a cold
+`ffi.null` block panics, the [`ffi-null` site](LANGUAGE.md#panic-sites). The
+result declared `string | null` reads `NULL` as `null` instead: `getenv`'s
+`ffi.none` arm joins the copy in a `phi`, tested but with no panic site
+(`tests/cases/ffi_string_return`, `panics_ffi_null`).
+
+<!-- cookbook:begin decl-ffi-string-result -->
+```ts
+declare function strerror(errnum: i32): string
+declare function getenv(name: string): string | null
+
+const message = (e: i32): u64 => toU64(strerror(e).length)
+
+export const main = (): i32 => {
+  const home = getenv("HOME")
+  return home === null || message(2) === 25 ? 0 : 1
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [75 x i8] } { i64 74, [75 x i8] c"`strerror` returned NULL for a `string` result; declare it `string | null`\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"HOME\00" }, align 8
+
+declare i8* @strerror(i32)
+declare i8* @getenv(i8*)
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+
+define private i8* @nish.ffi.str(i8* %p) {
+entry:
+  br label %scan
+
+scan:
+  %n = phi i64 [ 0, %entry ], [ %next, %scan ]
+  %at = getelementptr inbounds i8, i8* %p, i64 %n
+  %byte = load i8, i8* %at, align 1
+  %next = add i64 %n, 1
+  %end = icmp eq i8 %byte, 0
+  br i1 %end, label %copy, label %scan
+
+copy:
+  %s = call i8* @nish_str_new(i8* %p, i64 %n)
+  ret i8* %s
+}
+
+define internal noundef i64 @message(i32 noundef %e) #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @strerror(i32 %e)
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.null:
+  call void @nish_panic(i8* bitcast ({ i64, [75 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.copy:
+  %2 = call i8* @nish.ffi.str(i8* %0)
+  %3 = bitcast i8* %2 to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = trunc i64 %4 to i32
+  %6 = sext i32 %5 to i64
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i64 %6
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %home.addr = alloca i8*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds i8, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i64 8
+  %1 = call i8* @getenv(i8* %0)
+  %2 = icmp eq i8* %1, null
+  br i1 %2, label %ffi.none, label %ffi.copy
+
+ffi.copy:
+  %3 = call i8* @nish.ffi.str(i8* %1)
+  br label %ffi.join
+
+ffi.none:
+  br label %ffi.join
+
+ffi.join:
+  %4 = phi i8* [ %3, %ffi.copy ], [ null, %ffi.none ]
+  store i8* %4, i8** %home.addr, align 8
+  %5 = load i8*, i8** %home.addr, align 8
+  %6 = icmp eq i8* %5, null
+  br i1 %6, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %7 = call i64 @message(i32 2)
+  %8 = icmp eq i64 %7, 25
+  br label %lor.end
+
+lor.end:
+  %9 = phi i1 [ true, %ffi.join ], [ %8, %lor.rhs ]
+  br i1 %9, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %10 = phi i32 [ 0, %cond.true ], [ 1, %cond.false ]
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %10
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+```
+<!-- cookbook:end decl-ffi-string-result -->
 
 ### Numeric `enum`
 

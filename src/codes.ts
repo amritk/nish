@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 665
+export const RULE_COUNT: i32 = 666
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -373,6 +373,8 @@ const diagnosticRules = (): string[] => [
   "NL2395",
   "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
   "NL2128",
+  ", and a declared C function returns a scalar, a `CPtr` or a `string` it copies from a `const char *`",
+  "NL2538",
   "` is both allowed and denied in the root package's capability policy; a policy says one or the other",
   "NL3035",
   "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",

@@ -9,7 +9,7 @@
 // proving it, and the attribute pass the list is recorded beside is allowed to
 // say more than the emitter does, never less.
 //
-// A panic path is one of four shapes in unoptimised IR:
+// A panic path is one of five shapes in unoptimised IR:
 //
 //   - a call to `nish_panic_index`, `nish_panic_slice`, `nish_panic_div` or
 //     `nish_panic_overflow`;
@@ -22,13 +22,15 @@
 //   - the `ffi-nul` check of a `string` passed to a `declare function`
 //     (`emitForeignString`): an `ffi.nul` block whose first line calls
 //     `nish_panic`. The label is read, not the callee alone, because
-//     `nish_panic` also ends paths the report records as other kinds.
+//     `nish_panic` also ends paths the report records as other kinds;
+//   - the `ffi-null` check of a `string` a `declare function` returns
+//     (`emitForeignStringResult`): an `ffi.null` block, read the same way.
 
 const PANIC_CALL = /call void @nish_panic_(?:index|slice|div|overflow)\(/
 const EXITING_CALL = /@nish_(?:read_file|write_file|append_file|random_fill)\(/
 const TAIL_WRITE = /call void @nish_write\(i8\* [^,]+, i32 2, i1 true\)/
 const TAIL_EXIT = /^\s*call void @nish_exit\(i32 1\)/
-const FFI_NUL_LABEL = /^ffi\.nul(?:\.\d+)?:/
+const FFI_NUL_LABEL = /^ffi\.(?:nul|null)(?:\.\d+)?:/
 const FFI_NUL_PANIC = /^\s*call void @nish_panic\(/
 
 /** The lines of `@symbol`'s definition in `ir`, from `define` to its closing brace, or null. */

@@ -140,9 +140,9 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
 }
 
 /**
- * The rules a `declare function` adds (WP27 S1, widened by S2 and S3.1): no
- * body, not exported, a scalar or a `CPtr` in every position, and a `string`
- * or `string | null` as a parameter.
+ * The rules a `declare function` adds (WP27 S1, widened by S2, S3.1 and S3.2):
+ * no body, not exported, a scalar or a `CPtr` in every position, and a
+ * `string` or `string | null` as a parameter or as the result.
  *
  * S2 adds a pointer coming back that the compiler must never mistake for one
  * of its own (`docs/wp27-ffi.md` §2, §3). S3.1 is the first pointer this
@@ -192,13 +192,20 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
     }
     i = i + 1
   }
+  if (ctx.table.stripNull(sig.returnType) === T_STRING) {
+    // S3.2: C's `const char *`, copied into the arena at the call
+    // (`docs/wp27-ffi.md` §8d), so the string is the program's from then on
+    // and C keeps its own. `string | null` answers `null` for `NULL`, and a
+    // `string` panics on one (`ffi-null`).
+    return
+  }
   if (ctx.table.isRanged(sig.returnType)) {
     refuseForeignRange(ctx, decl.children[2], name, "returns", sig.returnType)
   } else if (!isForeignType(ctx.table, sig.returnType)) {
     const spelled = ctx.table.typeName(sig.returnType)
     ctx.error(
       decl.children[2],
-      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar or \`CPtr\` only`
+      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar, a \`CPtr\` or a \`string\` it copies from a \`const char *\``
     )
   }
 }

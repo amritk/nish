@@ -74,6 +74,13 @@ export const PANIC_OVERFLOW: i32 = 13
  * holds none (`foreignStringIsNulFree` in `src/emit-strings.ts`).
  */
 export const PANIC_FFI_NUL: i32 = 14
+/**
+ * WP27 S3.2: a `declare function` declared to return a `string` answered
+ * `NULL`, which a `string` cannot hold (`docs/wp27-ffi.md` §8d). Every call
+ * holds the site: whether C can answer `NULL` is not something the compiler
+ * can see, and `string | null` is the declaration that has none.
+ */
+export const PANIC_FFI_NULL: i32 = 15
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -106,6 +113,8 @@ const panicKindName = (kind: i32): string => {
       return "overflow"
     case PANIC_FFI_NUL:
       return "ffi-nul"
+    case PANIC_FFI_NULL:
+      return "ffi-null"
     default:
       return "oom"
   }
@@ -767,6 +776,11 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       return (
         "a C function reads a string to its first NUL byte, so a string that holds one panics before the call: " +
         "pass a literal with no NUL in it, which needs no check"
+      )
+    case PANIC_FFI_NULL:
+      return (
+        "a C function's `const char *` result may be NULL, which a `string` cannot hold: " +
+        "declare the result `string | null` and narrow it with `!== null`, which needs no check"
       )
     default:
       // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.
