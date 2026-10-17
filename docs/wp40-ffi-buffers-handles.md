@@ -22,7 +22,8 @@ gives the byte count, and every call checks that count against the array's
 length.**
 
 **A class may hold one field of type `CPtr` if its `[Symbol.dispose]` method
-is a single call to a declared C function on that field. Such a class is a
+calls one declared C function on that field, in one of the two shapes §4b
+allows: a bare call, or a call guarded by a null test. Such a class is a
 *handle class*. Its instances are created only as the initialiser of a `using`
 declaration, and they are bound nowhere else. The compiler emits the close at
 every exit of the block.**
@@ -40,6 +41,10 @@ class File {
   constructor(path: string) {
     this.file = fopen(path, "r");
   }
+  readByte(): i32 {
+    const p = this.file;      // the field is read only inside the class (§4a)
+    return p === null ? -1 : fgetc(p);
+  }
   [Symbol.dispose](): void {
     if (this.file !== null) {
       fclose(this.file);
@@ -49,8 +54,7 @@ class File {
 
 const firstByte = (path: string): i32 => {
   using f = new File(path);   // fclose runs on every way out of this block
-  const p = f.file;
-  return p === null ? -1 : fgetc(p);
+  return f.readByte();
 };
 ```
 
@@ -59,9 +63,10 @@ as S3's `string` (WP27 §8b): C may read or write the bytes until it returns,
 and it may keep no address. A handle keeps **§7a's placement rule**: a `CPtr`
 can still go only where the compiler can see all of its uses. This document
 adds one place for it to go, a field whose lifetime a `using` block bounds.
-With every exit of that block known, a use after close or a double close cannot
-be written. Both are refused statically, and the design needs no new panic kind
-for them (§4c).
+With every exit of that block known, a use after close or a double close
+through the `using` binding cannot be written. A close written by hand inside
+the class's own methods is the one way left, and §4c lays out the two answers
+to it for the owner (Q9).
 
 ## 2. What exists at `249cbe9`
 
@@ -90,7 +95,10 @@ for them (§4c).
   - a field (src/structs.ts:541);
   - an array element (src/annotations.ts:134, src/arrays.ts:681);
   - a `Result` arm (src/annotations.ts:518, :521);
-  - a generic type argument (src/generics.ts:1248);
+  - a generic type argument of a function template (src/generics.ts:1248).
+    The class-template path has no such check: src/generics.ts:993-1001 is a
+    TODO, and `new Empty<CPtr>()` compiles at `249cbe9`. §6 row 5 depends on
+    closing that path;
   - a parameter or return of a function the program defines
     (src/declarations.ts:92, :132; src/structs.ts:687).
 - **Readonly arrays.** `readonly T[]` exists already (docs/LANGUAGE.md,
@@ -185,9 +193,52 @@ declare the size as the count and pass `1` as `nmemb`. Even then, nothing
 stops a call from passing another `nmemb`. If the owner finds that
 unacceptable, the fallback is option 1 without prefix reads.
 
-A buffer parameter followed by anything but a `u64` is refused
-(`reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type`). The
-check compares against `len`, never `cap`.
+**The pairing rule, exactly.** A run of one or more consecutive buffer
+parameters is followed by one `u64`, and that `u64` is the byte count of every
+buffer in the run. The call checks `n <= len` once per buffer in the run. So
+`memcpy(dst: u8[], src: readonly u8[], n: u64)` and `memmove` are declarable as
+C declares them, and `memcpy(dst, src, n)` panics if either array is shorter
+than `n`. A run followed by anything but a `u64`, or by nothing, is refused
+(`reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type`), and a
+two-buffer run with one count is pinned positive in `ffi_buffer_memcpy`. A C
+function with one count per buffer (`(a, na, b, nb)`) is two runs and is
+declarable as it is. The check compares against `len`, never `cap`.
+
+**When the pointer and the length are read: after every argument.** The
+emitted call evaluates every argument left to right, as any call does, and
+only then loads `buf->data` and `buf->len` for each buffer and runs the check.
+Nothing is evaluated between those loads and the `call` instruction. The
+reason is that a later argument may change the array: in
+`write(1, buf, grow(buf))`, where `grow` pushes `buf` past its capacity and
+returns the new length, a `data` pointer loaded when `buf` was evaluated
+points at the block the push freed, and a `len` loaded then is the old length.
+Loading both last means C gets the block and the length that exist when C
+runs. Pinned by `ffi_buffer_late_load` (golden `.ll` showing the `data` and
+`len` loads after the call to `grow`, and a native round trip whose output is
+the bytes `grow` appended).
+
+The sibling is the proof that elides the check. `read(0, buf, buf.length)`
+needs no check only if nothing evaluated after the count argument may resize
+`buf`. The count is the last argument of `read` and `write`, so for them
+the proof holds, but the rule is stated on the facts, not on the position:
+the check is elided when the count is `buf.length` and no argument evaluated
+after it calls a callee whose facts say `resizesArray`, and kept otherwise.
+`ffi_buffer_late_load` pins both arms with `pwrite(fd, buf, n, off: i64)`:
+`pwrite(fd, buf, buf.length, 0)` has no check, and
+`pwrite(fd, buf, buf.length, shrink(buf))`, where `shrink` pops, keeps it and
+panics `ffi-length` in a `panics_ffi_length` variant.
+
+Concurrency adds nothing new here. Another task that resizes `buf` while C
+runs is the data race the existing `scope()` rule refuses for an array a
+task writes while its parent can reach it (`writesThroughMessage`, which a
+foreign `u8[]` argument now feeds, §5).
+
+The other answer, for the owner: refuse a call in which an argument after a
+buffer may resize it, using the same `resizesArray` fact, and load at the
+argument's own position. It is simpler to read in the IR and costs programs
+nothing they write today, but it adds a refusal whose message talks about
+callee facts. Q10 records the choice. The recommendation is the late load,
+because it makes the stale pointer impossible rather than refused.
 
 ### 3b. How read-only and writable are spelled: `readonly u8[]` and `u8[]`
 
@@ -255,15 +306,18 @@ of them a rule.
 **The borrow.** C may write the bytes until it returns, and it may keep no
 address. A buffer kept past the call is worse than S3's kept string, because a
 later write changes a Nish array without anything in the program writing it.
-`setvbuf(f, buf, mode, size)` is the example `docs/LANGUAGE.md` names: it keeps
-`buf` as the stream's buffer. So does `aio_read`. Declaring either with a
+`setvbuf(f, buf, mode, size)` is the example WP27 §8b names for S3's borrow
+(wp27-ffi.md:295): it keeps `buf` as the stream's buffer. So does `aio_read`. Declaring either with a
 `u8[]` has undefined behaviour, and the compiler cannot see that. S3 weighed
 the alternatives to the borrow (WP27 §8b) and found none safer. A buffer
 changes none of that weighing.
 
-Two writable buffers from the same array, as in `memmove(a, a, n)` declared
-with two `u8[]`, are not refused. C sees two pointers to one block. A
-`restrict` C function declared that way is a wrong declaration, as in §3a.
+Two buffers from the same array, as in `memmove(a, a, n)` declared with the
+two-buffer run of §3a, are not refused. C sees two pointers to one block, and
+the one count is checked against that block's length twice. `memmove` allows
+the overlap. `memcpy` is `restrict` and does not, so `memcpy(a, a, n)` has
+undefined behaviour the compiler cannot see: a wrong call of the same class as
+§3a's `fwrite`, which the LANGUAGE.md rule names.
 
 ### 3d. A returned count larger than the length: neither clamped nor a panic
 
@@ -304,7 +358,12 @@ A **handle class** is a class with exactly one field of type `CPtr` or
 - A `CPtr` field is read only inside the class's own methods. It is read
   either as a direct argument to a declared function, or into a `const` local
   that is then narrowed and passed. A read from outside the class is refused
-  (`reject_ffi_handle_field_read_outside`).
+  (`reject_ffi_handle_field_read_outside`). A closure in a method that captures
+  the field, or a `const` local read from it, is refused too
+  (`reject_ffi_handle_field_capture`): a closure is a value that could carry
+  the pointer past the method, which §7a's rule does not allow for a `CPtr`
+  local either. Which declared functions the field may be passed to is §4c's
+  question.
 - Such a local is a `CPtr` local, and S2's placement rule already keeps it out
   of every field, element, `Result` and signature. So the pointer leaves the
   object only into a C call, and that call borrows it.
@@ -337,6 +396,26 @@ emitted by the construct: `using` pushes a fourth kind onto the stack that
 `closeScope` (:808) then emits the null test and the call in LIFO order on
 every exit, the same exits a lock is released on (§2).
 
+"Every exit" is a list of emitter paths, and each one is wired for the fourth
+kind, as each was for locks:
+- the fall-through, `closeBlockScopes` (src/emit-parallel.ts:849);
+- `break`, `continue` and `return`, through `emitScopeJoins` (:833). Its
+  `later` test at :836, `openScopeArenas[i] || openScopeLocks[i]`, gains the
+  handle stack, or a scope holding only a handle would be skipped;
+- `emitScopeExit` (src/emit.ts:698), called at src/emit.ts:588, :1153, :1180,
+  :1192 and :1519, and on the `orReturn()` propagation path at
+  src/emit-result.ts:560 and :564. It calls a close pass beside
+  `emitLockReleases` (src/emit-parallel.ts:867);
+- the tail-call suppression. `holdsLock` (src/emit-parallel.ts:878) stops
+  src/emit.ts:662 from marking a call in return position `tail` while a lock
+  is held, because the release runs after it. An open handle needs the same,
+  or `return f.readByte()` would be a tail call with the close after it. The
+  test widens to "holds a lock or a handle".
+
+`ffi_handle_file` (§9) exercises each path: the fall-through, `break`,
+`continue`, an early `return`, an `orReturn()` that propagates, and
+`return f.readByte()` in tail position, whose golden shows no `tail` marker.
+
 Other options were weighed:
 - **A decorator or a magic static** (`static close = fclose`). Nish parses
   neither. The static would also be a function value, which is a function
@@ -347,24 +426,80 @@ Other options were weighed:
 - **A builtin wrapper type** (`Handle<"fclose">`) needs a type-level string
   (as in §3a, option 3).
 
-### 4c. Use after close and double close: refused statically
+### 4c. Use after close and double close
 
-**Decision (recommended, Q6):** both are refused statically. There is no
-`ffi-closed` panic kind.
+**Decision (recommended, Q6):** no run-time flag and no `ffi-closed` panic
+kind. What is static and what is a C contract is Q9, below, and is the
+owner's call.
 
-The proof is the rule in §4d. The binding that `using` introduces is the only
-name an instance ever has outside its own methods, and that binding goes out
-of scope at the exact point where the close is emitted. So no code can follow
-the close and name the object. The program cannot call the dispose method:
-`f[Symbol.dispose]()` is refused (`reject_ffi_handle_dispose_call`). So the
-only close is the emitted one, and it runs once per exit path. Each path runs
-exactly one exit.
+**What placement proves.** The binding that `using` introduces is the only
+name an instance ever has outside its own methods (§4d), and that binding goes
+out of scope at the exact point where the close is emitted. So no code can
+follow the emitted close and name the object. The program cannot call the
+dispose method: `f[Symbol.dispose]()` is refused
+(`reject_ffi_handle_dispose_call`). The emitted close runs once per exit path,
+and each path runs exactly one exit.
 
-The alternative was a defined panic. A `closed` flag in the object would be
-set by the close and tested on every method call. It costs a word, a load and
-a branch per call, and it turns a mistake the compiler can see into one found
-at run time. It would be the right design if handles could escape. They
-cannot (§4d), so it is not needed.
+**What placement does not prove.** A method of the class can call the close
+function itself:
+
+```ts
+class File {
+  // … as in §1
+  done(): void {
+    const p = this.file;
+    if (p !== null) { fclose(p); }   // a second close follows at the block's exit
+  }
+}
+```
+
+`f.done(); f.readByte();` is then a use after close, and the block's exit is a
+double close. Placement says nothing about it, because the call happens inside
+the object. There are two answers, and the choice is Q9.
+
+- **Option A: refuse it statically.** A written call to the dispose method's
+  close function (`fclose` above) whose argument is the owned field, or a
+  `const` local read from it, is refused anywhere in the class
+  (`reject_ffi_handle_close_call`). The check is local to the class, because
+  the field is readable nowhere else (§4a), and closures over it are refused
+  (`reject_ffi_handle_field_capture`), so the class body is every place the
+  pointer can be named. Its cost and its edges:
+  - It is one more checker rule with one message, beside the dispose-shape
+    check, which already resolves the close's name. The dispose method's own
+    call is the one exempt site.
+  - The constructor is covered too: `this.file = fopen(…); fclose(this.file)`
+    in the constructor is refused, since the constructor is a method of the
+    class for this walk.
+  - It covers only the close the class names. Other C functions that close,
+    replace or keep the pointer cannot be seen: `freopen(path, mode, p)`
+    closes `p`'s descriptor, `fdclose` and `fclose` through a C wrapper with
+    another name free it, and `setvbuf(p, …)` makes the stream keep a buffer.
+    These stay a C contract, stated in the LANGUAGE.md rule like §3a's
+    count: "the class's methods pass the field only to functions that use it
+    and return".
+  - Ownership itself stays a C contract. Two objects built from one C getter
+    that returns a shared pointer (`stdin`'s `FILE *` through a C helper, for
+    example) both close it. The rule is that the constructor's foreign call
+    returns a pointer the object owns, and the compiler cannot check that.
+- **Option B: a stated C contract.** Drop the claim that a close through a
+  method is refused. The LANGUAGE.md rule says that a method which closes the
+  field, through the named close or any other function, makes the next use
+  and the block's emitted close undefined behaviour. It costs no checker code
+  and admits the same programs as option A plus the wrong ones. It is the
+  status S3's borrow and §3a's count already have, so the design states three
+  C contracts instead of two.
+
+**Recommended: option A**, with the remaining C functions named in the rule.
+It makes the mistake a program is most likely to write, calling the close it
+already named, a refusal. What it leaves is the same class of unchecked
+declaration the borrow already has.
+
+The alternative to both was a defined panic. A `closed` flag in the object
+would be set by every close and tested on every method call. It costs a word,
+a load and a branch per call, and under option A it would catch only closes
+through other C functions, which would have to set the flag and cannot. It
+would be the right design if handles could escape. They cannot (§4d), so it
+is not needed.
 
 ### 4d. Where an instance may live
 
@@ -417,11 +552,38 @@ design, decided on a program that needs them.
 ## 5. Interactions
 
 **src/escape.ts and the arena scopes.**
-- *Buffers.* A buffer argument is a read for escape purposes, exactly as S3's
-  string is and as `console.log`'s is (src/escape.ts:552). It does not escape,
-  and an array allocated in a released scope may be passed. The foreign
-  callee's escaping facts stay empty (WP27 §8b). The write is an effect
-  (§3c), not an escape.
+- *Buffers.* A buffer argument does not escape, exactly as S3's string does
+  not and as `console.log`'s does not (src/escape.ts:552), so an array
+  allocated in a released scope may be passed. It is not a read, though. A
+  foreign callee gets no per-argument facts today: `addCallee`
+  (src/attributes.ts:2713-2722) returns before `noteArguments` for a foreign
+  callee, which was sound while no array could reach one. B1.2 adds the
+  missing step. A `u8[]` argument to a declared function sets the caller's
+  `PointerParamFacts` for that array to `writesThrough = true` and
+  `captured = false`, as a Nish callee that writes its parameter would. A
+  `readonly u8[]` argument sets neither.
+
+  Every fact derived from `writesThrough` then follows, and each is a place
+  where leaving it unset would be a miscompile or a lie in a generated file:
+  - the LLVM attributes on the caller's own array parameter: an
+    `f(b: u8[])` that calls `read(fd, b, n)` must not get `readonly` on `b`;
+  - `--emit-header`'s `const`, which `writtenArrayParams`
+    (src/interop-abi.ts:231-250) derives from `writesThrough`: that `f`, if
+    exported, renders as `nish_array *b`, not `const nish_array *b`;
+  - the wasm glue's copy-back of an exported `u8[]` parameter
+    (src/interop-wasm.ts:570-576, [wp30-bytes-interop.md](wp30-bytes-interop.md)),
+    which copies the bytes back to the host only for a written parameter, and
+    the `const` of napi's C declaration (src/interop-napi.ts:318);
+  - the `scope()` sharing rule (`writesThroughMessage`, src/parallel.ts:1897),
+    which refuses a task that writes an array its parent also reads. §3a's
+    concurrency claim depends on it.
+
+  `captured` stays `false`, by the borrow (WP27 §8b): C keeps no address. That
+  is the assertion §3c already states, now written into a fact.
+  `ffi_buffer_export_written` pins it: an exported `fill(b: u8[])` that calls
+  `read` has an `--emit-header` golden with `nish_array *b`, a `.ll` golden
+  with no `readonly` on `b`, and a wasm32 build whose JavaScript glue copies
+  `b` back.
 - *Handles.* A handle-class instance cannot escape, because every way out is
   refused (§4d). Escape analysis therefore never sees one leave and needs no
   new case, but B1/H1 adds a golden `.ll` showing that the object is
@@ -448,10 +610,13 @@ design, decided on a program that needs them.
   `reject_ffi_handle_deny`.
 
 **`--emit-header`, `--emit-dts` and `--emit-napi`.**
-- *Buffers.* A buffer parameter appears only on a `declare function`, which
-  can never be exported (`reject_ffi_export`, existing). The generators never
-  see one. A program function may already export a `u8[]`
-  ([wp30-bytes-interop.md](wp30-bytes-interop.md)), and that is unchanged.
+- *Buffers.* A buffer parameter on a `declare function` is never exported
+  (`reject_ffi_export`, existing), so no generator renders the declaration.
+  The generators do see what a buffer call does to an exported program
+  function's own `u8[]` parameter
+  ([wp30-bytes-interop.md](wp30-bytes-interop.md)): it is written, so it
+  renders without `const` and is copied back. That comes from `writesThrough`
+  (src/escape.ts and the arena scopes, above), and no generator changes.
 - *Handles.* A handle class may not be exported (`reject_ffi_handle_export`),
   and a program function that takes one may not be exported either (§4d). So
   none of the three generators is ever asked to render one, and each of them
@@ -468,18 +633,30 @@ design, decided on a program that needs them.
 **wasm32 and `--profile wasm`.**
 - *Buffers.* B1 adds no wasm32 guard and no wasm32 lowering. A `declare
   function` is not refused under `--target wasm32` today, and its symbol is
-  left to `wasm-ld`. Because nothing is skipped for wasm32, the freestanding
-  `--profile wasm` route, which links IR compiled for the host
-  (scripts/build.sh:367), sees exactly the IR that `--target wasm32` would.
-  There is no guard for it to bypass.
+  left to `wasm-ld`. The two wasm routes still see different IR. `--target
+  wasm32` compiles for wasm32, with 32-bit pointers. The freestanding
+  `--profile wasm` route links IR compiled for the host, not with `--target
+  wasm32` (the comment at scripts/build.sh:375, in the `wasm)` case at :367),
+  so its `buf->data` loads, header offsets and `u64` count are the host's,
+  linked by `wasm-ld`. Because B1 skips nothing for wasm32, there is no guard
+  for that route to bypass, but "same IR" is not a claim this design can make,
+  and neither route is tested today.
+
+  So B1 adds both checks to the `wasi` section of `tests/run.js`, which skips
+  without a WASI sysroot (CLAUDE.md): a `--target wasm32` build of
+  `ffi_buffer_write` whose IR passes `llvm-as` and whose `ptr` loads and
+  `n <= len` compare are read at wasm32 widths, and a `--profile wasm` link of
+  the same case against a stub `write` that must resolve. H1 adds the same
+  pair for `ffi_handle_file`, with stub `fopen`, `fgetc` and `fclose`.
 
   One width question is S1's, not new: a `u64` declared where C has `size_t`
   is 32 bits on wasm32. `wasm-ld` reports the signature mismatch instead of
   linking it silently, and that already applies to `calloc(count: u64, …)`
   today. B1 records it in the LANGUAGE.md rule and leaves the fix to a
   follow-up issue. Native round trips do not run on wasm.
-- *Handles.* The close is an ordinary call in the IR, emitted on both targets
-  in the same way, so the `--profile wasm` route links the same calls.
+- *Handles.* The close is an ordinary call in the IR, emitted the same way
+  for either target. The `--profile wasm` link above checks that it resolves
+  on the route that links host IR.
 
 **The differential oracle.**
 - *Buffers.* Outside it, by construction (known-failures.txt:40-47).
@@ -501,8 +678,8 @@ the rest in the same round.
 | 1 | A constructor reached by `new`, outside a `using` initialiser, including `new File()` inside another class's constructor, a default parameter value, or an argument | Refused: a handle-class `new` is legal only as a `using` initialiser | `reject_ffi_handle_new_outside_using` |
 | 2 | Every declarator of `using a = …, b = …` | Each declarator is checked on its own. `using a = new File(p), b = a` is refused at `b` | `reject_ffi_handle_using_second_declarator` |
 | 3 | `this` leaving a constructor or method (`h.l = this`, `return this`, `xs.push(this)`) | Refused, because the target's type would have to be the handle class (a field, an element or a return, rows 6, 7 and 8) | `reject_ffi_handle_this_escapes` |
-| 4 | A closure capture of the `using` binding or of a handle parameter | Refused, even for an arrow called at once | `reject_ffi_handle_closure_capture` |
-| 5 | A generic type argument (`Box<File>`, `id<File>(f)`, `Secret<File>`) | Refused, as for `CPtr` (src/generics.ts:1248) | `reject_ffi_handle_type_argument` |
+| 4 | A closure capture of the `using` binding or of a handle parameter; inside the class, a closure capture of the `CPtr` field or of a `const` local read from it | Refused, even for an arrow called at once (§4a) | `reject_ffi_handle_closure_capture`, `reject_ffi_handle_field_capture` |
+| 5 | A generic type argument (`Box<File>`, `new Box<File>()`, `id<File>(f)`, `Secret<File>`), and a generic handle class (`class File<T>`) | Refused on both template paths. src/generics.ts:1248 checks function templates only, and the class-template path (src/generics.ts:993-1001) has no check today, so H1.1 adds one there for the handle rule and for `CPtr` alike. A handle class may not have type parameters | `reject_ffi_handle_type_argument` (a function and a class template each), `reject_ffi_handle_generic_class` |
 | 6 | An array element (`File[]`, `[f]`) | Refused | `reject_ffi_handle_array` |
 | 7 | A `Result` arm (`Result<File, E>`) | Refused. A fallible open is written with a `CPtr \| null` field (§4a) | `reject_ffi_handle_result` |
 | 8 | A return from a program function or method | Refused | `reject_ffi_handle_return` |
@@ -519,6 +696,11 @@ the rest in the same round.
 | 19 | An exported class, or an exported function taking one | Refused (§5) | `reject_ffi_handle_export`, `reject_ffi_handle_exported_param` |
 | 20 | A buffer, through its paired count: the next parameter is missing or is not a `u64` | Refused (§3a) | `reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type` |
 | 21 | A buffer of another element type, a nullable buffer, or a returned buffer | Refused (§3b) | `reject_ffi_buffer_element`, `reject_ffi_buffer_nullable`, `reject_ffi_buffer_return` |
+| 22 | A close of the owned field written by hand, in a method or the constructor, through the dispose's close function | Option A: refused. Option B: a stated C contract. The owner chooses (§4c, Q9) | `reject_ffi_handle_close_call` (option A only) |
+| 23 | The owned field passed to another C function that closes, replaces or keeps it (`freopen`, `setvbuf`), or two objects owning one pointer a C getter shares | A C contract under either option, named in the LANGUAGE.md rule (§4c) | none: the compiler cannot see it |
+| 24 | A buffer's `data` or `len` read at a stale moment, because a later argument resizes the array | Both are loaded after every argument is evaluated (§3a, Q10). The elided check also requires that no later argument may resize | `ffi_buffer_late_load` (positive, both arms) |
+| 25 | A foreign write reaching the caller of a program function through its `u8[]` parameter, where that function is exported or its parameter's facts feed LLVM attributes | The foreign call marks the argument array `writesThrough` (§5), so the parameter loses `readonly`, renders without `const`, and is copied back by the wasm glue | `ffi_buffer_export_written` (positive) |
+| 26 | A run of buffers sharing one count | Each buffer in the run is checked against the count (§3a) | `ffi_buffer_memcpy` (positive) |
 
 ## 7. Stage 9's precondition: the finding
 
@@ -566,24 +748,50 @@ for revisiting this, and none is planned.
 
 ## 8. Out of scope: what stays refused
 
-Each of these stays refused, and each refusal is pinned by a reject case. A
-case marked existing is a case today. The others are planned with B1 or H1,
-so the refusal is tested in the same pull request that widens the boundary
-next to it.
+Each of these stays refused, and each refusal is pinned by a reject case,
+including the ones that have no spelling today: for those, the case pins the
+diagnostic that refuses the nearest thing a program could write, so a change
+that starts accepting it turns a test red. A case marked existing is a case
+today. The others are planned with B1 or H1, so the refusal is tested in the
+same pull request that widens the boundary next to it.
 
-| Refused | Why | Case |
-| --- | --- | --- |
-| Raw pointers, pointer arithmetic, dereference | A `CPtr` stays opaque. `readCString` (WP27 §8e) copies in C and is the only read | `reject_ffi_pointer_arithmetic` (existing), `reject_ffi_pointer_deref` |
-| `CPtr` in an array or a generic type argument | §7a's placement rule. A handle field is the one widening (§4a) | `reject_ffi_pointer_array` (existing), `reject_ffi_pointer_type_argument` (existing) |
-| Inline asm | No TypeScript spelling, and no attribute could be proved for it | `reject_ffi_asm` (a call to a pseudo-builtin `asm`, refused by name) |
-| Direct syscalls that bypass libc | `syscall(2)` is variadic (below). A raw `svc`/`syscall` instruction is inline asm | `reject_ffi_variadic` covers `syscall` |
-| User allocators | Every Nish allocation is the arena's or the runtime's, and an allocator hook would make escape analysis's facts about them unprovable | `reject_ffi_allocator` (an `Arena` constructor taking a `CPtr`) |
-| Function pointers and C callbacks | Nish has no function pointer type, and a callback would run Nish code from inside C, under facts that say C calls nothing | `reject_ffi_callback` (an arrow passed to a `declare function`) |
-| Variadic C functions | `declare function printf(fmt: string, ...args: i32[])`: the C variadic ABI differs from a fixed one and is not expressed by the IR `declare` | `reject_ffi_variadic` |
-| A SIMD type | [WP38](wp38-simd.md) owns it | none here |
-| `string[]` across the boundary | It would need an array of borrowed `char *` built per call, which is a C struct layout question (WP27 S4) | `reject_ffi_string_array_param` (WP27 §8g) |
-| C struct layout | WP27 S4 | none here |
-| `errno` | WP27 S5 | none here |
+The last column is the rolling freeze for each row: whether the seed already
+refuses it, or which stage adds the refusal. Nothing in the table waits on a
+release, because a refusal binds `src/` from the commit that adds it (the rolling freeze, below).
+
+| Refused | Why | Case | Rolling freeze |
+| --- | --- | --- | --- |
+| Raw pointers, pointer arithmetic, dereference | A `CPtr` stays opaque. `readCString` (WP27 §8e) copies in C and is the only read | `reject_ffi_pointer_arithmetic` (existing), `reject_ffi_pointer_deref` | Refused by the seed already |
+| `CPtr` in an array or a generic type argument | §7a's placement rule. A handle field is the one widening (§4a) | `reject_ffi_pointer_array` (existing), `reject_ffi_pointer_type_argument` (existing), and the class-template path in `reject_ffi_handle_type_argument` (§6 row 5) | The function-template and array refusals are in the seed. The class-template refusal lands with H1.1; until the release after it, the seed accepts `new Empty<CPtr>()`, and `src/` does not write one |
+| Inline asm | No TypeScript spelling, and no attribute could be proved for it | `reject_ffi_asm`: `asm("nop")`, pinning the existing unknown-name diagnostic. A `declare function asm(…)` is an ordinary C declaration of a symbol named `asm`, not an instruction, and needs no case of its own | Refused by the seed already |
+| Direct syscalls that bypass libc | `syscall(2)` is variadic. A raw `svc`/`syscall` instruction is inline asm. A fixed-arity `declare function syscall(n: i64, a: i64, b: i64): i64` is accepted today (`checkForeignSignature`, src/declarations.ts:152, checks arity only), so the refusal is Q11's choice | `reject_ffi_syscall` under Q11(a); none under Q11(b) | Under Q11(a), the refusal lands with B1.1, and `src/` makes no syscall |
+| User allocators | Every Nish allocation is the arena's or the runtime's, and an allocator hook would make escape analysis's facts about them unprovable | `reject_ffi_allocator`: `using a = arena(p)` with a `CPtr` argument. The builtin takes no argument, and the case pins the diagnostic that call gets today | Refused by the seed already |
+| Function pointers and C callbacks | Nish has no function pointer type, and a callback would run Nish code from inside C, under facts that say C calls nothing | `reject_ffi_callback` (an arrow passed to a `declare function`) | Refused by the seed already (an arrow is not `isForeignType`) |
+| Variadic C functions, spelled variadically | `declare function printf(fmt: string, ...args: i32[])`: the C variadic ABI differs from a fixed one and is not expressed by the IR `declare` | `reject_ffi_variadic` | Refused by the seed already (a rest parameter is an array, not `isForeignType`) |
+| Variadic C functions, declared with a fixed arity | `declare function printf(fmt: string, x: i32): i32` is accepted today and calls a variadic function through a fixed-arity type, which is undefined behaviour on some ABIs (arm64 Apple passes variadic arguments on the stack). The compiler cannot tell a variadic C function from its name in general: `open` is variadic too. Q11 | `reject_ffi_syscall` covers `syscall` only, under Q11(a). The rest is a stated C contract | Not a refusal |
+| A SIMD type | [WP38](wp38-simd.md) owns it. Once its first stage adds `f32x4` and its siblings, `isForeignType` (src/types.ts:88) refuses them with no new code, since they are neither scalar nor `CPtr` | `reject_ffi_simd_param`, planned with WP38's first stage, because the types do not exist in `src/` today and the case cannot be written before them | Refused by the seed as an unknown type today |
+| `string[]` across the boundary | It would need an array of borrowed `char *` built per call, which is a C struct layout question (WP27 S4) | `reject_ffi_string_array_param` (WP27 §8g) | Refused by the seed already |
+| C struct layout | WP27 S4 | WP27 S4's own cases | WP27's |
+| `errno` | WP27 S5 | WP27 S5's own cases | WP27's |
+
+**Q11, syscall and fixed-arity variadics, for the owner.**
+- **(a) A name denylist.** `declare function syscall` is refused by name
+  (`reject_ffi_syscall`), and optionally so are the variadic libc names
+  (`printf`, `fprintf`, `sprintf`, `snprintf`, `scanf`, `open`, `openat`,
+  `fcntl`, `ioctl`, `execl`). Its cost: a denylist is incomplete by nature,
+  since a C library or a wrapper adds names the list does not know; and it
+  catches `open`, S3.1's own example, whose two-argument call works on the
+  ABIs Nish targets today, so the guide's `open` would need a non-variadic C
+  wrapper.
+- **(b) A stated risk.** Both stay accepted, and the LANGUAGE.md rule says
+  that a fixed-arity declaration of a variadic C function, `syscall`
+  included, is undefined behaviour the compiler cannot see, of the class of
+  §3a's `fwrite`.
+
+**Recommended:** (a) for `syscall` alone, because it is the one name whose
+whole purpose is to bypass libc and whose arguments are untyped register
+values; and (b) for the variadic libc functions, which a denylist would get
+wrong.
 
 ### The rolling freeze
 
@@ -592,7 +800,10 @@ until the release after each lands, because the seed must accept a `u8[]`
 parameter on a `declare function`, or a handle class, before the compiler's
 own source writes one. CI's `bootstrap` job checks that. Nothing in `src/`
 waits on either: every operating-system call the compiler makes is a builtin,
-and §7 is why that stays so.
+and §7 is why that stays so. The refusals each stage adds (§8's table, and
+every case in §6) restrict `src/` from the commit that lands them, since a
+refusal in the new compiler applies to the compiler's own source at once;
+the seed lags only in still accepting them, which `src/` does not use.
 
 ## 9. Stages, tests and the bar each must clear
 
@@ -613,8 +824,8 @@ guide, and the cases below do not need S3.
 
 | Step | What | Tests |
 | --- | --- | --- |
-| B1.1 | `u8[]` and `readonly u8[]` parameters in `checkForeignSignature`, the paired-`u64` rule and the refusals | `reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type`, `reject_ffi_buffer_element`, `reject_ffi_buffer_nullable`, `reject_ffi_buffer_return` |
-| B1.2 | Lowering: `buf->data` as `i8*`, the `n <= len` check and the `ffi-length` panic kind, the escape read | `ffi_buffer_write` (golden `.ll` + native round trip: `write(1, bytes, bytes.length)` and a prefix `write(1, bytes, 3)`, with all output through `write` so that it does not interleave with `console.log`'s buffer); `ffi_buffer_read` (sidecar `ffi_buffer_read.c` whose `main` makes a pipe, fills it and calls the case's exported `run(fd)`, which `read`s into a `new Array<u8>(64)` from a function whose arena scope releases after the call and prints the bytes); `panics_ffi_length` (a count past the length: exit 1 and the message, plus the `--emit-panics` entry, `proven: false`); the proof of `read(fd, buf, buf.length)` shown in `ffi_buffer_read.ll` as no check |
+| B1.1 | `u8[]` and `readonly u8[]` parameters in `checkForeignSignature`, the run-and-count rule (§3a) and the refusals; `reject_ffi_syscall` if Q11 is (a) | `reject_ffi_buffer_length_missing`, `reject_ffi_buffer_length_type`, `reject_ffi_buffer_element`, `reject_ffi_buffer_nullable`, `reject_ffi_buffer_return`, `reject_ffi_variadic`, `reject_ffi_callback`, `reject_ffi_pointer_deref`, `reject_ffi_asm`, `reject_ffi_allocator`, and `reject_ffi_syscall` under Q11(a) |
+| B1.2 | Lowering: `buf->data` as `ptr` and `len` loaded after every argument (§3a), the `n <= len` check per buffer of a run and the `ffi-length` panic kind; the foreign argument facts, `writesThrough` for `u8[]` and nothing for `readonly u8[]`, `captured = false` (§5); the wasm32 checks (§5) | `ffi_buffer_write` (golden `.ll` + native round trip: `write(1, bytes, bytes.length)` and a prefix `write(1, bytes, 3)`, with all output through `write` so that it does not interleave with `console.log`'s buffer); `ffi_buffer_read` (sidecar `ffi_buffer_read.c` whose `main` makes a pipe, fills it and calls the case's exported `run(fd)`, which `read`s into a `new Array<u8>(64)` from a function whose arena scope releases after the call and prints the bytes); `panics_ffi_length` (a count past the length: exit 1 and the message, plus the `--emit-panics` entry, `proven: false`); the proof of `read(fd, buf, buf.length)` shown in `ffi_buffer_read.ll` as no check; `ffi_buffer_late_load` (§3a, both arms); `ffi_buffer_memcpy` (a two-buffer run, a native round trip and a `panics_ffi_length` program whose source is the shorter array); `ffi_buffer_export_written` (§5: the header, `.ll` and wasm glue goldens); in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_buffer_write` |
 | B1.3 | Re-derive `resizesArray = false` for a foreign callee (§3c) | `ffi_buffer_bounds_survive` (golden `.ll`: an element loop over `buf` after `read`, whose compound-store re-check is gone, compared in the commit body against the `.ll` before B1.3) |
 
 B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
@@ -625,8 +836,8 @@ B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
 
 | Step | What | Tests |
 | --- | --- | --- |
-| H1.1 | The handle-class rule: the one `CPtr` field, the dispose shape, and the `using`-only placement with every sibling in §6 | Every `reject_ffi_handle_*` case in §6, rows 1–19 |
-| H1.2 | The emitted close as a fourth kind on `openScope`'s stack, on fall-through, `break`, `continue` and `return`; the `ffi` offer at the `using` | `ffi_handle_file` (golden `.ll` + native round trip: a class owning an `fopen` handle, closed by `using`, reading a file the sidecar `ffi_handle_file.c` writes first, with an early `return`, a `break` out of a loop and two declarators, and the sidecar counting the closes through an `fclose` wrapper it exports, so that the output shows exactly one close per open); `ffi_handle_arena` (§5); `caps_ffi_handle` |
+| H1.1 | The handle-class rule: the one `CPtr` field, the dispose shape, the `using`-only placement with every sibling in §6, the class-template check (§6 row 5), and `reject_ffi_handle_close_call` if Q9 is option A | Every `reject_ffi_handle_*` case in §6, rows 1–19 and 22 (row 22 under Q9's option A only) |
+| H1.2 | The emitted close as a fourth kind on `openScope`'s stack, wired into every exit path §4b lists (fall-through, `emitScopeJoins` and its `later` test, `emitScopeExit` including `orReturn()` propagation, and the tail-call suppression); the `ffi` offer at the `using`; the wasm32 checks (§5) | `ffi_handle_file` (golden `.ll` + native round trip: a class owning an `fopen` handle, closed by `using`, reading a file the sidecar `ffi_handle_file.c` writes first, with an early `return`, a `break` and a `continue` in a loop, an `orReturn()` that propagates out of the block, `return f.readByte()` in tail position (no `tail` marker in the golden), and two declarators, and the sidecar counting the closes through an `fclose` wrapper it exports, so that the output shows exactly one close per open); `ffi_handle_arena` (§5); `caps_ffi_handle`; in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_handle_file` |
 | H1.3 | Use after close, refused | `reject_ffi_handle_use_after_close`: the binding named after its block (`let x = 0; { using f = new File(p) } f.read()`) is already a scope error; the case pins its message, and a second program reaches the object through a callee that tries to keep it, refused by row 15 |
 
 H1's bar is a class that owns an `fopen` handle and is closed by `using`, with
@@ -645,9 +856,12 @@ reason untrue comes back here before building anything else.
 | Q3 | Bounds facts after a write | (a) re-derive `resizesArray = false` for foreign callees; (b) keep `true` | **Open. Recommended: (a), in its own step (B1.3).** No header crosses after B1, so C cannot resize (§3c). |
 | Q4 | A returned count larger than the length | (a) neither, since it is an ordinary integer; (b) clamp; (c) panic | **Open. Recommended: (a).** The compiler does not know that the return is a count, and §3a's check plus the bounds checks leave no hole to close (§3d). |
 | Q5 | How a handle class names its close | (a) a one-call `[Symbol.dispose]` on a declared function; (b) a decorator or a static function value; (c) a free-form dispose body; (d) a builtin `Handle<"name">` | **Open. Recommended: (a).** It is TypeScript's own protocol, and the close is a symbol the checker reads off the body (§4b). |
-| Q6 | Use after close and double close | (a) refused statically, by the `using`-only placement; (b) a defined panic, `ffi-closed`, with a flag | **Open. Recommended: (a).** The placement rule makes both impossible to write, and (b) costs a check per call for a mistake the compiler can see (§4c). |
+| Q6 | Use after close and double close through the binding | (a) refused statically, by the `using`-only placement; (b) a defined panic, `ffi-closed`, with a flag | **Open. Recommended: (a).** The placement rule makes both impossible to write through the binding, and (b) costs a check per call. A close written inside the class is Q9 (§4c). |
 | Q7 | Where a handle may live | (a) only a `using` binding and non-exported parameters; (b) anywhere, with run-time ownership | **Open. Recommended: (a).** It is §7a's rule one level up. A handle that outlives its block is a later design (§4d). |
 | Q8 | Stage 9 | (a) move `getenv` to `std/` with a trusted summary; (b) the finding | **Open. Recommended: (b).** All four properties would be lost, and the mechanism that restores them is the unchecked attribute channel this compiler exists without (§7). |
+| Q9 | A close of the owned field written by hand in the class | (A) refused statically for the dispose's named close function, everywhere in the class, with other closing C functions and shared pointers stated as a C contract; (B) all of it a stated C contract | **Open. Recommended: (A).** It refuses the mistake a program is most likely to write for one checker rule, and what it leaves is the same class of unchecked declaration as the borrow. (B) costs nothing and adds a third C contract (§4c). |
+| Q10 | A buffer argument whose array a later argument resizes | (a) load `data` and `len` after every argument, and elide the check only when no later argument may resize; (b) refuse the call by the `resizesArray` fact and load at the argument's position | **Open. Recommended: (a).** C gets the block and length that exist when it runs, and no program is refused. (b) is simpler IR and a refusal phrased in callee facts (§3a). |
+| Q11 | `syscall` and fixed-arity declarations of variadic C functions | (a) a name denylist, for `syscall` and optionally the variadic libc names; (b) a stated C contract | **Open. Recommended: (a) for `syscall` alone, (b) for the rest.** A denylist of libc names is incomplete and catches `open` (§8). |
 
 ## 11. Declined
 
@@ -661,12 +875,17 @@ reason untrue comes back here before building anything else.
   attribute.
 - **Handles in `Result`, arrays or fields of other classes** (§6). Each would
   need ownership transfer, which the language does not have.
+- **Generic handle classes** (§6 row 5). A type parameter adds nothing a
+  handle needs and is one more path to check.
+- **Refusing a call whose later argument resizes a buffer** (§3a, Q10(b)),
+  in favour of loading after every argument. It is declined only if the owner
+  takes Q10(a).
 
 ## 12. What a reviewer should push back on
 
 Two rules here are assertions the compiler states and cannot check. Both
 follow S3's borrow (WP27 §8i), and both are where a program that looks correct
-has undefined behaviour.
+has undefined behaviour. Two more depend on Q9 and Q11, below.
 
 - The **buffer borrow** (§3c). Name `setvbuf` first.
 - The **paired count** (§3a). Name `fwrite` first.
@@ -675,7 +894,15 @@ If the paired count is not acceptable, the fallback is Q1(a): expansion, with
 no prefix reads. That makes the count impossible to get wrong, at the cost of
 `read`'s most common shape.
 
-The handle rules are all checked. The thing to push back on there is their
-reach: a handle cannot leave the function that opens it. If a motivating
+A third is the owner's choice. Under Q9's option A, a close written by hand
+through the dispose's own close function is refused, and closes through other
+C functions (`freopen`, a renamed wrapper) and pointers shared between objects
+stay a C contract. Under option B, all of it is. Name `freopen` first.
+
+Fixed-arity declarations of variadic C functions (`printf(fmt, x)`) are a
+fourth, whatever Q11 decides for `syscall`.
+
+The rest of the handle rules are checked. The thing to push back on there is
+their reach: a handle cannot leave the function that opens it. If a motivating
 program needs it to (a pool or a cache), it needs ownership transfer, which is
 a design of its own, not a widening of §4d.
