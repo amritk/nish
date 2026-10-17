@@ -137,7 +137,8 @@ export const emitParallelRegion = (
   // A region whose elements cross ends its context with the list its chunks
   // push their transfer blocks on (`nish_cross_keep`), which no chunk loop
   // reads.
-  const crosses = regionCrosses(emitter, caller)
+  const keepSize = regionKeepSize(emitter, caller)
+  const crosses = keepSize >= 0
   const ctxType = crosses ? `{ ${fieldTypes.join(", ")}, i8* }` : `{ ${fieldTypes.join(", ")} }`
   const fn = emitter.fn
   const slot = fn.emitAlloca("par.ctx", ctxType, emitter.opts.optimizeAttributes ? 8 : 0)
@@ -192,9 +193,22 @@ export const emitParallelRegion = (
   if (crosses) {
     // Every chunk left its elements in malloc'd blocks (`chunkTrampoline`);
     // the blocks become chunks of this thread's arena here, and the elements
-    // stay where they are.
+    // stay where they are, or, when they are few, the elements are copied
+    // into the arena and repointed in the array the region wrote, which is
+    // the argument before the range in both chunk loops.
     const blocks = fn.emitValue(`load i8*, i8** ${list}`)
-    fn.emit(`call void ${emitter.useRuntime("nish_cross_adopt")}(i8* ${blocks})`)
+    const dstAt = range - 3
+    if (dstAt < 0 || dstAt >= types.length || dstAt >= values.length) {
+      process.exit(
+        internalErrorFor(`emitter: \`${chunk.name}\` writes no array before its range`, emitter.opts.json)
+      )
+    }
+    const dstType = types[dstAt]
+    const dst = values[dstAt]
+    const dstRaw = dstType === "i8*" ? dst : fn.emitValue(`bitcast ${dstType} ${dst} to i8*`)
+    fn.emit(
+      `call void ${emitter.useRuntime("nish_cross_adopt")}(i8* ${blocks}, i8* ${dstRaw}, i64 ${keepSize})`
+    )
   }
   fn.emit(`br label %${doneBlock.label}`)
   fn.placeBlock(doneBlock)
@@ -204,17 +218,18 @@ export const emitParallelRegion = (
 }
 
 /**
- * Whether a region's elements cross by copy: a map's or a `parallelFrom`'s
- * whose element is a string or an array of scalars (`crossingSize`). A
- * reduce's partials are scalars (`resultMessage`), so a reduce never crosses.
+ * The `esize` of a region's elements when they cross by copy: a map's or a
+ * `parallelFrom`'s whose element is a string or an array of scalars
+ * (`crossingSize`); -1 when they do not. A reduce's partials are scalars
+ * (`resultMessage`), so a reduce never crosses.
  */
-const regionCrosses = (emitter: Emitter, caller: FunctionSig): boolean => {
+const regionKeepSize = (emitter: Emitter, caller: FunctionSig): i32 => {
   const role = parallelRoleOf(caller)
   const instance = caller.instance
   if ((role !== PAR_MAP && role !== PAR_FROM) || instance === null || instance.typeArgs.length === 0) {
-    return false
+    return -1
   }
-  return crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1]) >= 0
+  return crossingSize(emitter, instance.typeArgs[instance.typeArgs.length - 1])
 }
 
 /**

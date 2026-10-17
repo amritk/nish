@@ -495,10 +495,13 @@ the same shape as WP15 §2a's `NL2290`/`NL2291` interior-pointer rule. Hence:
   reused (`nish_cross_out`); the parent, after the join, copies each block
   into its own arena and frees it, or, for a block of 64 KB or more, links the
   block into its arena as a chunk (`nish_cross_in`). A map's chunk packs its
-  elements into 64 KB transfer blocks as each one answers (`nish_cross_keep`,
-  between `nish_cross_begin` and `nish_cross_end`), and the parent links those
-  blocks whole after the join (`nish_cross_adopt`), so copying a region's
-  answers in costs one link per block rather than a copy per element. An
+  elements into transfer blocks of 4 KB doubling to 64 KB as each one answers
+  (`nish_cross_keep`, between `nish_cross_begin` and `nish_cross_end`), and
+  the parent links those blocks whole after the join when they hold 64 KB or
+  more (`nish_cross_adopt`), so copying a large region's answers in costs one
+  link per block rather than a copy per element; a region that kept less is
+  copied in and its blocks freed, since each adopted block leaves the
+  parent's current chunk behind. An
   adopted block is freed exactly when a copy would have been: with the arena
   release that rewinds past it. A value the worker did not
   allocate since its mark — a literal, a string it was handed — is passed

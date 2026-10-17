@@ -660,8 +660,11 @@ int32_t nish_channel_receive(int64_t *state, int64_t *out);
  * transfer state, a `{ void *, void *, uint64_t, void * }` the caller holds,
  * whose filled blocks go on `*list`, and `nish_cross_end(state)` pops it; with
  * no list (a map's sequential path), or none pushed, keep copies `v` out and
- * back in below `mark`. `nish_cross_adopt(list)` makes the blocks on a list the newest chunks
- * of the calling thread's arena, once every chunk is done.
+ * back in below `mark`. `nish_cross_adopt(list, dst, esize)` runs once every
+ * chunk is done, with `dst` the array the region wrote: 64 KB or more of
+ * blocks on a list become the newest chunks of the calling thread's arena,
+ * and less is copied into it, each element of `dst` in a block moved, and the
+ * blocks freed.
  * `nish_cross_in(p, esize)` runs on the thread that takes the value: a tagged
  * `p` of 64 KB or more that does not fit the arena's current chunk becomes a
  * chunk of that arena; a smaller one is copied in and its block freed. Either
@@ -681,7 +684,7 @@ void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark);
 void *nish_cross_in(void *p, uint64_t esize);
 void nish_cross_begin(void *state, void **list);
 void nish_cross_end(void *state);
-void nish_cross_adopt(void *list);
+void nish_cross_adopt(void *list, void *dst, uint64_t esize);
 void *nish_guard_keep(void *old, const void *s);
 
 #ifdef __cplusplus

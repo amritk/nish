@@ -25,7 +25,8 @@
  * becomes a chunk of that arena, so every block is either freed by the one
  * `cross_in` its value meets or freed with the arena that adopted it. A map's
  * elements do not go one block each: a chunk packs them into blocks of its
- * own (`nish_cross_keep`), which the caller adopts whole. Arena blocks,
+ * own (`nish_cross_keep`), which the caller adopts whole, or copies in and
+ * frees when they hold little (`nish_cross_adopt`). Arena blocks,
  * literals and the copies here are all 8-aligned, which is what keeps the low
  * bit free for the tag.
  *
@@ -161,15 +162,22 @@ void nish_cross_begin(void *state, void **list) {
   nish_xfer_top = list ? x : 0;
 }
 
-void nish_cross_end(void *state) { nish_xfer_top = ((nish_xfer *)state)->prev; }
+/* The block being filled records how much of it is, as its `cap`, so the
+ * join reads what each chunk kept and an adopted block is full where it ends. */
+void nish_cross_end(void *state) {
+  nish_xfer *x = (nish_xfer *)state;
+  if (x->block) x->block->cap = x->off;
+  nish_xfer_top = x->prev;
+}
 
 /* A map's or a `parallelFrom`'s element, kept as its chunk loop rewinds the
  * arena to `mark`, the bump position before the body was called: everything
  * else the body bumped is dead once it has answered, so a chunk holds one
  * element's temporaries at a time rather than all of its elements'. A value
  * made since `mark` is copied, in a chunk of a divided region, to the end of
- * the chunk's transfer block -- a new one, of 64 KB or the value's size,
- * pushed on the region's list when it does not fit -- and is answered there;
+ * the chunk's transfer block -- a new one, pushed on the region's list when it
+ * does not fit, of 4 KB doubling to 64 KB or of the value's size, so what a
+ * chunk leaves unused is bounded by what it keeps -- and is answered there;
  * the caller adopts the blocks at the join (`nish_cross_adopt`). On a map's
  * sequential path, where no state is pushed, it goes out to a block of its own
  * and back in below `mark`. One made before `mark` is answered as it is. */
@@ -181,7 +189,8 @@ void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark) {
     } else {
       uint64_t n = nish_cross_size(v, esize);
       if (!x->block || x->block->cap - x->off < n) {
-        x->block = nish_cross_chunk(n > 65536 ? n : 65536);
+        uint64_t want = x->block && x->block->cap < 32768 ? x->block->cap * 2 : x->block ? 65536 : 4096;
+        x->block = nish_cross_chunk(n > want ? n : want);
         x->block->next = __atomic_exchange_n((nish_xchunk **)x->list, x->block, __ATOMIC_RELAXED);
         x->off = 0;
       }
@@ -215,14 +224,41 @@ void *nish_cross_in(void *p, uint64_t esize) {
   return r;
 }
 
-/* Once every chunk is done, on the thread that called the region: the blocks
- * the chunks filled become the newest chunks of its arena (`nish_cross_link`),
- * so the elements in them stay where they are, and the cost is one link per
- * block rather than a copy per element. */
-void nish_cross_adopt(void *list) {
-  for (nish_xchunk *c = (nish_xchunk *)list, *next; c; c = next) {
+/* Once every chunk is done, on the thread that called the region, with `dst`
+ * the array the region wrote. When the blocks the chunks filled hold 64 KB or
+ * more, they become the newest chunks of its arena (`nish_cross_link`), so
+ * the elements in them stay where they are, and the cost is one link per
+ * block rather than a copy per element. Less is copied, element by element,
+ * into the arena and the blocks freed, as `nish_cross_in` copies a small
+ * value: an adopted block leaves the arena's current chunk behind, and a
+ * region run in a loop would leave one per run. */
+void nish_cross_adopt(void *list, void *dst, uint64_t esize) {
+  nish_xchunk *first = (nish_xchunk *)list, *c, *next;
+  uint64_t kept = 0;
+  for (c = first; c; c = c->next) kept += c->cap;
+  if (kept >= 65536) {
+    for (c = first; c; c = next) {
+      next = c->next;
+      nish_cross_link(c);
+    }
+    return;
+  }
+  if (!first) return;
+  nish_array *a = (nish_array *)dst;
+  void **e = (void **)a->data;
+  for (uint64_t i = 0; i < a->len; i++) {
+    for (c = first; c; c = c->next) {
+      if ((uintptr_t)e[i] - (uintptr_t)(c + 1) < c->cap) {
+        char *r = (char *)nish_alloc_struct(nish_cross_size(e[i], esize));
+        nish_cross_put(r, e[i], esize);
+        e[i] = r;
+        break;
+      }
+    }
+  }
+  for (c = first; c; c = next) {
     next = c->next;
-    nish_cross_link(c);
+    free(c);
   }
 }
 
@@ -241,7 +277,9 @@ void nish_cross_adopt(void *list) {
  * the `Mutex`, not one per store. The set is one for the process, behind one
  * lock of its own, since two `Mutex`es are locked by two tasks at once; it is
  * taken only by a store, so stores through two different guards wait on each
- * other for the moment it is held. */
+ * other for the moment it is held. The set holds each block's header, the
+ * pointer `malloc` answered, so a leak checker counts a block a dropped `Mutex`
+ * left as reachable rather than as possibly lost. */
 static struct {
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_t mu;
@@ -293,8 +331,8 @@ void *nish_guard_keep(void *old, const void *s) {
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_lock(&nish_kept.mu);
 #endif
-  int mine = old && nish_kept_take((uintptr_t)old);
-  nish_kept_put((uintptr_t)b);
+  int mine = old && nish_kept_take((uintptr_t)((nish_xchunk *)old - 1));
+  nish_kept_put((uintptr_t)((nish_xchunk *)b - 1));
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_unlock(&nish_kept.mu);
 #endif

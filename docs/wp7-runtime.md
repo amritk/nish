@@ -297,15 +297,17 @@ that let a `string` or a scalar array cross from one arena to another: out of a
 task's arena when it returns, or a parallel chunk's when it finishes, and into
 the arena of the thread that takes the answer; every string a
 `Channel<string>` sends; and the copies a `Mutex` owns of the strings stored
-through its guards. A map's chunk packs each element it answers into a 64 KB
-transfer block of its own (`nish_cross_keep`) and rewinds its arena to the
-element's mark, and the caller links the blocks into its arena as chunks after
-the join (`nish_cross_adopt`): copying a region's answers in costs one link per
-block, and a single answer of 64 KB or more is linked rather than copied by
+through its guards. A map's chunk packs each element it answers into a
+transfer block of its own, 4 KB doubling to 64 KB (`nish_cross_keep`), and
+rewinds its arena to the element's mark, and after the join the caller links
+the blocks into its arena as chunks when they hold 64 KB or more, or copies
+the elements in and frees them when they hold less (`nish_cross_adopt`):
+copying a large region's answers in costs one link per block, and a single answer of 64 KB or more is linked rather than copied by
 `nish_cross_in`. An adopted block is freed by the release that would have freed
 the copy. Adoption measured 1,196 bytes of `.text` (1,277 in the threads build,
 where the transfer state is thread-local), and retired the sorted span table
-and the `_range` pair a copy-out per slot needed.
+and the `_range` pair a copy-out per slot needed; the copy-back for a small
+join and the doubling block sizes took it to 1,433 (1,514).
 
 Under glibc, `nish_pool_ready` raises `M_MMAP_THRESHOLD` to 32 MB and
 `M_TRIM_THRESHOLD` to 64 MB, so a 1 MB temporary a task or an element builds,

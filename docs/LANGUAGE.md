@@ -2958,10 +2958,14 @@ from the whole-program facts, and each rule is reported there:
   its thread exits. A string or a scalar array crosses by copy-at-join, and
   the caller then adopts it: as the chunk loop rewinds its arena after each
   element, it moves the answer to the end of the chunk's transfer block, a
-  `malloc`'d block of 64 KB or more (`nish_cross_keep`), and once every chunk
-  has finished the caller links the blocks into its own arena's chunk list
-  (`nish_cross_adopt`), so the answers stay where they are and the join costs
-  one link per block rather than a copy per element. The blocks are then the
+  `malloc`'d block of 4 KB doubling to 64 KB, or of the answer's size when
+  that is larger (`nish_cross_keep`). Once every chunk has finished, blocks
+  holding 64 KB or more in all are linked into the caller's arena's chunk
+  list (`nish_cross_adopt`), so the answers stay where they are and the join
+  costs one link per block rather than a copy per element; less than that is
+  copied into the caller's arena and the blocks freed, so a small map run in
+  a loop does not leave a chunk behind on every run
+  (`tests/link/par_map_join_small`). Adopted blocks are then the
   caller's arena memory like any other, given back when the caller's scope
   releases what the result was made in, exactly when a copied value would
   have been (`tests/link/thread_adopt_lifetime`); a result the body did not

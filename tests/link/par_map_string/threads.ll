@@ -33,7 +33,7 @@ declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* nou
 declare i8* @nish_cross_keep(i8* noundef, i64 noundef, i64 noundef) #1
 declare void @nish_cross_begin(i8* noundef nonnull, i8** noundef) #1
 declare void @nish_cross_end(i8* noundef nonnull) #1
-declare void @nish_cross_adopt(i8* noundef) #1
+declare void @nish_cross_adopt(i8* noundef, i8* noundef nonnull, i64 noundef) #1
 declare double @llvm.floor.f64(double) #0
 declare double @llvm.ceil.f64(double) #0
 declare i32 @llvm.fptosi.sat.i32.f64(double) #0
@@ -442,12 +442,13 @@ par.region:
   %19 = sext i32 %13 to i64
   call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelFrom$str$fn.16.nish_main$arrow3$chunk, i8* %18, i64 %19, i64 299593)
   %20 = load i8*, i8** %17
-  call void @nish_cross_adopt(i8* %20)
+  %21 = bitcast %struct.nish_array* %9 to i8*
+  call void @nish_cross_adopt(i8* %20, i8* %21, i64 0)
   br label %par.done
 
 par.done:
-  %21 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
-  ret %struct.nish_array* %21
+  %22 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
+  ret %struct.nish_array* %22
 }
 
 define noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @nish.parallelMap$i32$arr.i32$fn.16.nish_main$arrow4(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %src) #1 {
@@ -551,12 +552,13 @@ par.region:
   %19 = sext i32 %13 to i64
   call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelFrom$arr.bool$fn.16.nish_main$arrow5$chunk, i8* %18, i64 %19, i64 49932)
   %20 = load i8*, i8** %17
-  call void @nish_cross_adopt(i8* %20)
+  %21 = bitcast %struct.nish_array* %9 to i8*
+  call void @nish_cross_adopt(i8* %20, i8* %21, i64 1)
   br label %par.done
 
 par.done:
-  %21 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
-  ret %struct.nish_array* %21
+  %22 = load %struct.nish_array*, %struct.nish_array** %dst.addr, align 8
+  ret %struct.nish_array* %22
 }
 
 define internal void @nish.parallelMapInto$i32$str$fn.16.nish_main$arrow6$chunk(i64 noundef %lo, i64 noundef %hi, i8* noundef %ctx) #1 {
@@ -626,7 +628,8 @@ par.region:
   %19 = sext i32 %12 to i64
   call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$str$fn.16.nish_main$arrow6$chunk, i8* %18, i64 %19, i64 59918)
   %20 = load i8*, i8** %17
-  call void @nish_cross_adopt(i8* %20)
+  %21 = bitcast %struct.nish_array* %dst to i8*
+  call void @nish_cross_adopt(i8* %20, i8* %21, i64 0)
   br label %par.done
 
 par.done:
@@ -872,7 +875,8 @@ par.region:
   %20 = sext i32 %12 to i64
   call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$str$fn.16.nish_main$arrow0$chunk, i8* %19, i64 %20, i64 53773)
   %21 = load i8*, i8** %18
-  call void @nish_cross_adopt(i8* %21)
+  %22 = bitcast %struct.nish_array* %dst to i8*
+  call void @nish_cross_adopt(i8* %21, i8* %22, i64 0)
   br label %par.done
 
 par.done:
@@ -950,7 +954,8 @@ par.region:
   %20 = sext i32 %12 to i64
   call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$str$fn.16.nish_main$arrow1$chunk, i8* %19, i64 %20, i64 233016)
   %21 = load i8*, i8** %18
-  call void @nish_cross_adopt(i8* %21)
+  %22 = bitcast %struct.nish_array* %dst to i8*
+  call void @nish_cross_adopt(i8* %21, i8* %22, i64 0)
   br label %par.done
 
 par.done:
@@ -1024,7 +1029,8 @@ par.region:
   %19 = sext i32 %12 to i64
   call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$str$fn.16.nish_main$arrow2$chunk, i8* %18, i64 %19, i64 24105)
   %20 = load i8*, i8** %17
-  call void @nish_cross_adopt(i8* %20)
+  %21 = bitcast %struct.nish_array* %dst to i8*
+  call void @nish_cross_adopt(i8* %20, i8* %21, i64 0)
   br label %par.done
 
 par.done:
@@ -1166,7 +1172,8 @@ par.region:
   %19 = sext i32 %12 to i64
   call void @nish_parallel_range(void (i64, i64, i8*)* @nish.parallelMapInto$i32$arr.i32$fn.16.nish_main$arrow4$chunk, i8* %18, i64 %19, i64 53773)
   %20 = load i8*, i8** %17
-  call void @nish_cross_adopt(i8* %20)
+  %21 = bitcast %struct.nish_array* %dst to i8*
+  call void @nish_cross_adopt(i8* %20, i8* %21, i64 4)
   br label %par.done
 
 par.done:

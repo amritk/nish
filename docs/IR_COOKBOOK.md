@@ -2253,8 +2253,10 @@ call void @nish.storeResult$str(%struct.nish_array* %2, i32 %4, i8* %7)
 A large answer, 64 KB or more, is not copied in: `nish_cross_in` links its
 block into the caller's arena as a chunk. A map's chunk packs each element it
 answers into a transfer block of its own with `nish_cross_keep`, between
-`nish_cross_begin` and `nish_cross_end`, and the caller links those blocks
-after the join with `nish_cross_adopt`; a channel copies a string
+`nish_cross_begin` and `nish_cross_end`, and after the join
+`nish_cross_adopt` links those blocks into the caller's arena when they hold
+64 KB or more, or copies their elements in and frees them when they hold
+less; a channel copies a string
 out at `send` and in at the receive; a guard stores a string with
 `nish_guard_keep`, a copy its `Mutex` owns. Nothing is copied deeply: a
 `string[]` element, a nested array, a class, `Map` and `Set` stay refused. The
@@ -20743,7 +20745,7 @@ declare i8* @nish_cross_in(i8* noundef, i64 noundef) #3
 declare i8* @nish_cross_keep(i8* noundef, i64 noundef, i64 noundef) #3
 declare void @nish_cross_begin(i8* noundef nonnull, i8** noundef) #3
 declare void @nish_cross_end(i8* noundef nonnull) #3
-declare void @nish_cross_adopt(i8* noundef) #3
+declare void @nish_cross_adopt(i8* noundef, i8* noundef nonnull, i64 noundef) #3
 declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
 declare i32 @nish_aes_hw() #8

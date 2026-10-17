@@ -4135,6 +4135,7 @@ const INDEX_OF_ANY_REFUSALS = [
  */
 const LINK_READ_LATER = [
   "par_dst_short",
+  "par_map_join_small",
   "par_map_release",
   "range_export",
   "range_export_dts",
@@ -4638,6 +4639,36 @@ if (!only || "thread_task_release".includes(only)) {
     kb > 0 && kb < 64 * 1024,
     run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
   )
+}
+
+// A region whose chunks keep little has it copied in at the join rather than
+// adopted (`nish_cross_adopt`). `par_map_join_small` runs two 16-element maps
+// 3,000 times in a loop, each element a short string or a two-element array;
+// it peaks at 5 MB on one thread and on four, and with every chunk's 64 KB
+// block adopted at 53 MB and 125 MB. The bound is 16 MB.
+if (!only || "par_map_join_small".includes(only)) {
+  const fixture = linkTests.includes("par_map_join_small")
+  const dir = path.join(buildDir, "link", "par_map_join_small")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "4"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/par_map_join_small: 6,000 small maps on ${threads} thread(s) peak under 16 MB`,
+      kb > 0 && kb < 16 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
 }
 
 // A map's chunk loop keeps each element its body answers and gives back the

@@ -233,8 +233,16 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
  * own chunk list (`nish_cross_adopt`), as `nish_cross_in` now links a task's answer of
  * 64 KB or more. That retired the `_range` pair and the sorted span table, and paid for
  * the transfer list and the adoption.
+ *
+ * The copy-back join measured **1,433 bytes** on 2026-10-17 with clang 18.1.3 on
+ * linux-x64, 237 more, and the ceiling moves to 1,536. Every chunk took a 64 KB block
+ * however little it kept, and adopting it left the caller's current chunk behind, so a
+ * small map run in a loop grew without bound (`link/par_map_join_small`). Blocks now
+ * start at 4 KB and double to 64 KB, each records what it used when its chunk ends, and
+ * a join that kept under 64 KB in all copies its elements into the caller's arena and
+ * frees the blocks rather than adopting them.
  */
-const RUNTIME_CROSS_TEXT_BUDGET = 1280
+const RUNTIME_CROSS_TEXT_BUDGET = 1536
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,235 bytes** on
  * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
@@ -245,8 +253,11 @@ const RUNTIME_CROSS_TEXT_BUDGET = 1280
  * on linux-x64, 42 more, inside the same ceiling: the row above's change, with the
  * chunk's transfer state thread-local here, which takes 16 bytes more to reach than
  * the row above's plain static.
+ *
+ * The copy-back join measured **1,514 bytes** on 2026-10-17 with clang 18.1.3 on
+ * linux-x64, 237 more, and the ceiling moves to 1,536: the row above's change.
  */
-const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1280
+const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1536
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor

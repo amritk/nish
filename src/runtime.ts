@@ -921,7 +921,8 @@ export class RuntimeTable {
     // `nish_cross_in`, which copies or adopts the block between; a region's
     // chunks pack theirs into transfer blocks as they keep them, under the
     // state `nish_cross_begin` pushes and `nish_cross_end` pops, and
-    // `nish_cross_adopt` links the blocks into the caller's arena. Each
+    // `nish_cross_adopt` links the blocks into the caller's arena, or copies
+    // the few elements they hold into it and repoints the region's array. Each
     // allocates, or frees, or moves the arena, or the thread's transfer state,
     // so LLVM must not move them; but only the compiler calls them, on
     // the value a task, a chunk, a channel or a guard is already moving, so none
@@ -985,7 +986,7 @@ export class RuntimeTable {
       WRITES_NOTHING,
       new RuntimeFunction(
         "nish_cross_adopt",
-        "declare void @nish_cross_adopt(i8* noundef)",
+        "declare void @nish_cross_adopt(i8* noundef, i8* noundef nonnull, i64 noundef)",
         attrs1("nounwind"),
         EFFECT_WRITE
       )
