@@ -74882,44 +74882,44 @@ function http1WriteResponseHead(out: u8[], at: i32, status: i32, reason: string,
   pointer values: size=0 writesThrough=true captured=false
   pointer date: size=0 writesThrough=false captured=false passedTo=nish.http1BytesAreFieldText#0 nish.http1PutBytes#2
   stackSites=0 stackLocals=0
-  callee 1437:40 http1IsFieldText -> @nish.http1IsFieldText
-  callee 1437:69 http1IsFieldText -> @nish.http1IsFieldText
-  callee 1440:8 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
-  local 1446:9 count: i32 (const)
-  local 1453:7 need: i64 (let)
-  local 1454:7 sendDate: boolean (let)
-  local 1455:12 i: i32 (let)
-  local 1456:11 name: u8[] (const)
-  local 1457:11 value: u8[] (const)
-  callee 1458:10 http1BytesAreToken -> @nish.http1BytesAreToken
-  callee 1458:39 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
-  callee 1461:9 http1BytesAre -> @nish.http1BytesAre
-  callee 1461:50 http1BytesAre -> @nish.http1BytesAre
-  callee 1464:41 http1BytesAre -> @nish.http1BytesAre
-  callee 1467:9 http1BytesAre -> @nish.http1BytesAre
-  callee 1477:30 http1DecimalDigits -> @nish.http1DecimalDigits
-  local 1487:7 end: i32 (let)
-  callee 1487:18 http1PutText -> @nish.http1PutText
-  callee 1488:9 http1PutDecimal -> @nish.http1PutDecimal
-  callee 1489:9 http1PutText -> @nish.http1PutText
+  callee 1438:40 http1IsFieldText -> @nish.http1IsFieldText
+  callee 1438:69 http1IsFieldText -> @nish.http1IsFieldText
+  callee 1441:25 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
+  local 1447:9 count: i32 (const)
+  local 1454:7 need: i64 (let)
+  local 1455:7 sendDate: boolean (let)
+  local 1456:12 i: i32 (let)
+  local 1457:11 name: u8[] (const)
+  local 1458:11 value: u8[] (const)
+  callee 1459:10 http1BytesAreToken -> @nish.http1BytesAreToken
+  callee 1459:39 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
+  callee 1462:9 http1BytesAre -> @nish.http1BytesAre
+  callee 1462:50 http1BytesAre -> @nish.http1BytesAre
+  callee 1465:41 http1BytesAre -> @nish.http1BytesAre
+  callee 1468:9 http1BytesAre -> @nish.http1BytesAre
+  callee 1478:30 http1DecimalDigits -> @nish.http1DecimalDigits
+  local 1488:7 end: i32 (let)
+  callee 1488:18 http1PutText -> @nish.http1PutText
+  callee 1489:9 http1PutDecimal -> @nish.http1PutDecimal
   callee 1490:9 http1PutText -> @nish.http1PutText
   callee 1491:9 http1PutText -> @nish.http1PutText
-  local 1492:12 i: i32 (let)
-  callee 1493:11 http1PutBytes -> @nish.http1PutBytes
-  callee 1494:11 http1PutText -> @nish.http1PutText
-  callee 1495:11 http1PutBytes -> @nish.http1PutBytes
-  callee 1496:11 http1PutText -> @nish.http1PutText
-  callee 1499:11 http1PutText -> @nish.http1PutText
-  callee 1500:11 http1PutBytes -> @nish.http1PutBytes
-  callee 1501:11 http1PutText -> @nish.http1PutText
-  callee 1504:11 http1PutText -> @nish.http1PutText
-  callee 1505:11 http1PutDecimal -> @nish.http1PutDecimal
-  callee 1506:11 http1PutText -> @nish.http1PutText
-  callee 1508:11 http1PutText -> @nish.http1PutText
-  callee 1511:11 http1PutText -> @nish.http1PutText
+  callee 1492:9 http1PutText -> @nish.http1PutText
+  local 1493:12 i: i32 (let)
+  callee 1494:11 http1PutBytes -> @nish.http1PutBytes
+  callee 1495:11 http1PutText -> @nish.http1PutText
+  callee 1496:11 http1PutBytes -> @nish.http1PutBytes
+  callee 1497:11 http1PutText -> @nish.http1PutText
+  callee 1500:11 http1PutText -> @nish.http1PutText
+  callee 1501:11 http1PutBytes -> @nish.http1PutBytes
+  callee 1502:11 http1PutText -> @nish.http1PutText
+  callee 1505:11 http1PutText -> @nish.http1PutText
+  callee 1506:11 http1PutDecimal -> @nish.http1PutDecimal
+  callee 1507:11 http1PutText -> @nish.http1PutText
+  callee 1509:11 http1PutText -> @nish.http1PutText
   callee 1512:11 http1PutText -> @nish.http1PutText
   callee 1513:11 http1PutText -> @nish.http1PutText
-  callee 1515:10 http1PutText -> @nish.http1PutText
+  callee 1514:11 http1PutText -> @nish.http1PutText
+  callee 1516:10 http1PutText -> @nish.http1PutText
 module examples/relay/json.ts
 import h3CheckWindow from "nish/net/http3-frame" -> function @nish.h3CheckWindow
 import websocketIsUtf8 from "nish/net/websocket" -> function @nish.websocketIsUtf8
@@ -96391,44 +96391,44 @@ function http1WriteResponseHead(out: u8[], at: i32, status: i32, reason: string,
   pointer values: size=0 writesThrough=true captured=false
   pointer date: size=0 writesThrough=false captured=false passedTo=nish.http1BytesAreFieldText#0 nish.http1PutBytes#2
   stackSites=0 stackLocals=0
-  callee 1437:40 http1IsFieldText -> @nish.http1IsFieldText
-  callee 1437:69 http1IsFieldText -> @nish.http1IsFieldText
-  callee 1440:8 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
-  local 1446:9 count: i32 (const)
-  local 1453:7 need: i64 (let)
-  local 1454:7 sendDate: boolean (let)
-  local 1455:12 i: i32 (let)
-  local 1456:11 name: u8[] (const)
-  local 1457:11 value: u8[] (const)
-  callee 1458:10 http1BytesAreToken -> @nish.http1BytesAreToken
-  callee 1458:39 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
-  callee 1461:9 http1BytesAre -> @nish.http1BytesAre
-  callee 1461:50 http1BytesAre -> @nish.http1BytesAre
-  callee 1464:41 http1BytesAre -> @nish.http1BytesAre
-  callee 1467:9 http1BytesAre -> @nish.http1BytesAre
-  callee 1477:30 http1DecimalDigits -> @nish.http1DecimalDigits
-  local 1487:7 end: i32 (let)
-  callee 1487:18 http1PutText -> @nish.http1PutText
-  callee 1488:9 http1PutDecimal -> @nish.http1PutDecimal
-  callee 1489:9 http1PutText -> @nish.http1PutText
+  callee 1438:40 http1IsFieldText -> @nish.http1IsFieldText
+  callee 1438:69 http1IsFieldText -> @nish.http1IsFieldText
+  callee 1441:25 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
+  local 1447:9 count: i32 (const)
+  local 1454:7 need: i64 (let)
+  local 1455:7 sendDate: boolean (let)
+  local 1456:12 i: i32 (let)
+  local 1457:11 name: u8[] (const)
+  local 1458:11 value: u8[] (const)
+  callee 1459:10 http1BytesAreToken -> @nish.http1BytesAreToken
+  callee 1459:39 http1BytesAreFieldText -> @nish.http1BytesAreFieldText
+  callee 1462:9 http1BytesAre -> @nish.http1BytesAre
+  callee 1462:50 http1BytesAre -> @nish.http1BytesAre
+  callee 1465:41 http1BytesAre -> @nish.http1BytesAre
+  callee 1468:9 http1BytesAre -> @nish.http1BytesAre
+  callee 1478:30 http1DecimalDigits -> @nish.http1DecimalDigits
+  local 1488:7 end: i32 (let)
+  callee 1488:18 http1PutText -> @nish.http1PutText
+  callee 1489:9 http1PutDecimal -> @nish.http1PutDecimal
   callee 1490:9 http1PutText -> @nish.http1PutText
   callee 1491:9 http1PutText -> @nish.http1PutText
-  local 1492:12 i: i32 (let)
-  callee 1493:11 http1PutBytes -> @nish.http1PutBytes
-  callee 1494:11 http1PutText -> @nish.http1PutText
-  callee 1495:11 http1PutBytes -> @nish.http1PutBytes
-  callee 1496:11 http1PutText -> @nish.http1PutText
-  callee 1499:11 http1PutText -> @nish.http1PutText
-  callee 1500:11 http1PutBytes -> @nish.http1PutBytes
-  callee 1501:11 http1PutText -> @nish.http1PutText
-  callee 1504:11 http1PutText -> @nish.http1PutText
-  callee 1505:11 http1PutDecimal -> @nish.http1PutDecimal
-  callee 1506:11 http1PutText -> @nish.http1PutText
-  callee 1508:11 http1PutText -> @nish.http1PutText
-  callee 1511:11 http1PutText -> @nish.http1PutText
+  callee 1492:9 http1PutText -> @nish.http1PutText
+  local 1493:12 i: i32 (let)
+  callee 1494:11 http1PutBytes -> @nish.http1PutBytes
+  callee 1495:11 http1PutText -> @nish.http1PutText
+  callee 1496:11 http1PutBytes -> @nish.http1PutBytes
+  callee 1497:11 http1PutText -> @nish.http1PutText
+  callee 1500:11 http1PutText -> @nish.http1PutText
+  callee 1501:11 http1PutBytes -> @nish.http1PutBytes
+  callee 1502:11 http1PutText -> @nish.http1PutText
+  callee 1505:11 http1PutText -> @nish.http1PutText
+  callee 1506:11 http1PutDecimal -> @nish.http1PutDecimal
+  callee 1507:11 http1PutText -> @nish.http1PutText
+  callee 1509:11 http1PutText -> @nish.http1PutText
   callee 1512:11 http1PutText -> @nish.http1PutText
   callee 1513:11 http1PutText -> @nish.http1PutText
-  callee 1515:10 http1PutText -> @nish.http1PutText
+  callee 1514:11 http1PutText -> @nish.http1PutText
+  callee 1516:10 http1PutText -> @nish.http1PutText
 module std/net/websocket.ts [package nish]
 import base64urlDecode from "nish/crypto/base64url" -> function @nish.base64urlDecode
 import base64urlEncode from "nish/crypto/base64url" -> function @nish.base64urlEncode

@@ -116,8 +116,9 @@ chunked response to HTTP/1.0 goes unframed and ends with the connection.
 at `249cbe9`, cited by function rather than by line). Every final response,
 an error included, carries a `Date` (RFC 9110 §6.6.1) and a 1xx carries none;
 a program's own `date` field, in any case, is sent instead of the server's, so
-a response never carries two. `http1WriteResponseHead` refuses a date that is
-not field text, so the date cannot split the head, and counts its 37 bytes
+a response never carries two. On a final status `http1WriteResponseHead`
+refuses a date that is not field text, so the date cannot split the head (a
+1xx never sends it, so there it is not read), and counts its 37 bytes
 before it writes, so `HTTP1_NO_ROOM` still leaves the buffer untouched. The
 largest head `fail` writes — 431's status line, the date, `Content-Length: 0`
 and `Connection: close` — is 123 bytes, inside the 256 kept for what the
