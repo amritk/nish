@@ -938,6 +938,22 @@ export class QuicRecovery {
     return quicRecoveryMax((wait + QUIC_RECOVERY_MICROS - 1) / QUIC_RECOVERY_MICROS, 1)
   }
 
+  /**
+   * The credit a paced flight waits for before it starts, in bytes: what the
+   * pacer earns in a millisecond, at least `least` and at most `most`. A
+   * pacer that earns by the microsecond would otherwise let a fast
+   * connection out a datagram at a time, one send each; one that earns
+   * slowly still lets a datagram go as soon as it has the credit for it.
+   */
+  pacerQuantum(least: i32, most: i32): i32 {
+    const rtt: i64 = quicRecoveryMax(this.pacerRtt, 1)
+    const milli: i64 = (this.pacerWindow() * 5 * QUIC_RECOVERY_MICROS) / (rtt * 4)
+    if (milli < toI64(least)) {
+      return least
+    }
+    return milli > toI64(most) ? most : toI32(milli)
+  }
+
   /** Charges the pacer for a datagram of `size` bytes sent at `now`. */
   onPaced(now: i64, size: i32): void {
     this.pacerRefill(now)

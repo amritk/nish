@@ -89,7 +89,7 @@ import {
   QuicFlight,
   QuicListener,
   QuicListenerAnswer,
-  quicListenerPaceTime,
+  quicListenerFlightTime,
   quicListenerTakeFlight,
 } from "nish/net/quic-listener"
 import { TlsP256Signer } from "nish/net/tls"
@@ -867,7 +867,7 @@ export class Http3Server {
     // The pacer answers a time, not a delay: the slot wakes at it when it
     // comes before the connection's own deadline.
     let due: i64 = quic.deadline()
-    const paced: i64 = quicListenerPaceTime(quic, now)
+    const paced: i64 = quicListenerFlightTime(quic, now)
     if (paced > now && (due < 0 || paced < due)) {
       due = paced
     }

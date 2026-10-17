@@ -79,7 +79,10 @@
  * cuts back into datagrams; each is written in place, so a flight allocates
  * nothing. The flight is paced as a whole: it is as long as the pacer's
  * credit, and charged to it datagram by datagram, so a burst is never more
- * than the initial window however the carrier sends it. On the receiving
+ * than the initial window however the carrier sends it. It starts only on a
+ * millisecond's earning, up to four datagrams, so a fast connection's pacer,
+ * which earns by the microsecond, does not let it out a datagram per send;
+ * `quicListenerFlightTime` says when. On the receiving
  * side, `quicListenerReceiveSegments` hands a connection the datagrams of
  * one GRO receive, segment by segment, in place.
  *
@@ -894,6 +897,24 @@ export const quicListenerTakePaced = (conn: QuicConnection, now: i64): u8[] | nu
 export const quicListenerPaceTime = (conn: QuicConnection, now: i64): i64 =>
   now + conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE)
 
+/** The most credit a paced flight waits for before it starts: four datagrams. */
+export const QUIC_LISTENER_FLIGHT_QUANTUM: i32 = 4800
+
+/**
+ * The credit `quicListenerTakeFlight` waits for before `conn` starts a
+ * flight: what its pacer earns in a millisecond, from one datagram up to
+ * `QUIC_LISTENER_FLIGHT_QUANTUM`.
+ */
+const quicListenerQuantum = (conn: QuicConnection): i32 =>
+  conn.recovery.pacerQuantum(QUIC_CONN_DATAGRAM_SIZE, QUIC_LISTENER_FLIGHT_QUANTUM)
+
+/**
+ * When `quicListenerTakeFlight` next lets `conn` start a flight, in the
+ * caller's milliseconds: `now` when it may already.
+ */
+export const quicListenerFlightTime = (conn: QuicConnection, now: i64): i64 =>
+  now + conn.recovery.pacerDelay(now, quicListenerQuantum(conn))
+
 /** The most datagrams one GSO send carries: Linux's `UDP_MAX_SEGMENTS`. */
 export const QUIC_LISTENER_FLIGHT_MAX: i32 = 64
 
@@ -909,8 +930,10 @@ export class QuicFlight {
  * Writes the next flight `conn` sends at `now` into `buf[at .. at + cap)`,
  * datagram after datagram, for one GSO send, and answers its length in
  * bytes (0 for none); `flight` says how many datagrams it holds and the
- * segment size. Each datagram goes only when the pacer has credit for a full
- * one (RFC 9002 §7.7) and is charged at its real size, as
+ * segment size. A flight starts only once the pacer has the credit
+ * `quicListenerFlightTime` waits for, a millisecond's earning of one to four
+ * datagrams; then each datagram goes only when the pacer has credit for a
+ * full one (RFC 9002 §7.7) and is charged at its real size, as
  * `quicListenerTakePaced` does, so the flight is the pacer's whole credit
  * and no more. It stops at the first datagram shorter than
  * `QUIC_CONN_DATAGRAM_SIZE`, which can only be the last of a segmented send,
@@ -928,6 +951,9 @@ export const quicListenerTakeFlight = (
   flight.count = 0
   flight.segment = 0
   let length: i32 = 0
+  if (conn.recovery.pacerDelay(now, quicListenerQuantum(conn)) > 0) {
+    return length
+  }
   while (
     flight.count < QUIC_LISTENER_FLIGHT_MAX &&
     length + QUIC_CONN_DATAGRAM_SIZE <= cap &&

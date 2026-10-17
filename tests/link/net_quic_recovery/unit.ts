@@ -314,6 +314,14 @@ const rcFinePacerChecks = (t: Suite): void => {
   coarse.onPacketSent(APP, n64(0), FULL, n64(5));
   coarse.onAck(APP, rcRange(n64(0), n64(0)), n32(1), n64(0), n64(5));
   t.eqI64("with no micros a round trip inside one millisecond counts as kGranularity, as it always did", coarse.pacerRtt, n64(1000));
+
+  // The credit a paced flight starts on: a millisecond's earning, from one datagram to four.
+  const q = new QuicRecovery();
+  t.eqI32("before an RTT sample a flight starts on one datagram: 12000 × 5/4 per 333 ms is 45 bytes a millisecond", q.pacerQuantum(FULL, n32(4800)), FULL);
+  q.pacerRtt = n64(5000);
+  t.eqI32("at a 5 ms RTT on a millisecond's earning: 12000 × 5/4 / 5", q.pacerQuantum(FULL, n32(4800)), n32(3000));
+  q.pacerRtt = n64(200);
+  t.eqI32("and under a millisecond on at most four datagrams", q.pacerQuantum(FULL, n32(4800)), n32(4800));
 };
 
 /** Everything `nish/net/quic-recovery` refuses, and its full ring. */
