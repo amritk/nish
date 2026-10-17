@@ -13,7 +13,7 @@ import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
-import { QUIC_LISTENER_ENTROPY_SIZE, quicListenerFlightTime } from "nish/net/quic-listener";
+import { QUIC_LISTENER_ENTROPY_SIZE, quicListenerFlightTime, quicListenerPaceTime } from "nish/net/quic-listener";
 import { QuicServerConfig } from "nish/net/quic";
 import { H3_FRAME_DATA, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
 import { H3_ALPN, H3_END, H3_ERROR, H3_NEED_MORE, Http3Connection } from "nish/net/http3";
@@ -194,7 +194,32 @@ const quiet = (t: Suite): void => {
   server.touch(slot);
   server.flush(c.now);
   t.eqI64("the server hands its clock in microseconds to the connection's pacer", quic.recovery.pacerTime, micros);
+  // `serve` hands it over too, before the datagram reaches the connection: an empty one, and no flush after.
+  quic.recovery.micros = n64(-1);
+  const key: Secret<u8[]> = secret(leafPrivate());
+  const empty: u8[] = [];
+  server.serve(slot, empty, n32(0), n32(0), c.now, key);
+  wipe(key);
+  t.eqI64("and serve hands it to the pacer before any flush", quic.recovery.micros, micros);
   server.clock(n64(-1));
+  // Credit for one datagram but not for the flight quantum, on an RTT of
+  // 2 ms, where a millisecond earns more than a datagram: the pacer would let
+  // a datagram go now, but a flight starts only once the quantum is earned.
+  const budget: i64 = quic.recovery.pacerBudget;
+  const time: i64 = quic.recovery.pacerTime;
+  const rtt: i64 = quic.recovery.pacerRtt;
+  quic.recovery.pacerRtt = n64(2000);
+  quic.recovery.micros = n64(-1);
+  quic.recovery.pacerBudget = n64(1200);
+  quic.recovery.pacerTime = c.now * n64(1000);
+  const flightAt: i64 = quicListenerFlightTime(quic, c.now);
+  t.ok("with a datagram's credit short of the quantum, the flight time is later than the pace time", quic.recovery.pacerQuantum(n32(1200), n32(4800)) > n32(1200) && flightAt > quicListenerPaceTime(quic, c.now));
+  server.touch(slot);
+  server.flush(c.now);
+  t.eqI64("and the slot is filed at the flight time", server.wheel.dueAt[slot], flightAt);
+  quic.recovery.pacerRtt = rtt;
+  quic.recovery.pacerBudget = budget;
+  quic.recovery.pacerTime = time;
   const none: string[] = [];
   const start: i64 = c.now;
   p.send(n64(0), p.headers("GET", "/big/300000", none, none), true);

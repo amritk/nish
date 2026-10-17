@@ -39,6 +39,9 @@ PASS  the pacer holds the slot back, short of its idle deadline
 PASS  the slot is filed for now + the pacer's delay
 PASS  and the server's timeout is that delay
 PASS  the server hands its clock in microseconds to the connection's pacer
+PASS  and serve hands it to the pacer before any flush
+PASS  with a datagram's credit short of the quantum, the flight time is later than the pace time
+PASS  and the slot is filed at the flight time
 PASS  300,000 bytes arrive whole with the client quiet between its acknowledgements
 PASS  in under a second of the server's clock, not at the idle timeout
 PASS  a short header too short for a reset, a long one short of a full Initial, a Handshake packet no slot owns: dropped, keeping nothing
@@ -61,4 +64,4 @@ PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
 PASS  though the pinned clock moved a second on for each, the date formatted once a second
 PASS  and from the second on, each handshake through the listener into the slot keeps 0 bytes: from the first Initial to the close, nothing
-http3 server: 63 passed, 0 failed, 0 skipped
+http3 server: 66 passed, 0 failed, 0 skipped

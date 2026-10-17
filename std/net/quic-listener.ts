@@ -71,6 +71,10 @@
  *     while (out !== null) { … send it … ; out = quicListenerTakePaced(conn, now); }
  *     … and wake at the earlier of conn.deadline() and quicListenerPaceTime(conn, now)
  *
+ * A carrier that sends whole flights with `quicListenerTakeFlight`, below,
+ * wakes at `quicListenerFlightTime` instead, as `Http3Server` does: a flight
+ * waits for more credit than one datagram, so the pace time can come first.
+ *
  * **GSO and GRO** (`nish:net`'s `UDP_SEGMENT` and `UDP_GRO`). A carrier that
  * sends with segmentation offload takes a whole flight at once:
  * `quicListenerTakeFlight` writes as many datagrams as the pacer has credit

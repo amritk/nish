@@ -12,9 +12,10 @@ under load:
 | c96m10 (`-c96 -m10`) | 132k req/s | 174k req/s |
 
 This page records what reproduces on a second machine, the leads followed,
-and the mechanism that parks responses. It was measured before any change to
-`std/`. Every `file:line` anchor below is at commit `99b81d2`, which this
-branch leaves untouched under `std/`.
+and the mechanism that parks responses. Every section up to and including
+"Fix direction" describes `std/` as it was at commit `99b81d2`, before the
+fix, and its `file:line` anchors are at that commit; "After the fix"
+describes the change and its measurements.
 
 ## How it is measured
 
@@ -327,8 +328,9 @@ the initial window.
 
 Pacing on the finer clock alone cost throughput under load. On a fast path
 the pacer earns credit for one datagram at a time, so each GSO flight held
-one datagram and took one send each. At c96m10 with a 4 kB body that was
-15.8k req/s against the base's 16.7k (noise ±0.6 %). So a paced flight now
+one datagram and took one send each. At c96m10 with a 4 kB body that head
+lost throughput against the base, outside the noise band, in a run made
+before the measurements below and not recorded here. So a paced flight now
 starts only when the pacer has earned one millisecond's worth of credit,
 between one datagram and four (`pacerQuantum`, `quicListenerFlightTime`).
 Before the first RTT sample, the pacer earns about 45 bytes per
@@ -387,5 +389,5 @@ How these compare with the acceptance bounds:
 - **At c96** the server is 99 % busy.
 - **At c96m10** the throughput and the CPU per request are within the noise
   band of the base, or better than it, at both sizes. The base's 4 kB
-  c96m10 runs also end some requests with no status (192 median against
-  nish's 131), so that predates the fix.
+  c96m10 runs also end some requests with no status, more of them than
+  nish's do, so that predates the fix.

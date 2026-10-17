@@ -279,13 +279,17 @@ const rcFinePacerChecks = (t: Suite): void => {
   for (let k: i32 = 0; k < 10; k++) {
     r.onPaced(n64(5), FULL);
   }
-  // 1200 bytes at 5/4 × 13200 bytes per 200 µs: 1200 × 200 × 4 / 66000 = 14.5 µs, a millisecond on the timer wheel.
+  // 1200 bytes at 5/4 × 12000 bytes per 200 µs: 1200 × 200 × 4 / 60000 = 16 µs, a millisecond on the timer wheel.
   t.eqI64("the pacer still holds the datagram past a burst of the initial window (§7.7)", r.pacerDelay(n64(5), FULL), n64(1));
   r.micros = n64(5320);
   t.eqI64("20 µs later, inside the same millisecond, it may go", r.pacerDelay(n64(5), FULL), n64(0));
+  // A window grown past the initial one: the idle still refills only a burst of the initial window.
+  const window: i64 = r.congestionWindow;
+  r.congestionWindow = n64(13200);
   r.micros = n64(9000);
   r.pacerDelay(n64(9), FULL);
-  t.eqI64("an idle of milliseconds refills only the initial window, though the window is 13200", r.pacerBudget, QUIC_RECOVERY_INITIAL_WINDOW);
+  t.eqStr("an idle of milliseconds refills only the initial window, though the window is 13200", `${r.pacerBudget} ${r.congestionWindow}`, `${QUIC_RECOVERY_INITIAL_WINDOW} 13200`);
+  r.congestionWindow = window;
   t.eqI64("a micros outside the millisecond now names is not read", r.fineNow(n64(7)), n64(7000));
   t.eqI64("and one inside it is", r.fineNow(n64(9)), n64(9000));
 

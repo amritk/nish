@@ -565,7 +565,10 @@ export class QuicRecovery {
    * The pacer's RTT sample, in microseconds, for a packet sent at `sent` on
    * its clock: at least a microsecond on a fine clock, and at least
    * `QUIC_RECOVERY_GRANULARITY` on a millisecond one, where a sample of 0
-   * says only that the round trip was under a millisecond.
+   * says only that the round trip was under a millisecond. A packet sent
+   * while `micros` was stale is stamped `now × 1000`, so a fine sample for it
+   * runs long by up to a millisecond: only a carrier that calls `clock` on
+   * some sends and not others sees that.
    */
   fineSample(now: i64, sent: i64): i64 {
     const at: i64 = this.fineNow(now)
@@ -922,8 +925,8 @@ export class QuicRecovery {
 
   /**
    * How many milliseconds after `now` the pacer lets a datagram of `size`
-   * bytes go: 0 when it may go now, else at least 1, its wait in
-   * microseconds rounded up. The rate is 5/4 of the window per `pacerRtt`
+   * bytes go: 0 when it may go now, else its wait in microseconds rounded
+   * up to whole milliseconds, so at least 1. The rate is 5/4 of the window per `pacerRtt`
    * (§7.7's N of 1.25).
    */
   pacerDelay(now: i64, size: i32): i64 {
