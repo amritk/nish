@@ -103,6 +103,9 @@ const carrierChecks = (t: Suite): void => {
   t.eqStr("HTTP/1.1: a GET of /hello", `${answer.status} ${textOf(answer.body)}`, "200 hello from nish/net/http1\n");
 
   // HTTP/2 over TLS.
+  // The server's date, pinned so the heads compare byte for byte.
+  const noon: i64 = 1792138314000;
+  server.h2.server.date.pin(noon);
   const h2 = new H2TlsClient(server);
   t.ok("HTTP/2: a TLS handshake offering h2, the server's signature and Finished verified", h2.handshake(server.h2.port, key) && h2.verified);
   const none: i32[] = [];
@@ -115,11 +118,11 @@ const carrierChecks = (t: Suite): void => {
   const frames: string = h2.awaitFrames(n32(5), key);
   t.ok(
     "a GET of the file: 200 and its bytes",
-    frames.indexOf("HEADERS 1 :status=200 content-type=application/octet-stream server=nish") >= 0 && frames.indexOf(`DATA 1 16 "a file from www\n" end`) >= 0
+    frames.indexOf("HEADERS 1 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=application/octet-stream server=nish") >= 0 && frames.indexOf(`DATA 1 16 "a file from www\n" end`) >= 0
   );
   h2.wire.headers(n32(3), getOf("/missing"), H2_FLAG_END_STREAM);
   h2.flush(key);
-  t.eqStr("a GET of a file that is not there: 404", h2.awaitFrames(n32(2), key), 'HEADERS 3 :status=404 content-type=text/plain server=nish; DATA 3 10 "not found\n" end');
+  t.eqStr("a GET of a file that is not there: 404", h2.awaitFrames(n32(2), key), 'HEADERS 3 :status=404 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain server=nish; DATA 3 10 "not found\n" end');
 
   // hq-interop, the runner's HTTP/0.9.
   const hqLimits = new H3Limits();

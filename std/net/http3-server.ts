@@ -59,12 +59,19 @@
  * reads where it lies and answers into scratch made once, nor a handshake,
  * whose state is the slot's — `docs/security/http3.md` (H3-1, H3-3).
  *
+ * **The Date.** Every response carries one `date` field (RFC 9110 §6.6.1)
+ * from the pool's `HttpDate`, which formats the IMF-fixdate at most once a
+ * second for every slot; trailers carry none, and a program that sends its
+ * own `date` sends that one instead. `server.date.pin(unixMs)` fixes it, for
+ * a test that compares bytes.
+ *
  * Written from RFC 9114 §3 and RFC 9000 §5.2, not ported from another
  * implementation. Private names carry the `http3Server` prefix
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { udpRecvFrom, udpSendTo } from "nish:net"
 import { Secret } from "nish:secret"
+import { HttpDate } from "nish/net/http1-server"
 import { Http3Config, Http3Connection } from "nish/net/http3"
 import { H3_NO_ERROR, h3Count } from "nish/net/http3-frame"
 import {
@@ -404,6 +411,12 @@ export class Http3Server {
   answer: QuicListenerAnswer
   quics: QuicConnection[]
   conns: Http3Connection[]
+  /**
+   * The `date` every slot's responses carry, formatted once a second for all
+   * of them: each slot's `Http3Connection.date` is its bytes, refreshed by
+   * `connection` and `ready`. `date.pin` fixes its clock.
+   */
+  date: HttpDate
   index: Http3CidIndex
   wheel: Http3Wheel
   /** Each slot's client address, as its first datagram came from. */
@@ -463,13 +476,18 @@ export class Http3Server {
     this.wheel = new Http3Wheel(size)
     this.quics = []
     this.conns = []
+    this.date = new HttpDate()
+    // Formatted once now, so no slot ever sends the bytes before a first format.
+    const date: u8[] = this.date.current()
     this.addresses = []
     this.entropy = new Array<u8>(QUIC_CONN_ENTROPY_SIZE)
     for (let k: i32 = 0; k < size; k++) {
       crypto.getRandomValues(this.entropy)
       const quic = new QuicConnection(quicConfig, this.entropy)
       this.quics.push(quic)
-      this.conns.push(new Http3Connection(config, quic))
+      const conn: Http3Connection = new Http3Connection(config, quic)
+      conn.date = date
+      this.conns.push(conn)
       this.addresses.push(new Array<u8>(H3_SERVER_ADDRESS))
     }
     this.rx = new Array<u8>(H3_SERVER_RECEIVE_SIZE)
@@ -505,8 +523,9 @@ export class Http3Server {
     return slot >= 0 && slot < toI32(this.state.length) && this.state[slot] === H3_SERVER_BUSY
   }
 
-  /** The HTTP/3 connection of `slot`; a slot out of range names the first. */
+  /** The HTTP/3 connection of `slot`, its `date` brought up to now; a slot out of range names the first. */
   connection(slot: i32): Http3Connection {
+    this.date.current()
     const at: i32 = slot >= 0 && slot < toI32(this.conns.length) ? slot : H3_SERVER_ZERO
     return this.conns[at]
   }
@@ -542,6 +561,7 @@ export class Http3Server {
 
   /** The next slot with news for the program, or -1: call its connection's `next` until it has none. */
   ready(): i32 {
+    this.date.current()
     while (this.readyCount > 0) {
       const slot: i32 = this.readyRing[this.readyHead]
       this.readyHead = (this.readyHead + 1) % toI32(this.readyRing.length)

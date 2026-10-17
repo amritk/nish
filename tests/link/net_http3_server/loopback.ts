@@ -6,7 +6,8 @@
 // clock in epoch milliseconds, so the wheel alone must wake what the pacer
 // held back; a client whose handshake chose another
 // ALPN; a client that finds no slot free; and connection after connection
-// through one slot with the arena measured.
+// through one slot with the arena measured, the date pinned a second on for
+// each; and two slots answered in one second, the date formatted once.
 import { netAddress, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
@@ -94,6 +95,40 @@ const exchange = (t: Suite): void => {
   t.eqStr("with every request finished the server closes: H3_NO_ERROR", `${p.closeApp} 0x${p.closeCode}`, `true 0x${H3_NO_ERROR}`);
   t.eqI32("and frees the slot", loop.server.busy(), n32(0));
   t.eqI32("having accepted one connection", loop.server.accepted, n32(1));
+};
+
+/** The instant the date checks pin the server's clock to: Fri, 16 Oct 2026 08:11:54 GMT. */
+const NOON: i64 = 1792138314000;
+
+/** The server's date on two slots: one `date` on each response, formatted once between them. */
+const dated = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(4), n32(0));
+  loop.server.date.pin(NOON);
+  const p: H3Peer = h3WireConnect(loop.server, loop.port, limits);
+  const q: H3Peer = h3WireConnect(loop.server, loop.port, limits);
+  if (!t.ok("two clients, each in a slot of its own", loop.server.busy() === n32(2) && p.conn.handshakeComplete && q.conn.handshakeComplete)) {
+    return;
+  }
+  p.open(n64(-1));
+  q.open(n64(-1));
+  p.settle();
+  q.settle();
+  const formats: i64 = loop.server.date.formats();
+  p.get(n64(0), "/hello");
+  q.get(n64(0), "/hello");
+  p.settle();
+  q.settle();
+  t.eqStr("the first slot's response carries the server's date, once, after :status", `${p.response(n64(0)).status} ${p.response(n64(0)).fields}`, "200 date: Fri, 16 Oct 2026 08:11:54 GMT; content-type: text/plain; server: nish");
+  t.eqStr("and the second slot's the same date", `${q.response(n64(0)).status} ${q.response(n64(0)).fields}`, "200 date: Fri, 16 Oct 2026 08:11:54 GMT; content-type: text/plain; server: nish");
+  t.eqI64("a still clock formats nothing more for either", loop.server.date.formats() - formats, n64(0));
+  loop.server.date.pin(NOON + n64(60000));
+  p.get(n64(4), "/hello");
+  q.get(n64(4), "/hello");
+  p.settle();
+  q.settle();
+  t.eqStr("a minute on, both slots carry the new date", `${p.response(n64(4)).fields} | ${q.response(n64(4)).fields}`, "date: Fri, 16 Oct 2026 08:12:54 GMT; content-type: text/plain; server: nish | date: Fri, 16 Oct 2026 08:12:54 GMT; content-type: text/plain; server: nish");
+  t.eqI64("which the two slots share: formatted once between them", loop.server.date.formats() - formats, n64(1));
 };
 
 /** A connection the program closes while its pacer has no credit still sends its CONNECTION_CLOSE before the slot is freed. */
@@ -432,11 +467,14 @@ const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
  * Connection after connection through a server of one slot: from the second
  * on, nothing the server does keeps arena memory — neither the handshake,
  * through the listener and into the slot, nor what follows it: the client's
- * streams, five requests, a GOAWAY, the close, the slot freed.
+ * streams, five requests, a GOAWAY, the close, the slot freed — nor the
+ * date, which the pinned clock moves a second on for each connection.
  */
 const reused = (t: Suite): void => {
   const limits = new H3Limits();
   const loop = new LoopServer(h3QuicConfig(limits), n32(1), n32(0));
+  loop.server.date.pin(NOON);
+  const formats: i64 = loop.server.date.formats();
   const handshakes: i64[] = [];
   let after: i64 = 0;
   let closed: i32 = 0;
@@ -444,6 +482,7 @@ const reused = (t: Suite): void => {
   for (let k: i32 = 0; k < 5; k++) {
     const l = new Lean(loop);
     l.c.now = toI64(k) * n64(100000);
+    loop.server.date.pin(NOON + toI64(k) * n64(1000));
     const handshake = new QmMeter();
     const hello: u8[] = h3Hello(limits);
     l.c.before = hello;
@@ -485,6 +524,7 @@ const reused = (t: Suite): void => {
   t.ok("five connections through one slot, each closed after its GOAWAY", closed === n32(5) && loop.server.accepted === n32(5));
   t.eqI32("each served its five requests", answered, n32(25));
   t.eqI64("from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release", after, n64(0));
+  t.eqI64("though the pinned clock moved a second on for each, the date formatted once a second", loop.server.date.formats() - formats, n64(5));
   // Since the slot keeps the handshake's state (H3-1), `serve` signs in the
   // server's `TlsP256Signer`, and the listener reads the first Initial where
   // it lies and answers into scratch (H3-3), a handshake through a reused
@@ -502,6 +542,7 @@ const reused = (t: Suite): void => {
 /** Every check of this file. */
 export const loopbackChecks = (t: Suite): void => {
   exchange(t);
+  dated(t);
   closeUnpaced(t);
   quiet(t);
   flood(t);

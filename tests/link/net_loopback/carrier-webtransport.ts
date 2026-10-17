@@ -93,12 +93,15 @@ export const webtransportChecks = (t: Suite): void => {
     t.fail("webtransport: a server", "none was made");
     return;
   }
+  // The server's date, pinned so the session's head compares byte for byte.
+  const noon: i64 = 1792138314000;
+  s.date.pin(noon);
   const p: WtPeer = wtWireOpen(lp, s, limits);
   t.ok("webtransport: a handshake across loopback, and the client's streams under wtransport 0.7's SETTINGS", s.busy() === 1 && lp.failure === "");
   t.eqStr(
     "webtransport: an extended CONNECT is a session, accepted with draft-02's header",
     wtWireSession(lp, p, n64(0)),
-    ":status: 200; sec-webtransport-http3-draft: draft02"
+    ":status: 200; date: Fri, 16 Oct 2026 08:11:54 GMT; sec-webtransport-http3-draft: draft02"
   );
 
   const datagram: u8[] = wtWireDatagram(bytesOf("a datagram each way"));
@@ -153,7 +156,7 @@ export const webtransportChecks = (t: Suite): void => {
     lp.wtApp.closeCode === n64(7) && lp.wtApp.closeReason === "bye" && lp.wtApp.closedByPeer
   );
 
-  t.eqStr("webtransport: a second session on the connection", wtWireSession(lp, p, id), ":status: 200; sec-webtransport-http3-draft: draft02");
+  t.eqStr("webtransport: a second session on the connection", wtWireSession(lp, p, id), ":status: 200; date: Fri, 16 Oct 2026 08:11:54 GMT; sec-webtransport-http3-draft: draft02");
   const reason: u8[] = bytesOf("the server is done");
   t.eqI32("webtransport: the server closes it with code 9", lp.wts[0].close(id, n64(9), reason, n32(0), toI32(reason.length)), n32(0));
   s.touch(n32(0));
