@@ -1,0 +1,1 @@
+`Ring<i32>` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself

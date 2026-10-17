@@ -1008,7 +1008,7 @@ export const main = (): number => {
     opts.emitNapi.length > 0 ||
     opts.emitNapiAsync.length > 0
   const fns: ExternalFunction[] = anySidecar ? externalFunctions(compilation) : []
-  if (anySidecar && !acceptsSidecars(compilation, cDeclared(compilation, fns))) {
+  if (anySidecar && !acceptsSidecars(compilation, fns, cDeclared(compilation, fns))) {
     report(compilation, json)
     return 1
   }

@@ -16,6 +16,7 @@ import {
   isBitwiseCompound,
   holdsMember,
   mixedMemberMessage,
+  refuseNarrowingStore,
   unproven,
   WANT_INFERRED,
 } from "./expressions"
@@ -96,7 +97,10 @@ export const checkArrayLiteral = (ctx: CheckContext, expr: Node, scope: Scope, w
   let secretAt: Node | null = null
   let secretType = -1
   for (const element of expr.children) {
-    const type = unproven(ctx, checkExpression(ctx, element, scope, hint))
+    const checked = unproven(ctx, checkExpression(ctx, element, scope, hint))
+    // A smaller union enters the element union as the same pointer, as it
+    // enters every other sink of that union (`unionWithin`).
+    const type = hint >= 0 && ctx.table.unionWithin(checked, hint) ? hint : checked
     if (type === T_ERROR) {
       continue
     }
@@ -197,6 +201,9 @@ export const checkIndexAssignment = (ctx: CheckContext, expr: Node, scope: Scope
       const base = ctx.program.nodeTypes[expr.children[0].children[0].id]
       const spelled = base < 0 ? ctx.table.typeName(ctx.table.arrayOf(elem)) : ctx.table.typeName(base)
       return ctx.errorType(value, `Cannot assign ${ctx.table.typeName(rhs)} to an element of ${spelled}`)
+    }
+    if (refuseNarrowingStore(ctx, value, elem, "The element")) {
+      return T_ERROR
     }
     return elem
   }
