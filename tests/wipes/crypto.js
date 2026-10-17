@@ -9,6 +9,9 @@ const HMAC_HKDF_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha)/m
 /** The module that defines P-256. */
 const P256_MODULES = /^define [^\n]*@nish\.(P256|p256)/m
 
+/** The modules that define HMAC, HKDF, SHA-2, the TLS schedule and record layer, or QUIC packet protection. */
+const HELD_DERIVE_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha|Tls|tls|quic)/m
+
 /** The modules that define AES or ChaCha20-Poly1305. */
 const AEAD_MODULES = /^define [^\n]*@nish\.(Aes|aes|ghash|chacha20|poly1305)/m
 
@@ -121,6 +124,36 @@ export const wipeChecks = [
       ["nish.p256PublicKeyExposed", 18],
       ["nish.p256SignExposed", 93],
       ["nish.p256SignSha256Into", 56],
+    ],
+  },
+  // The derivations into a held `Secret` (#668). Each derives into a fresh
+  // plain buffer inside `exposeWith`, copies it into the held destination and
+  // wipes it before it returns, so every root counts its own HKDF-Expand
+  // wipes (the HMAC states, their pads and the plain output block) beside
+  // that one buffer: `hkdfExpandLabel*Held` 31, a schedule step 62 to 91
+  // (one Expand, or an Extract and an Expand), `installHeld` and
+  // `tlsTrafficKeysFromHeld` their key and iv derivations, and `advanceHeld`
+  // the ratchet and the install it reaches. The plain output's two wipes,
+  // `hkdfHeld`'s (the held destinations) and `hkdfExpandLabelHeldInto`'s (the
+  // plain AEAD keys and IVs), were each deleted in turn: between them every
+  // root's count dropped, by one per derivation it reaches.
+  {
+    name: "crypto: the wipes survive opt -O2 (the plain output of each derivation into a held Secret in HKDF, the TLS schedule and record layer, and QUIC)",
+    program: "tests/link/crypto_held_derive/main.ts",
+    modules: HELD_DERIVE_MODULES,
+    roots: [
+      ["nish.hkdfExpandLabelSha256Held", 31],
+      ["nish.hkdfExpandLabelSha384Held", 31],
+      ["nish.hkdfExpandLabelHeldInto", 31],
+      ["nish.tlsDeriveSecretHeld", 62],
+      ["nish.tlsHandshakeSecretHeld", 90],
+      ["nish.tlsMasterSecretHeld", 91],
+      ["nish.tlsFinishedVerifyDataHeld", 89],
+      ["nish.tlsTrafficKeysFromHeld", 62],
+      ["nish.TlsRecordProtection.installHeld", 65],
+      ["nish.TlsRecordProtection.advanceHeld", 127],
+      ["nish.quicKeysHeldInto", 93],
+      ["nish.quicKeyUpdateSecretHeldInto", 62],
     ],
   },
 ]
