@@ -213,8 +213,9 @@ connection's `date` straight after `:status` on every final head, a refusal's
 431 included, and never on trailers (HTTP/3 has no 1xx for a program to send);
 a program's own `date` (`http3NamesHoldDate`, which matches any ASCII
 case) is sent instead, so a head never carries two. A mixed-case `Date` never
-reaches it: `respond` refuses an uppercase name with `H3_INVALID` (§4.2). The date counts against the client's
-SETTINGS_MAX_FIELD_SECTION_SIZE as any field does, 65 bytes (RFC 9114
+reaches it: `respond` refuses an uppercase name with `H3_INVALID` (§4.2).
+The date counts against the client's SETTINGS_MAX_FIELD_SECTION_SIZE as any
+field does, 65 bytes (RFC 9114
 §4.2.2): a head that fits a limit of 107 bytes exactly without it is refused
 with `H3_TOO_LARGE` with it. QPACK's dynamic table has capacity 0, so the field
 is a literal and the encoder's streams carry nothing for it. A bare
