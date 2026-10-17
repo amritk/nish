@@ -1876,8 +1876,8 @@ export const voidTaskResultMessage = (table: TypeTable, fn: FunctionSig): string
     `${shown} answers \`${table.typeName(fn.returnType)}\`, and a \`spawn\` without a destination stores nothing: ` +
     "a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope " +
     "joins, so make the task answer `void` or give it a destination, " +
-    `\`s.spawn(${fn.lifted ? "task" : fn.sourceName}, arg, out, i)\` with \`out\`, ` +
-    `a \`${table.typeName(fn.returnType)}[]\` of one slot per task, declared before the scope's block`
+    `\`const answer = new Array<${table.typeName(fn.returnType)}>(1)\` above the scope's block and ` +
+    `\`s.spawn(${fn.lifted ? "task" : fn.sourceName}, arg, answer, 0)\``
   )
 }
 
