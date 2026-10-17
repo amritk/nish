@@ -2,7 +2,7 @@
 // stores each array into its result, as a loop that pushes arrays into an
 // array does, and the block's analysis stops following it. The refusal says
 // what to write instead: run that map outside the block, or answer numbers or
-// strings, which a map inside a block may (`mem_using_arena_map`).
+// strings, which a map inside a block may (`tests/link/mem_using_arena_map`).
 import { parallelMap } from "nish/threads";
 
 export const main = (): i32 => {

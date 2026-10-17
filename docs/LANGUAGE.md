@@ -7002,7 +7002,7 @@ const tally = (rows: string[]): i32 => {
 - **A map that answers numbers or strings may run inside one.** The map's
   region joins before the call returns, so its result array is the block's
   alone, and the blocks of strings it adopts from its workers are the block's
-  newest memory; the release frees both (`tests/cases/mem_using_arena_map`).
+  newest memory; the release frees both (`tests/link/mem_using_arena_map`).
   What the map answers may not outlive the block, as anything else allocated
   in it may not (`tests/cases/reject_using_arena_map_escapes`). A map whose
   body answers an array stores each one into its result, which the analysis

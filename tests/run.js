@@ -5084,7 +5084,8 @@ if (!only || "par_alloc".includes(only)) {
 // `churn()`, and prints only what every task order agrees on.
 //
 // And the frames that free a map's result: `par_map_reclaim`, whose helper
-// functions and `using` block give each map back, and
+// functions and `using` block give each map back, `mem_using_arena_map`,
+// whose blocks free a map of numbers and one of strings, and
 // `par_map_reclaim_escapes`, whose results are returned, stored into a field
 // and into an outer array, captured by a later task, and answered as strings
 // and as `string[][]`, each read after `churn()`.
@@ -5145,6 +5146,7 @@ for (const name of [
   "thread_adopt_lifetime",
   "par_map_reclaim",
   "par_map_reclaim_escapes",
+  "mem_using_arena_map",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
