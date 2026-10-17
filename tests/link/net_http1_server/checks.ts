@@ -139,6 +139,15 @@ const sent = (conn: Http1Connection): string => {
   return parts.join("");
 };
 
+/** `bytes` as a string, one character a byte. */
+const latin1 = (bytes: u8[]): string => {
+  const parts: string[] = [];
+  for (let k: i32 = 0; k < toI32(bytes.length); k++) {
+    parts.push(String.fromCharCode(toI32(bytes[k])));
+  }
+  return parts.join("");
+};
+
 /** What `conn` holds to send, as hex, which is then marked sent. */
 const sentHex = (conn: Http1Connection): string => {
   const digits: string = "0123456789abcdef";
@@ -152,12 +161,18 @@ const sentHex = (conn: Http1Connection): string => {
   return parts.join("");
 };
 
-/** A connection under `config` fed `text`, and its first event. */
+/** The instant every server and connection here is pinned to, so that a response's bytes are fixed. */
+const PINNED_MS: i64 = 1792138314000;
+/** Its `Date` line. */
+const PINNED_DATE: string = "Date: Fri, 16 Oct 2026 08:11:54 GMT\r\n";
+
+/** A connection under `config`, its clock pinned, fed `text`, and its first event. */
 class Driven {
   conn: Http1Connection;
   event: i32 = 0;
   constructor(config: Http1Config, text: string) {
     this.conn = new Http1Connection(config);
+    this.conn.date.pin(PINNED_MS);
     const bytes: u8[] = ascii(text);
     this.conn.feed(bytes, ZERO, toI32(bytes.length));
     this.event = this.conn.next();
@@ -252,6 +267,8 @@ class TlsClient {
 export const serverChecks = (): i32 => {
   const t = new Suite("http1 server");
   const lb = new H1Loop(testConfig(), tcpConfig([H1_ALPN, "h2"]), 4, ZERO, ZERO);
+  lb.plain.date.pin(PINNED_MS);
+  lb.secure.date.pin(PINNED_MS);
   const get: string = "GET /hello HTTP/1.1\r\nHost: a\r\n\r\n";
 
   // --- 1. Plain TCP ----------------------------------------------------------------------------
@@ -261,7 +278,7 @@ export const serverChecks = (): i32 => {
   t.eqStr(
     "a GET is answered with its length, byte for byte",
     `${hello.head}\r\n${hello.text()}`,
-    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 26\r\n\r\nhello from nish/net/http1\n"
+    `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n${PINNED_DATE}Content-Length: 26\r\n\r\nhello from nish/net/http1\n`
   );
 
   const post: u8[] = ascii("POST /echo HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;x=y\r\nhello\r\n6\r\n world\r\n0\r\n\r\n");
@@ -444,10 +461,14 @@ export const serverChecks = (): i32 => {
     lb.response(warm, false);
     lb.response(warm, false);
   }
+  const formatted: i64 = lb.plain.date.formats();
   lb.measuring = true;
   const rearmedWarm: i32 = lb.rearmed;
   let answered: i32 = 0;
   for (let k: i32 = 0; k < 100; k++) {
+    if (k === 50) {
+      lb.plain.date.pin(PINNED_MS + toI64(1000));
+    }
     lb.send(warm, exchange);
     if (lb.response(warm, false).status === 200 && lb.response(warm, false).text() === "warm") {
       answered = answered + 1;
@@ -457,7 +478,16 @@ export const serverChecks = (): i32 => {
   t.eqI32("a warmed slot answers a hundred GETs and a hundred chunked POSTs", answered, toI32(100));
   t.ok(`and the server's calls and its program's answers moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0));
   t.eqI32("and its interest never changed, so rearm never asked for a pollModify", lb.rearmed - rearmedWarm, ZERO);
+  t.ok("the date crossed a second among them and was formatted once for the two hundred", lb.plain.date.formats() - formatted === toI64(1));
   lb.hangUp(warm);
+  const shared: i64 = lb.plain.date.formats();
+  lb.plain.connections[0].date.pin(PINNED_MS + toI64(2000));
+  const seen: string = latin1(lb.plain.connections[1].date.current());
+  t.ok(
+    "the server's slots share one date: a second set through one is formatted once and read through another",
+    lb.plain.date.formats() - shared === toI64(1) && seen === "Fri, 16 Oct 2026 08:11:56 GMT"
+  );
+  lb.plain.date.pin(PINNED_MS);
 
   // --- 4. The refusals ----------------------------------------------------------------------------
   const bigField: string[] = [];
@@ -663,12 +693,12 @@ export const serverChecks = (): i32 => {
   t.eqI32("the end", g.conn.end(), ZERO);
   t.eqI32("the request ends after", g.conn.next(), H1_END);
   t.eqI32("refused: end twice", g.conn.end(), H1_CLOSED);
-  t.eqStr("what it sent", sent(g.conn), "HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc");
+  t.eqStr("what it sent", sent(g.conn), `HTTP/1.1 200 OK\r\n${PINNED_DATE}Content-Length: 3\r\n\r\nabc`);
 
-  // A 700-byte response left unsent, then a pipelined request: no room for its head.
+  // A 663-byte response left unsent, then a pipelined request: no room for its head.
   const p = new Driven(config, `${get}${get}`);
-  p.conn.respond(toI32(200), none, none, toI32(700));
-  p.conn.write(patterned(toI32(700)), ZERO, toI32(700));
+  p.conn.respond(toI32(200), none, none, toI32(663));
+  p.conn.write(patterned(toI32(663)), ZERO, toI32(663));
   p.conn.end();
   t.ok("the next pipelined request is read once the first is answered", p.conn.next() === H1_END && p.conn.next() === H1_REQUEST);
   t.eqI32("its head does not fit beside the unsent response: H1_AGAIN", p.conn.respond(toI32(200), none, none, ZERO), H1_AGAIN);
@@ -682,7 +712,7 @@ export const serverChecks = (): i32 => {
 
   // A chunked head that leaves less than the last chunk's five bytes.
   const tightValue: string[] = [];
-  for (let k: i32 = 0; k < 714; k++) {
+  for (let k: i32 = 0; k < 677; k++) {
     tightValue.push("t");
   }
   const e = new Driven(config, get);
@@ -698,7 +728,30 @@ export const serverChecks = (): i32 => {
   headRequest.conn.respond(toI32(200), none, none, HTTP1_CHUNKED);
   t.eqI32("a write to a response to HEAD takes everything", headRequest.conn.write(ascii("dropped"), ZERO, toI32(7)), toI32(7));
   headRequest.conn.end();
-  t.eqStr("and sends no body, not even the last chunk", sent(headRequest.conn), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+  t.eqStr("and sends no body, not even the last chunk", sent(headRequest.conn), `HTTP/1.1 200 OK\r\n${PINNED_DATE}Transfer-Encoding: chunked\r\n\r\n`);
+  const ownDate = new Driven(config, get);
+  ownDate.conn.respond(toI32(200), [ascii("DATE")], [ascii("Thu, 01 Jan 1970 00:00:00 GMT")], ZERO);
+  ownDate.conn.end();
+  t.eqStr(
+    "a program's own date field, in any case, is the response's only Date",
+    sent(ownDate.conn),
+    "HTTP/1.1 200 OK\r\nDATE: Thu, 01 Jan 1970 00:00:00 GMT\r\nContent-Length: 0\r\n\r\n"
+  );
+  for (const name of ["date", "dAtE"]) {
+    const own = new Driven(config, get);
+    own.conn.respond(toI32(200), [ascii(name)], [ascii("x")], ZERO);
+    own.conn.end();
+    t.eqStr(`and so is one named ${name}`, sent(own.conn), `HTTP/1.1 200 OK\r\n${name}: x\r\nContent-Length: 0\r\n\r\n`);
+  }
+  const early = new Driven(config, get);
+  early.conn.respond(toI32(103), none, none, HTTP1_NO_BODY);
+  early.conn.respond(toI32(200), none, none, ZERO);
+  early.conn.end();
+  t.eqStr(
+    "an interim 1xx carries no Date, and the final status after it does",
+    sent(early.conn),
+    `HTTP/1.1 103 Status\r\n\r\nHTTP/1.1 200 OK\r\n${PINNED_DATE}Content-Length: 0\r\n\r\n`
+  );
   const noContent = new Driven(config, get);
   t.ok("a 204 takes HTTP1_NO_BODY", noContent.conn.respond(toI32(204), none, none, HTTP1_NO_BODY) === 0 && noContent.conn.end() === 0);
   const toClose = new Driven(config, "GET / HTTP/1.0\r\n\r\n");
