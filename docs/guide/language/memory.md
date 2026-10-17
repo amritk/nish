@@ -140,6 +140,11 @@ console.log(longest);
 What has to outlive the block is allocated before the block opens. The check
 is cautious, so it also refuses some blocks that would in fact be safe, such
 as one that builds a `Map`; when it does, move that work out of the block.
+A `parallelMap`, `parallelFrom` or `parallelMapInto` from `nish/threads` may
+run inside the block when its body answers numbers or strings, and its result
+is released with the block, so a string it answers may not leave the block
+either; one whose body answers arrays is refused, and the error says to run
+it outside the block.
 
 `arena()` is only ever the initialiser of a `using` declaration, and `a` is
 never read: it exists so that the block has something to release when it

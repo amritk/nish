@@ -345,6 +345,25 @@ export const isRegionEntry = (sig: FunctionSig): boolean => {
 }
 
 /**
+ * The index of the parameter a map's chunk loop stores its answers into:
+ * `dst`, 1 for `mapRange` and 0 for `fromRange`, or -1 for any other
+ * function. Neither loop does anything with `dst` but store into it and read
+ * its length, which is what lets escape.ts hand those stores to the caller
+ * (`EscapeResult.fillsParam`).
+ */
+export const chunkDstIndex = (sig: FunctionSig): i32 => {
+  const instance = sig.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  if (template === null || parallelRoleOf(sig) !== PAR_CHUNK) {
+    return -1
+  }
+  if (template.sourceName === "mapRange") {
+    return 1
+  }
+  return template.sourceName === "fromRange" ? 0 : -1
+}
+
+/**
  * Remember a call of `sig` for `Compilation.checkParallel`, once. A body that
  * is checked again — a generic caller's, once per instantiation — reaches here
  * again with the same node and, for the same tuple, the same instance.

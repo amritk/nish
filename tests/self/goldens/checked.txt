@@ -130426,9 +130426,9 @@ function settle(x: f64): f64 -> @settle$
   local 10:7 v: f64 (let)
   local 11:12 k: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: 24:5
-  calls: nish.parallelMapInto$f64$f64$fn.6.settle nish_panic nish_panic_index nish_print nish_str_eq nish_str_from_f64 settle$
+  calls: nish.parallelMapInto$f64$f64$fn.6.settle nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_eq nish_str_from_f64 settle$
   stackSites=0 stackLocals=0
   local 18:9 n: i32 (const)
   local 19:9 par: boolean (const)
@@ -130929,7 +130929,7 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: 103:5
   calls: Body.constructor Probe.constructor accel$ energy nish.parallelMapInto$$Probe$f64$fn.5.accel nish_alloc_struct nish_array_grow nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_f64
-  stackSites=0 stackLocals=0
+  stackSites=1 stackLocals=1
   local 89:9 n: i32 (const)
   local 90:9 steps: i32 (const)
   local 91:9 dt: f64 (const)
@@ -131134,9 +131134,9 @@ function scramble(x: i32): i32 -> @scramble$
   local 13:7 h: i32 (let)
   local 14:12 k: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: 29:5
-  calls: nish.parallelMapInto$i32$i32$fn.8.scramble nish_panic nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 scramble$
+  calls: nish.parallelMapInto$i32$i32$fn.8.scramble nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_concat nish_str_eq nish_str_from_i32 scramble$
   stackSites=0 stackLocals=0
   local 23:9 rounds: i32 (const)
   local 24:9 n: i32 (const)
@@ -131329,10 +131329,10 @@ function bump(x: i32): i32 -> @bump$
   local 12:7 h: i32 (let)
   local 13:12 k: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 31:11
-  calls: bump$ nish.parallelMapInto$i32$i32$fn.4.bump nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32
-  stackSites=0 stackLocals=0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMapInto$i32$i32$fn.4.bump
+  calls: bump$ nish.parallelMapInto$i32$i32$fn.4.bump nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32
+  stackSites=2 stackLocals=2
   local 20:9 rounds: i32 (const)
   local 21:9 par: boolean (const)
   local 22:9 src: i32[] (const)

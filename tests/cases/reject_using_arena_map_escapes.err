@@ -1,0 +1,1 @@
+`ws[0]` may be allocated inside the `using arena()` block at 12:5 and is assigned to `kept`, which is declared outside the block
