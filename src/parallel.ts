@@ -572,23 +572,32 @@ const arrowBindings = (program: CheckedProgram, body: Node, values: string[]): s
   if (body.kind !== N_ARROW) {
     return ""
   }
-  let out = ""
+  const parts: string[] = []
   const params = body.children[1].children
   for (let k = 0; k < params.length && k < values.length; k++) {
     const name = params[k].children[0].text
     if (name !== values[k]) {
-      out = `${out}const ${name} = ${values[k]}; `
+      parts.push(`const ${name} = ${values[k]}; `)
     }
   }
   const result = body.children[3]
   if (result.kind === N_BLOCK) {
-    for (let k = 0; k < result.children.length - 1; k++) {
-      const statement = oneLine(program, result.children[k])
-      out =
-        statement.endsWith(";") || statement.endsWith("}") ? `${out}${statement} ` : `${out}${statement}; `
-    }
+    parts.push(leadingStatements(program, result.children, 0))
   }
-  return out
+  return parts.join("")
+}
+
+/**
+ * The statements of `statements` from `k` on, all but the last, each closed by
+ * `; ` unless it already ends in `;` or `}`.
+ */
+const leadingStatements = (program: CheckedProgram, statements: Node[], k: i32): string => {
+  if (k + 1 >= statements.length) {
+    return ""
+  }
+  const statement = oneLine(program, statements[k])
+  const end = statement.endsWith(";") || statement.endsWith("}") ? " " : "; "
+  return `${statement}${end}${leadingStatements(program, statements, k + 1)}`
 }
 
 /**
@@ -1704,21 +1713,22 @@ const oneLine = (program: CheckedProgram, node: Node): string =>
 
 /** `text` with each run of whitespace written as one space. */
 const collapsed = (text: string): string => {
-  let out = ""
-  let space = false
+  const words: string[] = []
+  let start = -1
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i)
-    if (c === 32 || c === 9 || c === 10 || c === 13) {
-      space = true
-    } else {
-      if (space && out.length > 0) {
-        out = `${out} `
-      }
-      space = false
-      out = `${out}${text.slice(i, i + 1)}`
+    const space = c === 32 || c === 9 || c === 10 || c === 13
+    if (space && start >= 0) {
+      words.push(text.slice(start, i))
+      start = -1
+    } else if (!space && start < 0) {
+      start = i
     }
   }
-  return out
+  if (start >= 0) {
+    words.push(text.slice(start))
+  }
+  return words.join(" ")
 }
 
 /** A finding together with its fix. */
@@ -3280,17 +3290,17 @@ const checkSiblingScopes = (
     k = k + 1
   }
   let j = 0
-  while (j < spawns.length) {
+  for (const later of spawns) {
+    let earlier: SiblingSpawn | null = null
     let i = 0
-    let message = ""
-    while (i < j && message.length === 0) {
-      if (spawns[i].scope !== spawns[j].scope) {
-        message = siblingShareMessage(program, spawns[i], spawns[j])
+    while (i < j && i < spawns.length && earlier === null) {
+      if (spawns[i].scope !== later.scope) {
+        earlier = spawns[i]
       }
       i = i + 1
     }
-    if (message.length > 0) {
-      out.push(new ScopeFinding(spawns[j].node, message))
+    if (earlier !== null) {
+      out.push(new ScopeFinding(later.node, siblingShareMessage(program, earlier, later)))
     }
     j = j + 1
   }
@@ -3841,11 +3851,11 @@ const spawnWithArgument = (program: CheckedProgram, spawn: Node, arg: string): s
   if (callee.kind !== N_MEMBER || args.length < 2) {
     return `s.spawn(${arg})`
   }
-  let shown = `${oneLine(program, callee)}(${oneLine(program, args[0])}, ${arg}`
+  const shown: string[] = [oneLine(program, args[0]), arg]
   for (let k = 2; k < args.length; k++) {
-    shown = `${shown}, ${oneLine(program, args[k])}`
+    shown.push(oneLine(program, args[k]))
   }
-  return `${shown})`
+  return `${oneLine(program, callee)}(${shown.join(", ")})`
 }
 
 const bodyLockMessage = (sig: FunctionSig, fn: FunctionSig, remedy: string): string =>
@@ -6031,6 +6041,8 @@ const checkChannel = (
     }
   }
   let chosen: ScopeSite | null = null
+  let split: Node | null = null
+  let splitScope: ScopeSite | null = null
   for (const spawn of holders) {
     const receiver = spawnReceiver(program, spawn)
     let found: ScopeSite | null = null
@@ -6051,18 +6063,24 @@ const checkChannel = (
       return
     }
     if (chosen !== null && chosen !== found) {
-      out.push(
-        new ScopeFinding(
-          spawn,
-          channelSendersMessage(
-            `\`${local.name}\` is reachable from the tasks of two scopes`,
-            `spawn every task that reaches \`${local.name}\` on one scope, \`${spawnOn(program, spawn, scopeNameOf(chosen))}\``
-          )
-        )
-      )
-      return
+      split = spawn
+      splitScope = chosen
+      break
     }
     chosen = found
+  }
+  // Written after the loop, so the remedy's text is not built on one of its passes.
+  if (split !== null && splitScope !== null) {
+    out.push(
+      new ScopeFinding(
+        split,
+        channelSendersMessage(
+          `\`${local.name}\` is reachable from the tasks of two scopes`,
+          `spawn every task that reaches \`${local.name}\` on one scope, \`${spawnOn(program, split, scopeNameOf(splitScope))}\``
+        )
+      )
+    )
+    return
   }
   if (chosen === null) {
     chosen = candidates.length > 0 ? candidates[0] : null
@@ -6155,6 +6173,7 @@ const checkParentOps = (
   out: ScopeFinding[]
 ): void => {
   const apart = chosen.body !== block
+  let lateSend: Node | null = null
   let k = 0
   while (k < ops.sites.length) {
     const ref = ops.refs[k]
@@ -6163,16 +6182,8 @@ const checkParentOps = (
     if (ref.kind === REF_LOCAL && named !== null && named === local) {
       const at = statementIndexIn(block, node)
       if (ops.sends[k] && !(apart && at > index && at < chosen.stmt)) {
-        out.push(
-          new ScopeFinding(
-            node,
-            channelSendersMessage(
-              `This sends on \`${local.name}\` once its scope's block has begun`,
-              `move \`${oneLine(program, node)}\` above the block that opens with \`using ${scopeNameOf(chosen)} = scope()\``
-            )
-          )
-        )
-        return
+        lateSend = node
+        break
       }
       // A receive after the scope's `using`, in its block, is `findScopeReceives`'s
       // to refuse; one before it, in the same block, is refused below.
@@ -6201,6 +6212,18 @@ const checkParentOps = (
       }
     }
     k = k + 1
+  }
+  // Written after the loop, so the remedy's text is not built on one of its passes.
+  if (lateSend !== null) {
+    out.push(
+      new ScopeFinding(
+        lateSend,
+        channelSendersMessage(
+          `This sends on \`${local.name}\` once its scope's block has begun`,
+          `move \`${oneLine(program, lateSend)}\` above the block that opens with \`using ${scopeNameOf(chosen)} = scope()\``
+        )
+      )
+    )
   }
 }
 
