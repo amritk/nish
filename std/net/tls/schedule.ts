@@ -538,8 +538,14 @@ const tlsHeldWindow = (hashLength: i32, transcriptHash: u8[], hashOff: i32): u8[
   return window
 }
 
-/** Panics naming `caller` unless `held` holds `hashLength` bytes, as every secret of the schedule does. */
+/**
+ * Panics naming `caller` unless `hashLength` is 32 or 48 and `held` holds
+ * `hashLength` bytes, as every secret of the schedule does.
+ */
 const tlsHeldCheck = (caller: string, hashLength: i32, held: Secret<u8[]>): void => {
+  if (hashLength !== SHA256_SIZE && hashLength !== SHA384_SIZE) {
+    panic(`${caller}: a hash length of ${hashLength}, not 32 or 48`)
+  }
   const length: i32 = expose(held, tlsHeldLength)
   if (length !== hashLength) {
     panic(`${caller}: a secret of ${length} bytes, not ${hashLength}`)
@@ -560,7 +566,8 @@ const tlsExtractHeld = (hashLength: i32, salt: Secret<u8[]>, ikm: Secret<u8[]>, 
  * `tlsDeriveSecret` into a held `Secret`: Derive-Secret (RFC 8446 §7.1) of
  * `prk` with `label` and the transcript hash `transcriptHash[hashOff ..
  * hashOff + hashLength)`, written over the HashLen bytes `dst` holds. `dst`
- * may be `prk`. Panics unless both hold HashLen bytes.
+ * may be `prk`. Panics unless `hashLength` is 32 or 48 and both hold
+ * HashLen bytes.
  */
 export const tlsDeriveSecretHeld = (
   hashLength: i32,

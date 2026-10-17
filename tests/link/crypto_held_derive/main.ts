@@ -37,6 +37,7 @@ import {
   tlsTrafficKeysInto,
 } from "nish/net/tls/schedule";
 import { TLS_CONTENT_APPLICATION_DATA, TlsRecordProtection } from "nish/net/tls/record";
+import { AesKey } from "nish/crypto/aes";
 import {
   QUIC_AEAD_AES_128_GCM,
   QUIC_AEAD_AES_256_GCM,
@@ -120,8 +121,37 @@ const placed = (bytes: u8[], at: i32): u8[] => {
 };
 
 /** Whether two key sets carry the same suite, key, IV and header-protection key. */
+/** Whether two expanded AES keys hold the same schedule and H, or are both absent. */
+const sameAes = (got: AesKey | null, want: AesKey | null): boolean => {
+  if (got === null || want === null) {
+    return got === null && want === null;
+  }
+  if (got.rounds !== want.rounds || got.roundKeys.length !== want.roundKeys.length || got.h.length !== want.h.length) {
+    return false;
+  }
+  for (let k: i32 = 0; k < toI32(got.roundKeys.length) && k < toI32(want.roundKeys.length); k++) {
+    if (got.roundKeys[k] !== want.roundKeys[k]) {
+      return false;
+    }
+  }
+  for (let k: i32 = 0; k < toI32(got.h.length) && k < toI32(want.h.length); k++) {
+    if (got.h[k] !== want.h[k]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** Whether two QUIC key sets match, the expanded `packetAes` and `hpAes` schedules included. */
 const sameKeys = (got: QuicKeys | null, want: QuicKeys | null): boolean =>
-  got !== null && want !== null && got.aead === want.aead && sameBytes(got.key, want.key) && sameBytes(got.iv, want.iv) && sameBytes(got.hp, want.hp);
+  got !== null &&
+  want !== null &&
+  got.aead === want.aead &&
+  sameBytes(got.key, want.key) &&
+  sameBytes(got.iv, want.iv) &&
+  sameBytes(got.hp, want.hp) &&
+  sameAes(got.packetAes, want.packetAes) &&
+  sameAes(got.hpAes, want.hpAes);
 
 /** The record a protection seals for a fixed message: the AES schedule (or ChaCha20 key) at work. */
 const sealed = (p: TlsRecordProtection): string => {
@@ -333,10 +363,17 @@ const recordChecks = (t: Suite): void => {
   plain.advance(long);
   t.eqStr("advanceHeld under SHA-384 ratchets as advance does", secretHex(traffic48), toHex(long));
   t.eqStr("and seals as it does", sealed(held), sealed(plain));
+  const wrongBytes: u8[] = ramp(32, 3, 5);
+  const wrong: Secret<u8[]> = secret(copyOf(wrongBytes));
+  t.ok("advanceHeld refuses a secret that is not its suite's hash length", !held.advanceHeld(wrong));
+  t.eqStr("and leaves that secret as it was", secretHex(wrong), toHex(wrongBytes));
+  t.ok("installHeld refuses a suite it does not know", !held.installHeld(0x1304, traffic48));
+  t.ok("leaving the direction cleartext", !held.isProtected() && allZero(held.key) && allZero(held.iv));
   wipe(traffic);
   wipe(short);
   wipe(client);
   wipe(traffic48);
+  wipe(wrong);
 };
 
 /** `quicKeysHeldInto` and `quicKeyUpdateSecretHeldInto` on RFC 9001 Appendix A, against the `*Into` forms. */

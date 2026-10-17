@@ -42,6 +42,10 @@ PASS  installHeld under ChaCha20-Poly1305 seals what install seals
 PASS  and under AES-256-GCM-SHA384
 PASS  advanceHeld under SHA-384 ratchets as advance does
 PASS  and seals as it does
+PASS  advanceHeld refuses a secret that is not its suite's hash length
+PASS  and leaves that secret as it was
+PASS  installHeld refuses a suite it does not know
+PASS  leaving the direction cleartext
 PASS  quicKeysHeldInto: RFC 9001 A.1 client key, iv and hp
 PASS  and they are quicKeysInto's
 PASS  quicKeysHeldInto: RFC 9001 A.5 key, iv and hp
@@ -56,4 +60,4 @@ PASS  quicKeyUpdateSecretHeldInto under SHA-384 is quicKeyUpdateSecretInto
 PASS  quicKeysHeldInto refuses a secret that is not its hash's length
 PASS  quicKeyUpdateSecretHeldInto refuses lengths that differ
 PASS  and a length that is no hash's
-crypto held derive: 58 passed, 0 failed, 0 skipped
+crypto held derive: 62 passed, 0 failed, 0 skipped
