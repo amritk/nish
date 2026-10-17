@@ -1,4 +1,4 @@
-// A constructor reached by `new` that wipes a holder's field is a write too.
+// A constructor reached by `new` that ends a holder is a write too.
 import { Secret, expose, secret, wipe } from "nish:secret";
 import { scope } from "nish/threads";
 const first = (k: u8[]): i32 => toI32(k[0]);
@@ -14,7 +14,7 @@ class Holder {
 class Ender {
   n: i32 = 0;
   constructor(h: Holder) {
-    wipe(h.k);
+    h.wipe();
   }
 }
 const work = (h: Holder): i32 => expose(h.k, first);

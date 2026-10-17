@@ -1,4 +1,4 @@
-// A helper that wipes a holder's field is a write to the holder too.
+// A helper that ends a holder is a write to the holder too.
 import { Secret, expose, secret, wipe } from "nish:secret";
 import { scope } from "nish/threads";
 const first = (k: u8[]): i32 => toI32(k[0]);
@@ -13,7 +13,7 @@ class Holder {
 }
 const work = (h: Holder): i32 => expose(h.k, first);
 const end = (h: Holder): void => {
-  wipe(h.k);
+  h.wipe();
 };
 export const main = (): i32 => {
   const h = new Holder();

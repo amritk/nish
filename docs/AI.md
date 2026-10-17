@@ -1721,7 +1721,8 @@ through `exposeWith`; read `this.k` only as a call or `new` argument (`expose`,
 `exposeWith`, `wipe`, a function taking a `Secret`) or a `===`/`!==` operand —
 never bind, return or store it. The class declares `wipe(): void`, no
 parameters, calling `wipe(this.k)` itself for every such field on every path
-(NL2536, NL2537). Nothing checks that `wipe()` is called: call it when the
+(NL2536, NL2537); a field is wiped nowhere else (NL2543). A function taking a
+`Secret` borrows it: it neither returns it (NL2542) nor wipes it (NL2544). Nothing checks that `wipe()` is called: call it when the
 holder is done.
 
 ```ts nish:ok

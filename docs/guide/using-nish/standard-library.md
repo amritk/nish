@@ -821,6 +821,24 @@ export const main = (): i32 => {
 };
 ```
 
+The holder's `wipe()` is the only place the field ends: `wipe(s.key)`
+anywhere else is refused, so call `s.wipe()` instead. A function that takes a
+`Secret` borrows it, so it may lend it on or `expose` it, but it neither
+returns it nor wipes it:
+
+```ts nish:err NL2542
+import { Secret, secret, wipe } from "nish:secret";
+
+const same = (k: Secret<u8[]>): Secret<u8[]> => k; // a second name for the caller's key
+
+export const main = (): i32 => {
+  const k = secret(new Array<u8>(32));
+  const again = same(k);
+  wipe(again);
+  return 0;
+};
+```
+
 Calling `wipe()` is the program's job: the compiler checks that the method
 wipes every field, not that something calls it. The rules are in
 [A `Secret` field](../../LANGUAGE.md#a-secret-field).

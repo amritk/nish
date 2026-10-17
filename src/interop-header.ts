@@ -38,6 +38,7 @@ import {
 } from "./interop-abi"
 import { CheckedProgram, inlineElementStruct, StructInfo, STRUCT_CLASS } from "./program"
 import { isCollectionStruct } from "./generics"
+import { isSecretStruct } from "./secret"
 import { K_ARRAY, TypeTable } from "./types"
 
 /**
@@ -143,6 +144,16 @@ const structDefinitions = (compilation: Compilation): string[] => {
       i = i + 1
       continue
     }
+    // A `Secret` is opaque too: its field is the key, which leaves only through
+    // `expose`, so the header names the struct and keeps its layout back.
+    if (isSecretStruct(info)) {
+      lines.push(
+        `/* ${file}: ${kind} ${info.name}, opaque: a key, held and passed back but never read here */`
+      )
+      lines.push(`typedef struct ${cName} ${cName};`)
+      i = i + 1
+      continue
+    }
     lines.push(`/* ${file}: ${kind} ${info.name}${ifaces} */`)
     if (info.fields.length === 0) {
       lines.push(`/* struct ${cName} has no fields; it stays incomplete (pointers only). */`)
@@ -172,8 +183,8 @@ const structFieldTypes = (compilation: Compilation): i32[] => {
   const out: i32[] = []
   for (const unit of compilation.modules) {
     for (const info of unit.checker.program.structList) {
-      // An opaque `Map` or `Set` (WP32) contributes no field to describe.
-      if (isCollectionStruct(info)) {
+      // An opaque `Map`, `Set` (WP32) or `Secret` contributes no field to describe.
+      if (isCollectionStruct(info) || isSecretStruct(info)) {
         continue
       }
       for (const f of info.fields) {

@@ -10854,6 +10854,73 @@ if (!only || "interop".includes(only)) {
     escapedHeader || escaped.stdout + escaped.stderr
   )
 
+  // A `Secret` is opaque at the boundary, as a `Map` is: the header names its
+  // struct and keeps the layout, so a C host holds the key's pointer but has no
+  // field to read it through; the wasm typings and the N-API shim bridge no
+  // function that takes or returns a holder or a `Secret` at all.
+  const secretSrc = path.join(interopDir, "secret_export.ts")
+  fs.writeFileSync(
+    secretSrc,
+    [
+      'import { Secret, expose, secret, wipe } from "nish:secret";',
+      "const width = (k: u8[]): i32 => toI32(k.length);",
+      "export class Keyed {",
+      "  readonly k: Secret<u8[]>;",
+      "  constructor(n: i32) {",
+      "    this.k = secret(new Array<u8>(n));",
+      "  }",
+      "  wipe(): void {",
+      "    wipe(this.k);",
+      "  }",
+      "}",
+      "export function make(n: i32): Keyed {",
+      "  return new Keyed(n);",
+      "}",
+      "export function size(h: Keyed): i32 {",
+      "  return expose(h.k, width);",
+      "}",
+      "export function measure(s: Secret<u8[]>): i32 {",
+      "  return expose(s, width);",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const secretOut = emit(secretSrc, [
+    "--emit-header",
+    sidecar("secret_export", "h"),
+    "--emit-dts",
+    sidecar("secret_export", "d.ts"),
+    "--emit-napi",
+    sidecar("secret_export", "napi.c"),
+  ])
+  const readSidecar = (ext) =>
+    secretOut.status === 0 && fs.existsSync(sidecar("secret_export", ext))
+      ? fs.readFileSync(sidecar("secret_export", ext), "utf8")
+      : ""
+  const secretHeader = readSidecar("h")
+  const secretDts = readSidecar("d.ts")
+  const secretNapi = readSidecar("napi.c")
+  const secretDriver = path.join(interopDir, "secret_export_driver.c")
+  fs.writeFileSync(secretDriver, '#include "secret_export.h"\nint main(void) { return 0; }\n')
+  const secretCc = spawnSync("clang", [...strictC, "-fsyntax-only", secretDriver], { encoding: "utf8" })
+  check(
+    "nish:secret: --emit-header keeps a Secret opaque in a holder's field and a parameter, and --emit-dts / --emit-napi bridge neither",
+    secretOut.status === 0 &&
+      secretHeader.includes("typedef struct nish_gen_Secret_arr_u8 nish_gen_Secret_arr_u8;") &&
+      !secretHeader.includes("struct nish_gen_Secret_arr_u8 {") &&
+      secretHeader.includes("struct nish_gen_Secret_arr_u8 *k;") &&
+      secretHeader.includes("int32_t measure(struct nish_gen_Secret_arr_u8 *s);") &&
+      secretHeader.includes("int32_t size(struct Keyed *h);") &&
+      secretCc.status === 0 &&
+      secretDts.includes("// make(n: number): Keyed  -- not exported to JS") &&
+      secretDts.includes("// size(h: Keyed): number  -- not exported to JS") &&
+      secretDts.includes("// measure(s: Secret$arr.u8): number  -- not exported to JS") &&
+      secretNapi.includes("make(n: number): Keyed -- not bridged") &&
+      secretNapi.includes("size(h: Keyed): number -- not bridged") &&
+      secretNapi.includes("measure(s: Secret$arr.u8): number -- not bridged"),
+    secretOut.stderr + secretCc.stderr + secretHeader + secretDts + secretNapi
+  )
+
   const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")])
   const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : ""
   check(

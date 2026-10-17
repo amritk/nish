@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1039 programs, 127588 dump lines.
+# 1043 programs, 127948 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -51439,6 +51439,296 @@ function main(): i32 -> @nish_main [exported entry]
   local 11:9 sum: i32 (const)
   local 12:9 wide: i64 (const)
   local 13:9 xs: i32[] (const)
+program tests/cases/secret_field.ts
+module tests/cases/secret_field.ts (entry)
+import Secret from "nish:secret" -> generic class Secret
+import expose from "nish:secret" -> generic function expose
+import exposeWith from "nish:secret" -> generic function exposeWith
+import secret from "nish:secret" -> generic function secret
+import wipe from "nish:secret" -> generic function wipe
+struct Rec (class) size=8 align=4
+  field a: i32 index=0 offset=0
+  field b: i32 index=1 offset=4
+  constructor -> @Rec.constructor
+struct Holder (class) size=24 align=8
+  field k: Secret<u8[]> index=0 offset=0 readonly
+  field j: Secret<Rec> index=1 offset=8 readonly
+  field label: string index=2 offset=16 readonly
+  constructor -> @Holder.constructor
+  method refill -> @Holder.refill
+  method tag -> @Holder.tag
+  method wipe -> @Holder.wipe
+function Rec.constructor(this: Rec, a: i32, b: i32): void -> @Rec.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: a b
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function sum(k: u8[]): i32 -> @sum$
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 t: i32 (let)
+  local 19:12 i: i32 (let)
+function recSum(r: Rec): i32 -> @recSum$
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer r: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Holder.constructor(this: Holder, seed: u8, label: string): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: label seed
+  calls: Rec.constructor nish.secret$$Rec nish.secret$arr.u8 nish_alloc_struct
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 32:14 secret<u8[]> -> @nish.secret$arr.u8
+  callee 33:14 secret<Rec> -> @nish.secret$$Rec
+  callee 33:21 new Rec -> @Rec.constructor
+function Holder.refill(this: Holder, by: u8): void -> @Holder.refill [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.exposeWith$arr.u8$u8$i32$fn.20.Holder.refill$arrow0
+  escaping: by
+  calls: nish.exposeWith$arr.u8$u8$i32$fn.20.Holder.refill$arrow0
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 37:5 exposeWith<u8[], u8, i32, (v, d) => ...> -> @nish.exposeWith$arr.u8$u8$i32$fn.20.Holder.refill$arrow0
+  local 38:16 i: i32 (let)
+function Holder.tag(this: Holder): i32 -> @Holder.tag [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.expose$$Rec$i32$fn.6.recSum nish.expose$arr.u8$i32$fn.3.sum nish_panic_overflow
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 45:12 expose<u8[], i32, sum> -> @nish.expose$arr.u8$i32$fn.3.sum
+  callee 45:34 expose<Rec, i32, recSum> -> @nish.expose$$Rec$i32$fn.6.recSum
+function Holder.wipe(this: Holder): void -> @Holder.wipe [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.wipe$$Secret$arr.u8
+  calls: nish.wipe$$Secret$$Rec nish.wipe$$Secret$arr.u8
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 48:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 49:5 wipe<Secret<Rec>> -> @nish.wipe$$Secret$$Rec
+function borrowed(k: Secret<u8[]>): i32 -> @borrowed
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.expose$arr.u8$i32$fn.3.sum
+  pointer k: size=8 writesThrough=false captured=false passedTo=nish.expose$arr.u8$i32$fn.3.sum#0
+  stackSites=0 stackLocals=0
+  callee 53:44 expose<u8[], i32, sum> -> @nish.expose$arr.u8$i32$fn.3.sum
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Holder.constructor Holder.refill Holder.tag Holder.wipe borrowed nish_alloc_struct nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 56:9 h: Holder (const)
+  callee 56:13 new Holder -> @Holder.constructor
+  callee 57:15 Holder.tag -> @Holder.tag
+  callee 58:3 Holder.refill -> @Holder.refill
+  callee 59:15 Holder.tag -> @Holder.tag
+  callee 60:15 borrowed -> @borrowed
+  local 62:9 g: Holder (const)
+  callee 62:13 new Holder -> @Holder.constructor
+  local 63:9 all: Holder[] (const)
+  local 64:9 alias: Holder (const)
+  callee 65:15 borrowed -> @borrowed
+  local 69:14 x: Holder (const)
+  callee 70:5 Holder.wipe -> @Holder.wipe
+function (v, d) => ...(v: u8[], d: u8): i32 -> @Holder.refill$arrow0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 39:9
+  pointer v: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 38:16 i: i32 (let)
+module std/secret.ts [package nish]
+struct Secret<u8[]> (class) size=8 align=8 exported
+  field value: u8[] index=0 offset=0
+  constructor -> @nish.Secret$arr.u8.constructor
+struct Secret<Rec> (class) size=8 align=8 exported
+  field value: Rec index=0 offset=0
+  constructor -> @nish.Secret$$Rec.constructor
+function Secret<u8[]>.constructor(this: Secret<u8[]>, value: u8[]): void -> @nish.Secret$arr.u8.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  pointer value: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Secret<Rec>.constructor(this: Secret<Rec>, value: Rec): void -> @nish.Secret$$Rec.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  pointer value: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function secret<u8[]>(value: u8[]): Secret<u8[]> -> @nish.secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  calls: nish.Secret$arr.u8.constructor nish_alloc_struct
+  pointer value: size=0 writesThrough=true captured=true passedTo=nish.Secret$arr.u8.constructor#1
+  stackSites=0 stackLocals=0
+  callee 46:51 new Secret<u8[]> -> @nish.Secret$arr.u8.constructor
+function secret<Rec>(value: Rec): Secret<Rec> -> @nish.secret$$Rec [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  calls: nish.Secret$$Rec.constructor nish_alloc_struct
+  pointer value: size=8 writesThrough=true captured=true passedTo=nish.Secret$$Rec.constructor#1
+  stackSites=0 stackLocals=0
+  callee 46:51 new Secret<Rec> -> @nish.Secret$$Rec.constructor
+function exposeWith<u8[], u8, i32, (v, d) => ...>(s: Secret<u8[]>, arg: u8, f: void): i32 -> @nish.exposeWith$arr.u8$u8$i32$fn.20.Holder.refill$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Holder.refill$arrow0
+  escaping: arg
+  calls: Holder.refill$arrow0
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 52:93 (v, d) => ... -> @Holder.refill$arrow0
+function expose<u8[], i32, sum>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.3.sum [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: sum$
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 49:70 sum -> @sum$
+function expose<Rec, i32, recSum>(s: Secret<Rec>, f: void): i32 -> @nish.expose$$Rec$i32$fn.6.recSum [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: recSum$
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 49:70 recSum -> @recSum$
+function wipe<Secret<u8[]>>(_target: Secret<u8[]>): void -> @nish.wipe$$Secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via llvm.memset.p0i8.i64
+  calls: llvm.memset.p0i8.i64
+  pointer _target: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function wipe<Secret<Rec>>(_target: Secret<Rec>): void -> @nish.wipe$$Secret$$Rec [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via llvm.memset.p0i8.i64
+  calls: llvm.memset.p0i8.i64
+  pointer _target: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/secret_field_wipe_o2.ts
+module tests/cases/secret_field_wipe_o2.ts (entry)
+import Secret from "nish:secret" -> generic class Secret
+import expose from "nish:secret" -> generic function expose
+import secret from "nish:secret" -> generic function secret
+import wipe from "nish:secret" -> generic function wipe
+struct Holder (class) size=8 align=8
+  field k: Secret<u8[]> index=0 offset=0 readonly
+  constructor -> @Holder.constructor
+  method tag -> @Holder.tag
+  method wipe -> @Holder.wipe
+function sum(k: u8[]): i32 -> @sum$
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 11:7 t: i32 (let)
+  local 12:12 i: i32 (let)
+function Holder.constructor(this: Holder, seed: u8): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: seed
+  calls: nish.secret$arr.u8
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 21:14 secret<u8[]> -> @nish.secret$arr.u8
+function Holder.tag(this: Holder): i32 -> @Holder.tag [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.expose$arr.u8$i32$fn.3.sum
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 24:12 expose<u8[], i32, sum> -> @nish.expose$arr.u8$i32$fn.3.sum
+function Holder.wipe(this: Holder): void -> @Holder.wipe [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.wipe$$Secret$arr.u8
+  calls: nish.wipe$$Secret$arr.u8
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 27:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function work(seed: i32): i32 -> @work
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Holder.wipe
+  calls: Holder.constructor Holder.tag Holder.wipe nish_arena_mark nish_arena_release
+  stackSites=1 stackLocals=1
+  local 32:9 h: Holder (const)
+  callee 32:13 new Holder -> @Holder.constructor
+  local 33:9 t: i32 (const)
+  callee 33:18 Holder.tag -> @Holder.tag
+  callee 34:3 Holder.wipe -> @Holder.wipe
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print nish_str_from_i32 work
+  stackSites=0 stackLocals=0
+  callee 39:15 work -> @work
+module std/secret.ts [package nish]
+struct Secret<u8[]> (class) size=8 align=8 exported
+  field value: u8[] index=0 offset=0
+  constructor -> @nish.Secret$arr.u8.constructor
+function Secret<u8[]>.constructor(this: Secret<u8[]>, value: u8[]): void -> @nish.Secret$arr.u8.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  pointer value: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function secret<u8[]>(value: u8[]): Secret<u8[]> -> @nish.secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  calls: nish.Secret$arr.u8.constructor nish_alloc_struct
+  pointer value: size=0 writesThrough=true captured=true passedTo=nish.Secret$arr.u8.constructor#1
+  stackSites=0 stackLocals=0
+  callee 46:51 new Secret<u8[]> -> @nish.Secret$arr.u8.constructor
+function expose<u8[], i32, sum>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.3.sum [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: sum$
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 49:70 sum -> @sum$
+function wipe<Secret<u8[]>>(_target: Secret<u8[]>): void -> @nish.wipe$$Secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via llvm.memset.p0i8.i64
+  calls: llvm.memset.p0i8.i64
+  pointer _target: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/secret_field_wipe_o2_plain.ts
+module tests/cases/secret_field_wipe_o2_plain.ts (entry)
+struct Holder (class) size=8 align=8
+  field k: u8[] index=0 offset=0 readonly
+  constructor -> @Holder.constructor
+  method tag -> @Holder.tag
+  method wipe -> @Holder.wipe
+function sum(k: u8[]): i32 -> @sum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 8:7 t: i32 (let)
+  local 9:12 i: i32 (let)
+function Holder.constructor(this: Holder, seed: u8): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: seed
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Holder.tag(this: Holder): i32 -> @Holder.tag [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: sum
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 21:12 sum -> @sum
+function Holder.wipe(this: Holder): void -> @Holder.wipe [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 24:5
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function work(seed: i32): i32 -> @work
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Holder.wipe
+  calls: Holder.constructor Holder.tag Holder.wipe nish_arena_mark nish_arena_release
+  stackSites=1 stackLocals=1
+  local 29:9 h: Holder (const)
+  callee 29:13 new Holder -> @Holder.constructor
+  local 30:9 t: i32 (const)
+  callee 30:18 Holder.tag -> @Holder.tag
+  callee 31:3 Holder.wipe -> @Holder.wipe
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print nish_str_from_i32 work
+  stackSites=0 stackLocals=0
+  callee 36:15 work -> @work
 program tests/cases/secret_flow.ts
 module tests/cases/secret_flow.ts (entry)
 import Secret from "nish:secret" -> generic class Secret
@@ -81195,6 +81485,80 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 2:9 here: string | null (const)
   local 3:9 root: string (const)
+program docs/cookbook/builtin-secret-field.ts
+module docs/cookbook/builtin-secret-field.ts (entry)
+import Secret from "nish:secret" -> generic class Secret
+import expose from "nish:secret" -> generic function expose
+import secret from "nish:secret" -> generic function secret
+import wipe from "nish:secret" -> generic function wipe
+struct Session (class) size=8 align=8
+  field key: Secret<u8[]> index=0 offset=0 readonly
+  constructor -> @Session.constructor
+  method size -> @Session.size
+  method wipe -> @Session.wipe
+function width(k: u8[]): i32 -> @width$
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Session.constructor(this: Session, n: i32): void -> @Session.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: n
+  calls: nish.secret$arr.u8 nish_panic
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee 13:16 secret<u8[]> -> @nish.secret$arr.u8
+function Session.size(this: Session): i32 -> @Session.size [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.expose$arr.u8$i32$fn.5.width
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 16:12 expose<u8[], i32, width> -> @nish.expose$arr.u8$i32$fn.5.width
+function Session.wipe(this: Session): void -> @Session.wipe [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.wipe$$Secret$arr.u8
+  calls: nish.wipe$$Secret$arr.u8
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 19:5 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function useSession(n: i32): i32 -> @useSession [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Session.wipe
+  escaping: n
+  calls: Session.constructor Session.size Session.wipe nish_arena_mark nish_arena_release
+  stackSites=1 stackLocals=1
+  local 24:9 s: Session (const)
+  callee 24:13 new Session -> @Session.constructor
+  local 25:9 w: i32 (const)
+  callee 25:13 Session.size -> @Session.size
+  callee 26:3 Session.wipe -> @Session.wipe
+module std/secret.ts [package nish]
+struct Secret<u8[]> (class) size=8 align=8 exported
+  field value: u8[] index=0 offset=0
+  constructor -> @nish.Secret$arr.u8.constructor
+function Secret<u8[]>.constructor(this: Secret<u8[]>, value: u8[]): void -> @nish.Secret$arr.u8.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  pointer value: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function secret<u8[]>(value: u8[]): Secret<u8[]> -> @nish.secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  calls: nish.Secret$arr.u8.constructor nish_alloc_struct
+  pointer value: size=0 writesThrough=true captured=true passedTo=nish.Secret$arr.u8.constructor#1
+  stackSites=0 stackLocals=0
+  callee 46:51 new Secret<u8[]> -> @nish.Secret$arr.u8.constructor
+function expose<u8[], i32, width>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.5.width [exported instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: width$
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 49:70 width -> @width$
+function wipe<Secret<u8[]>>(_target: Secret<u8[]>): void -> @nish.wipe$$Secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via llvm.memset.p0i8.i64
+  calls: llvm.memset.p0i8.i64
+  pointer _target: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 program docs/cookbook/builtin-secret.ts
 module docs/cookbook/builtin-secret.ts (entry)
 import Secret from "nish:secret" -> generic class Secret

@@ -13,13 +13,16 @@
 //   - **Shape and position**, asked by the checker as it meets the construct:
 //     what `T` may be, and that a `Secret` is never interpolated, printed,
 //     handed to a builtin, compared with a value, branched on, indexed, read
-//     into, built with `new`, or put in a field, an element or a `Result`.
+//     into, built with `new`, or put in an element or a `Result`; a field holds
+//     one only as a `readonly` field of a class whose `wipe()` wipes it.
 //     Each is asked before the generic rule it would otherwise trip, so the one
 //     diagnostic a program gets names the secret.
 //   - **Ownership**, over a body once it has checked cleanly
 //     (`checkSecretFlow`): a `Secret` the function makes leaves it returned or
 //     wiped on every path, is not copied, is not read once wiped, and a local
-//     handed to `secret` is moved. Result rule 1's two entry points, the
+//     handed to `secret` is moved. A `Secret` parameter is borrowed, so it is
+//     neither returned nor wiped; a holder's field is set once, in the
+//     constructor, and wiped only in the holder's `wipe()`. Result rule 1's two entry points, the
 //     statement that drops a value and the body that never handles one, with
 //     the second walked path by path rather than counted, because "wiped
 //     somewhere" is not "wiped".
@@ -117,6 +120,12 @@ export const isSecretSource = (program: CheckedProgram): boolean =>
 /** Whether `template` is `Secret<T>` itself. */
 export const isSecretTemplate = (template: StructTemplateInfo): boolean =>
   template.sourceName === SECRET_CLASS && isSecretSource(template.home.program)
+
+/** Whether `info` is an instantiation of `Secret<T>`, a struct the C header keeps opaque. */
+export const isSecretStruct = (info: StructInfo): boolean => {
+  const instance = info.instance
+  return instance !== null && isSecretTemplate(instance.template)
+}
 
 /** The `SECRET_*` role of an instantiation of `template`. */
 const secretRole = (template: TemplateInfo): i32 => {
@@ -292,6 +301,12 @@ const fieldReadMessage = (field: string): string =>
   "operand: bound, returned, chosen or stored, it would be a second owner of the key the holder's " +
   "`wipe()` ends, so pass it to `expose`, `exposeWith`, `wipe` or a function that takes a `Secret`"
 
+/** `wipe(h.k)` anywhere but the holder's own `wipe()`. */
+const fieldWipeMessage = (field: string): string =>
+  `\`${field}\` is wiped outside its holder's \`wipe()\`: a \`Secret\` field ends only in that method, ` +
+  "on every path, so a wipe anywhere else would leave the holder holding zeros that its other uses " +
+  "then read and its own `wipe()` wipes again; call the holder's `wipe()` instead"
+
 /** `{ key: ... }` for a holder class: the field set without `secret(...)`. */
 export const holderLiteralMessage = (holder: string): string =>
   `\`${holder}\` holds a \`Secret\` field and is made only by \`new\`: its constructor is the one place ` +
@@ -452,6 +467,17 @@ const copyMessage = (name: string): string =>
   `\`${name}\` is a \`Secret\`, and a \`Secret\` is not copied: two names for one key would leave one ` +
   "of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function " +
   "made into another (`const j = k`), after which `k` is not read"
+
+/** `wipe(p)` for a `Secret` parameter `p`, which its caller still owns. */
+const paramWipeMessage = (name: string): string =>
+  `\`${name}\` is a \`Secret\` parameter, which its caller owns and wipes: wiped here, the caller ` +
+  "would go on reading zeros and wipe it again. Leave the wipe to the caller, which knows when it is done"
+
+/** `return p` for a `Secret` parameter `p`, which its caller still owns. */
+const paramReturnMessage = (name: string): string =>
+  `\`${name}\` is a \`Secret\` parameter, which its caller owns and wipes: returned, it would be a ` +
+  "second name for that key in the caller, one of the two wiped by nobody or both read once it is wiped. " +
+  "Return a value computed from it inside `expose`, or a new `secret(...)` made from one"
 
 /** A read of a local after `secret(x)` moved it. */
 const movedMessage = (name: string): string =>
@@ -1161,6 +1187,13 @@ class SecretFlow {
       return
     }
     const at = this.slotIndex(node)
+    // A field ends in its holder's own `wipe()`, the one body whose slots are
+    // owned: wiped in a constructor, a method or through another name, the
+    // holder would go on reading, and wiping, the zeros.
+    if (role === ROLE_WIPE && (at < 0 || this.building)) {
+      this.error(node, fieldWipeMessage(node.text))
+      return
+    }
     if (at < 0) {
       return
     }
@@ -1233,6 +1266,11 @@ class SecretFlow {
       return
     }
     if (role === ROLE_WIPE) {
+      // A parameter is borrowed, and its caller goes on reading it and wipes
+      // it itself.
+      if (!this.owned[at] && this.slots[at] === "") {
+        this.error(node, paramWipeMessage(local.name))
+      }
       state.live[at] = false
       state.wiped[at] = true
       return
@@ -1248,6 +1286,11 @@ class SecretFlow {
       return
     }
     if (role === ROLE_RETURN) {
+      // A parameter is borrowed: returning it hands the caller a second name
+      // for a key it already owns.
+      if (!this.owned[at] && this.slots[at] === "") {
+        this.error(node, paramReturnMessage(local.name))
+      }
       state.live[at] = false
       return
     }

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 669
+export const RULE_COUNT: i32 = 672
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -75,6 +75,8 @@ const diagnosticRules = (): string[] => [
   "NL2515",
   "` is a `Secret` field, which is read only as a call's argument or an `===`/`!==` operand: bound, returned, chosen or stored, it would be a second owner of the key the holder's `wipe()` ends, so pass it to `expose`, `exposeWith`, `wipe` or a function that takes a `Secret`",
   "NL2540",
+  "` is a `Secret` parameter, which its caller owns and wipes: returned, it would be a second name for that key in the caller, one of the two wiped by nobody or both read once it is wiped. Return a value computed from it inside `expose`, or a new `secret(...)` made from one",
+  "NL2542",
   "The task given to `spawn` must be a top-level function named at the call, not an arrow: a task is a unit of work a thread runs on its own, and its name is what a debugger or a profiler shows for that thread (declare the arrow as a `const` of the module and pass its name)",
   "NL2391",
   "` from outside the arrow it is written in: only an arrow written directly in a function's body and passed to `parallelMap`, `parallelFrom`, `parallelMapInto` or `parallelReduce` may read that function's `const` locals, and an arrow inside another arrow captures nothing",
@@ -85,6 +87,8 @@ const diagnosticRules = (): string[] => [
   "NL2480",
   "`, a `let` of the function it is written in: a task's arrow may read only a `const` or a parameter of that function, which is handed to the task when it is spawned as its argument is and cannot change before it runs; bind the value to a `const` before the `spawn`",
   "NL2506",
+  "` is wiped outside its holder's `wipe()`: a `Secret` field ends only in that method, on every path, so a wipe anywhere else would leave the holder holding zeros that its other uses then read and its own `wipe()` wipes again; call the holder's `wipe()` instead",
+  "NL2543",
   "The arrow reads `this`: a data-parallel body may read the `const` locals and the parameters of the function it is written in, and `this` is neither; bind it, or what the body needs of it, to a `const` before the call (`const self = this`, `const k = this.k`)",
   "NL2502",
   "` cannot declare `[Symbol.dispose]`: in this version `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, whose disposal the compiler emits itself, so a disposal method of any other class would never be called",
@@ -171,6 +175,8 @@ const diagnosticRules = (): string[] => [
   "NL2338",
   "` releases what a body allocates after every element: a parallel body may allocate only temporaries it drops before it returns, and this analysis stops following a value once it is stored",
   "NL2352",
+  "` is a `Secret` parameter, which its caller owns and wipes: wiped here, the caller would go on reading zeros and wipe it again. Leave the wipe to the caller, which knows when it is done",
+  "NL2544",
   " and cannot initialise a `const` annotated with its value type: annotate the `const` with the whole type, or with none, and test it with `!== undefined`, or give it a default with `??`",
   "NL2368",
   "`, which belongs to the function it is written in: a task reads a captured value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument",

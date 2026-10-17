@@ -1,4 +1,5 @@
-// A `Secret` made as a `new` argument: the constructor only borrows it, so nobody owns it (NL2439).
+// `new Box(h.k)` borrows the holder's field, as a call does; a `Secret` made as a `new` argument
+// is borrowed the same way, so nobody owns it (NL2439).
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret";
 const sum = (k: u8[]): i32 => toI32(k.length);
 const bytes = (): u8[] => [toU8(1), toU8(2)];
@@ -18,6 +19,9 @@ class Box {
   }
 }
 export const main = (): i32 => {
+  const h = new Holder(toU8(1));
+  const a = new Box(h.k);
+  h.wipe();
   const b = new Box(secret(bytes()));
-  return b.n;
+  return a.n + b.n;
 };

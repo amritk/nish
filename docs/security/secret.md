@@ -148,7 +148,13 @@ can name the field.
   chained member, an index, a template, `console.log`, a condition and
   `secret(h.k)`; the holder as an object literal, a JSON encode or decode
   target, a data-parallel capture, a task's argument wiped in its scope, and a
-  `using` binding.
+  `using` binding. Review round 1 added: a function, an arrow or a generic
+  `id<T>` that returns the `Secret` it borrows; `wipe(h.k)` in a function,
+  another method, a constructor, or through `this` handed out of one; a
+  helper that wipes its `Secret` parameter; a constructor reached by `new`
+  that zeroes the key in place inside `wipe()`; a field read through a nested
+  member, `o.h.k`; and the header, typings and N-API shim of an exported
+  function that takes or returns a holder.
 - Wrote a program for each and compiled it with the branch's `build/nish`.
 
 ### Properties verified
@@ -159,7 +165,15 @@ can name the field.
 - A class with such a field has `wipe(): void` with no parameters (NL2536),
   and that method calls `wipe(this.f)` for every field on every path out of it
   (NL2537): a branch, a loop body, an early `return` and a helper that wipes it
-  are each refused.
+  are each refused. A field is wiped only there: `wipe(h.f)` anywhere else,
+  a constructor included, is NL2543 (`SecretFlow.fieldRead`, `src/secret.ts`).
+- A `Secret` parameter is borrowed: returning it is NL2542 and wiping it
+  NL2544 (`SecretFlow.name`), so no function, arrow or generic instantiation
+  hands a caller a second name for a holder's key.
+- The C header keeps a `Secret` opaque, as it does a `Map`
+  (`isSecretStruct`, `src/interop-header.ts`): a holder's field and an
+  exported function's parameter are pointers to an incomplete struct with no
+  layout, and the `.d.ts` and N-API shim bridge no such function.
 - The field is set only in the constructor, only from `secret(...)` (NL2538),
   and only once (NL2539); `secret(...)` there keeps the sole-reference rule
   (NL2512). A store anywhere else is NL2181, and the store is a statement of its
@@ -181,11 +195,10 @@ can name the field.
 - What the rule leaves out: nothing makes a program call `wipe()`, so a holder
   that is never wiped leaves its key in memory, unzeroed; the rule does
   not follow a second reference to the holder itself, which is a loan of the
-  whole object rather than of the key; a function that takes a `Secret` and
-  returns it, as `(s: Secret<u8[]>): Secret<u8[]> => s`, hands back the
-  field's key under a second name, as it does a local's: the result is a
-  `Secret` its caller must wipe or return, and a use of it after the holder's
-  `wipe()` is the program's error, a wrong answer and not a leak; and a key made per packet or per record
+  whole object rather than of the key; a function that takes a `Secret` may
+  still zero its bytes through `exposeWith` and `fill(0)`, which is a write
+  through a borrow like any other and leaves the holder reading zeros, a
+  wrong answer and not a leak; and a key made per packet or per record
   is a local, held to NL2448 and NL2450, not a field.
 
 ### Tests
@@ -215,13 +228,20 @@ can name the field.
   `reject_secret_field_json`, `reject_secret_field_json_decode`,
   `reject_secret_field_capture`, `reject_secret_field_task_wipe`,
   `reject_secret_field_scope_wipe`, `reject_secret_field_scope_helper`,
-  `reject_secret_field_scope_new`, `reject_secret_field_store_value` and
-  `reject_secret_field_using`: one road each.
+  `reject_secret_field_scope_new`, `reject_secret_field_store_value`,
+  `reject_secret_field_using`, `reject_secret_field_launder_function`,
+  `reject_secret_field_launder_arrow`, `reject_secret_field_launder_generic`,
+  `reject_secret_field_wipe_outside`, `reject_secret_field_wipe_through`,
+  `reject_secret_field_wipe_method`, `reject_secret_field_wipe_ctor`,
+  `reject_secret_field_this_fin`, `reject_secret_field_this_store`,
+  `reject_secret_field_wipe_param`, `reject_secret_field_wipe_new` and
+  `reject_secret_field_nested`: one road each.
+- `nish:secret: --emit-header keeps a Secret opaque in a holder's field and a parameter, and --emit-dts / --emit-napi bridge neither`.
 - `${name}: IR matches golden` and `${name}: native output matches .out`, for
   `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.
 - `nish:secret: a holder's wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is an ordinary one`.
 - `codes: every registry code is provoked by a program, declared, or explained (${wordingsSummary})`:
-  NL2536 to NL2541 each have their `tests/wordings/` program.
+  NL2536 to NL2544 each have their `tests/wordings/` program.
 - `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
   for `docs/AI.md` and `docs/guide/using-nish/standard-library.md`: a holder
   accepted, and a field copied into a local refused with NL2540.
