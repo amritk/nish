@@ -210,6 +210,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-16 | `nish_write` retries `EINTR` (#611), so a panic's message is not cut short by a handler without `SA_RESTART`: core 3,622 → 3,656, threads 3,840 → 3,860 | core 3,656, threads 3,860 |
 | 2026-10-16 | the newline too, and `nish_die` through the same loop rather than `fputs` (#611): core 3,656 → 3,684, threads 3,860 → 3,885 | core 3,684, threads 3,885 |
 | 2026-10-16 | `runtime-cross.c` (1,170 / 1,235), threads-complete's copy-at-join; folded into `runtime-parallel.c` it measured 1,786 / 3,889 | cross 1,280 / 1,280 |
+| 2026-10-17 | threads-complete's adoption (#686): 1,196 / 1,277 → 1,433 / 1,514. The join's copy-back below 64 KB, so a small map in a loop stops growing the caller's chunk list, is 205 of the 237 bytes (`nish_cross_adopt` 51 → 256); `nish_cross_end` recording a block's use and `nish_cross_keep`'s doubling sizes are the rest. Nothing shrank first: the file already sat at 1,277 of 1,280 threaded, and its next largest function, the guard's kept set (`nish_kept_put`, 225), is the `Mutex` stage's, unchanged here. `runtime-parallel.c`'s thresholds and idle trim (30 and 110 bytes; 2,805 threaded) fit its ceiling | cross 1,536 / 1,536 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
