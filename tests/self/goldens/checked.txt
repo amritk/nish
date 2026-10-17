@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1043 programs, 130445 dump lines.
+# 1043 programs, 130461 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -16077,6 +16077,10 @@ function remember(s: string): i32 -> @remember
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
+function isNull(s: string | null): i32 -> @isNull
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
 function digits(n: i32): string -> @digits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow nish_str_from_i32
@@ -16087,26 +16091,38 @@ function handOver(n: i32): i32 -> @handOver
   escaping: n
   calls: digits nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_index_of remember
   stackSites=0 stackLocals=0
-  local 13:9 label: string (const)
-  callee 13:33 digits -> @digits
-  callee 14:10 remember -> @remember
+  local 16:9 label: string (const)
+  callee 16:33 digits -> @digits
+  callee 17:10 remember -> @remember
 function churn(n: i32): i32 -> @churn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: digits nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat
   stackSites=0 stackLocals=0
-  local 18:7 total: i32 (let)
-  local 19:12 i: i32 (let)
-  local 20:11 noise: string (const)
-  callee 20:48 digits -> @digits
+  local 21:7 total: i32 (let)
+  local 22:12 i: i32 (let)
+  local 23:11 noise: string (const)
+  callee 23:48 digits -> @digits
+function maybe(n: i32): string | null -> @maybe
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: digits
+  stackSites=0 stackLocals=0
+  callee 29:53 digits -> @digits
 function run(n: i32): i32 -> @run [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via handOver
   escaping: n
-  calls: churn handOver nish_panic_overflow
+  calls: churn handOver isNull maybe nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_index_of
   stackSites=0 stackLocals=0
-  local 27:9 read: i32 (const)
-  callee 27:21 handOver -> @handOver
-  callee 28:17 churn -> @churn
+  local 32:9 read: i32 (const)
+  callee 32:21 handOver -> @handOver
+  local 33:9 absent: i32 (const)
+  callee 33:23 isNull -> @isNull
+  callee 33:30 maybe -> @maybe
+  local 34:9 present: i32 (const)
+  callee 34:24 isNull -> @isNull
+  callee 34:31 maybe -> @maybe
+  callee 35:17 churn -> @churn
 program tests/cases/fn_arrow.ts
 module tests/cases/fn_arrow.ts (entry)
 function double(n: i32): i32 -> @double

@@ -1,7 +1,7 @@
 # WP27 — Calling C from Nish
 
-**Status:** S1 and S2 are built; S3 is planned (§8) and unbuilt; S4 and S5
-are proposed and unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
+**Status:** S1 and S2 are built; of S3 (§8), S3.1, `string` parameters, is
+built and S3.2 and S3.3 are planned; S4 and S5 are proposed and unbuilt. S1, scalar-only `declare function`, shipped in 0.2.0
 ([#62](https://github.com/amritk/nish/pull/62), `tests/cases/ffi_scalar`); S2,
 the opaque pointer `CPtr`, in 0.3.0 (`tests/cases/ffi_pointer`, §7), with its
 debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
@@ -92,7 +92,8 @@ stage is a real decision rather than a missing line:
 - **S3, `string` marshalling.** Converting at the boundary means allocating,
   which means the arena, which means the escape question of §2 in its hardest
   form: a pointer the compiler allocated would cross into C, and "the arena
-  cannot be released around the call" would start to bind. §8 plans it.
+  cannot be released around the call" would start to bind. §8 plans it, and
+  S3.1 has built its parameter half: the borrow rule (§8b).
 - **S4, struct layout.** The first layout in the language the compiler did not
   choose, and so the first whose size and alignment it would be told rather
   than know.
@@ -194,7 +195,9 @@ The arena is untouched: `tests/cases/ffi_pointer` allocates a string in the
 function that calls `calloc`, `realloc` and `free`, and `nish_arena_mark` /
 `nish_arena_release` bracket it exactly as without the foreign calls. That is
 safe because **no pointer this compiler allocated crosses the boundary in
-either direction** — which is precisely what S3 would change.
+either direction** — which held until S3. S3.1 lends a `string`'s bytes to C
+for the length of the call (§8b): the scope is released only after the call
+returns, so the bracket stays where it was.
 
 What S2 buys is a handle that comes out of C, is proved non-null, is held, and
 goes back in: `opendir`/`closedir`, `fopen`/`fclose`, `dlopen`/`dlsym`,
