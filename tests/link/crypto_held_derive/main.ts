@@ -4,14 +4,19 @@
 // `advanceHeld`, and `quicKeysHeldInto` and `quicKeyUpdateSecretHeldInto` in
 // `nish/net/quic-packet`. Each is run on RFC 8448 §3's and RFC 9001 Appendix
 // A's vectors and compared with the expected bytes and with its in-place
-// (`*Into`) form on plain arrays. The plain scratch the `*Into` forms derive
-// in, which a held form does not use, is read back as zero, and every
-// `Secret` the test makes is wiped.
+// (`*Into`) form on plain arrays, and `hkdfExpandLabelHeldInto` writes a
+// window inside a plain array as `hkdfExpandLabelInto` does. Every `Secret`
+// the test makes is wiped. The plain buffer each held form derives in is its
+// own and gone when it returns, so no test here can read it back: that it is
+// wiped is pinned by the held-derive group of `tests/wipes/crypto.js`, whose
+// counts drop when the wipe is deleted.
 import { Suite } from "nish/testing";
 import { Secret, expose, secret, wipe } from "nish:secret";
 import {
   HkdfScratch,
   hkdfExpandLabelSha256,
+  hkdfExpandLabelHeldInto,
+  hkdfExpandLabelInto,
   hkdfExpandLabelSha256Held,
   hkdfExpandLabelSha384,
   hkdfExpandLabelSha384Held,
@@ -64,6 +69,29 @@ import {
 const allZero = (bytes: u8[]): boolean => {
   for (const b of bytes) {
     if (b !== toU8(0)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** Whether `bytes[from .. to)` is all zero. */
+const zeroIn = (bytes: u8[], from: i32, to: i32): boolean => {
+  for (let k: i32 = from; k < to && k < toI32(bytes.length); k++) {
+    if (bytes[k] !== toU8(0)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** Whether `bytes` holds `want` at offset `at`. */
+const sameWindow = (bytes: u8[], at: i32, want: u8[]): boolean => {
+  if (at < 0 || at + toI32(want.length) > toI32(bytes.length)) {
+    return false;
+  }
+  for (let k: i32 = 0; k < toI32(want.length); k++) {
+    if (bytes[at + k] !== want[k]) {
       return false;
     }
   }
@@ -150,6 +178,37 @@ const hkdfChecks = (t: Suite): void => {
   t.eqStr("and into its own source", secretHex(held), toHex(hkdfExpandLabelSha384(prk, "traffic upd", none, l48)));
   wipe(okm);
   wipe(held);
+
+  // Into a plain array at a window inside it, against `hkdfExpandLabelInto`
+  // writing the same window: the bytes either side of it are left as they were.
+  const kdf = new HkdfScratch();
+  const at: i32 = 3;
+  const n16: i32 = 16;
+  const contextLength: i32 = toI32(context.length);
+  const zero: i32 = 0;
+  const source256: u8[] = ramp(32, 11, 7);
+  const held256: Secret<u8[]> = secret(copyOf(source256));
+  const window256: u8[] = new Array<u8>(24);
+  const window256Into: u8[] = new Array<u8>(24);
+  hkdfExpandLabelHeldInto(l32, held256, "quic key", context, window256, at, n16);
+  hkdfExpandLabelInto(kdf, l32, source256, "quic key", context, zero, contextLength, window256Into, at, n16);
+  t.eqStr("hkdfExpandLabelHeldInto at out[3] is hkdfExpandLabelInto there", toHex(window256), toHex(window256Into));
+  t.ok(
+    "and leaves the bytes either side of its window zero",
+    zeroIn(window256, 0, at) && zeroIn(window256, at + n16, 24) && !zeroIn(window256, at, at + n16)
+  );
+  const held384: Secret<u8[]> = secret(copyOf(prk));
+  const window384: u8[] = new Array<u8>(55);
+  const window384Into: u8[] = new Array<u8>(55);
+  hkdfExpandLabelHeldInto(l48, held384, "c ap traffic", context, window384, at, l48);
+  hkdfExpandLabelInto(kdf, l48, prk, "c ap traffic", context, zero, contextLength, window384Into, at, l48);
+  t.eqStr("and under SHA-384, 48 bytes at out[3]", toHex(window384), toHex(window384Into));
+  t.ok(
+    "which are hkdfExpandLabelSha384's",
+    sameWindow(window384, at, hkdfExpandLabelSha384(prk, "c ap traffic", context, l48))
+  );
+  wipe(held256);
+  wipe(held384);
 };
 
 /** The TLS 1.3 schedule into held `Secret`s along RFC 8448 §3, against the `*Into` forms. */
@@ -254,10 +313,6 @@ const recordChecks = (t: Suite): void => {
   t.eqStr("the held secret is ratcheted in place to advance's next secret", secretHex(traffic), toHex(next));
   t.ok("the keys are advance's", sameBytes(held.key, plain.key) && sameBytes(held.iv, plain.iv));
   t.eqStr("and so is the record", sealed(held), sealed(plain));
-  t.ok(
-    "the held forms leave no plain copy in the direction's own scratch: its next secret and HKDF state read zero",
-    allZero(held.next) && allZero(held.kdf.previous)
-  );
 
   const short: Secret<u8[]> = heldOf(16);
   t.ok("installHeld refuses a secret that is not its hash's length", !held.installHeld(TLS_AES_128_GCM_SHA256, short));

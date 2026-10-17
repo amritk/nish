@@ -5,6 +5,10 @@ PASS  into its own source: RFC 9001 A.1 server_initial_secret
 PASS  a 16-byte destination: RFC 9001 A.1 client key
 PASS  hkdfExpandLabelSha384Held is hkdfExpandLabelSha384
 PASS  and into its own source
+PASS  hkdfExpandLabelHeldInto at out[3] is hkdfExpandLabelInto there
+PASS  and leaves the bytes either side of its window zero
+PASS  and under SHA-384, 48 bytes at out[3]
+PASS  which are hkdfExpandLabelSha384's
 PASS  tlsHandshakeSecretHeld: RFC 8448 extract secret "handshake"
 PASS  and into its own early secret
 PASS  tlsDeriveSecretHeld: RFC 8448 "tls13 s hs traffic"
@@ -31,7 +35,6 @@ PASS  advanceHeld moves to the next key
 PASS  the held secret is ratcheted in place to advance's next secret
 PASS  the keys are advance's
 PASS  and so is the record
-PASS  the held forms leave no plain copy in the direction's own scratch: its next secret and HKDF state read zero
 PASS  installHeld refuses a secret that is not its hash's length
 PASS  leaving the direction cleartext
 PASS  advanceHeld refuses on a cleartext direction
@@ -53,4 +56,4 @@ PASS  quicKeyUpdateSecretHeldInto under SHA-384 is quicKeyUpdateSecretInto
 PASS  quicKeysHeldInto refuses a secret that is not its hash's length
 PASS  quicKeyUpdateSecretHeldInto refuses lengths that differ
 PASS  and a length that is no hash's
-crypto held derive: 55 passed, 0 failed, 0 skipped
+crypto held derive: 58 passed, 0 failed, 0 skipped
