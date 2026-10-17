@@ -1,14 +1,15 @@
 // A function that runs a map and answers a scalar gives its frame back when it
 // returns, as its sequential twin does: the map's result array, and the blocks
 // a string map adopts from its workers, are freed with the frame. Before that,
-// a map stored its result where escape analysis lost it, so every caller kept
-// every result: 24 calls over 2^21 elements and 24 string maps over 2^17 peaked
-// at 452 MB on four threads, and now peak at 27 MB.
+// the region's entry counted as keeping the array it was handed, and a string
+// map's chunk loop stored into an array escape analysis lost, so every caller
+// kept every result: without the third loop, which main refused to compile,
+// this peaked at 281 MB on 1, 4 and 8 threads, and now peaks at 18 to 20 MB.
 //
 // The third loop runs a map in main's own frame, which never returns between
 // rounds, so only `using a = arena()` around it gives each round back. The
-// block used to refuse a map; it still refuses one that answers strings, whose
-// result holds what the body allocated, as it refuses a loop that pushes them.
+// block used to refuse a map; it now refuses only one whose body answers
+// arrays (`tests/cases/reject_using_arena_map_arrays`).
 import { parallelFrom, parallelMap } from "nish/threads";
 
 const scaled = (xs: i32[], seed: i32, at: i32): i32 => {

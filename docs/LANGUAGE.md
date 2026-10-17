@@ -6987,15 +6987,16 @@ const tally = (rows: string[]): i32 => {
   (`reject_using_arena_outer_local`).
 - **A parallel body or a task may not open one**, for the reason it may not
   call `Arena.*` (`reject_using_arena_parallel`, NL2351).
-- **A map that answers numbers may run inside one.** The map's region joins
-  before the call returns, so its result array is the block's alone and the
-  release frees it (`tests/cases/mem_using_arena_map`). A map whose body
-  answers a string or an array stores each into its result, which the
-  analysis stops following, so the block refuses it as NL2424, as it refuses
-  a callee that pushes strings, and says what to write instead: run the map
-  in a function that answers what the block needs, whose frame gives the
-  map's result back when it returns
-  (`tests/cases/reject_using_arena_map_strings`).
+- **A map that answers numbers or strings may run inside one.** The map's
+  region joins before the call returns, so its result array is the block's
+  alone, and the blocks of strings it adopts from its workers are the block's
+  newest memory; the release frees both (`tests/cases/mem_using_arena_map`).
+  What the map answers may not outlive the block, as anything else allocated
+  in it may not (`tests/cases/reject_using_arena_map_escapes`). A map whose
+  body answers an array stores each one into its result, which the analysis
+  stops following, as it does for a loop that pushes arrays into an array, so
+  the block refuses it as NL2424 and says what to write instead: run that map
+  outside the block (`tests/cases/reject_using_arena_map_arrays`).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
   theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
