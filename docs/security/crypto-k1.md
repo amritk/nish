@@ -11,7 +11,7 @@ is `main` at `882857d`.
 | `std/crypto/sha256.ts` | `Sha256` (`update`, `copy`, `digest`), `sha256`, and the private `sha256Compress`, `sha256RoundConstant`, `sha256LoadWord`, `sha256CopyBytes` |
 | `std/crypto/sha512.ts` | `Sha512Engine` (`compress`, `absorb`, `copyInto`, `finish`), `Sha512`, `Sha384`, `sha512`, `sha384` |
 | `std/crypto/hmac.ts` | `HmacSha256`, `HmacSha384`, `hmacSha256`, `hmacSha384`, `hmacSha256Verify`, `hmacSha384Verify`, `hmacPadBlock` |
-| `std/crypto/hkdf.ts` | `hkdfExtractSha256/384`, `hkdfExpandSha256/384`, `hkdfSalt`, `hkdfAppend` |
+| `std/crypto/hkdf.ts` | `hkdfExtractSha256/384`, `hkdfExpandSha256/384`, `hkdfSalt`, `hkdfAppend`; added since (#668): `hkdfExpandLabelSha256Held/384Held` and `hkdfExpandLabelHeldInto`, which read a held PRK only inside `exposeWith`, derive into a fresh plain buffer, copy it into the held `dst` (or the caller's plain window) and `wipe` it, counted after `opt -O2` by `tests/wipes/crypto.js` ("crypto: the wipes survive opt -O2 (the plain output of each derivation into a held Secret in HKDF, the TLS schedule and record layer, and QUIC)"); test `crypto_held_derive` |
 | `std/crypto/ct.ts` | `timingSafeEqual`, `timingSafeEqualAt` |
 | `std/crypto/base64url.ts` | `base64urlEncode`, `base64urlDecode`, and the maps `base64urlRangeMask`, `base64urlCharOf`, `base64urlSextetOf` |
 
