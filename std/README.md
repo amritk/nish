@@ -261,8 +261,9 @@ Retry, key update both ways, the idle timeout and a stateless reset.
 
 `net/http1.ts`, `net/http1-server.ts` and `net/websocket.ts` run their checks
 again under `--number-mode f64` (`net_http1_f64`, `net_http1_server_f64`,
-`net_websocket_f64`), and so does the HTTP date (`net_http_date_f64`). None handles a secret but through `nish/net/tls-tcp`, so
-none is in the constant-time check; their record is
+`net_websocket_f64`). So does the HTTP date (`net_http_date_f64`). None
+handles a secret but through `nish/net/tls-tcp`, so none is in the
+constant-time check; their record is
 [`docs/security/http1.md`](../docs/security/http1.md), written with the code
 rather than after an audit.
 

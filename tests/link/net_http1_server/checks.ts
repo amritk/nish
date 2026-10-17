@@ -278,7 +278,7 @@ export const serverChecks = (): i32 => {
   t.eqStr(
     "a GET is answered with its length, byte for byte",
     `${hello.head}\r\n${hello.text()}`,
-`HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n${PINNED_DATE}Content-Length: 26\r\n\r\nhello from nish/net/http1\n`
+    `HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n${PINNED_DATE}Content-Length: 26\r\n\r\nhello from nish/net/http1\n`
   );
 
   const post: u8[] = ascii("POST /echo HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n5;x=y\r\nhello\r\n6\r\n world\r\n0\r\n\r\n");
@@ -736,6 +736,21 @@ export const serverChecks = (): i32 => {
     "a program's own date field, in any case, is the response's only Date",
     sent(ownDate.conn),
     "HTTP/1.1 200 OK\r\nDATE: Thu, 01 Jan 1970 00:00:00 GMT\r\nContent-Length: 0\r\n\r\n"
+  );
+  for (const name of ["date", "dAtE"]) {
+    const own = new Driven(config, get);
+    own.conn.respond(toI32(200), [ascii(name)], [ascii("x")], ZERO);
+    own.conn.end();
+    t.eqStr(`and so is one named ${name}`, sent(own.conn), `HTTP/1.1 200 OK\r\n${name}: x\r\nContent-Length: 0\r\n\r\n`);
+  }
+  const early = new Driven(config, get);
+  early.conn.respond(toI32(103), none, none, HTTP1_NO_BODY);
+  early.conn.respond(toI32(200), none, none, ZERO);
+  early.conn.end();
+  t.eqStr(
+    "an interim 1xx carries no Date, and the final status after it does",
+    sent(early.conn),
+    `HTTP/1.1 103 Early Hints\r\n\r\nHTTP/1.1 200 OK\r\n${PINNED_DATE}Content-Length: 0\r\n\r\n`
   );
   const noContent = new Driven(config, get);
   t.ok("a 204 takes HTTP1_NO_BODY", noContent.conn.respond(toI32(204), none, none, HTTP1_NO_BODY) === 0 && noContent.conn.end() === 0);

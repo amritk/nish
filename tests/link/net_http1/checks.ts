@@ -838,6 +838,8 @@ export const http1Checks = (): i32 => {
   const datedExact: u8[] = new Array<u8>(datedEnd);
   t.eqI32("and fits a buffer exactly its size", http1WriteResponseHead(datedExact, zero, ok, "OK", names, values, five, "close", date), datedEnd);
   t.eqI32("refused: a date that is not field text", http1WriteResponseHead(out, zero, ok, "OK", none, none, zero, "", bytesOf("a\r\nX: y")), HTTP1_REFUSED);
+  const badEarlyEnd: i32 = http1WriteResponseHead(out, zero, informational, "Early Hints", none, none, HTTP1_NO_BODY, "", bytesOf("a\r\nX: y"));
+  t.eqStr("but not on a 1xx, which sends no date", badEarlyEnd < 0 ? "refused" : textOf(out, zero, badEarlyEnd), "HTTP/1.1 103 Early Hints\r\n\r\n");
 
   const chunkEnd: i32 = http1WriteChunk(out, toI32(3), digits, one, seventeen);
   t.eqStr("http1WriteChunk writes the chunk at its offset", textOf(out, toI32(3), chunkEnd - 3), "11\r\n123456789abcdefgh\r\n");

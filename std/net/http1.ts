@@ -1419,7 +1419,8 @@ const http1PutDecimal = (out: u8[], at: i32, n: i32): i32 => {
  * already hold a `date` in any case: the caller's wins, so a response carries
  * one. Answers where the head ends; `HTTP1_REFUSED` for everything
  * `http1ResponseHead` refuses, a `Connection` among the caller's fields when
- * `connection` is given, and a `connection` or `date` that is not field text;
+ * `connection` is given, a `connection` that is not field text, and a `date`
+ * that is not field text on a final status, the only one it is sent on;
  * `HTTP1_NO_ROOM` when it is well formed but does not fit, the `Date` line
  * counted when it is sent. Either way `out` is untouched.
  */
@@ -1437,7 +1438,7 @@ export const http1WriteResponseHead = (
   if (status < 100 || status > 599 || !http1IsFieldText(reason) || !http1IsFieldText(connection)) {
     return HTTP1_REFUSED
   }
-  if (!http1BytesAreFieldText(date)) {
+  if (status >= 200 && !http1BytesAreFieldText(date)) {
     return HTTP1_REFUSED
   }
   if (bodyLength < HTTP1_NO_BODY || ((status < 200 || status === 204) && bodyLength !== HTTP1_NO_BODY)) {

@@ -167,11 +167,13 @@ export const dateChecks = (): i32 => {
   t.eqStr("which is that second", textOf(date.current(), 0, HTTP_DATE_SIZE), "Fri, 31 Dec 9999 23:59:59 GMT");
 
   // --- The clock -------------------------------------------------------------------------------
+  // One read: a second ending between two would format again and make the count 6.
   date.unpin();
-  const now: string = textOf(date.current(), 0, HTTP_DATE_SIZE);
+  const clocked: u8[] = date.current();
+  const now: string = textOf(clocked, 0, HTTP_DATE_SIZE);
   t.ok(
     "unpinned, it reads the clock: a date after this test was written",
-    now !== "Fri, 31 Dec 9999 23:59:59 GMT" && numberAt(date.current(), 12, 4) >= 2026 && now.endsWith(" GMT")
+    now !== "Fri, 31 Dec 9999 23:59:59 GMT" && numberAt(clocked, 12, 4) >= 2026 && now.endsWith(" GMT")
   );
   t.eqI64("formatted once for the change", date.formats(), toI64(5));
   return t.done();
