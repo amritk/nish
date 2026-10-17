@@ -62,6 +62,7 @@
  * namespace (`docs/wp26-stdlib.md` §3e).
  */
 
+import { mulHigh, mulLow } from "nish:arith"
 import { wipe } from "nish:secret"
 
 /** The length of a ChaCha20 key in bytes (RFC 8439 §2.3). */
@@ -84,13 +85,6 @@ export const CHACHA20_HEADER_SAMPLE_SIZE: i32 = 16
 
 /** The length of a header-protection mask in bytes (RFC 9001 §5.4.1). */
 export const CHACHA20_HEADER_MASK_SIZE: i32 = 5
-
-/**
- * 2^128 as limb 4 sees it (bit 24 of the limb at bit 104): the one bit a
- * whole 16-byte block gets above its last byte (RFC 8439 §2.5.1's "add one
- * bit beyond the number of octets").
- */
-const POLY1305_HIGH_BIT: i32 = 0x1000000
 
 /** `x` rotated left by `n` bits, `n` in 1 to 31. */
 const chacha20Rotl = (x: u32, n: u32): u32 => (x << n) | (x >>> (32 - n))
@@ -386,157 +380,145 @@ const poly1305Le64 = (buf: u8[], at: i32): u64 => {
 }
 
 /**
+ * The carry out of `a + b`, whose wrapped sum is `sum`: 1 or 0. It is the
+ * top bit of the majority of `a`, `b` and the carry into bit 63, which is
+ * `(a & b) | ((a | b) & ~sum)`, so it costs no comparison.
+ */
+const poly1305Carry = (a: u64, b: u64, sum: u64): u64 => ((a & b) | ((a | b) & ~sum)) >>> 63
+
+/**
  * `r` from the first 16 bytes of a one-time key, clamped as RFC 8439 §2.5
  * says (the top four bits of bytes 3, 7, 11 and 15 and the bottom two of
- * bytes 4, 8 and 12 cleared), into the five limbs of `r`.
+ * bytes 4, 8 and 12 cleared), as two 64-bit words into `r`.
  *
  * Straight-line and without a length check so that
  * `tests/cases/ct_asm_chacha20poly1305` can hold a copy of it to the
- * disassembly check; every caller passes a 32-byte key and a 5-limb `r`.
+ * disassembly check; every caller passes a 32-byte key and a 2-word `r`.
  */
 const poly1305Clamp = (key: u8[], r: u64[]): void => {
-  const lo: u64 = poly1305Le64(key, 0) & ((toU64(0x0ffffffc) << 32) | 0x0fffffff)
-  const hi: u64 = poly1305Le64(key, 8) & ((toU64(0x0ffffffc) << 32) | 0x0ffffffc)
-  r[0] = lo & 0x3ffffff
-  r[1] = (lo >>> 26) & 0x3ffffff
-  r[2] = ((lo >>> 52) | (hi << 12)) & 0x3ffffff
-  r[3] = (hi >>> 14) & 0x3ffffff
-  r[4] = hi >>> 40
+  r[0] = poly1305Le64(key, 0) & ((toU64(0x0ffffffc) << 32) | 0x0fffffff)
+  r[1] = poly1305Le64(key, 8) & ((toU64(0x0ffffffc) << 32) | 0x0ffffffc)
 }
 
 /**
  * One Poly1305 step (RFC 8439 §2.5.1): `h = (h + block) * r mod p`, the block
  * the 16 bytes at `m[at]` plus `high` at bit 128, reduced only far enough for
- * the next step. `high` is `POLY1305_HIGH_BIT` for a whole block and for an
- * AEAD's zero-padded one, and zero for §2.5.1's short last block, whose 0x01
- * byte is already inside the sixteen.
+ * the next step. `high` is 1 for a whole block and for an AEAD's zero-padded
+ * one, and zero for §2.5.1's short last block, whose 0x01 byte is already
+ * inside the sixteen.
  *
- * **Why the sums fit in `u64`.** On entry every limb of `h` is below
- * 2^26 + 2^9 — what the last step's carries leave — and adding the block,
- * whose limbs are below 2^26 and whose top limb is below 2^25, keeps each
- * below 2^27.01. The clamped `r` has limbs below 2^26, and `5 * r` below
- * 2^28.33. A product is therefore below 2^55.34 and each `d` is five of them,
- * below 2^57.66. The carries out of `d` are below 2^31.7, `5 *` the one out of
- * limb 4 is below 2^34.1, and what carries on from limb 0 into limb 1 is
- * below 2^9, which is the entry bound again.
+ * `h` is `h0 + h1 * 2^64 + h2 * 2^128`, `r` is `r0 + r1 * 2^64`, and a
+ * product of two words is the 128-bit `mulHigh`, `mulLow` pair. The clamp
+ * leaves `r0` and `r1` below 2^60 and `r1` a multiple of four, so
+ * `s1 = r1 + r1 / 4` is `5 * r1 / 4` exactly, and since 2^130 = 5 (mod p),
+ * `r1 * 2^128 = s1` and `r1 * 2^192 = s1 * 2^64`. The product is then
  *
- * Straight-line and without a length check so that
- * `tests/cases/ct_asm_chacha20poly1305` can hold a copy of it to the
- * disassembly check; every caller passes 5-limb arrays and a window of 16.
+ *     d0 = t0 * r0 + t1 * s1
+ *     d1 = t0 * r1 + t1 * r0 + t2 * s1   (plus the high word of d0)
+ *     d2 = t2 * r0                       (plus the high word of d1)
+ *
+ * **Why it fits.** On entry `h2` is at most 4 — what the reduction below
+ * leaves — so `t2`, with the block's bit and a carry, is at most 6. `d0` is
+ * below 2.25 * 2^124 and `d1` below 2^125.01, so neither 128-bit sum carries
+ * out of its high word, and `d2` is below 6 * 2^60 + 2^61.01 < 2^63. The
+ * reduction takes the bits of `d2` from 2^130 up, `d2 >> 2`, back in at the
+ * bottom times five (`(d2 & ~3) + (d2 >> 2)`, below 2^63.33), and leaves
+ * `d2 & 3` plus at most one carry: at most 4, the entry bound again.
+ *
+ * Every carry is `poly1305Carry`'s, so the step has no comparison. Without a
+ * length check so that `tests/cases/ct_asm_chacha20poly1305` can hold a copy
+ * of it to the disassembly check; every caller passes a 3-word `h`, a 2-word
+ * `r` and a window of 16.
  */
 const poly1305Block = (h: u64[], r: u64[], m: u8[], at: i32, high: u64): void => {
   const lo: u64 = poly1305Le64(m, at)
   const hi: u64 = poly1305Le64(m, toI32(toU32(at) + 8))
-  const h0: u64 = h[0] + (lo & 0x3ffffff)
-  const h1: u64 = h[1] + ((lo >>> 26) & 0x3ffffff)
-  const h2: u64 = h[2] + (((lo >>> 52) | (hi << 12)) & 0x3ffffff)
-  const h3: u64 = h[3] + ((hi >>> 14) & 0x3ffffff)
-  const h4: u64 = h[4] + ((hi >>> 40) | high)
+  const h0: u64 = h[0]
+  const h1: u64 = h[1]
+  const t0: u64 = h0 + lo
+  const c0: u64 = poly1305Carry(h0, lo, t0)
+  const u1: u64 = h1 + hi
+  const t1: u64 = u1 + c0
+  const t2: u64 = h[2] + high + poly1305Carry(h1, hi, u1) + poly1305Carry(u1, c0, t1)
 
   const r0: u64 = r[0]
   const r1: u64 = r[1]
-  const r2: u64 = r[2]
-  const r3: u64 = r[3]
-  const r4: u64 = r[4]
-  // A product that lands at limb 5 or above is 2^130 times something, and
-  // 2^130 = 5 (mod p), so it comes back in at limb `i - 5` times five.
-  const s1: u64 = r1 * 5
-  const s2: u64 = r2 * 5
-  const s3: u64 = r3 * 5
-  const s4: u64 = r4 * 5
+  const s1: u64 = r1 + (r1 >>> 2)
 
-  let d0: u64 = h0 * r0 + h1 * s4 + h2 * s3 + h3 * s2 + h4 * s1
-  let d1: u64 = h0 * r1 + h1 * r0 + h2 * s4 + h3 * s3 + h4 * s2
-  let d2: u64 = h0 * r2 + h1 * r1 + h2 * r0 + h3 * s4 + h4 * s3
-  let d3: u64 = h0 * r3 + h1 * r2 + h2 * r1 + h3 * r0 + h4 * s4
-  let d4: u64 = h0 * r4 + h1 * r3 + h2 * r2 + h3 * r1 + h4 * r0
+  // d0 = t0 * r0 + t1 * s1, as a low and a high word.
+  const a0: u64 = mulLow(t0, r0)
+  const b0: u64 = mulLow(t1, s1)
+  const d0: u64 = a0 + b0
+  const d0High: u64 = mulHigh(t0, r0) + mulHigh(t1, s1) + poly1305Carry(a0, b0, d0)
 
-  // Carry each limb into the next, and the carry out of limb 4 into limb 0
-  // times five; then limb 0's own carry once more.
-  d1 = d1 + (d0 >>> 26)
-  d2 = d2 + (d1 >>> 26)
-  d3 = d3 + (d2 >>> 26)
-  d4 = d4 + (d3 >>> 26)
-  d0 = (d0 & 0x3ffffff) + (d4 >>> 26) * 5
-  h[0] = d0 & 0x3ffffff
-  h[1] = (d1 & 0x3ffffff) + (d0 >>> 26)
-  h[2] = d2 & 0x3ffffff
-  h[3] = d3 & 0x3ffffff
-  h[4] = d4 & 0x3ffffff
+  // d1 = t0 * r1 + t1 * r0 + t2 * s1 + d0High; t2 * s1 and d0High fit a word.
+  const a1: u64 = mulLow(t0, r1)
+  const b1: u64 = mulLow(t1, r0)
+  const e1: u64 = a1 + b1
+  const f1: u64 = t2 * s1 + d0High
+  const d1: u64 = e1 + f1
+  const d1High: u64 = mulHigh(t0, r1) + mulHigh(t1, r0) + poly1305Carry(a1, b1, e1) + poly1305Carry(e1, f1, d1)
+
+  // d2, and what lies at 2^130 and up back in at the bottom times five.
+  const d2: u64 = t2 * r0 + d1High
+  const fold: u64 = (d2 & ~toU64(3)) + (d2 >>> 2)
+  const n0: u64 = d0 + fold
+  const k0: u64 = poly1305Carry(d0, fold, n0)
+  const n1: u64 = d1 + k0
+  h[0] = n0
+  h[1] = n1
+  h[2] = (d2 & 3) + poly1305Carry(d1, k0, n1)
 }
 
 /**
  * The tag (RFC 8439 §2.5.1): `h` reduced into `[0, p)`, plus `s` (bytes 16 to
  * 31 of the one-time key) modulo 2^128, as 16 little-endian bytes into `tag`.
  *
- * Two carry passes make every limb below 2^26: the first leaves limb 0 at most
- * 2^26 + 4, the second carries at most one bit all the way up, and a carry
- * out of limb 4 then leaves limb 0 below ten. So `h` is below 2^130, which is
- * `[0, p)` or `[p, 2^130)`. `g = h + 5 - 2^130` is `h - p`, and it has no
- * borrow out of its top limb exactly when `h >= p`: the borrow's sign bit
- * becomes an all-zeros or all-ones mask, and `ctSelect` keeps `g` or `h`
- * limb by limb without a comparison. Adding `s` runs in 32-bit words with the
- * carry in the upper half of a `u64`, so there is no compare there either.
+ * `poly1305Block` leaves `h2` at most 4, so `h` is below 2^130 + 2^128, less
+ * than `2p`, and one subtraction of `p` reduces it. `g = h + 5` reaches 2^130
+ * exactly when `h >= p`, and then its low 128 bits are those of `h - p`. Its
+ * top word is at most 5, so `g2 >> 2` is that answer as one bit: negated, it
+ * is an all-zeros or all-ones mask, and `ctSelect` keeps `g` or `h` word by
+ * word without a comparison. Adding `s` modulo 2^128 is two words and one
+ * `poly1305Carry`.
  *
  * Straight-line and without a length check so that
  * `tests/cases/ct_asm_chacha20poly1305` can hold a copy of it to the
- * disassembly check; every caller passes a 5-limb `h`, a 32-byte key and a
+ * disassembly check; every caller passes a 3-word `h`, a 32-byte key and a
  * 16-byte `tag`.
  */
 const poly1305Finish = (h: u64[], key: u8[], tag: u8[]): void => {
-  let h0: u64 = h[0]
-  let h1: u64 = h[1]
-  let h2: u64 = h[2]
-  let h3: u64 = h[3]
-  let h4: u64 = h[4]
-  for (let pass: i32 = 0; pass < 2; pass++) {
-    h1 = h1 + (h0 >>> 26)
-    h0 = h0 & 0x3ffffff
-    h2 = h2 + (h1 >>> 26)
-    h1 = h1 & 0x3ffffff
-    h3 = h3 + (h2 >>> 26)
-    h2 = h2 & 0x3ffffff
-    h4 = h4 + (h3 >>> 26)
-    h3 = h3 & 0x3ffffff
-    h0 = h0 + (h4 >>> 26) * 5
-    h4 = h4 & 0x3ffffff
-  }
-
+  const h0: u64 = h[0]
+  const h1: u64 = h[1]
   const g0: u64 = h0 + 5
-  const g1: u64 = h1 + (g0 >>> 26)
-  const g2: u64 = h2 + (g1 >>> 26)
-  const g3: u64 = h3 + (g2 >>> 26)
-  const g4: u64 = h4 + (g3 >>> 26) - 0x4000000
-  // All ones when `g4` did not borrow, which is when `h >= p` and `g` is the
-  // reduced value; all zeros otherwise.
-  const keep: u64 = (g4 >>> 63) - 1
-  h0 = ctSelect(keep, g0 & 0x3ffffff, h0)
-  h1 = ctSelect(keep, g1 & 0x3ffffff, h1)
-  h2 = ctSelect(keep, g2 & 0x3ffffff, h2)
-  h3 = ctSelect(keep, g3 & 0x3ffffff, h3)
-  h4 = ctSelect(keep, g4 & 0x3ffffff, h4)
+  const c0: u64 = poly1305Carry(h0, 5, g0)
+  const g1: u64 = h1 + c0
+  const g2: u64 = h[2] + poly1305Carry(h1, c0, g1)
+  // All ones when `g` reached 2^130, which is when `h >= p`; all zeros otherwise.
+  const keep: u64 = toU64(0) - (g2 >>> 2)
+  const f0: u64 = ctSelect(keep, g0, h0)
+  const f1: u64 = ctSelect(keep, g1, h1)
 
-  const word: u64 = 0xffffffff
-  let f: u64 = ((h0 | (h1 << 26)) & word) + toU64(chacha20Word(key, 16))
-  tag[0] = toU8(f)
-  tag[1] = toU8(f >>> 8)
-  tag[2] = toU8(f >>> 16)
-  tag[3] = toU8(f >>> 24)
-  f = (((h1 >>> 6) | (h2 << 20)) & word) + toU64(chacha20Word(key, 20)) + (f >>> 32)
-  tag[4] = toU8(f)
-  tag[5] = toU8(f >>> 8)
-  tag[6] = toU8(f >>> 16)
-  tag[7] = toU8(f >>> 24)
-  f = (((h2 >>> 12) | (h3 << 14)) & word) + toU64(chacha20Word(key, 24)) + (f >>> 32)
-  tag[8] = toU8(f)
-  tag[9] = toU8(f >>> 8)
-  tag[10] = toU8(f >>> 16)
-  tag[11] = toU8(f >>> 24)
-  f = (((h3 >>> 18) | (h4 << 8)) & word) + toU64(chacha20Word(key, 28)) + (f >>> 32)
-  tag[12] = toU8(f)
-  tag[13] = toU8(f >>> 8)
-  tag[14] = toU8(f >>> 16)
-  tag[15] = toU8(f >>> 24)
+  const s0: u64 = poly1305Le64(key, 16)
+  const s1: u64 = poly1305Le64(key, 24)
+  const out0: u64 = f0 + s0
+  const out1: u64 = f1 + s1 + poly1305Carry(f0, s0, out0)
+  tag[0] = toU8(out0)
+  tag[1] = toU8(out0 >>> 8)
+  tag[2] = toU8(out0 >>> 16)
+  tag[3] = toU8(out0 >>> 24)
+  tag[4] = toU8(out0 >>> 32)
+  tag[5] = toU8(out0 >>> 40)
+  tag[6] = toU8(out0 >>> 48)
+  tag[7] = toU8(out0 >>> 56)
+  tag[8] = toU8(out1)
+  tag[9] = toU8(out1 >>> 8)
+  tag[10] = toU8(out1 >>> 16)
+  tag[11] = toU8(out1 >>> 24)
+  tag[12] = toU8(out1 >>> 32)
+  tag[13] = toU8(out1 >>> 40)
+  tag[14] = toU8(out1 >>> 48)
+  tag[15] = toU8(out1 >>> 56)
 }
 
 /**
@@ -549,7 +531,7 @@ const poly1305Finish = (h: u64[], key: u8[], tag: u8[]): void => {
 const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPad: boolean): void => {
   const whole: i32 = len >> 4
   for (let i: i32 = 0; i < whole; i++) {
-    poly1305Block(h, r, buf, at + 16 * i, toU64(POLY1305_HIGH_BIT))
+    poly1305Block(h, r, buf, at + 16 * i, 1)
   }
   const tail: i32 = len & 15
   if (tail > 0) {
@@ -558,7 +540,7 @@ const poly1305Absorb = (h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPa
       last[i] = buf[at + 16 * whole + i]
     }
     if (zeroPad) {
-      poly1305Block(h, r, last, 0, toU64(POLY1305_HIGH_BIT))
+      poly1305Block(h, r, last, 0, 1)
     } else {
       last[tail] = 1
       poly1305Block(h, r, last, 0, 0)
@@ -576,8 +558,8 @@ export const poly1305 = (key: u8[], msg: u8[]): u8[] | null => {
   if (toI32(key.length) !== POLY1305_KEY_SIZE) {
     return null
   }
-  const h: u64[] = new Array<u64>(5)
-  const r: u64[] = new Array<u64>(5)
+  const h: u64[] = new Array<u64>(3)
+  const r: u64[] = new Array<u64>(2)
   poly1305Clamp(key, r)
   poly1305Absorb(h, r, msg, 0, toI32(msg.length), false)
   const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
@@ -610,8 +592,8 @@ export const poly1305KeyGen = (key: u8[], nonce: u8[]): u8[] | null => {
  */
 const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i32): u8[] => {
   const aadLen: i32 = toI32(aad.length)
-  const h: u64[] = new Array<u64>(5)
-  const r: u64[] = new Array<u64>(5)
+  const h: u64[] = new Array<u64>(3)
+  const r: u64[] = new Array<u64>(2)
   poly1305Clamp(polyKey, r)
   poly1305Absorb(h, r, aad, 0, aadLen, true)
   poly1305Absorb(h, r, ct, at, len, true)
@@ -620,7 +602,7 @@ const chacha20Poly1305Tag = (polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i
     lengths[i] = toU8(aadLen >>> (8 * i))
     lengths[8 + i] = toU8(len >>> (8 * i))
   }
-  poly1305Block(h, r, lengths, 0, toU64(POLY1305_HIGH_BIT))
+  poly1305Block(h, r, lengths, 0, 1)
   const tag: u8[] = new Array<u8>(POLY1305_TAG_SIZE)
   poly1305Finish(h, polyKey, tag)
   wipe(h)
