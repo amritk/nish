@@ -10,10 +10,11 @@
 // POST /json-echo-doc. Bodies and Content-Type are compared with what the Nish
 // server answers: `Hello, World!`, `{"message":"Hello, World!","n":2}` (the
 // second request), and the payload with `"revision":7` made `"revision":8`.
-// /json-echo-doc must be a 404, and so must /json-echo from nginx, which has no
-// echo. The Nish server, build/bench/h1, is checked first when it is built. Exit
-// 1 names the server, the request and the first byte that differs; with no
-// names given, a twin that is not built fails too.
+// The Nish server answers /json-echo-doc with the same echo; from a twin it must
+// be a 404, and so must /json-echo from nginx, which has no echo. The Nish
+// server, build/bench/h1, is checked first when it is built. Exit 1 names the
+// server, the request and the first byte that differs; with no names given, a
+// twin that is not built fails too.
 import { spawn } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { Agent, request } from "node:http"
@@ -141,7 +142,9 @@ const check = async (server) => {
     noEcho.has(server.name)
       ? ["POST", "/json-echo", payload, 404]
       : ["POST", "/json-echo", payload, 200, "application/json", echoed],
-    ["POST", "/json-echo-doc", payload, 404],
+    server.name === "nish"
+      ? ["POST", "/json-echo-doc", payload, 200, "application/json", echoed]
+      : ["POST", "/json-echo-doc", payload, 404],
   ]
   const faults = []
   try {

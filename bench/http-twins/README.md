@@ -25,7 +25,7 @@ server's.
 | `GET /plaintext` | 200, `text/plain`, `Hello, World!` |
 | `GET /json` | 200, `application/json`, `{"message":"Hello, World!","n":<n>}`, where `n` counts the requests this process has answered, this one included |
 | `POST /json-echo` with `bench/http-payload.json` | 200, `application/json`, the payload with `"revision":7` made `"revision":8` |
-| anything else, `/json-echo-doc` included | 404 |
+| anything else, `/json-echo-doc` included (which the Nish server answers as `/json-echo`) | 404 |
 
 The echo decodes the body into a typed order (with `notes` a nullable string),
 increments `revision` and encodes it again compactly, keeping the key order
@@ -113,7 +113,8 @@ the pinned version.
 - `check.mjs [--payload file] [name...]` checks the built twins. It starts each
   one, and the Nish server too when `build/bench/h1` exists. Over one
   keep-alive connection it sends `/plaintext`, `/json`, `/json-echo` and
-  `/json-echo-doc`, and compares status, Content-Type and body byte for byte.
+  `/json-echo-doc`, and compares status, Content-Type and body byte for byte
+  (`/json-echo-doc` is the echo from the Nish server and a 404 from a twin).
   On a mismatch it exits 1 and names the server, the request and the first
   differing byte. Without names, a twin that is not built is a failure too, so
   `build.sh && check.mjs` checks all eight. Without `--payload` it reads `bench/http-payload.json`.
