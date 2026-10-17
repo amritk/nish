@@ -1,6 +1,25 @@
 # WP29: The thread surface, and what is legal TypeScript
 
-**Status: P1 and P2 are built, and P3 is built, lock and channel.** P1, `parallelMapInto` and
+**Closing status: complete.** Every stage of §4 is built: P1 and P2, and P3's
+lock (§4.3), channel (§4.4) and atomics (§4.5,
+[#654](https://github.com/amritk/nish/pull/654)). Strings and scalar arrays
+now cross between threads by copy at the join (§7,
+[#669](https://github.com/amritk/nish/pull/669)), a guard may be handed to a
+helper, and `nish --fix` writes the usual repair for six thread refusals
+([#691](https://github.com/amritk/nish/pull/691)). What is declined stays
+declined: a detached spawn and `Arc<T>`, `select`, bounded channels (C3), a
+configurable pool or `scope(n)`, decorators, a stored task handle and
+async/await, for the reasons §9 gives; and general closure capture outside the
+parallel forms and tasks, wasm threads, and work stealing and nested parallel
+regions ([wp20](wp20-threads.md)). Deferred, not declined: `parallelSort`,
+`parallelFilter`, copy-at-join for class values, and the serial copy-in at the
+join, which [#686](https://github.com/amritk/nish/pull/686) addresses. Class
+values, nested arrays, `string[]`, `Map` and `Set` still do not cross (§7). The
+user guide's [threads page](guide/using-nish/threads.md) teaches the finished
+surface.
+
+*History, superseded by the closing status above: the status as P3 was being
+built.* P1, `parallelMapInto` and
 `parallelReduce`, shipped in 0.11.0 ([#219](https://github.com/amritk/nish/pull/219),
 with allocating bodies and the cost-sized grain in [#223](https://github.com/amritk/nish/pull/223)).
 P2, `using s = scope()`, shipped in 0.13.0
