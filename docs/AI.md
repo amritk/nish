@@ -1254,10 +1254,11 @@ export const main = (): i32 => {
 
 - **Crosses, by copy:** a number, a `boolean`, an enum, a `string`, an array
   of numbers, booleans or enums — a task's answer, a `parallelMap` element, a
-  `Channel<string>` value, a string stored through a guard. The worker copies
-  an answer out on its own thread and the joining thread copies it in, one
-  value at a time, so cheap work that answers
-  strings can be slower threaded than sequential.
+  `Channel<string>` value, a string stored through a guard. Each thread moves
+  the `parallelMap` elements it answers into blocks of its own, and the caller
+  takes the blocks whole at the join; a task's answer under 64 KB is copied in
+  by the joining thread. On one thread every element still pays the move, so
+  cheap work that answers strings can be slower there than sequential.
 - **Doesn't cross:** a class value, a nested array, a `string[]`, a `Map`, a
   `Set`. Answer what it is built from, and build it after the join.
 - **`nish --fix` writes the usual repair**: `const` to `using` for a scope or a
