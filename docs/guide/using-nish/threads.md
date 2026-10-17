@@ -67,10 +67,12 @@ export const main = (): i32 => {
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
   own: it may fill it, `push` onto it, or pass it to a helper that writes it.
-- **A string or an array is copied out at the join.** Each thread copies the
-  answers it built out of its arena before the next element reuses it, and the
-  caller copies them into its own once every thread has finished, so the array
-  you get back holds strings you own. An array of strings, an array of arrays,
+- **A string or an array is copied out once, then handed over.** Each thread
+  copies the answers it built into a block of its own before the next element
+  reuses its arena. Once every thread has finished, the caller takes those
+  blocks into its own arena whole when they hold 64 KB or more, and copies the
+  answers in when they hold less, so the array you get back holds strings you
+  own. An array of strings, an array of arrays,
   an object, a `Map` or a `Set` is refused: copying one would mean following
   every element.
 - **A reduce folds numbers, booleans or enums.** Its `f` answers the same type
