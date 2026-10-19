@@ -9,22 +9,22 @@ stages:
     todos:
       - id: emt-parse
         content: Parse a qualified name `E.M` in type position in parsePrimaryType (src/parser.ts) — see Stage 1, Syntax
-        status: pending
+        status: completed
       - id: emt-type
         content: Add the enum-member type kind to src/types.ts and resolve it in src/annotations.ts — see Stage 1, The type
-        status: pending
+        status: completed
       - id: emt-assign
         content: Accept exactly the matching member in member-typed slots and enum-member field initializers in src/structs.ts and src/members.ts — see Stage 1, Values
-        status: pending
+        status: completed
       - id: emt-passes
         content: Give the new kind its case in every pass that switches on type kinds — see Stage 1, Other passes
-        status: pending
+        status: completed
       - id: emt-tests
         content: Add positive, negative and wording cases, register differential goldens, regenerate checked goldens — see Tests
-        status: pending
+        status: completed
       - id: emt-docs
         content: Document the rule in LANGUAGE.md Enums, AI.md, the cookbook and the guide types page — see Stage 1, Docs
-        status: pending
+        status: completed
   - id: union-types
     title: "feat(checker): discriminated union types"
     goal: Declare, store, pass and return a union of tagged classes and interfaces, read its tag, and refuse every other union with the existing NL1053
@@ -32,28 +32,28 @@ stages:
     todos:
       - id: ut-validator
         content: Let Phase 0 pass a union of type references through to the resolver in checkNullUnion (src/validator.ts) — see Stage 2, Where the rule moves
-        status: pending
+        status: completed
       - id: ut-type
         content: Add the union type kind, interned by variant set, with llvmType, alignOf, typeName, mangle and assignable cases in src/types.ts — see Stage 2, The type
-        status: pending
+        status: completed
       - id: ut-resolve
         content: Validate variants and build the union in src/annotations.ts with a new NL code per refusal — see Stage 2, Variant rules
-        status: pending
+        status: completed
       - id: ut-coerce
         content: Widen variant to union and sub-union to union through nodeCoercions, emitted as a bitcast — see Stage 2, Conversions
-        status: pending
+        status: completed
       - id: ut-tag-read
         content: Read the tag through an un-narrowed union and refuse every other member access — see Stage 2, Members
-        status: pending
+        status: completed
       - id: ut-passes
         content: Give the union kind its case in escape, attributes, tbaa, inline records, generics, interop, parallel, secret, json, debug and dump — see Stage 2, Other passes
-        status: pending
+        status: completed
       - id: ut-tests
         content: Add native round trips, a tests/link export case, every reject case, wordings and goldens — see Tests
-        status: pending
+        status: completed
       - id: ut-docs
         content: Write the LANGUAGE.md section, AI.md row, cookbook entry and the new guide page with its route — see Stage 2, Docs
-        status: pending
+        status: completed
   - id: union-narrowing
     title: "feat(checker): narrow a discriminated union by testing its tag"
     goal: Narrow a union-typed local or parameter to a variant or a smaller union after `x.kind === K.A` or `!==`, in if, ternary, && and early return
@@ -66,13 +66,19 @@ stages:
         content: Record each narrowed read in a new side table and emit its bitcast in the emitter — see Stage 3, Lowering
         status: pending
       - id: un-refuse
-        content: Refuse a tag comparison with a member no variant carries and a narrowing on a property path — see Stage 3, Refusals
+        content: Check every tag comparison (NL2531, NL2532) against the narrowed union, refuse a narrowing on a property path and a variant read after a branch that did not narrow — see Stage 3, Refusals
+        status: pending
+      - id: un-kind-local
+        content: Give a Kind local initialised from a union's tag the tag's member set, so its comparisons are checked as tsc's assignment narrowing checks them — see Stage 3, Refusals
+        status: pending
+      - id: un-tag-code
+        content: Give a first field typed with the whole enum (`readonly kind: Kind`) its own code, apart from NL2523's missing tag — see Stage 3, Criterion 4 follow-up
         status: pending
       - id: un-tests
         content: Add round trips that read variant fields and call variant methods after narrowing, the reject cases and goldens — see Tests
         status: pending
       - id: un-docs
-        content: Extend the LANGUAGE.md section, cookbook entry and guide page with narrowing — see Stage 3, Docs
+        content: Extend the LANGUAGE.md section, cookbook entry and guide page with narrowing, and delete the "Accepted here, refused by TypeScript" gap — see Stage 3, Docs
         status: pending
   - id: union-switch
     title: "feat(checker): switch on a union's tag, with exhaustiveness"
@@ -97,6 +103,14 @@ stages:
 ---
 
 # Discriminated unions
+
+## Status
+
+Run 1 (tracking issue #649) merged stages 1 and 2: #655 as `99b81d2` and #682 as `e3d9fc0`. It stopped at its deadline before stage 3. Run 2 builds stages 3 and 4 from `main`. Stage 2 changed three things these stages rely on:
+
+- **NL2531 and NL2532** already refuse a comparison, or a `case`, that no variant of the *declared* union can satisfy. Stage 3 makes them check against the *narrowed* union instead.
+- **The accept-gap.** `docs/LANGUAGE.md` documents a gap under "Accepted here, refused by TypeScript": a second test of a tag after a test that excluded it, and a `const k: Kind = u.kind` local. `tsc` refuses both (TS2367 / TS2678), and stage 3 must close both.
+- **Criterion 4.** Run 1's acceptance found that NL2523 covers two shapes: "no tag first" and "tag typed with the whole enum". Stage 3 gives the second its own code. This is a small addition to stage 3's scope, so it is listed here for the owner to see.
 
 ## Context
 
@@ -266,14 +280,21 @@ Each rule is a new code in the NL2 band of [`src/codes.ts`](../../src/codes.ts),
 
 ### Refusals
 
-New codes, each with a reject case and a wording:
-- A tag compared with a member no variant of the union carries. This is also `tsc`'s "comparison appears to be unintentional".
-- A field read through a property path such as `h.node.items` after `h.node.kind === K.Array`. The message says to copy `h.node` to a local, which is the existing nullable rule's advice.
-- A read of a variant field after a branch that did not narrow, such as `if (x.kind !== K.A) {} x.a`.
+- **NL2531 and NL2532 follow the narrowing.** A tag comparison, or a `case`, that no variant of the *narrowed* union can satisfy is refused. For example, a second `u.kind === K.A` after `if (u.kind === K.A) { return 1; }` is refused. This is `tsc`'s TS2367 / TS2678, "comparison appears to be unintentional". No new code is needed.
+- **A `Kind` local initialised from a tag.** `const k: Kind = u.kind`, or `let` with no write before the comparison, carries the member set of `u`'s current union for its comparisons, as `tsc`'s assignment narrowing does. A comparison with a member outside that set is NL2531. A write to a `let` drops the set.
+- **New codes**, each with a reject case and a wording:
+  - A field read through a property path such as `h.node.items` after `h.node.kind === K.Array`. The message says to copy `h.node` to a local, which is the existing nullable rule's advice.
+  - A read of a variant field after a branch that did not narrow, such as `if (x.kind !== K.A) {} x.a`.
+- Every probe from run 1's gap goes in as a reject case that `tsc --strict` also refuses. Those probes are the after-test comparison in `if`, ternary and `&&` form, `case` in a `switch`, and the `const k` local.
+
+### Criterion 4 follow-up
+
+`readonly kind: Kind = Kind.A` gets its own code in the NL2 band, with a reject case and a wording. Its message names the member type to write, `Kind.A`. NL2523 keeps "the first field is not a tag". `tests/wordings/nl2523_*` and the reject cases that used NL2523 for this shape move to the new code.
 
 ### Docs
 
-Extend the LANGUAGE.md section, the `decl-union` cookbook entry (or add `union-narrow`), the guide page, and [`docs/AI.md`](../../docs/AI.md).
+- Extend the LANGUAGE.md section, the `decl-union` cookbook entry (or add `union-narrow`), the guide page, and [`docs/AI.md`](../../docs/AI.md).
+- Delete the "Accepted here, refused by TypeScript" paragraph, and the AI.md "Not yet" bullet and NL2530 recipe qualification that point at it.
 
 ## Stage 4: switch and exhaustiveness
 
@@ -339,3 +360,14 @@ bash docs/cookbook/regen.sh --check
 ```
 
 The PR body shows the exact LLVM IR for every TypeScript snippet the stage adds to the tests, per CLAUDE.md.
+
+## Acceptance criteria (run 2)
+
+Checked on `main` after stage 4 merges, against independent programs. Each criterion is checked by `nish` and by `tsc --strict`, with `runtime/nish.d.ts` included:
+
+1. After `if (u.kind === Kind.A)`, after a ternary on the tag, and after `&&`, reading A-only fields and calling A's methods works natively. The same read with no test, or after a branch that did not narrow, is refused with a stable NL code.
+2. After `if (u.kind === Kind.A) { return …; }`, a second `u.kind === Kind.A` is refused. So is `k === Kind.C` with `const k: Kind = u.kind` and no `C` variant. `tsc` refuses both too, and LANGUAGE.md no longer lists an accept-gap for unions.
+3. A `switch (u.kind)` that covers every variant can end a non-void function, and its IR default is `unreachable`. With one case removed, both `nish` and `tsc` refuse it as a missing return. An existing plain enum switch golden is byte-identical.
+4. `readonly kind: Kind` as a variant's first field is refused with a code distinct from "tag not first". All eight run-1 shapes now give eight distinct codes.
+5. On merged `main`: `npm run check`, an undegraded `npm test`, and the `wasi` and `performance` sections are green. Here `wasi` means CI's run, or a local one that has the wasm32 builtins.
+6. LANGUAGE.md, the guide page `docs/guide/language/unions.md`, AI.md and the cookbook describe narrowing and the exhaustive `switch`. `check-links.mjs` and `regen.sh --check` pass.
