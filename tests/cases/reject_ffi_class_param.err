@@ -1,0 +1,1 @@
+Parameter `p` of `declare function plot` is Point, and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count
