@@ -842,11 +842,7 @@ export class TlsServer {
     this.inputLength = 0
     this.outputInitialLength = 0
     this.outputHandshakeLength = 0
-    if (
-      toI32(serverRandom.length) !== TLS_RANDOM_SIZE ||
-      keyLength !== X25519_SIZE ||
-      !this.configFits
-    ) {
+    if (toI32(serverRandom.length) !== TLS_RANDOM_SIZE || keyLength !== X25519_SIZE || !this.configFits) {
       this.state = TLS_STATE_FAILED
       this.alert = TLS_ALERT_INTERNAL_ERROR
     }
@@ -1425,7 +1421,15 @@ export class TlsServer {
     this.transcript.hashInto(this.hashes, TLS_FROM)
     // The Finished's verify_data goes into its place in the flight.
     const serverHandshake: u8[] = expose(pool.serverHandshake, tlsHeldClone)
-    tlsFinishedVerifyDataInto(this.kdf, h, serverHandshake, this.hashes, TLS_FROM, this.outputHandshake, verifyEnd + 4)
+    tlsFinishedVerifyDataInto(
+      this.kdf,
+      h,
+      serverHandshake,
+      this.hashes,
+      TLS_FROM,
+      this.outputHandshake,
+      verifyEnd + 4
+    )
     secureZero(serverHandshake)
     const finishedEnd: i32 = tlsWriteFinished(
       this.outputHandshake,
