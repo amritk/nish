@@ -1457,7 +1457,10 @@ export class TlsServer {
     const nameLength: i32 = this.ticketWanted && hello.hasServerName ? hello.serverNameLength : 0
     for (
       let k: i32 = 0;
-      k < nameLength && k < toI32(name.length) && hello.serverNameAt + k >= 0 && hello.serverNameAt + k < toI32(data.length);
+      k < nameLength &&
+      k < toI32(name.length) &&
+      hello.serverNameAt + k >= 0 &&
+      hello.serverNameAt + k < toI32(data.length);
       k++
     ) {
       name[k] = data[hello.serverNameAt + k]
@@ -1579,7 +1582,9 @@ export class TlsServer {
       const ticket: u8[] = new Array<u8>(hello.pskIdentityLength)
       for (
         let n: i32 = 0;
-        n < toI32(ticket.length) && hello.pskIdentityAt + n >= 0 && hello.pskIdentityAt + n < toI32(data.length);
+        n < toI32(ticket.length) &&
+        hello.pskIdentityAt + n >= 0 &&
+        hello.pskIdentityAt + n < toI32(data.length);
         n++
       ) {
         ticket[n] = data[hello.pskIdentityAt + n]
@@ -1972,7 +1977,15 @@ export class TlsServer {
     const at: i32 = this.outputHandshakeLength
     this.transcript.hashInto(this.hashes, TLS_FROM)
     const serverHandshake: u8[] = expose(pool.serverHandshake, tlsHeldClone)
-    tlsFinishedVerifyDataInto(this.kdf, h, serverHandshake, this.hashes, TLS_FROM, this.outputHandshake, at + 4)
+    tlsFinishedVerifyDataInto(
+      this.kdf,
+      h,
+      serverHandshake,
+      this.hashes,
+      TLS_FROM,
+      this.outputHandshake,
+      at + 4
+    )
     secureZero(serverHandshake)
     const finishedEnd: i32 = tlsWriteFinished(this.outputHandshake, at, this.outputHandshake, at + 4, h)
     this.sent(TLS_LEVEL_HANDSHAKE, at, finishedEnd)
@@ -2042,7 +2055,15 @@ export class TlsServer {
     const pool: TlsSecretPool = this.secrets()
     using _scope = arena()
     const resumption: u8[] = expose(pool.resumption, tlsHeldClone)
-    tlsResumptionPskInto(this.kdf, this.hashLength, resumption, this.ticketNonce, TLS_FROM, 1, this.issuing.psk)
+    tlsResumptionPskInto(
+      this.kdf,
+      this.hashLength,
+      resumption,
+      this.ticketNonce,
+      TLS_FROM,
+      1,
+      this.issuing.psk
+    )
     secureZero(resumption)
   }
 

@@ -1366,7 +1366,8 @@ export class TlsRecordServer {
     if (this.state === TLS_RECORD_STATE_HANDSHAKE && this.tls.state === TLS_STATE_WAIT_SIGNATURE) {
       bits = bits | TLS_RECORD_SIGN
     }
-    const ticketHello: boolean = this.state === TLS_RECORD_STATE_HANDSHAKE && this.tls.state === TLS_STATE_WAIT_TICKET
+    const ticketHello: boolean =
+      this.state === TLS_RECORD_STATE_HANDSHAKE && this.tls.state === TLS_STATE_WAIT_TICKET
     const ticketOwed: boolean =
       this.state === TLS_RECORD_STATE_OPEN &&
       this.tls.state === TLS_STATE_CONNECTED &&
