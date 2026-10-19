@@ -26,10 +26,14 @@
  * stops asking to be written. An event with the hang-up bit (4) goes to
  * `readable`, which is where a closed or failed socket is noticed.
  *
- * **Slots, sized at start-up.** The constructor allocates every connection's
- * buffers — about 136 KB of resident memory each, the largest record twice
- * over in each direction and the handshake's own state (TLS-3) — and `accept` hands the next connection a free slot and
- * reuses it once the program `close`s it (WP34 N9). When every slot is busy
+ * **Slots, sized at start-up; record buffers, borrowed.** The constructor
+ * builds every slot's handshake state and keys (TLS-3), and `accept` hands
+ * the next connection a free slot and reuses it once the program `close`s it
+ * (WP34 N9). The record buffers — the bytes to send, the plaintext waiting
+ * for the program, the record being opened and the record being read — are
+ * borrowed from pools this server owns only while they hold bytes, and given
+ * back zeroed (`BufferPool.giveSecret`), so an idle or free slot holds none
+ * of them ("What moves between connections" in `docs/security/tls.md`). When every slot is busy
  * a new connection is accepted and closed at once, so the listener does not
  * stay readable; the program sees `TLS_TCP_POOL_FULL`. Each slot keeps its
  * own `TlsServer`, which `accept` restarts for the connection, so neither the
@@ -69,6 +73,7 @@ import {
   TLS_RECORD_DONE,
   TLS_RECORD_INVALID,
   TLS_RECORD_STATE_FAILED,
+  TlsRecordPools,
   TlsRecordServer,
 } from "nish/net/tls/record-server"
 
@@ -114,12 +119,19 @@ export class TlsTcpServer {
    * handed.
    */
   randoms: u8[][]
+  /**
+   * The pools every slot borrows its record buffers from, each with a
+   * ceiling of one per slot: `lent()` is 0 once every connection has ended,
+   * and `made()` is the most slots that were ever moving bytes at once.
+   */
+  pools: TlsRecordPools
   /** The listening socket, which the program made with `tcpListen` and still owns. */
   listener: i32 = -1
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`, a
-   * socket `tcpListen` made. Every slot's buffers are allocated here.
+   * socket `tcpListen` made. Every slot's handshake state is allocated here;
+   * its record buffers are borrowed from `pools` while a connection uses them.
    */
   constructor(config: TlsServerConfig, listener: i32, size: i32) {
     this.config = config
@@ -127,15 +139,21 @@ export class TlsTcpServer {
     this.connections = []
     this.fds = []
     this.randoms = []
-    const none: u8[] = []
     const slots: i32 = size < 1 ? 1 : size
+    this.pools = new TlsRecordPools(slots)
+    // A placeholder key for the slots' first handshakes, which never run.
+    const zeros: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
     for (let k: i32 = 0; k < slots; k++) {
-      // Each slot's own handshake, refused by `TlsServer` for its empty
-      // randomness, so the slot starts out failed until `accept` restarts it
-      // for a connection; every later connection reuses its buffers.
-      this.connections.push(new TlsRecordServer(new TlsServer(config, none, none)))
-      this.fds.push(TLS_TCP_FREE)
+      // Each slot's own handshake, waiting for a ClientHello it is never
+      // given until `accept` restarts it for a connection with real
+      // randomness; every later connection reuses its state. It starts
+      // waiting rather than failed, so no alert is sealed and the slot
+      // borrows no buffer until a connection moves bytes through it.
       this.randoms.push(new Array<u8>(TLS_TCP_KEY_SIZE))
+      const conn: TlsRecordServer = new TlsRecordServer(new TlsServer(config, this.randoms[k], zeros))
+      conn.borrowFrom(this.pools)
+      this.connections.push(conn)
+      this.fds.push(TLS_TCP_FREE)
     }
     this.scratch = new Array<u8>(TLS_MAX_RECORD)
     this.peer = new Array<u8>(TLS_TCP_ADDRESS_SIZE)
@@ -398,5 +416,7 @@ export class TlsTcpServer {
     netClose(this.fds[slot])
     this.fds[slot] = TLS_TCP_FREE
     conn.wipeKeys()
+    // Whatever the last flush could not send is dropped with its buffer.
+    conn.release()
   }
 }

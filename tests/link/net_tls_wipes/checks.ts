@@ -31,6 +31,9 @@
 //   8. A client's KeyUpdate: both traffic secrets are the next generation,
 //      written over the one they replace, and the next-secret scratch of both
 //      directions reads zero; an abort after it leaves every key zero.
+//   9. The record buffers a slot borrows: a connection that held a pattern
+//      in each and ended leaves the next borrower the same buffers, every
+//      byte zero (`BufferPool.giveSecret`).
 //
 // Each "holds" precondition reads every array on its own, so a check that
 // later reads zero is not passed by an array that was never filled.
@@ -67,7 +70,16 @@ import {
   TLS_CONTENT_HANDSHAKE,
   TlsRecordProtection,
 } from "nish/net/tls/record";
-import { TLS_RECORD_STATE_CLOSED, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_HANDSHAKE, TLS_RECORD_STATE_OPEN, TLS_RECORD_SIGN, TlsRecordServer } from "nish/net/tls/record-server";
+import {
+  TLS_RECORD_SIGN,
+  TLS_RECORD_STATE_CLOSED,
+  TLS_RECORD_STATE_FAILED,
+  TLS_RECORD_STATE_HANDSHAKE,
+  TLS_RECORD_STATE_OPEN,
+  TlsRecordPools,
+  TlsRecordServer,
+} from "nish/net/tls/record-server";
+import { BufferPool } from "nish/net/buffer-pool";
 import { TlsTcpServer } from "nish/net/tls-tcp";
 import { leafPrivate, serverPrivate, serverRandom, tcpConfig } from "../net_tls_common/server";
 import { clientHelloRaw, extKeyShare, extSignatureAlgorithms, extSupportedGroups, extSupportedVersions } from "../net_tls_common/client";
@@ -555,6 +567,46 @@ const slotClose = (t: Suite): void => {
   netClose(loop);
 };
 
+/** How many bytes of what `pool` lends are not zero, taken and given straight back; -1 when it would have to make one. */
+const lentHeld = (pool: BufferPool): i32 => {
+  if (pool.made !== 1 || pool.lent() !== 0) {
+    return -1;
+  }
+  const buf: u8[] = pool.take();
+  const held: i32 = bytesHeld(buf);
+  pool.give(buf, ZERO);
+  return held;
+};
+
+/**
+ * 9. The record buffers a connection borrows reach the next one zeroed. With
+ * one buffer of each in the pools, connection A holds a pattern in all four
+ * — the record read, the record opened, the plaintext waiting and the record
+ * sealed to send — and ends; whoever borrows next takes the same buffers,
+ * since none other was made, and reads every byte zero.
+ */
+const reuse = (t: Suite): void => {
+  const zero: i32 = 0;
+  const pools = new TlsRecordPools(toI32(1));
+  const a: Live = connect(TLS_AES_256_GCM_SHA384);
+  a.conn.borrowFrom(pools);
+  const pattern: u8[] = filled(toI32(4000), toI32(0xa5));
+  feed(a.conn, sealOne(a.writer, TLS_CONTENT_APPLICATION_DATA, pattern, ZERO));
+  a.conn.write(pattern, ZERO, toI32(pattern.length));
+  t.ok(
+    "connection A holds the pattern it was sent and the record it seals, borrowed from the pools",
+    a.connected && bytesHeld(a.conn.plain) >= toI32(4000) && a.conn.outputEnd > toI32(4000) && pools.lent() === toI32(2) && pools.made() === toI32(4)
+  );
+  a.conn.wipeKeys();
+  a.conn.release();
+  t.eqI32("A ends and gives every buffer back: lent() is 0", pools.lent(), zero);
+  t.eqStr(
+    "the next borrower takes the same buffer from each pool and reads every byte zero: output, plain, scratch, reader",
+    `${lentHeld(pools.output)} ${lentHeld(pools.plain)} ${lentHeld(pools.scratch)} ${lentHeld(pools.reader)}`,
+    "0 0 0 0"
+  );
+};
+
 /**
  * A handshake that fails before it is done, under AES-256-GCM: aborted while
  * it waits for the CertificateVerify signature, and refused at the client's
@@ -661,6 +713,7 @@ export const tlsWipeChecks = (): i32 => {
   restarts(t, "AES-256-GCM", TLS_AES_256_GCM_SHA384);
   midway(t);
   keyUpdates(t);
+  reuse(t);
 
   // 6. The exchange's words, after a handshake and after a refused exchange.
   const done: Live = connect(TLS_AES_256_GCM_SHA384);

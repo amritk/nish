@@ -34,6 +34,8 @@ PASS  every connection was accepted into a slot but the one shed
 PASS  each accept copied the key into its slot and wiped the one buffer the program refills
 PASS  two pending handshakes whose randoms the program drew into one buffer each send their own (the slot keeps a copy)
 PASS  and both are closed when their clients hang up
+PASS  with every connection ended the record pools have lent nothing: lent() is 0
+PASS  and two slots made no more than two buffers of any pool
 PASS  a random of 31 bytes is refused with -22 before any connection is taken, and both arrays are left as they were
 PASS  so is a key of 33 bytes, which stays unwiped
 PASS  a slot that holds nothing: done to every call, -22 to reads, writes and key updates, no descriptor
@@ -45,4 +47,4 @@ PASS  a key that is not a P-256 key: the ServerHello goes out
 PASS  then internal_error, under the handshake keys like everything after the ServerHello
 PASS  and the connection is closed
 PASS  with nothing gone wrong in the loop
-tls over tcp: 47 passed, 0 failed, 0 skipped
+tls over tcp: 49 passed, 0 failed, 0 skipped

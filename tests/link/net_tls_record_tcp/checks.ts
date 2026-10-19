@@ -12,7 +12,8 @@
 //      client.
 //   3. The pool: three clients at once for two slots, the third shed; two
 //      clients that hang up mid-handshake (one cleanly, one with a reset);
-//      and every slot free afterwards.
+//      and every slot free afterwards, its record buffers given back to the
+//      pools.
 //   4. A signing key that is not one, and the calls a free slot answers.
 //
 // openssl s_client and curl drive the same server in `serve` mode from the
@@ -208,6 +209,12 @@ export const tcpChecks = (): i32 => {
   lb.hangUp(p);
   lb.hangUp(q);
   t.ok("and both are closed when their clients hang up", lb.awaitClosed(toI32(6)) && lb.server.busy() === 0);
+  t.eqI32("with every connection ended the record pools have lent nothing: lent() is 0", lb.server.pools.lent(), ZERO);
+  const pools = lb.server.pools;
+  t.ok(
+    "and two slots made no more than two buffers of any pool",
+    pools.output.made <= 2 && pools.plain.made <= 2 && pools.scratch.made <= 2 && pools.reader.made <= 2
+  );
 
   const shortRandom: u8[] = filled(31, 7);
   const fullKey: u8[] = filled(32, 9);
