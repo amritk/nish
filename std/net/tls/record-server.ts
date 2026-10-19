@@ -69,8 +69,18 @@ import {
   TLS_STATE_WAIT_CLIENT_HELLO,
   TLS_STATE_WAIT_FINISHED,
   TLS_STATE_WAIT_SIGNATURE,
+  TLS_SECRET_CLIENT_APPLICATION,
+  TLS_SECRET_CLIENT_HANDSHAKE,
+  TLS_SECRET_HANDSHAKE,
+  TLS_SECRET_SERVER_APPLICATION,
+  TLS_SECRET_SERVER_HANDSHAKE,
   TlsServer,
+  TlsSecretPool,
+  tlsHeldClone,
+  tlsHeldCopyIn,
+  tlsHeldCopyOver,
 } from "nish/net/tls"
+import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
 import {
@@ -168,22 +178,39 @@ export const TLS_RECORD_MAX_KEY_UPDATES: i32 = 64
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_RECORD_SERVER_FROM: i32 = 0
 
+/** Zeroes the bytes a traffic secret field holds, for `exposeWith`; answers 0. */
+const tlsTrafficZero = (held: u8[], answer: i32): i32 => {
+  wipe(held)
+  return answer
+}
+
 /**
- * Copies a traffic secret out of `TlsServer` into `long` when it is that
- * array's length and into `short` otherwise, so the server's own can be wiped
- * while this one lives on, and answers the array; `none` when there is no
- * secret.
+ * Installs `protection` under `suite` from the traffic secret `held`. The
+ * keys are derived from a plain copy that dies with the arena block and is
+ * zeroed before it ends; false, as `install` answers, when they do not
+ * install.
  */
-const tlsKeepSecret = (secret: u8[] | null, short: u8[], long: u8[], none: u8[]): u8[] => {
-  if (secret === null) {
-    return none
-  }
-  const length: i32 = toI32(secret.length)
-  const out: u8[] = length === toI32(long.length) ? long : short
-  for (let k: i32 = 0; k < toI32(out.length) && k < length; k++) {
-    out[k] = secret[k]
-  }
-  return out
+const tlsInstallHeld = (protection: TlsRecordProtection, suite: i32, held: Secret<u8[]>): boolean => {
+  using _scope = arena()
+  const plain: u8[] = expose(held, tlsHeldClone)
+  const installed: boolean = protection.install(suite, plain)
+  secureZero(plain)
+  return installed
+}
+
+/**
+ * Moves `protection` to the next traffic secret (§7.2) and writes it over
+ * `held`'s bytes in place, the KeyUpdate step: the plain copy it is derived
+ * on dies with the arena block, zeroed. False, as `advance` answers, when
+ * the keys do not install.
+ */
+const tlsAdvanceHeld = (protection: TlsRecordProtection, held: Secret<u8[]>): boolean => {
+  using _scope = arena()
+  const plain: u8[] = expose(held, tlsHeldClone)
+  const installed: boolean = protection.advance(plain)
+  exposeWith(held, plain, tlsHeldCopyIn)
+  secureZero(plain)
+  return installed
 }
 
 /**
@@ -209,15 +236,17 @@ export class TlsRecordServer {
   /** Application data the caller has not read is `plain[plainStart .. plainEnd)`. */
   plain: u8[]
   scratch: u8[]
-  /** The client's and the server's current application traffic secrets, for KeyUpdate. */
-  readSecret: u8[]
-  writeSecret: u8[]
-  /** The arrays those two point into, one of each hash's length, and the empty one they point at before. */
-  readSecret256: u8[]
-  readSecret384: u8[]
-  writeSecret256: u8[]
-  writeSecret384: u8[]
-  none: u8[]
+  /**
+   * The client's and the server's current application traffic secrets, for
+   * KeyUpdate, each held at both hash lengths: `readHash` and `writeHash`
+   * say which of a pair holds the secret, and are 0 before it is known.
+   */
+  readonly readTraffic256: Secret<u8[]>
+  readonly readTraffic384: Secret<u8[]>
+  readonly writeTraffic256: Secret<u8[]>
+  readonly writeTraffic384: Secret<u8[]>
+  readHash: i32 = 0
+  writeHash: i32 = 0
   /** A post-handshake message the client has sent part of. */
   postHandshake: u8[]
   state: i32 = 0
@@ -265,13 +294,10 @@ export class TlsRecordServer {
     this.output = new Array<u8>(TLS_RECORD_OUTPUT_SIZE)
     this.plain = new Array<u8>(TLS_RECORD_PLAIN_SIZE)
     this.scratch = new Array<u8>(TLS_RECORD_SCRATCH_SIZE)
-    this.none = []
-    this.readSecret256 = new Array<u8>(SHA256_SIZE)
-    this.readSecret384 = new Array<u8>(SHA384_SIZE)
-    this.writeSecret256 = new Array<u8>(SHA256_SIZE)
-    this.writeSecret384 = new Array<u8>(SHA384_SIZE)
-    this.readSecret = this.none
-    this.writeSecret = this.none
+    this.readTraffic256 = secret(new Array<u8>(SHA256_SIZE))
+    this.readTraffic384 = secret(new Array<u8>(SHA384_SIZE))
+    this.writeTraffic256 = secret(new Array<u8>(SHA256_SIZE))
+    this.writeTraffic384 = secret(new Array<u8>(SHA384_SIZE))
     this.postHandshake = new Array<u8>(TLS_KEY_UPDATE_SIZE)
     this.start(tls)
   }
@@ -290,8 +316,6 @@ export class TlsRecordServer {
     // was used, when it failed or when its slot was closed, and is not
     // touched here: the array may already hold the next connection's.
     this.wipeTraffic()
-    this.readSecret = this.none
-    this.writeSecret = this.none
     this.tls = tls
     this.state = TLS_RECORD_STATE_HANDSHAKE
     this.alert = 0
@@ -317,12 +341,28 @@ export class TlsRecordServer {
   /**
    * Wipes every key this connection holds: the two application traffic
    * secrets it keeps for KeyUpdate, both directions' keys, and what is left
-   * in `TlsServer` (`wipeHandshake`). The carrier calls it when a slot is
+   * in `TlsServer` (`TlsServer.wipe`). The carrier calls it when a slot is
    * closed, so a free slot holds no key.
    */
   wipeKeys(): void {
-    this.wipeTraffic()
-    this.wipeHandshake()
+    this.wipe()
+  }
+
+  /**
+   * Wipes everything this slot holds, which is what `wipeKeys` does: both
+   * traffic secrets at both hash lengths, both directions' keys, and
+   * everything `TlsServer` holds.
+   */
+  wipe(): void {
+    wipe(this.readTraffic256)
+    wipe(this.readTraffic384)
+    wipe(this.writeTraffic256)
+    wipe(this.writeTraffic384)
+    this.readHash = 0
+    this.writeHash = 0
+    this.readProtection.clear()
+    this.writeProtection.clear()
+    this.tls.wipe()
   }
 
   /** Wipes the two application traffic secrets and both directions' keys. */
@@ -333,39 +373,76 @@ export class TlsRecordServer {
 
   /** Wipes the client's application traffic secret and the read keys. */
   wipeRead(): void {
-    // The two secret fields point into these four arrays, or at nothing.
-    secureZero(this.readSecret256)
-    secureZero(this.readSecret384)
+    // Whichever of the pair held the secret, both are zeroed.
+    this.wipeReadSecret()
+    this.readHash = 0
     this.readProtection.clear()
   }
 
   /** Wipes the server's application traffic secret and its write keys. */
   wipeWrite(): void {
-    secureZero(this.writeSecret256)
-    secureZero(this.writeSecret384)
+    this.wipeWriteSecret()
+    this.writeHash = 0
     this.writeProtection.clear()
   }
 
+  /** Zeroes both of the client's traffic secret fields. */
+  wipeReadSecret(): void {
+    exposeWith(this.readTraffic256, 0, tlsTrafficZero)
+    exposeWith(this.readTraffic384, 0, tlsTrafficZero)
+  }
+
+  /** Zeroes both of the server's traffic secret fields. */
+  wipeWriteSecret(): void {
+    exposeWith(this.writeTraffic256, 0, tlsTrafficZero)
+    exposeWith(this.writeTraffic384, 0, tlsTrafficZero)
+  }
+
   /**
-   * Wipes every secret `TlsServer` still holds — the ephemeral key it was
-   * handed, the handshake, traffic, exporter and resumption master secrets
-   * and the expected Finished — for a connection that has failed or is
-   * closed. On the way to an open connection each is wiped as soon as it
-   * has been used; this is
-   * for the ways that end early, and for the exporter secret, which a caller
-   * may read until the connection ends.
+   * Copies the client's application traffic secret out of `TlsServer` into
+   * the field of its hash's length, wipes the server's copy, and installs the
+   * read keys from it. False when the secret is not known or the keys do not
+   * install.
    */
-  wipeHandshake(): void {
+  keepRead(): boolean {
     const tls: TlsServer = this.tls
-    secureZero(tls.ephemeralPrivate)
-    secureZero(tls.handshakeSecret)
-    secureZero(tls.clientHandshakeSecret)
-    secureZero(tls.serverHandshakeSecret)
-    secureZero(tls.clientApplicationSecret)
-    secureZero(tls.serverApplicationSecret)
-    secureZero(tls.exporterSecret)
-    secureZero(tls.expectedClientFinished)
-    tls.wipeResumption()
+    if (!tls.readKnown(TLS_LEVEL_APPLICATION)) {
+      return false
+    }
+    const pool: TlsSecretPool = tls.secrets()
+    this.readHash = tls.hashLength
+    let installed: boolean = false
+    if (this.readHash === SHA384_SIZE) {
+      exposeWith(pool.clientApplication, this.readTraffic384, tlsHeldCopyOver)
+      tls.wipeSecret(TLS_SECRET_CLIENT_APPLICATION)
+      installed = tlsInstallHeld(this.readProtection, tls.suite, this.readTraffic384)
+    } else {
+      exposeWith(pool.clientApplication, this.readTraffic256, tlsHeldCopyOver)
+      tls.wipeSecret(TLS_SECRET_CLIENT_APPLICATION)
+      installed = tlsInstallHeld(this.readProtection, tls.suite, this.readTraffic256)
+    }
+    return installed
+  }
+
+  /** `keepRead` for the server's application traffic secret and the write keys. */
+  keepWrite(): boolean {
+    const tls: TlsServer = this.tls
+    if (!tls.writeKnown(TLS_LEVEL_APPLICATION)) {
+      return false
+    }
+    const pool: TlsSecretPool = tls.secrets()
+    this.writeHash = tls.hashLength
+    let installed: boolean = false
+    if (this.writeHash === SHA384_SIZE) {
+      exposeWith(pool.serverApplication, this.writeTraffic384, tlsHeldCopyOver)
+      tls.wipeSecret(TLS_SECRET_SERVER_APPLICATION)
+      installed = tlsInstallHeld(this.writeProtection, tls.suite, this.writeTraffic384)
+    } else {
+      exposeWith(pool.serverApplication, this.writeTraffic256, tlsHeldCopyOver)
+      tls.wipeSecret(TLS_SECRET_SERVER_APPLICATION)
+      installed = tlsInstallHeld(this.writeProtection, tls.suite, this.writeTraffic256)
+    }
+    return installed
   }
 
   /** How many bytes `receive` would take now: what the socket should read at most. */
@@ -691,11 +768,15 @@ export class TlsRecordServer {
    * The client's KeyUpdate: its next records are under the next secret
    * (§7.2), the old one wiped. When it asked for an update the server owes
    * one of its own before its next application data, which `pump` sends.
-   * Answers 0, or `internal_error` when the keys do not install, which only
-   * a secret of the wrong length could cause.
+   * Answers 0, or `internal_error` when no read secret is kept (`readHash`
+   * 0) or the keys do not install.
    */
   updateReadKeys(requested: boolean): i32 {
-    if (!this.readProtection.advance(this.readSecret)) {
+    const advanced: boolean =
+      this.readHash === SHA384_SIZE
+        ? tlsAdvanceHeld(this.readProtection, this.readTraffic384)
+        : this.readHash !== 0 && tlsAdvanceHeld(this.readProtection, this.readTraffic256)
+    if (!advanced) {
       return TLS_ALERT_INTERNAL_ERROR
     }
     if (requested) {
@@ -724,34 +805,26 @@ export class TlsRecordServer {
         toI32(tls.outputInitial[TLS_SESSION_ID_ECHO_AT]) > 0
     }
     if (this.readLevel === TLS_LEVEL_INITIAL) {
-      const handshake: u8[] | null = tls.readSecret(TLS_LEVEL_HANDSHAKE)
-      if (handshake !== null) {
-        this.readProtection.install(tls.suite, handshake)
+      if (tls.readKnown(TLS_LEVEL_HANDSHAKE)) {
+        tlsInstallHeld(this.readProtection, tls.suite, tls.secrets().clientHandshake)
         this.readLevel = TLS_LEVEL_HANDSHAKE
       }
     }
     if (tls.state !== TLS_STATE_WAIT_CLIENT_HELLO) {
       // The ServerHello is written, so the exchange is done with the key.
-      secureZero(tls.ephemeralPrivate)
+      tls.wipeEphemeral()
     }
     if (tls.state === TLS_STATE_WAIT_FINISHED || tls.state === TLS_STATE_CONNECTED) {
       this.flightReady = true
       // The flight is signed and finished: the handshake secret and the
       // client's handshake secret have done their work in `TlsServer`, and
       // the read keys made from the latter are installed.
-      secureZero(tls.handshakeSecret)
-      secureZero(tls.clientHandshakeSecret)
+      tls.wipeSecret(TLS_SECRET_HANDSHAKE)
+      tls.wipeSecret(TLS_SECRET_CLIENT_HANDSHAKE)
     }
     if (tls.state === TLS_STATE_CONNECTED && this.readLevel === TLS_LEVEL_HANDSHAKE) {
-      this.readSecret = tlsKeepSecret(
-        tls.readSecret(TLS_LEVEL_APPLICATION),
-        this.readSecret256,
-        this.readSecret384,
-        this.none
-      )
-      secureZero(tls.clientApplicationSecret)
       // A direction whose keys did not install would read in the clear.
-      if (!this.readProtection.install(tls.suite, this.readSecret)) {
+      if (!this.keepRead()) {
         this.fail(TLS_ALERT_INTERNAL_ERROR)
         return
       }
@@ -895,9 +968,8 @@ export class TlsRecordServer {
     // in as soon as the ServerHello is sealed. `install` refuses only a suite
     // or a secret `TlsServer` never hands over; the check keeps the flight
     // from ever being sealed in the clear.
-    const handshake: u8[] | null = tls.writeSecret(TLS_LEVEL_HANDSHAKE)
-    if (this.writeLevel === TLS_LEVEL_INITIAL && handshake !== null) {
-      if (!this.writeProtection.install(tls.suite, handshake)) {
+    if (this.writeLevel === TLS_LEVEL_INITIAL && tls.writeKnown(TLS_LEVEL_HANDSHAKE)) {
+      if (!tlsInstallHeld(this.writeProtection, tls.suite, tls.secrets().serverHandshake)) {
         this.fail(TLS_ALERT_INTERNAL_ERROR)
         return
       }
@@ -919,16 +991,9 @@ export class TlsRecordServer {
       this.writeLevel === TLS_LEVEL_HANDSHAKE &&
       (tls.state === TLS_STATE_WAIT_FINISHED || tls.state === TLS_STATE_CONNECTED)
     ) {
-      this.writeSecret = tlsKeepSecret(
-        tls.writeSecret(TLS_LEVEL_APPLICATION),
-        this.writeSecret256,
-        this.writeSecret384,
-        this.none
-      )
-      secureZero(tls.serverApplicationSecret)
-      secureZero(tls.serverHandshakeSecret)
+      tls.wipeSecret(TLS_SECRET_SERVER_HANDSHAKE)
       // A direction whose keys did not install would write in the clear.
-      if (!this.writeProtection.install(tls.suite, this.writeSecret)) {
+      if (!this.keepWrite()) {
         this.fail(TLS_ALERT_INTERNAL_ERROR)
         return
       }
@@ -949,7 +1014,11 @@ export class TlsRecordServer {
     if (!this.sealRecord(TLS_CONTENT_HANDSHAKE, message, TLS_RECORD_SERVER_FROM, TLS_KEY_UPDATE_SIZE)) {
       return false
     }
-    if (!this.writeProtection.advance(this.writeSecret)) {
+    const advanced: boolean =
+      this.writeHash === SHA384_SIZE
+        ? tlsAdvanceHeld(this.writeProtection, this.writeTraffic384)
+        : this.writeHash !== 0 && tlsAdvanceHeld(this.writeProtection, this.writeTraffic256)
+    if (!advanced) {
       this.fail(TLS_ALERT_INTERNAL_ERROR)
       return false
     }

@@ -268,13 +268,20 @@ import {
   TLS_LEVEL_APPLICATION,
   TLS_LEVEL_HANDSHAKE,
   TLS_LEVEL_INITIAL,
+  TLS_SECRET_CLIENT_APPLICATION,
+  TLS_SECRET_CLIENT_HANDSHAKE,
+  TLS_SECRET_SERVER_APPLICATION,
+  TLS_SECRET_SERVER_HANDSHAKE,
   TLS_STATE_CONNECTED,
   TLS_STATE_WAIT_CLIENT_HELLO,
   TLS_STATE_WAIT_SIGNATURE,
+  TlsSecretPool,
   TlsServer,
   TlsServerConfig,
+  tlsHeldClone,
 } from "nish/net/tls"
 import { TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule"
+import { Secret, expose } from "nish:secret"
 
 // ---- Sizes ----------------------------------------------------------------------
 
@@ -1025,6 +1032,20 @@ const quicConnSecretAt = (pool: u8[][], aead: i32, index: i32): u8[] => {
   return pool[at]
 }
 
+/**
+ * Copies a traffic secret `TlsServer` holds into `to`, one of a direction's
+ * pool: the plain copy `expose` makes stays in an arena block and is wiped
+ * before the block ends, so `to` is the only copy left outside the server.
+ */
+const quicConnTakeSecret = (held: Secret<u8[]>, to: u8[]): void => {
+  using _scope = arena()
+  const plain: u8[] = expose(held, tlsHeldClone)
+  for (let k: i32 = 0; k < toI32(to.length) && k < toI32(plain.length); k += 1) {
+    to[k] = plain[k]
+  }
+  secureZero(plain)
+}
+
 /** Two secrets of SHA-256's length and two of SHA-384's, for one direction's key updates. */
 const quicConnSecretPool = (): u8[][] => [
   new Array<u8>(32),
@@ -1188,7 +1209,7 @@ export class QuicConnection {
   /** Which of the Application Data space's two read slots, and two write slots, hold the current keys. */
   appReadSlot: i32 = 0
   appWriteSlot: i32 = 0
-  /** Which of `readSecrets` and `writeSecrets` (0 or 1) holds the current secret, or -1 for `TlsServer`'s own. */
+  /** Which of `readSecrets` and `writeSecrets` (0 or 1) holds the current secret, or -1 before the 1-RTT keys are installed. */
   readSecretCurrent: i32 = -1
   writeSecretCurrent: i32 = -1
   /** Handshake data sent again early, against `QUIC_CONN_EARLY_RESENDS` (RFC 9002 §6.2.3). */
@@ -2476,35 +2497,47 @@ export class QuicConnection {
       }
       this.alpn = tls.alpn
       this.serverName = tls.serverName
-      this.handshake.readKeys = this.keysFor(
-        this.handshake.keySlot(QUIC_CONN_READ_SLOT),
-        aead,
-        tls.readSecret(TLS_LEVEL_HANDSHAKE)
-      )
-      this.handshake.writeKeys = this.keysFor(
-        this.handshake.keySlot(QUIC_CONN_WRITE_SLOT),
-        aead,
-        tls.writeSecret(TLS_LEVEL_HANDSHAKE)
-      )
+      if (tls.readKnown(TLS_LEVEL_HANDSHAKE)) {
+        this.handshake.readKeys = this.keysFor(
+          this.handshake.keySlot(QUIC_CONN_READ_SLOT),
+          aead,
+          tls.secrets().clientHandshake
+        )
+      }
+      if (tls.writeKnown(TLS_LEVEL_HANDSHAKE)) {
+        this.handshake.writeKeys = this.keysFor(
+          this.handshake.keySlot(QUIC_CONN_WRITE_SLOT),
+          aead,
+          tls.secrets().serverHandshake
+        )
+      }
     }
     if (
       !this.application.discarded &&
       this.application.writeKeys === null &&
       tls.state !== TLS_STATE_WAIT_SIGNATURE
     ) {
-      const write: u8[] | null = tls.writeSecret(TLS_LEVEL_APPLICATION)
-      const read: u8[] | null = tls.readSecret(TLS_LEVEL_APPLICATION)
-      if (write !== null && read !== null) {
-        this.application.writeKeys = this.keysFor(
+      if (tls.writeKnown(TLS_LEVEL_APPLICATION) && tls.readKnown(TLS_LEVEL_APPLICATION)) {
+        // The key updates derive from the connection's own pools, so the
+        // application secrets are copied into the first of each and wiped
+        // in `TlsServer`, leaving one copy of each.
+        const pool: TlsSecretPool = tls.secrets()
+        const write: u8[] = quicConnSecretAt(this.writeSecrets, aead, 0)
+        const read: u8[] = quicConnSecretAt(this.readSecrets, aead, 0)
+        quicConnTakeSecret(pool.serverApplication, write)
+        quicConnTakeSecret(pool.clientApplication, read)
+        tls.wipeSecret(TLS_SECRET_SERVER_APPLICATION)
+        tls.wipeSecret(TLS_SECRET_CLIENT_APPLICATION)
+        this.application.writeKeys = this.plainKeysFor(
           this.application.keySlot(QUIC_CONN_APP_WRITE_SLOTS + this.appWriteSlot),
           aead,
           write
         )
-        this.application.readKeys = this.keysFor(this.application.keySlot(this.appReadSlot), aead, read)
-        // The key update secrets start from `TlsServer`'s own arrays, so the
-        // first update wipes those too, rather than leaving a copy behind.
+        this.application.readKeys = this.plainKeysFor(this.application.keySlot(this.appReadSlot), aead, read)
         this.appWriteSecret = write
         this.appReadSecret = read
+        this.writeSecretCurrent = 0
+        this.readSecretCurrent = 0
         this.prepareNextReadKeys()
       }
     }
@@ -2516,17 +2549,29 @@ export class QuicConnection {
       this.discard(this.handshake)
       // The Handshake level's traffic secrets have nothing left to derive
       // once it is discarded (TLS wipes the handshake secret itself).
-      secureZero(tls.clientHandshakeSecret)
-      secureZero(tls.serverHandshakeSecret)
+      tls.wipeSecret(TLS_SECRET_CLIENT_HANDSHAKE)
+      tls.wipeSecret(TLS_SECRET_SERVER_HANDSHAKE)
       this.topUpConnectionIds()
     }
   }
 
-  /** `quicKeysInto` `slot` of a secret TLS has, or `null` when it has none yet. */
-  keysFor(slot: QuicKeysSlot, aead: i32, secret: u8[] | null): QuicKeys | null {
-    if (secret === null) {
-      return null
+  /**
+   * `quicKeysInto` `slot` of a traffic secret `TlsServer` holds: the plain
+   * copy `expose` makes stays in an arena block and is wiped before it ends.
+   */
+  keysFor(slot: QuicKeysSlot, aead: i32, held: Secret<u8[]>): QuicKeys | null {
+    let made: boolean = false
+    {
+      using _scope = arena()
+      const plain: u8[] = expose(held, tlsHeldClone)
+      made = quicKeysInto(this.kdf, slot, aead, plain) !== null
+      secureZero(plain)
     }
+    return made ? slot.keys : null
+  }
+
+  /** `quicKeysInto` `slot` of a secret of the connection's own pools. */
+  plainKeysFor(slot: QuicKeysSlot, aead: i32, secret: u8[]): QuicKeys | null {
     return quicKeysInto(this.kdf, slot, aead, secret)
   }
 
@@ -3627,14 +3672,7 @@ export class QuicConnection {
     if (tls !== null) {
       // The server's encoded transport parameters carry its first ID's token.
       secureZero(tls.config.quicTransportParameters)
-      secureZero(tls.expectedClientFinished)
-      secureZero(tls.handshakeSecret)
-      secureZero(tls.clientHandshakeSecret)
-      secureZero(tls.serverHandshakeSecret)
-      secureZero(tls.clientApplicationSecret)
-      secureZero(tls.serverApplicationSecret)
-      secureZero(tls.exporterSecret)
-      tls.wipeResumption()
+      tls.wipe()
     }
   }
 }

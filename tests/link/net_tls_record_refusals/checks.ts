@@ -5,7 +5,7 @@
 // caller that reads too slowly. Each case names the rule of RFC 8446 it
 // holds the module to; none may panic.
 import { Suite } from "nish/testing";
-import { Secret, secret, wipe } from "nish:secret";
+import { Secret, expose, secret, wipe } from "nish:secret";
 import { AesKey, aesGcmSeal } from "nish/crypto/aes";
 import { TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
 import {
@@ -81,7 +81,7 @@ import {
   sealOne,
 } from "../net_tls_record_common/bytes";
 import { clearRecord, clientKeysFor, recordHello, splitRecords } from "../net_tls_record_common/client";
-import { nextTrafficCopy } from "../net_tls_common/secrets";
+import { nextTrafficCopy, secretLength } from "../net_tls_common/secrets";
 
 const SUITE: i32 = TLS_AES_128_GCM_SHA256;
 
@@ -377,7 +377,7 @@ export const refusalChecks = (): i32 => {
   t.eqStr("sent as a fatal alert under the server's application keys", alertIn(clientReader(), drain(wrongFinished)), `2 ${TLS_ALERT_DECRYPT_ERROR}`);
   t.ok(
     "the failure wipes what TlsServer still held: the client's application secret, the exporter secret, the expected Finished",
-    allZero(wrongFinished.tls.clientApplicationSecret) && allZero(wrongFinished.tls.exporterSecret) && allZero(wrongFinished.tls.expectedClientFinished) && toI32(wrongFinished.tls.exporterSecret.length) === 32
+    expose(wrongFinished.tls.secrets().clientApplication, allZero) && expose(wrongFinished.tls.secrets().exporter, allZero) && allZero(wrongFinished.tls.secrets().clientFinished) && secretLength(wrongFinished.tls.secrets().exporter) === 32
   );
 
   // The caller's mistakes.
@@ -606,12 +606,15 @@ export const refusalChecks = (): i32 => {
   t.eqStr("and so are seventeen change_cipher_specs", `${floods}:${ccsFlood.alert}`, `17:${TLS_ALERT_UNEXPECTED_MESSAGE}`);
 
   // A key that does not install fails the connection rather than leave a direction in the clear.
+  // The traffic secrets are fixed-length `Secret` fields, so what cannot
+  // install is a direction whose secret was never kept: `readHash` and
+  // `writeHash` 0.
   const badRead = traceOpen();
-  badRead.readSecret = filled(33, 1);
+  badRead.readHash = 0;
   feed(badRead, sealOne(clientWriter(), TLS_CONTENT_HANDSHAKE, keyUpdateMessage(0), ZERO));
   t.eqI32("a read secret that installs no keys fails the client's KeyUpdate with internal_error", badRead.alert, TLS_ALERT_INTERNAL_ERROR);
   const badWrite = traceOpen();
-  badWrite.writeSecret = filled(33, 1);
+  badWrite.writeHash = 0;
   t.eqI32("and a write secret that installs none fails the server's: -104", badWrite.keyUpdate(false), TLS_RECORD_RESET);
   t.eqI32("with internal_error", badWrite.alert, TLS_ALERT_INTERNAL_ERROR);
 

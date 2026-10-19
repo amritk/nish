@@ -13,6 +13,12 @@ const hexOf = (bytes: u8[]): string => toHex(bytes);
 /** The hex of the bytes `s` holds; the caller still owns `s` and wipes it. */
 export const secretHex = (s: Secret<u8[]>): string => expose(s, hexOf);
 
+/** The length of `bytes`, for `expose` to run. */
+const lengthOf = (bytes: u8[]): i32 => toI32(bytes.length);
+
+/** How many bytes `s` holds. */
+export const secretLength = (s: Secret<u8[]>): i32 => expose(s, lengthOf);
+
 /** A plain copy of the bytes `s` holds, for a test that keeps one in a field; the caller wipes `s`. */
 export const secretCopy = (s: Secret<u8[]>): u8[] => expose(s, copyOf);
 

@@ -318,7 +318,7 @@ const closeChecks = (t: Suite): void => {
   const keys = released.application.writeKeys;
   const key: u8[] = keys === null ? fromHex("ff") : keys.key;
   const tlsAtRelease = released.tls;
-  const finished: u8[] = tlsAtRelease === null ? fromHex("ff") : tlsAtRelease.expectedClientFinished;
+  const finished: u8[] = tlsAtRelease === null ? fromHex("ff") : tlsAtRelease.secrets().clientFinished;
   const params: u8[] = tlsAtRelease === null ? fromHex("ff") : tlsAtRelease.config.quicTransportParameters;
   const tokens: u8[][] = [];
   for (const entry of released.cids.local) {

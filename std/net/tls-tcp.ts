@@ -106,14 +106,12 @@ export class TlsTcpServer {
   /** Signs every slot's CertificateVerify in `signP256`, one for the pool, keeping nothing per signature. */
   signer: TlsP256Signer
   /**
-   * Each slot's own copy of its connection's ephemeral key, so that wiping it
-   * can never reach an array the program has refilled for the next one.
-   */
-  keys: u8[][]
-  /**
-   * Each slot's own copy of its connection's server random, for the same
-   * reason: `TlsServer` keeps the array it is given and writes it into the
-   * ServerHello only once the ClientHello arrives.
+   * Each slot's own copy of its connection's server random: `TlsServer`
+   * keeps the array it is given and writes it into the ServerHello only once
+   * the ClientHello arrives, so the program's array may be refilled for the
+   * next one. The ephemeral key needs no copy here: `TlsServer.restart`
+   * copies it into the server's own `Secret` and wipes the array it was
+   * handed.
    */
   randoms: u8[][]
   /** The listening socket, which the program made with `tcpListen` and still owns. */
@@ -128,7 +126,6 @@ export class TlsTcpServer {
     this.listener = listener
     this.connections = []
     this.fds = []
-    this.keys = []
     this.randoms = []
     const none: u8[] = []
     const slots: i32 = size < 1 ? 1 : size
@@ -138,7 +135,6 @@ export class TlsTcpServer {
       // for a connection; every later connection reuses its buffers.
       this.connections.push(new TlsRecordServer(new TlsServer(config, none, none)))
       this.fds.push(TLS_TCP_FREE)
-      this.keys.push(new Array<u8>(TLS_TCP_KEY_SIZE))
       this.randoms.push(new Array<u8>(TLS_TCP_KEY_SIZE))
     }
     this.scratch = new Array<u8>(TLS_MAX_RECORD)
@@ -218,7 +214,6 @@ export class TlsTcpServer {
     }
     this.fds[slot] = fd
     const random: u8[] = this.randoms[slot]
-    const key: u8[] = this.keys[slot]
     for (
       let k: i32 = 0;
       k < TLS_TCP_KEY_SIZE && k < toI32(random.length) && k < toI32(serverRandom.length);
@@ -226,16 +221,9 @@ export class TlsTcpServer {
     ) {
       random[k] = serverRandom[k]
     }
-    for (
-      let k: i32 = 0;
-      k < TLS_TCP_KEY_SIZE && k < toI32(key.length) && k < toI32(ephemeralPrivate.length);
-      k++
-    ) {
-      key[k] = ephemeralPrivate[k]
-    }
-    secureZero(ephemeralPrivate)
     const conn: TlsRecordServer = this.connections[slot]
-    conn.tls.restart(random, key)
+    // `restart` copies the key into the server's own `Secret` and wipes this array.
+    conn.tls.restart(random, ephemeralPrivate)
     conn.start(conn.tls)
     return slot
   }

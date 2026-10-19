@@ -82,6 +82,8 @@ import {
   rfc8448ServerHelloRecord,
 } from "./records";
 import { nextTrafficCopy } from "../net_tls_common/secrets";
+import { readTrafficHex, writeTrafficHex } from "../net_tls_common/held";
+import { expose } from "nish:secret";
 
 /** `close_notify` as an alert's two bytes. */
 const closeNotify = (): u8[] => [toU8(1), toU8(TLS_ALERT_CLOSE_NOTIFY)];
@@ -325,17 +327,17 @@ export const rfc8448RecordChecks = (): i32 => {
   t.eqI32("still in the handshake until the client's Finished", conn.state, TLS_RECORD_STATE_HANDSHAKE);
   t.ok(
     "the handshake and server secrets are wiped in TlsServer once installed here",
-    allZero(tls.handshakeSecret) &&
-      allZero(tls.clientHandshakeSecret) &&
-      allZero(tls.serverHandshakeSecret) &&
-      allZero(tls.serverApplicationSecret)
+    expose(tls.secrets().handshake, allZero) &&
+      expose(tls.secrets().clientHandshake, allZero) &&
+      expose(tls.secrets().serverHandshake, allZero) &&
+      expose(tls.secrets().serverApplication, allZero)
   );
-  t.eqStr("and the server's application secret lives on here", toHex(conn.writeSecret), toHex(rfc8448ServerApplicationTraffic()));
+  t.eqStr("and the server's application secret lives on here", writeTrafficHex(conn), toHex(rfc8448ServerApplicationTraffic()));
   feed(conn, join([rfc8448ClientFinishedRecord(), rfc8448ClientApplicationRecord()]));
   t.eqI32("the client's Finished opens the connection", conn.state, TLS_RECORD_STATE_OPEN);
   t.ok(
     "its application secret is kept here and wiped in TlsServer",
-    toHex(conn.readSecret) === toHex(rfc8448ClientApplicationTraffic()) && allZero(tls.clientApplicationSecret)
+    readTrafficHex(conn) === toHex(rfc8448ClientApplicationTraffic()) && expose(tls.secrets().clientApplication, allZero)
   );
   t.ok("the client's data is waiting to be read", (conn.interest() & TLS_RECORD_DATA) !== 0);
   t.eqStr("it reads as the fifty bytes", toHex(readAll(conn)), toHex(rfc8448ApplicationPayload()));
