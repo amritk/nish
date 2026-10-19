@@ -610,7 +610,9 @@ export const refusalChecks = (): i32 => {
   // install is a direction whose secret was never kept (`readHash` and
   // `writeHash` 0), or one whose kept secret is held at the other hash's
   // length than its suite's: the 48-byte secret against AES-128-GCM's
-  // SHA-256, which `advanceHeld` leaves unratcheted and `installHeld` refuses.
+  // SHA-256: `tlsAdvanceHeld` hands `TlsRecordProtection.advance` a clone of
+  // it, which ratchets the clone's first `hashLength` bytes before `install`
+  // refuses the 48-byte secret.
   const badRead = traceOpen();
   badRead.readHash = 0;
   feed(badRead, sealOne(clientWriter(), TLS_CONTENT_HANDSHAKE, keyUpdateMessage(0), ZERO));
