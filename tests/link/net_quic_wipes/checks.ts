@@ -282,7 +282,15 @@ const qwDiscard = (t: Suite, name: string, suite: i32): void => {
       expose(tls.secrets().clientHandshake, qwZero) &&
       expose(tls.secrets().serverHandshake, qwZero)
   );
-  t.ok(`${name}: while the 1-RTT keys are held`, qwHeld(conn, suite));
+  // The connection holds them in its own pools: TlsServer's copies of the
+  // application traffic secrets are wiped once it takes them.
+  t.ok(
+    `${name}: while the 1-RTT keys are held`,
+    qwHeld(conn, suite) &&
+      tls !== null &&
+      expose(tls.secrets().clientApplication, qwZero) &&
+      expose(tls.secrets().serverApplication, qwZero)
+  );
 };
 
 /**
