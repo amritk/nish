@@ -1955,18 +1955,19 @@ export const narrowToTags = (
   let i = 0
   while (i < variants.length && i < tags.length) {
     const variant = variants[i]
+    const tag = tags[i]
     const left = ctx.table.isUnion(current) ? ctx.table.hasVariant(current, variant) : current === variant
     if (left) {
       possible = possible + 1
       let named = false
       for (const member of members) {
-        if (ctx.table.memberValue(member) === ctx.table.memberValue(tags[i])) {
+        if (ctx.table.memberValue(member) === ctx.table.memberValue(tag)) {
           named = true
         }
       }
       if (named === keep) {
         keptVariants.push(variant)
-        keptTags.push(tags[i])
+        keptTags.push(tag)
       }
     }
     i = i + 1
