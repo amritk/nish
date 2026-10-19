@@ -107,5 +107,44 @@ itself (`expr-nofix-logical-value`, `-argument`). A float, a `string | null`
 and a class that cannot be `null` have no comparison, and an `&&` with one such
 operand has no fix for the other either (`expr-nofix-logical-float`).
 
+The `thread-` cases are the `nish/threads` fixes, each a refusal whose
+replacement the source decides. `thread-using-scope` (NL2388) and
+`thread-using-lock` (NL2465) turn a `const` bound to `scope()` or `m.lock()`
+into `using`; a `let` is left alone (`thread-nofix-using-let-scope`, `-lock`),
+since a binding that is assigned again is not one `using` can take.
+`thread-destination` (NL2511) gives a `spawn` whose task answers a number or a
+`boolean` the destination it lacks, `const answer = new Array<T>(1)` above the
+scope's `using` and `, answer, 0` after the arguments; a `spawn` in a loop,
+where one slot would be written by every task (`thread-nofix-destination-loop`),
+and an answer that is not a number (`thread-nofix-destination-string`) get
+none. Two such `spawn`s in one scope each get a slot of their own, `answer` and
+`answer2`, over two rounds, since both write the line above the `using`
+(`thread-destination-two`). `thread-capture-task` (NL2506) and `thread-capture-map` (NL2500) read a
+`let` the arrow captures through a `const kNow = k` written just before the
+statement, which is the value the arrow would have read when it ran; a `let`
+another argument also names (`thread-nofix-capture-other-argument`) or one a
+`for` header declares (`thread-nofix-capture-for`), where no statement before
+the call is in the loop, keeps the refusal, and so does an arrow that assigns
+the `let` itself (`thread-nofix-capture-assigned`, `-assigned-map`), whose write
+would land on the `const`. Two statements in one block that capture the same
+`let` are rewritten in one round from the same text, so each takes a name of
+its own, `kNow` and `kNow2`, counted by the capturing arrows before it:
+two `parallelMap`s (`thread-capture-two`), two `spawn`s in one scope
+(`thread-capture-two-spawn`) and two in a loop's body
+(`thread-capture-two-loop`). `thread-hoist-channel` (NL2484)
+moves an arrow that uses a `Channel` to a `const` of its own above the
+top-level statement it is written in, named for the function and `Task`; an
+arrow that captures (`thread-nofix-hoist-capturing`) or leaves a type out
+(`thread-nofix-hoist-unannotated`) would not check at the top level, and one
+in a method (`thread-nofix-hoist-method`) has no name to give the `const`,
+since `Runner.run` is not an identifier, so it stays; a `parallelMap` body in
+a method (`thread-nofix-hoist-method-map`) stays for the same reason. A
+hoisted arrow is dedented to the top level line by line, except a line that
+starts inside a template literal, whose spaces are part of its string
+(`thread-hoist-template`, which prints 11, not the 7 of `one\ntwo`). Each input is an error, so none runs before its fix and none has a
+`.stdout`; the fixed programs print 25, 42, `joined`, `joined`, 24, 66, 86, 31, 27, 3 and 11. The fixed
+program imports `nish/threads`, which is why the runner compiles it with
+`-o fixed/`: one `.ll` per module.
+
 A fix is behaviour-preserving or it is not attached. When a new fix is in
 doubt about a shape, the shape gets a `.nofix.ts` case rather than a guess.

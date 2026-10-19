@@ -26,6 +26,8 @@ import {
 } from "nish/net/tls";
 import { ClientView, clientFinish, clientHello, sendHandshake, sendHello, standardExtensions } from "../net_tls_common/client";
 import { fromHex, sameBytes, toHex } from "../crypto_x509/hex";
+import { readCopy } from "../net_tls_common/held";
+import { secretLength } from "../net_tls_common/secrets";
 import { leafCertificate, leafPrivate, leafPublic, newServer, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 
 /** One whole handshake under `suite`, checked from the client's side. */
@@ -61,14 +63,14 @@ const handshakeWith = (t: Suite, suite: i32, name: string): void => {
   }
   t.ok(`${name}: the signature verifies with p256VerifySha256`, view.signatureVerifies);
   t.ok(`${name}: the server's Finished verifies`, view.serverFinishedVerifies);
-  const readSecret: u8[] | null = server.readSecret(TLS_LEVEL_HANDSHAKE);
+  const readSecret: u8[] | null = readCopy(server, TLS_LEVEL_HANDSHAKE);
   t.ok(
     `${name}: the client and server agree on the handshake secrets`,
     readSecret !== null && sameBytes(readSecret, view.clientHandshakeSecret)
   );
   t.eqI32(`${name}: the client's Finished verifies`, sendHandshake(server, view.clientFinished), zero);
   t.eqI32(`${name}: connected`, server.state, TLS_STATE_CONNECTED);
-  t.eqI32(`${name}: application secrets of HashLen bytes`, toI32(server.exporterSecret.length), hashLength);
+  t.eqI32(`${name}: application secrets of HashLen bytes`, secretLength(server.secrets().exporter), hashLength);
   t.eqStr(`${name}: nothing written at the Application level`, toHex(server.takeOutput(TLS_LEVEL_APPLICATION)), "");
 };
 

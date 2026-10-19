@@ -163,16 +163,77 @@ $ nish app.ts -o app.ll
 $ $NISH/scripts/build.sh app.ll $NISH/runtime/runtime.c mylib.c -o app
 ```
 
-Only scalars cross: the integer and float widths (`i32`, `u8`, `u64`, `f64`
-and the rest), `boolean` and `void`. A string, an array, a class or an
-interface is refused, because nothing the Nish compiler allocated may reach
-code it cannot see:
+Scalars cross: the integer and float widths (`i32`, `u8`, `u64`, `f64` and
+the rest), `boolean` and `void`. So does a `string` *parameter*, which C reads
+as a NUL-terminated `const char *`:
 
-```ts nish:err NL2322
+```ts nish:ok
 declare function puts(s: string): i32;
+declare function strlen(s: string): u64;
 
 export const main = (): i32 => {
   puts("hello");
+  const word = "nish" + "!";
+  console.log(`${strlen(word)}`); // 5
+  return 0;
+};
+```
+
+C *borrows* the string: it may read the bytes until it returns, and may not
+keep the address or write through it. Nothing is copied, so a C function that
+keeps its argument (`putenv`) or writes into it (`strtok`) must be declared to
+take a `CPtr` instead, and handed memory C allocated. A `string | null`
+parameter passes `NULL` for `null`.
+
+A Nish string can hold a NUL byte, and C would stop reading at it, so a string
+that holds one stops the program before the call instead:
+
+```console
+`strlen`: argument 1 (s) holds a NUL byte, which C would read as the end of the string
+```
+
+A literal with no NUL in it is checked at compile time and costs nothing at run
+time; any other string is checked with one scan of its bytes. `--emit-panics`
+lists each checked call as an `ffi-nul` site.
+
+A `string` *result* crosses the other way, as a copy. C answers a
+`const char *` into a buffer it keeps, and the program copies the bytes into a
+string of its own at the call, so a later call that overwrites C's buffer
+changes nothing the program holds. Each call makes a new copy, which lives
+like any other string the function makes, in a loop as anywhere else. A C
+function that may answer `NULL` is declared `string | null`, and `NULL` arrives
+as `null`:
+
+```ts nish:ok
+declare function strerror(errnum: i32): string;
+declare function getenv(name: string): string | null;
+
+export const main = (): i32 => {
+  console.log(strerror(2)); // No such file or directory
+  const home = getenv("HOME");
+  console.log(home === null ? "no HOME" : "HOME is set");
+  return 0;
+};
+```
+
+A result declared `string` that is `NULL` after all stops the program, because
+a `string` cannot hold it, and `--emit-panics` lists the call as an `ffi-null`
+site:
+
+```console
+`getenv` returned NULL for a `string` result; declare it `string | null`
+```
+
+A string C allocated for the caller to free (`strdup`) is a `CPtr`, not a
+`string`: the copy would leave C's allocation with no one to free it.
+
+An array, a class or an interface is refused, in either direction, because
+nothing else the Nish compiler allocated may reach code it cannot see:
+
+```ts nish:err NL2322
+declare function execvp(file: string, argv: string[]): i32;
+
+export const main = (): i32 => {
   return 0;
 };
 ```
@@ -193,6 +254,54 @@ export const main = (): i32 => {
   }
   return 0;
 };
+```
+
+That is how a string C allocated comes back. Declare it `CPtr | null`, narrow
+it, copy it with `readCString` from `nish:unsafe`, and free C's buffer
+yourself. A parameter declared `CPtr | null` takes the literal `null`, which is
+how `realpath` is asked to allocate:
+
+```ts nish:ok
+import { readCString } from "nish:unsafe";
+
+declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
+declare function free(p: CPtr): void;
+
+export const main = (): i32 => {
+  const p = realpath(".", null);
+  if (p === null) {
+    return 1;
+  }
+  const dir = readCString(p);
+  free(p);
+  console.log(dir.length > 0 ? "resolved" : "empty");
+  return 0;
+};
+```
+
+The copy is an ordinary Nish string, so it outlives `free(p)`. `readCString`
+is in `nish:unsafe` because nothing proves the pointer is live or that its
+bytes end in a NUL: reading a freed or unterminated buffer is undefined
+behaviour, and the import is where a module says it takes that on. It takes a
+`CPtr`, not a `CPtr | null`, so an unnarrowed pointer is refused.
+
+A `NULL` reaches C only where the source spells it. A nullable pointer held in
+a variable is refused, because the path that passes it `NULL` is one nobody
+wrote on purpose:
+
+```ts nish:err NL2539
+declare function free(p: CPtr | null): void;
+declare function getcwd(buf: CPtr | null, size: u64): CPtr | null;
+
+export const main = (): i32 => {
+  const p = getcwd(null, 0);
+  free(p);
+  return 0;
+};
+```
+
+```console
+Argument 1 of `free` is a `CPtr | null` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested
 ```
 
 A declared function has no body and cannot be exported. Calling C has a cost

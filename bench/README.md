@@ -523,7 +523,10 @@ module's header says to build one: one `Http1Server` pool on plain TCP, one
 readiness loop, one thread, nothing between the socket and the handler. It
 answers `GET /plaintext` with 13 bytes and `GET /json` with
 `{"message":"Hello, World!","n":<count>}` from a `JsonWriter` reset onto one
-buffer per request. `http.mjs` load-tests builds of it against each other with
+buffer per request. `POST /json-echo` takes the 545-byte order in
+`http-payload.json`, decodes it with `jsonDecode` into one reused class, raises
+its `revision` by one and encodes it back; `POST /json-echo-doc` gives the same
+answer through one reused `JsonDocument`. `http.mjs` load-tests builds of it against each other with
 [wrk](https://github.com/wg/wrk), with the server pinned to CPU 0 and wrk to
 the other CPUs, so the server has one core to itself:
 
@@ -547,7 +550,8 @@ server for two seconds of each scenario: a count, which does not drift with
 the machine the way throughput does. The scenarios are keep-alive at 256 and
 4,096 connections, `Connection: close` at 64 (every request a new TCP
 connection), and the same churn while 8,000 idle connections hold the pool's
-first slots.
+first slots, plus `post-json` and `post-json-doc` (keep-alive at 256, wrk
+POSTing the payload through `http-post-json.lua`).
 
 **Measured on the commit that adds this section.** x86-64, four-core Intel
 Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3, wrk 4.1.0, `-t3`.
@@ -612,22 +616,107 @@ seven rounds, against +2.2% and −3.7% for a byte-identical copy) and up
 12.7% at 4,096 (copy +2.6%), where the slots no longer touch 4,096 cold
 buffers. `net_http1_server` runs its whole plain section on one buffer.
 
-The same scenarios against other servers, each pinned to the one core the
-same way (three rounds; hyper 1.12 on a current-thread tokio runtime, nginx
-1.24 in one process with `return`, Bun 1.4 `Bun.serve`, Go 1.24 `net/http`
-with `GOMAXPROCS=1`, Node 22 `node:http`), in req/s and peak RSS. The other
-servers also send a `Date` field, which this one does not yet:
+**Against other servers.** [`http-twins/`](http-twins/README.md) holds eight
+servers that answer what this one answers, byte for byte, on other runtimes:
+`node:http`, uWebSockets.js, `Bun.serve`, Go's `net/http` and fasthttp, hyper,
+actix-web, and nginx answering from `return`. Each runs on one core, as this
+server does. `bash bench/http-twins/run.sh` builds `http1-server.ts` twice, as
+`nish` and a byte-identical `nish-copy`, then runs `check.mjs` and times all
+ten servers interleaved under `http.mjs`. The copy's distance from `nish` is
+the noise band, and every other difference is read against it.
 
-| scenario | nish | hyper | nginx | Bun | Go | Node |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| keep-alive, c=256, `/plaintext` | 150,629 | 114,240 | 99,149 | 88,242 | 38,289 | 31,590 |
-| keep-alive, c=4096 | 88,883 | 70,626 | 83,166 | 70,052 | 30,214 | 26,267 |
-| close, c=64 | 63,664 | 45,933 | 54,892 | 41,924 | 27,187 | 16,008 |
-| peak RSS, 8,000 idle connections | 35 MB | 76 MB | 19 MB | 48 MB | 180 MB | 128 MB |
+Measured on 2026-10-17 at `aa75cec`. The machine is a shared cloud VM (KVM),
+with four vCPUs of an Intel Xeon @ 2.80 GHz at one thread per core, Linux
+6.18.44, Ubuntu clang 18.1.3 and wrk 4.1.0 (Ubuntu's `4.1.0-4build2`). The
+server runs on CPU 0 and wrk on CPUs 1–3 with `-t3`. The run was
+`run.sh --rounds 5 --duration 5`: five rounds, each a one-second warm-up and a
+five-second timed run, a fresh server per round, 16,384 slots. The versions:
 
-Go and Node are from an earlier run of the same scenarios (the Nish build
-there was this one's base, at 141,782, 85,096 and 59,784). Bun's `close`
-rows carry about 200,000 wrk read errors a run.
+| server | versions |
+| --- | --- |
+| `nish`, `nish-copy` | nish 0.18.0 (`build/nish` at `aa75cec`), `--profile speed`, 134,512 bytes |
+| `node-http` | Node 26.12.0 |
+| `uws` | uWebSockets.js v20.71.0 (`9ec36de7`), Node 26.12.0 |
+| `bun` | Bun 1.4.3 |
+| `go-nethttp` | Go 1.27.2, `GOMAXPROCS=1` |
+| `go-fasthttp` | Go 1.27.2, fasthttp v1.75.0, `GOMAXPROCS=1` |
+| `rust-hyper` | Rust 1.99.1, hyper 1.12.0, hyper-util 0.1.21, tokio 1.53.3, serde_json 1.0.154 |
+| `rust-actix` | Rust 1.99.1, actix-web 4.17.0, serde_json 1.0.154 |
+| `nginx` | nginx 1.30.6, `worker_processes 1`, `master_process off` |
+
+Each cell is the median req/s, with the five rounds' min–max beneath it. The
+last column is the noise band, `nish-copy`'s median against `nish`'s:
+
+| scenario | nish | nish-copy | node-http | uws | bun | go-nethttp | go-fasthttp | rust-hyper | rust-actix | nginx | band |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| plaintext keep-alive c=256 | 112,078<br>105,705–131,314 | 118,246<br>56,686–132,872 | 21,919<br>20,608–23,718 | 97,945<br>92,922–107,106 | 56,614<br>50,558–65,313 | 27,003<br>25,948–29,333 | 58,683<br>57,284–61,311 | 66,305<br>62,796–73,910 | 64,754<br>64,112–70,603 | 65,997<br>62,134–67,095 | +5.5% |
+| json keep-alive c=256 | 118,907<br>110,330–123,977 | 116,483<br>107,903–138,722 | 22,788<br>19,633–23,745 | 97,946<br>68,642–104,229 | 56,535<br>54,253–64,274 | 25,381<br>25,014–26,717 | 49,569<br>45,211–57,689 | 68,586<br>59,691–69,231 | 66,363<br>61,008–69,475 | 65,451<br>63,830–67,832 | −2.0% |
+| post-json keep-alive c=256 | 38,888<br>33,874–45,603 | 37,888<br>33,579–41,356 | 12,585<br>12,373–13,953 | 24,813<br>23,323–27,029 | 25,101<br>23,901–25,832 | 15,978<br>15,122–16,708 | 22,467<br>21,088–23,862 | 36,522<br>31,404–39,801 | 31,836<br>30,757–41,411 | n/a¹ | −2.6% |
+| post-json-doc keep-alive c=256 | 37,645<br>31,359–42,837 | 35,043<br>34,374–41,057 | n/a² | n/a² | n/a² | n/a² | n/a² | n/a² | n/a² | n/a² | −6.9% |
+| plaintext keep-alive c=4096 | 69,743<br>55,592–74,015 | 68,545<br>44,565–78,226 | 18,395<br>17,778–20,838³ | 67,799<br>55,544–69,557 | 46,896<br>42,485–69,437 | 22,929<br>21,927–26,335 | 48,807<br>46,889–50,412 | 58,351<br>52,269–58,909 | 60,417<br>46,076–61,889 | 59,970<br>54,861–63,156³ | −1.7% |
+| plaintext close c=64 | 47,813<br>46,052–50,230 | 44,595<br>43,104–47,525 | 10,532<br>8,404–11,134 | 39,701<br>35,178–40,819⁴ | 31,091<br>29,301–32,155⁴ | 18,198<br>16,310–18,806 | 31,122<br>28,587–32,254 | 34,702<br>34,343–39,217 | 19,493<br>16,664–21,374 | 33,323<br>29,049–33,877 | −6.7% |
+| plaintext close c=64 + 8000 idle | 47,981<br>42,154–49,365 | 46,480<br>42,932–47,336 | 9,874<br>8,907–11,067 | 38,016<br>33,941–41,022⁴ | 30,270<br>28,806–31,401⁴ | 17,174<br>15,641–18,962 | 29,755<br>28,953–31,281 | 35,021<br>30,351–38,460 | 20,160<br>18,120–21,653 | 30,670<br>29,176–33,819 | −3.1% |
+| peak RSS, keep-alive c=256 | 65 MB | 65 MB | 90 MB | 56 MB | 33 MB | 17 MB | 12 MB | 6 MB | 7 MB | 10 MB | |
+| peak RSS, + 8000 idle | 65 MB | 65 MB | 233 MB | 59 MB | 45 MB | 158 MB | 115 MB | 84 MB | 81 MB | 14 MB | |
+
+1. nginx answers `/json-echo` with 404: `return` cannot read a request body,
+   so nginx has no echo, and the pre-check marks the cell n/a.
+2. Only the Nish server has `/json-echo-doc`. Every twin answers it with 404,
+   which the pre-check marks n/a.
+3. wrk timeouts in every round: node-http 27 to 70 a round, nginx 12 to 55.
+4. wrk read socket errors in every round, on top of the requests counted. uws
+   had 176,251 to 204,437 a round on `close`, and 173,087 to 209,232 with the
+   idle connections. bun had 149,421 to 160,985, and 146,913 to 160,149. No
+   other server had any in these rows. The twins are as `http-twins/` builds
+   them; this run does not explain the errors.
+
+**Reading it against the band.** The band runs from 1.7% to 6.9% across the
+rows. A single bad round can be wider still: one of the copy's plaintext
+rounds ran at 56,686. Most rows are clear of it. In the GET rows at c=256,
+`nish`'s median is above every twin's by more than the band: by 12.6% and
+17.6% over uws (bands 5.5% and 2.0%), and by 40.8% to 80.8% over the rest. At
+c=4096 it is above every twin but uws by at least 13.4%, against a band of
+1.7%. Two rows are close:
+
+- **uws at c=4096** is 2.8% lower, against a band of 1.7%. Its spread
+  (55,544–69,557) sits inside `nish`'s (55,592–74,015) and the copy's
+  (44,565–78,226), so this run cannot call them different.
+- **hyper on post-json** is 6.1% lower, against a band of 2.6%. That is
+  outside the band, but the two spreads overlap (31,404–39,801 and
+  33,874–45,603), so the lead is narrow.
+
+The other twins trail by 18.1% (actix) to 67.6% (node-http) on post-json.
+With `Connection: close`, `nish` is above the next twin, uws, by 17.0% and
+20.8% (bands 6.7% and 3.1%). In those rows uws and bun also took the read
+errors of note 4.
+
+`nish`'s 65 MB is the 16,384-slot pool it builds at start-up (the table above
+gives 64 MB). It does not grow with the 8,000 idle connections. Every twin's
+peak grows with them, except nginx, which stays at 14 MB.
+
+**What was measured, header by header.** Every server sends a `Date` field:
+`curl -si /plaintext` showed one on all ten. The Nish server's comes from
+#675. The earlier table here predated it and said this server sent none, which
+is no longer true. Beyond that, the servers differ in what they add:
+
+- `Server: nish`, `Server: fasthttp` and `Server: nginx`, and uws's
+  `uWebSockets: 20`.
+- node-http's `Connection: keep-alive` and `Keep-Alive: timeout=5`, and
+  nginx's `Connection: keep-alive`.
+- node-http answers `/plaintext` with `Transfer-Encoding: chunked`. Every
+  other server sends `Content-Length`.
+
+nginx's `/json` `n` is `$connection_requests`, which counts per connection,
+not per process.
+
+**The idle connections stayed open.** Each server held 8,000 idle connections
+for 10 s, with no requests on them. A round holds them about 6.2 s (0.2 s to
+settle, the 1 s warm-up and the 5 s run). Eight servers kept all 8,000 for the
+full 10 s, rust-actix among them: it sets `keep_alive(KeepAlive::Os)` and a
+zero `client_request_timeout`. bun kept all 8,000 at 6.5 s, 8 s and 9.5 s, but
+only 755 at 10 s, when its default `idleTimeout` of 10 s closed the rest.
+Every timed round therefore ran with all 8,000 open on every server.
+
 ## P-256
 
 `p256.ts` times ECDSA over P-256 on the three calls a key's life makes:

@@ -1,0 +1,1 @@
+`ws[2]` may be allocated inside the `using arena()` block at 10:5 and is stored into an element of `outer`

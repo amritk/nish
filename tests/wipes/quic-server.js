@@ -19,10 +19,10 @@ export const wipeChecks = [
   // IDs, each across its room. `QuicListener.release` 47: the seed, the
   // generator's pool, the tag and the two Initial secrets with `secureZero`, 5,
   // the scratch's `wipe`, 13, both key slots', 26, and the spare answer's, 3.
-  // `QuicConnection.release` 94, `quic.js`'s `wipeAll`; `Http3Server.release`
-  // frees one slot through it, 94. `Http3Server.stop` 242: the loop over the
+  // `QuicConnection.release` 88, `quic.js`'s `wipeAll`; `Http3Server.release`
+  // frees one slot through it, 88. `Http3Server.stop` 230: the loop over the
   // slots calls `Http3Server.release` for a slot in use and
-  // `QuicConnection.release` for a free one, 94 each (a loop's one call site
+  // `QuicConnection.release` for a free one, 88 each (a loop's one call site
   // counted once), the listener's `release`, 47, the stateless reset key, the
   // Retry token key, the index's salt and the entropy scratch with
   // `secureZero`, 4, and the server's answer's `wipe`, 3.
@@ -37,9 +37,9 @@ export const wipeChecks = [
       ["nish.QuicKeysSlot.wipe", 13],
       ["nish.QuicListenerAnswer.wipe", 3],
       ["nish.QuicListener.release", 47],
-      ["nish.QuicConnection.release", 94],
-      ["nish.Http3Server.release", 94],
-      ["nish.Http3Server.stop", 242],
+      ["nish.QuicConnection.release", 88],
+      ["nish.Http3Server.release", 88],
+      ["nish.Http3Server.stop", 230],
     ],
   },
 ]

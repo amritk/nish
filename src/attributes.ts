@@ -51,7 +51,13 @@ import { isBuiltinFunction } from "./builtins"
 import { numericLiteralValue } from "./constants"
 import { builtinCapability, CAP_FFI, CAP_NONE, CAP_UNLABELLED, CAPABILITY_COUNT } from "./capabilities"
 import { newArrayLengthChecked } from "./emit-arrays"
-import { stringifyCallee, stringConstructCallees } from "./emit-strings"
+import {
+  foreignResultCallees,
+  foreignStringCallees,
+  foreignStringIsNulFree,
+  stringifyCallee,
+  stringConstructCallees,
+} from "./emit-strings"
 import { unlabelledBuiltinError } from "./ice"
 import {
   analyzeEscapes,
@@ -101,6 +107,7 @@ import {
   N_FOR,
   N_FOR_OF,
   N_IDENT,
+  N_PARAM,
   N_IF,
   N_INDEX,
   N_LIST,
@@ -112,6 +119,7 @@ import {
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
+  N_TRY,
   N_STRING,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
@@ -188,6 +196,8 @@ import {
   PANIC_CALL,
   PANIC_DIVIDE,
   PANIC_EXPECT,
+  PANIC_FFI_NUL,
+  PANIC_FFI_NULL,
   PANIC_INDEX,
   PANIC_OVERFLOW,
   PANIC_PARALLEL_LENGTH,
@@ -223,6 +233,15 @@ export class PointerParamFacts {
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee. */
   captured: boolean
   /**
+   * `captured`, less a parallel region's hold on it: escape analysis's
+   * question, where `captured` is LLVM's. A region entry hands every
+   * parameter to other threads and joins them before it returns
+   * (`markParallelEntry`), so the address is kept, and no `nocapture` may be
+   * claimed, but not past the call: an array the caller made and passed in is
+   * still the caller's alone once the call has returned.
+   */
+  outlives: boolean
+  /**
    * WP29: the function writes memory reachable from the pointer, its own slots
    * or anything deeper, directly or via a callee (fixpoint). `writesThrough`
    * is LLVM's narrower question: a store through `p.inner.x` writes through a
@@ -251,6 +270,7 @@ export class PointerParamFacts {
     this.align = align
     this.writesThrough = false
     this.captured = false
+    this.outlives = false
     this.writesReach = false
     this.writesDeep = false
     this.keptInThis = false
@@ -583,6 +603,15 @@ export class FunctionFacts {
    */
   writesPastParams: boolean
   /**
+   * `writesPastParams`, less the writes made below one of this function's own
+   * pointer parameters (`p.xs[i] = v`, `this.xs.push(v)`), each of which also
+   * sets that parameter's `writesDeep` (fixpoint). A caller that hands such a
+   * callee only objects of its own, whose memory below them no parameter
+   * reaches (`DirtMark`), writes nothing shared through it (`pastBelow`):
+   * `const h = new H(); h.op()`, where `op` pushes onto `this.xs`.
+   */
+  writesElsewhere: boolean
+  /**
    * The body itself writes to a stream or exits: `nish_write` or `nish_exit`,
    * which `console.log`, `console.error`, `write`, `writeError` and
    * `process.exit` call. A panic calls `nish_panic` instead
@@ -603,6 +632,14 @@ export class FunctionFacts {
   wholeReaches: ArgEdge[]
   /** Every slot this body writes, as a path (`MemPath`): what `composeArguments` turns into `writesReach`. */
   memWrites: MemPath[]
+  /**
+   * The slots this body writes of an object of its own (`ROOT_OWN`), with the
+   * store at `ownSlotSites` beside each: a shared write only where a
+   * `DirtMark` says the object there may be memory that is not its own
+   * (`composeArguments`), as a call on one is.
+   */
+  ownSlotWrites: MemPath[]
+  ownSlotSites: Node[]
   /**
    * The objects this call made, by key (`FactCollector.ownKeyOf`), and the
    * names it has resolved (`LocalPath`).
@@ -692,6 +729,8 @@ export class FunctionFacts {
   returnsAllocation: boolean
   /** The returned array may hold elements the call allocated (escape.ts, `isListingCall`). */
   returnsFreshElements: boolean
+  /** The parameter whose elements the call fills with strings it allocated, or -1 (escape.ts, `fillsParam`). */
+  fillsParam: i32
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
   usesArenaControl: boolean
   /**
@@ -814,9 +853,12 @@ export class FunctionFacts {
     this.sharedWrite = false
     this.atomic = false
     this.writesPastParams = false
+    this.writesElsewhere = false
     this.argEdges = []
     this.wholeReaches = []
     this.memWrites = []
+    this.ownSlotWrites = []
+    this.ownSlotSites = []
     this.ownLocals = []
     this.localPaths = []
     this.dirt = []
@@ -854,6 +896,7 @@ export class FunctionFacts {
     this.allocEscapes = false
     this.returnsAllocation = false
     this.returnsFreshElements = false
+    this.fillsParam = -1
     this.usesArenaControl = false
     this.readsArenaState = false
     this.opensArena = false
@@ -1530,6 +1573,70 @@ const declarationIn = (program: CheckedProgram, node: Node, local: Local): Node 
   return null
 }
 
+/**
+ * The parameter every `return` of `callee` hands back, when each returns
+ * either that parameter or a fresh allocation (`new`, an array or an object
+ * literal); -1 otherwise, and for a method, whose answer may be its
+ * receiver's. A call to such a function answers memory no further from its
+ * caller than that argument, since a parameter is never reassigned
+ * (`checkAssignment` and `checkIncrement` in `expressions.ts` refuse it, NL2179):
+ * `rebuiltSlots` in `std/collections.ts`, which `Map.rebuild` refiles into.
+ * A fresh return may hold another argument's memory, `[ys]` or `new H(ys)`,
+ * and the path still names only the one parameter: that is sound because a
+ * task's own write through the answer lands in its top-level slots, which a
+ * fresh allocation owns, and any deeper write or a field's is refused
+ * (`reject_thread_task_own_fresh_holds_*`).
+ */
+const returnedParameter = (callee: FunctionSig): i32 => {
+  const body = callee.body()
+  if (body === null || callee.owner !== null || callee.foreign()) {
+    return -1
+  }
+  const returned: Node[] = []
+  const bound: string[] = []
+  if (body.kind === N_BLOCK) {
+    returnsAndBindings(body, returned, bound)
+  } else {
+    returned.push(body)
+  }
+  let at = -1
+  for (const r of returned) {
+    const e = unwrapParens(r)
+    if (e.kind === N_NEW || e.kind === N_ARRAY || e.kind === N_OBJECT) {
+      continue
+    }
+    const index = e.kind === N_IDENT && bound.indexOf(e.text) < 0 ? callee.paramNames.indexOf(e.text) : -1
+    if (index < 0 || index >= callee.writtenArity() || (at >= 0 && at !== index)) {
+      return -1
+    }
+    at = index
+  }
+  return at
+}
+
+/**
+ * The expressions `node`'s `return`s give, outside nested arrows, into
+ * `returned` (a bare `return` gives its EMPTY), and every name it binds into
+ * `bound`, so a name that shadows a parameter is never taken for it.
+ */
+const returnsAndBindings = (node: Node, returned: Node[], bound: string[]): void => {
+  if (node.kind === N_RETURN) {
+    returned.push(node.children[0])
+  }
+  if (node.kind === N_VAR_DECL || node.kind === N_PARAM) {
+    bound.push(node.children[0].text)
+  }
+  if (node.kind === N_TRY && node.children[1].kind === N_IDENT) {
+    bound.push(node.children[1].text)
+  }
+  if (node.kind === N_ARROW) {
+    return
+  }
+  for (const child of node.children) {
+    returnsAndBindings(child, returned, bound)
+  }
+}
+
 /** The block a declaration's scope ends with, or null when it is not in one. */
 const enclosingBlock = (unit: AnalysisUnit, decl: Node): Node | null => {
   let node: Node | null = unit.parents.parentOf(decl)
@@ -1783,6 +1890,7 @@ class FactCollector {
       this.facts.escaping.add(name)
       if (pointer !== null) {
         pointer.captured = true
+        pointer.outlives = true
         pointer.writesThrough = true // an alias may be written through later
       }
       return
@@ -1875,14 +1983,17 @@ class FactCollector {
   notePastWrite(node: Node): void {
     this.noteSharedWrite(node)
     this.facts.writesPastParams = true
+    this.facts.writesElsewhere = true
   }
 
   /**
    * `node` stores into the own slots of `receiver` (an element, a field, or
    * the header a `push` moves): nothing when it is a private array of this
    * function (`FunctionFacts.privateArrays`), a write through the parameter
-   * when it is one of this function's pointer parameters as it is, and a
-   * shared write past them otherwise.
+   * when it is one of this function's pointer parameters as it is, a write
+   * below it when it is under one, one the fixpoint settles when it is an
+   * object of this function's own (`ownSlotWrites`), and a shared write past
+   * them otherwise.
    */
   noteSlotWrite(node: Node, receiver: Node): void {
     const e = unwrapParens(receiver)
@@ -1893,8 +2004,21 @@ class FactCollector {
       }
       return
     }
-    this.facts.memWrites.push(this.pathOf(e))
+    const path = this.pathOf(e)
+    this.facts.memWrites.push(path)
     const pointer = this.pointerParamOf(e)
+    if (pointer === null && path.kind === ROOT_PARAM) {
+      // Below a parameter: past its own slots, but nowhere its caller cannot
+      // name (`writesElsewhere`).
+      this.noteSharedWrite(node)
+      this.facts.writesPastParams = true
+      return
+    }
+    if (path.kind === ROOT_OWN) {
+      this.facts.ownSlotWrites.push(path)
+      this.facts.ownSlotSites.push(node)
+      return
+    }
     if (pointer === null) {
       this.notePastWrite(node)
       return
@@ -1930,7 +2054,7 @@ class FactCollector {
     }
     if (e.kind === N_CALL) {
       const read = this.readBackPath(e, depth)
-      return read === null ? new MemPath(ROOT_UNKNOWN, "", "") : read
+      return read === null ? this.returnedPath(e, depth) : read
     }
     if (e.kind !== N_IDENT) {
       return new MemPath(ROOT_UNKNOWN, "", "")
@@ -2035,6 +2159,21 @@ class FactCollector {
       return base
     }
     return new MemPath(base.kind, base.name, `${base.steps}[]`)
+  }
+
+  /**
+   * Where what a call to a function of `returnedParameter`'s shape answers
+   * lives: where the argument it hands back does. Any other call's answer
+   * may be anything.
+   */
+  returnedPath(call: Node, depth: i32): MemPath {
+    const callee = this.unit.program.nodeCallees[call.id]
+    const at = callee === null || depth >= 8 ? -1 : returnedParameter(callee)
+    const args = call.children[1].children
+    if (at < 0 || at >= args.length) {
+      return new MemPath(ROOT_UNKNOWN, "", "")
+    }
+    return this.pathFrom(args[at], depth + 1)
   }
 
   /**
@@ -2720,6 +2859,31 @@ class FactCollector {
     if (this.known !== null) {
       this.facts.offerCapability(CAP_FFI, callee.sourceName, call, 0)
     }
+    // WP27 S3.1: a string that may hold a NUL is searched for one before C
+    // reads it, and a hit panics (`emitForeignString`).
+    const args = call.children[1].children
+    let i = 0
+    while (i < args.length && i < callee.paramTypes.length) {
+      const arg = args[i]
+      if (this.table.stripNull(callee.paramTypes[i]) === T_STRING && !foreignStringIsNulFree(arg)) {
+        const checks: string[] = []
+        foreignStringCallees(checks)
+        this.addCallees(checks)
+        this.noteSite(arg, PANIC_FFI_NUL, false, "")
+      }
+      i = i + 1
+    }
+    // WP27 S3.2: a `string` result is copied out of C, and a `NULL` one that
+    // is not declared `string | null` panics (`emitForeignStringResult`).
+    if (this.table.stripNull(callee.returnType) === T_STRING) {
+      const nullable = this.table.isNullable(callee.returnType)
+      const copy: string[] = []
+      foreignResultCallees(copy, nullable)
+      this.addCallees(copy)
+      if (!nullable) {
+        this.noteSite(call, PANIC_FFI_NULL, false, "")
+      }
+    }
   }
 
   /**
@@ -3291,9 +3455,10 @@ class FactCollector {
     // `nish:unsafe`: `uncheckedGet` is the load `xs[i]` is and
     // `uncheckedSet` the store `xs[i] = v` is (`collectArrayFacts`), less the
     // bounds check, so neither lists `nish_panic_index`. The store's receiver
-    // is a shared write above, through its `w`.
+    // is a shared write above, through its `w`. `readCString` reads C's bytes
+    // up to the `NUL` (WP27 S3.3).
     const name = builtinNameOf(this.unit.program, node)
-    if (name === "uncheckedGet") {
+    if (name === "uncheckedGet" || name === "readCString") {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet") {
       this.facts.effect = EFFECT_WRITE
@@ -3332,6 +3497,7 @@ const collectFacts = (
     facts.allocEscapes = memory.allocEscapes
     facts.returnsAllocation = memory.returnsAllocation
     facts.returnsFreshElements = memory.returnsFreshElements
+    facts.fillsParam = memory.fillsParam
     facts.usesArenaControl = memory.usesArenaControl
     facts.callSites = memory.callSites
     facts.escapingNodes = memory.escapingNodes
@@ -3390,12 +3556,14 @@ const collectFacts = (
   // which miscompiles rather than pessimises. So a foreign function asserts the
   // worst of everything it cannot be seen to avoid, and the fixpoint carries
   // that outward exactly as it carries any other impurity. `escaping` and the
-  // pointer facts stay empty because S1's boundary is scalars only, so a
-  // foreign callee has no pointer to capture (`docs/wp27-ffi.md` §3).
+  // pointer facts stay empty: S1's boundary was scalars only, and the one
+  // pointer S3.1 lets in, a `string` argument, is borrowed for the call and
+  // never kept, by the rule `docs/wp27-ffi.md` §8b decides rather than proves.
   if (sig.foreign()) {
     facts.effect = EFFECT_WRITE
     facts.sharedWrite = true // no site and no callee to name: the body is C
     facts.writesPastParams = true
+    facts.writesElsewhere = true
     facts.worldVia = `the C function \`${sig.sourceName}\`` // `nish:secret`: nothing about C is proved
     facts.willReturn = false
     facts.readsMemory = true
@@ -3404,6 +3572,16 @@ const collectFacts = (
     // do. S2 widening the type check must revisit the block rather than
     // inherit a `false` nobody re-derived.
     facts.resizesArray = true
+    // WP27 S3.2: a `string` result is a fresh arena copy at every call
+    // (`emitForeignStringResult`), so the call allocates and answers what it
+    // allocated, as a body that returns `s.substring(...)` does. Every caller
+    // that asks whether a call's result is fresh, a loop pass or a `using a =
+    // arena()` block deciding what it may release, reads it here.
+    if (table.stripNull(sig.returnType) === T_STRING) {
+      facts.allocates = true
+      facts.allocatesItself = true
+      facts.returnsAllocation = true
+    }
     return facts
   }
 
@@ -3434,10 +3612,10 @@ const collectFacts = (
   // `analyzeFunctions` adds the scope's own `nish_arena_mark` to `callees`
   // after the fixpoint, and that one is the compiler's, not the program's.
   if (isRegionEntry(sig)) {
-    markParallelEntry(facts, "nish_parallel_range")
+    markParallelEntry(facts, "nish_parallel_range", true)
   }
   if (isSpawnEntry(sig)) {
-    markParallelEntry(facts, "nish_scope_spawn") // WP29 P2: the payload is kept until the join
+    markParallelEntry(facts, "nish_scope_spawn", false) // WP29 P2: the payload is kept until the join
   }
   if (isMapRoute(sig)) {
     markMapRoute(table, sig, facts)
@@ -3487,21 +3665,32 @@ const collectFacts = (
  *
  * Both are claims LLVM would act on, and what each would buy is nothing: the
  * instance is called once per region, and the loop inside it is the chunk
- * function, whose own facts are unaffected. *
+ * function, whose own facts are unaffected.
+ *
+ * What the copy does not do is outlive the call: `nish_parallel_range` keeps
+ * its jobs on its own stack and returns once every chunk has, so a region
+ * entry (`joined`) leaves `outlives` as its source walk found it. An array the
+ * caller made and handed to `parallelMapInto` is then the caller's alone
+ * again, and the frame or the pass that made it releases it as it would after
+ * a sequential loop; without this every `parallelMap` let its result out of
+ * the caller's frame, and a function that called one and answered a scalar
+ * never reclaimed it (`tests/link/par_map_reclaim`).
+ *
  * A `spawn` instance (WP29 P2) is the same shape with a longer wait: its
  * payload — the argument and the destination — is copied into the scope's
  * task and read when the scope joins, after `spawn` has returned. So every
- * parameter escapes there too, which is also what keeps an argument out of a
- * stack slot a later pass of a loop would reuse and out of a loop pass the
- * arena would release before the join.
+ * parameter outlives the call there, which is also what keeps an argument out
+ * of a stack slot a later pass of a loop would reuse and out of a loop pass
+ * the arena would release before the join.
  */
-const markParallelEntry = (facts: FunctionFacts, runtime: string): void => {
+const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolean): void => {
   facts.callees.add(runtime)
   for (const name of facts.paramNames) {
     facts.escaping.add(name)
   }
   for (const pp of facts.pointerParams) {
     pp.captured = true
+    pp.outlives = pp.outlives || !joined
     pp.writesThrough = true
   }
 }
@@ -3544,7 +3733,10 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
  * instance says what its emitted body does: it reads the header or the field
  * that leads to the bytes, writes through its parameter, and the write is one
  * its caller can see, because the caller's key is what it zeroes. It keeps
- * nothing, so the parameter stays uncaptured.
+ * nothing, so the parameter stays uncaptured. The bytes it zeroes lie below
+ * the parameter's own slots, so the write reaches past them too: a caller that
+ * hands it `this.k` writes what `this` reaches, which is what a scope's region
+ * rule reads of a holder's `wipe()` called beside a task that borrows the key.
  */
 const markWipe = (facts: FunctionFacts): void => {
   facts.effect = EFFECT_WRITE
@@ -3552,7 +3744,10 @@ const markWipe = (facts: FunctionFacts): void => {
   facts.sharedWrite = true
   facts.callees.add(WIPE_MEMSET)
   if (facts.pointerParams.length > 0) {
-    facts.pointerParams[0].writesThrough = true
+    const pp = facts.pointerParams[0]
+    pp.writesThrough = true
+    pp.writesReach = true
+    pp.writesDeep = true
   }
 }
 
@@ -3667,7 +3862,7 @@ const markJsonRoute = (
     facts.allocEscapes = true
     facts.resizesArray = true
     facts.callees.add("nish_array_grow")
-    markParallelEntry(facts, "nish_alloc_struct")
+    markParallelEntry(facts, "nish_alloc_struct", false)
   }
 }
 
@@ -3696,7 +3891,10 @@ const analyzeInstanceEscapes = (
   return result
 }
 
-/** Record in `known` each function whose result now says it returns fresh elements; answer the new ones. */
+/**
+ * Record in `known` each function whose result now says it returns fresh
+ * elements or fills a parameter; answer the new ones.
+ */
 const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: FactsTable): StringSet => {
   const added = new StringSet()
   for (const sig of sigs) {
@@ -3706,8 +3904,27 @@ const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: Facts
       f.returnsFreshElements = true
       added.add(sig.name)
     }
+    if (result !== null && f !== null && result.fillsParam >= 0 && f.fillsParam < 0) {
+      f.fillsParam = result.fillsParam
+      added.add(sig.name)
+    }
   }
   return added
+}
+
+/** `f` calls one of `names`, for any result: a call that fills a parameter answers nothing. */
+const callsAnyCallee = (f: FunctionFacts | null, names: StringSet): boolean => {
+  if (f === null) {
+    return false
+  }
+  let c = 0
+  while (c < f.callees.size()) {
+    if (names.has(f.callees.at(c))) {
+      return true
+    }
+    c = c + 1
+  }
+  return false
 }
 
 /** `result`'s function calls one of `names` for a pointer. */
@@ -3760,7 +3977,7 @@ export const analyzeFunctions = (
   while (added.size() > 0) {
     let i = 0
     while (i < sigs.length && i < owners.length) {
-      if (callsAnyOf(escapes.get(sigs[i].name), added)) {
+      if (callsAnyOf(escapes.get(sigs[i].name), added) || callsAnyCallee(first.get(sigs[i].name), added)) {
         escapes.set(sigs[i].name, analyzeInstanceEscapes(owners[i], table, sigs[i], first, opts))
       }
       i = i + 1
@@ -3777,7 +3994,9 @@ export const analyzeFunctions = (
   propagateCapabilities(facts)
   for (const f of facts.list) {
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl
-    f.contained = f.contained || !f.allocEscapes
+    // What a function stores into a parameter it fills is its caller's, so
+    // no scope of its own may release it.
+    f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0
   }
   scopeParallelBodies(units, facts)
   settleCalleeScopes(facts)
@@ -4157,11 +4376,13 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
           const g = facts.get(pp.passedToCallees[i])
           let writes = true
           let captures = true
+          let outlives = true
           if (g !== null) {
             const target = g.pointerParamAt(pp.passedToIndices[i])
             if (target !== null) {
               writes = target.writesThrough
               captures = target.captured
+              outlives = target.outlives
             }
           }
           if (writes && !pp.writesThrough) {
@@ -4170,6 +4391,10 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
           }
           if (captures && !pp.captured) {
             pp.captured = true
+            changed = true
+          }
+          if (outlives && !pp.outlives) {
+            pp.outlives = true
             changed = true
           }
           i = i + 1
@@ -4209,7 +4434,7 @@ const propagateCallee = (
     calleeReturns = hasAttr(rt.attrs, "willreturn")
     calleeNoReturn = rt.noreturn
   }
-  if (!f.writesPastParams && writesShared(f, calleeFacts, rt, callee) && markPastWrite(f)) {
+  if (!f.writesElsewhere && writesShared(f, calleeFacts, rt, callee) && markPastWrite(f, true)) {
     changed = true
   }
   const merged = maxEffect(f.effect, calleeEffect)
@@ -4413,7 +4638,7 @@ const writesShared = (
   callee: string
 ): boolean => {
   if (calleeFacts !== null) {
-    return f.wholeCallees.has(callee) ? calleeFacts.sharedWrite : calleeFacts.writesPastParams
+    return f.wholeCallees.has(callee) ? calleeFacts.sharedWrite : calleeFacts.writesElsewhere
   }
   if (callee === "nish_alloc_struct") {
     return false // the inline arena allocator; see `FunctionFacts.sharedWrite`
@@ -4703,14 +4928,42 @@ const settleDirt = (facts: FactsTable, f: FunctionFacts, d: DirtMark): boolean =
   return true
 }
 
-/** Mark `f` as writing shared memory past its parameters; answers whether that moved anything. */
-const markPastWrite = (f: FunctionFacts): boolean => {
-  if (f.writesPastParams) {
+/** Mark `f` as writing shared memory past its parameters, and `elsewhere` than below them (`writesElsewhere`); answers whether that moved anything. */
+const markPastWrite = (f: FunctionFacts, elsewhere: boolean): boolean => {
+  if (f.writesPastParams && (f.writesElsewhere || !elsewhere)) {
     return false
   }
   f.sharedWrite = true
   f.writesPastParams = true
+  f.writesElsewhere = f.writesElsewhere || elsewhere
   return true
+}
+
+const PAST_NONE: i32 = 0
+const PAST_BELOW: i32 = 1 // below one of the caller's own parameters
+const PAST_ELSEWHERE: i32 = 2
+
+/**
+ * The past write the call along `edge` makes its caller when the callee
+ * writes below its parameters (`writesElsewhere` clear): none for an object
+ * of the caller's own whose memory below it no parameter reaches, below the
+ * caller's parameter for memory rooted at one, and anywhere otherwise. A
+ * private array is taken as anywhere, as it was before the distinction.
+ */
+const pastBelow = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 => {
+  const g = facts.get(edge.callee)
+  // A table's receiver, taken whole (`wholeReaches`), is its `this`.
+  const index = edge.index < 0 ? 0 : edge.index
+  if (g === null || !g.writesPastParams || g.writesElsewhere || g.pointerParamAt(index) === null) {
+    return PAST_NONE
+  }
+  if (edge.owner !== null) {
+    return PAST_ELSEWHERE
+  }
+  if (edge.path.kind === ROOT_OWN) {
+    return reachesForeign(f, edge.path.name, edge.path.steps, true) ? PAST_ELSEWHERE : PAST_NONE
+  }
+  return edge.path.kind === ROOT_PARAM ? PAST_BELOW : PAST_ELSEWHERE
 }
 
 /** Whether the call along `edge` writes shared memory through its argument: one not private, that the callee writes. */
@@ -4803,6 +5056,17 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
       changed = true
     }
   }
+  let w = 0
+  while (w < f.ownSlotWrites.length) {
+    const path = f.ownSlotWrites[w]
+    if (reachesForeign(f, path.name, path.steps, false) && markPastWrite(f, true)) {
+      if (f.writeSite === null) {
+        f.writeSite = f.ownSlotSites[w]
+      }
+      changed = true
+    }
+    w = w + 1
+  }
   for (const edge of f.wholeReaches) {
     // A table's method writes its receiver only when it writes through its
     // `this` (parameter 0): `has` and a fused `get`'s `probe` read it.
@@ -4810,6 +5074,10 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     const self: PointerParamFacts | null = g === null ? null : g.pointerParamAt(0)
     const writes = g === null || (g.sharedWrite && (self === null || self.writesReach))
     if (writes && callWrites(f, edge, false)) {
+      changed = true
+    }
+    const past = pastBelow(facts, f, edge)
+    if (past !== PAST_NONE && markPastWrite(f, past === PAST_ELSEWHERE)) {
       changed = true
     }
   }
@@ -4820,6 +5088,10 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   }
   for (const edge of f.argEdges) {
     if (keepsOwn(facts, f, edge)) {
+      changed = true
+    }
+    const past = pastBelow(facts, f, edge)
+    if (past !== PAST_NONE && markPastWrite(f, past === PAST_ELSEWHERE)) {
       changed = true
     }
   }
@@ -4842,7 +5114,7 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     if (owner !== null && !owner.lost && keepsArgument(facts.get(edge.callee), edge.index)) {
       owner.lost = true
       changed = true
-      if (owner.site !== null && markPastWrite(f)) {
+      if (owner.site !== null && markPastWrite(f, true)) {
         changed = true
       }
     }
@@ -4859,14 +5131,14 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     // (`callWrites`), which is all the parent's region rule reads.
     if (edge.path.kind === ROOT_OWN) {
       const deep = target === null || target.writesDeep
-      if (reachesForeign(f, edge.path.name, edge.path.steps, deep) && markPastWrite(f)) {
+      if (reachesForeign(f, edge.path.name, edge.path.steps, deep) && markPastWrite(f, true)) {
         changed = true
       }
       continue
     }
     const pointer: PointerParamFacts | null = edge.param.length > 0 ? f.pointerParam(edge.param) : null
     if (pointer === null) {
-      if (markPastWrite(f)) {
+      if (markPastWrite(f, edge.path.kind !== ROOT_PARAM)) {
         changed = true
       }
       continue
@@ -4883,10 +5155,29 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
   return changed
 }
 
-/** Whether `f` hands `callee` an argument it writes shared memory through (`composeArguments`). */
+/** Whether `f` hands `callee` an argument or a table it writes shared memory through (`composeArguments`). */
 const writesAnArgument = (facts: FactsTable, f: FunctionFacts, callee: string): boolean => {
+  for (const edge of f.wholeReaches) {
+    if (edge.callee === callee && pastBelow(facts, f, edge) !== PAST_NONE) {
+      return true
+    }
+  }
   for (const edge of f.argEdges) {
-    if (edge.callee === callee && edgeWrites(facts, edge)) {
+    if (edge.callee === callee && pastBelow(facts, f, edge) !== PAST_NONE) {
+      return true
+    }
+    if (edge.callee !== callee || !edgeWrites(facts, edge)) {
+      continue
+    }
+    // An object of the caller's own is a shared write only where it may hold
+    // memory that is not, as the fixpoint judges it: `h.poke()` on a fresh
+    // `h` is not the write to name.
+    if (edge.path.kind !== ROOT_OWN) {
+      return true
+    }
+    const g = facts.get(callee)
+    const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(edge.index)
+    if (reachesForeign(f, edge.path.name, edge.path.steps, target === null || target.writesDeep)) {
       return true
     }
   }

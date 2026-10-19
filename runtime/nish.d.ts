@@ -203,7 +203,7 @@ declare function isExecutableSync(path: string): boolean;
 // ---- Unsafe (`nish:unsafe`) --------------------------------------------------
 //
 // Declared as globals so `tsc` reads a program that imports them, as every
-// `nish:` export is, but `nish` refuses a call to any of the five that is not
+// `nish:` export is, but `nish` refuses a call to any of the six that is not
 // imported from `nish:unsafe`: the import is the module's visible opt-in.
 
 /** `xs[i]` with no bounds check: undefined behaviour when `i` is out of range. */
@@ -216,6 +216,8 @@ declare function wrappingAdd<T extends i32 | i64>(a: T, b: T): T;
 declare function wrappingSub<T extends i32 | i64>(a: T, b: T): T;
 /** `a * b` wrapped to the operands' width. */
 declare function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
+/** The `NUL`-terminated bytes at `p`, copied into a string: undefined behaviour unless `p` is a live C string. */
+declare function readCString(p: CPtr): string;
 
 // ---- Streams and files (globals: Nish has no package resolution) ---------
 
@@ -484,6 +486,8 @@ declare module "nish:unsafe" {
   export function wrappingSub<T extends i32 | i64>(a: T, b: T): T;
   /** `a * b` wrapped to the operands' width. */
   export function wrappingMul<T extends i32 | i64>(a: T, b: T): T;
+  /** The `NUL`-terminated bytes at `p`, copied into a string: undefined behaviour unless `p` is a live C string. */
+  export function readCString(p: CPtr): string;
 }
 
 declare module "nish:io" {

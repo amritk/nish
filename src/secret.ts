@@ -13,13 +13,16 @@
 //   - **Shape and position**, asked by the checker as it meets the construct:
 //     what `T` may be, and that a `Secret` is never interpolated, printed,
 //     handed to a builtin, compared with a value, branched on, indexed, read
-//     into, built with `new`, or put in a field, an element or a `Result`.
+//     into, built with `new`, or put in an element or a `Result`; a field holds
+//     one only as a `readonly` field of a class whose `wipe()` wipes it.
 //     Each is asked before the generic rule it would otherwise trip, so the one
 //     diagnostic a program gets names the secret.
 //   - **Ownership**, over a body once it has checked cleanly
 //     (`checkSecretFlow`): a `Secret` the function makes leaves it returned or
 //     wiped on every path, is not copied, is not read once wiped, and a local
-//     handed to `secret` is moved. Result rule 1's two entry points, the
+//     handed to `secret` is moved. A `Secret` parameter is borrowed, so it is
+//     neither returned nor wiped; a holder's field is set once, in the
+//     constructor, and wiped only in the holder's `wipe()`. Result rule 1's two entry points, the
 //     statement that drops a value and the body that never handles one, with
 //     the second walked path by path rather than counted, because "wiped
 //     somewhere" is not "wiped".
@@ -59,19 +62,25 @@ import {
   N_PAREN,
   N_RETURN,
   N_SWITCH,
+  N_THIS,
   N_THROW,
   N_TRUE,
   N_VAR,
   N_VAR_DECL,
   N_WHILE,
   Node,
+  FLAG_OPTIONAL,
 } from "./nodes"
 import {
   CheckedProgram,
+  FieldInfo,
   FunctionSig,
   Instantiation,
   ParallelCall,
+  ROLE_CONSTRUCTOR,
   SecretNeed,
+  STRUCT_CLASS,
+  StructInfo,
   StructTemplateInfo,
   TemplateInfo,
   capturedReads,
@@ -81,8 +90,8 @@ import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { methodReceiver } from "./emit-util"
 import { isSecretModule } from "./std-modules"
 import { StringBuilder } from "./strings"
-import { Local, Scope, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { isInteger, T_CPTR, T_ERROR, TypeTable } from "./types"
+import { Local, Scope, STORAGE_LOCAL, STORAGE_PARAM, sourceLocal } from "./symbols"
+import { isInteger, T_CPTR, T_ERROR, T_VOID, TypeTable } from "./types"
 
 /** The class `nish:secret` declares. */
 const SECRET_CLASS: string = "Secret"
@@ -111,6 +120,12 @@ export const isSecretSource = (program: CheckedProgram): boolean =>
 /** Whether `template` is `Secret<T>` itself. */
 export const isSecretTemplate = (template: StructTemplateInfo): boolean =>
   template.sourceName === SECRET_CLASS && isSecretSource(template.home.program)
+
+/** Whether `info` is an instantiation of `Secret<T>`, a struct the C header keeps opaque. */
+export const isSecretStruct = (info: StructInfo): boolean => {
+  const instance = info.instance
+  return instance !== null && isSecretTemplate(instance.template)
+}
 
 /** The `SECRET_*` role of an instantiation of `template`. */
 const secretRole = (template: TemplateInfo): i32 => {
@@ -197,10 +212,105 @@ export const containerMessage = (spelled: string): string =>
   "outlives the function that made the secret, which then can neither return nor wipe it; " +
   "hold a `Secret` in a local or a parameter"
 
-/** `key: Secret<u8[]>` in a class or an interface. */
+/**
+ * `key: Secret<u8[]>` anywhere but a `readonly` field of a non-generic class:
+ * an interface's, a nullable one, a `Secret<T>[]`, a generic class's.
+ */
 export const secretFieldMessage = (field: string): string =>
   `\`${field}\` cannot be a \`Secret\`: a field of a class or interface outlives the function that ` +
-  "made the secret, which then can neither return nor wipe it; hold a `Secret` in a local or a parameter"
+  "made the secret, which then can neither return nor wipe it; hold a `Secret` in a local, a parameter, " +
+  "or a `readonly` field of a class whose `wipe()` wipes it"
+
+/**
+ * Whether `type`, the declared type of a field of `owner`, is a `Secret` field
+ * the language admits (docs/LANGUAGE.md, "A `Secret` field"): exactly
+ * `Secret<T>`, `readonly`, in a class that is neither generic nor
+ * `nish:secret`'s own. Every other field `holdsSecret` answers for is NL2430.
+ */
+export const admitsSecretField = (
+  ctx: CheckContext,
+  owner: StructInfo,
+  type: i32,
+  readonly: boolean
+): boolean =>
+  readonly &&
+  ctx.table.secretInner(type) >= 0 &&
+  owner.kind === STRUCT_CLASS &&
+  owner.instance === null &&
+  !isSecretSource(ctx.program)
+
+/**
+ * The first `Secret` field of `info`, or null when it has none: a class with
+ * one is a *holder*. Only `admitsSecretField` lets such a field in, so this is
+ * the record, derived where it is asked rather than kept beside the fields.
+ */
+export const secretFieldOf = (table: TypeTable, info: StructInfo | null): FieldInfo | null => {
+  if (info === null) {
+    return null
+  }
+  for (const field of info.fields) {
+    if (table.isSecret(field.type)) {
+      return field
+    }
+  }
+  return null
+}
+
+/** A holder whose `wipe` is missing, or takes parameters, or answers a value. */
+const releaserMessage = (holder: string, field: string): string =>
+  `\`${holder}\` holds the \`Secret\` field \`${field}\`, so it declares \`wipe(): void\`, taking no ` +
+  "parameters: a holder's key ends in that method, which wipes every `Secret` field it holds, " +
+  `\`wipe(this.${field})\`, on every path`
+
+/**
+ * A holder declares `wipe(): void`, the one place its keys end, which
+ * `checkSecretFlow` then walks path by path.
+ */
+export const checkHolderReleaser = (ctx: CheckContext, info: StructInfo): void => {
+  const field = secretFieldOf(ctx.table, info)
+  if (field === null) {
+    return
+  }
+  const sig = info.method("wipe")
+  // `this` is the first parameter of a method's signature.
+  if (sig === null || sig.paramTypes.length !== 1 || sig.returnType !== T_VOID) {
+    ctx.error(info.decl.children[0], releaserMessage(info.name, field.name))
+  }
+}
+
+/** An exit or the end of a holder's `wipe()` that leaves `this.f` holding its key. */
+const releaseMessage = (field: string): string =>
+  `\`${field}\` can leave this \`wipe()\` unwiped: a holder's \`wipe()\` ends every \`Secret\` field ` +
+  `it holds itself, with \`wipe(${field})\` on every path (a helper it calls does not count), ` +
+  "because nothing else ever will"
+
+/** `this.f = v` in a constructor for a `v` that is not `secret(...)`. */
+const fieldSourceMessage = (field: string): string =>
+  `\`${field}\` is set from something other than \`secret(...)\`: a \`Secret\` field is set in its ` +
+  "class's constructor, from `secret(v)`, so the holder is the only owner of the key it makes, " +
+  "and its `wipe()` the one place that key ends"
+
+/** A second `this.f = secret(...)` while the first may still hold its key. */
+const refillMessage = (field: string): string =>
+  `\`${field}\` is set again while it may still hold a \`Secret\`: a \`Secret\` field is set once, ` +
+  "in its class's constructor, and the key it held would be lost unwiped"
+
+/** `const k = h.key`, `return h.key`, `c ? h.key : s`, ... */
+const fieldReadMessage = (field: string): string =>
+  `\`${field}\` is a \`Secret\` field, which is read only as a call's argument or an \`===\`/\`!==\` ` +
+  "operand: bound, returned, chosen or stored, it would be a second owner of the key the holder's " +
+  "`wipe()` ends, so pass it to `expose`, `exposeWith` or a function that takes a `Secret`"
+
+/** `wipe(h.k)` anywhere but the holder's own `wipe()`. */
+const fieldWipeMessage = (field: string): string =>
+  `\`${field}\` is wiped outside its holder's \`wipe()\`: a \`Secret\` field ends only in that method, ` +
+  "on every path, so a wipe anywhere else would leave the holder holding zeros that its other uses " +
+  "then read and its own `wipe()` wipes again; call the holder's `wipe()` instead"
+
+/** `{ key: ... }` for a holder class: the field set without `secret(...)`. */
+export const holderLiteralMessage = (holder: string): string =>
+  `\`${holder}\` holds a \`Secret\` field and is made only by \`new\`: its constructor is the one place ` +
+  "that field is set, from `secret(v)`, so an object literal or a decoded document cannot build it"
 
 // ---- Position ------------------------------------------------------------------------------
 
@@ -271,20 +381,43 @@ export const secretArgumentShapeMessage = (
 
 /**
  * Whether the expression `arg`, as written, names a local whose current type
- * is a `Secret`. It reads the scope and never checks `arg`, so a builtin can
- * refuse a secret before its own argument checks run and say something less
- * useful about the same mistake.
+ * is a `Secret`, or a holder's `Secret` field through a chain of names and
+ * fields (`h.key`, `this.key`, `a.h.key`). It reads the scope and the declared
+ * fields and never checks `arg`, so a builtin can refuse a secret before its
+ * own argument checks run and say something less useful about the same
+ * mistake.
  */
-export const namesSecret = (ctx: CheckContext, arg: Node, scope: Scope): boolean => {
-  let at = arg
-  while (at.kind === N_PAREN) {
-    at = at.children[0]
+export const namesSecret = (ctx: CheckContext, arg: Node, scope: Scope): boolean =>
+  ctx.table.isSecret(writtenType(ctx, arg, scope))
+
+/** The type of a chain of names and fields as written, or -1 for anything else. */
+const writtenType = (ctx: CheckContext, node: Node, scope: Scope): i32 => {
+  const at = unwrapSecretNode(node)
+  if (at.kind === N_IDENT) {
+    const local = scope.lookup(at.text)
+    return local === null ? -1 : scope.typeOf(local)
   }
-  if (at.kind !== N_IDENT) {
-    return false
+  if (at.kind === N_THIS) {
+    const sig = ctx.current
+    if (sig === null) {
+      return -1
+    }
+    const owner = sig.owner
+    return owner === null ? -1 : owner.type
   }
-  const local = scope.lookup(at.text)
-  return local !== null && ctx.table.isSecret(scope.typeOf(local))
+  if (at.kind !== N_MEMBER) {
+    return -1
+  }
+  const receiver = writtenType(ctx, at.children[0], scope)
+  if (receiver < 0) {
+    return -1
+  }
+  const info = ctx.program.struct(ctx.table.nameOf(ctx.table.stripNull(receiver)))
+  if (info === null) {
+    return -1
+  }
+  const field = info.field(at.text)
+  return field === null ? -1 : field.type
 }
 
 /**
@@ -335,6 +468,17 @@ const copyMessage = (name: string): string =>
   "of them to be wiped by nobody. Pass it to a function, return it, `wipe` it, or move a local the function " +
   "made into another (`const j = k`), after which `k` is not read"
 
+/** `wipe(p)` for a `Secret` parameter `p`, which its caller still owns. */
+const paramWipeMessage = (name: string): string =>
+  `\`${name}\` is a \`Secret\` parameter, which its caller owns and wipes: wiped here, the caller ` +
+  "would go on reading zeros and wipe it again. Leave the wipe to the caller, which knows when it is done"
+
+/** `return p` for a `Secret` parameter `p`, which its caller still owns. */
+const paramReturnMessage = (name: string): string =>
+  `\`${name}\` is a \`Secret\` parameter, which its caller owns and wipes: returned, it would be a ` +
+  "second name for that key in the caller, one of the two wiped by nobody or both read once it is wiped. " +
+  "Return a value computed from it inside `expose`, or a new `secret(...)` made from one"
+
 /** A read of a local after `secret(x)` moved it. */
 const movedMessage = (name: string): string =>
   `\`${name}\` was moved into a \`Secret\` by \`secret(${name})\` and cannot be read again: the ` +
@@ -364,6 +508,8 @@ const ROLE_INIT: i32 = 4
 const ROLE_NULL_TEST: i32 = 5
 /** An arm of a ternary in a place a new secret may stand: a call may be one, a name may not. */
 const ROLE_ARM: i32 = 6
+/** The `secret(v)` a constructor stores in a holder's `Secret` field, which owns it from there. */
+const ROLE_FIELD_INIT: i32 = 7
 
 /** What one path knows: per tracked variable, may it hold an unhandled secret, may it be wiped, moved. */
 class FlowState {
@@ -496,10 +642,19 @@ class SecretFlow {
   /** The block (or `for`) that declares each owned variable; a parameter's own name until then. */
   declBlocks: Node[]
   declDepths: i32[]
+  /**
+   * Per variable, "" for a local or a parameter, or the name of the holder's
+   * `Secret` field it stands for: a *slot*, `this.f` in the holder's own
+   * constructor (not owned: set once, from `secret(...)`) or its `wipe()`
+   * (owned and live from the start: ended on every path).
+   */
+  slots: string[]
   movable: Local[]
   /** Every `secret(...)` call in the body, which the sole-reference rule judges. */
   sites: Node[]
   targets: SecretExitTarget[]
+  /** The body is a holder's constructor, whose slots are set rather than ended. */
+  building: boolean
   report: boolean
   /** Node ids already reported, so a node reached twice in one pass says it once. */
   reported: boolean[]
@@ -511,6 +666,8 @@ class SecretFlow {
     this.declNodes = []
     this.declBlocks = []
     this.declDepths = []
+    this.slots = []
+    this.building = false
     this.movable = []
     this.sites = []
     this.targets = []
@@ -529,6 +686,21 @@ class SecretFlow {
     let i = 0
     while (i < this.vars.length) {
       if (this.vars[i] === local) {
+        return i
+      }
+      i = i + 1
+    }
+    return -1
+  }
+
+  /** The slot `this.f` names, or -1: a member read of something else, or a body with no slots. */
+  slotIndex(member: Node): i32 {
+    if (unwrapSecretNode(member.children[0]).kind !== N_THIS) {
+      return -1
+    }
+    let i = 0
+    while (i < this.slots.length) {
+      if (this.slots[i] === member.text) {
         return i
       }
       i = i + 1
@@ -583,7 +755,7 @@ class SecretFlow {
       i = i + 1
     }
     if (found >= 0) {
-      this.error(at, exitMessage(this.vars[found].name, this.typeName(found)))
+      this.error(at, this.endMessage(found, true))
     }
   }
 
@@ -608,11 +780,17 @@ class SecretFlow {
       i = i + 1
     }
     if (found >= 0) {
-      this.error(
-        this.declNodes[found].children[0],
-        scopeEndMessage(this.vars[found].name, this.typeName(found))
-      )
+      this.error(this.declNodes[found].children[0], this.endMessage(found, false))
     }
+  }
+
+  /** What an exit (or, `atExit` false, a scope's end) says of `vars[i]` still holding its key. */
+  endMessage(i: i32, atExit: boolean): string {
+    const name = this.vars[i].name
+    if (this.slots[i] !== "") {
+      return releaseMessage(name)
+    }
+    return atExit ? exitMessage(name, this.typeName(i)) : scopeEndMessage(name, this.typeName(i))
   }
 
   // ---- Statements ----
@@ -636,7 +814,11 @@ class SecretFlow {
         this.declarations(stmt, state, block)
         return
       case N_EXPR_STMT:
-        this.expression(stmt.children[0], ROLE_READ, state)
+        if (stmt.children[0].kind === N_BINARY && stmt.children[0].text === "=") {
+          this.assignment(stmt.children[0], state, true)
+        } else {
+          this.expression(stmt.children[0], ROLE_READ, state)
+        }
         if (terminatesControlFlow(this.ctx, stmt.children[0])) {
           state.reachable = false // the process ends, and the key with it
         }
@@ -690,7 +872,7 @@ class SecretFlow {
       const local = this.ctx.program.nodeLocals[decl.id]
       const at = this.varIndex(local)
       if (at >= 0) {
-        state.live[at] = mayHoldSecret(init)
+        state.live[at] = mayHoldSecret(init) && !isMemberRead(init)
         state.wiped[at] = false
         this.declBlocks[at] = block
         this.declDepths[at] = this.targets.length
@@ -952,10 +1134,16 @@ class SecretFlow {
         return
       case N_NEW:
         for (const arg of node.children[2].children) {
-          this.expression(arg, unwrapSecretNode(arg).kind === N_IDENT ? ROLE_BORROW : ROLE_READ, state)
+          this.expression(arg, isBorrowable(arg) ? ROLE_BORROW : ROLE_READ, state)
         }
         this.produced(node, role)
         return
+      case N_MEMBER:
+        if (this.ctx.table.isSecret(program.nodeTypes[node.id])) {
+          this.fieldRead(node, role, state)
+          return
+        }
+        break
       default:
         break
     }
@@ -973,10 +1161,94 @@ class SecretFlow {
     if (type < 0 || !this.ctx.table.isSecret(type) || node.kind === N_IDENT || node.kind === N_NULL) {
       return
     }
-    if (role === ROLE_INIT || role === ROLE_RETURN || role === ROLE_WIPE || role === ROLE_ARM) {
+    if (
+      role === ROLE_INIT ||
+      role === ROLE_RETURN ||
+      role === ROLE_WIPE ||
+      role === ROLE_ARM ||
+      role === ROLE_FIELD_INIT
+    ) {
       return
     }
     this.error(node, discardMessage(this.ctx.table, type))
+  }
+
+  /**
+   * `h.f`, a holder's `Secret` field: lent to a call, compared, or (a slot)
+   * wiped. Any other read would be a second owner of the key the holder's
+   * `wipe()` ends, so it is refused rather than tracked, and a field read
+   * never makes a secret for `produced` to ask about.
+   */
+  fieldRead(node: Node, role: i32, state: FlowState): void {
+    this.expression(node.children[0], ROLE_READ, state)
+    const lent = role === ROLE_BORROW || role === ROLE_WIPE || role === ROLE_NULL_TEST
+    if (!lent || (node.flags & FLAG_OPTIONAL) !== 0) {
+      this.error(node, fieldReadMessage(node.text))
+      return
+    }
+    const at = this.slotIndex(node)
+    // A field ends in its holder's own `wipe()`, the one body whose slots are
+    // owned: wiped in a constructor, a method or through another name, the
+    // holder would go on reading, and wiping, the zeros.
+    if (role === ROLE_WIPE && (at < 0 || this.building)) {
+      this.error(node, fieldWipeMessage(node.text))
+      return
+    }
+    if (at < 0) {
+      return
+    }
+    if (role === ROLE_WIPE) {
+      state.live[at] = false
+      state.wiped[at] = true
+    } else if (state.wiped[at]) {
+      this.error(node, wipedMessage(this.vars[at].name))
+    }
+  }
+
+  /**
+   * `this.f = value` in a holder's constructor, the one store the `readonly`
+   * rule lets through (`assignableReadonly`, src/members.ts): every other
+   * store of a `Secret` field — in a method, through another name than
+   * `this`, compound — is refused there before this walk runs, so this is
+   * where the two rules meet. The value is `secret(...)`, made here and owned
+   * by the field from now, and the field is not yet set. The store is a
+   * statement of its own: `const x = (this.k = secret(v))` would bind the
+   * value the field now owns, a second owner as `const x = this.k` is.
+   */
+  fieldStore(target: Node, value: Node, state: FlowState, statement: boolean): void {
+    const at = this.building ? this.slotIndex(target) : -1
+    if (at < 0) {
+      this.expression(value, ROLE_READ, state)
+      return
+    }
+    const made = unwrapSecretNode(value)
+    if (made.kind === N_CALL && secretRoleOf(this.ctx.program.nodeCallees[made.id]) === SECRET_MAKE) {
+      this.call(made, ROLE_FIELD_INIT, state)
+      if (state.live[at]) {
+        this.error(target, refillMessage(this.vars[at].name))
+      }
+      state.live[at] = true
+      state.wiped[at] = false
+      if (!statement) {
+        this.error(target, fieldReadMessage(target.text))
+      }
+      return
+    }
+    if (made.kind === N_BINARY && made.text === "=") {
+      // `this.k = this.j = secret(v)`: `this.j` is set, and then read.
+      this.expression(made, ROLE_READ, state)
+      this.error(made, fieldReadMessage(unwrapSecretNode(made.children[0]).text))
+      return
+    }
+    // `this.k = k`: the one diagnostic is where the key came from, and a
+    // local it names is the field's problem now, not its scope's.
+    if (made.kind === N_IDENT) {
+      const named = this.varIndex(this.ctx.program.nodeLocals[made.id])
+      if (named >= 0) {
+        state.live[named] = false
+      }
+    }
+    this.error(value, fieldSourceMessage(this.vars[at].name))
   }
 
   name(node: Node, role: i32, state: FlowState): void {
@@ -994,6 +1266,11 @@ class SecretFlow {
       return
     }
     if (role === ROLE_WIPE) {
+      // A parameter is borrowed, and its caller goes on reading it and wipes
+      // it itself.
+      if (!this.owned[at] && this.slots[at] === "") {
+        this.error(node, paramWipeMessage(local.name))
+      }
       state.live[at] = false
       state.wiped[at] = true
       return
@@ -1009,6 +1286,11 @@ class SecretFlow {
       return
     }
     if (role === ROLE_RETURN) {
+      // A parameter is borrowed: returning it hands the caller a second name
+      // for a key it already owns.
+      if (!this.owned[at] && this.slots[at] === "") {
+        this.error(node, paramReturnMessage(local.name))
+      }
       state.live[at] = false
       return
     }
@@ -1026,7 +1308,7 @@ class SecretFlow {
   binary(node: Node, state: FlowState): void {
     const op = node.text
     if (op === "=") {
-      this.assignment(node, state)
+      this.assignment(node, state, false)
       return
     }
     if (op === "===" || op === "!==") {
@@ -1043,9 +1325,42 @@ class SecretFlow {
     }
   }
 
-  assignment(node: Node, state: FlowState): void {
+  /**
+   * The type of the field `target` stores to. An assignment's target is not
+   * typed as an expression, so it is found through the receiver's struct.
+   */
+  storedType(target: Node): i32 {
+    const program = this.ctx.program
+    const receiver = unwrapSecretNode(target.children[0])
+    let type = receiver.kind === N_EMPTY ? -1 : program.nodeTypes[receiver.id]
+    if (receiver.kind === N_THIS) {
+      const sig = this.ctx.current
+      if (sig !== null) {
+        const owner = sig.owner
+        if (owner !== null) {
+          type = owner.type
+        }
+      }
+    }
+    if (type < 0) {
+      return -1
+    }
+    const info = program.struct(this.ctx.table.nameOf(this.ctx.table.stripNull(type)))
+    if (info === null) {
+      return -1
+    }
+    const field = info.field(target.text)
+    return field === null ? -1 : field.type
+  }
+
+  /** `target = value`; `statement` when it is the whole of an expression statement, so its value goes nowhere. */
+  assignment(node: Node, state: FlowState, statement: boolean): void {
     const target = unwrapSecretNode(node.children[0])
     const value = node.children[1]
+    if (target.kind === N_MEMBER && this.ctx.table.isSecret(this.storedType(target))) {
+      this.fieldStore(target, value, state, statement)
+      return
+    }
     if (target.kind !== N_IDENT) {
       for (const side of node.children) {
         this.expression(side, ROLE_READ, state)
@@ -1059,7 +1374,7 @@ class SecretFlow {
       if (state.live[at]) {
         this.error(target, overwriteMessage(local.name))
       }
-      state.live[at] = this.owned[at] && mayHoldSecret(value)
+      state.live[at] = this.owned[at] && mayHoldSecret(value) && !isMemberRead(value)
       state.wiped[at] = false
     }
     const moved = this.movableIndex(local)
@@ -1084,7 +1399,7 @@ class SecretFlow {
         this.expression(arg, ROLE_WIPE, state)
       } else if (calleeRole === SECRET_MAKE && i === 0) {
         this.move(arg, state)
-      } else if (unwrapSecretNode(arg).kind === N_IDENT) {
+      } else if (isBorrowable(arg)) {
         this.expression(arg, ROLE_BORROW, state)
       } else {
         this.expression(arg, ROLE_READ, state)
@@ -1164,6 +1479,15 @@ const unwrapSecretNode = (node: Node): Node => {
 
 const isLiteralTrue = (node: Node): boolean => unwrapSecretNode(node).kind === N_TRUE
 
+/** An argument a call borrows rather than takes: a name, or a holder's field. */
+const isBorrowable = (arg: Node): boolean => {
+  const kind = unwrapSecretNode(arg).kind
+  return kind === N_IDENT || kind === N_MEMBER
+}
+
+/** `h.f`: a field read, which `fieldRead` refuses as an owner, so it hands nothing to own. */
+const isMemberRead = (init: Node): boolean => unwrapSecretNode(init).kind === N_MEMBER
+
 /** Whether an initialiser can leave a secret in its variable: anything but `null` or nothing. */
 const mayHoldSecret = (init: Node): boolean => {
   const value = unwrapSecretNode(init)
@@ -1201,6 +1525,7 @@ const collectFlow = (flow: SecretFlow, node: Node): void => {
       flow.declNodes.push(node)
       flow.declBlocks.push(node)
       flow.declDepths.push(0)
+      flow.slots.push("")
     }
   }
   if (node.kind === N_IDENT) {
@@ -1216,6 +1541,7 @@ const collectFlow = (flow: SecretFlow, node: Node): void => {
       flow.declNodes.push(node)
       flow.declBlocks.push(node)
       flow.declDepths.push(-1)
+      flow.slots.push("")
     }
   }
   // `const j = k` and `j = k`: the owned secret `k` moves, and is then not read.
@@ -1277,11 +1603,18 @@ export const checkSecretFlow = (ctx: CheckContext, body: Node): void => {
   }
   const flow = new SecretFlow(ctx)
   collectFlow(flow, body)
+  const releaser = collectSlots(flow, body)
   if (flow.vars.length === 0 && flow.movable.length === 0 && !producesSecret(ctx, body)) {
     return
   }
   const before = ctx.sink.count()
   const state = flow.fresh()
+  // A holder's `wipe()` starts holding every key: each is ended on every path.
+  let i = 0
+  while (i < flow.vars.length) {
+    state.live[i] = releaser && flow.slots[i] !== ""
+    i = i + 1
+  }
   if (body.kind === N_BLOCK) {
     flow.statements(body.children, state, body)
     flow.checkScopeEnd(state, body)
@@ -1291,6 +1624,40 @@ export const checkSecretFlow = (ctx: CheckContext, body: Node): void => {
   if (ctx.sink.count() === before && flow.sites.length > 0) {
     checkSoleReferences(ctx, body, flow.sites)
   }
+}
+
+/**
+ * A holder's constructor or `wipe()`: one variable per `Secret` field, after
+ * the locals and parameters. True for the `wipe()`, whose slots are owned and
+ * start live; a constructor's are set once (`building`).
+ */
+const collectSlots = (flow: SecretFlow, body: Node): boolean => {
+  const sig = flow.ctx.current
+  if (sig === null) {
+    return false
+  }
+  const owner = sig.owner
+  if (owner === null || secretFieldOf(flow.ctx.table, owner) === null) {
+    return false
+  }
+  const wipe = owner.method("wipe")
+  const releaser = sig.role !== ROLE_CONSTRUCTOR && wipe !== null && sig === wipe
+  flow.building = sig.role === ROLE_CONSTRUCTOR
+  if (!releaser && !flow.building) {
+    return false
+  }
+  for (const field of owner.fields) {
+    if (flow.ctx.table.isSecret(field.type)) {
+      flow.vars.push(new Local(`this.${field.name}`, field.type, false, STORAGE_LOCAL))
+      flow.owned.push(releaser)
+      // `wipe`'s own name, where the end of its body is reported.
+      flow.declNodes.push(sig.decl)
+      flow.declBlocks.push(body)
+      flow.declDepths.push(0)
+      flow.slots.push(field.name)
+    }
+  }
+  return releaser
 }
 
 /** Whether any expression in `node` has a `Secret` type: a body with none needs no walk. */

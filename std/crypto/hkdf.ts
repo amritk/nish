@@ -78,6 +78,16 @@
  *     const okm: Secret<u8[]> | null = hkdfSha256Secret(salt, ikm, info, 42);
  *     const key: Secret<u8[]> = hkdfExpandLabelSha256Secret(prk, "key", context, 16);
  *
+ * A caller that already holds the destination — a field of a long-lived
+ * object, say, that keeps one traffic secret and ratchets it — derives into
+ * it with the `*Held` forms, which fill as many bytes as the `Secret` holds,
+ * in place, and wipe the plain output they copied from. The destination may
+ * be the PRK itself; `hkdfExpandLabelHeldInto` writes a plain window instead,
+ * for output that is plain by design, a record layer's AEAD key and IV:
+ *
+ *     hkdfExpandLabelSha256Held(secret, secret, "traffic upd", none);
+ *     hkdfExpandLabelHeldInto(32, secret, "key", none, key, 0, 16);
+ *
  * Written from RFC 5869 and RFC 8446 §7.1, not ported from another
  * implementation.
  */
@@ -91,7 +101,7 @@ import {
 } from "nish/crypto/hmac"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
-import { Secret, exposeWith, secret, wipe } from "nish:secret"
+import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 
 /** The largest block counter, and so the most blocks `expand` can make (RFC 5869 §2.3). */
 const HKDF_MAX_BLOCKS: i32 = 255
@@ -659,4 +669,119 @@ export const hkdfExpandLabelInto = (
     info[contextAt + 1 + k] = context[contextOff + k]
   }
   hkdfExpandWindow(s, hashLength, prk, info, contextAt + 1 + contextLen, out, at, length)
+}
+
+// ---- From and into a held `Secret` -----------------------------------------
+//
+// The `*Held` forms derive from a `Secret<u8[]>` the caller already holds, and
+// into one, overwriting its bytes in place, so a key that lives in one place
+// for a connection's life is never handed out as a fresh `Secret`. The output
+// is derived plain inside `exposeWith` of the PRK, by the function the
+// `*Secret` forms run, copied where it goes, and wiped. None of this opens a
+// `using arena()` block: every hasher's constructor stores the arrays it
+// allocates into its fields, which the block refuses (NL2424), and a scratch
+// made before the block could be neither written nor wiped inside `exposeWith`
+// (NL2450, and `secureZero` is C). The function's own scope reclaims the
+// temporaries instead.
+
+/** The length of the bytes a `Secret` holds, which is public, for `expose` to read. */
+const hkdfHeldLength = (bytes: u8[]): i32 => toI32(bytes.length)
+
+/**
+ * HKDF-Expand-Label of the held `prk` over the hash `hashLength` names: the
+ * `length` bytes, plain, for the caller to copy and wipe. Panics naming
+ * `caller` where `hkdfExpandLabelSha256` does.
+ */
+const hkdfHeldDerive = (
+  caller: string,
+  hashLength: i32,
+  prk: Secret<u8[]>,
+  label: string,
+  context: u8[],
+  length: i32
+): u8[] => {
+  hkdfCheckHash(caller, hashLength)
+  const request: HkdfExpandRequest = { info: hkdfLabel(caller, label, context, length), length: length }
+  const okm: u8[] | null =
+    hashLength === SHA256_SIZE
+      ? exposeWith(prk, request, hkdfExpandSha256Exposed)
+      : exposeWith(prk, request, hkdfExpandSha384Exposed)
+  if (okm === null) {
+    panic(
+      `${caller}: a secret shorter than ${hashLength} bytes, or more than ${255 * hashLength} bytes asked`
+    )
+  }
+  return okm
+}
+
+/**
+ * Overwrites the bytes a `Secret` holds with `okm`, for `exposeWith` to run on
+ * the destination: it writes the value it is shown, never its argument.
+ */
+const hkdfHeldCopy = (held: u8[], okm: u8[]): void => {
+  for (let k: i32 = 0; k < toI32(held.length) && k < toI32(okm.length); k++) {
+    held[k] = okm[k]
+  }
+}
+
+/** Derives into `dst`, as many bytes as it holds, for the two exported forms. */
+const hkdfHeld = (
+  caller: string,
+  hashLength: i32,
+  dst: Secret<u8[]>,
+  prk: Secret<u8[]>,
+  label: string,
+  context: u8[]
+): void => {
+  const okm: u8[] = hkdfHeldDerive(caller, hashLength, prk, label, context, expose(dst, hkdfHeldLength))
+  exposeWith(dst, okm, hkdfHeldCopy)
+  wipe(okm)
+}
+
+/**
+ * `hkdfExpandLabelSha256Secret` into `dst`: as many bytes as `dst` holds,
+ * derived from `prk`, the label and `context` and written over `dst`'s in
+ * place. `dst` may be `prk` itself, since the output is whole before it is
+ * copied: that is a ratchet. Panics as `hkdfExpandLabelSha256` does.
+ */
+export const hkdfExpandLabelSha256Held = (
+  dst: Secret<u8[]>,
+  prk: Secret<u8[]>,
+  label: string,
+  context: u8[]
+): void => {
+  hkdfHeld("hkdfExpandLabelSha256Held", SHA256_SIZE, dst, prk, label, context)
+}
+
+/** `hkdfExpandLabelSha256Held` with HMAC-SHA-384: panics as `hkdfExpandLabelSha384` does. */
+export const hkdfExpandLabelSha384Held = (
+  dst: Secret<u8[]>,
+  prk: Secret<u8[]>,
+  label: string,
+  context: u8[]
+): void => {
+  hkdfHeld("hkdfExpandLabelSha384Held", SHA384_SIZE, dst, prk, label, context)
+}
+
+/**
+ * HKDF-Expand-Label of the held `prk` over the hash `hashLength` names into a
+ * plain array: `length` bytes written at `out[at]`. This is for output that is
+ * kept plain by design, a record layer's AEAD key and IV, say, which live in
+ * the arrays the cipher reads. Panics as `hkdfExpandLabelInto` does.
+ */
+export const hkdfExpandLabelHeldInto = (
+  hashLength: i32,
+  prk: Secret<u8[]>,
+  label: string,
+  context: u8[],
+  out: u8[],
+  at: i32,
+  length: i32
+): void => {
+  hkdfCheckOutput("hkdfExpandLabelHeldInto", out, at, length)
+  const okm: u8[] = hkdfHeldDerive("hkdfExpandLabelHeldInto", hashLength, prk, label, context, length)
+  for (let k: i32 = 0; k < length && k < toI32(okm.length); k++) {
+    out[at + k] = okm[k]
+  }
+  wipe(okm)
 }

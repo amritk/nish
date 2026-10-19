@@ -23,14 +23,14 @@
 //
 // The signature is the caller's and is made once: RFC 6979 makes the P-256
 // signature of a fixed input the same every time.
-import { Secret, secret, wipe } from "nish:secret";
+import { Secret, expose, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { QUIC_STREAM_END } from "nish/net/quic-stream";
 import { QuicKeys, QuicKeysSlot, quicKeysWipe } from "nish/net/quic-packet";
 import { quicKeyUpdateCopy, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_CONN_DATAGRAM_SIZE, QUIC_STATE_CONNECTED, QuicConnection, QuicServerConfig } from "nish/net/quic";
-import { TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
+import { TlsSecretPool, TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
 import { TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
 import { fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
@@ -338,19 +338,19 @@ const qmSlotsZero = (slots: QuicKeysSlot[]): boolean => {
 
 /** Whether every key slot of `conn`, every key-update secret and the Initial secrets are zero. */
 const qmKeysZero = (conn: QuicConnection): boolean => {
-  let zero: boolean =
+  return (
     qmZero(conn.initialClient) &&
     qmZero(conn.initialServer) &&
     qmSlotsZero(conn.initial.keySlots) &&
     qmSlotsZero(conn.handshake.keySlots) &&
-    qmSlotsZero(conn.application.keySlots);
-  for (const secret of conn.readSecrets) {
-    zero = zero && qmZero(secret);
-  }
-  for (const secret of conn.writeSecrets) {
-    zero = zero && qmZero(secret);
-  }
-  return zero;
+    qmSlotsZero(conn.application.keySlots) &&
+    expose(conn.readSecret256, qmZero) &&
+    expose(conn.nextReadSecret256, qmZero) &&
+    expose(conn.writeSecret256, qmZero) &&
+    expose(conn.readSecret384, qmZero) &&
+    expose(conn.nextReadSecret384, qmZero) &&
+    expose(conn.writeSecret384, qmZero)
+  );
 };
 
 /**
@@ -359,6 +359,18 @@ const qmKeysZero = (conn: QuicConnection): boolean => {
  * a key update, so its slots, its key-update secrets and its `TlsServer`'s
  * SHA-384 secrets are full; `reset` must zero every one of them.
  */
+/** How many of a pool's six schedule secrets and its expected client Finished read zero. */
+const qmPoolZeros = (pool: TlsSecretPool): i32 => {
+  let zeros: i32 = 0;
+  zeros = zeros + (expose(pool.handshake, qmZero) ? 1 : 0);
+  zeros = zeros + (expose(pool.clientHandshake, qmZero) ? 1 : 0);
+  zeros = zeros + (expose(pool.serverHandshake, qmZero) ? 1 : 0);
+  zeros = zeros + (expose(pool.clientApplication, qmZero) ? 1 : 0);
+  zeros = zeros + (expose(pool.serverApplication, qmZero) ? 1 : 0);
+  zeros = zeros + (expose(pool.exporter, qmZero) ? 1 : 0);
+  return zeros + (qmZero(pool.clientFinished) ? 1 : 0);
+};
+
 const qmResetWipes = (t: Suite, conn: QuicConnection, b: QmBuffers): void => {
   const tls: TlsServer | null = conn.tlsSlot;
   const live: TlsServer | null = conn.tls;
@@ -367,20 +379,14 @@ const qmResetWipes = (t: Suite, conn: QuicConnection, b: QmBuffers): void => {
     return;
   }
   t.ok("the slot keeps its TlsServer across connections", live === tls);
-  // Index 7 is the CertificateVerify input, which is public.
-  const secrets: u8[][] = tls.secrets384;
+  // The CertificateVerify input is public, and left out.
+  const secrets: TlsSecretPool = tls.secrets384;
   // The key updates already wiped the application secrets TLS made; the
   // exporter secret and the expected client Finished are still there.
-  let tlsHeld: boolean = false;
-  let wiped: boolean = true;
-  for (let k: i32 = 0; k < 7 && k < toI32(secrets.length); k++) {
-    tlsHeld = tlsHeld || !qmZero(secrets[k]);
-  }
+  const tlsHeld: boolean = qmPoolZeros(secrets) < 7;
   const held: boolean = tlsHeld && !qmKeysZero(conn);
   conn.reset(b.refill());
-  for (let k: i32 = 0; k < 7 && k < toI32(secrets.length); k++) {
-    wiped = wiped && qmZero(secrets[k]);
-  }
+  const wiped: boolean = qmPoolZeros(secrets) === 7;
   t.ok("before the next connection, the slot holds the last one's keys and secrets", held);
   t.ok(
     "and reset zeroes them all: every space's key slots, AES schedules included, the key-update and Initial secrets, and TlsServer's secrets",

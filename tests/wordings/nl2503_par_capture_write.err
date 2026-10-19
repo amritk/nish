@@ -1,1 +1,1 @@
-The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one
+The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one; answer the value from the body instead, and read the answers from the array the call gives back, `const kValues = parallelMap([1, 2], (x): i32 => x)`

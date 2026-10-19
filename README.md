@@ -149,6 +149,12 @@ New to Nish? The [user guide](docs/guide/index.md) teaches the language page
 by page, from installing it to threads, with every example compiled by
 `npm test`.
 
+Threads come from one import, `nish/threads`: parallel maps and reduces,
+scoped tasks, a `Mutex` that owns its data, atomics and channels, with data
+races and deadlocks refused at compile time.
+[Which one to reach for](docs/guide/using-nish/threads.md) is the guide's
+threads page.
+
 The full reference is [docs/LANGUAGE.md](docs/LANGUAGE.md); every rule
 there cites the test case that proves it. If an **AI** is writing the program —
 or you want the whole language in one pass rather than as a reference to browse
