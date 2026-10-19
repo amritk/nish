@@ -17,11 +17,13 @@ import {
   checkCondition,
   checkExpression,
   clearNarrowingsAssignedIn,
+  enumVariable,
   holdMembers,
   memberSetName,
   memberSetOf,
   membersDisjoint,
   narrow,
+  narrowHeld,
   narrowToTags,
   refuseExpressionForm,
   refuseNarrowingStore,
@@ -920,9 +922,11 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const members = memberSetOf(ctx, stmt.children[0])
   const seen: i64[] = []
   // `switch (s.kind)` on a union variable narrows each clause to the variants
-  // its labels name, as `===` does, so every label is checked before any body.
+  // its labels name, as `===` does, and `switch (k)` on an enum variable to
+  // the members, so every label is checked before any body.
   const tagged = tagVariable(ctx, stmt.children[0], scope)
-  if (tagged !== null) {
+  const held: Local | null = tagged === null ? enumVariable(ctx, stmt.children[0], scope) : null
+  if (tagged !== null || held !== null) {
     for (const clause of clauses) {
       if (clause.kind !== N_DEFAULT) {
         checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
@@ -950,7 +954,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
       hasDefault = true
       groupDefault = true
     } else {
-      if (tagged === null) {
+      if (tagged === null && held === null) {
         checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
       }
       for (const member of memberSetOf(ctx, clause.children[0])) {
@@ -968,8 +972,8 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     let terminates = false
     if (body.children.length > 0 || i === clauses.length - 1) {
       const clauseScope = scope.child()
-      if (tagged !== null) {
-        narrowClause(ctx, clauseScope, tagged, clauses, group, groupDefault)
+      if (tagged !== null || held !== null) {
+        narrowClause(ctx, clauseScope, tagged, held, clauses, group, groupDefault)
       }
       ctx.pushLoop(LOOP_SWITCH)
       terminates = body.children.length > 0 ? checkStatements(ctx, body.children, clauseScope) : false
@@ -995,8 +999,8 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     lastTerminates = terminates
     i = i + 1
   }
-  if (tagged !== null) {
-    narrowAfterSwitch(ctx, scope, tagged, clauses, reaching, hasDefault ? defaultReaches : true)
+  if (tagged !== null || held !== null) {
+    narrowAfterSwitch(ctx, scope, tagged, held, clauses, reaching, hasDefault ? defaultReaches : true)
     // A clause that assigns the variable leaves nothing a label proved true.
     clearNarrowingsAssignedIn(ctx, stmt.children[1], scope)
   }
@@ -1037,41 +1041,64 @@ const withoutMembers = (ctx: CheckContext, members: i32[], drop: i32[]): i32[] =
 }
 
 /**
- * Narrow a clause body of `switch (s.kind)` to the variants its group of
- * labels names; a group with `default` is every variant no other label names.
+ * Narrow `tagged`, the union variable of `switch (s.kind)`, or else `held`,
+ * the enum variable of `switch (k)`, to the variants or members `members`
+ * names (`keep`), or to those it does not.
+ */
+const narrowSwitched = (
+  ctx: CheckContext,
+  scope: Scope,
+  tagged: Local | null,
+  held: Local | null,
+  members: i32[],
+  keep: boolean
+): void => {
+  if (tagged !== null) {
+    narrowToTags(ctx, scope, tagged, members, keep)
+  } else if (held !== null) {
+    narrowHeld(ctx, scope, held, members, keep)
+  }
+}
+
+/**
+ * Narrow a clause body of a `switch` to the variants or members its group of
+ * labels names; a group with `default` is every one no other label names.
  */
 const narrowClause = (
   ctx: CheckContext,
   clauseScope: Scope,
-  tagged: Local,
+  tagged: Local | null,
+  held: Local | null,
   clauses: Node[],
   group: i32[],
   groupDefault: boolean
 ): void => {
   if (groupDefault) {
-    narrowToTags(ctx, clauseScope, tagged, withoutMembers(ctx, labelledMembers(ctx, clauses), group), false)
+    narrowSwitched(ctx, clauseScope, tagged, held, withoutMembers(ctx, labelledMembers(ctx, clauses), group), false)
   } else {
-    narrowToTags(ctx, clauseScope, tagged, group, true)
+    narrowSwitched(ctx, clauseScope, tagged, held, group, true)
   }
 }
 
 /**
- * Narrow `s` after `switch (s.kind)` to the variants that can reach the next
- * statement: those of a body that breaks or falls out of the bottom, and,
- * when no `default` catches them or a reaching one does, those no label names.
+ * Narrow `s` after `switch (s.kind)`, or `k` after `switch (k)`, to the
+ * variants or members that can reach the next statement: those of a body that
+ * breaks or falls out of the bottom, and, when no `default` catches them or a
+ * reaching one does, those no label names.
  */
 const narrowAfterSwitch = (
   ctx: CheckContext,
   scope: Scope,
-  tagged: Local,
+  tagged: Local | null,
+  held: Local | null,
   clauses: Node[],
   reaching: i32[],
   unlabelledReach: boolean
 ): void => {
   if (unlabelledReach) {
-    narrowToTags(ctx, scope, tagged, withoutMembers(ctx, labelledMembers(ctx, clauses), reaching), false)
+    narrowSwitched(ctx, scope, tagged, held, withoutMembers(ctx, labelledMembers(ctx, clauses), reaching), false)
   } else {
-    narrowToTags(ctx, scope, tagged, reaching, true)
+    narrowSwitched(ctx, scope, tagged, held, reaching, true)
   }
 }
 

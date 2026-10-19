@@ -261,7 +261,7 @@ const diagnosticRules = (): string[] => [
   "NL2354",
   "` is set again while it may still hold a `Secret`: a `Secret` field is set once, in its class's constructor, and the key it held would be lost unwiped",
   "NL2543",
-  "` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type this version does not have, so annotate it as `",
+  "` cannot give a type to what it initialises: TypeScript would infer `",
   "NL2530",
   "` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { ",
   "NL2456",

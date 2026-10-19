@@ -259,6 +259,14 @@ export class Scope {
 
   /** Record that the enum variable `variable` holds one of `set`'s members for the rest of this scope. */
   hold(variable: Local, set: i32): void {
+    let i = 0
+    while (i < this.heldVars.length) {
+      if (this.heldVars[i] === variable) {
+        this.heldSets[i] = set
+        return
+      }
+      i = i + 1
+    }
     this.heldVars.push(variable)
     this.heldSets.push(set)
   }

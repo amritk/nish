@@ -378,29 +378,49 @@ export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): 
 }
 
 /**
- * A union's tag read where its type would be inferred: TypeScript gives it
- * the union of the variants' tags, `Kind.Circle | Kind.Square`, which Nish
- * has no type for, and reading it as the whole enum would accept a later
- * comparison TypeScript refuses.
+ * A union's tag, or an enum variable a test narrowed to some of its members,
+ * read where its type would be inferred: TypeScript gives it the union of
+ * those members, `Kind.Circle | Kind.Square`, which Nish has no type for, and
+ * reading it as the whole enum would accept a later comparison TypeScript
+ * refuses.
  */
 const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean => {
-  const union = ctx.program.memberSets[expr.id]
-  if (!ctx.table.isUnion(union) || (want !== WANT_MAYBE && want !== WANT_RANGE && want !== WANT_INFERRED)) {
+  const set = ctx.program.memberSets[expr.id]
+  const union = ctx.table.isUnion(set)
+  if ((!union && set >= MEMBERS_NONE) || (want !== WANT_MAYBE && want !== WANT_RANGE && want !== WANT_INFERRED)) {
     return false
   }
-  const kind = ctx.table.typeName(ctx.table.tagEnumOf(union))
+  const members = memberSetOf(ctx, expr)
+  const kind = ctx.table.typeName(ctx.table.enumBase(members[0]))
+  const what = union ? "The tag `" : "The enum variable `"
   ctx.program.nodeTypes[expr.id] = T_ERROR
   ctx.error(
     expr,
-    `The tag \`${ctx.textOf(expr)}\` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type this version does not have, so annotate it as \`${kind}\``
+    `${what}${ctx.textOf(expr)}\` cannot give a type to what it initialises: TypeScript would infer \`${memberSetName(ctx, members)}\`, a type this version does not have, so annotate it as \`${kind}\``
   )
   return true
 }
 
 /**
+ * What an enum variable holds once tests excluded every member (`Scope.hold`),
+ * which TypeScript types `never` and compares with anything. Not a set any
+ * read records, so `memberSetOf` reads it as unknown.
+ */
+export const MEMBERS_NONE: i32 = -2
+
+/** Whether `set`, as `memberSets` and `Scope.hold` record one, names members. */
+export const namesMembers = (set: i32): boolean => set >= 0 || set < MEMBERS_NONE
+
+/** `members`, two or more of one enum, as an id `memberSets` can record (`CheckedProgram.memberLists`). */
+const memberListId = (ctx: CheckContext, members: i32[]): i32 => {
+  ctx.program.memberLists.push(members)
+  return MEMBERS_NONE - ctx.program.memberLists.length
+}
+
+/**
  * The enum members `node` can hold, as member types, where they are known to
- * be fewer than its enum's: a member constant, a read of a member type, or a
- * union's tag. Empty for any other node.
+ * be fewer than its enum's: a member constant, a read of a member type, a
+ * union's tag, or an enum variable a test narrowed. Empty for any other node.
  */
 export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
   const bare = unwrapParens(node)
@@ -411,6 +431,9 @@ export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
     return members
   }
   const set = ctx.program.memberSets[bare.id]
+  if (set < MEMBERS_NONE) {
+    return ctx.program.memberLists[MEMBERS_NONE - 1 - set]
+  }
   if (ctx.table.isEnumMemberType(set)) {
     members.push(set)
   } else if (ctx.table.isUnion(set)) {
@@ -443,7 +466,7 @@ export const holdMembers = (ctx: CheckContext, scope: Scope, local: Local, value
     return
   }
   const set = memberSetId(ctx, value)
-  if (set >= 0) {
+  if (namesMembers(set)) {
     scope.hold(local, set)
   }
 }
@@ -791,7 +814,7 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return ctx.errorType(expr, exhaustedMessage(expr.text))
     }
     const held = scope.heldBy(local)
-    if (held >= 0) {
+    if (namesMembers(held)) {
       ctx.program.memberSets[expr.id] = held
     }
     return scope.typeOf(local) // the declared type, or the narrowed one inside `if (p !== null)`
@@ -807,7 +830,7 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     // A `const` holds at the call what it held when it was declared.
     const outer = captured.captureOf
     const held = outer === null ? -1 : ctx.arrowOuterScopes[0].heldBy(outer)
-    if (held >= 0) {
+    if (namesMembers(held)) {
       ctx.program.memberSets[expr.id] = held
     }
     return captured.type
@@ -1893,6 +1916,7 @@ const narrowTag = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolea
   const leftTag = tagVariable(ctx, cond.children[0], scope)
   const local = leftTag !== null ? leftTag : tagVariable(ctx, cond.children[1], scope)
   if (local === null) {
+    narrowEnumTest(ctx, cond, scope, whenTrue)
     return
   }
   const other = leftTag !== null ? cond.children[1] : cond.children[0]
@@ -1901,6 +1925,102 @@ const narrowTag = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolea
     return
   }
   narrowToTags(ctx, scope, local, members, cond.text === "===" ? whenTrue : !whenTrue)
+}
+
+/**
+ * `k === Kind.A`, either way round, and `!==`, where `k` is an enum variable:
+ * the test narrows the members `k` can hold where it holds and where it does
+ * not, as TypeScript does, so a later comparison the first one decided is the
+ * disjoint comparison `checkEquality` refuses.
+ */
+const narrowEnumTest = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
+  const leftVar = enumVariable(ctx, cond.children[0], scope)
+  const local = leftVar !== null ? leftVar : enumVariable(ctx, cond.children[1], scope)
+  if (local === null) {
+    return
+  }
+  const members = memberSetOf(ctx, leftVar !== null ? cond.children[1] : cond.children[0])
+  if (members.length !== 1) {
+    return
+  }
+  narrowHeld(ctx, scope, local, members, cond.text === "===" ? whenTrue : !whenTrue)
+}
+
+/** The local or parameter `node` names when it is declared as an enum, or `null`. */
+export const enumVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_IDENT) {
+    return null
+  }
+  const local = scope.lookup(read.text)
+  return local !== null && ctx.table.isEnum(local.type) ? local : null
+}
+
+/** Every member of the enum `enumType` as member types, one per value; none when this module cannot name it. */
+const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
+  const members: i32[] = []
+  for (const info of ctx.program.enumList) {
+    if (info.type === enumType && members.length === 0) {
+      const seen: i32[] = []
+      for (const value of info.memberValues) {
+        if (seen.indexOf(value) < 0) {
+          seen.push(value)
+          members.push(ctx.table.enumMemberOf(info.type, value, info.memberNameOf(value)))
+        }
+      }
+    }
+  }
+  return members
+}
+
+/** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
+const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
+  const held = scope.heldBy(local)
+  if (held === MEMBERS_NONE) {
+    return []
+  }
+  if (held < MEMBERS_NONE) {
+    return ctx.program.memberLists[MEMBERS_NONE - 1 - held]
+  }
+  if (held >= 0) {
+    const one: i32[] = []
+    one.push(held)
+    return one
+  }
+  return enumMembersOf(ctx, local.type)
+}
+
+/**
+ * Narrow the enum variable `local` to the members it may still hold that are
+ * among `members` (`keep`), or to those that are not. One member left is also
+ * its type, `Kind.A`, which a `let` inferred from it takes, as TypeScript's
+ * does; none left is `MEMBERS_NONE`, which compares with anything, as `never`.
+ */
+export const narrowHeld = (ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void => {
+  const current = heldMembers(ctx, scope, local)
+  const kept: i32[] = []
+  for (const member of current) {
+    let named = false
+    for (const test of members) {
+      if (ctx.table.memberValue(test) === ctx.table.memberValue(member)) {
+        named = true
+      }
+    }
+    if (named === keep) {
+      kept.push(member)
+    }
+  }
+  if (current.length === 0 || kept.length === current.length) {
+    return
+  }
+  if (kept.length === 1) {
+    scope.hold(local, kept[0])
+    scope.narrow(local, kept[0])
+    return
+  }
+  // A member type an earlier test narrowed it to no longer holds.
+  scope.narrow(local, local.type)
+  scope.hold(local, kept.length === 0 ? MEMBERS_NONE : memberListId(ctx, kept))
 }
 
 /** A union variable read where tag tests excluded every variant. */
