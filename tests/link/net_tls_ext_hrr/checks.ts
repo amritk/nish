@@ -35,6 +35,7 @@ import {
 } from "nish/net/tls/schedule";
 import { Secret, secret, wipe } from "nish:secret";
 import { secretHex } from "../net_tls_common/secrets";
+import { readCopy, writeCopy } from "../net_tls_common/held";
 import {
   TLS_LEVEL_HANDSHAKE,
   TLS_LEVEL_INITIAL,
@@ -172,7 +173,7 @@ export const retryChecks = (): i32 => {
     toHex(retry)
   );
   t.eqStr("nothing at the Handshake level yet", toHex(server.takeOutput(TLS_LEVEL_HANDSHAKE)), "");
-  t.eqStr("and no secrets", toHex(server.readSecret(TLS_LEVEL_HANDSHAKE)), "null");
+  t.eqStr("and no secrets", toHex(readCopy(server, TLS_LEVEL_HANDSHAKE)), "null");
 
   const hello2: u8[] = retryHello([TLS_AES_128_GCM_SHA256], [GROUP_SECP256R1, TLS_GROUP_X25519]);
   t.eqI32("the second ClientHello, with the share, is accepted", sendHello(server, hello2), zero);
@@ -185,12 +186,12 @@ export const retryChecks = (): i32 => {
   );
   t.eqStr(
     "client_handshake_traffic_secret over message_hash, HRR, CH2, SH (checked against Python)",
-    toHex(server.readSecret(TLS_LEVEL_HANDSHAKE)),
+    toHex(readCopy(server, TLS_LEVEL_HANDSHAKE)),
     "5f8007866dc228ced9b5c708f8df0fbc4e34c9e3ca0389afb73a2e0fdb33491d"
   );
   t.eqStr(
     "server_handshake_traffic_secret likewise (checked against Python)",
-    toHex(server.writeSecret(TLS_LEVEL_HANDSHAKE)),
+    toHex(writeCopy(server, TLS_LEVEL_HANDSHAKE)),
     "096d79660af841d713ac9ba26c7433fddae7deea2392cd0c3ef0fc851e2fb98c"
   );
   const before: u8[] = cat([messageHash(hello1), retry, hello2]);

@@ -32,6 +32,8 @@ import {
   TLS_LEVEL_APPLICATION,
   TLS_LEVEL_HANDSHAKE,
   TLS_LEVEL_INITIAL,
+  TLS_SECRET_CLIENT_HANDSHAKE,
+  TLS_SECRET_HANDSHAKE,
   TLS_STATE_CONNECTED,
   TLS_STATE_FAILED,
   TLS_STATE_WAIT_FINISHED,
@@ -43,6 +45,7 @@ import { Secret, secret, wipe } from "nish:secret";
 import { copyOf } from "../crypto_x25519/plain";
 import { fromHex, toHex } from "../crypto_x509/hex";
 import { secretHex } from "../net_tls_common/secrets";
+import { exporterHex, readCopy, resumptionHex, writeCopy } from "../net_tls_common/held";
 import { clientHello, splitMessages, standardExtensions } from "../net_tls_common/client";
 import {
   rfc8448Certificate,
@@ -273,16 +276,16 @@ export const rfc8448Checks = (): i32 => {
   t.eqStr("nothing more at the Initial level", toHex(server.takeOutput(TLS_LEVEL_INITIAL)), "");
   t.eqStr(
     "server_handshake_traffic_secret is its Handshake write secret",
-    toHex(server.writeSecret(TLS_LEVEL_HANDSHAKE)),
+    toHex(writeCopy(server, TLS_LEVEL_HANDSHAKE)),
     toHex(rfc8448ServerHandshakeTraffic())
   );
   t.eqStr(
     "client_handshake_traffic_secret is its Handshake read secret",
-    toHex(server.readSecret(TLS_LEVEL_HANDSHAKE)),
+    toHex(readCopy(server, TLS_LEVEL_HANDSHAKE)),
     toHex(rfc8448ClientHandshakeTraffic())
   );
-  t.eqStr("no Application write secret before the signature", toHex(server.writeSecret(TLS_LEVEL_APPLICATION)), "null");
-  t.eqStr("and no Initial secret at all", toHex(server.readSecret(TLS_LEVEL_INITIAL)), "null");
+  t.eqStr("no Application write secret before the signature", toHex(writeCopy(server, TLS_LEVEL_APPLICATION)), "null");
+  t.eqStr("and no Initial secret at all", toHex(readCopy(server, TLS_LEVEL_INITIAL)), "null");
   const spaces: string[] = [];
   for (let k: i32 = 0; k < 64; k++) {
     spaces.push("20");
@@ -329,16 +332,16 @@ export const rfc8448Checks = (): i32 => {
   );
   t.eqStr(
     "client_application_traffic_secret_0 is its Application read secret",
-    toHex(server.readSecret(TLS_LEVEL_APPLICATION)),
+    toHex(readCopy(server, TLS_LEVEL_APPLICATION)),
     toHex(rfc8448ClientApplicationTraffic())
   );
   t.eqStr(
     "server_application_traffic_secret_0 is its Application write secret",
-    toHex(server.writeSecret(TLS_LEVEL_APPLICATION)),
+    toHex(writeCopy(server, TLS_LEVEL_APPLICATION)),
     toHex(rfc8448ServerApplicationTraffic())
   );
-  t.eqStr("exporter_master_secret", toHex(server.exporterSecret), toHex(rfc8448ExporterSecret()));
-  t.eqStr("no resumption_master_secret before the client's Finished", toHex(server.resumptionSecret), "");
+  t.eqStr("exporter_master_secret", exporterHex(server), toHex(rfc8448ExporterSecret()));
+  t.eqStr("no resumption_master_secret before the client's Finished", resumptionHex(server), "");
 
   // --- The client's Finished ------------------------------------------------
   const finished: u8[] = rfc8448ClientFinished();
@@ -351,7 +354,7 @@ export const rfc8448Checks = (): i32 => {
   t.eqStr("with nothing left to send", toHex(server.takeOutput(TLS_LEVEL_HANDSHAKE)), "");
   t.eqStr(
     'resumption_master_secret, {server} derive secret "tls13 res master"',
-    toHex(server.resumptionSecret),
+    resumptionHex(server),
     toHex(rfc8448ResumptionSecret())
   );
   // The same secret from the schedule alone, over the transcript through the
@@ -369,13 +372,11 @@ export const rfc8448Checks = (): i32 => {
   const forged: TlsServer = rfc8448Server();
   forged.receive(TLS_LEVEL_INITIAL, hello, zero, toI32(hello.length));
   forged.sign(rfc8448RsaPssSignature());
-  // `sign` derived the secret ahead into its pool array (index 8,
-  // `TLS_SECRET_RESUMPTION`), which `fail` must wipe, as `net_tls_memory`
-  // reads the pools after `restart`.
-  const resumptionArray: u8[] = forged.secrets256[8];
+  // `sign` derived the secret ahead into its pool's `resumption`, which
+  // `fail` must wipe, as `net_tls_memory` reads the pools after `restart`.
   t.eqStr(
     "sign derives resumption_master_secret ahead, into its pool array",
-    toHex(resumptionArray),
+    secretHex(forged.secrets256.resumption),
     toHex(rfc8448ResumptionSecret())
   );
   const tampered: u8[] = rfc8448ClientFinished();
@@ -387,8 +388,8 @@ export const rfc8448Checks = (): i32 => {
     TLS_ALERT_DECRYPT_ERROR
   );
   t.eqI32("and fails the handshake", forged.state, TLS_STATE_FAILED);
-  t.eqStr("with no resumption_master_secret", toHex(forged.resumptionSecret), "");
-  t.eqStr("and the one derived ahead is wiped", toHex(resumptionArray), toHex(new Array<u8>(h)));
+  t.eqStr("with no resumption_master_secret", resumptionHex(forged), "");
+  t.eqStr("and the one derived ahead is wiped", secretHex(forged.secrets256.resumption), toHex(new Array<u8>(h)));
 
   // --- The same ClientHello a byte at a time --------------------------------
   // A carrier hands over whatever a record or a CRYPTO frame held, so the
@@ -410,8 +411,8 @@ export const rfc8448Checks = (): i32 => {
   // A carrier wipes the handshake secrets once the flight is signed, before
   // the client's Finished arrives (TlsRecordServer and QUIC both do), so the
   // resumption secret cannot be derived from them afterwards.
-  secureZero(split.handshakeSecret);
-  secureZero(split.clientHandshakeSecret);
+  split.wipeSecret(TLS_SECRET_HANDSHAKE);
+  split.wipeSecret(TLS_SECRET_CLIENT_HANDSHAKE);
   for (let k: i32 = 0; k < toI32(finished.length); k++) {
     alerts = alerts + split.receive(TLS_LEVEL_HANDSHAKE, finished, k, one);
   }
@@ -419,7 +420,7 @@ export const rfc8448Checks = (): i32 => {
   t.eqI32("which completes the handshake", split.state, TLS_STATE_CONNECTED);
   t.eqStr(
     "with the trace's resumption_master_secret, though its carrier wiped the handshake secrets",
-    toHex(split.resumptionSecret),
+    resumptionHex(split),
     toHex(rfc8448ResumptionSecret())
   );
 
@@ -443,12 +444,12 @@ export const rfc8448Checks = (): i32 => {
   );
   t.eqStr(
     "SHA-384: client_handshake_traffic_secret (checked against Python)",
-    toHex(sha384.readSecret(TLS_LEVEL_HANDSHAKE)),
+    toHex(readCopy(sha384, TLS_LEVEL_HANDSHAKE)),
     "4ebd28600abdc5615d6c1c8ba9e7ae8fe027e8978bd69a640c650935a806681876f099e4fb970e1eff12595cf8271394"
   );
   t.eqStr(
     "SHA-384: server_handshake_traffic_secret (checked against Python)",
-    toHex(sha384.writeSecret(TLS_LEVEL_HANDSHAKE)),
+    toHex(writeCopy(sha384, TLS_LEVEL_HANDSHAKE)),
     "55feae9ef957a1848583c75529a7843fbc003570a174d669678c3d98292b8e0e062a6d7aed5c7d8fc8daa8c463aa7752"
   );
   sha384.takeOutput(TLS_LEVEL_HANDSHAKE);
@@ -461,12 +462,12 @@ export const rfc8448Checks = (): i32 => {
   );
   t.eqStr(
     "SHA-384: client_application_traffic_secret_0 (checked against Python)",
-    toHex(sha384.readSecret(TLS_LEVEL_APPLICATION)),
+    toHex(readCopy(sha384, TLS_LEVEL_APPLICATION)),
     "f02ede38e6a05af1e4273725ae3be408709cc23a80b16cc01346c0fa07a9d33f1b90e38321308a59d5faa922933bf9b1"
   );
   t.eqStr(
     "SHA-384: server_application_traffic_secret_0 (checked against Python)",
-    toHex(sha384.writeSecret(TLS_LEVEL_APPLICATION)),
+    toHex(writeCopy(sha384, TLS_LEVEL_APPLICATION)),
     "cbb7b8b8602a1e5dfb8950ef7048c1a2389862aa46ea18799d0d3bfdccf7f171e5827b3c142cb7cba1b97fb2782914c8"
   );
   const finished384: u8[] = fromHex(
@@ -480,7 +481,7 @@ export const rfc8448Checks = (): i32 => {
   t.eqI32("SHA-384: connected", sha384.state, TLS_STATE_CONNECTED);
   t.eqStr(
     "SHA-384: resumption_master_secret (checked against Python)",
-    toHex(sha384.resumptionSecret),
+    resumptionHex(sha384),
     "87842baad2ea6733dab276bf5d9c00fde9043f6e1c33019cfc57a36f0e415634272671a9189b01b0a547cfb6986001d1"
   );
 

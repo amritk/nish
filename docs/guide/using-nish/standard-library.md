@@ -947,6 +947,17 @@ the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
 as a `Secret<u8[]>` and answer secrets as one; the `QuicKeys` that `quicKeys`
 answers is plain, so call `quicKeysWipe` on it when you are done with it.
 
+A `TlsServer` keeps every secret of an open connection as a
+[`Secret` field](../../LANGUAGE.md#a-secret-field): the ephemeral key, and the
+handshake, traffic, exporter and resumption secrets in the `TlsSecretPool` that
+`secrets()` answers, read only through `expose`. `new TlsServer`, `restart`
+and `TlsTcpServer.accept` copy the ephemeral key you hand them into the
+server's own `Secret` and zero your array, so fill a fresh key into it for
+each connection rather than reading it again. When you drive a `TlsServer` or
+a `TlsRecordServer` yourself rather than through `nish/net/tls-tcp`, call its
+`wipe()` once the connection is done; the carriers call it at every end of a
+connection.
+
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";
 

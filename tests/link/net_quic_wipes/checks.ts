@@ -7,7 +7,7 @@
 // and at `reset`. Each runs under the three
 // suites, against the test client of `net_quic_conn`. `tests/wipes/quic.js`
 // compiles this program to count the same wipes after `opt -O2`.
-import { Secret, secret, wipe } from "nish:secret";
+import { Secret, expose, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { AesKey } from "nish/crypto/aes";
 import { QuicKeys, QuicKeysSlot, quicKeyUpdateSecret, quicKeys, quicKeysUpdate, quicKeysWipe } from "nish/net/quic-packet";
@@ -21,11 +21,27 @@ import {
   QUIC_STATE_TIMED_OUT,
   QuicConnection,
 } from "nish/net/quic";
-import { TlsServer } from "nish/net/tls";
+import { TLS_LEVEL_APPLICATION, TlsSecretPool, TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
 import { TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
 import { fromHex } from "../crypto_x509/hex";
-import { n64 } from "../net_quic_frame/typed";
-import { CLIENT_SCID, QcClient, qcAead, qcConnect, qcDrain, qcExchange, qcHello, qcParams, qcShort, qcShortWith } from "../net_quic_conn/client";
+import { n32, n64 } from "../net_quic_frame/typed";
+import { leafPrivate } from "../net_tls_common/server";
+import {
+  CLIENT_SCID,
+  QcClient,
+  qcAead,
+  qcConnect,
+  qcCrypto,
+  qcDrain,
+  qcExchange,
+  qcFinishedPacket,
+  qcHello,
+  qcInitial,
+  qcParams,
+  qcReadFlight,
+  qcShort,
+  qcShortWith,
+} from "../net_quic_conn/client";
 import { qcDefaultConfig, qcServer } from "../net_quic_conn/common";
 
 /**
@@ -100,23 +116,26 @@ const qwPacketKey = (slot: QuicKeysSlot, suite: i32): u8[] => (suite === TLS_AES
 /** The header-protection key of `slot` the suite uses. */
 const qwHpKey = (slot: QuicKeysSlot, suite: i32): u8[] => (suite === TLS_AES_128_GCM_SHA256 ? slot.hp16 : slot.hp32);
 
+/** Whether every secret of `pool` reads zero, the expected client Finished included. */
+const qwPoolZero = (pool: TlsSecretPool): boolean =>
+  expose(pool.handshake, qwZero) &&
+  expose(pool.clientHandshake, qwZero) &&
+  expose(pool.serverHandshake, qwZero) &&
+  expose(pool.clientApplication, qwZero) &&
+  expose(pool.serverApplication, qwZero) &&
+  expose(pool.exporter, qwZero) &&
+  expose(pool.resumption, qwZero) &&
+  qwZero(pool.clientFinished);
+
 /**
  * Whether everything secret `conn` held is zero: every key slot of every
  * space, the key-update and Initial secrets, the seed, the ephemeral key, and
- * every secret field of its `TlsServer`, the resumption secret included.
+ * every secret of its `TlsServer`, the ephemeral key and the resumption
+ * secret included.
  */
 const qwConnZero = (conn: QuicConnection): boolean => {
   const tls: TlsServer | null = conn.tlsSlot;
-  const tlsZero: boolean =
-    tls !== null &&
-    qwZero(tls.handshakeSecret) &&
-    qwZero(tls.clientHandshakeSecret) &&
-    qwZero(tls.serverHandshakeSecret) &&
-    qwZero(tls.clientApplicationSecret) &&
-    qwZero(tls.serverApplicationSecret) &&
-    qwZero(tls.exporterSecret) &&
-    qwZero(tls.resumptionSecret) &&
-    qwZero(tls.expectedClientFinished);
+  const tlsZero: boolean = tls !== null && expose(tls.ephemeral, qwZero) && qwPoolZero(tls.secrets());
   return (
     tlsZero &&
     qwSlotsZero(conn.initial.keySlots) &&
@@ -138,7 +157,7 @@ const qwHeld = (conn: QuicConnection, suite: i32): boolean => {
   const write: QuicKeys | null = conn.application.writeKeys;
   return (
     tls !== null &&
-    !qwZero(tls.resumptionSecret) &&
+    !expose(tls.secrets().resumption, qwZero) &&
     read !== null &&
     write !== null &&
     !qwZero(read.key) &&
@@ -264,9 +283,52 @@ const qwEntropy = (t: Suite): void => {
   conn.release();
 };
 
+/**
+ * `QwPair`'s handshake, but signed through `TlsServer` itself, so that the
+ * application traffic secrets `sign` derives can be read before `afterTls`
+ * takes them; `taken` answers whether both were known and non-zero then.
+ */
+class QwWatchedPair {
+  conn: QuicConnection;
+  client: QcClient;
+  connected: boolean = false;
+  taken: boolean = false;
+
+  constructor(suite: i32) {
+    this.conn = qcServer(qcDefaultConfig());
+    const scid: u8[] = fromHex(CLIENT_SCID);
+    this.client = new QcClient(suite, scid);
+    const c: QcClient = this.client;
+    const hello: u8[] = qcHello([suite], "nish-echo", quicEncodeTransportParameters(qcParams(scid, n64(65536))));
+    c.before = hello;
+    const from: i32 = toI32(c.datagrams.length);
+    this.conn.receive(qcInitial(c, qcCrypto(n64(0), hello), n32(1200)), c.now);
+    const input: u8[] | null = this.conn.signatureInput();
+    const tls: TlsServer | null = this.conn.tlsSlot;
+    if (input !== null && tls !== null) {
+      const key: Secret<u8[]> = secret(leafPrivate());
+      const signature: u8[] | null = tlsSignEcdsaP256(key, input);
+      wipe(key);
+      if (signature !== null && tls.sign(signature) === 0) {
+        this.taken =
+          tls.readKnown(TLS_LEVEL_APPLICATION) &&
+          tls.writeKnown(TLS_LEVEL_APPLICATION) &&
+          !expose(tls.secrets().clientApplication, qwZero) &&
+          !expose(tls.secrets().serverApplication, qwZero);
+      }
+      this.conn.afterTls();
+    }
+    qcDrain(this.conn, c);
+    if (qcReadFlight(c, from, n32(0))) {
+      qcExchange(this.conn, c, qcFinishedPacket(c));
+      this.connected = this.conn.handshakeComplete;
+    }
+  }
+}
+
 /** The Initial and Handshake levels are wiped as each is discarded, and the 1-RTT keys are not. */
 const qwDiscard = (t: Suite, name: string, suite: i32): void => {
-  const p = new QwPair(suite);
+  const p = new QwWatchedPair(suite);
   const conn: QuicConnection = p.conn;
   t.ok(`${name}: the handshake completes`, p.connected && conn.state === QUIC_STATE_CONNECTED);
   t.ok(`${name}: the Initial level's slots, schedules included, read zero once it is discarded`, conn.initial.discarded && qwSlotsZero(conn.initial.keySlots));
@@ -274,9 +336,22 @@ const qwDiscard = (t: Suite, name: string, suite: i32): void => {
   const tls: TlsServer | null = conn.tlsSlot;
   t.ok(
     `${name}: with TlsServer's handshake traffic secrets`,
-    tls !== null && qwZero(tls.handshakeSecret) && qwZero(tls.clientHandshakeSecret) && qwZero(tls.serverHandshakeSecret)
+    tls !== null &&
+      expose(tls.secrets().handshake, qwZero) &&
+      expose(tls.secrets().clientHandshake, qwZero) &&
+      expose(tls.secrets().serverHandshake, qwZero)
   );
-  t.ok(`${name}: while the 1-RTT keys are held`, qwHeld(conn, suite));
+  // TlsServer's application traffic secrets, non-zero once `sign` derives
+  // them, read zero once `afterTls` has copied them into the connection's
+  // own pools, which hold the one copy of each the 1-RTT keys use.
+  t.ok(
+    `${name}: while the 1-RTT keys are held`,
+    p.taken &&
+      qwHeld(conn, suite) &&
+      tls !== null &&
+      expose(tls.secrets().clientApplication, qwZero) &&
+      expose(tls.secrets().serverApplication, qwZero)
+  );
 };
 
 /**
