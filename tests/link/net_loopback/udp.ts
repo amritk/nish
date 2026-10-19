@@ -46,7 +46,7 @@ import {
   QuicFlight,
   QuicListener,
   QuicListenerAnswer,
-  quicListenerPaceTime,
+  quicListenerFlightTime,
   quicListenerTakeFlight,
 } from "nish/net/quic-listener";
 import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet";
@@ -250,8 +250,8 @@ export class QuicEchoServer {
     if (due >= 0) {
       wait = due > now ? due - now : n64(0);
     }
-    // `quicListenerPaceTime` answers when, not how long: the pacer's next credit on the caller's clock.
-    const paced: i64 = quicListenerPaceTime(this.conn, now);
+    // `quicListenerFlightTime` answers when, not how long: the pacer's next flight on the caller's clock.
+    const paced: i64 = quicListenerFlightTime(this.conn, now);
     if (paced > now && (wait < 0 || paced - now < wait)) {
       wait = paced - now;
     }

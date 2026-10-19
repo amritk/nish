@@ -1,0 +1,1 @@
+The arrow assigns to `calls`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one; answer the value from the reducer instead, and let `parallelReduce` fold it, `const callsTotal = parallelReduce([1, 2, 3], (a, b): i32 => a + b, 0)`

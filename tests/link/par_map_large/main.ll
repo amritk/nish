@@ -9,6 +9,8 @@ declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @nish.parallelMapInto$i32$i32$fn.3.mix(%struct.nish_array* noundef nonnull align 8 dereferenceable(24), %struct.nish_array* noundef nonnull align 8 dereferenceable(24)) #0
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
@@ -75,6 +77,7 @@ entry:
   %dst.addr = alloca %struct.nish_array*, align 8
   %sum.addr = alloca i64, align 8
   %i.addr.1 = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
   store i32 3000000, i32* %n.addr, align 4
   %0 = load i32, i32* %n.addr, align 4
   %1 = sext i32 %0 to i64
@@ -252,6 +255,7 @@ bounds.ok.2:
   %93 = call i8* @nish_str_from_i64(i64 %92)
   %94 = call i8* @nish_str_concat(i8* %91, i8* %93)
   call void @nish_print(i8* %94)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 
 ovf.fail:

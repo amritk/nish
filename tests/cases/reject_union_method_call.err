@@ -1,0 +1,1 @@
+`size` cannot be used on the union `Square | Ball`: its tag `kind` is the one member a union has in this version

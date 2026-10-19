@@ -194,6 +194,9 @@ class H2Client {
 /** Every check of the HTTP/2 carrier. */
 export const http2Checks = (t: Suite): void => {
   const lp = new TcpLoop(CARRIER_H2);
+  // The server's date, pinned so the head compares byte for byte.
+  const noon: i64 = 1792138314000;
+  lp.h2.date.pin(noon);
   const c = new TlsClient(lp);
   t.ok("http/2: a TLS handshake offering h2 across loopback", c.handshake([H2_ALPN, "http/1.1"]));
   t.eqStr("http/2: ALPN chose h2", lp.h2.alpn(ZERO), "h2");
@@ -207,7 +210,7 @@ export const http2Checks = (t: Suite): void => {
   t.eqStr(
     "http/2: the server's SETTINGS, then a GET answered on stream 1",
     `${h.log.take()} | ${hello}`,
-    "SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 content-type=text/plain; DATA 1 20 \"hello over loopback\n\" end | hello over loopback\n"
+    "SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain; DATA 1 20 \"hello over loopback\n\" end | hello over loopback\n"
   );
 
   const body: u8[] = h3Pattern(toI32(150000));

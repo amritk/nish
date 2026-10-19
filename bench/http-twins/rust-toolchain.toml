@@ -1,0 +1,4 @@
+# Read by rustup in the staging directory build.sh copies each Rust twin into.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"

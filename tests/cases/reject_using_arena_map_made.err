@@ -1,0 +1,1 @@
+`made(xs)` may be allocated inside the `using arena()` block at 20:5 and is stored into a field of `h`

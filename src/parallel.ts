@@ -50,6 +50,7 @@
 import { FactsTable, FunctionFacts, stepOf } from "./attributes"
 import { CLI, STD_PREFIX } from "./branding"
 import { numericLiteralValue } from "./constants"
+import { Edit } from "./diagnostics"
 import { isScalarArgument } from "./escape"
 import {
   isArrayWriteMethod,
@@ -68,6 +69,7 @@ import {
   N_BLOCK,
   N_CALL,
   N_CONDITIONAL,
+  N_EMPTY,
   N_EXPR_STMT,
   N_CLASS,
   N_FIELD,
@@ -84,15 +86,18 @@ import {
   N_FALSE,
   N_FOR,
   N_FOR_OF,
+  N_FUNCTION,
   N_IDENT,
   N_LIST,
   N_METHOD,
   N_NEW,
+  N_NULL,
   N_NUMBER,
   N_OBJECT,
   N_RETURN,
   N_STRING,
   N_THIS,
+  N_TEMPLATE,
   N_TRUE,
   N_UNARY,
   N_BINARY,
@@ -114,6 +119,7 @@ import {
   PAR_TASK,
   ParallelCall,
   ROLE_CONSTRUCTOR,
+  ROLE_FUNCTION,
   STRUCT_CLASS,
   ScopeChannels,
   StructInfo,
@@ -125,8 +131,9 @@ import { isCollectionStruct } from "./generics"
 import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
+import { ParentTable } from "./parents"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_STRING, T_VOID, TypeTable } from "./types"
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
 const THREAD_SCOPE: string = "ThreadScope"
@@ -328,6 +335,16 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
 }
 
 /**
+ * Whether `sig` is an instance of one of the three forms that fill an array
+ * with what their body answers (`parallelMapInto`, `parallelMap`,
+ * `parallelFrom`): `parallelReduce` and `spawn` are not maps.
+ */
+export const isMapEntry = (sig: FunctionSig): boolean => {
+  const role = parallelRoleOf(sig)
+  return role === PAR_MAP || role === PAR_MAP_NEW || role === PAR_FROM
+}
+
+/**
  * Whether `sig` is an instance whose call to its chunk loop the emitter turns
  * into a region: every form but `parallelMap`, which reaches its region
  * through the `parallelMapInto` it calls.
@@ -335,6 +352,25 @@ export const isParallelEntry = (sig: FunctionSig): boolean => {
 export const isRegionEntry = (sig: FunctionSig): boolean => {
   const role = parallelRoleOf(sig)
   return role === PAR_MAP || role === PAR_REDUCE || role === PAR_FROM
+}
+
+/**
+ * The index of the parameter a map's chunk loop stores its answers into:
+ * `dst`, 1 for `mapRange` and 0 for `fromRange`, or -1 for any other
+ * function. Neither loop does anything with `dst` but store into it and read
+ * its length, which is what lets escape.ts hand those stores to the caller
+ * (`EscapeResult.fillsParam`).
+ */
+export const chunkDstIndex = (sig: FunctionSig): i32 => {
+  const instance = sig.instance
+  const template: TemplateInfo | null = instance === null ? null : instance.template
+  if (template === null || parallelRoleOf(sig) !== PAR_CHUNK) {
+    return -1
+  }
+  if (template.sourceName === "mapRange") {
+    return 1
+  }
+  return template.sourceName === "fromRange" ? 0 : -1
 }
 
 /**
@@ -391,7 +427,14 @@ const intrinsicName = (sig: FunctionSig): string => {
  * it at once could both write. It names the first such write the fixpoint
  * found: the node, or the callee that carries it.
  */
-export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+export const sharedWriteMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  fn: FunctionSig,
+  facts: FactsTable,
+  call: Node
+): string => {
   const own = facts.get(fn.name)
   if (own === null || !own.sharedWrite) {
     return ""
@@ -409,12 +452,19 @@ export const sharedWriteMessage = (sig: FunctionSig, fn: FunctionSig, facts: Fac
   }
   // WP29 P3, R6: a task's one shared write is through a guard, which the
   // fixpoint does not count (`isGuardedAccess`), so this names what is left.
+  const instance = sig.instance
+  let result = fn.returnType
+  if (instance !== null && instance.typeArgs.length > 0) {
+    result = instance.typeArgs[instance.typeArgs.length - 1]
+  }
+  const serial = serialRemedy(program, table, intrinsicName(sig), call, result)
   if (parallelRoleOf(sig) === PAR_SPAWN) {
-    return `\`${fn.sourceName}\` writes memory its caller can see${where}${TASK_WRITE_TAIL}`
+    return `\`${fn.sourceName}\` writes memory its caller can see${where}${TASK_WRITE_TAIL}${withSerial(TASK_WRITE_ADVICE, serial)}`
   }
   return (
     `\`${fn.sourceName}\` writes memory its caller can see${where}, and \`${intrinsicName(sig)}\` runs it on several ` +
-    "threads at once: a parallel body may read what its caller owns and write nothing but its result"
+    "threads at once: a parallel body may read what its caller owns and write nothing but its result; " +
+    withSerial("make it answer what it computes and do the write after the call", serial)
   )
 }
 
@@ -508,14 +558,243 @@ export const allocationWarning = (
   )
 }
 
+/** Whether a `return` sits anywhere under `node`. */
+const holdsReturn = (node: Node): boolean => {
+  if (node.kind === N_RETURN) {
+    return true
+  }
+  for (const child of node.children) {
+    if (holdsReturn(child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether an arrow `body` can be written in place (`inlinedAnswer`): a concise
+ * result, or a block whose one `return` is its last statement.
+ */
+const inlinable = (body: Node): boolean => {
+  const result = body.children[3]
+  if (result.kind !== N_BLOCK) {
+    return true
+  }
+  const last = result.children.length - 1
+  if (last < 0 || result.children[last].kind !== N_RETURN || result.children[last].children.length === 0) {
+    return false
+  }
+  for (let k = 0; k < last; k++) {
+    if (holdsReturn(result.children[k])) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * What runs before an arrow `body`'s answer when it is written in place:
+ * `const x = v; ` for each parameter not already spelled as its value in
+ * `values`, then the statements of a block body ahead of its `return`.
+ */
+const arrowBindings = (program: CheckedProgram, body: Node, values: string[]): string => {
+  if (body.kind !== N_ARROW) {
+    return ""
+  }
+  const parts: string[] = []
+  const params = body.children[1].children
+  for (let k = 0; k < params.length && k < values.length; k++) {
+    const name = params[k].children[0].text
+    if (name !== values[k]) {
+      parts.push(`const ${name} = ${values[k]}; `)
+    }
+  }
+  const result = body.children[3]
+  if (result.kind === N_BLOCK) {
+    parts.push(leadingStatements(program, result.children, 0))
+  }
+  return parts.join("")
+}
+
+/**
+ * The statements of `statements` from `k` on, all but the last, each closed by
+ * `; ` unless it already ends in `;` or `}`.
+ */
+const leadingStatements = (program: CheckedProgram, statements: Node[], k: i32): string => {
+  if (k + 1 >= statements.length) {
+    return ""
+  }
+  const statement = oneLine(program, statements[k])
+  const end = statement.endsWith(";") || statement.endsWith("}") ? " " : "; "
+  return `${statement}${end}${leadingStatements(program, statements, k + 1)}`
+}
+
+/**
+ * What one call of `body` with `values` answers, written in place: an arrow's
+ * concise result, or the expression its block's last statement returns, after
+ * `arrowBindings`; a named function called by name. "" when an arrow cannot
+ * be written in place (`inlinable`) or takes another number of arguments.
+ */
+const inlinedAnswer = (program: CheckedProgram, body: Node, values: string[]): string => {
+  if (body.kind !== N_ARROW) {
+    return `${oneLine(program, body)}(${values.join(", ")})`
+  }
+  if (body.children[1].children.length !== values.length || !inlinable(body)) {
+    return ""
+  }
+  const result = body.children[3]
+  if (result.kind !== N_BLOCK) {
+    return oneLine(program, result)
+  }
+  const last = result.children[result.children.length - 1]
+  return oneLine(program, last.children[0])
+}
+
+/** The name an arrow `body` gives its parameter `k`, or `fallback` for a named function or a missing parameter. */
+const arrowParam = (body: Node, k: i32, fallback: string): string => {
+  if (body.kind !== N_ARROW || body.children[1].children.length <= k) {
+    return fallback
+  }
+  return body.children[1].children[k].children[0].text
+}
+
+/** The name `call` initialises when it is the whole initializer of a declaration, or `fallback`. */
+const callDeclaredName = (program: CheckedProgram, call: Node, fallback: string): string => {
+  const parents = new ParentTable(program.file, program.nodeTypes.length)
+  const decl = parents.parentOf(call)
+  if (
+    decl !== null &&
+    decl.kind === N_VAR_DECL &&
+    decl.children[2] === call &&
+    decl.children[0].kind === N_IDENT
+  ) {
+    return decl.children[0].text
+  }
+  return fallback
+}
+
+/**
+ * The parallel call `call` of `intrinsic` run on the thread that made it: a
+ * loop written with the program's own names, the body inlined when it is an
+ * arrow and called when it is a named function, which keeps the body as it is
+ * and gives up the threads. `result` is the element a map or `parallelFrom`
+ * builds, or a reduce's result. "" when the call has no body argument where
+ * `intrinsic` puts it, or an arrow's block body cannot be inlined.
+ */
+const serialRemedy = (
+  program: CheckedProgram,
+  table: TypeTable,
+  intrinsic: string,
+  call: Node,
+  result: i32
+): string => {
+  if (call.kind !== N_CALL) {
+    return ""
+  }
+  const text = program.source.text
+  const args = call.children[1].children
+  if (intrinsic === "spawn") {
+    if (args.length === 0) {
+      return ""
+    }
+    const values: string[] = []
+    if (args.length > 1) {
+      values.push(oneLine(program, args[1]))
+    }
+    const answer = inlinedAnswer(program, args[0], values)
+    if (answer === "") {
+      return ""
+    }
+    const bound = arrowBindings(program, args[0], values)
+    if (args.length < 4) {
+      return `${bound}${answer}`
+    }
+    const slot = `${oneLine(program, args[2])}[${oneLine(program, args[3])}]`
+    return `${bound}${slot} = ${answer}`
+  }
+  const bodyAt = intrinsic === "parallelMapInto" ? 2 : 1
+  if (args.length <= bodyAt) {
+    return ""
+  }
+  const body = args[bodyAt]
+  const source = oneLine(program, args[0])
+  const spelled = table.typeName(result)
+  if (intrinsic === "parallelMapInto") {
+    const index = freshName(text, "i", 0)
+    const element = `${source}[${index}]`
+    const values: string[] = [element]
+    const answer = inlinedAnswer(program, body, values)
+    if (answer === "") {
+      return ""
+    }
+    const dst = oneLine(program, args[1])
+    const loop = `for (let ${index} = 0; ${index} < ${source}.length; ${index}++)`
+    return `${loop} { ${arrowBindings(program, body, values)}${dst}[${index}] = ${answer} }`
+  }
+  if (intrinsic === "parallelReduce") {
+    if (args.length < 3) {
+      return ""
+    }
+    const total = callDeclaredName(program, call, freshName(text, "total", 0))
+    const element = arrowParam(body, 1, freshName(text, "x", 0))
+    const values: string[] = [total, element]
+    const answer = inlinedAnswer(program, body, values)
+    if (answer === "") {
+      return ""
+    }
+    const start = `let ${total}: ${spelled} = ${oneLine(program, args[2])}`
+    return `${start}; for (const ${element} of ${source}) { ${arrowBindings(program, body, values)}${total} = ${answer} }`
+  }
+  const out = callDeclaredName(program, call, freshName(text, "out", 0))
+  const start = `const ${out}: ${spelled}[] = []`
+  if (intrinsic === "parallelFrom") {
+    const index = arrowParam(body, 0, freshName(text, "i", 0))
+    const values: string[] = [index]
+    const answer = inlinedAnswer(program, body, values)
+    if (answer === "") {
+      return ""
+    }
+    const loop = `for (let ${index} = 0; ${index} < ${source}; ${index}++)`
+    return `${start}; ${loop} { ${arrowBindings(program, body, values)}${out}.push(${answer}) }`
+  }
+  const element = arrowParam(body, 0, freshName(text, "x", 0))
+  const values: string[] = [element]
+  const answer = inlinedAnswer(program, body, values)
+  if (answer === "") {
+    return ""
+  }
+  return `${start}; for (const ${element} of ${source}) { ${arrowBindings(program, body, values)}${out}.push(${answer}) }`
+}
+
+/**
+ * `advice`, then `serial` as the other way out when there is one: the remedy's
+ * last clause. Code that holds a template literal is fenced with two backticks,
+ * as Markdown spells a code span that holds one.
+ */
+const withSerial = (advice: string, serial: string): string => {
+  if (serial === "") {
+    return advice
+  }
+  const fence = serial.indexOf("`") >= 0 ? "``" : "`"
+  const pad = fence === "``" ? " " : ""
+  return `${advice}, or run it on the thread that called it, ${fence}${pad}${serial}${pad}${fence}`
+}
+
 /** The refusal of a body answering `type`, which is not a number, a `boolean` or an enum, from `intrinsic`. */
-const resultWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32): string => {
+const resultWording = (
+  table: TypeTable,
+  intrinsic: string,
+  fn: FunctionSig,
+  type: i32,
+  serial: string
+): string => {
   if (isScalarArgument(table, type)) {
     return ""
   }
   return (
     `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsic}\` hands back only a ` +
-    "number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory"
+    "number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory; " +
+    withSerial("answer a number and fold those", serial)
   )
 }
 
@@ -531,14 +810,22 @@ export const crossesByCopy = (table: TypeTable, type: i32): boolean =>
   type === T_STRING || (table.isArray(type) && isScalarArgument(table, table.refOf(type)))
 
 /** The refusal of a task answering `type`, which is not a scalar, a string or an array of scalars. */
-const crossingWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, type: i32): string => {
+const crossingWording = (
+  table: TypeTable,
+  intrinsic: string,
+  fn: FunctionSig,
+  type: i32,
+  serial: string
+): string => {
   if (isScalarArgument(table, type) || crossesByCopy(table, type)) {
     return ""
   }
   return (
     `\`${fn.sourceName}\` answers \`${table.typeName(type)}\`, and \`${intrinsic}\` hands back only a ` +
     "number, a `boolean`, an enum, a `string` or an array of numbers, booleans or enums, which the join copies " +
-    "out of the worker's arena: anything else would point into memory the worker frees or reuses"
+    "out of the worker's arena: anything else would point into memory the worker frees or reuses; answer the " +
+    "number or string the caller needs, one result per field if it needs several, and build the object from " +
+    withSerial("them after the call", serial)
   )
 }
 
@@ -550,14 +837,29 @@ const crossingWording = (table: TypeTable, intrinsic: string, fn: FunctionSig, t
  * it wrote out of its arena before the arena is reused, and the caller copies
  * it into its own once every chunk has finished.
  */
-export const resultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
-  parallelRoleOf(sig) === PAR_REDUCE
-    ? resultWording(table, intrinsicName(sig), fn, type)
-    : crossingWording(table, intrinsicName(sig), fn, type)
+export const resultMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  fn: FunctionSig,
+  type: i32,
+  call: Node
+): string => {
+  const intrinsic = intrinsicName(sig)
+  const serial = serialRemedy(program, table, intrinsic, call, type)
+  return parallelRoleOf(sig) === PAR_REDUCE
+    ? resultWording(table, intrinsic, fn, type, serial)
+    : crossingWording(table, intrinsic, fn, type, serial)
+}
 
 /** A task's result: a scalar, or a value the join copies (`crossesByCopy`). */
-export const taskResultMessage = (table: TypeTable, sig: FunctionSig, fn: FunctionSig, type: i32): string =>
-  crossingWording(table, intrinsicName(sig), fn, type)
+export const taskResultMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  fn: FunctionSig,
+  type: i32,
+  call: Node
+): string => crossingWording(table, "spawn", fn, type, serialRemedy(program, table, "spawn", call, type))
 
 /**
  * The same rule, asked before `template` is instantiated rather than once the
@@ -571,10 +873,12 @@ export const taskResultMessage = (table: TypeTable, sig: FunctionSig, fn: Functi
  * arguments, whose last is the result type in all three.
  */
 export const reduceElementMessage = (
+  program: CheckedProgram,
   table: TypeTable,
   template: TemplateInfo,
   functions: FunctionSig[],
-  typeArgs: i32[]
+  typeArgs: i32[],
+  call: Node
 ): string => {
   const role = parallelRole(template)
   if (role !== PAR_REDUCE && role !== PAR_MAP_NEW && role !== PAR_FROM) {
@@ -599,9 +903,10 @@ export const reduceElementMessage = (
       `the array its workers write, which a \`${spelled}\` cannot hold; declare the body to answer \`${table.typeName(table.enumBase(result))}\``
     )
   }
+  const serial = serialRemedy(program, table, intrinsic, call, result)
   return role === PAR_REDUCE
-    ? resultWording(table, intrinsic, functions[0], result)
-    : crossingWording(table, intrinsic, functions[0], result)
+    ? resultWording(table, intrinsic, functions[0], result, serial)
+    : crossingWording(table, intrinsic, functions[0], result, serial)
 }
 
 /**
@@ -857,7 +1162,7 @@ export const capturesOf = (sig: FunctionSig): CaptureSlot[] => {
 export const letCaptureMessage = (name: string): string =>
   `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a data-parallel body may read only ` +
   "a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the " +
-  "value to a `const` before the call"
+  `value to a \`const\` before the call, \`const ${name}Now = ${name}\`, and read \`${name}Now\` in the arrow`
 
 /** The refusal for a name an arrow inside an arrow reads from outside both. */
 export const nestedCaptureMessage = (name: string): string =>
@@ -875,7 +1180,8 @@ export const thisCaptureMessage = (): string =>
 export const taskLetCaptureMessage = (name: string): string =>
   `The arrow reads \`${name}\`, a \`let\` of the function it is written in: a task's arrow may read only a ` +
   "`const` or a parameter of that function, which is handed to the task when it is spawned as its argument is " +
-  "and cannot change before it runs; bind the value to a `const` before the `spawn`"
+  "and cannot change before it runs; bind the value to a `const` before the `spawn`, " +
+  `\`const ${name}Now = ${name}\`, and read \`${name}Now\` in the arrow`
 
 /** The refusal for `this` in a task's arrow. */
 export const taskThisCaptureMessage = (): string =>
@@ -886,12 +1192,116 @@ export const taskThisCaptureMessage = (): string =>
 /** The refusal for an assignment to a name a task's arrow captures. */
 export const taskCaptureWriteMessage = (name: string): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a task reads a captured ` +
-  "value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument"
+  "value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument; " +
+  "make the task answer the value and give the `spawn` a destination, `s.spawn(task, arg, out, i)`, and read " +
+  "`out[i]` after the scope's block"
 
-/** The refusal for an assignment to a captured name. */
-export const captureWriteMessage = (name: string): string =>
+/** The refusal for an assignment to a captured name: the first sentence, and `remedy`, the code to write. */
+export const captureWriteMessage = (name: string, remedy: string): string =>
   `The arrow assigns to \`${name}\`, which belongs to the function it is written in: a data-parallel body ` +
-  "reads a captured value and never writes it, because every thread reads the same one"
+  `reads a captured value and never writes it, because every thread reads the same one; ${remedy}`
+
+/**
+ * The code NL2503 shows for `target`, a captured name the arrow writes: the
+ * fold the write spells, `+=`, `*=`, `= name + e`, `= name * e` or `++`, as a
+ * `parallelReduce` over the values the body would have added, and a plain
+ * `=` as the array the call gives back; a reducer that writes one is the same
+ * `parallelReduce` without the write. It is built from the call the arrow is
+ * passed to, its source and the arrow's own parameters.
+ */
+export const captureWriteRemedy = (program: CheckedProgram, target: Node): string => {
+  const text = program.source.text
+  const name = target.text
+  const parents = new ParentTable(program.file, program.nodeTypes.length)
+  const write = parents.parentOf(target)
+  let op = ""
+  let value = ""
+  if (write !== null && write.kind === N_UNARY && write.text === "++") {
+    op = "+"
+    value = "1"
+  } else if (write !== null && write.kind === N_BINARY && write.children[0] === target) {
+    const rhs = write.children[1]
+    if (write.text === "+=" || write.text === "*=") {
+      op = write.text.slice(0, 1)
+      value = oneLine(program, rhs)
+    } else if (write.text === "=") {
+      value = oneLine(program, rhs)
+      if (
+        rhs.kind === N_BINARY &&
+        (rhs.text === "+" || rhs.text === "*") &&
+        rhs.children[0].kind === N_IDENT &&
+        rhs.children[0].text === name
+      ) {
+        op = rhs.text
+        value = oneLine(program, rhs.children[1])
+      }
+    }
+  }
+  let arrow = write
+  while (arrow !== null && arrow.kind !== N_ARROW) {
+    arrow = parents.parentOf(arrow)
+  }
+  let list: Node | null = null
+  if (arrow !== null) {
+    list = parents.parentOf(arrow)
+  }
+  let call: Node | null = null
+  if (list !== null) {
+    call = parents.parentOf(list)
+  }
+  if (
+    arrow === null ||
+    call === null ||
+    call.kind !== N_CALL ||
+    call.children[0].kind !== N_IDENT ||
+    value === ""
+  ) {
+    return "answer the value from the body instead, and fold the answers with `parallelReduce` after the call"
+  }
+  const callee = call.children[0].text
+  const source = oneLine(program, call.children[1].children[0])
+  const params = arrow.children[1].children
+  let head = ""
+  for (const param of params) {
+    head = head === "" ? param.children[0].text : `${head}, ${param.children[0].text}`
+  }
+  head = `(${head})`
+  const returns = arrow.children[2]
+  if (returns.kind !== N_EMPTY) {
+    head = `${head}: ${oneLine(program, returns)}`
+  }
+  const from = callee === "parallelFrom" ? "parallelFrom" : "parallelMap"
+  let mapped = `${from}(${source}, ${head} => ${value})`
+  if (op !== "" && from === "parallelMap" && params.length === 1 && value === params[0].children[0].text) {
+    mapped = source
+  }
+  if (callee === "parallelReduce") {
+    const lead = "answer the value from the reducer instead, and let `parallelReduce` fold it"
+    const args = call.children[1].children
+    if (args.length < 3 || !inlinable(arrow)) {
+      return lead
+    }
+    let result = arrow.children[3]
+    if (result.kind === N_BLOCK) {
+      result = result.children[result.children.length - 1].children[0]
+    }
+    const folded = freshName(text, `${name}Total`, 0)
+    const init = oneLine(program, args[2])
+    return `${lead}, \`const ${folded} = parallelReduce(${source}, ${head} => ${oneLine(program, result)}, ${init})\``
+  }
+  if (op === "") {
+    const values = freshName(text, `${name}Values`, 0)
+    return `answer the value from the body instead, and read the answers from the array the call gives back, \`const ${values} = ${mapped}\``
+  }
+  const total = freshName(text, `${name}Total`, 0)
+  const a = freshName(text, "a", 0)
+  const b = freshName(text, "b", 0)
+  const identity = op === "*" ? "1" : "0"
+  return (
+    "answer the value from the body instead, and fold the answers with `parallelReduce`, " +
+    `\`const ${total} = parallelReduce(${mapped}, (${a}, ${b}) => ${a} ${op} ${b}, ${identity})\``
+  )
+}
 
 /** Whether `info` is a class `nish/threads` declares: a scope, a lock, its guard or a channel. */
 const isThreadsLayout = (info: StructInfo): boolean => {
@@ -1197,11 +1607,203 @@ export const mapGrain = (fn: FunctionSig): i32 => {
 export class ScopeFinding {
   node: Node
   message: string
+  /** The finding's machine-applicable fix, which `--fix` applies; empty when there is none. */
+  edits: Edit[]
 
   constructor(node: Node, message: string) {
     this.node = node
     this.message = message
+    this.edits = []
   }
+}
+
+/**
+ * The source of `node` when it is short and on one line, so that a refusal's
+ * remedy can be written in the program's own names, or `fallback`.
+ */
+const shownSource = (program: CheckedProgram, node: Node, fallback: string): string => {
+  const text = program.source.text.slice(node.start, node.end)
+  return text.length > 0 && text.length <= 40 && text.indexOf("\n") < 0 ? text : fallback
+}
+
+/** The name `node` is bound to, when it is the initialiser of a declaration, or `fallback`. */
+const boundNameOf = (node: Node, parents: Node[], n: i32, fallback: string): string => {
+  const decl: Node | null = n > 0 ? parents[n - 1] : null
+  return decl !== null &&
+    decl.kind === N_VAR_DECL &&
+    decl.children[2] === node &&
+    decl.children[0].kind === N_IDENT
+    ? decl.children[0].text
+    : fallback
+}
+
+/** A slot a guard copies, the text that reaches it and its type; `text` is "" when there is none. */
+class CopiedSlot {
+  text: string
+  type: i32
+
+  constructor(text: string, type: i32) {
+    this.text = text
+    this.type = type
+  }
+}
+
+/**
+ * A slot of a value of `type` reached by `chain` that a guard reads or stores
+ * by copy, a number, a `boolean` or a `string`: `type` itself, the first
+ * element of an array, or the first such field of a class, descended three
+ * levels at most; or none, as in a `Map`, a `Set` or a nullable. An enum is
+ * passed over, because a remedy has no literal to store into it.
+ */
+const copiedSlot = (program: CheckedProgram, table: TypeTable, chain: string, type: i32): CopiedSlot =>
+  copiedSlotAt(program, table, chain, type, 3)
+
+const copiedSlotAt = (
+  program: CheckedProgram,
+  table: TypeTable,
+  chain: string,
+  type: i32,
+  depth: i32
+): CopiedSlot => {
+  if (type < 0 || depth < 0 || table.isNullable(type) || table.enumBase(type) >= 0) {
+    return new CopiedSlot("", type)
+  }
+  if (isScalarArgument(table, type) || type === T_STRING) {
+    return new CopiedSlot(chain, type)
+  }
+  if (table.isArray(type)) {
+    return copiedSlotAt(program, table, `${chain}[0]`, table.refOf(type), depth - 1)
+  }
+  const info = classLayoutOf(program, table, type)
+  if (info === null || isCollectionStruct(info)) {
+    return new CopiedSlot("", type)
+  }
+  for (const field of info.fields) {
+    const slot = copiedSlotAt(program, table, `${chain}.${field.name}`, field.type, depth - 1)
+    if (slot.text.length > 0) {
+      return slot
+    }
+  }
+  return new CopiedSlot("", type)
+}
+
+/** The last field name in `chain`, `n` of `g.value.n`, or `first` when it ends in an element. */
+const lastWordOf = (chain: string): string => {
+  let dot = -1
+  for (let i = 0; i < chain.length; i++) {
+    if (chain.charCodeAt(i) === 46) {
+      dot = i
+    }
+  }
+  const word = chain.slice(dot + 1)
+  return word.indexOf("[") < 0 ? word : "first"
+}
+
+/** A literal of `slot`'s type, for a remedy that stores into it. */
+const slotLiteral = (slot: CopiedSlot): string => {
+  if (slot.type === T_STRING) {
+    return '""'
+  }
+  return slot.type === T_BOOL ? "false" : "0"
+}
+
+/**
+ * The value a remedy stores into `slot`, reached from `target`: what `from`
+ * holds at the same place when the program names it — a variable or a field
+ * read, or the first element of an array literal — or a literal of the slot's
+ * type.
+ */
+const storedInto = (program: CheckedProgram, slot: CopiedSlot, target: string, from: Node | null): string => {
+  const rest = slot.text.slice(target.length)
+  if (from !== null && rest.length === 0 && (from.kind === N_STRING || from.kind === N_NUMBER)) {
+    return shownSource(program, from, slotLiteral(slot))
+  }
+  if (from !== null && (from.kind === N_IDENT || from.kind === N_MEMBER)) {
+    const named = shownSource(program, from, "")
+    if (named.length > 0) {
+      return `${named}${rest}`
+    }
+  }
+  if (from !== null && from.kind === N_ARRAY && from.children.length > 0 && rest.slice(0, 3) === "[0]") {
+    const first = unwrapParens(from.children[0])
+    const after = rest.slice(3)
+    if (
+      after.length === 0 &&
+      (first.kind === N_STRING || first.kind === N_NUMBER || first.kind === N_IDENT)
+    ) {
+      return shownSource(program, first, slotLiteral(slot))
+    }
+    if (first.kind === N_IDENT || first.kind === N_MEMBER) {
+      const named = shownSource(program, first, "")
+      if (named.length > 0) {
+        return `${named}${after}`
+      }
+    }
+  }
+  return slotLiteral(slot)
+}
+
+/** The remedy for data a guard can copy nothing out of: keep it as numbers and strings. */
+const COPIED_NONE_REMEDY: string =
+  "keep the data the `Mutex` holds as numbers and strings, `class Shared { n: i32 = 0 }` behind " +
+  "`new Mutex<Shared>(new Shared())`"
+
+/** The source of `node` with each run of whitespace written as one space, for a remedy that shows it. */
+const oneLine = (program: CheckedProgram, node: Node): string =>
+  collapsed(program.source.text.slice(node.start, node.end))
+
+/** `text` with each run of whitespace written as one space. */
+const collapsed = (text: string): string => {
+  const words: string[] = []
+  let start = -1
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i)
+    const space = c === 32 || c === 9 || c === 10 || c === 13
+    if (space && start >= 0) {
+      words.push(text.slice(start, i))
+      start = -1
+    } else if (!space && start < 0) {
+      start = i
+    }
+  }
+  if (start >= 0) {
+    words.push(text.slice(start))
+  }
+  return words.join(" ")
+}
+
+/** A finding together with its fix. */
+const fixedFinding = (node: Node, message: string, edits: Edit[]): ScopeFinding => {
+  const finding = new ScopeFinding(node, message)
+  finding.edits = edits
+  return finding
+}
+
+/**
+ * The fix for a `scope()` or a `lock()` bound by `const`: the keyword becomes
+ * `using`, which is the declaration the rule asks for. Only `const x = call()`
+ * with one declarator, a statement of a block, is rewritten: a `let` may be
+ * assigned again and a `using` may not, and a declaration anywhere else would
+ * be refused as a `using` too (NL2390).
+ */
+const usingEdits = (program: CheckedProgram, node: Node, parents: Node[], n: i32): Edit[] => {
+  const edits: Edit[] = []
+  if (n < 4) {
+    return edits
+  }
+  const decl = parents[n - 1]
+  const stmt = parents[n - 3]
+  const fits =
+    decl.kind === N_VAR_DECL &&
+    decl.children[2] === node &&
+    parents[n - 2].children.length === 1 &&
+    stmt.kind === N_VAR &&
+    (stmt.flags & FLAG_CONST) !== 0 &&
+    parents[n - 4].kind === N_BLOCK
+  if (fits && program.source.text.slice(stmt.start, stmt.start + 6) === "const ") {
+    edits.push(new Edit(stmt.start, stmt.start + 5, "using"))
+  }
+  return edits
 }
 
 const usingNotScopeMessage = (): string =>
@@ -1218,9 +1820,10 @@ const arenaBindingMessage = (name: string): string =>
   `\`${name}\` is the binding of a \`using\` declaration of \`arena()\` and cannot be read: it holds the mark ` +
   "its block releases to when it ends, and nothing but that release may see or move the mark"
 
-const scopeNotUsingMessage = (): string =>
+const scopeNotUsingMessage = (name: string): string =>
   "`scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that " +
-  "declares it ends, so a scope bound any other way would be one nobody joins"
+  "declares it ends, so a scope bound any other way would be one nobody joins; " +
+  `declare it as \`using ${name} = scope()\``
 
 const scopeEscapesMessage = (): string =>
   `A \`${THREAD_SCOPE}\` can only be the receiver of a \`spawn\` statement: passed, stored, returned or copied, ` +
@@ -1230,16 +1833,556 @@ const usingPlaceMessage = (): string =>
   "A `using` declaration must be a statement of a block, `{ ... }`: its scope joins when that block ends, " +
   "and a single-statement body is not a block"
 
-/** A task with no destination whose entry answers something, which nothing would store. */
-export const voidTaskResultMessage = (table: TypeTable, fn: FunctionSig): string => {
+/** The element types a destination the fix declares may hold: a scalar the task's answer is. */
+const DESTINATION_ELEMENTS: string = "|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|number|boolean|"
+
+/**
+ * The `skip + 1`th of `base`, `base2`, ... that is not a word anywhere in
+ * `text`, so the declaration shadows nothing, and each statement the fix
+ * rewrites in one round, from the same unmodified text, has a name of its own.
+ */
+const freshName = (text: string, base: string, skip: i32): string => {
+  let left = skip
+  let name = base
+  for (let n = 2; containsWord(text, name) || left > 0; n++) {
+    if (!containsWord(text, name)) {
+      left = left - 1
+    }
+    name = `${base}${n}`
+  }
+  return name
+}
+
+/** How many `receiver.spawn(task, arg)` calls under `node` start before `at`: the slots the fix names ahead of the one at `at`. */
+const spawnsBefore = (node: Node, receiver: string, at: i32): i32 => {
+  let count = 0
+  for (const child of node.children) {
+    if (child.start >= at) {
+      continue
+    }
+    if (child.kind === N_CALL && child.children.length === 2 && child.children[1].children.length === 2) {
+      const callee = child.children[0]
+      if (
+        callee.kind === N_MEMBER &&
+        callee.text === "spawn" &&
+        callee.children[0].kind === N_IDENT &&
+        callee.children[0].text === receiver
+      ) {
+        count = count + 1
+      }
+    }
+    count = count + spawnsBefore(child, receiver, at)
+  }
+  return count
+}
+
+const isWordChar = (code: i32): boolean =>
+  (code >= 48 && code <= 57) ||
+  (code >= 65 && code <= 90) ||
+  (code >= 97 && code <= 122) ||
+  code === 95 ||
+  code === 36
+
+/** Whether `text` is a name a `const` may take: word characters, the first not a digit. */
+const isIdentifier = (text: string): boolean => {
+  if (text.length === 0 || (text.charCodeAt(0) >= 48 && text.charCodeAt(0) <= 57)) {
+    return false
+  }
+  for (let i = 0; i < text.length; i++) {
+    if (!isWordChar(text.charCodeAt(i))) {
+      return false
+    }
+  }
+  return true
+}
+
+const containsWord = (text: string, word: string): boolean => {
+  let from = text.indexOf(word)
+  while (from >= 0) {
+    const end = from + word.length
+    const before = from === 0 ? false : isWordChar(text.charCodeAt(from - 1))
+    const after = end >= text.length ? false : isWordChar(text.charCodeAt(end))
+    if (!before && !after) {
+      return true
+    }
+    from = text.indexOf(word, from + 1)
+  }
+  return false
+}
+
+/** The whitespace between the start of the line holding `at` and `at`, or `null` when other text comes first. */
+const indentBefore = (text: string, at: i32): string | null => {
+  let start = at
+  while (start > 0 && text.charCodeAt(start - 1) !== 10) {
+    start = start - 1
+  }
+  for (let i = start; i >= 0 && i < at && i < text.length; i++) {
+    const code = text.charCodeAt(i)
+    if (code !== 32 && code !== 9) {
+      return null
+    }
+  }
+  return text.slice(start, at)
+}
+
+/**
+ * The fix for a `spawn` without a destination whose task answers a scalar:
+ * a one-element array is declared on the line above the scope's `using`, and
+ * the `spawn` stores into it, `s.spawn(task, arg, answer, 0)`. The answer was
+ * thrown away and is now kept where nothing reads it, so the program prints
+ * the same. Only a `spawn` statement written directly in a block of the
+ * scope's own block, outside every loop, with an argument, whose receiver is
+ * the `using` binding of a statement of an enclosing block, is rewritten: in a
+ * loop every task would store into the one slot, and the fix would have to
+ * choose a length and an index the program never states.
+ */
+export const destinationEdits = (
+  program: CheckedProgram,
+  table: TypeTable,
+  parents: ParentTable,
+  call: Node,
+  fn: FunctionSig
+): Edit[] => {
+  const edits: Edit[] = []
+  const element = table.typeName(fn.returnType)
+  const callee = call.children[0]
+  const args = call.children[1].children
+  const stmt = parents.parentOf(call)
+  if (
+    fn.returnType === T_VOID ||
+    DESTINATION_ELEMENTS.indexOf(`|${element}|`) < 0 ||
+    callee.kind !== N_MEMBER ||
+    callee.children[0].kind !== N_IDENT ||
+    args.length !== 2
+  ) {
+    return edits
+  }
+  if (stmt === null) {
+    return edits
+  }
+  if (stmt.kind !== N_EXPR_STMT) {
+    return edits
+  }
+  const receiver = callee.children[0].text
+  let child: Node = stmt
+  let up = parents.parentOf(stmt)
+  while (up !== null) {
+    const kind = up.kind
+    if (kind === N_FOR || kind === N_WHILE || kind === N_DO || kind === N_FOR_OF || kind === N_ARROW) {
+      return edits
+    }
+    if (kind === N_BLOCK) {
+      const at = up.children.indexOf(child)
+      for (let i = at - 1; i >= 0; i--) {
+        const prior = up.children[i]
+        if (
+          prior.kind === N_VAR &&
+          (prior.flags & FLAG_USING) !== 0 &&
+          prior.children[0].children.length === 1
+        ) {
+          const decl = prior.children[0].children[0]
+          if (decl.children[0].text === receiver) {
+            return scopeDestinationEdits(
+              program,
+              prior,
+              args[1],
+              element,
+              spawnsBefore(up, receiver, call.start)
+            )
+          }
+        }
+      }
+    }
+    if (kind === N_FUNCTION || kind === N_METHOD) {
+      return edits
+    }
+    child = up
+    up = parents.parentOf(up)
+  }
+  return edits
+}
+
+const scopeDestinationEdits = (
+  program: CheckedProgram,
+  scope: Node,
+  last: Node,
+  element: string,
+  earlier: i32
+): Edit[] => {
+  const edits: Edit[] = []
+  const text = program.source.text
+  const indent = indentBefore(text, scope.start)
+  if (indent === null) {
+    return edits
+  }
+  const name = freshName(text, "answer", earlier)
+  const semi = text.slice(scope.start, scope.end).endsWith(";") ? ";" : ""
+  edits.push(new Edit(scope.start, scope.start, `const ${name} = new Array<${element}>(1)${semi}\n${indent}`))
+  edits.push(new Edit(last.end, last.end, `, ${name}, 0`))
+  return edits
+}
+
+/** The child of `node` whose span holds `inner`, or `null`: one step of the walk down to an arrow. */
+const childHolding = (node: Node, inner: Node): Node | null => {
+  for (const child of node.children) {
+    if (
+      child === inner ||
+      (child.start <= inner.start && inner.end <= child.end && child.end > child.start)
+    ) {
+      return child
+    }
+  }
+  return null
+}
+
+/** Every `N_IDENT` under `node` spelled `name`, into `out`; false when one is declared there, or written in an object literal or a nested arrow. */
+const identsNamed = (node: Node, name: string, out: Node[]): boolean => {
+  for (const child of node.children) {
+    const kind = child.kind
+    if (kind === N_OBJECT || kind === N_ARROW) {
+      return false
+    }
+    if ((kind === N_VAR_DECL || kind === N_PARAM) && child.children[0].text === name) {
+      return false
+    }
+    if (kind === N_IDENT && child.text === name) {
+      out.push(child)
+    } else if (!identsNamed(child, name, out)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** Whether `node` assigns `name`, `name = v`, `name += v` or `name++`: the fix's `const` could not take the write. */
+/** Whether an `N_IDENT` spelled `name` is anywhere under `node`. */
+const mentionsName = (node: Node, name: string): boolean => {
+  for (const child of node.children) {
+    if ((child.kind === N_IDENT && child.text === name) || mentionsName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** How many arrows under `node` that mention `name` start before `at`: the bound names the fix gives the statements ahead of the one at `at`. */
+const arrowsNamingBefore = (node: Node, name: string, at: i32): i32 => {
+  let count = 0
+  for (const child of node.children) {
+    if (child.start >= at) {
+      continue
+    }
+    if (child.kind === N_ARROW && mentionsName(child, name)) {
+      count = count + 1
+    } else {
+      count = count + arrowsNamingBefore(child, name, at)
+    }
+  }
+  return count
+}
+
+const assignsName = (node: Node, name: string): boolean => {
+  if (node.kind === N_BINARY && isAssignmentOperator(node.text)) {
+    const target = unwrapParens(node.children[0])
+    if (target.kind === N_IDENT && target.text === name) {
+      return true
+    }
+  }
+  if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    const target = unwrapParens(node.children[0])
+    if (target.kind === N_IDENT && target.text === name) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (assignsName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The fix for an arrow argument that reads a `let` of the function it is
+ * written in: the value is bound to a `const` on the line above the statement
+ * that makes the call, `const kNow = k`, and the arrow reads that, which is
+ * handed to the body when the call is made, as the rule asks. Only a call
+ * that is the whole of a statement of a block, `f(...)` or `const r = f(...)`,
+ * with the arrow as one of its arguments, is rewritten, and only when nothing
+ * else in the statement names the `let`, so the value bound is the one the
+ * arrow read: a call in a loop's header or a condition would bind it at
+ * another time, and an argument that assigns the `let` would change it after. Each statement rewritten from the same text takes a name of
+ * its own, `kNow`, `kNow2`, ..., counted by the capturing arrows before it.
+ * An arrow that assigns the `let` itself is left alone: the write would land on
+ * the `const`.
+ */
+export const letCaptureEdits = (text: string, host: Node, arrow: Node, name: string): Edit[] => {
+  const edits: Edit[] = []
+  const path: Node[] = [host]
+  let at: Node = host
+  while (at !== arrow) {
+    const next = childHolding(at, arrow)
+    if (next === null) {
+      return edits
+    }
+    path.push(next)
+    at = next
+  }
+  const n = path.length
+  if (n < 5 || path[n - 2].kind !== N_LIST || path[n - 3].kind !== N_CALL) {
+    return edits
+  }
+  const call = path[n - 3]
+  const holder = path[n - 4]
+  let top = n - 4
+  if (
+    holder.kind === N_VAR_DECL &&
+    holder.children[2] === call &&
+    n >= 7 &&
+    path[n - 5].children.length === 1
+  ) {
+    top = n - 6
+  } else if (holder.kind !== N_EXPR_STMT) {
+    return edits
+  }
+  const stmt = path[top]
+  if (top < 1 || path[top - 1].kind !== N_BLOCK || (stmt.kind !== N_EXPR_STMT && stmt.kind !== N_VAR)) {
+    return edits
+  }
+  const uses: Node[] = []
+  if (!identsNamed(arrow, name, uses) || uses.length === 0 || assignsName(arrow, name)) {
+    return edits
+  }
+  for (const arg of call.children[1].children) {
+    const outside: Node[] = []
+    if (arg !== arrow && (!identsNamed(arg, name, outside) || outside.length > 0)) {
+      return edits
+    }
+  }
+  const indent = indentBefore(text, stmt.start)
+  if (indent === null) {
+    return edits
+  }
+  const bound = freshName(text, `${name}Now`, arrowsNamingBefore(host, name, stmt.start))
+  const semi = text.slice(stmt.start, stmt.end).endsWith(";") ? ";" : ""
+  edits.push(new Edit(stmt.start, stmt.start, `const ${bound} = ${name}${semi}\n${indent}`))
+  for (const use of uses) {
+    edits.push(new Edit(use.start, use.end, bound))
+  }
+  return edits
+}
+
+/** Where the line before the one `at` starts, when it is a comment line (`//`, `/*`, or a block comment's `*`), else -1. */
+const commentLineAbove = (text: string, at: i32): i32 => {
+  if (at === 0) {
+    return -1
+  }
+  let start = at - 1
+  while (start > 0 && text.charCodeAt(start - 1) !== 10) {
+    start = start - 1
+  }
+  let first = start
+  while (
+    first >= 0 &&
+    first < at - 1 &&
+    first < text.length &&
+    (text.charCodeAt(first) === 32 || text.charCodeAt(first) === 9)
+  ) {
+    first = first + 1
+  }
+  if (first >= at - 1 || first < 0 || first >= text.length) {
+    return -1
+  }
+  const code = text.charCodeAt(first)
+  return code === 47 || code === 42 ? start : -1
+}
+
+/** Every template literal's span under `node`, as `start, end` pairs relative to `base`, into `out`. */
+const templateSpans = (node: Node, base: i32, out: i32[]): void => {
+  for (const child of node.children) {
+    if (child.kind === N_TEMPLATE) {
+      out.push(child.start - base)
+      out.push(child.end - base)
+    } else {
+      templateSpans(child, base, out)
+    }
+  }
+}
+
+/** Whether `at` is strictly inside one of the `start, end` pairs in `spans`. */
+const insideSpan = (spans: i32[], at: i32): boolean => {
+  for (let i = 0; i + 1 < spans.length; i = i + 2) {
+    if (spans[i] < at && at < spans[i + 1]) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * `text` with up to `width` leading spaces taken off every line after its
+ * first, except a line that starts inside one of `spans`: a template
+ * literal's text, whose spaces are part of its string.
+ */
+const dedentAfterFirst = (text: string, width: i32, spans: i32[]): string => {
+  const out: string[] = []
+  let from = 0
+  let first = true
+  while (from <= text.length) {
+    const nl = text.indexOf("\n", from)
+    const end = nl < 0 ? text.length : nl
+    let skip = from
+    while (
+      !first &&
+      !insideSpan(spans, from) &&
+      skip >= 0 &&
+      skip < end &&
+      skip < text.length &&
+      skip - from < width &&
+      text.charCodeAt(skip) === 32
+    ) {
+      skip = skip + 1
+    }
+    out.push(text.slice(skip, end))
+    if (nl < 0) {
+      break
+    }
+    from = nl + 1
+    first = false
+  }
+  return out.join("\n")
+}
+
+/**
+ * The fix for a channel used inside an arrow argument: the arrow moves to a
+ * `const` of its own above the top-level statement it is written in, which
+ * makes it a top-level function the channel rules follow, and the argument
+ * names it. A lifted arrow is a function already, so only where it is written
+ * changes. Only a fully annotated arrow written directly as an argument, that
+ * captures nothing, in a function that is not generic, is moved: a capture or
+ * a type parameter would not be in scope at the top level, and an arrow
+ * without its types would be one the checker cannot type outside the call.
+ */
+const hoistArrowEdits = (program: CheckedProgram, sig: FunctionSig, arrow: Node, parents: Node[]): Edit[] => {
+  const edits: Edit[] = []
+  const depth = parents.length
+  const lifted = program.nodeCallees[arrow.id]
+  if (
+    depth < 2 ||
+    parents[depth - 1].kind !== N_LIST ||
+    parents[depth - 2].kind !== N_CALL ||
+    lifted === null
+  ) {
+    return edits
+  }
+  const typeParams = sig.decl.children.length > 4 ? sig.decl.children[4].children.length : 0
+  if (
+    arrow.children[2].kind === N_EMPTY ||
+    capturesOf(lifted).length > 0 ||
+    typeParams > 0 ||
+    sig.instance !== null
+  ) {
+    return edits
+  }
+  for (const param of arrow.children[1].children) {
+    if (param.kind !== N_PARAM || param.children[1].kind === N_EMPTY) {
+      return edits
+    }
+  }
+  let held = -1
+  const stmts = program.file.children
+  for (let i = 0; i < stmts.length; i++) {
+    if (stmts[i].start <= arrow.start && arrow.end <= stmts[i].end) {
+      held = i
+    }
+  }
+  if (held < 0) {
+    return edits
+  }
+  const top = stmts[held]
+  const text = program.source.text
+  const lead = indentBefore(text, top.start)
+  if (lead === null) {
+    return edits
+  }
+  if (lead.length > 0) {
+    return edits
+  }
+  let at = top.start
+  let above = commentLineAbove(text, at)
+  while (above >= 0) {
+    at = above
+    above = commentLineAbove(text, at)
+  }
+  const suffix = spawnCallee(program, parents[depth - 2]) !== null ? "Task" : "Body"
+  if (!isIdentifier(sig.sourceName)) {
+    return edits
+  }
+  let name = `${sig.sourceName}${suffix}`
+  for (let n = 2; containsWord(text, name); n++) {
+    name = `${sig.sourceName}${suffix}${n}`
+  }
+  const lineIndent = indentOfLine(text, arrow.start)
+  const semi = text.slice(top.start, top.end).endsWith(";") ? ";" : ""
+  const spans: i32[] = []
+  templateSpans(arrow, arrow.start, spans)
+  const body = dedentAfterFirst(text.slice(arrow.start, arrow.end), lineIndent, spans)
+  edits.push(new Edit(at, at, `const ${name} = ${body}${semi}\n\n`))
+  edits.push(new Edit(arrow.start, arrow.end, name))
+  return edits
+}
+
+/** How many spaces open the line that holds `at`. */
+const indentOfLine = (text: string, at: i32): i32 => {
+  let start = at
+  while (start > 0 && text.charCodeAt(start - 1) !== 10) {
+    start = start - 1
+  }
+  let n = 0
+  while (start + n < at && text.charCodeAt(start + n) === 32) {
+    n = n + 1
+  }
+  return n
+}
+
+export const voidTaskResultMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  fn: FunctionSig,
+  node: Node
+): string => {
   if (fn.returnType === T_VOID) {
     return ""
   }
   const shown = fn.lifted ? "The arrow" : `\`${fn.sourceName}\``
+  const element = table.typeName(fn.returnType)
   return (
-    `${shown} answers \`${table.typeName(fn.returnType)}\`, and a \`spawn\` without a destination stores nothing: ` +
+    `${shown} answers \`${element}\`, and a \`spawn\` without a destination stores nothing: ` +
     "a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope " +
-    "joins, so make the task answer `void` or give it a destination"
+    "joins, so make the task answer `void` or give it a destination, " +
+    voidTaskRemedy(program, element, node)
+  )
+}
+
+/**
+ * NL2511's remedy in the call's own names: a one-element destination above
+ * the scope's block, when the answer is one a destination holds, and
+ * otherwise a `void` task that keeps its answer through a lock.
+ */
+const voidTaskRemedy = (program: CheckedProgram, element: string, node: Node): string => {
+  const callee = node.kind === N_CALL ? unwrapParens(node.children[0]) : node
+  const none: Node[] = []
+  const args = node.kind === N_CALL ? node.children[1].children : none
+  if (DESTINATION_ELEMENTS.indexOf(`|${element}|`) < 0 || callee.kind !== N_MEMBER || args.length !== 2) {
+    return (
+      "and since a destination holds only a number or a `boolean`, keep the answer in a `Mutex` the task is " +
+      "handed and answer `void`, `using g = m.lock(); g.value.last = last` in the task's body"
+    )
+  }
+  const answer = freshName(program.source.text, "answer", 0)
+  return (
+    `\`const ${answer} = new Array<${element}>(1)\` above the scope's block and ` +
+    `\`${oneLine(program, callee)}(${oneLine(program, args[0])}, ${oneLine(program, args[1])}, ${answer}, 0)\``
   )
 }
 
@@ -1373,7 +2516,13 @@ const walkScopes = (
   if (!declaresName && node.kind !== N_PAREN && program.nodeTypes[node.id] === scopeType) {
     if (node.kind === N_CALL && isScopeCall(program, node, scopeType)) {
       if (!isUsingInitialiser(at, parents, depth)) {
-        out.push(new ScopeFinding(node, scopeNotUsingMessage()))
+        out.push(
+          fixedFinding(
+            node,
+            scopeNotUsingMessage(boundNameOf(at, parents, depth, "s")),
+            usingEdits(program, at, parents, depth)
+          )
+        )
       }
     } else if (!(node.kind === N_IDENT && isSpawnReceiver(at, parents, depth))) {
       out.push(new ScopeFinding(node, scopeEscapesMessage()))
@@ -1426,7 +2575,7 @@ export const scopeFindings = (
     const arenas: Local[] = []
     walkScopes(program, body, parents, scopeType, arenas, out)
     if (loaded) {
-      checkBody(program, table, facts, body, out)
+      checkBody(program, table, facts, body, scopeType, out)
       walkMutexes(program, table, body, parents, out)
       findGuardBlocks(program, facts, body, new HeldContext(scopeType, scopeSymbol(programs), summaries), out)
       // The standard library holds no channel of its own; one handed to it is
@@ -1786,7 +2935,8 @@ const collectDestinations = (program: CheckedProgram, node: Node, state: RegionS
 
 const destinationMessage = (): string =>
   "The destination of this `spawn` must be a `const` local bound to a fresh array (a literal or `new Array`), " +
-  `used only by index, \`.length\`, its methods and as a destination${REGION_TAIL}`
+  `used only by index, \`.length\`, its methods and as a destination${REGION_TAIL}; declare it before the ` +
+  "scope's block, `const out = new Array<i32>(n)`, and spawn into it, `s.spawn(task, arg, out, i)`"
 
 const regionReadMessage = (state: RegionState, name: string): string =>
   `This reads \`${name}\`, a destination of a task of \`${state.name}\`, before the scope joins${REGION_TAIL}`
@@ -2099,6 +3249,7 @@ const findRegions = (
   facts: FactsTable,
   uses: VariableUses,
   node: Node,
+  scopeType: i32,
   out: ScopeFinding[]
 ): void => {
   if (node.kind === N_ARROW) {
@@ -2116,7 +3267,16 @@ const findRegions = (
             locals.push(local)
           }
         }
-        const state = new RegionState(locals, locals.length > 0 ? locals[0].name : "scope")
+        // The scope's own declarator names the region, not the first of the
+        // statement: `using g = m.lock(), s = scope()` is the region of `s`.
+        let name = locals.length > 0 ? locals[0].name : "scope"
+        for (const local of locals) {
+          if (local.type === scopeType) {
+            name = local.name
+            break
+          }
+        }
+        const state = new RegionState(locals, name)
         let k = i + 1
         while (k < node.children.length) {
           collectTaskArgs(program, node.children[k], state)
@@ -2140,7 +3300,7 @@ const findRegions = (
     }
   }
   for (const child of node.children) {
-    findRegions(program, table, facts, uses, child, out)
+    findRegions(program, table, facts, uses, child, scopeType, out)
   }
 }
 
@@ -2171,17 +3331,17 @@ const checkSiblingScopes = (
     k = k + 1
   }
   let j = 0
-  while (j < spawns.length) {
+  for (const later of spawns) {
+    let earlier: SiblingSpawn | null = null
     let i = 0
-    let message = ""
-    while (i < j && message.length === 0) {
-      if (spawns[i].scope !== spawns[j].scope) {
-        message = siblingShareMessage(spawns[i], spawns[j])
+    while (i < j && i < spawns.length && earlier === null) {
+      if (spawns[i].scope !== later.scope && siblingsShare(spawns[i], later)) {
+        earlier = spawns[i]
       }
       i = i + 1
     }
-    if (message.length > 0) {
-      out.push(new ScopeFinding(spawns[j].node, message))
+    if (earlier !== null) {
+      out.push(new ScopeFinding(later.node, siblingShareMessage(program, earlier, later)))
     }
     j = j + 1
   }
@@ -2361,29 +3521,53 @@ const heldReaches = (
   }
 }
 
-/** The refusal of `later`, a `spawn` on a scope sibling to `earlier`'s, when their tasks share something, or "". */
-const siblingShareMessage = (earlier: SiblingSpawn, later: SiblingSpawn): string => {
+/** Whether two spawns on sibling scopes share a destination, a lock or an atomic. */
+const siblingsShare = (earlier: SiblingSpawn, later: SiblingSpawn): boolean => {
   const destination = later.destination
   const shared = earlier.destination
   if (destination !== null && shared !== null && destination === shared) {
-    return siblingMessage(later, earlier, `the destination \`${destination.name}\``)
+    return true
+  }
+  for (const reach of later.reaches) {
+    for (const other of earlier.reaches) {
+      if (reach.meets(other)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+/** The refusal of `later`, a `spawn` on a scope sibling to `earlier`'s, when their tasks share something, or "". */
+const siblingShareMessage = (program: CheckedProgram, earlier: SiblingSpawn, later: SiblingSpawn): string => {
+  const destination = later.destination
+  const shared = earlier.destination
+  if (destination !== null && shared !== null && destination === shared) {
+    return siblingMessage(program, later, earlier, `the destination \`${destination.name}\``)
   }
   for (const reach of later.reaches) {
     for (const other of earlier.reaches) {
       if (reach.meets(other)) {
         const what = reach.atomic ? "an atomic" : "a `Mutex`"
-        return siblingMessage(later, earlier, `${what} through \`${reach.path}\``)
+        return siblingMessage(program, later, earlier, `${what} through \`${reach.path}\``)
       }
     }
   }
   return ""
 }
 
-const siblingMessage = (later: SiblingSpawn, earlier: SiblingSpawn, what: string): string =>
+const siblingMessage = (
+  program: CheckedProgram,
+  later: SiblingSpawn,
+  earlier: SiblingSpawn,
+  what: string
+): string =>
   `This \`spawn\` on \`${later.scope.name}\` hands its task ${what}, which a task of \`${earlier.scope.name}\` ` +
   "also reaches: the scopes one `using` statement opens join one after the other natively, the last declared " +
   "first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no " +
-  "atomic and no destination; open the scopes in `using` statements of their own"
+  "atomic and no destination; open each scope in a block of its own, so the first joins before the second opens, " +
+  `\`{ using ${earlier.scope.name} = scope(); ${oneLine(program, earlier.node)} } ` +
+  `{ using ${later.scope.name} = scope(); ${oneLine(program, later.node)} }\``
 
 /** The destination rule and every region of one function's body. */
 const checkBody = (
@@ -2391,12 +3575,13 @@ const checkBody = (
   table: TypeTable,
   facts: FactsTable,
   body: Node,
+  scopeType: i32,
   out: ScopeFinding[]
 ): void => {
   const uses = new VariableUses()
   collectUses(program, body, null, uses)
   checkDestinations(program, body, uses, out)
-  findRegions(program, table, facts, uses, body, out)
+  findRegions(program, table, facts, uses, body, scopeType, out)
 }
 
 // ---- WP29 P3: a lock that owns its data ---------------------------------------------------
@@ -2570,7 +3755,8 @@ const mutexFreshMessage = (): string =>
   "`new Mutex` takes a value that is fresh all the way down — a `new` expression or a literal whose every " +
   "argument or element is a number, a `boolean`, an enum, a string literal or itself fresh — because the data a " +
   "`Mutex` owns is reachable only through its guard, and a value the program already holds would be a path to " +
-  "it that skips the lock"
+  "it that skips the lock; build the value inside the call, `new Mutex<Hist>(new Hist(new Array<i32>(16)))`, or " +
+  "copy what it needs into a fresh one, `new Mutex<Hist>(new Hist(h.n))`"
 
 const mutexMemberMessage = (name: string): string =>
   `\`${name}\` is not a member a program may name: the data a \`Mutex\` owns is reachable only through ` +
@@ -2586,59 +3772,212 @@ const threadsLiteralMessage = (table: TypeTable, type: i32): string =>
   "makes them: `new AtomicI32(v)`, `new AtomicI64(v)`, `new Mutex(v)`, `new Channel()`, `m.lock()` and `scope()`. " +
   "An object literal would be a plain record under Node, with none of the methods the class is used through"
 
-const lockNotUsingMessage = (): string =>
-  "`lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released " +
-  "when the block that declares it ends, so a guard bound any other way would be one nobody releases"
+const lockNotUsingMessage = (name: string, mutex: string): string =>
+  "`lock()` must be the initialiser of a `using` declaration: the lock is released " +
+  "when the block that declares it ends, so a guard bound any other way would be one nobody releases; " +
+  `declare it as \`using ${name} = ${mutex}.lock()\``
 
-const guardUseMessage = (name: string): string =>
+/** The first number or string `guard`'s data holds, read through `name`: `g.value.n`, or `g.value` when there is none. */
+const guardSlot = (program: CheckedProgram, table: TypeTable, guard: i32, name: string): string => {
+  const info = classLayoutOf(program, table, guard)
+  if (info !== null) {
+    for (const field of info.fields) {
+      if (field.name === "value") {
+        const slot = copiedSlot(program, table, `${name}.value`, field.type)
+        if (slot.text.length > 0) {
+          return slot.text
+        }
+      }
+    }
+  }
+  return `${name}.value`
+}
+
+const guardUseMessage = (name: string, guard: string, slot: string): string =>
   `A guard is used only as \`${name}.value\`, and \`${name}.value\` only as the base of a field or element ` +
-  "read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock"
+  "read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock; " +
+  `write \`${slot}\` where the value is used, or hand \`${name}\` to a helper whose parameter is a \`${guard}\``
 
-const guardDerivedMessage = (table: TypeTable, type: i32): string =>
-  `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
-  "element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, " +
-  "would outlive the block that holds the lock"
+const guardArgumentMessage = (
+  name: string,
+  why: string,
+  guard: string,
+  helper: string,
+  slot: string
+): string =>
+  `\`${name}\` is passed to ${why}: a guard is handed only to a function named at the call, ` +
+  "neither a method, a constructor nor a generic, whose parameter is declared as the guard is, " +
+  "`MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; " +
+  `write the helper as \`const ${helper} = (g: ${guard}): void => { console.log(${slot}) }\` and call it as \`${helper}(${name})\``
 
-const guardStoreMessage = (table: TypeTable, type: i32): string =>
+const guardDerivedMessage = (table: TypeTable, type: i32, read: string, field: string): string => {
+  let remedy = COPIED_NONE_REMEDY
+  if (table.isNullable(type)) {
+    remedy = nullableFieldRemedy(table, type, field)
+  } else if (read.length > 0) {
+    remedy = `do the work inside the guard's block, or read the numbers and strings it holds one at a time, \`${read}\``
+  }
+  return (
+    `This reads \`${table.typeName(type)}\` through a guard, whose chains are only the base of a further field or ` +
+    "element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, " +
+    "would outlive the block that holds the lock; " +
+    remedy
+  )
+}
+
+/** The remedy for a nullable field read through a guard: a field that is never `null`. */
+const nullableFieldRemedy = (table: TypeTable, type: i32, field: string): string =>
+  table.stripNull(type) === T_STRING
+    ? `declare the field a \`string\` with \`""\` for none, \`${field}: string = ""\``
+    : `keep a \`boolean\` beside the field that says whether it is set, \`${field}Set: boolean = false\``
+
+const guardStoreMessage = (table: TypeTable, type: i32, store: string): string =>
   `This stores \`${table.typeName(type)}\` through a guard, which stores only a number, a \`boolean\`, an enum ` +
   "or a `string`, which the store copies, into a field or an element that already exists: anything else is a " +
-  "pointer, which may point into a task's arena, freed when the task is joined"
+  "pointer, which may point into a task's arena, freed when the task is joined; " +
+  (store.length > 0
+    ? "build the value into the one the `Mutex` is made with, or store what it holds one at a time into slots " +
+      `that already exist, \`${store}\``
+    : COPIED_NONE_REMEDY)
 
-const guardMethodMessage = (name: string): string =>
+/**
+ * A `null` stored through a guard, into any slot. The store into a
+ * `string | null` slot is `nish_guard_keep`'s exchange of one kept copy for
+ * another, which reads the length of the string it is given, so a `null`
+ * handed to it would be dereferenced; written past it, the `null` would leave
+ * the copy it replaces allocated, one block per store rather than one per
+ * slot. Any other nullable slot holds a pointer, which a guard stores in no form.
+ */
+const GUARD_NULL_STORE_MESSAGE: string =
+  "This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a " +
+  "`string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the " +
+  "`Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the " +
+  'slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, ' +
+  "and read it back as empty with `.length === 0`"
+
+const guardMethodMessage = (name: string, store: string): string =>
   `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
-  "a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined"
+  "a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined; " +
+  (store.length > 0
+    ? `write what it does as reads and stores through the guard, into slots that already exist, ${store}`
+    : COPIED_NONE_REMEDY)
 
-const guardHeldMessage = (what: string, guard: string): string =>
-  `${what} is reached while \`${guard}\` holds its lock${GUARD_HELD_TAIL}`
+const guardHeldMessage = (what: string, guard: string, lock: string, call: string): string =>
+  `${what} is reached while \`${guard}\` holds its lock${GUARD_HELD_TAIL}; move \`${call}\` below the end ` +
+  `of the block that opens with \`using ${lock}\`, which releases the lock`
 
 /** R6, in `sharedWriteMessage`'s words for a task. */
 const TASK_WRITE_TAIL: string =
-  ", and `spawn` runs it beside the scope's other tasks: a task may write shared memory only through the " +
-  "guard of a `Mutex`, `using g = m.lock()`"
+  ", and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, because an " +
+  "object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was " +
+  "made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; "
 
-const regionLockMessage = (state: RegionState, what: string, path: string): string =>
+/** What `TASK_WRITE_TAIL` advises last, before the serial remedy. */
+const TASK_WRITE_ADVICE: string = "hand a value the parent needs back as the task's answer"
+
+const regionLockMessage = (state: RegionState, what: string, path: string, call: string): string =>
   `${what} locks a \`Mutex\` a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
   "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
-  "so the parent locks what they share only before the statement that holds the first `spawn` or after the join"
+  "so the parent locks what they share only before the statement that holds the first `spawn` or after the join; " +
+  regionMoveRemedy(state, call)
 
-const regionAtomicMessage = (state: RegionState, what: string, path: string): string =>
+const regionAtomicMessage = (state: RegionState, what: string, path: string, call: string): string =>
   `${what} reaches an atomic a task of \`${state.name}\` can reach through \`${path}\`, before the scope ` +
   "joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, " +
-  "so the parent touches what they share only before the statement that holds the first `spawn` or after the join"
+  "so the parent touches what they share only before the statement that holds the first `spawn` or after the join; " +
+  regionMoveRemedy(state, call)
+
+/** R7's remedy: the call moved out of the scope's block, to either side of it. */
+const regionMoveRemedy = (state: RegionState, call: string): string =>
+  `move \`${call}\` above the block that opens with \`using ${state.name} = scope()\`, or below the end of that block`
 
 const taskCaptureMutexMessage = (table: TypeTable, name: string, type: i32, path: string): string =>
   `The task's arrow reads \`${name}\`, which is \`${table.typeName(type)}\` and reaches a \`Mutex\` through ` +
   `\`${path}\`: a captured value is the task's argument, and a \`Mutex\` reaches a task as an argument or as a ` +
   "field of the class an argument is, never deeper, so which tasks share a lock is a question the checker can answer"
 
-const taskMutexMessage = (table: TypeTable, type: i32, path: string): string =>
+const taskMutexMessage = (table: TypeTable, type: i32, path: string, spawn: string): string =>
   `The argument of \`spawn\` is \`${table.typeName(type)}\`, which reaches a \`Mutex\` through \`${path}\`: ` +
   "a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so " +
-  "which tasks share a lock is a question the checker can answer"
+  `which tasks share a lock is a question the checker can answer; hand the task the \`Mutex\` itself, \`${spawn}\`, ` +
+  "and declare its parameter a `Mutex` of the same data"
 
-const bodyLockMessage = (sig: FunctionSig, fn: FunctionSig): string =>
+/** `spawn`'s call with its argument replaced by `arg`, in the call's own names. */
+const spawnWithArgument = (program: CheckedProgram, spawn: Node, arg: string): string => {
+  const callee = unwrapParens(spawn.children[0])
+  const args = spawn.children[1].children
+  if (callee.kind !== N_MEMBER || args.length < 2) {
+    return `s.spawn(${arg})`
+  }
+  const shown: string[] = [oneLine(program, args[0]), arg]
+  for (let k = 2; k < args.length; k++) {
+    shown.push(oneLine(program, args[k]))
+  }
+  return `${oneLine(program, callee)}(${shown.join(", ")})`
+}
+
+const bodyLockMessage = (sig: FunctionSig, fn: FunctionSig, remedy: string): string =>
   `\`${fn.sourceName}\` takes a \`Mutex\`'s lock, and \`${intrinsicName(sig)}\` runs it on several threads ` +
-  "at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body"
+  `at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body; ${remedy}`
+
+/**
+ * NL2474's remedy: the parallel call `node` written as a scope's tasks, one
+ * per element, each storing its answer where the call would have, in the
+ * call's own names; a reduce, whose body is no task, folds on the parent.
+ */
+const bodyLockRemedy = (program: CheckedProgram, table: TypeTable, sig: FunctionSig, node: Node): string => {
+  const args = node.children[1].children
+  const role = parallelRoleOf(sig)
+  const instance = sig.instance
+  const want = role === PAR_MAP || role === PAR_REDUCE ? 3 : 2
+  if (args.length < want || instance === null) {
+    return "run it as a scope's tasks instead"
+  }
+  const text = program.source.text
+  const i = freshName(text, "i", 0)
+  const src = oneLine(program, args[0])
+  if (role === PAR_REDUCE) {
+    const acc = freshName(text, "acc", 0)
+    const x = freshName(text, "x", 0)
+    return (
+      "fold on the thread that called it instead, " +
+      `\`let ${acc} = ${oneLine(program, args[2])}; for (const ${x} of ${src}) { ${acc} = ${oneLine(program, args[1])}(${acc}, ${x}) }\``
+    )
+  }
+  if (role === PAR_MAP) {
+    const tasks = scopeTasks(
+      text,
+      i,
+      `${src}.length`,
+      `${src}[${i}]`,
+      oneLine(program, args[2]),
+      oneLine(program, args[1])
+    )
+    return `run it as a scope's tasks instead, \`${tasks}\``
+  }
+  const out = freshName(text, "out", 0)
+  const answer = table.typeName(instance.typeArgs[instance.typeArgs.length - 1])
+  const count = role === PAR_FROM ? src : `${src}.length`
+  const each = role === PAR_FROM ? i : `${src}[${i}]`
+  const tasks = scopeTasks(text, i, count, each, oneLine(program, args[1]), out)
+  return (
+    "run it as a scope's tasks instead, each storing its answer into an array made beforehand, " +
+    `\`const ${out} = new Array<${answer}>(${count}); ${tasks}\``
+  )
+}
+
+/** A scope whose tasks run `task` on `each` for every index `i` below `count`, storing into `dst[i]`. */
+const scopeTasks = (
+  text: string,
+  i: string,
+  count: string,
+  each: string,
+  task: string,
+  dst: string
+): string => {
+  const s = freshName(text, "s", 0)
+  return `{ using ${s} = scope(); for (let ${i} = 0; ${i} < ${count}; ${i}++) { ${s}.spawn(${task}, ${each}, ${dst}, ${i}) } }`
+}
 
 /**
  * Whether `init`, the argument of `new Mutex` or a part of it, is fresh all
@@ -2753,8 +4092,14 @@ const takesLock = (facts: FactsTable, fn: FunctionSig): boolean =>
   reachesWait(facts, fn.name, true, "", new StringSet())
 
 /** The refusal of a parallel body that takes a lock, or "". */
-export const bodyLockMessageFor = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string =>
-  takesLock(facts, fn) ? bodyLockMessage(sig, fn) : ""
+export const bodyLockMessageFor = (
+  program: CheckedProgram,
+  table: TypeTable,
+  node: Node,
+  sig: FunctionSig,
+  fn: FunctionSig,
+  facts: FactsTable
+): string => (takesLock(facts, fn) ? bodyLockMessage(sig, fn, bodyLockRemedy(program, table, sig, node)) : "")
 
 /**
  * The field path from a value of `type` to a `Mutex` — `want`, or any when
@@ -2839,12 +4184,20 @@ const mutexInside = (table: TypeTable, program: CheckedProgram, type: i32, root:
  * R8: the argument of a task reaches a `Mutex` only as itself or as a field of
  * the class it is, and no `Mutex`'s data holds another. The refusal, or "".
  */
-export const taskMutexMessageFor = (table: TypeTable, program: CheckedProgram, sig: FunctionSig): string => {
+export const taskMutexMessageFor = (
+  table: TypeTable,
+  program: CheckedProgram,
+  sig: FunctionSig,
+  node: Node
+): string => {
   const arg = taskArgTypeOf(sig)
   if (arg >= 0) {
-    const path = taskMutexPath(table, program, arg, "arg")
+    const none: Node[] = []
+    const args = node.kind === N_CALL ? node.children[1].children : none
+    const root = args.length > 1 && args[1].kind === N_IDENT ? args[1].text : "arg"
+    const path = taskMutexPath(table, program, arg, root)
     if (path.length > 0) {
-      return taskMutexMessage(table, arg, path)
+      return taskMutexMessage(table, arg, path, spawnWithArgument(program, node, path))
     }
   }
   // An arrow's captures are the task's arguments too, each held to the same rule.
@@ -2934,7 +4287,10 @@ const walkMutexes = (
     }
   } else if (isLockCall(program, node)) {
     if (!isUsingInitialiser(at, parents, depth)) {
-      out.push(new ScopeFinding(node, lockNotUsingMessage()))
+      const callee = unwrapParens(node.children[0])
+      const mutex = callee.kind === N_MEMBER ? shownSource(program, callee.children[0], "m") : "m"
+      const message = lockNotUsingMessage(boundNameOf(at, parents, depth, "g"), mutex)
+      out.push(fixedFinding(node, message, usingEdits(program, at, parents, depth)))
     }
   } else if (isGuardType(program, table, type)) {
     const named = node.kind === N_IDENT ? node.text : "g"
@@ -2945,13 +4301,31 @@ const walkMutexes = (
       parent.text === "value" &&
       parent.children[0] === at
     if (!asValue) {
-      out.push(new ScopeFinding(node, guardUseMessage(named)))
-      return
+      const call: Node | null = depth > 1 ? parents[depth - 2] : null
+      const passed = node.kind === N_IDENT && parent !== null && parent.kind === N_LIST && call !== null
+      const why = passed && call !== null ? guardArgumentWhy(program, table, call, at, node.text) : ""
+      const guard = table.typeName(type)
+      if (!passed) {
+        out.push(
+          new ScopeFinding(node, guardUseMessage(named, guard, guardSlot(program, table, type, named)))
+        )
+        return
+      }
+      if (why.length > 0) {
+        const helper = freshName(program.source.text, "useGuard", 0)
+        const message = guardArgumentMessage(named, why, guard, helper, guardSlot(program, table, type, "g"))
+        out.push(new ScopeFinding(node, message))
+        return
+      }
     }
-  } else if (isGuardedAccess(program, table, node) && parent !== null) {
-    const base = (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at
+  } else if (isGuardedAccess(program, table, node)) {
+    // With no parent the chain is an arrow's whole expression body, which is
+    // its answer: judged as `return g.value` is, by the type it would carry out.
+    const base =
+      parent !== null && (parent.kind === N_MEMBER || parent.kind === N_INDEX) && parent.children[0] === at
     const above: Node | null = depth > 1 ? parents[depth - 2] : null
     if (
+      parent !== null &&
       base &&
       parent.kind === N_MEMBER &&
       above !== null &&
@@ -2959,17 +4333,37 @@ const walkMutexes = (
       above.children[0] === parent &&
       type !== T_STRING
     ) {
-      out.push(new ScopeFinding(above, guardMethodMessage(parent.text)))
+      const chain = shownSource(program, at, "g.value.items")
+      const slot = copiedSlot(program, table, chain, type)
+      const args = above.children[1].children
+      const from: Node | null = args.length > 0 ? unwrapParens(args[0]) : null
+      const value = from !== null && table.isArray(type) ? storedInto(program, slot, `${chain}[0]`, from) : ""
+      const store =
+        slot.text.length > 0 ? `\`${slot.text} = ${value.length > 0 ? value : slotLiteral(slot)}\`` : ""
+      out.push(new ScopeFinding(above, guardMethodMessage(parent.text, store)))
     } else if (base) {
       // an access through it: judged where it ends
-    } else if (isStoreTarget(at, parents, depth)) {
+    } else if (parent !== null && isStoreTarget(at, parents, depth)) {
       // A store's target has no type of its own in the tables; what is stored is the value's.
       const stored = parent.kind === N_BINARY ? program.nodeTypes[parent.children[1].id] : type
-      if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
-        out.push(new ScopeFinding(parent, guardStoreMessage(table, stored)))
+      if (parent.kind === N_BINARY && unwrapParens(parent.children[1]).kind === N_NULL) {
+        out.push(new ScopeFinding(parent, GUARD_NULL_STORE_MESSAGE))
+      } else if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
+        const target = shownSource(program, at, "g.value.x")
+        const from: Node | null = parent.kind === N_BINARY ? unwrapParens(parent.children[1]) : null
+        const slot = copiedSlot(program, table, target, stored)
+        const store = slot.text.length > 0 ? `${slot.text} = ${storedInto(program, slot, target, from)}` : ""
+        out.push(new ScopeFinding(parent, guardStoreMessage(table, stored, store)))
       }
     } else if (type >= 0 && !isScalarArgument(table, type) && type !== T_STRING) {
-      out.push(new ScopeFinding(node, guardDerivedMessage(table, type)))
+      const slot = copiedSlot(program, table, shownSource(program, node, "g.value.x"), type)
+      const bound = boundNameOf(node, parents, depth, "")
+      const read =
+        slot.text.length > 0
+          ? `const ${bound.length > 0 ? bound : freshName(program.source.text, lastWordOf(slot.text), 0)} = ${slot.text}`
+          : ""
+      const field = node.kind === N_MEMBER ? node.text : "field"
+      out.push(new ScopeFinding(node, guardDerivedMessage(table, type, read, field)))
       return
     }
   }
@@ -2978,6 +4372,72 @@ const walkMutexes = (
     walkMutexes(program, table, child, parents, out)
   }
   parents.pop()
+}
+
+/**
+ * Why the guard `name`, the argument `arg` of `call`, may not be passed there,
+ * in words, or "" when it may: a call of a free function of a module, named
+ * at the call, that is no generic's instance, whose parameter in that
+ * position is declared as the guard's own type, with the guard named once
+ * among the arguments. Such a parameter is held to R3–R5 in the helper's body
+ * exactly as the `using` binding is in the block — `walkMutexes` judges every
+ * expression of guard type, wherever it is declared, and R5 follows the call
+ * — so the helper can only reach through it, and what it reaches outlives
+ * neither the call nor the block. A method, a constructor and a generic are
+ * left out, because a parameter is followed only as a free function declares
+ * it: a generic's body treats a `T` as any value, and `this` is a second way
+ * out of a method or a constructor that the parameter's rule does not cover.
+ */
+const guardArgumentWhy = (
+  program: CheckedProgram,
+  table: TypeTable,
+  call: Node,
+  arg: Node,
+  name: string
+): string => {
+  if (call.kind === N_NEW) {
+    return "a constructor"
+  }
+  if (call.kind !== N_CALL) {
+    return "something that is not a call"
+  }
+  const callee = program.nodeCallees[call.id]
+  const target = unwrapParens(call.children[0])
+  if (target.kind === N_MEMBER) {
+    return `\`${target.text}\`, a method`
+  }
+  if (callee === null || target.kind !== N_IDENT) {
+    return "a function that is not named at the call"
+  }
+  if (callee.owner !== null || callee.role !== ROLE_FUNCTION) {
+    return `\`${callee.sourceName}\`, a method`
+  }
+  if (callee.instance !== null) {
+    return `\`${target.text}\`, a generic function`
+  }
+  const args = call.children[1].children
+  let index = -1
+  let named = 0
+  for (let i = 0; i < args.length; i++) {
+    const e = unwrapParens(args[i])
+    if (e.kind === N_IDENT && e.text === name) {
+      named = named + 1
+    }
+    if (args[i] === arg) {
+      index = i
+    }
+  }
+  if (named > 1) {
+    return `\`${callee.sourceName}\` twice`
+  }
+  const type = program.nodeTypes[unwrapParens(arg).id]
+  if (index < 0 || index >= callee.paramTypes.length || callee.isCompileTime(index)) {
+    return `\`${callee.sourceName}\`, past its parameters`
+  }
+  if (callee.paramTypes[index] !== type) {
+    return `\`${callee.sourceName}\`, whose parameter is \`${table.typeName(callee.paramTypes[index])}\``
+  }
+  return ""
 }
 
 /**
@@ -3041,6 +4501,7 @@ const walkHeld = (
   facts: FactsTable,
   node: Node,
   name: string,
+  lock: string,
   held: HeldContext,
   out: ScopeFinding[]
 ): void => {
@@ -3055,11 +4516,11 @@ const walkHeld = (
   }
   const what = heldWhat(program, facts, node, held.scopeType, held.scopeName)
   if (what.length > 0) {
-    out.push(new ScopeFinding(node, guardHeldMessage(what, name)))
+    out.push(new ScopeFinding(node, guardHeldMessage(what, name, lock, oneLine(program, node))))
     return
   }
   for (const child of node.children) {
-    walkHeld(program, facts, child, name, held, out)
+    walkHeld(program, facts, child, name, lock, held, out)
   }
 }
 
@@ -3086,14 +4547,15 @@ const findGuardBlocks = (
         while (d < decls.length) {
           const name = decls[d].children[0].text
           if (isLockCall(program, unwrapParens(decls[d].children[2]))) {
+            const lock = shownSource(program, decls[d], `${name} = m.lock()`)
             let e = d + 1
             while (e < decls.length) {
-              walkHeld(program, facts, decls[e].children[2], name, held, out)
+              walkHeld(program, facts, decls[e].children[2], name, lock, held, out)
               e = e + 1
             }
             let j = i + 1
             while (j < node.children.length) {
-              walkHeld(program, facts, node.children[j], name, held, out)
+              walkHeld(program, facts, node.children[j], name, lock, held, out)
               j = j + 1
             }
           }
@@ -3138,7 +4600,7 @@ const regionLockMessageFor = (
     const path = mutexPath(table, program, state.taskArgs[k], want, state.taskArgRoots[k], new StringSet())
     k = k + 1
     if (path.length > 0) {
-      return regionLockMessage(state, what, path)
+      return regionLockMessage(state, what, path, oneLine(program, node))
     }
   }
   return regionAtomicMessageFor(program, table, facts, node, callee, state)
@@ -3179,7 +4641,7 @@ const regionAtomicMessageFor = (
     )
     k = k + 1
     if (path.length > 0) {
-      return regionAtomicMessage(state, what, path)
+      return regionAtomicMessage(state, what, path, oneLine(program, node))
     }
   }
   return ""
@@ -3232,7 +4694,8 @@ const CHANNEL_DECLARE_TAIL: string =
 const CHANNEL_USE_TAIL: string =
   ": a channel is used only as the receiver of `send`, the iterable of a `for...of`, an argument, or a field " +
   "its class's constructor sets from a parameter, so it is never bound, stored, returned or captured, and " +
-  "which tasks reach it is a question the checker can answer"
+  "which tasks reach it is a question the checker can answer; hand it to the task as its argument, " +
+  "`s.spawn(task, ch)`, or as a field the argument's constructor sets, `s.spawn(task, new Work(ch, n))`"
 
 /** C4. */
 const CHANNEL_SENDERS_TAIL: string =
@@ -3240,47 +4703,104 @@ const CHANNEL_SENDERS_TAIL: string =
   "holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every " +
   "task that may send on it has returned"
 
+/** The name a scope site's `using` binds, or `s`. */
+const scopeNameOf = (site: ScopeSite): string => {
+  const local = site.local
+  return local === null ? "s" : local.name
+}
+
+/** The statement `node`, a `this` under `parents`, stands in: the outermost expression below a block. */
+const thisStatement = (node: Node, parents: Node[]): Node => {
+  let at = node
+  let k = parents.length - 1
+  while (k >= 0 && parents[k].kind !== N_BLOCK && parents[k].kind !== N_EXPR_STMT) {
+    at = parents[k]
+    k = k - 1
+  }
+  return at
+}
+
 /** C5. */
 const CHANNEL_RECEIVER_TAIL: string =
   ": a channel has one receiver, either one task spawned outside any loop or the parent in a later statement " +
   "of the block that has the scope's block as one of its statements, and inside a scope's block the parent " +
-  "receives nothing, so the parent's one wait is the join"
+  "receives nothing, so the parent's one wait is the join; receive in one task spawned outside the loop, or " +
+  "after the scope's block, `{ using s = scope(); ... } for (const x of ch) { ... }`"
 
 /** C6's order. */
 const CHANNEL_ORDER_TAIL: string =
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the " +
   "block's statement order, before the one task that receives on it, which is also what keeps channels from " +
-  "deadlocking"
+  "deadlocking; move the `spawn` of the receiving task below every `spawn` that sends"
+
+/** C6's order, with the remedy in the tasks' own names. */
+const channelOrderRemedy = (sender: string, receiver: string): string =>
+  `, \`${sender}\` above \`${receiver}\``
 
 /** C6's other half: one task's two roles on one channel. */
 const CHANNEL_BOTH_TAIL: string =
   ": no task both sends and receives on one channel, because a channel closes only once every task that may " +
-  "send on it has returned, and this one would wait in its own loop for its own return"
+  "send on it has returned, and this one would wait in its own loop for its own return; split it into a task " +
+  "that sends and a task that receives, or answer the result through a second channel"
 
 /** C3: a channel takes no capacity. */
-export const channelCapacityMessage = (): string =>
+export const channelCapacityMessage = (label: string): string =>
   "`new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a " +
-  "scope's tasks run one at a time and nothing would drain a channel that was full"
+  "scope's tasks run one at a time and nothing would drain a channel that was full; " +
+  `write \`${label.indexOf("<") >= 0 ? label : label + "<i32>"}()\``
 
-const channelElementMessage = (table: TypeTable, type: i32): string =>
+const channelElementMessage = (table: TypeTable, type: i32, name: string): string =>
   "A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry " +
   `\`${table.typeName(type)}\`: a sender's arena is freed when its scope joins, and only a string is copied ` +
-  "out of it on the way, so anything else would point into freed memory"
+  "out of it on the way, so anything else would point into freed memory; keep the values in an array the " +
+  `receiver can read and send each one's index, \`const ${name} = new Channel<i32>()\``
 
-const channelDeclareMessage = (what: string): string => `${what}${CHANNEL_DECLARE_TAIL}`
+/** C2's refusal of `what`, ending with the declaration of `name`, a channel of `element`, for the scope `scope`. */
+const channelDeclareMessage = (
+  table: TypeTable,
+  what: string,
+  name: string,
+  element: i32,
+  scope: string
+): string => {
+  const carried = element < 0 ? "i32" : table.typeName(element)
+  return `${what}${CHANNEL_DECLARE_TAIL}; write \`const ${name} = new Channel<${carried}>()\` on the line before \`using ${scope} = scope()\``
+}
 
 const channelUseMessage = (what: string): string => `${what}${CHANNEL_USE_TAIL}`
 
 /** A channel inside an arrow's body. */
 const channelArrowMessage = (): string =>
   "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel " +
-  "rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body"
+  "rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body; " +
+  "write the arrow as a module function, `const sendAll = (ch: Channel<i32>): void => { ch.send(1) }`, and pass " +
+  "`sendAll` where the arrow was"
 
-const channelSendersMessage = (what: string): string => `${what}${CHANNEL_SENDERS_TAIL}`
+const channelSendersMessage = (what: string, remedy: string): string =>
+  `${what}${CHANNEL_SENDERS_TAIL}; ${remedy}`
+
+/** C4's remedy for a channel a task is handed from outside the function: one this function declares. */
+const ownChannelRemedy = (program: CheckedProgram, table: TypeTable, node: Node): string => {
+  const element = channelElement(program, table, program.nodeTypes[node.id])
+  const shown = element >= 0 ? table.typeName(element) : "i32"
+  const name = freshName(program.source.text, node.kind === N_IDENT ? node.text : "ch", 0)
+  return `declare the channel in the function that opens the scope, \`const ${name} = new Channel<${shown}>()\`, and hand the task that one`
+}
+
+/** `spawn`'s call written on the scope `name`, the same task and arguments. */
+const spawnOn = (program: CheckedProgram, spawn: Node, name: string): string => {
+  const args = spawn.children[1].children
+  if (args.length === 0) {
+    return `${name}.spawn()`
+  }
+  const inner = collapsed(program.source.text.slice(args[0].start, args[args.length - 1].end))
+  return `${name}.spawn(${inner})`
+}
 
 const channelReceiverMessage = (what: string): string => `${what}${CHANNEL_RECEIVER_TAIL}`
 
-const channelOrderMessage = (what: string): string => `${what}${CHANNEL_ORDER_TAIL}`
+const channelOrderMessage = (what: string, sender: string, receiver: string): string =>
+  `${what}${CHANNEL_ORDER_TAIL}${channelOrderRemedy(sender, receiver)}`
 
 const channelBothMessage = (what: string): string => `${what}${CHANNEL_BOTH_TAIL}`
 
@@ -3648,9 +5168,9 @@ const walkChannelUses = (
   if (node.kind === N_ARROW) {
     const used = arrowChannel(program, table, node)
     if (used !== null) {
-      out.push(new ScopeFinding(used, channelArrowMessage()))
+      out.push(fixedFinding(used, channelArrowMessage(), hoistArrowEdits(program, sig, node, parents)))
     } else if (liftedTakesChannel(program, table, node)) {
-      out.push(new ScopeFinding(node, channelArrowMessage()))
+      out.push(fixedFinding(node, channelArrowMessage(), hoistArrowEdits(program, sig, node, parents)))
     }
     return
   }
@@ -3664,8 +5184,13 @@ const walkChannelUses = (
   const type = program.nodeTypes[node.id]
   const declaresName =
     parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === at
-  if (node.kind !== N_PAREN && !declaresName && parent !== null && isChannelType(program, table, type)) {
-    const message = channelUseFinding(program, table, sig, node, at, parents, depth, locals)
+  if (node.kind !== N_PAREN && !declaresName && isChannelType(program, table, type)) {
+    // With no parent the channel is an arrow's whole expression body, which is
+    // its answer: refused as `return ch` is.
+    const message =
+      parent === null
+        ? channelUseMessage("A `Channel` cannot be bound, stored, returned or compared here")
+        : channelUseFinding(program, table, sig, node, at, parents, depth, locals)
     if (message.length > 0) {
       out.push(new ScopeFinding(node, message))
       return
@@ -3732,14 +5257,24 @@ const channelUseFinding = (
   if (node.kind === N_NEW) {
     const element = channelElement(program, table, type)
     if (element >= 0 && !isScalarArgument(table, element) && element !== T_STRING) {
-      return channelElementMessage(table, element)
+      return channelElementMessage(table, element, boundNameOf(at, parents, depth, "ch"))
     }
     const declared =
       parent.kind === N_VAR_DECL &&
       parent.children[2] === at &&
       depth > 2 &&
       isConstDeclaration(parents[depth - 3])
-    return declared ? "" : channelDeclareMessage("`new Channel` must be the initialiser of a `const`")
+    if (declared) {
+      return ""
+    }
+    const bound = boundNameOf(at, parents, depth, "ch")
+    return channelDeclareMessage(
+      table,
+      "`new Channel` must be the initialiser of a `const`",
+      bound,
+      element,
+      "s"
+    )
   }
   // A constructor holds a channel it is handed only to set a field from it;
   // one it declares itself is used as in any other function.
@@ -3767,7 +5302,10 @@ const channelUseFinding = (
     if (call.kind === N_CALL && call.children[1] === parent && spawnCallee(program, call) !== null) {
       return isChannelLocal(program, node, locals)
         ? ""
-        : channelSendersMessage("A `spawn` hands its task only a channel this function declared")
+        : channelSendersMessage(
+            "A `spawn` hands its task only a channel this function declared",
+            ownChannelRemedy(program, table, node)
+          )
     }
     if (call.kind === N_CALL && call.children[1] === parent) {
       return takesChannelParameter(program, table, call, at)
@@ -3784,7 +5322,10 @@ const channelUseFinding = (
       if (isChannelLocal(program, node, locals)) {
         return ""
       }
-      return channelSendersMessage("A `spawn` hands its task only a channel this function declared")
+      return channelSendersMessage(
+        "A `spawn` hands its task only a channel this function declared",
+        ownChannelRemedy(program, table, node)
+      )
     }
   }
   if (constructing) {
@@ -4112,7 +5653,7 @@ const checkChannels = (
   collectChannelOps(program, sig, body, summaries, ops)
   let c = 0
   while (c < locals.length && c < decls.length) {
-    checkChannel(program, summaries, body, locals[c], decls[c], spawns, ops, scopeType, out)
+    checkChannel(program, table, summaries, body, locals[c], decls[c], spawns, ops, scopeType, out)
     c = c + 1
   }
 }
@@ -4261,7 +5802,9 @@ const findThisEscapes = (
       new ScopeFinding(
         node,
         channelSendersMessage(
-          "The constructor of a class that holds a channel uses `this` other than to read or set its own fields, `this.f`, where a send made through it could not be counted"
+          "The constructor of a class that holds a channel uses `this` other than to read or set its own fields, `this.f`, where a send made through it could not be counted",
+          `set only the object's own fields in the constructor, and move \`${oneLine(program, thisStatement(node, parents))}\` ` +
+            "to below the `new` that makes the object, naming the object where it names `this`"
         )
       )
     )
@@ -4518,6 +6061,7 @@ const receiveWhat = (program: CheckedProgram, summaries: ChannelSummaries, node:
 /** C2's placement, C4, C5 and C6 for the channel `local`, declared by `decl` in `body`. */
 const checkChannel = (
   program: CheckedProgram,
+  table: TypeTable,
   summaries: ChannelSummaries,
   body: Node,
   local: Local,
@@ -4529,8 +6073,14 @@ const checkChannel = (
 ): void => {
   const site = statementSiteOf(body, decl)
   const block = site.block
+  const element = channelElement(program, table, local.type)
   if (block === null) {
-    out.push(new ScopeFinding(decl, channelDeclareMessage(`\`${local.name}\` serves no scope`)))
+    out.push(
+      new ScopeFinding(
+        decl,
+        channelDeclareMessage(table, `\`${local.name}\` serves no scope`, local.name, element, "s")
+      )
+    )
     return
   }
   const candidates = candidateScopes(program, block, site.index, scopeType)
@@ -4549,6 +6099,8 @@ const checkChannel = (
     }
   }
   let chosen: ScopeSite | null = null
+  let split: Node | null = null
+  let splitScope: ScopeSite | null = null
   for (const spawn of holders) {
     const receiver = spawnReceiver(program, spawn)
     let found: ScopeSite | null = null
@@ -4559,30 +6111,45 @@ const checkChannel = (
       }
     }
     if (found === null) {
+      const what = `\`${local.name}\` is not declared for the scope of this \`spawn\``
       out.push(
         new ScopeFinding(
           spawn,
-          channelDeclareMessage(`\`${local.name}\` is not declared for the scope of this \`spawn\``)
+          channelDeclareMessage(table, what, local.name, element, receiver === null ? "s" : receiver.name)
         )
       )
       return
     }
     if (chosen !== null && chosen !== found) {
-      out.push(
-        new ScopeFinding(
-          spawn,
-          channelSendersMessage(`\`${local.name}\` is reachable from the tasks of two scopes`)
-        )
-      )
-      return
+      split = spawn
+      splitScope = chosen
+      break
     }
     chosen = found
+  }
+  // Written after the loop, so the remedy's text is not built on one of its passes.
+  if (split !== null && splitScope !== null) {
+    out.push(
+      new ScopeFinding(
+        split,
+        channelSendersMessage(
+          `\`${local.name}\` is reachable from the tasks of two scopes`,
+          `spawn every task that reaches \`${local.name}\` on one scope, \`${spawnOn(program, split, scopeNameOf(splitScope))}\``
+        )
+      )
+    )
+    return
   }
   if (chosen === null) {
     chosen = candidates.length > 0 ? candidates[0] : null
   }
   if (chosen === null) {
-    out.push(new ScopeFinding(decl, channelDeclareMessage(`\`${local.name}\` serves no scope`)))
+    out.push(
+      new ScopeFinding(
+        decl,
+        channelDeclareMessage(table, `\`${local.name}\` serves no scope`, local.name, element, "s")
+      )
+    )
     return
   }
   recordSeal(program, chosen.decl, decl)
@@ -4630,7 +6197,9 @@ const checkChannel = (
           new ScopeFinding(
             spawn,
             channelOrderMessage(
-              `\`${entry.sourceName}\` may send on \`${local.name}\` and is spawned after its receiver`
+              `\`${entry.sourceName}\` may send on \`${local.name}\` and is spawned after its receiver`,
+              oneLine(program, spawn),
+              oneLine(program, receiver)
             )
           )
         )
@@ -4642,7 +6211,7 @@ const checkChannel = (
     }
     k = k + 1
   }
-  checkParentOps(block, site.index, chosen, local, receiver !== null, ops, out)
+  checkParentOps(program, block, site.index, chosen, local, receiver !== null, ops, out)
 }
 
 /**
@@ -4652,6 +6221,7 @@ const checkChannel = (
  * `block` and no task receives.
  */
 const checkParentOps = (
+  program: CheckedProgram,
   block: Node,
   index: i32,
   chosen: ScopeSite,
@@ -4661,6 +6231,7 @@ const checkParentOps = (
   out: ScopeFinding[]
 ): void => {
   const apart = chosen.body !== block
+  let lateSend: Node | null = null
   let k = 0
   while (k < ops.sites.length) {
     const ref = ops.refs[k]
@@ -4669,13 +6240,8 @@ const checkParentOps = (
     if (ref.kind === REF_LOCAL && named !== null && named === local) {
       const at = statementIndexIn(block, node)
       if (ops.sends[k] && !(apart && at > index && at < chosen.stmt)) {
-        out.push(
-          new ScopeFinding(
-            node,
-            channelSendersMessage(`This sends on \`${local.name}\` once its scope's block has begun`)
-          )
-        )
-        return
+        lateSend = node
+        break
       }
       // A receive after the scope's `using`, in its block, is `findScopeReceives`'s
       // to refuse; one before it, in the same block, is refused below.
@@ -4704,6 +6270,18 @@ const checkParentOps = (
       }
     }
     k = k + 1
+  }
+  // Written after the loop, so the remedy's text is not built on one of its passes.
+  if (lateSend !== null) {
+    out.push(
+      new ScopeFinding(
+        lateSend,
+        channelSendersMessage(
+          `This sends on \`${local.name}\` once its scope's block has begun`,
+          `move \`${oneLine(program, lateSend)}\` above the block that opens with \`using ${scopeNameOf(chosen)} = scope()\``
+        )
+      )
+    )
   }
 }
 

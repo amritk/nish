@@ -1,0 +1,5 @@
+%union.tagged = type { i32 }
+declare noundef %union.tagged* @pick(i1 noundef zeroext)
+declare noundef %union.tagged* @dotAt(i32 noundef)
+declare noundef zeroext i1 @isRound(%union.tagged* noundef)
+declare noundef align 8 %union.tagged* @nth(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture, i32 noundef)

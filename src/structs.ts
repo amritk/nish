@@ -15,7 +15,7 @@
 // half — duplicate members, `extends`, a class that does not cover the
 // interface it names.
 
-import { secretFieldMessage } from "./secret"
+import { admitsSecretField, checkHolderReleaser, secretFieldMessage } from "./secret"
 import {
   DISPOSE_METHOD,
   disposeElsewhereMessage,
@@ -541,8 +541,12 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return
   }
-  // `nish:secret`: a field outlives the function that made the secret.
-  if (ctx.table.holdsSecret(type)) {
+  // `nish:secret`: a field outlives the function that made the secret, unless
+  // it is a holder's `readonly` field, which its `wipe()` ends (`secret.ts`).
+  if (
+    ctx.table.holdsSecret(type) &&
+    !admitsSecretField(ctx, owner, type, (decl.flags & FLAG_READONLY) !== 0)
+  ) {
     ctx.error(decl.children[1], secretFieldMessage(name))
     return
   }
@@ -846,6 +850,7 @@ export const collectStructMembers = (ctx: CheckContext, info: StructInfo): void 
         collectConstructor(ctx, info, member)
       }
     }
+    checkHolderReleaser(ctx, info)
   } else {
     for (const member of decl.children[1].children) {
       if (member.kind === N_FIELD) {
@@ -979,10 +984,20 @@ export const referencedStructNames = (table: TypeTable, info: StructInfo, out: S
  * `Shape`'s. `implementsDeclaration` is the test a constraint uses (#161).
  */
 export const coercesTo = (ctx: CheckContext, from: i32, want: i32): boolean => {
-  if (want < 0 || !ctx.table.isStruct(from)) {
+  if (want < 0) {
     return false
   }
   const target = ctx.table.stripNull(want) // a class converts to `I | null` as it does to `I`
+  // A variant converts to its union, and a nullable one to the nullable
+  // union. Only the variant itself: a class that implements an interface
+  // variant converts to that interface first, as a narrower rule than tsc's.
+  if (ctx.table.isUnion(target)) {
+    const variant = ctx.table.stripNull(from)
+    return (variant === from || target !== want) && ctx.table.hasVariant(target, variant)
+  }
+  if (!ctx.table.isStruct(from)) {
+    return false
+  }
   if (!ctx.table.isStruct(target) || target === from) {
     return false
   }

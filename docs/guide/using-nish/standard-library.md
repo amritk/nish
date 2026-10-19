@@ -805,6 +805,92 @@ export const main = (): i32 => {
 
 The rules are in [Secrets](../../LANGUAGE.md#secrets-nishsecret).
 
+### Keeping a key in an object
+
+A key that lives as long as a connection or a session can be a field. The
+field is `readonly` and exactly `Secret<T>`, the class is not generic, and the
+class has a `wipe(): void` that calls `wipe(this.field)` for every such field
+on every path: the checker reads that method, and a field it can leave
+unwiped is a compile error.
+
+```ts nish:ok
+import { Secret, expose, secret, wipe } from "nish:secret";
+
+const count = (k: u8[]): i32 => toI32(k.length);
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32)); // set once, from `secret(...)`
+  }
+  size(): i32 {
+    return expose(this.key, count); // lent to `expose`, not copied out
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  console.log(`${s.size()}-byte key`); // 32-byte key
+  s.wipe();
+  return 0;
+};
+```
+
+The field is set only in the constructor, only from `secret(...)`, and only
+once. It may be read only to lend it: as an argument of a call or of `new`, or
+as an operand of `===` or `!==`. Copying it into a local, returning it, or
+storing it anywhere else is refused:
+
+```ts nish:err NL2544
+import { Secret, secret, wipe } from "nish:secret";
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32));
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  const k = s.key; // a second name for the key, outside the holder
+  s.wipe();
+  return 0;
+};
+```
+
+The holder's `wipe()` is the only place the field ends: `wipe(s.key)`
+anywhere else is refused, so call `s.wipe()` instead. A function that takes a
+`Secret` borrows it, so it may lend it on or `expose` it, but it neither
+returns it nor wipes it:
+
+```ts nish:err NL2546
+import { Secret, secret, wipe } from "nish:secret";
+
+const same = (k: Secret<u8[]>): Secret<u8[]> => k; // a second name for the caller's key
+
+export const main = (): i32 => {
+  const k = secret(new Array<u8>(32));
+  const again = same(k);
+  wipe(again);
+  return 0;
+};
+```
+
+Up to 0.18.0 a function could return or wipe a `Secret` it was passed; from
+the release after it, both are refused. Drop such a return and keep using the
+key you passed in, and leave the `wipe` to the code that made the key.
+
+Calling `wipe()` is the program's job: the compiler checks that the method
+wipes every field, not that something calls it. The rules are in
+[A `Secret` field](../../LANGUAGE.md#a-secret-field).
+
 ## `nish/crypto`
 
 One module per primitive, each imported by its own name, each written in Nish
@@ -816,7 +902,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
 | `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time |
-| `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way |
+| `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded |
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
@@ -874,22 +960,65 @@ loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
 its interest changed, so a keep-alive request costs one `recv` and one `send`
 and no `pollModify`. A slot borrows its output buffer only while it writes, so
 an idle connection costs a few KiB, not `outputSize`; `bench/http.mjs`
-load-tests that loop on one core. When
-an `Http3Server` shuts down, call its `stop()`: it releases every connection
-and wipes the stateless reset and Retry token keys of the `QuicServerConfig`
-it was made with, so keep no other copy of them, or wipe yours with
-[`secureZero`](../../LANGUAGE.md#wiping-a-secret-securezero) too. It zeroes
-those keys in place, so give each server a `QuicServerConfig` of its own: once
-one server stops, any other listener, connection or server made with the same
-configuration would sign its Retry tokens and stateless resets with a key of
-zeros, which anyone can forge. The
-HTTP/1.1 and WebSocket modules were written with a security record of their
-own ([docs/security/http1.md](../../security/http1.md)) rather than audited
-after the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
+load-tests that loop on one core.
+
+Every final response an `Http1Connection` sends carries a `Date` field, and so
+does every final response an `Http2TlsServer` or `Http3Server` slot sends, as
+a lowercase `date` field straight after `:status`. A 1xx response and trailers
+carry none. Each server's `HttpDate` formats the date at most once a second,
+and a pool's slots share one. Set your own `date` field and it is sent
+instead: in any case on HTTP/1.1, and lowercase on HTTP/2 and HTTP/3, which
+refuse an uppercase field name (`H2_INVALID`, `H3_INVALID`). On HTTP/3 the
+date counts against the client's field-section limit like any other field. In
+a test that compares the bytes, call `date.pin(unixMs)` on the server, or on a
+lone HTTP/1.1 connection; give a lone `Http2Connection` or `Http3Connection`
+the bytes to send in its `date`. The formatter itself, `httpDateWrite` in
+`nish/net/http-fields`, reads no clock, so a wasm32 build can use it.
+
+When an `Http3Server` shuts down, call its `stop()`: it releases every
+connection and wipes the stateless reset and Retry token keys of the
+`QuicServerConfig` it was made with, so keep no other copy of them, or wipe
+yours with [`secureZero`](../../LANGUAGE.md#wiping-a-secret-securezero) too.
+It zeroes those keys in place, so give each server a `QuicServerConfig` of its
+own: once one server stops, any other listener, connection or server made with
+the same configuration would sign its Retry tokens and stateless resets with a
+key of zeros, which anyone can forge. The HTTP/1.1 and WebSocket modules were
+written with a security record of their own
+([docs/security/http1.md](../../security/http1.md)) rather than audited after
+the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
 `tlsTrafficKey` and the rest of `nish/net/tls/schedule`) and QUIC's
 `quicKeys`, `quicKeysUpdate` and `quicKeyUpdateSecret` take a traffic secret
-as a `Secret<u8[]>` and answer secrets as one; the `QuicKeys` that `quicKeys`
-answers is plain, so call `quicKeysWipe` on it when you are done with it.
+as a `Secret<u8[]>` and answer secrets as one; `quicKeys` and `quicKeysUpdate`
+write the packet keys into a `QuicKeysSlot` you pass, and that slot is yours to
+wipe, so call its `wipe()` (or `quicKeysWipe` on the keys) when you are done.
+
+A `TlsServer` keeps every secret of an open connection as a
+[`Secret` field](../../LANGUAGE.md#a-secret-field): the ephemeral key, and the
+handshake, traffic, exporter and resumption secrets in the `TlsSecretPool` that
+`secrets()` answers, read only through `expose`. `new TlsServer`, `restart`
+and `TlsTcpServer.accept` copy the ephemeral key you hand them into the
+server's own `Secret` and zero your array, so fill a fresh key into it for
+each connection rather than reading it again. When you drive a `TlsServer` or
+a `TlsRecordServer` yourself rather than through `nish/net/tls-tcp`, call its
+`wipe()` once the connection is done; the carriers call it at every end of a
+connection.
+
+A server that lends byte buffers across connections takes them from
+`nish/net/buffer-pool`'s `BufferPool`: a pool of fixed-size buffers, up to a
+ceiling, whose `give` zeroes the bytes a buffer used before it is lent again,
+and whose `giveSecret` wipes the buffer whole.
+
+A TLS server that resumes sessions seals its tickets with
+`nish/net/tls/ticket`: `tlsTicketSeal` and `tlsTicketOpen` take the ticket key
+as a borrowed `Secret<u8[]>`, so your program keeps the current and previous
+keys in locals — draw both with `tlsTicketKeyDraw` at start-up, each into its
+own `TlsTicketKeyInfo` — and runs the rotation itself when `tlsTicketKeyDue` says so —
+`wipe(previous)`, `previous = current`, `previousInfo.copyFrom(currentInfo)`,
+`current = tlsTicketKeyDraw(currentInfo, now)`. Every time it takes is
+`monotonicNanos()`, read by you and passed in. Strike each opened ticket's
+`id` in a `TlsTicketStrikes` before you resume from it: `take` answers false
+for a replay, and for every ticket once the register is full, so make it as
+large as the tickets you issue in two hours.
 
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";
