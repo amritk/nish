@@ -2,17 +2,17 @@
 
 Nish runs code on several threads without letting two threads race on the
 same memory. It does that by offering a few shapes of parallel work, each
-with rules the compiler checks, instead of raw threads and shared variables:
+with rules the compiler checks, instead of raw threads and shared variables.
+Pick the shape by what the work is:
 
-- **`parallelMapInto`, `parallelMap`, `parallelFrom` and `parallelReduce`** —
-  one function over every element of an array, or every index of a new one.
-- **`scope()`** — a handful of different tasks at once, joined when a block
-  ends.
-- **`Mutex<T>`** — one value that a scope's tasks all update.
-- **`AtomicI32` and `AtomicI64`** — one counter that tasks, or a parallel
-  map's function, update without a lock.
-- **`Channel<T>`** — numbers passed from tasks that produce them to one that
-  consumes them.
+| You need | Reach for |
+| --- | --- |
+| the same work on every element of an array | [`parallelMap`](#a-new-array-parallelmap-and-parallelfrom) / [`parallelMapInto`](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| a fold: a sum, a count, a maximum | [`parallelReduce`](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| a few unlike jobs at once | [`scope` + `spawn`](#different-tasks-at-once-using-s--scope) |
+| a shared counter, minimum, maximum or flag | [`AtomicI32` / `AtomicI64`](#counting-without-a-lock-atomici32-and-atomici64) |
+| a shared structure that tasks update | [`Mutex<T>`](#sharing-a-value-mutext) |
+| a pipeline: tasks that produce values for one that consumes them | [`Channel<T>`](#passing-values-channelt) |
 
 All of them come from `nish/threads`. Importing it is the only switch: the
 program is built for threads, and there is no thread count to choose. A
@@ -67,10 +67,16 @@ export const main = (): i32 => {
   element, and the compiler warns that each element pays for that. An array it
   makes itself, keeps in a `const` and hands to nothing that keeps it is its
   own: it may fill it, `push` onto it, or pass it to a helper that writes it.
-- **A string or an array is copied out at the join.** Each thread copies the
-  answers it built out of its arena before the next element reuses it, and the
-  caller copies them into its own once every thread has finished, so the array
-  you get back holds strings you own. An array of strings, an array of arrays,
+- **A string or an array is copied out once, then handed over.** Each thread
+  copies the answers it built into a block of its own before the next element
+  reuses its arena. Once every thread has finished, the caller takes those
+  blocks into its own arena whole when they hold 64 KB or more, and copies the
+  answers in when they hold less, so the array you get back holds strings you
+  own. They are freed like anything else your function allocates: a function
+  that runs a map and returns only a number gives the result and its strings
+  back when it returns, and a map may run inside
+  [`using a = arena()`](../language/memory.md#freeing-a-batch-yourself-using-a--arena)
+  unless its body answers arrays. An array of strings, an array of arrays,
   an object, a `Map` or a `Set` is refused: copying one would mean following
   every element.
 - **A reduce folds numbers, booleans or enums.** Its `f` answers the same type
@@ -82,6 +88,13 @@ export const main = (): i32 => {
   sixty-four. For that to be the fold you meant, `f` must be associative and
   `identity` its identity: `(a, b) => a - b`, or `+` with an identity of `1`,
   is refused.
+
+**What is refused, and why.** An `f` that prints, stores through its
+argument or writes anything else its caller can see is refused at the call
+(NL2345 for output), because every thread would make that write at once and
+the order would be the scheduler's. So is a reduce whose arrow is plainly not
+associative, because the blocks are combined in a fixed order. The rules are
+in the reference, [Data parallelism](../../LANGUAGE.md#data-parallelism-nishthreads).
 
 ```ts nish:err NL2345
 import { parallelMapInto } from "nish/threads";
@@ -133,13 +146,29 @@ export const main = (): i32 => {
 };
 ```
 
-That copy has a cost, and the caller pays its last part alone, one string at
-a time, after every thread has finished. When the work per element is small,
-a `parallelMap` that answers strings is slower than a plain loop today. Five
-maps of a million `` `n${x % 1000}` `` strings took a median of 270 ms on 4
-threads, against 200 ms for the sequential loop. Single runs ranged from 249
-to 356 ms, so measure your own case. Reach for the threads when each element does real work,
-or when the answer is a number.
+Each thread moves the strings its elements answer into blocks of its own, and
+the caller takes the blocks whole at the join rather than copying each string
+again, so the copy runs on every thread at once. A map of a million
+`` `s${x % 100000}` `` strings took a median of 24 ms on 4 threads (22 to 32 ms
+over nine runs), against 40 ms for the sequential loop. On one thread the same
+map takes 65 ms, since every element still pays the move, so measure your own
+case. Reach for the threads when each element does some work, or when there is
+more than one core to run it.
+
+**What is refused, and why.** The rules for `f` above, and an answer that is
+an array of strings, an array of arrays, an object, a `Map` or a `Set`
+(NL2348): each thread's memory is reused for its next element, and copying
+such an answer out of it would mean following every element. Answer a string
+or a number per element, and build the structure from them after the call.
+
+```ts nish:err NL2348
+import { parallelFrom } from "nish/threads";
+
+export const main = (): i32 => {
+  const rows = parallelFrom(3, (i) => [`row-${i}`]); // a string[] per element
+  return rows.length;
+};
+```
 
 ## Reading the function's constants
 
@@ -180,16 +209,33 @@ export const main = (): i32 => {
   beside a `dst` that is a `const` bound to its own array, as in
   `const table = [1, 2]` and `const dst = new Array<i32>(n)`.
 
+Each of these is refused because every thread reads the same value at once:
+a write to it, or a `let` that changes under the threads, would make the
+answer depend on which thread ran first.
+
 ```ts nish:err NL2503
 import { parallelMap } from "nish/threads";
 
 export const main = (): i32 => {
-  const total: i32 = 0;
+  const sum: i32 = 0;
   const ys = parallelMap([1, 2, 3], (x): i32 => {
-    total = total + x; // every thread would write it at once
+    sum = sum + x; // every thread would write it at once
     return x;
   });
   return ys[0];
+};
+```
+
+Answer the value from the body instead, and fold the answers with
+`parallelReduce` after the call. Here the body answers `x` itself, so the
+fold reads the array the call was given:
+
+```ts nish:ok
+import { parallelReduce } from "nish/threads";
+
+export const main = (): i32 => {
+  const sumTotal = parallelReduce([1, 2, 3], (a, b) => a + b, 0);
+  return sumTotal;
 };
 ```
 
@@ -326,6 +372,17 @@ export const main = (): i32 => {
   form, or make it answer `void`. The arrow's thread is named after the
   function it is written in, so a debugger still shows where it came from.
 
+**What is refused, and why.** Every refusal in a scope keeps one promise:
+nothing a task reads changes while the task may be running. So a scope bound
+without `using` is refused, since its tasks might never be joined (NL2388).
+Reading a destination inside the block is refused, since its answer is not
+there yet, and so is writing memory a task reads, since the task would see
+whichever value was there when its thread got to it. Reading a `let` from an
+arrow task is refused for the same reason (NL2506): the `let` could change
+before the task runs. [`nish --fix`](#letting-nish---fix-write-it) repairs the
+missing `using` and the captured `let`; a destination read early or a write a
+task would see is yours to move after the block.
+
 ```ts nish:err NL2506
 import { scope } from "nish/threads";
 
@@ -396,9 +453,12 @@ export const main = (): i32 => {
 - **Use the guard only as `g.value`, and only to read or store a number, a
   `boolean`, an enum or a `string` through it.** A string you store is copied
   into memory the `Mutex` owns, and one you read is copied out to you, so
-  neither side keeps a pointer the other can free. Don't bind `g` or `g.value` to another
-  name, pass them on, or keep an array they reach: anything that outlives the
-  block would outlive the lock.
+  neither side keeps a pointer the other can free. You may hand `g` to a
+  function of your own, called by name — `bump(g)` with
+  `const bump = (g: MutexGuard<Counter>): void => { … }` — which uses it the
+  same way. Don't bind `g` or `g.value` to another name, store or return
+  either, or keep an array they reach: anything that outlives the block would
+  outlive the lock (NL2466 for the guard, NL2467 for what it reaches).
 - **One lock at a time, and no waiting while you hold it.** Inside a guard's
   block — directly or through any call — there is no second `lock()`, no
   `scope()` and no parallel map. That is why a program that compiles cannot
@@ -412,6 +472,81 @@ export const main = (): i32 => {
   times in a tight loop and then keeps checking, giving its core up to
   another thread before each check, so a long block makes every waiter spend
   processor time waiting for it.
+
+A helper that takes the guard does the block's work under the block's lock,
+so the work can be split into functions without taking the lock twice:
+
+```ts nish:ok
+import { Mutex, MutexGuard, scope } from "nish/threads";
+
+class Stats {
+  count: i32 = 0;
+  total: i32 = 0;
+}
+
+const note = (g: MutexGuard<Stats>, x: i32): void => {
+  g.value.count = g.value.count + 1; // the helper uses `g` as the block would
+  g.value.total = g.value.total + x;
+};
+
+const addAll = (stats: Mutex<Stats>, xs: i32[]): void => {
+  for (const x of xs) {
+    using g = stats.lock();
+    note(g, x);
+  }
+};
+
+export const main = (): i32 => {
+  const stats = new Mutex<Stats>(new Stats());
+  const low: i32[] = [1, 2, 3];
+  const high: i32[] = [40, 50];
+  {
+    using s = scope();
+    s.spawn(() => addAll(stats, low));
+    s.spawn(() => addAll(stats, high));
+  }
+  using g = stats.lock();
+  console.log(`${g.value.count} ${g.value.total}`); // 5 96
+  return 0;
+};
+```
+
+**What is refused, and why.** The guard is the lock, so anything that could
+keep the guard past its block is refused. A helper is a plain function called
+by name. Binding, storing, returning or walking the guard itself is refused
+(NL2466), and handing `g` to a method, a constructor or a generic function is
+refused too (NL2536), since `this` or a type parameter is a way for the guard
+to be kept, and so is handing it twice in one call. Binding, storing,
+returning or walking an object read through the guard, `const c = g.value`, is
+refused (NL2467); storing anything but a number, a `boolean`, an enum or a
+`string` into it is refused (NL2468), and so is storing `null` (NL2537), which has
+no string to copy into the `Mutex`.
+A guard bound with `const` would never be released (NL2465). A second lock
+inside a guard's block is refused because two tasks each holding one lock and
+waiting for the other would wait forever.
+
+```ts nish:err NL2536
+import { Mutex, MutexGuard } from "nish/threads";
+
+class Stats {
+  count: i32 = 0;
+}
+
+class Log {
+  last: i32 = 0;
+  note(g: MutexGuard<Stats>): void { // a method: `this` is a second way out
+    this.last = g.value.count;
+  }
+}
+
+export const main = (): i32 => {
+  const stats = new Mutex<Stats>(new Stats());
+  const log = new Log();
+  using g = stats.lock();
+  log.note(g);
+  return log.last;
+};
+```
 
 ```ts nish:err NL2465
 import { Mutex } from "nish/threads";
@@ -510,6 +645,14 @@ export const main = (): i32 => {
   (`examples/histogram-atomic.ts`) takes 24 ms with a local tally and one `add`
   per bin, 77 ms on one thread, and 677 ms with one `add` per value.
 
+**What is refused, and why.** An atomic is safe to update from any task, but
+its value is only an answer once every task has finished. So reading it inside
+the scope's block after the first `spawn`, while the tasks may still be adding
+to it, is refused (NL2513): the number would depend on how far each thread had got. Two scopes
+opened by one `using` may not share an atomic either (NL2516), since natively
+one scope's tasks finish before the other's start and under Node they run as
+they are spawned, so the two would print different answers.
+
 ```ts nish:err NL2513
 import { AtomicI32, scope } from "nish/threads";
 
@@ -525,6 +668,26 @@ export const main = (): i32 => {
     seen = a.load(); // the task may not have run yet
   }
   return seen;
+};
+```
+
+Read it once the block has closed, when every task has finished:
+
+```ts nish:ok
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const done: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(bump, a, done, 0);
+  }
+  const seen = a.load(); // every task has finished
+  console.log(`${seen}`); // 1
+  return 0;
 };
 ```
 
@@ -618,6 +781,329 @@ export const main = (): i32 => {
 - **Print what the interleaving cannot change.** Values from two senders
   arrive in the scheduler's order natively and in spawn order under Node, so a
   sum or a count is the same both ways and a list of the values is not.
+
+**What is refused, and why.** A program that compiles cannot wait forever on
+a channel, and gives the same answer natively and under Node. A receiver
+spawned before a sender is refused (NL2481): under Node, where tasks run one
+after another in spawn order, it would find the channel empty and end before
+the sender ran. So is a task that both sends and receives, a second receiver,
+and a channel kept past its scope, each of which could leave a receiver
+waiting for a value no task will send.
+
+```ts nish:err NL2481
+import { Channel, scope } from "nish/threads";
+
+const one = (ch: Channel<i32>): i32 => {
+  ch.send(1);
+  return 1;
+};
+
+const drain = (ch: Channel<i32>): i32 => {
+  let sum: i32 = 0;
+  for (const x of ch) {
+    sum = sum + x;
+  }
+  return sum;
+};
+
+export const main = (): i32 => {
+  const out: i32[] = [0, 0];
+  const ch = new Channel<i32>();
+  {
+    using s = scope();
+    s.spawn(drain, ch, out, 0); // the receiver first: under Node it finds nothing
+    s.spawn(one, ch, out, 1);
+  }
+  return out[0];
+};
+```
+
+## What crosses between threads
+
+Each task has memory of its own, freed when the scope joins, so a value that
+leaves a task is copied into the memory of whoever receives it:
+
+```ts nish:ok
+import { Mutex, scope } from "nish/threads";
+
+class Last {
+  name: string = "";
+}
+
+const label = (n: i32): string => `job-${n}`;
+
+const record = (box: Mutex<Last>): void => {
+  using g = box.lock();
+  g.value.name = label(3); // copied into memory the Mutex owns
+};
+
+export const main = (): i32 => {
+  const names: string[] = ["", ""];
+  const last = new Mutex<Last>(new Last());
+  {
+    using s = scope();
+    s.spawn(label, 1, names, 0); // the answer is copied out at the join
+    s.spawn(label, 2, names, 1);
+    s.spawn(record, last);
+  }
+  using g = last.lock();
+  console.log(`${names[0]} ${names[1]} ${g.value.name}`); // job-1 job-2 job-3
+  return 0;
+};
+```
+
+- **Crosses:** a number, a `boolean`, an enum, a `string`, and an array of
+  numbers, booleans or enums. That covers a task's answer stored in its
+  destination, each element of a `parallelMap` or `parallelFrom` that answers
+  strings, a value sent on a `Channel<string>`, and a string stored through a
+  guard.
+- **Doesn't cross:** an object of a class, an array of arrays, a `string[]`,
+  a `Map` or a `Set`. Each holds pointers into the task's memory, which is
+  gone once the task is joined, so an entry or a map that answers one is
+  refused. Answer the numbers or strings it is built from, or build it after
+  the scope from what the tasks answered.
+- **The copy back runs on every thread.** A `parallelMap` or `parallelFrom`
+  element that is a string or an array is moved into a block of its chunk's
+  as it is answered, and the joining thread takes the blocks whole, so a map
+  of a million short strings took a median of 24 ms on four threads, against
+  40 ms for the same loop on one. A scope's task answer is copied in by the
+  joining thread when it is under 64 KB, and taken whole above that.
+
+## Letting `nish --fix` write it
+
+Most refusals in a thread program have one usual repair, and
+[`nish --fix`](cli.md#--fix) writes it in your source and compiles again.
+This task reads a `let` that changes before the scope:
+
+```ts nish:err NL2506
+import { scope } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  k = k + 1;
+  const out: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn((n: i32): i32 => n * k, 5, out, 0); // NL2506: `k` could change first
+  }
+  console.log(`${out[0]}`);
+  return 0;
+};
+```
+
+`nish --fix main.ts` snapshots it in a `const` just before the `spawn`, which
+the task may read:
+
+```ts nish:ok
+import { scope } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  k = k + 1;
+  const out: i32[] = [0];
+  {
+    using s = scope();
+    const kNow = k;
+    s.spawn((n: i32): i32 => n * kNow, 5, out, 0); // reads the snapshot
+  }
+  console.log(`${out[0]}`); // 20
+  return 0;
+};
+```
+
+It writes these repairs: `const` becomes `using` for a scope or a guard
+bound without it (NL2388, NL2465); a task that answers a number or a
+`boolean` with nowhere to store it gets a destination,
+`const answer = new Array<i32>(1)` for an `i32` task, above the scope and `, answer, 0` after its
+arguments (NL2511); a `let` an arrow task or a `parallelMap` arrow reads gets
+a `const` snapshot (NL2506, NL2500); and an arrow that uses a channel moves to
+a top-level `const`, `mainTask`, which the `spawn` names (NL2484). It writes a
+repair only where your source alone decides it, so it leaves alone a `spawn`
+in a loop, where every task would write the one slot; a `let` another
+argument of the call names, or one a `for` header declares; and a channel
+arrow that captures a local or leaves a parameter's or its result's type out,
+which would not check at the top level; those stay refused for you to fix by hand. The reference lists each case:
+[What `nish --fix` writes for a thread program](../../LANGUAGE.md#what-nish---fix-writes-for-a-thread-program).
+
+## Refused, and what to write instead
+
+Every refusal on this page ends with the code to write in its place, in your
+program's own names where the compiler has them. This table pairs each one
+with an example on this page that compiles.
+
+| Code | Refused | Write instead |
+|---|---|---|
+| NL2345 | `f` of a parallel call writes what its caller can see, or prints | `f` answers the value, `const square = (x: f64): f64 => x * x`, and the call writes it, `parallelMapInto(src, dst, square)`: [the first example](#one-function-over-an-array-parallelmapinto-and-parallelreduce) |
+| NL2348 | an element answer that is an array of strings or arrays, an object, a `Map` or a `Set` | answer a string or a number per element, `const squares = parallelFrom(5, (i) => i * i)`, and build the structure after the call: [`parallelFrom`](#a-new-array-parallelmap-and-parallelfrom) |
+| NL2503 | a parallel arrow writes a local of its function | answer the value from the body instead, and fold the answers with `parallelReduce`, `const sumTotal = parallelReduce([1, 2, 3], (a, b) => a + b, 0)`: [below the rule](#reading-the-functions-constants) |
+| NL2500 | a parallel arrow reads a `let` | a `const` snapshot before the call, `const kNow = k`: [below](#a-let-read-by-a-parallel-arrow) |
+| NL2388 | `scope()` bound without `using` | `using s = scope()`: [below](#a-scope-bound-without-using) |
+| NL2506 | an arrow task reads a `let` | a `const` snapshot before the `spawn`, `const kNow = k`: [`nish --fix`](#letting-nish---fix-write-it) |
+| NL2511 | a task that answers a value has no destination | `const answer = new Array<i32>(1)` above the scope and `s.spawn(twice, 21, answer, 0)`: [below](#a-task-answer-with-nowhere-to-go) |
+| NL2465 | `m.lock()` bound without `using` | `using g = total.lock()`: [`Mutex<T>`](#sharing-a-value-mutext) |
+| NL2536 | a guard handed to a method, a constructor or a generic function | a top-level helper, `const note = (g: MutexGuard<Stats>, x: i32): void => {`, called as `note(g, x)`: [the helper](#sharing-a-value-mutext) |
+| NL2513 | an atomic read inside the scope's block after a `spawn` | read it after the block, `const seen = a.load()`: [atomics](#counting-without-a-lock-atomici32-and-atomici64) |
+| NL2516 | two scopes of one `using` share an atomic | one `using` per scope, `using s = scope()` and `using t = scope()`: [below](#two-scopes-that-share-an-atomic) |
+| NL2481 | a channel's receiver spawned before a sender | spawn every sender first, `s.spawn(produce, new Pipe(ch, 10), sent, 0)` above `s.spawn(consume, new Pipe(ch, 0), sums, 0)`: [`Channel<T>`](#passing-values-channelt) |
+| NL2484 | an arrow that uses a channel | a module function the `spawn` names, `const sendOne = (c: Channel<i32>): void => {` and `s.spawn(sendOne, ch)`: [below](#a-channel-in-an-arrow) |
+
+### A `let` read by a parallel arrow
+
+```ts nish:err NL2500
+import { parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  k = k + 1;
+  const xs: i32[] = [1, 2, 3];
+  const ys = parallelMap(xs, (x: i32): i32 => x * k); // `k` is a `let`
+  return ys[0];
+};
+```
+
+Snapshot it in a `const` before the call, as `nish --fix` does:
+
+```ts nish:ok
+import { parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  k = k + 1;
+  const xs: i32[] = [1, 2, 3];
+  const kNow = k;
+  const ys = parallelMap(xs, (x: i32): i32 => x * kNow);
+  console.log(`${ys[2]}`); // 12
+  return 0;
+};
+```
+
+### A scope bound without `using`
+
+```ts nish:err NL2388
+import { scope } from "nish/threads";
+
+const twice = (n: i32): i32 => n * 2;
+
+export const main = (): i32 => {
+  const out: i32[] = [0];
+  {
+    const s = scope(); // never joined: its task might never run
+    s.spawn(twice, 21, out, 0);
+  }
+  return out[0];
+};
+```
+
+Declare it with `using`, so the block's end joins it, as `nish --fix` does:
+`using s = scope()`, as in [the first scope example](#different-tasks-at-once-using-s--scope).
+
+### A task answer with nowhere to go
+
+```ts nish:err NL2511
+import { scope } from "nish/threads";
+
+const twice = (n: i32): i32 => n * 2;
+
+export const main = (): i32 => {
+  {
+    using s = scope();
+    s.spawn(twice, 21); // the answer has nowhere to go
+  }
+  return 0;
+};
+```
+
+Give the answer a one-slot destination above the scope, as `nish --fix` does,
+and read it after the block:
+
+```ts nish:ok
+import { scope } from "nish/threads";
+
+const twice = (n: i32): i32 => n * 2;
+
+export const main = (): i32 => {
+  const answer = new Array<i32>(1);
+  {
+    using s = scope();
+    s.spawn(twice, 21, answer, 0);
+  }
+  console.log(`${answer[0]}`); // 42
+  return 0;
+};
+```
+
+### Two scopes that share an atomic
+
+The [NL2516 example](#counting-without-a-lock-atomici32-and-atomici64) opens two
+scopes in one `using`. Give each scope its own block, so the first one's tasks
+have finished before the second one's start, natively and under Node alike:
+
+```ts nish:ok
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+const peek = (a: AtomicI32): i32 => a.load();
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const bumped: i32[] = [0];
+  const seen: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn(bump, a, bumped, 0);
+  }
+  {
+    using t = scope();
+    t.spawn(peek, a, seen, 0);
+  }
+  console.log(`${seen[0]}`); // 1
+  return 0;
+};
+```
+
+### A channel in an arrow
+
+```ts nish:err NL2484
+import { Channel, scope } from "nish/threads";
+
+export const main = (): i32 => {
+  const ch = new Channel<i32>();
+  {
+    using s = scope();
+    s.spawn((c: Channel<i32>): void => { c.send(1); }, ch); // an arrow with a channel
+  }
+  let total: i32 = 0;
+  for (const v of ch) {
+    total = total + v;
+  }
+  return total;
+};
+```
+
+Write the task as a module function and name it in the `spawn`, as
+`nish --fix` does with `mainTask`:
+
+```ts nish:ok
+import { Channel, scope } from "nish/threads";
+
+const sendOne = (c: Channel<i32>): void => {
+  c.send(1);
+};
+
+export const main = (): i32 => {
+  const ch = new Channel<i32>();
+  {
+    using s = scope();
+    s.spawn(sendOne, ch);
+  }
+  let total: i32 = 0;
+  for (const v of ch) {
+    total = total + v;
+  }
+  console.log(`${total}`); // 1
+  return 0;
+};
+```
 
 The full rules, and the code each one is refused with, are in the reference:
 [Data parallelism](../../LANGUAGE.md#data-parallelism-nishthreads),

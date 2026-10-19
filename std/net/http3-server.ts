@@ -9,6 +9,7 @@
  *     // quicConfig.alpn is ["h3"]; pollAdd(loop, fd, 1, 0)
  *     // each time round the loop, with `now` in milliseconds:
  *     pollWait(loop, ready, server.timeout(now));
+ *     server.clock(micros);                      // the same instant in microseconds, for the pacer
  *     server.receive(now, key);                  // every datagram waiting; signs handshakes with `key`
  *     server.tick(now);                          // the connections' timers
  *     let slot: i32 = server.ready();
@@ -40,6 +41,10 @@
  * **Sending.** `flush` writes each touched slot's datagrams with
  * `quicListenerTakeFlight`, a paced flight at a time in one `udpSendTo` with
  * GSO where the platform has it and one datagram at a time where it does not.
+ * The pacer counts the microseconds `clock` gives it, so on a path whose
+ * round trip is under a millisecond it neither waits for the next
+ * millisecond to earn credit nor holds a slot back for a whole one; without
+ * `clock` it counts whole milliseconds.
  * A slot whose HTTP/3 side sent GOAWAY and whose requests have all finished,
  * every byte acknowledged, is closed with H3_NO_ERROR; a closed slot is freed
  * once its CONNECTION_CLOSE is out.
@@ -59,12 +64,19 @@
  * reads where it lies and answers into scratch made once, nor a handshake,
  * whose state is the slot's — `docs/security/http3.md` (H3-1, H3-3).
  *
+ * **The Date.** Every response carries one `date` field (RFC 9110 §6.6.1)
+ * from the pool's `HttpDate`, which formats the IMF-fixdate at most once a
+ * second for every slot; trailers carry none, and a program that sends its
+ * own `date` sends that one instead. `server.date.pin(unixMs)` fixes it, for
+ * a test that compares bytes.
+ *
  * Written from RFC 9114 §3 and RFC 9000 §5.2, not ported from another
  * implementation. Private names carry the `http3Server` prefix
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { udpRecvFrom, udpSendTo } from "nish:net"
 import { Secret } from "nish:secret"
+import { HttpDate } from "nish/net/http1-server"
 import { Http3Config, Http3Connection } from "nish/net/http3"
 import { H3_NO_ERROR, h3Count } from "nish/net/http3-frame"
 import {
@@ -84,7 +96,7 @@ import {
   QuicFlight,
   QuicListener,
   QuicListenerAnswer,
-  quicListenerPaceTime,
+  quicListenerFlightTime,
   quicListenerTakeFlight,
 } from "nish/net/quic-listener"
 import { TlsP256Signer } from "nish/net/tls"
@@ -404,6 +416,12 @@ export class Http3Server {
   answer: QuicListenerAnswer
   quics: QuicConnection[]
   conns: Http3Connection[]
+  /**
+   * The `date` every slot's responses carry, formatted once a second for all
+   * of them: each slot's `Http3Connection.date` is its bytes, refreshed by
+   * `connection` and `ready`. `date.pin` fixes its clock.
+   */
+  date: HttpDate
   index: Http3CidIndex
   wheel: Http3Wheel
   /** Each slot's client address, as its first datagram came from. */
@@ -429,6 +447,8 @@ export class Http3Server {
   queued: i32[]
   /** When the answer budget was last topped up, -1 before the first answer. */
   answerRefilled: i64 = -1
+  /** The caller's clock in microseconds, from `clock`, or -1: what each connection's pacer counts. */
+  micros: i64 = -1
   fd: i32 = -1
   readyHead: i32 = 0
   readyCount: i32 = 0
@@ -463,13 +483,18 @@ export class Http3Server {
     this.wheel = new Http3Wheel(size)
     this.quics = []
     this.conns = []
+    this.date = new HttpDate()
+    // Formatted once now, so no slot ever sends the bytes before a first format.
+    const date: u8[] = this.date.current()
     this.addresses = []
     this.entropy = new Array<u8>(QUIC_CONN_ENTROPY_SIZE)
     for (let k: i32 = 0; k < size; k++) {
       crypto.getRandomValues(this.entropy)
       const quic = new QuicConnection(quicConfig, this.entropy)
       this.quics.push(quic)
-      this.conns.push(new Http3Connection(config, quic))
+      const conn: Http3Connection = new Http3Connection(config, quic)
+      conn.date = date
+      this.conns.push(conn)
       this.addresses.push(new Array<u8>(H3_SERVER_ADDRESS))
     }
     this.rx = new Array<u8>(H3_SERVER_RECEIVE_SIZE)
@@ -505,8 +530,9 @@ export class Http3Server {
     return slot >= 0 && slot < toI32(this.state.length) && this.state[slot] === H3_SERVER_BUSY
   }
 
-  /** The HTTP/3 connection of `slot`; a slot out of range names the first. */
+  /** The HTTP/3 connection of `slot`, its `date` brought up to now; a slot out of range names the first. */
   connection(slot: i32): Http3Connection {
+    this.date.current()
     const at: i32 = slot >= 0 && slot < toI32(this.conns.length) ? slot : H3_SERVER_ZERO
     return this.conns[at]
   }
@@ -542,6 +568,7 @@ export class Http3Server {
 
   /** The next slot with news for the program, or -1: call its connection's `next` until it has none. */
   ready(): i32 {
+    this.date.current()
     while (this.readyCount > 0) {
       const slot: i32 = this.readyRing[this.readyHead]
       this.readyHead = (this.readyHead + 1) % toI32(this.readyRing.length)
@@ -717,9 +744,21 @@ export class Http3Server {
     return true
   }
 
+  /**
+   * Gives the server the caller's monotonic clock in microseconds: the
+   * instant the `now` of the calls that follow names, `monotonicNanos() /
+   * 1000` where `now` is `monotonicNanos() / 1000000`. The pacer counts it;
+   * every timer still counts `now`. One that is not inside `now`'s
+   * millisecond is not read.
+   */
+  clock(micros: i64): void {
+    this.micros = micros
+  }
+
   /** Hands `slot`'s connection a datagram, signs when the handshake asks, and refiles its IDs and timer. */
   serve(slot: i32, buf: u8[], at: i32, len: i32, now: i64, key: Secret<u8[]>): void {
     const quic: QuicConnection = this.quics[slot]
+    quic.recovery.micros = this.micros
     quic.receiveWindow(buf, at, len, now)
     const input: u8[] | null = quic.signatureInput()
     if (input !== null) {
@@ -805,6 +844,7 @@ export class Http3Server {
   /** `flush` of one slot. */
   flushSlot(slot: i32, now: i64): void {
     const quic: QuicConnection = this.quics[slot]
+    quic.recovery.micros = this.micros
     if (this.conns[slot].isDone() && !quic.closed()) {
       quic.close(H3_NO_ERROR)
     }
@@ -847,7 +887,7 @@ export class Http3Server {
     // The pacer answers a time, not a delay: the slot wakes at it when it
     // comes before the connection's own deadline.
     let due: i64 = quic.deadline()
-    const paced: i64 = quicListenerPaceTime(quic, now)
+    const paced: i64 = quicListenerFlightTime(quic, now)
     if (paced > now && (due < 0 || paced < due)) {
       due = paced
     }

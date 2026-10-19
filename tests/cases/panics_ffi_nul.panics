@@ -1,0 +1,7 @@
+{"functions":[
+{"name":"withNul","symbol":"withNul","module":"tests/cases/panics_ffi_nul.ts","line":10,"panics":[{"kind":"oom","line":10,"column":43,"allowed":true},{"kind":"oom","line":10,"column":43,"allowed":true},{"kind":"oom","line":10,"column":50,"allowed":true}]},
+{"name":"literal","symbol":"literal","module":"tests/cases/panics_ffi_nul.ts","line":12,"panics":[]},
+{"name":"clean","symbol":"clean","module":"tests/cases/panics_ffi_nul.ts","line":14,"panics":[{"kind":"ffi-nul","line":14,"column":46,"proven":false},{"kind":"slice","line":14,"column":46,"proven":false},{"kind":"oom","line":14,"column":46,"allowed":true}]},
+{"name":"holdsNul","symbol":"holdsNul","module":"tests/cases/panics_ffi_nul.ts","line":16,"panics":[{"kind":"ffi-nul","line":16,"column":49,"proven":false}]},
+{"name":"nullableNul","symbol":"nullableNul","module":"tests/cases/panics_ffi_nul.ts","line":18,"panics":[{"kind":"ffi-nul","line":20,"column":22,"proven":false}]}
+]}

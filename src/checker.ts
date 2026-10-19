@@ -2127,10 +2127,11 @@ const checkNotInlinable = (walk: PerfWalk, call: Node): void => {
  * says so was prompted by `NL9008`, which had the stronger version of the same
  * defect — it fired on a `declare function`, where *both* its rewrites were
  * impossible, and is now silent for one. This rule has no `declare function`
- * twin, and cannot: a foreign declaration returns a scalar or `CPtr` only, so
- * the **receiver** can never come from C, and a C-returned **bound** is an
- * ordinary `i32` local that the named guard silences like any other. Both were
- * provoked rather than argued.
+ * twin, and needs none: a **receiver** that comes from C is a `string` copied
+ * into the arena at the call (WP27 S3.2), an ordinary local from then on that
+ * the named guard silences and `slice` replaces like any other, and a
+ * C-returned **bound** is an ordinary `i32` local likewise. Both were provoked
+ * rather than argued.
  */
 const checkUnfoldedClamp = (walk: PerfWalk, call: Node): void => {
   if (walk.loops.length === 0) {

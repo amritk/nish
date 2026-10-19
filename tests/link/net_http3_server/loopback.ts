@@ -6,14 +6,15 @@
 // clock in epoch milliseconds, so the wheel alone must wake what the pacer
 // held back; a client whose handshake chose another
 // ALPN; a client that finds no slot free; and connection after connection
-// through one slot with the arena measured.
+// through one slot with the arena measured, the date pinned a second on for
+// each; and two slots answered in one second, the date formatted once.
 import { netAddress, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
-import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
-import { QUIC_CONN_DATAGRAM_SIZE, QuicServerConfig } from "nish/net/quic";
+import { QUIC_LISTENER_ENTROPY_SIZE, quicListenerFlightTime, quicListenerPaceTime } from "nish/net/quic-listener";
+import { QuicServerConfig } from "nish/net/quic";
 import { H3_FRAME_DATA, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
 import { H3_ALPN, H3_END, H3_ERROR, H3_NEED_MORE, Http3Connection } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
@@ -96,6 +97,40 @@ const exchange = (t: Suite): void => {
   t.eqI32("having accepted one connection", loop.server.accepted, n32(1));
 };
 
+/** The instant the date checks pin the server's clock to: Fri, 16 Oct 2026 08:11:54 GMT. */
+const NOON: i64 = 1792138314000;
+
+/** The server's date on two slots: one `date` on each response, formatted once between them. */
+const dated = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(4), n32(0));
+  loop.server.date.pin(NOON);
+  const p: H3Peer = h3WireConnect(loop.server, loop.port, limits);
+  const q: H3Peer = h3WireConnect(loop.server, loop.port, limits);
+  if (!t.ok("two clients, each in a slot of its own", loop.server.busy() === n32(2) && p.conn.handshakeComplete && q.conn.handshakeComplete)) {
+    return;
+  }
+  p.open(n64(-1));
+  q.open(n64(-1));
+  p.settle();
+  q.settle();
+  const formats: i64 = loop.server.date.formats();
+  p.get(n64(0), "/hello");
+  q.get(n64(0), "/hello");
+  p.settle();
+  q.settle();
+  t.eqStr("the first slot's response carries the server's date, once, after :status", `${p.response(n64(0)).status} ${p.response(n64(0)).fields}`, "200 date: Fri, 16 Oct 2026 08:11:54 GMT; content-type: text/plain; server: nish");
+  t.eqStr("and the second slot's the same date", `${q.response(n64(0)).status} ${q.response(n64(0)).fields}`, "200 date: Fri, 16 Oct 2026 08:11:54 GMT; content-type: text/plain; server: nish");
+  t.eqI64("a still clock formats nothing more for either", loop.server.date.formats() - formats, n64(0));
+  loop.server.date.pin(NOON + n64(60000));
+  p.get(n64(4), "/hello");
+  q.get(n64(4), "/hello");
+  p.settle();
+  q.settle();
+  t.eqStr("a minute on, both slots carry the new date", `${p.response(n64(4)).fields} | ${q.response(n64(4)).fields}`, "date: Fri, 16 Oct 2026 08:12:54 GMT; content-type: text/plain; server: nish | date: Fri, 16 Oct 2026 08:12:54 GMT; content-type: text/plain; server: nish");
+  t.eqI64("which the two slots share: formatted once between them", loop.server.date.formats() - formats, n64(1));
+};
+
 /** A connection the program closes while its pacer has no credit still sends its CONNECTION_CLOSE before the slot is freed. */
 const closeUnpaced = (t: Suite): void => {
   const limits = new H3Limits();
@@ -149,10 +184,42 @@ const quiet = (t: Suite): void => {
   quic.recovery.onPaced(c.now, n32(30000));
   server.touch(slot);
   server.flush(c.now);
-  const delay: i64 = quic.recovery.pacerDelay(c.now, QUIC_CONN_DATAGRAM_SIZE);
+  const delay: i64 = quicListenerFlightTime(quic, c.now) - c.now;
   t.ok("the pacer holds the slot back, short of its idle deadline", delay > n64(0) && c.now + delay < quic.deadline());
   t.ok("the slot is filed for now + the pacer's delay", server.wheel.dueAt[slot] === c.now + delay);
   t.eqI64("and the server's timeout is that delay", toI64(server.timeout(c.now)), delay);
+  // The clock in microseconds, 999 µs into the same millisecond: the pacer counts it.
+  const micros: i64 = c.now * n64(1000) + n64(999);
+  server.clock(micros);
+  server.touch(slot);
+  server.flush(c.now);
+  t.eqI64("the server hands its clock in microseconds to the connection's pacer", quic.recovery.pacerTime, micros);
+  // `serve` hands it over too, before the datagram reaches the connection: an empty one, and no flush after.
+  quic.recovery.micros = n64(-1);
+  const key: Secret<u8[]> = secret(leafPrivate());
+  const empty: u8[] = [];
+  server.serve(slot, empty, n32(0), n32(0), c.now, key);
+  wipe(key);
+  t.eqI64("and serve hands it to the pacer before any flush", quic.recovery.micros, micros);
+  server.clock(n64(-1));
+  // Credit for one datagram but not for the flight quantum, on an RTT of
+  // 2 ms, where a millisecond earns more than a datagram: the pacer would let
+  // a datagram go now, but a flight starts only once the quantum is earned.
+  const budget: i64 = quic.recovery.pacerBudget;
+  const time: i64 = quic.recovery.pacerTime;
+  const rtt: i64 = quic.recovery.pacerRtt;
+  quic.recovery.pacerRtt = n64(2000);
+  quic.recovery.micros = n64(-1);
+  quic.recovery.pacerBudget = n64(1200);
+  quic.recovery.pacerTime = c.now * n64(1000);
+  const flightAt: i64 = quicListenerFlightTime(quic, c.now);
+  t.ok("with a datagram's credit short of the quantum, the flight time is later than the pace time", quic.recovery.pacerQuantum(n32(1200), n32(4800)) > n32(1200) && flightAt > quicListenerPaceTime(quic, c.now));
+  server.touch(slot);
+  server.flush(c.now);
+  t.eqI64("and the slot is filed at the flight time", server.wheel.dueAt[slot], flightAt);
+  quic.recovery.pacerRtt = rtt;
+  quic.recovery.pacerBudget = budget;
+  quic.recovery.pacerTime = time;
   const none: string[] = [];
   const start: i64 = c.now;
   p.send(n64(0), p.headers("GET", "/big/300000", none, none), true);
@@ -432,11 +499,14 @@ const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
  * Connection after connection through a server of one slot: from the second
  * on, nothing the server does keeps arena memory — neither the handshake,
  * through the listener and into the slot, nor what follows it: the client's
- * streams, five requests, a GOAWAY, the close, the slot freed.
+ * streams, five requests, a GOAWAY, the close, the slot freed — nor the
+ * date, which the pinned clock moves a second on for each connection.
  */
 const reused = (t: Suite): void => {
   const limits = new H3Limits();
   const loop = new LoopServer(h3QuicConfig(limits), n32(1), n32(0));
+  loop.server.date.pin(NOON);
+  const formats: i64 = loop.server.date.formats();
   const handshakes: i64[] = [];
   let after: i64 = 0;
   let closed: i32 = 0;
@@ -444,6 +514,7 @@ const reused = (t: Suite): void => {
   for (let k: i32 = 0; k < 5; k++) {
     const l = new Lean(loop);
     l.c.now = toI64(k) * n64(100000);
+    loop.server.date.pin(NOON + toI64(k) * n64(1000));
     const handshake = new QmMeter();
     const hello: u8[] = h3Hello(limits);
     l.c.before = hello;
@@ -485,6 +556,7 @@ const reused = (t: Suite): void => {
   t.ok("five connections through one slot, each closed after its GOAWAY", closed === n32(5) && loop.server.accepted === n32(5));
   t.eqI32("each served its five requests", answered, n32(25));
   t.eqI64("from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release", after, n64(0));
+  t.eqI64("though the pinned clock moved a second on for each, the date formatted once a second", loop.server.date.formats() - formats, n64(5));
   // Since the slot keeps the handshake's state (H3-1), `serve` signs in the
   // server's `TlsP256Signer`, and the listener reads the first Initial where
   // it lies and answers into scratch (H3-3), a handshake through a reused
@@ -502,6 +574,7 @@ const reused = (t: Suite): void => {
 /** Every check of this file. */
 export const loopbackChecks = (t: Suite): void => {
   exchange(t);
+  dated(t);
   closeUnpaced(t);
   quiet(t);
   flood(t);

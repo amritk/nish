@@ -189,16 +189,43 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * threads-complete's copy-at-join measured **2,665 bytes** on 2026-10-16 with clang
  * 18.1.3 on linux-x64, 5 more, inside the same ceiling: the copies themselves are
  * `runtime-cross.c`'s, below.
+ *
+ * threads-complete's adoption measured **2,695 bytes** on 2026-10-16 with clang 18.1.3
+ * on linux-x64, 30 more, inside the same ceiling: the two `mallopt` calls with which
+ * the pool's first start fixes glibc's trim and mmap thresholds, so that an arena's
+ * release no longer hands a task's 1 MB temporary back to the kernel and faults it in
+ * again on the next call (200 such tasks: 314 ms at one thread before, 48 ms after).
+ * Only under glibc: WASI and darwin compile none of it.
+ *
+ * Its idle trim measured **2,805 bytes** on 2026-10-17 with clang 18.1.3 on linux-x64,
+ * 110 more, inside the same ceiling: a worker that freed an arena larger than one chunk
+ * waits for its next job with a one-second timeout and calls `malloc_trim(0)` when it
+ * runs out, so a parked pool hands a burst's temporaries back to the kernel (an idle
+ * 68 MB after ten rounds of 8 tasks that each build 16 MB, 52 MB with the trim).
+ *
+ * Raised to 2,944 by the trim reaching the workers' arenas, measured **2,900 bytes** on
+ * 2026-10-17 with clang 18.1.3 on linux-x64, 95 more: `malloc_trim(0)` cuts back only
+ * the main arena's top, and a worker's arena keeps a burst's top below the 64 MB trim
+ * threshold, so the parked worker lowers the threshold, frees a 16 MB block through its
+ * own arena and then trims, and the next region restores the threshold
+ * (`nish_pool_drain` 381 → 441 bytes, `nish_jobs_run` 572 → 607). Four maps of 1.2
+ * million strings on four threads idled at 82 MB before and 2.3 MB after
+ * (`tests/link/par_map_idle`), the ten rounds of 16 MB tasks at 52 MB and 2.3 MB. The
+ * file had nothing to give: the bytes are the pool's, and dropping the 64 MB threshold
+ * instead cost the bursts it was set for (586-700 ms against 440-466 ms on the 1.2
+ * million strings).
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2944
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
  * `nish_cross_in`, which copy a task's or a chunk's `string` or scalar array out of the
- * arena it was made in and into the one that takes it, their `_range` forms over a map's
- * slots, `nish_cross_send`, which copies every string a `Channel<string>` sends,
- * `nish_cross_keep`, which keeps a map's element as its chunk loop rewinds the arena, and
- * `nish_guard_keep` with the set of the copies a `Mutex` owns.
+ * arena it was made in and into the one that takes it, `nish_cross_send`, which copies
+ * every string a `Channel<string>` sends, `nish_cross_keep`, which moves a map's element
+ * into its chunk's transfer block as the chunk loop rewinds the arena,
+ * `nish_cross_begin`, `_end` and `_adopt`, which open a chunk's transfer list and link
+ * its blocks into the caller's arena, and `nish_guard_keep` with the set of the copies a
+ * `Mutex` owns.
  *
  * Measured **1,170 bytes** on 2026-10-16 with clang 18.1.3 on linux-x64. A copy-out first
  * collects the arena's spans since the mark and sorts them, so that a map's million
@@ -210,15 +237,39 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2816
  * measured ceiling, never a raised one. A program that sends, answers or guards no
  * string pays none of it. The budget is the next 256-byte boundary above the
  * measurement, as every ceiling here was set.
+ *
+ * threads-complete's adoption measured **1,196 bytes** on 2026-10-16 with clang 18.1.3
+ * on linux-x64, 26 more, inside the same ceiling. A map's answers are no longer copied
+ * out of the worker's arena range by range and copied in again at the caller: each
+ * element is moved once, into a transfer block, and the caller links the blocks into its
+ * own chunk list (`nish_cross_adopt`), as `nish_cross_in` now links a task's answer of
+ * 64 KB or more. That retired the `_range` pair and the sorted span table, and paid for
+ * the transfer list and the adoption.
+ *
+ * The copy-back join measured **1,427 bytes** on 2026-10-17 with clang 18.1.3 on
+ * linux-x64, 231 more, and the ceiling moves to 1,536. Every chunk took a 64 KB block
+ * however little it kept, and adopting it left the caller's current chunk behind, so a
+ * small map run in a loop grew without bound (`link/par_map_join_small`). Blocks now
+ * start at 4 KB and double to 64 KB, each records what it used when its chunk ends, and
+ * a join that kept under 64 KB in all copies its elements into the caller's arena and
+ * frees the blocks rather than adopting them.
  */
-const RUNTIME_CROSS_TEXT_BUDGET = 1280
+const RUNTIME_CROSS_TEXT_BUDGET = 1536
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,235 bytes** on
  * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
  * `nish_guard_keep` takes over the set of a `Mutex`'s copies, which another thread's
  * guard may be changing.
+ *
+ * threads-complete's adoption measured **1,277 bytes** on 2026-10-16 with clang 18.1.3
+ * on linux-x64, 42 more, inside the same ceiling: the row above's change, with the
+ * chunk's transfer state thread-local here, which takes 16 bytes more to reach than
+ * the row above's plain static.
+ *
+ * The copy-back join measured **1,508 bytes** on 2026-10-17 with clang 18.1.3 on
+ * linux-x64, 231 more, and the ceiling moves to 1,536: the row above's change.
  */
-const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1280
+const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1536
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor

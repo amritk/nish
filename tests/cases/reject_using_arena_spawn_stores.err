@@ -1,0 +1,2 @@
+`ThreadScope.spawn<i32, i32[], rowOf>` is called inside the `using arena()` block at 12:5 and stores an allocation into memory, where this analysis stops following it: what it stores may be the block's and outlive the release
+  16 |       s.spawn(rowOf, 4, rows, 0);

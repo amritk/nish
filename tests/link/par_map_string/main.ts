@@ -1,6 +1,7 @@
 // A data-parallel body answers a `string` or an array of numbers, booleans or
-// enums. Each worker copies its range's answers out of its arena before it
-// returns, and the caller copies them into its own (copy-at-join). `churn()`
+// enums. Each worker moves its range's answers out of its arena into transfer
+// blocks before it returns, and the caller adopts the blocks into its own
+// arena (copy-at-join, then adoption). `churn()`
 // reuses the memory a missed copy would leave the result pointing at.
 import { parallelFrom, parallelMap, parallelMapInto, parallelReduce } from "nish/threads";
 

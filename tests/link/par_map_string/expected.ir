@@ -1,2 +1,4 @@
-call void @nish_cross_out_range(
-call void @nish_cross_in_range(
+call void @nish_cross_begin(
+call i8* @nish_cross_keep(
+call void @nish_cross_end(
+call void @nish_cross_adopt(

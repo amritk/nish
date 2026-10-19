@@ -1098,6 +1098,8 @@ const caseResults = caseRuns.map((run) => run.compiled)
     "  call void @nish_append_file(i8* %0, i8* %1)",
     "  call void @nish_random_fill(%struct.nish_array* %0)",
     "  call void @nish_write(i8* %0, i32 2, i1 true)\n  call void @nish_exit(i32 1)",
+    "ffi.nul:\n  call void @nish_panic(i8* %0)",
+    "ffi.nul.3:\n  call void @nish_panic(i8* %0)",
   ]
   const missed = paths.filter((line) => panicOracle(define([line]), clean, null).failures.length !== 1)
   const flagged = paths.filter((line) => panicOracle(define([line]), unproven, null).failures.length > 0)
@@ -4016,7 +4018,9 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
         check(`fix ${name}: --fix takes ${want} rounds`, rounds === want, shown(fixed))
       }
       fs.writeFileSync(path.join(work, `${name}.fixed.ts`), expected)
-      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed.ll"], {
+      // A directory, so a fixed program that imports a module (`nish/threads`) is
+      // written as one `.ll` per module rather than refused for being several.
+      const clean = spawnSync(NISH, ["--json", `${name}.fixed.ts`, "-o", "fixed/"], {
         cwd: work,
         encoding: "utf8",
       })
@@ -4135,6 +4139,9 @@ const INDEX_OF_ANY_REFUSALS = [
  */
 const LINK_READ_LATER = [
   "par_dst_short",
+  "par_map_idle",
+  "par_map_join_small",
+  "par_map_reclaim",
   "par_map_release",
   "range_export",
   "range_export_dts",
@@ -4640,10 +4647,40 @@ if (!only || "thread_task_release".includes(only)) {
   )
 }
 
+// A region whose chunks keep little has it copied in at the join rather than
+// adopted (`nish_cross_adopt`). `par_map_join_small` runs two 16-element maps
+// 3,000 times in a loop, each element a short string or a two-element array;
+// it peaks at 5 MB on one thread and on four, and with every chunk's 64 KB
+// block adopted at 53 MB and 125 MB. The bound is 16 MB.
+if (!only || "par_map_join_small".includes(only)) {
+  const fixture = linkTests.includes("par_map_join_small")
+  const dir = path.join(buildDir, "link", "par_map_join_small")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "4"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/par_map_join_small: 6,000 small maps on ${threads} thread(s) peak under 16 MB`,
+      kb > 0 && kb < 16 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
 // A map's chunk loop keeps each element its body answers and gives back the
 // rest (`nish_cross_keep`). `par_map_release` builds a 2 KB string per element
-// of a million and answers 4 bytes cut from it; it peaks at 64 MB on one thread
-// and 68 MB on eight, and without the keep at 2.1 GB on either. The bound is
+// of a million and answers 4 bytes cut from it; it peaks at 32 MB on one thread
+// and on eight, and without the keep at 2.1 GB on either. The bound is
 // 256 MB.
 if (!only || "par_map_release".includes(only)) {
   const fixture = linkTests.includes("par_map_release")
@@ -4666,6 +4703,76 @@ if (!only || "par_map_release".includes(only)) {
       `link/par_map_release: a million 2 KB temporaries on ${threads} thread(s) peak under 256 MB`,
       kb > 0 && kb < 256 * 1024,
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
+// A function that runs a map and answers a scalar frees the map's result, and
+// the blocks a string map adopts from its workers, when it returns, as its
+// sequential twin does; `using a = arena()` frees a map run in main's own frame.
+// `par_map_reclaim` runs five loops of maps in frames that give them back:
+// 24 int maps over 2^21 elements, 72 string maps over 2^17 (blocks linked in),
+// 8000 string maps over 512 (blocks copied in), 64 int maps over 2^19 (below
+// the grain, on the calling thread), and 24 int maps over 2^21 in a
+// `using a = arena()` block in main. It peaks at 21 to 23 MB on 1, 2 and 8
+// threads. Each of the first four loops alone, built by main at efbbd8c8,
+// peaked at 206, 232, 112 and 143 MB on 1 and 8 threads, and main refused the
+// block, so each would pass the 64 MB bound on its own.
+if (!only || "par_map_reclaim".includes(only)) {
+  const fixture = linkTests.includes("par_map_reclaim")
+  const dir = path.join(buildDir, "link", "par_map_reclaim")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/par_map_reclaim: 8184 maps in returning frames, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
+      kb > 0 && kb < 64 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
+// A worker that finds the queue empty for a second lowers glibc's trim
+// threshold, frees a 16 MB block through its own arena so the arena's top is
+// cut back, and trims (`nish_pool_drain`). `par_map_idle` runs four maps of
+// 1.2 million short strings and then spins; two seconds after its first line
+// it holds 2.3 MB on four threads and on eight. With the 64 MB threshold left
+// in place it held 82 MB on either, every worker's arena keeping the burst's
+// top. The bound is 16 MB, read from `/proc/<pid>/status` while it spins, so
+// the check runs on Linux alone.
+if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
+  const fixture = linkTests.includes("par_map_idle")
+  const exe = path.join(buildDir, "link", "par_map_idle", "app")
+  const sample =
+    'o=$(mktemp); "$1" > "$o" & p=$!; ' +
+    'until [ -s "$o" ] || ! kill -0 $p 2>/dev/null; do sleep 0.05; done; ' +
+    'sleep 2; grep VmRSS /proc/$p/status; wait $p; s=$?; rm -f "$o"; exit $s'
+  for (const threads of ["4", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe)
+        ? spawnSync("sh", ["-c", sample, "sh", exe], {
+            encoding: "utf8",
+            env: { ...process.env, NISH_NUM_THREADS: threads },
+          })
+        : null
+    const m = run !== null ? /VmRSS:\s*(\d+)/.exec(run.stdout) : null
+    const kb = run !== null && run.status === 0 && m !== null ? Number(m[1]) : -1
+    const missing = fixture ? `no such binary: ${exe}` : "no such fixture"
+    check(
+      `link/par_map_idle: a parked pool on ${threads} threads holds under 16 MB`,
+      kb > 0 && kb < 16 * 1024,
+      run !== null ? `exit ${run.status}, idle ${kb} KB\n${run.stdout}${run.stderr}` : missing
     )
   }
 }
@@ -4935,6 +5042,11 @@ if (!only || "par_alloc".includes(only)) {
 // `thread_scope_region_param_lookup` looks a key up in its argument's table.
 // `thread_scope_task_map_reads` has two tasks read one `Map` and one `Set`,
 // and `par_map_table_reads` has a parallel map's body read them.
+// `thread_task_own_writes` has tasks write only what they made: a holder poked
+// through a method, a `Map` and a `Set`, an object's array fields, an array
+// handed back by a helper returning its argument, and an array under a second
+// declarator. `par_map_captured_strings` has a body build a literal of a
+// captured string and drop it.
 //
 // And the forms that answer a new array, `par_map_new` and `par_from`, and the
 // two capture programs, whose bodies read their function's `const` locals:
@@ -4969,8 +5081,20 @@ if (!only || "par_alloc".includes(only)) {
 // And copy-at-join: `thread_task_string`, whose tasks answer strings and
 // scalar arrays; `par_map_string`, whose data-parallel bodies do; and
 // `thread_channel_string` and `thread_mutex_string`, which send strings on
-// channels and store them through guards. Each reads what crossed after
+// channels and store them through guards; and `thread_adopt_lifetime`, whose
+// answers the caller adopts and then releases. Each reads what crossed after
 // `churn()`, and prints only what every task order agrees on.
+//
+// And the frames that free a map's result: `par_map_reclaim`, whose helper
+// functions and `using` block give each map back, `mem_using_arena_map`,
+// whose blocks free a map of numbers and one of strings and fill an outer
+// array of numbers, and
+// `par_map_reclaim_escapes`, whose results are returned, stored into a field
+// and into an outer array, captured by a later task, answered as strings and
+// as `string[][]`, chosen by a ternary, pushed, put in a `Map` or a `Set`,
+// sent on a channel, stored through a mutex guard, handed to a callee that
+// keeps them, aliased, and carried into the next iteration, each read after
+// `churn()`.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -4990,6 +5114,7 @@ for (const name of [
   "thread_mutex_contended",
   "thread_mutex_scalar",
   "thread_mutex_using_mixed",
+  "thread_mutex_helper",
   "thread_channel_pipeline",
   "thread_channel_two_producers",
   "thread_channel_parent_drain",
@@ -5007,6 +5132,8 @@ for (const name of [
   "thread_scope_region_param_lookup",
   "thread_scope_task_map_reads",
   "par_map_table_reads",
+  "thread_task_own_writes",
+  "par_map_captured_strings",
   "thread_scope_libc_named_tasks",
   "thread_no_strict_hidden_task",
   "thread_private_prefixed_names",
@@ -5022,6 +5149,10 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_adopt_lifetime",
+  "par_map_reclaim",
+  "par_map_reclaim_escapes",
+  "mem_using_arena_map",
   "std_random",
 ]) {
   if (only && !name.includes(only) && !"threads-under-node".includes(only)) {
@@ -5123,6 +5254,550 @@ if (!only || "c_symbol_private_libm".includes(only)) {
     "link/c_symbol_private_libm: Node prints what the native binary prints",
     run.status === 0 && run.stdout === want,
     `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
+// WP27 S3.1: a `string` handed to a `declare function` is borrowed as
+// `const char *`, and one that holds a NUL panics before the call (`ffi-nul`,
+// docs/wp27-ffi.md §8c). A literal with no NUL is proved and is no site;
+// anything else is a site in the function that makes the call, which
+// `--deny-panics` refuses and `--emit-panics` names through every caller --
+// a constructor reached by `new` included -- and the call is `ffi` under
+// `--deny ffi` whether it passes a string or a scalar. The last program puts
+// the call inside a `using` block and reads the string back through `this`
+// stored out of a constructor, the two other ways CLAUDE.md names for a value
+// to reach a rule from where its tests do not write it.
+if (!only || "ffi_string checks".includes(only)) {
+  const ffiDir = path.join(buildDir, "ffi-string")
+  fs.mkdirSync(ffiDir, { recursive: true })
+  const write = (name, text) => {
+    const file = path.join(ffiDir, name)
+    fs.writeFileSync(file, text)
+    return file
+  }
+  const compileFfi = (file, extra) =>
+    spawnSync(NISH, [file, "-o", path.join(ffiDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  const sitesOf = (file) => {
+    const json = path.join(ffiDir, `${path.basename(file, ".ts")}.panics.json`)
+    const r = compileFfi(file, ["--emit-panics", json])
+    return { r, report: r.status === 0 ? JSON.parse(fs.readFileSync(json, "utf8")) : null }
+  }
+  const irOf = (file) => {
+    const ll = path.join(ffiDir, path.basename(file, ".ts"), `${path.basename(file, ".ts")}.ll`)
+    return fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
+  }
+  const fnSites = (report, name) => (report?.functions ?? []).find((f) => f.name === name)?.panics ?? []
+
+  const literal = write(
+    "literal.ts",
+    'declare function puts(s: string): i32;\n\nexport const main = (): i32 => {\n  puts("hello");\n  return 0;\n};\n'
+  )
+  const lit = sitesOf(literal)
+  check(
+    'ffi_string: `puts("hello")` has no `ffi-nul` site and no NUL check in its IR',
+    lit.report !== null &&
+      fnSites(lit.report, "main").every((p) => p.kind !== "ffi-nul") &&
+      !irOf(literal).includes("@nish_str_index_of(") &&
+      /= getelementptr inbounds i8, i8\* bitcast \(\{ i64, \[6 x i8\] \}\* @\.str\.\d+ to i8\*\), i64 8\n\s+%\d+ = call i32 @puts\(/.test(
+        irOf(literal)
+      ),
+    lit.report === null ? shown(lit.r) : irOf(literal)
+  )
+  const litDeny = compileFfi(literal, ["--deny-panics"])
+  check("ffi_string: a NUL-free literal compiles under --deny-panics", litDeny.status === 0, shown(litDeny))
+  const litFfi = compileFfi(literal, ["--deny", "ffi"])
+  check(
+    "ffi_string: --deny ffi refuses a call that passes only a string",
+    litFfi.status === 1 && litFfi.stderr.includes("reaches `ffi`") && litFfi.stderr.includes("calls puts"),
+    shown(litFfi)
+  )
+
+  const ctor = write(
+    "ctor.ts",
+    [
+      "declare function strlen(s: string): u64;",
+      "",
+      "class Name {",
+      "  len: u64;",
+      "  constructor(s: string) {",
+      "    this.len = strlen(s);",
+      "  }",
+      "}",
+      "",
+      "export const main = (): i32 => {",
+      `  const n = new Name("ab" + \`\${toI32(Date.now()) % 10}\`);`,
+      '  console.log(n.len > 0 ? "some" : "none");',
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const ctorSites = sitesOf(ctor)
+  check(
+    "ffi_string: a constructor's string argument to C is an `ffi-nul` site, and `new` is a call site via it",
+    ctorSites.report !== null &&
+      fnSites(ctorSites.report, "Name.constructor").some((p) => p.kind === "ffi-nul" && p.proven === false) &&
+      fnSites(ctorSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "Name.constructor" && p.via === "ffi-nul"
+      ),
+    ctorSites.report === null ? shown(ctorSites.r) : JSON.stringify(ctorSites.report)
+  )
+  const ctorDeny = compileFfi(ctor, ["--deny-panics"])
+  check(
+    "ffi_string: --deny-panics refuses a string that is not a literal, handed to C in a constructor",
+    ctorDeny.status === 1 && ctorDeny.stderr.includes("`ffi-nul` may panic here"),
+    shown(ctorDeny)
+  )
+  const ctorFfi = compileFfi(ctor, ["--deny", "ffi"])
+  check(
+    "ffi_string: --deny ffi refuses a string call reached from a constructor by `new`",
+    ctorFfi.status === 1 &&
+      ctorFfi.stderr.includes("calls Name.constructor") &&
+      ctorFfi.stderr.includes("calls strlen"),
+    shown(ctorFfi)
+  )
+
+  const reach = write(
+    "reach.ts",
+    [
+      'import { Mutex } from "nish/threads";',
+      "",
+      "declare function strlen(s: string): u64;",
+      "",
+      "class Counter {",
+      "  n: i32 = 0;",
+      "}",
+      "",
+      "class Holder {",
+      "  t: Tag | null = null;",
+      "}",
+      "",
+      "class Tag {",
+      "  label: string;",
+      "  constructor(h: Holder, s: string) {",
+      "    this.label = s;",
+      "    h.t = this;",
+      "  }",
+      "}",
+      "",
+      "export const main = (): i32 => {",
+      "  const m = new Mutex<Counter>(new Counter());",
+      `  const name: string = "n" + \`\${toI32(Date.now()) % 10}\`;`,
+      "  {",
+      "    using g = m.lock();",
+      "    g.value.n = toI32(strlen(name));",
+      "  }",
+      "  const h = new Holder();",
+      '  new Tag(h, name + "!");',
+      "  const t = h.t;",
+      "  if (t !== null) {",
+      '    console.log(strlen(t.label) > 0 ? "some" : "none");',
+      "  }",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const reachSites = sitesOf(reach)
+  const reachLines = fnSites(reachSites.report, "main")
+    .filter((p) => p.kind === "ffi-nul" && p.proven === false)
+    .map((p) => p.line)
+    .join(",")
+  check(
+    "ffi_string: a string handed to C inside a `using` block, and one read through `this` stored out of a constructor, are each an `ffi-nul` site",
+    reachSites.report !== null && reachLines === "26,32",
+    reachSites.report === null ? shown(reachSites.r) : JSON.stringify(reachSites.report)
+  )
+  const reachFfi = compileFfi(reach, ["--deny", "ffi"])
+  check(
+    "ffi_string: --deny ffi refuses a string call inside a `using` block",
+    reachFfi.status === 1 && reachFfi.stderr.includes("calls strlen"),
+    shown(reachFfi)
+  )
+
+  // WP27 S3.2: a `string` result is copied out of C's `const char *` after the
+  // call, and `NULL` panics (`ffi-null`); `string | null` reads `NULL` as
+  // `null` and is no site. The second program reaches the copy through a
+  // constructor by `new`, inside a `using` block, and through `this` stored
+  // out of a constructor, then churns the arena before it prints each one, so
+  // a copy placed in a scope released too early prints other bytes.
+  const result = write(
+    "result.ts",
+    [
+      "declare function getenv(name: string): string;",
+      "declare function strchr(s: string, c: i32): string | null;",
+      "",
+      "export const main = (): i32 => {",
+      '  const a = getenv("HOME");',
+      '  const b = strchr("abc", 98);',
+      "  console.log(b === null ? a : b);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const resultSites = sitesOf(result)
+  const resultKinds = fnSites(resultSites.report, "main")
+    .map((p) => `${p.line}:${p.kind}`)
+    .join(",")
+  check(
+    "ffi_string: a `string` result is an `ffi-null` site and a `string | null` one is not, each an allowed `oom`",
+    resultKinds === "5:ffi-null,5:oom,6:oom",
+    resultSites.report === null ? shown(resultSites.r) : JSON.stringify(resultSites.report)
+  )
+  const resultDeny = compileFfi(result, ["--deny-panics"])
+  check(
+    "ffi_string: --deny-panics refuses a `string` result and names `string | null`",
+    resultDeny.status === 1 &&
+      resultDeny.stderr.includes("`ffi-null` may panic here") &&
+      resultDeny.stderr.includes("declare the result `string | null`"),
+    shown(resultDeny)
+  )
+  const nullable = write(
+    "nullable.ts",
+    [
+      "declare function getenv(name: string): string | null;",
+      "",
+      "export const main = (): i32 => {",
+      '  const a = getenv("HOME");',
+      '  console.log(a === null ? "unset" : "set");',
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const nullableDeny = compileFfi(nullable, ["--deny-panics"])
+  check(
+    "ffi_string: a `string | null` result compiles under --deny-panics, with no `ffi.null` block",
+    nullableDeny.status === 0 &&
+      irOf(nullable).includes("ffi.none:") &&
+      !irOf(nullable).includes("ffi.null:"),
+    `${shown(nullableDeny)}\n${irOf(nullable)}`
+  )
+
+  const kept = write(
+    "kept.ts",
+    [
+      'import { Mutex } from "nish/threads";',
+      "",
+      "declare function strerror(errnum: i32): string;",
+      "",
+      "class Counter {",
+      '  s: string = "";',
+      "}",
+      "",
+      "class Name {",
+      "  text: string;",
+      "  constructor(e: i32) {",
+      "    this.text = strerror(e);",
+      "  }",
+      "}",
+      "",
+      "class Holder {",
+      "  t: Tag | null = null;",
+      "}",
+      "",
+      "class Tag {",
+      "  constructor(h: Holder, e: i32) {",
+      "    h.t = this;",
+      "    this.label = strerror(e);",
+      "  }",
+      '  label: string = "";',
+      "}",
+      "",
+      "const churn = (n: i32): i32 => {",
+      "  const t: string[] = [];",
+      "  for (let i = 0; i < n; i++) {",
+      "    t.push(`${i}`);",
+      "  }",
+      '  return t.join("").length;',
+      "};",
+      "",
+      "export const main = (): i32 => {",
+      "  const m = new Mutex<Counter>(new Counter());",
+      "  const n = new Name(1);",
+      "  {",
+      "    using g = m.lock();",
+      "    g.value.s = strerror(2);",
+      "  }",
+      "  const h = new Holder();",
+      "  new Tag(h, 12);",
+      "  console.log(`${churn(4000) > 0}`);",
+      "  console.log(n.text);",
+      "  {",
+      "    using g = m.lock();",
+      "    console.log(g.value.s);",
+      "  }",
+      "  const t = h.t;",
+      '  console.log(t === null ? "none" : t.label);',
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const keptSites = sitesOf(kept)
+  check(
+    "ffi_string: a C string result in a constructor reached by `new` is an `ffi-null` site, and `new` a call site via it",
+    keptSites.report !== null &&
+      fnSites(keptSites.report, "Name.constructor").some(
+        (p) => p.kind === "ffi-null" && p.proven === false
+      ) &&
+      fnSites(keptSites.report, "Tag.constructor").some((p) => p.kind === "ffi-null" && p.proven === false) &&
+      fnSites(keptSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "Name.constructor" && p.via === "ffi-null"
+      ) &&
+      fnSites(keptSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "Tag.constructor" && p.via === "ffi-null"
+      ) &&
+      fnSites(keptSites.report, "main").filter((p) => p.kind === "ffi-null").length === 1,
+    keptSites.report === null ? shown(keptSites.r) : JSON.stringify(keptSites.report)
+  )
+  const keptExe = path.join(ffiDir, "kept.exe")
+  const keptBuilt = spawnSync(NISH, [kept, "-o", path.join(ffiDir, "kept") + path.sep, "--link", keptExe], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const keptRun = keptBuilt.status === 0 ? spawnSync(keptExe, [], { encoding: "utf8" }) : keptBuilt
+  check(
+    "ffi_string: C string results kept by a constructor, by a `using` block's guard and through `this` survive churn",
+    keptRun.status === 0 &&
+      keptRun.stdout === "true\nOperation not permitted\nNo such file or directory\nCannot allocate memory\n",
+    shown(keptRun)
+  )
+
+  // WP27 S3.3: `readCString` from `nish:unsafe` copies the bytes behind a
+  // `CPtr` into the arena. It is an allowed `unchecked` site, so it compiles
+  // under --deny-panics, and --deny unsafe and --deny ffi each refuse it; the
+  // literal `null` for a `CPtr | null` parameter is `i8* null` at the call.
+  // The second program keeps copies through a constructor reached by `new`,
+  // a `using` block's guard and `this` stored out of a constructor, then
+  // churns the arena before it prints each one.
+  const owned = write(
+    "owned.ts",
+    [
+      'import { readCString } from "nish:unsafe";',
+      "",
+      "declare function realpath(path: string, resolved: CPtr | null): CPtr | null;",
+      "declare function free(p: CPtr): void;",
+      "",
+      "export const main = (): i32 => {",
+      '  const p = realpath("/", null);',
+      "  if (p === null) {",
+      "    return 1;",
+      "  }",
+      "  const s = readCString(p);",
+      "  free(p);",
+      "  console.log(s);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const ownedSites = sitesOf(owned)
+  const ownedKinds = fnSites(ownedSites.report, "main")
+    .map((p) => `${p.line}:${p.kind}:${p.allowed}`)
+    .join(",")
+  check(
+    "ffi_owned_string: `readCString` is an allowed `unchecked` site and the copy's `oom`, and nothing else",
+    ownedKinds === "11:unchecked:true,11:oom:true",
+    ownedSites.report === null ? shown(ownedSites.r) : JSON.stringify(ownedSites.report)
+  )
+  check(
+    "ffi_owned_string: a literal `null` for a `CPtr | null` parameter is `i8* null`, and the copy is `@nish.ffi.str`",
+    /call i8\* @realpath\(i8\* %\d+, i8\* null\)/.test(irOf(owned)) &&
+      /call i8\* @nish\.ffi\.str\(i8\* %\d+\)/.test(irOf(owned)),
+    irOf(owned)
+  )
+  const ownedDenyPanics = compileFfi(owned, ["--deny-panics"])
+  check(
+    "ffi_owned_string: `readCString` compiles under --deny-panics",
+    ownedDenyPanics.status === 0,
+    shown(ownedDenyPanics)
+  )
+  const ownedUnsafe = compileFfi(owned, ["--deny", "unsafe"])
+  check(
+    "ffi_owned_string: --deny unsafe refuses `readCString` and names the call",
+    ownedUnsafe.status === 1 &&
+      ownedUnsafe.stderr.includes("reaches `unsafe`") &&
+      ownedUnsafe.stderr.includes("calls readCString"),
+    shown(ownedUnsafe)
+  )
+  const ownedFfi = compileFfi(owned, ["--deny", "ffi"])
+  check(
+    "ffi_owned_string: --deny ffi refuses a program that reads a C string",
+    ownedFfi.status === 1 &&
+      ownedFfi.stderr.includes("reaches `ffi`") &&
+      ownedFfi.stderr.includes("calls realpath"),
+    shown(ownedFfi)
+  )
+  const ownedChecked = spawnSync(NISH, [owned, "--emit-checked"], { cwd: root, encoding: "utf8" })
+  check(
+    "ffi_owned_string: --emit-checked records the `readCString` import and its call",
+    ownedChecked.status === 0 &&
+      ownedChecked.stdout.includes('unsafe import 1:10 readCString from "nish:unsafe"') &&
+      /unsafe call 11:13 readCString \(node \d+\)/.test(ownedChecked.stdout),
+    shown(ownedChecked)
+  )
+  const ownedKept = write(
+    "owned-kept.ts",
+    [
+      'import { Mutex } from "nish/threads";',
+      'import { readCString } from "nish:unsafe";',
+      "",
+      "declare function strdup(s: string): CPtr | null;",
+      "declare function free(p: CPtr): void;",
+      "",
+      "const copy = (s: string): string => {",
+      "  const p = strdup(s);",
+      "  if (p === null) {",
+      '    return "";',
+      "  }",
+      "  const r = readCString(p);",
+      "  free(p);",
+      "  return r;",
+      "};",
+      "",
+      "class Counter {",
+      '  s: string = "";',
+      "}",
+      "",
+      "class Name {",
+      "  text: string;",
+      "  constructor() {",
+      '    const p = strdup("from a constructor");',
+      '    this.text = p === null ? "" : readCString(p);',
+      "    if (p !== null) {",
+      "      free(p);",
+      "    }",
+      "  }",
+      "}",
+      "",
+      "class Holder {",
+      "  t: Tag | null = null;",
+      "}",
+      "",
+      "class Tag {",
+      "  constructor(h: Holder) {",
+      "    h.t = this;",
+      '    const p = strdup("through this");',
+      "    if (p !== null) {",
+      "      this.label = readCString(p);",
+      "      free(p);",
+      "    }",
+      "  }",
+      '  label: string = "";',
+      "}",
+      "",
+      "const churn = (n: i32): i32 => {",
+      "  const t: string[] = [];",
+      "  for (let i = 0; i < n; i++) {",
+      "    t.push(`${i}`);",
+      "  }",
+      '  return t.join("").length;',
+      "};",
+      "",
+      "export const main = (): i32 => {",
+      "  const m = new Mutex<Counter>(new Counter());",
+      "  const n = new Name();",
+      "  {",
+      "    using g = m.lock();",
+      '    const p = strdup("under a guard");',
+      "    if (p !== null) {",
+      "      g.value.s = readCString(p);",
+      "      free(p);",
+      "    }",
+      "  }",
+      "  const h = new Holder();",
+      "  new Tag(h);",
+      '  const c = copy("returned");',
+      "  console.log(`${churn(4000) > 0}`);",
+      "  console.log(n.text);",
+      "  {",
+      "    using g = m.lock();",
+      "    console.log(g.value.s);",
+      "  }",
+      "  const t = h.t;",
+      '  console.log(t === null ? "none" : t.label);',
+      "  console.log(c);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const ownedKeptExe = path.join(ffiDir, "owned-kept.exe")
+  const ownedKeptBuilt = spawnSync(
+    NISH,
+    [ownedKept, "-o", path.join(ffiDir, "owned-kept") + path.sep, "--link", ownedKeptExe],
+    { cwd: root, encoding: "utf8" }
+  )
+  const ownedKeptRun =
+    ownedKeptBuilt.status === 0 ? spawnSync(ownedKeptExe, [], { encoding: "utf8" }) : ownedKeptBuilt
+  check(
+    "ffi_owned_string: `readCString` copies kept by a constructor, by a `using` block's guard and through `this` survive churn",
+    ownedKeptRun.status === 0 &&
+      ownedKeptRun.stdout === "true\nfrom a constructor\nunder a guard\nthrough this\nreturned\n",
+    shown(ownedKeptRun)
+  )
+
+  // A `declare function` passed as a function parameter is called from the
+  // specialisation (`err<strerror>`), which holds the copy and the site.
+  const passed = write(
+    "passed.ts",
+    [
+      "declare function strerror(errnum: i32): string;",
+      "declare function getenv(name: string): string | null;",
+      "",
+      "function err(f: (n: i32) => string, n: i32): string {",
+      "  return f(n);",
+      "}",
+      "",
+      "function env(f: (name: string) => string | null, name: string): string {",
+      '  return f(name) ?? "unset";',
+      "}",
+      "",
+      "function churn(n: i32): i32 {",
+      "  const t: string[] = [];",
+      "  for (let i = 0; i < n; i++) {",
+      "    t.push(`${i}`);",
+      "  }",
+      '  return t.join("").length;',
+      "}",
+      "",
+      "export const main = (): i32 => {",
+      "  const a = err(strerror, 2);",
+      '  const b = env(getenv, "NISH_FFI_PASSED_UNSET");',
+      "  console.log(`${churn(4000) > 0}`);",
+      "  console.log(`${a}|${b}`);",
+      "  return 0;",
+      "};",
+      "",
+    ].join("\n")
+  )
+  const passedSites = sitesOf(passed)
+  check(
+    "ffi_string: a C string result through a function parameter is an `ffi-null` site in the specialisation",
+    passedSites.report !== null &&
+      fnSites(passedSites.report, "err<strerror>").some((p) => p.kind === "ffi-null" && p.proven === false) &&
+      !fnSites(passedSites.report, "env<getenv>").some((p) => p.kind === "ffi-null") &&
+      fnSites(passedSites.report, "main").some(
+        (p) => p.kind === "call" && p.callee === "err<strerror>" && p.via === "ffi-null"
+      ),
+    passedSites.report === null ? shown(passedSites.r) : JSON.stringify(passedSites.report)
+  )
+  const passedExe = path.join(ffiDir, "passed.exe")
+  const passedBuilt = spawnSync(
+    NISH,
+    [passed, "-o", path.join(ffiDir, "passed") + path.sep, "--link", passedExe],
+    { cwd: root, encoding: "utf8" }
+  )
+  const passedRun = passedBuilt.status === 0 ? spawnSync(passedExe, [], { encoding: "utf8" }) : passedBuilt
+  check(
+    "ffi_string: C string results through a function parameter are copied and survive churn",
+    passedRun.status === 0 && passedRun.stdout === "true\nNo such file or directory|unset\n",
+    shown(passedRun)
   )
 }
 
@@ -5260,7 +5935,17 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `thread_task_string`, `par_map_string`, `thread_channel_string` and
 // `thread_mutex_string` are the strings and scalar arrays that cross by copy,
 // whose transfer block carries a tag in its pointer's low bit on a 32-bit
-// pointer as on a 64-bit one.
+// pointer as on a 64-bit one; `thread_adopt_lifetime` adopts those blocks, and
+// a 24-byte transfer state, on wasm32 as on a 64-bit target.
+// `par_map_reclaim` and `par_map_reclaim_escapes` free a map's result, and
+// the blocks it adopted, with the frame or block that ran it, and keep every
+// result that escapes it, on a 32-bit target as on a 64-bit one.
+// Node runs them with `--no-turbo-fast-api-calls`: the escapes fixture grows its
+// memory to some 120 MB, and Node 22 then collects garbage inside the fast
+// call of WASI's `fd_write`, whose frame walk segfaults
+// (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24 (three of
+// three crashed without the flag, none of six with it). The slow call is the
+// whole difference.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -5274,6 +5959,9 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_adopt_lifetime",
+  "par_map_reclaim",
+  "par_map_reclaim_escapes",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
@@ -5288,7 +5976,7 @@ for (const name of [
     )
     const ran =
       built.status === 0
-        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+        ? spawnSync("node", ["--no-warnings", "--no-turbo-fast-api-calls", "examples/wasi-host.mjs", wasm], {
             cwd: root,
             encoding: "utf8",
           })
@@ -8391,7 +9079,12 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   const namesTestedIn = (text) => [...(text ?? "").matchAll(/name === "([^"]+)"/g)].map((m) => m[1])
 
   const builtinsDecl = declarationOf(selfSource("builtins.ts"), "isBuiltinFunction")
-  const builtins = namesTestedIn(builtinsDecl)
+  // `nish:unsafe`'s exports are builtins through `isUnsafeExport`, and
+  // `readCString` among them allocates, so they are read from there too.
+  const builtins = [
+    ...namesTestedIn(builtinsDecl),
+    ...namesTestedIn(declarationOf(selfSource("nish-modules.ts"), "isUnsafeExport")),
+  ]
   const emitBuiltins = selfSource("emit-builtins.ts")
   const calleesDecl = declarationOf(emitBuiltins, "identifierBuiltinCalleesNamed")
   /** The module's string constants, so `out.push(PARSE_RUNTIME)` reads as the symbol it names. */
@@ -8544,6 +9237,37 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
     return parts.every((p) => p.startsWith("i8*")) ? parts.length : undefined
   }
   for (const [builtin, symbol] of allocating) {
+    // `readCString` takes a `CPtr`, which only a foreign call answers, and its
+    // `@nish_str_new` is inside `@nish.ffi.str`, so its probe is written out.
+    if (builtin === "readCString") {
+      const probeSrc = [
+        'import { readCString } from "nish:unsafe";',
+        "declare function getcwd(buf: CPtr | null, size: u64): CPtr | null;",
+        "export const probe = (arg0: string): string => {",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+        "  const label = `probe ${arg0}`;",
+        "  console.log(label);",
+        "  const p = getcwd(null, 0);",
+        '  return p === null ? "" : readCString(p);',
+        "};",
+        "",
+      ].join("\n")
+      const probeTs = path.join(buildDir, "alloc_probe_readCString.ts")
+      const probeLl = path.join(buildDir, "alloc_probe_readCString.ll")
+      fs.writeFileSync(probeTs, probeSrc)
+      const r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root, encoding: "utf8" })
+      const ir = r.status === 0 ? fs.readFileSync(probeLl, "utf8") : r.stderr
+      const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? ""
+      check(
+        "readCString: a function returning its result keeps the arena (no nish_arena_release before the ret)",
+        r.status === 0 &&
+          body.includes("@nish.ffi.str(") &&
+          body.includes("@nish_str_concat(") &&
+          !body.includes("nish_arena_release"),
+        `${probeSrc}\n${ir}`
+      )
+      continue
+    }
     const fn = runtimeByName.get(symbol)
     const returnTypes = nishReturnTypes(fn)
     const arity = stringArity(fn)
@@ -17176,6 +17900,87 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     return paragraphs.length === 2 && paragraphs[0].startsWith("# ") && !/^(#|```)/m.test(paragraphs[1])
   }
 
+  // The threads page's refusal table: each code's `nish:err` example must be refused
+  // with a message whose last clause holds the code to write. The clause is what
+  // follows the last `; ` outside backticks or, in a message with none, the start of
+  // its last sentence, or after its last `: `. The code is a backticked fragment that
+  // is more than one word (`using g = m.lock()`, `a.load()`), so a remedy that only
+  // names a keyword, "bind the value to a `const`", is prose; and code the user can
+  // paste, so no fragment of the clause holds a placeholder: `...`, `<field>`, or a
+  // single-letter type, `Channel<T>`, `new T()`.
+  const threadsPage = "docs/guide/using-nish/threads.md"
+  /** @type {Map<string, string>} the first message each `nish:err` code of the page is refused with */
+  const threadRefusals = new Map()
+  /** The remedy of a refusal: its text after the last `; `, else its last sentence, else after its last `: `. */
+  const lastClause = (message) => {
+    // A span opens with a run of backticks and closes with a run as long, as in
+    // Markdown, so ``[`row-${i}`]`` is one span.
+    let open = 0
+    let clause = -1
+    let sentence = -1
+    let colon = 0
+    for (let i = 0; i < message.length; i++) {
+      if (message[i] === "`") {
+        let run = 1
+        while (message[i + run] === "`") {
+          run++
+        }
+        if (open === 0) {
+          open = run
+        } else if (open === run) {
+          open = 0
+        }
+        i += run - 1
+      } else if (open === 0 && message[i + 1] === " ") {
+        if (message[i] === ";") {
+          clause = i + 2
+        } else if (message[i] === ".") {
+          sentence = i + 2
+        } else if (message[i] === ":") {
+          colon = i + 2
+        }
+      }
+    }
+    if (clause >= 0) {
+      return message.slice(clause)
+    }
+    return message.slice(sentence >= 0 ? sentence : colon)
+  }
+  /** Whether a clause holds a backticked fragment of code rather than a single word. */
+  const holdsCode = (clause) => {
+    const fragments = [...clause.matchAll(/(`+)(?!`)(.+?)(?<!`)\1(?!`)/g)].map((m) => m[2].trim())
+    return fragments.some((f) => /[\s(=.[]/.test(f)) && !fragments.some(isPlaceholder)
+  }
+  /** The type names a `<...>` may hold that are spelled in lower case. */
+  const lowerTypes = new Set([
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "f32",
+    "f64",
+    "number",
+    "string",
+    "boolean",
+    "void",
+    "null",
+  ])
+  /** Whether a fragment of code stands in for code rather than being it. */
+  const isPlaceholder = (fragment) =>
+    /\.\.\.|…/.test(fragment) ||
+    /\bnew [A-Z]\b/.test(fragment) ||
+    /:\s*[A-Z](?![\w<])/.test(fragment) ||
+    [...fragment.matchAll(/<([^<>]+)>/g)].some((m) =>
+      m[1].split(/[,|]/).some((arg) => {
+        const name = arg.trim().replace(/\[\]$/, "")
+        return /^[A-Z]$/.test(name) || (/^[a-z]+$/.test(name) && !lowerTypes.has(name))
+      })
+    )
+
   for (const page of docPages) {
     const rel = path.relative(root, page).split(path.sep).join("/")
     const text = fs.readFileSync(page, "utf8")
@@ -17212,6 +18017,12 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         .map((line) => JSON.parse(line))
       const errors = diagnostics.filter((d) => d.severity === "error")
       const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n")
+      if (rel === threadsPage && s.kind === "err") {
+        const refused = errors.find((e) => e.code === s.code)
+        if (refused && !threadRefusals.has(s.code)) {
+          threadRefusals.set(s.code, refused.message)
+        }
+      }
       if (s.kind === "ok") {
         check(`${rel}:${s.line} compiles`, run.status === 0, detail || run.stderr)
       } else {
@@ -17222,6 +18033,55 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
         )
       }
     }
+  }
+
+  const threadsText = fs.readFileSync(path.join(root, threadsPage), "utf8")
+  const tableCodes = [...threadsText.matchAll(/^\| (NL\d{4}) \|/gm)].map((m) => m[1])
+  check(`${threadsPage} has a refusal table`, tableCodes.length > 0, "no `| NLxxxx |` row")
+  for (const code of new Set(
+    markedSnippets(threadsText)
+      .filter((s) => s.kind === "err")
+      .map((s) => s.code)
+  )) {
+    check(`${threadsPage}: ${code} has a row in the refusal table`, tableCodes.includes(code), "no row")
+  }
+  for (const code of tableCodes) {
+    const message = threadRefusals.get(code)
+    if (message === undefined) {
+      check(`${threadsPage}: ${code} has a nish:err example`, false, "no fence refused with it")
+      continue
+    }
+    const clause = lastClause(message)
+    check(`${threadsPage}: ${code} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
+  }
+  // Each row's "write instead" cell quotes code the page compiles: every fragment of
+  // more than one word is in a `nish:ok` fence, and the cell links to an example.
+  const okSources = markedSnippets(threadsText)
+    .filter((s) => s.kind === "ok")
+    .map((s) => s.source)
+  for (const row of threadsText.matchAll(/^\| (NL\d{4}) \|.*\| (.*) \|$/gm)) {
+    // A link's text names the section it points to, not code to write.
+    const cell = row[2].replace(/\[[^\]]*\]\([^)]*\)/g, "")
+    const fragments = [...cell.matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter((f) => /[\s(=.[]/.test(f))
+    const missing = fragments.filter((f) => !okSources.some((source) => source.includes(f)))
+    check(
+      `${threadsPage}: ${row[1]}'s cell quotes code a nish:ok fence compiles`,
+      fragments.length > 0 && missing.length === 0 && /\]\(#/.test(row[2]),
+      fragments.length === 0 ? "no code in the cell" : `not in a fence: ${missing.join(" | ") || "(no link)"}`
+    )
+  }
+  // Every pinned wording of a thread refusal, not only the page's example of it: a
+  // code reached several ways (NL2479 from a spawn, a constructor, two scopes and a
+  // late send) builds its remedy several ways, and each one ends with the code.
+  const wordingDir = path.join(root, "tests", "wordings")
+  const remedyCodes = /^nl(2345|2348|2388|2465|246[6-9]|247\d|248[14]|2500|2503|2506|2511|2513|2516|2536)_/
+  for (const file of fs.readdirSync(wordingDir).sort()) {
+    if (!file.endsWith(".err") || !remedyCodes.test(file)) {
+      continue
+    }
+    const message = fs.readFileSync(path.join(wordingDir, file), "utf8").split("\n")[0]
+    const clause = lastClause(message)
+    check(`tests/wordings/${file} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
   }
 }
 

@@ -1,0 +1,1 @@
+`Map<i32, string[]>.set` is called inside the `using arena()` block at 9:5 and stores an allocation into memory

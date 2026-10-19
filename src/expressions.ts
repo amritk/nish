@@ -35,6 +35,7 @@ import {
 import { CheckContext } from "./context"
 import {
   captureWriteMessage,
+  captureWriteRemedy,
   taskCaptureWriteMessage,
   taskThisCaptureMessage,
   thisCaptureMessage,
@@ -237,7 +238,11 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   } else if (entry >= 0 && !takesRangeContext(expr)) {
     inner = -1
   }
+  ctx.program.memberSets[expr.id] = -1
   const computed = computeType(ctx, expr, scope, inner)
+  if (refuseInferredTag(ctx, expr, want)) {
+    return T_ERROR
+  }
   if (ctx.table.isMaybe(computed) && !welcome && expr.kind !== N_PAREN) {
     ctx.program.nodeTypes[expr.id] = T_ERROR
     return refuseMaybe(ctx, expr, computed)
@@ -255,8 +260,13 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   }
   const keepsMember = want === WANT_INFERRED && ctx.table.isEnumMemberType(computed)
   const type = readAsBase(ctx, computed, keepsRange || keepsMember)
+  if (type !== computed && ctx.table.isEnumMemberType(computed)) {
+    ctx.program.memberSets[expr.id] = computed
+  }
   if (coercesTo(ctx, type, want)) {
-    const target = ctx.table.stripNull(want)
+    // A nullable variant stays nullable as its union; everything else that
+    // converts is a non-null struct, and lands on the non-null target.
+    const target = type === ctx.table.stripNull(type) ? ctx.table.stripNull(want) : want
     ctx.program.nodeCoercions[expr.id] = type
     ctx.program.nodeTypes[expr.id] = target
     return target
@@ -365,6 +375,150 @@ export const enterMember = (ctx: CheckContext, expr: Node, computed: i32, member
 export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): string => {
   const spelled = ctx.table.typeName(member)
   return `Type \`${spelled}\` holds only the member \`${spelled}\`, got ${got}`
+}
+
+/**
+ * A union's tag read where its type would be inferred: TypeScript gives it
+ * the union of the variants' tags, `Kind.Circle | Kind.Square`, which Nish
+ * has no type for, and reading it as the whole enum would accept a later
+ * comparison TypeScript refuses.
+ */
+const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean => {
+  const union = ctx.program.memberSets[expr.id]
+  if (!ctx.table.isUnion(union) || (want !== WANT_MAYBE && want !== WANT_RANGE && want !== WANT_INFERRED)) {
+    return false
+  }
+  const kind = ctx.table.typeName(ctx.table.tagEnumOf(union))
+  ctx.program.nodeTypes[expr.id] = T_ERROR
+  ctx.error(
+    expr,
+    `The tag \`${ctx.textOf(expr)}\` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type this version does not have, so annotate it as \`${kind}\``
+  )
+  return true
+}
+
+/**
+ * The enum members `node` can hold, as member types, where they are known to
+ * be fewer than its enum's: a member constant, a read of a member type, or a
+ * union's tag. Empty for any other node.
+ */
+export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
+  const bare = unwrapParens(node)
+  const members: i32[] = []
+  if (ctx.program.isEnumMember(ctx.table, bare)) {
+    const type = ctx.table.enumBase(ctx.program.nodeTypes[bare.id])
+    members.push(ctx.table.enumMemberOf(type, ctx.program.nodeEnumValues[bare.id], bare.text))
+    return members
+  }
+  const set = ctx.program.memberSets[bare.id]
+  if (ctx.table.isEnumMemberType(set)) {
+    members.push(set)
+  } else if (ctx.table.isUnion(set)) {
+    for (const tag of ctx.table.tagsOf(set)) {
+      members.push(tag)
+    }
+  }
+  return members
+}
+
+/**
+ * Whether two member sets are both known and share no value, which
+ * TypeScript refuses in a comparison (TS2367) and a `case` label (TS2678).
+ */
+export const membersDisjoint = (ctx: CheckContext, left: i32[], right: i32[]): boolean => {
+  if (left.length === 0 || right.length === 0) {
+    return false
+  }
+  for (const a of left) {
+    for (const b of right) {
+      if (ctx.table.memberValue(a) === ctx.table.memberValue(b)) {
+        return false
+      }
+    }
+  }
+  return true
+}
+
+/** A member set as TypeScript spells it: `Kind.Circle | Kind.Square`. */
+export const memberSetName = (ctx: CheckContext, members: i32[]): string => {
+  const names: string[] = []
+  for (const member of members) {
+    names.push(ctx.table.typeName(member))
+  }
+  return names.join(" | ")
+}
+
+/**
+ * The variants of `union` that `node` may be to TypeScript, which types a
+ * value before it converts: `new Circle()` is a `Circle`, a ternary is its
+ * arms, `??` both its operands, `null` none. Read after `node` was checked.
+ */
+const variantsGiven = (ctx: CheckContext, node: Node, union: i32, out: i32[]): void => {
+  if (node.kind === N_PAREN) {
+    variantsGiven(ctx, node.children[0], union, out)
+    return
+  }
+  if (node.kind === N_CONDITIONAL) {
+    variantsGiven(ctx, node.children[1], union, out)
+    variantsGiven(ctx, node.children[2], union, out)
+    return
+  }
+  if (node.kind === N_BINARY && node.text === "??") {
+    variantsGiven(ctx, node.children[0], union, out)
+    variantsGiven(ctx, node.children[1], union, out)
+    return
+  }
+  const from = ctx.program.nodeCoercions[node.id]
+  const type = ctx.table.stripNull(from >= 0 ? from : ctx.program.nodeTypes[node.id])
+  if (ctx.table.isUnion(type)) {
+    for (const variant of ctx.table.variantsOf(type)) {
+      out.push(variant)
+    }
+  } else if (ctx.table.hasVariant(union, type)) {
+    out.push(type)
+  }
+}
+
+/**
+ * Refuses `value` stored where `slot`, a union, is declared, when it is some
+ * of the variants and not all: TypeScript narrows the place to what it was
+ * given, and reads every later comparison against that, which Nish does not
+ * track yet (docs/LANGUAGE.md, Discriminated unions). `null` alone is the
+ * nullable rule's to answer. True once it has reported.
+ */
+export const refuseNarrowingStore = (ctx: CheckContext, value: Node, slot: i32, place: string): boolean => {
+  const union = ctx.table.stripNull(slot)
+  if (!ctx.table.isUnion(union)) {
+    return false
+  }
+  const given: i32[] = []
+  variantsGiven(ctx, value, union, given)
+  if (given.length === 0) {
+    return false
+  }
+  let missing = false
+  for (const variant of ctx.table.variantsOf(union)) {
+    if (given.indexOf(variant) < 0) {
+      missing = true
+    }
+  }
+  if (!missing) {
+    return false
+  }
+  const named: string[] = []
+  for (const each of given) {
+    const name = ctx.table.typeName(each)
+    if (named.indexOf(name) < 0) {
+      named.push(name)
+    }
+  }
+  const shown = named.join(" | ")
+  ctx.error(
+    value,
+    `${place} is \`${ctx.table.typeName(union)}\` and is given a \`${shown}\`: TypeScript narrows it to \`${shown}\` ` +
+      "from here on, which this version does not track, so declare it as that type or give it a value of the whole union"
+  )
+  return true
 }
 
 /**
@@ -684,7 +838,7 @@ const refuseOuterWrite = (ctx: CheckContext, target: Node): i32 => {
   if (task) {
     message = taskCaptureWriteMessage(target.text)
   } else if (parallel) {
-    message = captureWriteMessage(target.text)
+    message = captureWriteMessage(target.text, captureWriteRemedy(ctx.program, target))
   }
   refuseOnce(ctx, target, message)
   return T_ERROR
@@ -1251,6 +1405,14 @@ const checkEquality = (
       )
     }
     return ctx.errorType(expr, `Operator \`${op}\` requires two operands of the same type, got ${a} and ${b}`)
+  }
+  const leftSet = memberSetOf(ctx, leftNode)
+  const rightSet = memberSetOf(ctx, rightNode)
+  if (membersDisjoint(ctx, leftSet, rightSet)) {
+    return ctx.errorType(
+      expr,
+      `This \`${op}\` is always ${op === "===" ? "false" : "true"}: \`${ctx.textOf(leftNode)}\` is \`${memberSetName(ctx, leftSet)}\` and \`${ctx.textOf(rightNode)}\` is \`${memberSetName(ctx, rightSet)}\`, which share no member`
+    )
   }
   // Two `T | null` values: neither is narrowed, so a pointer compare would
   // answer a question about identity that the reader did not ask.
@@ -2107,6 +2269,9 @@ export const assignInto = (
       const got = ctx.table.typeName(rhs)
       return ctx.errorType(value, `Cannot assign ${got} to ${ctx.table.typeName(slot)} ${what} \`${name}\``)
     }
+    if (rhs !== T_ERROR && refuseNarrowingStore(ctx, value, slot, `The ${what} \`${name}\``)) {
+      return T_ERROR
+    }
     return slot
   }
   // WP31 §7: a compound assignment to a ranged place computes in `i32`, and
@@ -2320,7 +2485,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   while (i < args.children.length) {
     const arg = args.children[i]
     const got = checkExpression(ctx, arg, scope, sig.paramTypes[i])
-    if (got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
+    const refused = refuseForeignNullable(ctx, sig, i, arg, got, sig.name)
+    if (!refused && got !== T_ERROR && !ctx.table.assignable(got, sig.paramTypes[i])) {
       const wantName = ctx.table.typeName(sig.paramTypes[i])
       ctx.error(
         arg,
@@ -2331,6 +2497,40 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   }
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
+}
+
+/**
+ * A `CPtr | null` parameter of a `declare function` takes the literal `null`
+ * or a `CPtr`, never a `CPtr | null` the program holds (WP27 S3.3,
+ * `docs/wp27-ffi.md` §8g). The `null` written at the call is the program's
+ * own "no address", as a `string | null` parameter's is; a nullable pointer
+ * held in a variable, a field, a ternary or a `??` came from C and is narrowed
+ * with `!== null` before it goes back, so C is never handed a null it gave
+ * out by a path the program did not test. `true` when it reported.
+ */
+const refuseForeignNullable = (
+  ctx: CheckContext,
+  sig: FunctionSig,
+  i: i32,
+  arg: Node,
+  got: i32,
+  shown: string
+): boolean => {
+  if (!sig.foreign() || i >= sig.paramTypes.length) {
+    return false
+  }
+  const want = sig.paramTypes[i]
+  if (!ctx.table.isNullable(want) || ctx.table.stripNull(want) === T_STRING) {
+    return false
+  }
+  if (unwrapParens(arg).kind === N_NULL || got === T_ERROR || !ctx.table.isNullable(got)) {
+    return false
+  }
+  ctx.error(
+    arg,
+    `Argument ${i + 1} of \`${shown}\` is a \`CPtr | null\` the program holds: a nullable foreign parameter takes the literal \`null\` or a pointer narrowed with \`!== null\`, so C is never handed a null by a path nobody tested`
+  )
+  return true
 }
 
 /**
@@ -2362,6 +2562,7 @@ const checkDirectCall = (
   while (i < args.children.length && i < arity) {
     const want = sig.paramTypes[i]
     const got = checkExpression(ctx, args.children[i], scope, want)
+    refuseForeignNullable(ctx, sig, i, args.children[i], got, shown)
     if (bad < 0 && got !== T_ERROR && !ctx.table.assignable(got, want)) {
       bad = i
       badType = got

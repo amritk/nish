@@ -1,0 +1,2 @@
+`task` writes memory its caller can see at 
+reject_thread_task_own_method_adopts_param.ts:28:3, and `spawn`

@@ -32,6 +32,7 @@ import { Scope } from "./symbols"
 import {
   isNumeric,
   T_BOOL,
+  T_CPTR,
   T_ERROR,
   T_F32,
   T_F64,
@@ -355,7 +356,7 @@ const checkUncheckedAccess = (ctx: CheckContext, call: Node, scope: Scope, name:
 }
 
 /**
- * A `nish:unsafe` function called by its global name. The five are declared
+ * A `nish:unsafe` function called by its global name. The six are declared
  * as globals in `runtime/nish.d.ts`, as every `nish:` export is, but a
  * program reaches them only through the import: an unchecked index and a
  * defined wrap are each a decision about one site, and the import is what
@@ -730,6 +731,23 @@ const checkCrypto = (
   return T_VOID
 }
 
+/**
+ * `readCString(p)`, from `nish:unsafe` (WP27 S3.3, `docs/wp27-ffi.md` §8e):
+ * the `NUL`-terminated bytes at `p`, copied into the arena as a `string`.
+ *
+ * The argument is a `CPtr` and never a `CPtr | null`, so a null address cannot
+ * reach the copy: the only `CPtr` a program holds came back from a C function,
+ * and one that may be null is narrowed with `!== null` before it is accepted
+ * here. What the type cannot say — that the address is a C string, and still
+ * live — is why the call is in `nish:unsafe`.
+ */
+const checkReadCString = (ctx: CheckContext, call: Node, scope: Scope, args: Node): i32 => {
+  if (checkBuiltinArity(ctx, call, "readCString", args, 1)) {
+    checkArgumentType(ctx, args.children[0], scope, "readCString", T_CPTR)
+  }
+  return T_STRING
+}
+
 // ---- Plain calls ----------------------------------------------------------------------
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
@@ -781,6 +799,9 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   // `--emit-checked` dump, whatever its arguments turn out to be.
   if (isUnsafeExport(name)) {
     ctx.program.noteUnsafeCall(call, name)
+    if (name === "readCString") {
+      return checkReadCString(ctx, call, scope, args)
+    }
     return name === "uncheckedGet" || name === "uncheckedSet"
       ? checkUncheckedAccess(ctx, call, scope, name, args)
       : checkWrapping(ctx, call, scope, name, args)

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Starts the nginx twin: `serve <port> [ignored...]`. build.sh copies this file
+# beside the nginx it builds, into build/http-twins/nginx/.
+#
+# nginx prints nothing once it is bound, so a background poller prints
+# `listening <port>` when the port accepts, and the shell then becomes nginx
+# with `exec`: the pid bench/http.mjs measures and sends SIGINT to is nginx's own.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+port=${1:-8080}
+run="$here/run/$port"
+mkdir -p "$run"
+sed "s/@PORT@/$port/" "$here/nginx.conf" >"$run/nginx.conf"
+(
+  for _ in $(seq 1 1000); do
+    if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+      echo "listening $port"
+      exit 0
+    fi
+    sleep 0.01
+  done
+  echo "nginx did not bind 127.0.0.1:$port" >&2
+) &
+exec "$here/sbin/nginx" -p "$run/" -c nginx.conf -e stderr
