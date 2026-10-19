@@ -6,6 +6,9 @@
 /** The modules that define the TLS server, its record layer and carrier, and the AEADs they seal with. */
 const TLS_MODULES = /^define [^\n]*@nish\.(Tls|tls|Aes|aes|ghash|chacha20|poly1305)/m
 
+/** The ticket module, the ChaCha20-Poly1305 it seals with, and the test program's exports, `ticketRotationTurns` among them. */
+const TICKET_MODULES = /^define [^\n]*@(nish\.(tlsTicket|TlsTicket|chacha20|poly1305)|ticket)/m
+
 /** The schedule's module and the HMAC and HKDF it derives with. */
 const SCHEDULE_MODULES = /^define [^\n]*@nish\.(tls|Tls|hmac|Hmac|hkdf|Hkdf)/m
 
@@ -112,6 +115,32 @@ export const wipeChecks = [
       ["nish.tlsHandshakeSecret", 57],
       ["nish.tlsMasterSecret", 58],
       ["nish.tlsFinishedVerifyData", 57],
+    ],
+  },
+  // `nish/net/tls/ticket` seals and opens session tickets under a borrowed
+  // `Secret` key; `net_tls_ticket` calls both and rotates the keys.
+  // `tlsTicketSeal` 8: the plaintext, built after the key id and nonce in the
+  // one array `exposeWith` hands its function, wiped with `secureZero` once
+  // after the seal and its refusals (1), and the exposed function's 7 — the
+  // `wipe` of the plaintext copy it hands the AEAD (1, a `wipe` since
+  // `secureZero` is C, which that function may not reach) and
+  // `chacha20Poly1305Seal`'s own 6. `tlsTicketOpen` 9: the opened plaintext,
+  // wiped once after the branch on the tag and the parse (1), the state's PSK
+  // array on a failed parse (1), and `chacha20Poly1305Open`'s own 7. Deleting
+  // any one of these four wipes lowers its root's count by 1.
+  //
+  // `ticketRotationTurns` is the test program's rotation turn, an export of
+  // `checks.ts` and so named without the `nish.` prefix: 55, its own 3 `wipe`s
+  // (the previous key on each turn, and both keys at the end) besides the 2
+  // seals (8 each) and 4 opens (9 each) it calls. It is pinned at its total.
+  {
+    name: "tls: the wipes survive opt -O2 (a session ticket's plaintext on seal and open, the PSK of a failed open, the rotation turn's keys)",
+    program: "tests/link/net_tls_ticket/main.ts",
+    modules: TICKET_MODULES,
+    roots: [
+      ["nish.tlsTicketSeal", 8],
+      ["nish.tlsTicketOpen", 9],
+      ["ticketRotationTurns", 55],
     ],
   },
 ]
