@@ -88,6 +88,10 @@ const post = (t: Suite): void => {
   t.ok("held back by the send buffer and resumed: H3_WRITABLE came", p.writables > n32(0));
   t.ok("and the request ended whole: its content-length matched", h3Saw(p, "end 0"));
   t.eqI64("the client never sent past the credit it had: no error", p.closeCode, n64(-1));
+  t.ok(
+    "between events the connection holds neither its body chunk nor its field section: both went back to their pools",
+    p.h3.dataPool.lent() === 0 && p.h3.sectionPool.lent() === 0 && p.h3.dataPool.made === 1 && p.h3.sectionPool.made === 1
+  );
 };
 
 /** Twelve requests open at once on one connection, and two large responses interleaved. */
