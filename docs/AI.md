@@ -1859,8 +1859,9 @@ may not drop, as a statement: how a key in a plain array is cleared once used.
 
 **Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
 array or a record of integer fields). It is opaque: no printing, interpolating,
-comparing with a value, branching, indexing, `.value`, field, array element or
-`Result` payload, and no builtin takes one. Read it only with `expose(s, f)` or
+comparing with a value, branching, indexing, `.value`, array element or
+`Result` payload, a field other than a holder's `readonly` one (below), and no
+builtin takes one. Read it only with `expose(s, f)` or
 `exposeWith(s, arg, f)`, where `f` is a top-level function or an arrow that
 declares its return type, reaches no I/O and no C, keeps nothing of the value
 and returns no `Secret` — that return is what leaves. A `Secret` your function
@@ -1911,6 +1912,64 @@ export const main = (): i32 => {
   const k: Secret<u8[]> = secret(raw); // NL2512: `raw` has a second reference
   wipe(k);
   return toI32(alias[0]);
+};
+```
+
+**A key kept in an object.** A class keeps a key as long as it lives in a
+`readonly` field of exactly `Secret<T>` (the class not generic). Set it once,
+in the constructor, with `this.k = secret(fresh)`; rewrite it only in place
+through `exposeWith`; read `this.k` only as a call or `new` argument (`expose`,
+`exposeWith`, a function taking a `Secret`; `wipe` only in the holder's own `wipe()`) or a `===`/`!==` operand —
+never bind, return or store it. The class declares `wipe(): void`, no
+parameters, calling `wipe(this.k)` itself for every such field on every path
+(NL2540, NL2541); a field is wiped nowhere else (NL2547). A function taking a
+`Secret` borrows it: it neither returns it (NL2546) nor wipes it (NL2548). Nothing checks that `wipe()` is called: call it when the
+holder is done.
+
+```ts nish:ok
+import { Secret, expose, secret, wipe } from "nish:secret";
+
+const width = (k: u8[]): i32 => toI32(k.length);
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32));
+  }
+  size(): i32 {
+    return expose(this.key, width);
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  const n: i32 = s.size();
+  s.wipe();
+  return n === 32 ? 0 : 1;
+};
+```
+
+```ts nish:err NL2544
+import { Secret, secret, wipe } from "nish:secret";
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32));
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  const k = s.key; // NL2544: a second owner of the key
+  s.wipe();
+  return 0;
 };
 ```
 

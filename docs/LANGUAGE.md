@@ -6105,11 +6105,15 @@ names the secret:
   `reject_secret_as_index`);
 - a member read, written or called anywhere but `std/secret.ts` (NL2436,
   `reject_secret_member`), and `new Secret` (NL2437, `reject_secret_new`);
-- a field of a class or interface (NL2430, `reject_secret_field`), an array
-  element, a `Result` payload, or a type argument of any class, `Map` and `Set`
-  included (NL2429, `reject_secret_array`, `reject_secret_result`,
-  `reject_secret_generic_class`). A `Secret` lives in a local or a parameter,
-  and `Secret<T> | null` is how a function hands back one it may not have.
+- an array element, a `Result` payload, or a type argument of any class,
+  `Map` and `Set` included (NL2429, `reject_secret_array`,
+  `reject_secret_result`, `reject_secret_generic_class`). A `Secret` lives in a
+  local, a parameter, or a holder's field ([A `Secret` field](#a-secret-field)),
+  and `Secret<T> | null` is how a function hands back one it may not have. Any
+  other field — of an interface, of a generic class, not `readonly`, or not
+  exactly `Secret<T>` — is NL2430 (`reject_secret_field`,
+  `reject_secret_field_interface`, `_generic_class`, `_not_readonly`,
+  `_nullable`).
 
 **A `Secret` leaves the function that made it returned or wiped, on every
 path.** This is Result rule 1's analysis in its two places — the statement that
@@ -6195,9 +6199,139 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   reads the local before the move, a `Result` local copied into another
   (`reject_secret_alias_result_copy`), and a `let` given another local even
   after the move (`reject_secret_alias_reassigned_after`).
-- A `Secret` parameter is borrowed. The callee may read it through `expose`,
-  hand it on, wipe it or return it, and owes nothing: the caller wipes what it
-  made.
+- A `Secret` parameter is borrowed. The callee may read it through `expose`
+  or hand it on, and owes nothing: the caller wipes what it made. It neither
+  returns it, which would give the caller a second name for a key it already
+  owns (NL2546, `reject_secret_field_launder_function` and its siblings, among
+  them `reject_secret_field_launder_local` for a caller's own local), nor
+  wipes it, which would leave the caller reading zeroes and wiping it again
+  (NL2548, `reject_secret_field_wipe_param` and its siblings, among them
+  `reject_secret_field_wipe_param_local`). The cases are listed under
+  [A `Secret` field](#a-secret-field).
+
+  **This narrows 0.18.0.** Up to 0.18.0 a callee could also return or wipe a
+  borrowed `Secret`; from the release after it, both are refused, for every
+  `Secret` parameter and not only a holder's field. A function that returned
+  its parameter is called for its effect and the caller goes on using the key
+  it passed; a function that wiped its parameter leaves the wipe to the owner,
+  the function or holder that made the key.
+
+#### A `Secret` field
+
+A key that lives as long as an object does — a connection's traffic secret, a
+signer's private scalar — is kept in a `readonly` field of exactly `Secret<T>`,
+in a class with no type parameters. Such a class is a *holder*. The checker
+proves three things of it: the field is set once, from a fresh value; it is
+read only where the key cannot get out; and the holder's `wipe()` ends it.
+
+```ts
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32));   // once, from a fresh value
+  }
+  rekey(by: u8): void {
+    exposeWith(this.key, by, refill);       // rewritten in place, never replaced
+  }
+  wipe(): void {
+    wipe(this.key);                         // every field, on every path
+  }
+}
+```
+
+- **The releaser.** A holder declares `wipe(): void`, taking no parameters
+  (`` `Holder` holds the `Secret` field `k`, so it declares `wipe(): void` ``,
+  NL2540, `reject_secret_field_no_wipe`, `_wipe_signature`). Its body calls
+  `wipe(this.f)` itself for every `Secret` field, on every path: the field is
+  walked as an owned local would be, so a `return` before it, one arm of an
+  `if`, a loop that may run no pass, and a helper method that wipes it are each
+  `` `this.k` can leave this `wipe()` unwiped `` (NL2541,
+  `reject_secret_field_wipe_missing`, `_wipe_return`, `_wipe_branch`,
+  `_wipe_loop`, `_wipe_helper`, and `_wipe_new`, where a constructor `new`
+  reaches zeroes the key in place). That method is the only place a field
+  ends: `wipe(h.f)` anywhere else — a function, another method, a
+  constructor, or a function the constructor hands `this` to or stores it
+  for — is `` `k` is wiped outside its holder's `wipe()` `` (NL2547,
+  `reject_secret_field_wipe_outside`, `_wipe_through`, `_wipe_method`,
+  `_wipe_ctor`, `_this_fin`, `_this_store`); call the holder's `wipe()`.
+- **Construction.** The field is set in the constructor, by `this.f =
+  secret(v)` and nothing else, and `v` is judged by the sole-reference rule
+  above (NL2512, `reject_secret_field_alias_raw`). A parameter, a call that
+  answers a `Secret`, or a local holding one is
+  `` `this.k` is set from something other than `secret(...)` `` (NL2542,
+  `reject_secret_field_param`, `_call`, `_local`); a second store while the
+  first may still be there, a later loop pass included, is NL2543
+  (`reject_secret_field_twice`, `_ctor_loop`). The field is `readonly`, so a
+  store anywhere else — a method, a function, a compound `+=`, or a second
+  name for `this` — is the `readonly` refusal, NL2181
+  (`reject_secret_field_store_method`, `_store_outside`, `_compound`,
+  `_this_escape`). The store is a statement of its own: `const x = (this.k =
+  secret(v))` binds the key a second time, and is NL2544
+  (`reject_secret_field_store_value`). A holder is made only by `new`: an
+  object literal is NL2545 (`reject_secret_field_object_literal`), and typed
+  JSON neither encodes nor decodes one (NL2485, `reject_secret_field_json`, `_json_decode`).
+- **Reads.** `h.f` is borrowed, as a `Secret` parameter is: it is an argument
+  of a call or a `new` — `expose`, `exposeWith`, or a function that
+  takes a `Secret`, and `wipe` only in the holder's own `wipe()` (NL2547) — or an operand of `===` or `!==` against another `Secret`
+  (a field is never `null`, so `h.k === null` is a type error, NL2024). Bound to a local, assigned, returned, chosen by a ternary or `??`,
+  or read through `?.` or a chain of fields, it would be a second owner of the
+  key, and is `` `k` is a `Secret` field, which is read only as a call's
+  argument or an `===`/`!==` operand `` (NL2544, `reject_secret_field_bind`,
+  `_assign_local`, `_return`, `_ternary`, `_nullish`, `_optional_chain`,
+  and `_nested` for `o.h.k`; `_chain` is the chained store `this.k = this.j =
+  secret(v)`). What a borrow receives stays borrowed: a function, an arrow or
+  a generic `id<T>` that takes a `Secret` and returns it would hand the
+  caller a second name for the holder's key, and is
+  `` `s` is a `Secret` parameter, which its caller owns and wipes: returned ``
+  (NL2546, `reject_secret_field_launder_function`, `_launder_arrow`,
+  `_launder_generic`, `_launder_method`, and `_launder_local` for a caller's
+  own local); one that wipes it is NL2548 (`reject_secret_field_wipe_param`,
+  `_wipe_param_new`, `_wipe_param_method`, and `_wipe_param_local` for a
+  caller's own local). A ternary that picks one of two borrowed parameters to
+  return is refused before it gets there, as a copy (NL2444,
+  `reject_secret_field_launder_ternary`). Every place a `Secret` may not go is closed to the field too:
+  `reject_secret_field_console` (NL2432), `_template` (NL2431), `_equality`
+  (NL2433), `_condition` (NL2434), `_index` (NL2435), `_member` (NL2436),
+  `_array`, `_array_literal` and `_result` (NL2429), `_new_arg` (NL2439: a
+  `Secret` made for a constructor that keeps none, beside an accepted
+  `new Box(h.k)` that borrows the field), and `_secret_arg` and
+  `_holder_payload` (NL2428: neither a `Secret` nor a holder is key material).
+- **The holder is a value.** It may be aliased and kept in an array, a `Map`,
+  another object's field or a `Result`. The rules that follow are the general
+  ones, applied to a holder as to any class: a data-parallel body may not
+  capture one (NL2504, `reject_secret_field_capture`) nor may a task (NL2509,
+  `_task_wipe`), the scope's own thread may not wipe one a task of it may read
+  before the join — through `wipe()`, a helper or a constructor
+  (`_scope_wipe`, `_scope_helper`, `_scope_new`) — and `using` does not take
+  one (NL2387, `reject_secret_field_using`).
+
+`secret_field` runs all of it, and `tests/run.js` holds the wipe to `-O2`
+("nish:secret: a holder's wipe survives opt -O2"): `secret_field_wipe_o2`'s
+`wipe()` is a volatile `llvm.memset` of the key after `opt -O2`, where its twin
+`secret_field_wipe_o2_plain`, zeroing the same bytes with `fill(0)`, has an
+ordinary one. An exported holder appears in an `--emit-header` sidecar as an
+opaque struct, a `typedef` with no fields: with its layout a host could
+allocate one and skip the constructor that sets the key, so it reaches C only
+as a pointer. A `Secret` an exported function takes or returns is likewise a
+pointer to an opaque struct, as a `Map` is, and `--emit-dts` and `--emit-napi`
+bridge no function that takes or returns a holder or a `Secret`
+("nish:secret: --emit-header keeps a Secret and its holder opaque, and
+--emit-dts / --emit-napi bridge neither").
+
+What the rule leaves out, so a review need not look for it here:
+
+- **A holder nobody wipes.** The checker proves that `wipe()` ends every key,
+  not that anybody calls it: a holder dropped, or released with its arena,
+  without `wipe()` leaves its key in memory. Holders are values that cross
+  functions, aliases and containers, and their owner is not tracked.
+- **Aliases.** `wipe()` through one alias zeroes the key for every alias, and
+  an `expose` through another reads zeros afterwards: a wrong answer, never a
+  leak.
+- **Plain temporaries.** What an exposed function copies out of the key is a
+  plain value, and is wiped only if that function wipes it.
+- **Per-packet and per-record keys.** These cannot be a `Secret` under today's
+  `expose`: sealing writes the output buffer (NL2450) and the AES kernels are C
+  (NL2448).
 
 **`expose` and `exposeWith`.** The function either runs is a
 [function parameter](#function-parameters): a top-level function named at the
@@ -9349,7 +9483,7 @@ messages are exact for the cases cited; other rows quote the checker
 | an arrow argument whose types cannot be inferred | `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` / `` The arrow passed to `map` needs a return type annotation: ... `` | `reject_fnarg_infer`, `reject_fnarg_block_return` |
 | a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
 | type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
-| a `Secret` where a value would leave it, or a `Secret` the function made and did not return or wipe on some path | NL2428 to NL2453, worded in [Secrets](#secrets-nishsecret) | `reject_secret_*` |
+| a `Secret` where a value would leave it, or a `Secret` the function made and did not return or wipe on some path | NL2428 to NL2453 and NL2540 to NL2548, worded in [Secrets](#secrets-nishsecret) | `reject_secret_*` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
 | importing an enum or a type alias its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported`, `alias_import_not_exported` |

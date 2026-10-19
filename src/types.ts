@@ -826,7 +826,9 @@ export class TypeTable {
   /**
    * Whether `type` holds a `Secret` anywhere a value of it could reach: the
    * type itself, an element, a nullable's inner type, or either arm of a
-   * `Result`. A struct is not looked inside, because no field may be one.
+   * `Result`. A struct is not looked inside: the one field that may be a
+   * `Secret`, a holder's (`admitsSecretField`), is ended by the holder's own
+   * `wipe()`, so the holder itself travels as a value.
    */
   holdsSecret(type: i32): boolean {
     if (type < 0) {
