@@ -22,52 +22,84 @@ export const wipeChecks = [
   // AES schedules (`aesKeyWipe`, 2 each); with ordinary stores in place of
   // `aesKeyWipe` it is 3. `wipeWrite` 9 (`tlsTrafficZero` on the server's two
   // traffic secret fields, and `clear`), `wipeRead` 9 (the client's),
-  // `wipeTraffic` 18 (both). The holders' own `wipe()`s: `TlsServer.wipe` 19
-  // = 1 + 2 × 9 (the ephemeral key, 1, and each of its two `TlsSecretPool`s'
-  // nine secrets, 9 each), and
-  // the record server's `wipe` 37 (its four traffic secret fields, both
-  // `clear`s and `TlsServer.wipe`), which `wipeKeys` is, so 37 too. A
+  // `wipeTraffic` 18 (both). The holders' own `wipe()`s: `TlsServer.wipe` 25
+  // = 1 + 2 × 12 (the ephemeral key, 1, and each of its two `TlsSecretPool`s'
+  // twelve secrets, 12 each: the nine of a full handshake and a resumed
+  // one's PSK, early secret and binder key), and
+  // the record server's `wipe` 43 (its four traffic secret fields, both
+  // `clear`s and `TlsServer.wipe`), which `wipeKeys` is, so 43 too. A
   // `wipe()` that leaves out one of its `Secret` fields does not compile
   // (NL2541, the holder rule), so those lines are pinned by the checker, and
   // the pools' two plain arrays, `secureZero`d, are what deleting moves:
   // each takes 2 from `TlsServer.wipe` and from every root above it.
-  // `fail` 51: the alert sealed first (`sendAlert`'s seal, 14) and then
+  // `fail` 57: the alert sealed first (`sendAlert`'s seal, 14) and then
   // `wipeKeys`, once, after the branch on whether the alert is sent, so that
-  // `opt` has no two wipes to merge; a truncated stream and `abort` 37 each,
-  // `wipeKeys`; `handleAlert` 46, `wipeRead` on the client's `close_notify`
+  // `opt` has no two wipes to merge; a truncated stream and `abort` 43 each,
+  // `wipeKeys`; `handleAlert` 52, `wipeRead` on the client's `close_notify`
   // and `wipeKeys` on its error alert. `sealClose` 23: the `close_notify`'s
   // seal and then `wipeWrite`; `close` 24, `wipeResumption` and `sealClose`.
-  // `TlsServer`: `exchangeKeys` 5 (the exchange's copy of the ephemeral key,
-  // the ECDHE secret on each of its two paths, the handshake secret's bytes,
-  // and the words, wiped whole once after the branch on the alert; with the
-  // words zeroed by ordinary stores it is 4), `fail` and `wipeResumption` 1
-  // (`TlsSecretPool.zero`'s resumption arm, `tlsZeroHeld`, the one `opt`
-  // keeps for the constant index), and `restart` 20 (`wipe`, and the
-  // caller's key array once it is copied in). The carrier's `close` 530 (the
-  // record server's `close`, the flush after it and `wipeKeys`).
+  // `TlsServer`: `exchangeKeys` 6 (the exchange's copy of the ephemeral key,
+  // the ECDHE secret, once after the branch on the low-order share, the
+  // handshake secret's bytes, the salt `exchangeKeys` reads into words and
+  // the salt `tlsExchange` rebuilds from them, 1 each, and the words, wiped
+  // whole once after the branch on the alert; with the words zeroed by
+  // ordinary stores it is 5, and deleting either salt's `secureZero` makes
+  // it 5), `wipeResumption` 1 (`TlsSecretPool.zero`'s resumption arm,
+  // `tlsZeroHeld`, the one `opt` keeps for the constant index), `fail` 6
+  // (that arm, the PSK's, the early secret's and the binder key's, the salt
+  // and the opened ticket's PSK, 1 each), and `restart` 29 (`wipe`, the
+  // caller's key array once it is copied in, and the salt and both tickets'
+  // PSK arrays, 1 each). The carrier's `close` 652 (the record server's
+  // `close`, the flush after it and `wipeKeys`).
   //
   // The handshake's own wipes, each a root of its own: a record's `open` 16
   // (its nonce, 1, and the AEADs' own wipes), `writeServerFlight` 3 (the
   // plain copy of the handshake secret, 1, and `deriveInto`'s output for each
-  // handshake traffic secret, 1 each), `TlsServer.sign` 12 (the plain copies
-  // of the server handshake, handshake and client handshake secrets, the
-  // master secret, `deriveInto`'s four outputs, 1 each, and the
-  // transcript's 4), `handleFinished` 1 (the handshake secret's arm of
-  // `zero`), the record server's `start` 69 (the last connection's
+  // handshake traffic secret, 1 each), `TlsServer.sign` 17 (the `fail` `opt` inlines into it, 6,
+  // `writeServerFinished`'s plain copy of the server handshake secret and
+  // the derivation under it, 2, and `masterSecretStep`'s 9),
+  // `masterSecretStep` 9 (the plain copies of the handshake and client
+  // handshake secrets and the master secret, `deriveInto`'s four outputs,
+  // and the master secret's and client Finished's derivations, 1 each),
+  // `handleFinished` 1 (the handshake secret's arm of
+  // `zero`), the record server's `start` 75 (the last connection's
   // `wipeTraffic`, 18, `TlsServer.wipe` through `restart`, and the handshake
-  // it begins) and `advance` 561 (`wipeEphemeral`, the handshake and client
+  // it begins) and `advance` 690 (`wipeEphemeral`, the handshake and client
   // handshake secrets through `wipeSecret`, the plain copy each
-  // `tlsInstallHeld` installs from, besides the `fail` it can reach), and
+  // `tlsInstallHeld` installs from, the resumption master secret of a
+  // connection no ticket will be issued to, besides the `fail` it can reach), and
   // `updateReadKeys` 30 (the plain copy `tlsAdvanceHeld` moves on, once for
   // each hash length, and the keys it installs). Deleting any one of these
   // wipes lowers its root's count by its own share; `tlsZeroHeld`'s one
   // `wipe` lowers every root that zeroes a pool's secret.
   //
+  // A resumed handshake's own wipes, each a root of its own too:
+  // `selectTicket` 20 (the opened ticket's PSK on a refusal, in the loop
+  // and when the register is full, 1 each, and `tlsTicketOpen`'s 9 under
+  // the current and the previous key), `bindTicket` 8 (the opened ticket's
+  // PSK once it is in the pool, the plain copies of the PSK, early secret
+  // and binder key, and the PSK's and binder key's arms of `zero`, 1 each,
+  // and the early secret's and binder key's derivations, 1 each),
+  // `saltFromEarly` 1 (the plain copy of the early secret),
+  // `writeResumedHello` 3 (the plain copy of the handshake secret and
+  // `deriveInto`'s output for each handshake traffic secret, 1 each), `resume` 72
+  // (`saltFromEarly`, the opened ticket's PSK, the early secret's arm of
+  // `zero`, three `fail`s `opt` inlines, 6 each, `selectTicket`,
+  // `bindTicket`, and `answerHello`'s 23: `exchangeKeys`, the resumed
+  // flight's 14 and `writeServerFlight`), and on the way out
+  // `resumptionPsk` 1 (the plain copy of the resumption master secret),
+  // `writeTicket` 10 (the issued ticket's PSK, the inlined
+  // `resumptionPsk`, and `tlsTicketSeal`'s 8) and `issue` 11 (the
+  // resumption master secret's arm of `zero`, and `writeTicket`). One wipe
+  // is the exception to deleting: without `resume`'s early secret arm, `opt`
+  // turns a `zero` it inlined elsewhere into a `nish_wipe` call and `resume`
+  // still reads 72, so `net_tls_resume` reads that secret back as zero instead.
+  //
   // `fail` calls `sendAlert`, whose seal can call `fail` again, so a root's
   // count depends on which root of this cycle is counted first: the roots are
   // counted in the order below, and each count was read in that order.
   {
-    name: "tls: the wipes survive opt -O2 (both directions' keys, IVs and AES schedules; the traffic, handshake, exporter and resumption secrets; the exchange's words)",
+    name: "tls: the wipes survive opt -O2 (both directions' keys, IVs and AES schedules; the traffic, handshake, exporter and resumption secrets; the exchange's words; a resumed handshake's PSK, early secret, binder key and salt)",
     program: "tests/link/net_tls_wipes/main.ts",
     modules: TLS_MODULES,
     roots: [
@@ -75,27 +107,36 @@ export const wipeChecks = [
       ["nish.TlsRecordServer.wipeWrite", 9],
       ["nish.TlsRecordServer.wipeRead", 9],
       ["nish.TlsRecordServer.wipeTraffic", 18],
-      ["nish.TlsRecordServer.wipe", 37],
-      ["nish.TlsRecordServer.wipeKeys", 37],
-      ["nish.TlsRecordServer.fail", 51],
-      ["nish.TlsRecordServer.checkTruncation", 37],
-      ["nish.TlsRecordServer.abort", 37],
-      ["nish.TlsRecordServer.handleAlert", 46],
+      ["nish.TlsRecordServer.wipe", 43],
+      ["nish.TlsRecordServer.wipeKeys", 43],
+      ["nish.TlsRecordServer.fail", 57],
+      ["nish.TlsRecordServer.checkTruncation", 43],
+      ["nish.TlsRecordServer.abort", 43],
+      ["nish.TlsRecordServer.handleAlert", 52],
       ["nish.TlsRecordServer.sealClose", 23],
       ["nish.TlsRecordServer.close", 24],
-      ["nish.TlsServer.exchangeKeys", 5],
-      ["nish.TlsServer.fail", 1],
+      ["nish.TlsServer.exchangeKeys", 6],
+      ["nish.TlsServer.fail", 6],
       ["nish.TlsServer.wipeResumption", 1],
-      ["nish.TlsServer.wipe", 19],
-      ["nish.TlsServer.restart", 20],
-      ["nish.TlsTcpServer.close", 530],
+      ["nish.TlsServer.wipe", 25],
+      ["nish.TlsServer.restart", 29],
+      ["nish.TlsTcpServer.close", 652],
       ["nish.TlsRecordProtection.open", 16],
       ["nish.TlsServer.writeServerFlight", 3],
-      ["nish.TlsServer.sign", 12],
+      ["nish.TlsServer.sign", 17],
       ["nish.TlsServer.handleFinished", 1],
-      ["nish.TlsRecordServer.start", 69],
-      ["nish.TlsRecordServer.advance", 561],
+      ["nish.TlsRecordServer.start", 75],
+      ["nish.TlsRecordServer.advance", 690],
       ["nish.TlsRecordServer.updateReadKeys", 30],
+      ["nish.TlsServer.masterSecretStep", 9],
+      ["nish.TlsServer.selectTicket", 20],
+      ["nish.TlsServer.bindTicket", 8],
+      ["nish.TlsServer.saltFromEarly", 1],
+      ["nish.TlsServer.writeResumedHello", 3],
+      ["nish.TlsServer.resume", 72],
+      ["nish.TlsServer.resumptionPsk", 1],
+      ["nish.TlsServer.writeTicket", 10],
+      ["nish.TlsServer.issue", 11],
     ],
   },
   // `nish/net/tls/schedule`'s one-shot derivations take and answer `Secret`s
