@@ -641,19 +641,19 @@ export class TlsSecretPool {
   /** Wipes the one secret `index` names (`TLS_SECRET_*`), leaving the rest; any other index wipes nothing. */
   zero(index: i32): void {
     if (index === TLS_SECRET_HANDSHAKE) {
-      exposeWith(this.handshake, 0, tlsZeroHeld)
+      exposeWith(this.handshake, TLS_FROM, tlsZeroHeld)
     } else if (index === TLS_SECRET_CLIENT_HANDSHAKE) {
-      exposeWith(this.clientHandshake, 0, tlsZeroHeld)
+      exposeWith(this.clientHandshake, TLS_FROM, tlsZeroHeld)
     } else if (index === TLS_SECRET_SERVER_HANDSHAKE) {
-      exposeWith(this.serverHandshake, 0, tlsZeroHeld)
+      exposeWith(this.serverHandshake, TLS_FROM, tlsZeroHeld)
     } else if (index === TLS_SECRET_CLIENT_APPLICATION) {
-      exposeWith(this.clientApplication, 0, tlsZeroHeld)
+      exposeWith(this.clientApplication, TLS_FROM, tlsZeroHeld)
     } else if (index === TLS_SECRET_SERVER_APPLICATION) {
-      exposeWith(this.serverApplication, 0, tlsZeroHeld)
+      exposeWith(this.serverApplication, TLS_FROM, tlsZeroHeld)
     } else if (index === TLS_SECRET_EXPORTER) {
-      exposeWith(this.exporter, 0, tlsZeroHeld)
+      exposeWith(this.exporter, TLS_FROM, tlsZeroHeld)
     } else if (index === TLS_SECRET_RESUMPTION) {
-      exposeWith(this.resumption, 0, tlsZeroHeld)
+      exposeWith(this.resumption, TLS_FROM, tlsZeroHeld)
     } else if (index === TLS_SECRET_CLIENT_FINISHED) {
       secureZero(this.clientFinished)
     } else if (index === TLS_SECRET_TO_BE_SIGNED) {
@@ -907,7 +907,7 @@ export class TlsServer {
 
   /** Zeroes the ephemeral key, which the record layer does once the ServerHello is written. */
   wipeEphemeral(): void {
-    exposeWith(this.ephemeral, 0, tlsZeroHeld)
+    exposeWith(this.ephemeral, TLS_FROM, tlsZeroHeld)
   }
 
   /** Wipes every secret the server holds: the ephemeral key and both pools. `restart` calls it, and the carriers when a connection ends. */
@@ -1264,10 +1264,10 @@ export class TlsServer {
     const w: TlsExchangeWords = this.exchange
     const share: u8[] = this.input
     const at: i32 = this.hello.x25519ShareAt
-    w.key0 = exposeWith(this.ephemeral, 0, tlsWordAt)
-    w.key1 = exposeWith(this.ephemeral, 8, tlsWordAt)
-    w.key2 = exposeWith(this.ephemeral, 16, tlsWordAt)
-    w.key3 = exposeWith(this.ephemeral, 24, tlsWordAt)
+    w.key0 = exposeWith(this.ephemeral, TLS_FROM, tlsWordAt)
+    w.key1 = exposeWith(this.ephemeral, TLS_FROM + 8, tlsWordAt)
+    w.key2 = exposeWith(this.ephemeral, TLS_FROM + 16, tlsWordAt)
+    w.key3 = exposeWith(this.ephemeral, TLS_FROM + 24, tlsWordAt)
     w.share0 = tlsWordAt(share, at)
     w.share1 = tlsWordAt(share, at + 8)
     w.share2 = tlsWordAt(share, at + 16)

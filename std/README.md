@@ -145,7 +145,7 @@ reads one, and it still takes its randomness as an argument.
 
 | Module | What it is | Reproduces |
 | --- | --- | --- |
-| [`net/tls.ts`](./net/tls.ts) | The server side of a TLS 1.3 handshake, ClientHello through the client's Finished. `new TlsServer(config, serverRandom, x25519Private)`, then `receive(level, buf, off, len)` with what the client sent, `takeOutput(level)` for what to send, and `signatureInput()` / `sign(signature)` for the CertificateVerify hand-off (`tlsSignEcdsaP256` signs for a P-256 key, DER-encoded; a `TlsP256Signer`, made once, gives the same DER from its `sign(priv, content)` and keeps nothing per signature). A `TlsServerConfig` names the certificate chain, the signature scheme, the ALPN protocols, whether the carrier is QUIC, the server's transport parameters, and extensions to pass through in EncryptedExtensions. The suites are `TLS_AES_128_GCM_SHA256`, `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384` (in the client's order), the group x25519 (one HelloRetryRequest when the client offers it without a share), and `server_name`, ALPN and `quic_transport_parameters` are read; PSKs, 0-RTT, NewSessionTicket and client authentication are not. Every refusal is the alert to send — `receive` and `sign` answer 0 or a `TLS_ALERT_*` — never a panic, and a low-order x25519 share is refused. `restart(serverRandom, x25519Private)` hands a server's buffers, made once, to the slot's next connection, so a handshake allocates nothing that outlives it under any suite (TLS-3) | RFC 8446 §4, §7; RFC 8448 §3 byte for byte, and §5's transcript |
+| [`net/tls.ts`](./net/tls.ts) | The server side of a TLS 1.3 handshake, ClientHello through the client's Finished. `new TlsServer(config, serverRandom, x25519Private)`, then `receive(level, buf, off, len)` with what the client sent, `takeOutput(level)` for what to send, and `signatureInput()` / `sign(signature)` for the CertificateVerify hand-off (`tlsSignEcdsaP256` signs for a P-256 key, DER-encoded; a `TlsP256Signer`, made once, gives the same DER from its `sign(priv, content)` and keeps nothing per signature). A `TlsServerConfig` names the certificate chain, the signature scheme, the ALPN protocols, whether the carrier is QUIC, the server's transport parameters, and extensions to pass through in EncryptedExtensions. The suites are `TLS_AES_128_GCM_SHA256`, `TLS_CHACHA20_POLY1305_SHA256` and `TLS_AES_256_GCM_SHA384` (in the client's order), the group x25519 (one HelloRetryRequest when the client offers it without a share), and `server_name`, ALPN and `quic_transport_parameters` are read; PSKs, 0-RTT, NewSessionTicket and client authentication are not. Every refusal is the alert to send — `receive` and `sign` answer 0 or a `TLS_ALERT_*` — never a panic, and a low-order x25519 share is refused. `restart(serverRandom, x25519Private)` hands a server's buffers, made once, to the slot's next connection, so a handshake allocates nothing that outlives it under any suite (TLS-3); it copies the key into the server's own `Secret` and wipes the caller's array, and `wipe()` zeroes every secret the server holds | RFC 8446 §4, §7; RFC 8448 §3 byte for byte, and §5's transcript |
 | [`net/tls/codec.ts`](./net/tls/codec.ts) | The handshake messages as bytes: `tlsReadClientHello` into a reusable `TlsClientHelloView` of windows into the message, and `tlsParseClientHello` into a `TlsClientHello` of copies (structure checked, an alert on a malformed or duplicated field); each message's `tlsWrite*` writer into the caller's array at an offset, and `tlsEncodeServerHello`, `tlsEncodeHelloRetryRequest`, `tlsEncodeEncryptedExtensions`, `tlsEncodeCertificate`, `tlsEncodeCertificateVerify`, `tlsEncodeFinished` and `tlsCertificateVerifyContent`. The wire's constants: handshake and extension types, versions, the x25519 group, the two signature schemes, and the `TLS_ALERT_*` descriptions | RFC 8446 §4, RFC 6066 §3, RFC 7301 §3.1, RFC 9001 §8.2 |
 | [`net/tls/schedule.ts`](./net/tls/schedule.ts) | The key schedule over SHA-256 or SHA-384: `tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsFinishedVerifyData`, and `tlsTrafficKey` / `tlsTrafficIv` for a record layer — these one-shots take every secret as a `Secret<u8[]>` and answer one (`tlsFinishedVerifyData` answers the public verify data as a plain array; transcript hashes, labels and contexts stay plain), and each wipes its derived salts and `finished_key` before it returns — with in-place forms over an `HkdfScratch` (`tlsDeriveSecretInto`, `tlsMasterSecretInto`, `tlsFinishedVerifyDataInto`, `tlsTrafficKeysInto`), and forms into a `Secret<u8[]>` the caller already holds (`tlsDeriveSecretHeld`, `tlsHandshakeSecretHeld`, `tlsMasterSecretHeld`; `dst` may be the source), `tlsFinishedVerifyDataHeld`, the plain verify data from a held base key, and `tlsTrafficKeysFromHeld`, a held secret's key and IV into plain arrays, which answers `false` for a suite or length it does not know. `TlsTranscript` is the running transcript hash, with HelloRetryRequest's `message_hash` rule, `reset` for the next connection and `hashInto` the caller's array. The suite constants and `tlsSuiteHashLength` / `tlsSuiteKeyLength` | RFC 8446 §4.4.1, §7.1, §7.3 |
 | [`net/tls/record.ts`](./net/tls/record.ts) | The record layer (RFC 8446 §5): `TlsRecordReader` cuts a stream into records in a buffer allocated once, refusing a header of unknown type or a body past 2^14 + 256 bytes before the body is waited for; `TlsRecordProtection` is one direction, cleartext until `install(suite, secret)`, or `installHeld(suite, secret)` from a secret held as a `Secret<u8[]>`, ratcheted in place by `advanceHeld(secret)` — then `seal` and `open` a record into the caller's buffer — the nonce from the sequence number, the header as additional data, the inner content type and zero padding found without branching on the padding. `tlsNextTrafficSecret` is KeyUpdate's next secret, taken and answered as a `Secret<u8[]>`. Every refusal is the alert, negated | RFC 8448 §3's nine records byte for byte; ChaCha20-Poly1305, AES-256-GCM-SHA384 and padding against Python's `cryptography` |
@@ -182,11 +182,14 @@ through both Finished messages) and `TLS_LEVEL_APPLICATION`. A carrier hands
 `receive` the bytes it got at a level, in any split, and sends what
 `takeOutput(level)` answers under that level's keys: TLS over TCP (T2) in
 records, QUIC (Q2) in CRYPTO frames of the matching packet number space.
-`writeSecret(level)` and `readSecret(level)` answer the server's and the
-client's traffic secret for the Handshake and Application levels as soon as
-it is known (`null` before; the Initial level has none), `tlsTrafficKey` and
-`tlsTrafficIv` turn one into a record key, and `exporterSecret` is there for
-exporters. The state says what is due: `TLS_STATE_WAIT_SIGNATURE` after the
+`writeKnown(level)` and `readKnown(level)` say when the server's and the
+client's traffic secret for the Handshake and Application levels is known
+(the Initial level has none); the secrets themselves are `Secret` fields of
+`secrets()`, the `TlsSecretPool` of the negotiated hash — `serverHandshake`,
+`clientHandshake`, `serverApplication`, `clientApplication` and `exporter` —
+which a carrier reads only through `expose` (`installHeld` turns one into a
+record key), and `wipeSecret(TLS_SECRET_*)` zeroes one once the carrier has
+what it needs. The state says what is due: `TLS_STATE_WAIT_SIGNATURE` after the
 first flight is written, `TLS_STATE_WAIT_FINISHED` once it is signed,
 `TLS_STATE_CONNECTED` when the client's Finished verified, and
 `TLS_STATE_FAILED` with `alert` set after a refusal. Over QUIC, set `quic` in
@@ -197,9 +200,14 @@ ways (`clientTransportParameters` holds the client's).
 computed with, are `Secret`s wiped on every path, and `tlsSignEcdsaP256` takes
 its key as a `Secret`. The one-shot key-schedule functions of
 `nish/net/tls/schedule` and `tlsNextTrafficSecret` take and answer their
-secrets as `Secret<u8[]>`s, so a plain array there is a compile error. What `TlsServer` keeps in its fields — the caller's
-ephemeral key bytes and the handshake, traffic and exporter secrets — is not
-wiped until `secureZero` ships in a release (TLS-1 in
+secrets as `Secret<u8[]>`s, so a plain array there is a compile error. What `TlsServer` keeps for an open connection —
+the caller's ephemeral key, copied in by `restart`, and the handshake,
+traffic, exporter and resumption secrets — and the four traffic secrets
+`TlsRecordServer` keeps for KeyUpdate are `Secret` fields, readonly and read
+only through `expose`, so the checker refuses binding one to a local, logging
+it or replacing it, and refuses a holder whose `wipe()` misses one; each is
+zeroed once the carrier has what it needs from it and at every end of the
+connection (TLS-1 in
 [`docs/security/tls.md`](../docs/security/tls.md), the record that also lists
 what each refusal is and the test that pins it).
 `tests/link/net_tls_*` are the module's programs, each also run under

@@ -38,24 +38,31 @@
  * allocates nothing that outlives a record, and a slot can be handed the
  * next connection with `start`. The handshake's messages are sealed straight
  * out of `TlsServer`'s own buffers, and the application secrets are copied
- * into arrays of this slot's, so a slot that hands its `TlsServer` the next
+ * into this slot's fields, so a slot that hands its `TlsServer` the next
  * connection with `restart` runs every handshake after the first without
  * moving the arena, whichever suite it negotiates; a KeyUpdate's key
  * install leaves nothing either (TLS-3 in `docs/security/tls.md`). When the caller leaves application data unread
  * for long enough to fill its buffer, records stay in the reader and
  * `interest` stops asking for reads, which is how the peer is made to wait.
  *
- * **Secrets.** Each traffic secret is copied out of `TlsServer` as it is
- * installed and the server's copy is wiped with `secureZero`, as are the
- * handshake secret once the flight is signed and the caller's ephemeral key
- * once the ServerHello is written, or the handshake fails. The two application traffic secrets live
- * on here, for KeyUpdate: each is overwritten in place by the next. Every way
- * the connection ends wipes what it holds: a failure of any kind (`fail`, the
- * client's error alert, a truncated stream, `abort`) wipes both directions' keys, both secrets and
- * everything `TlsServer` still holds once the last alert is sealed; the
- * server's `close_notify`, once sealed, wipes the write direction, the
- * client's the read direction, and `close` the resumption master secret; and `wipeKeys`, when the carrier
- * closes the slot, and `start` wipe the rest. What stays unwiped is TLS-1's.
+ * **Secrets.** Each traffic secret is a `Secret<u8[]>` (`nish:secret`):
+ * `TlsServer` holds the handshake's in its `TlsSecretPool`s, and this slot
+ * holds the two application traffic secrets in four readonly fields, one per
+ * direction and hash length, with `readHash` and `writeHash` saying which of
+ * each pair is live (0 when neither is). A secret is copied out of
+ * `TlsServer` as it is installed and the server's copy is zeroed, as are the
+ * handshake secret once the flight is signed and the ephemeral key once the
+ * ServerHello is written, or the handshake fails; a KeyUpdate overwrites the
+ * live field in place with the next secret. Every way the connection ends
+ * wipes what it holds: a failure of any kind (`fail`, the client's error
+ * alert, a truncated stream, `abort`) wipes both directions' keys, both
+ * secrets and everything `TlsServer` still holds once the last alert is
+ * sealed; the server's `close_notify`, once sealed, wipes the write
+ * direction, the client's the read direction, and `close` the resumption
+ * master secret; and `wipe` (which `wipeKeys` calls when the carrier closes
+ * the slot) and `start` wipe the rest. No secret leaves either object but
+ * through `expose`, so a secret cannot be logged or kept outside
+ * this module and `nish/net/tls` (TLS-1 in `docs/security/tls.md`).
  *
  * Refusals are alerts, never panics. Written from RFC 8446 §4.6.3, §5, §6
  * and §D.4, not ported from another implementation.
@@ -388,14 +395,14 @@ export class TlsRecordServer {
 
   /** Zeroes both of the client's traffic secret fields. */
   wipeReadSecret(): void {
-    exposeWith(this.readTraffic256, 0, tlsTrafficZero)
-    exposeWith(this.readTraffic384, 0, tlsTrafficZero)
+    exposeWith(this.readTraffic256, TLS_RECORD_SERVER_FROM, tlsTrafficZero)
+    exposeWith(this.readTraffic384, TLS_RECORD_SERVER_FROM, tlsTrafficZero)
   }
 
   /** Zeroes both of the server's traffic secret fields. */
   wipeWriteSecret(): void {
-    exposeWith(this.writeTraffic256, 0, tlsTrafficZero)
-    exposeWith(this.writeTraffic384, 0, tlsTrafficZero)
+    exposeWith(this.writeTraffic256, TLS_RECORD_SERVER_FROM, tlsTrafficZero)
+    exposeWith(this.writeTraffic384, TLS_RECORD_SERVER_FROM, tlsTrafficZero)
   }
 
   /**

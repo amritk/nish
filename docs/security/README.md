@@ -32,7 +32,7 @@ the record that found it. The notes below the table name each such finding.
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14, RT-15 and RT-16 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`) | 0 / 2 / 6 / 8 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
-| TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 2 ⁹ | 0 / 0 / 0 / 2 |
+| TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 3 ⁹ | 0 / 0 / 0 / 1 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 5 ¹¹ | 0 / 0 / 0 / 3 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 2 ⁷ |
@@ -41,7 +41,7 @@ the record that found it. The notes below the table name each such finding.
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 1 / 1 ¹⁰ |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
-| **Total** ⁸ | | | **3 / 10 / 17 / 89** | **0 / 1 / 3 / 17** |
+| **Total** ⁸ | | | **3 / 10 / 17 / 90** | **0 / 1 / 3 / 16** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -86,6 +86,9 @@ the record that found it. The notes below the table name each such finding.
    TLS-5, the ChaCha20 state each ChaCha20-Poly1305 seal and open left
    unwiped, was found in review of the resumption design, closed by #639,
    and is counted as a fixed Low.
+   TLS-1, an open connection's secrets kept in plain fields, was closed by
+   #674's secret-fields stage, which made each a `Secret` field, and is
+   counted as a fixed Low.
 10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8, JSON-9, JSON-11 and JSON-12 (Low) are accepted, with the reason in
     their record, and are not counted, and so is JSON-14 (Low), a `JsonNumber`'s
     bytes written raw. JSON-2 is open, and so is JSON-13
@@ -134,7 +137,6 @@ only.
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
-| TLS-1 | Low | `std/net/tls.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts` | An open connection's secrets live in fields, which a `Secret` cannot be (NL2430). The schedule's one-shot derivations and `tlsNextTrafficSecret` take and answer `Secret<u8[]>` and wipe what they derive on the way (#430's secret-boundary stage). Every key a connection holds is wiped by a volatile store when it ends: all at once on a failure and at the slot close; after a clean `close` the write direction and the resumption secret at once, the read direction at the client's `close_notify`, and the rest at `wipeKeys`, which a program driving `TlsRecordServer` without `TlsTcpServer` calls after close | #430 |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | QUIC-1 | Low | `std/net/quic-packet.ts` (`quicKeys`, `quicKeyUpdateSecret`, `quicKeysUpdate`, `quicKeysWipe`) | The one-shot key forms take the traffic secret as a `Secret<u8[]>`, `quicKeyUpdateSecret` answers one, and each wipes its HKDF outputs (#430's secret-boundary stage); the `QuicKeys` they answer is plain (NL2430) and stays readable until its caller runs `quicKeysWipe`, which zeroes its keys and AES schedules. A connection's own keys go through the in-place forms and are wiped (QUIC-2), and the Initial keys are public by construction | #430 |
 | QUIC-6 | Low | `std/net/quic.ts` | RFC 9001 §6.6's AEAD limits are not counted: no key update before 2^23 packets under one AES-GCM key, no AEAD_LIMIT_REACHED after too many failed opens | Q3 and Q4 |
