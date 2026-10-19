@@ -430,10 +430,15 @@ export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
     members.push(ctx.table.enumMemberOf(type, ctx.program.nodeEnumValues[bare.id], bare.text))
     return members
   }
-  const set = ctx.program.memberSets[bare.id]
+  return membersOfSet(ctx, ctx.program.memberSets[bare.id])
+}
+
+/** The members a `memberSets` id names: a list, a member type, a union's tags, or none. */
+const membersOfSet = (ctx: CheckContext, set: i32): i32[] => {
   if (set < MEMBERS_NONE) {
     return ctx.program.memberLists[MEMBERS_NONE - 1 - set]
   }
+  const members: i32[] = []
   if (ctx.table.isEnumMemberType(set)) {
     members.push(set)
   } else if (ctx.table.isUnion(set)) {
@@ -1979,15 +1984,7 @@ const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
   if (held === MEMBERS_NONE) {
     return []
   }
-  if (held < MEMBERS_NONE) {
-    return ctx.program.memberLists[MEMBERS_NONE - 1 - held]
-  }
-  if (held >= 0) {
-    const one: i32[] = []
-    one.push(held)
-    return one
-  }
-  return enumMembersOf(ctx, local.type)
+  return namesMembers(held) ? membersOfSet(ctx, held) : enumMembersOf(ctx, local.type)
 }
 
 /**

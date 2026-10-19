@@ -142,6 +142,7 @@ cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with
+cases/enum_narrowing added after R6: no rewriter to freeze it with
 cases/ffi_owned_string added after R6: no rewriter to freeze it with
 cases/ffi_string_loops added after R6: no rewriter to freeze it with
 cases/ffi_string_param added after R6: no rewriter to freeze it with
