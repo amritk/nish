@@ -239,6 +239,8 @@ export class QuicStreamPools {
   none: u8[]
   /** How many buffers the reserve holds. */
   ready: i32 = 0
+  /** How many buffers each pool's free list has been grown to hold, by `fit`. */
+  room: i32 = 0
 
   /** Pools for `connections` connections of `streams` stream slots each, `bufferSize` bytes each way. */
   constructor(bufferSize: i32, streams: i32, connections: i32) {
@@ -271,6 +273,32 @@ export class QuicStreamPools {
       this.readyBits[this.ready] = this.bits.take()
       this.ready = this.ready + 1
     }
+    this.fit()
+  }
+
+  /**
+   * Grows each pool's free list until it can hold every buffer the pool has
+   * made, by pushing `none` and popping it straight off again, so that a
+   * give-back never grows it. A slot's `reset` gives back every buffer its
+   * connection held at once, more than the free list ever held before, and
+   * the arena must not move by it (QUIC-3). The room doubles, so the pushes
+   * cost O(1) for each buffer made.
+   */
+  fit(): void {
+    const made: i32 = this.data.made
+    if (made <= this.room) {
+      return
+    }
+    let target: i32 = this.room + this.room
+    if (target < made) {
+      target = made
+    }
+    if (target > this.data.ceiling) {
+      target = this.data.ceiling
+    }
+    quicStreamGrowFree(this.data.free, target, this.none)
+    quicStreamGrowFree(this.bits.free, target, this.none)
+    this.room = target
   }
 
   /**
@@ -292,6 +320,17 @@ export class QuicStreamPools {
   /** How many buffers and bitmaps are lent now, the reserve's among them: 0 once every stream that borrowed has given back. */
   lent(): i32 {
     return this.data.lent() + this.bits.lent()
+  }
+}
+
+/** Pushes `none` onto `free` until it is `target` long, then pops each one off again: the capacity stays. */
+const quicStreamGrowFree = (free: u8[][], target: i32, none: u8[]): void => {
+  const length: i32 = toI32(free.length)
+  while (toI32(free.length) < target) {
+    free.push(none)
+  }
+  while (toI32(free.length) > length) {
+    free.pop()
   }
 }
 
@@ -712,6 +751,7 @@ export class QuicStreams {
     if (pools !== null && stream.sendBuf.length === 0) {
       stream.sendBuf = pools.data.take()
       stream.sendAcked = pools.bits.take()
+      pools.fit()
     }
   }
 
