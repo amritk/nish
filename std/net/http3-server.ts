@@ -76,6 +76,7 @@
  */
 import { udpRecvFrom, udpSendTo } from "nish:net"
 import { Secret } from "nish:secret"
+import { BufferPool } from "nish/net/buffer-pool"
 import { HttpDate } from "nish/net/http1-server"
 import { Http3Config, Http3Connection } from "nish/net/http3"
 import { H3_NO_ERROR, h3Count } from "nish/net/http3-frame"
@@ -88,6 +89,7 @@ import {
   QuicServerConfig,
 } from "nish/net/quic"
 import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet"
+import { QuicStreamPools } from "nish/net/quic-stream"
 import {
   QUIC_LISTEN_ACCEPT,
   QUIC_LISTENER_ANSWER_SIZE,
@@ -406,6 +408,20 @@ export class Http3Wheel {
 }
 
 /**
+ * Grows `pool`'s free list to hold `count` buffers and empties it again, so
+ * that giving back every buffer the pool can lend never grows the arena.
+ */
+const http3ServerRoom = (pool: BufferPool, count: i32): void => {
+  const none: u8[] = []
+  for (let k: i32 = 0; k < count; k++) {
+    pool.free.push(none)
+  }
+  for (let k: i32 = 0; k < count; k++) {
+    pool.free.pop()
+  }
+}
+
+/**
  * The pool. `slot`s are indices from 0 to `size() - 1`; `connection(slot)`
  * is the HTTP/3 side of each and `quic(slot)` the QUIC side.
  */
@@ -461,6 +477,17 @@ export class Http3Server {
   refused: i32 = 0
   limited: i32 = 0
   sendErrors: i32 = 0
+  /**
+   * The stream buffers every slot's connection borrows from, built from the
+   * first connection's stream table: `null` when its streams have none. Each
+   * pool makes a buffer only when a stream first needs one, so an idle
+   * server holds none (QUIC-3).
+   */
+  streamPools: QuicStreamPools | null = null
+  /** The `bodyChunk`-byte read buffers every slot's `Http3Connection` borrows, one at most each. */
+  dataPool: BufferPool
+  /** The `maxFieldSectionSize`-byte HEADERS buffers every slot's `Http3Connection` borrows around a decode. */
+  sectionPool: BufferPool
 
   /**
    * A pool of `size` slots serving HTTP/3 under `config` over QUIC under
@@ -488,11 +515,23 @@ export class Http3Server {
     const date: u8[] = this.date.current()
     this.addresses = []
     this.entropy = new Array<u8>(QUIC_CONN_ENTROPY_SIZE)
+    this.dataPool = new BufferPool("Http3Server.data", config.bodyChunk, size)
+    this.sectionPool = new BufferPool("Http3Server.section", config.maxFieldSectionSize, size)
+    http3ServerRoom(this.dataPool, size)
+    http3ServerRoom(this.sectionPool, size)
     for (let k: i32 = 0; k < size; k++) {
       crypto.getRandomValues(this.entropy)
       const quic = new QuicConnection(quicConfig, this.entropy)
       this.quics.push(quic)
+      if (k === 0 && quic.streams.bufferSize > 0 && quic.streams.slots.length > 0) {
+        this.streamPools = new QuicStreamPools(quic.streams.bufferSize, toI32(quic.streams.slots.length), size)
+      }
+      const pools: QuicStreamPools | null = this.streamPools
+      if (pools !== null) {
+        quic.streams.share(pools)
+      }
       const conn: Http3Connection = new Http3Connection(config, quic)
+      conn.share(this.dataPool, this.sectionPool)
       conn.date = date
       this.conns.push(conn)
       this.addresses.push(new Array<u8>(H3_SERVER_ADDRESS))
@@ -907,6 +946,7 @@ export class Http3Server {
     this.unindex(slot)
     this.wheel.unfile(slot)
     this.quics[slot].release()
+    this.conns[slot].giveBack()
     this.state[slot] = H3_SERVER_FREE
     if (this.freeCount < toI32(this.free.length)) {
       this.free[this.freeCount] = slot
@@ -935,6 +975,7 @@ export class Http3Server {
         this.release(slot)
       } else {
         this.quics[slot].release()
+        this.conns[slot].giveBack()
       }
     }
     this.listener.release()

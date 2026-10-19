@@ -3639,10 +3639,13 @@ export class QuicConnection {
    * secrets and expected client Finished, the ephemeral key, the
    * connection-ID seed and the stateless reset tokens (QUIC-2). Call it when
    * the connection is done with (or `reset` the slot, which does the same
-   * first); the connection is closed after it and sends nothing more.
+   * first); the connection is closed after it and sends nothing more. Every
+   * stream buffer it borrowed goes back to its pool, zeroed: nothing is sent
+   * again from a closed connection.
    */
   release(): void {
     this.wipeAll()
+    this.streams.giveBack()
     if (!this.closed()) {
       this.state = QUIC_STATE_CLOSING
       this.error = QUIC_ERROR_NO_ERROR
