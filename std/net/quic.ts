@@ -138,18 +138,20 @@
  * packet numbers by `QUIC_ACK_MAX_RANGES`, and datagrams by their ring.
  *
  * **Secrets.** The packet keys of each level live in this connection's key
- * slots as long as the level does, and in `TlsServer`'s (TLS-1); so do the
- * 1-RTT secrets the next key generation is derived from, and the next
- * generation's read keys. A `Secret` may not be a field (NL2430), so they are
- * plain bytes, wiped with stores no optimiser removes (`secureZero`, and
- * `aesKeyWipe` for an AES schedule): each level's key, IV, header-protection
- * key and schedules when the level is discarded; each generation's key, IV,
- * schedule and secret when a key update replaces it; and the rest — the
- * 1-RTT keys, the key-update secrets, the traffic secrets `TlsServer` holds,
- * its ephemeral key and the connection-ID seed — by `release()`, `reset`,
- * the idle timeout, and the end of the closing or draining period (RFC 9000
- * §10.2), three probe timeouts after this side's CONNECTION_CLOSE went out
- * or the client's arrived.
+ * slots as long as the level does; so do the 1-RTT secrets the next key
+ * generation is derived from, and the next generation's read keys. The
+ * traffic secrets and the ephemeral key `TlsServer` holds are `Secret`
+ * fields its `wipe()` reaches (TLS-1): `afterTls` takes each level's secrets
+ * out of them once, into this connection's plain slots, and zeroes them
+ * through `wipeSecret`. The slots are plain bytes, wiped with stores no
+ * optimiser removes (`secureZero`, and `aesKeyWipe` for an AES schedule):
+ * each level's key, IV, header-protection key and schedules when the level
+ * is discarded; each generation's key, IV, schedule and secret when a key
+ * update replaces it; and the rest — the 1-RTT keys, the key-update secrets,
+ * whatever `TlsServer` still holds and the connection-ID seed — by
+ * `release()`, `reset`, the idle timeout, and the end of the closing or
+ * draining period (RFC 9000 §10.2), three probe timeouts after this side's
+ * CONNECTION_CLOSE went out or the client's arrived.
  * `docs/security/quic.md` records what is wiped where as QUIC-2.
  *
  * Written from RFC 9000, RFC 9001 and RFC 9221, in this module's own
@@ -1225,6 +1227,12 @@ export class QuicConnection {
   /** Whether the handshake is complete, which for a server is also confirmed (RFC 9001 §4.1.2). */
   handshakeComplete: boolean = false
   handshakeDonePending: boolean = false
+  /**
+   * Whether `afterTls` has taken the application traffic secrets out of
+   * `TlsServer`. It takes them once: `wipeSecret` leaves them known, so a
+   * second take would derive the 1-RTT keys from the zeros it left.
+   */
+  applicationTaken: boolean = false
   /** Whether the connection was set up by `acceptRetry`. */
   retried: boolean = false
   /** Whether an ack-eliciting packet went out since the last packet was received. */
@@ -1375,6 +1383,7 @@ export class QuicConnection {
     this.closeSent = false
     this.addressValidated = false
     this.handshakeComplete = false
+    this.applicationTaken = false
     this.handshakeDonePending = false
     this.retried = false
     this.elicitingSent = false
@@ -2513,6 +2522,7 @@ export class QuicConnection {
       }
     }
     if (
+      !this.applicationTaken &&
       !this.application.discarded &&
       this.application.writeKeys === null &&
       tls.state !== TLS_STATE_WAIT_SIGNATURE
@@ -2526,6 +2536,7 @@ export class QuicConnection {
         const read: u8[] = quicConnSecretAt(this.readSecrets, aead, 0)
         quicConnTakeSecret(pool.serverApplication, write)
         quicConnTakeSecret(pool.clientApplication, read)
+        this.applicationTaken = true
         tls.wipeSecret(TLS_SECRET_SERVER_APPLICATION)
         tls.wipeSecret(TLS_SECRET_CLIENT_APPLICATION)
         this.application.writeKeys = this.plainKeysFor(

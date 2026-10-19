@@ -31,15 +31,20 @@ export const wipeChecks = [
   // `discard`s, the previous generation's packet schedule 2, and 16 wipes of
   // its own (a loop's one call site counted once); every secret `TlsServer`
   // holds it leaves to `TlsServer.wipe`, in `nish/net/tls`, which this group
-  // does not run through `opt` (`tls.js` counts it, `net_quic_wipes` reads it
-  // back); `release` is `wipeAll`. `runClocks` 184: `wipeAll` at the idle timeout and again at
+  // does not run through `opt` and `opt` does not inline here, so no count
+  // below pins that call: `net_quic_wipes` does (`qwConnZero` reads every
+  // field back as zero), and `tls.js` counts `TlsServer.wipe` itself;
+  // `release` is `wipeAll`. `runClocks` 184: `wipeAll` at the idle timeout and again at
   // the end of the closing or draining period, each copy counted, and
   // `prepareNextReadKeys` once a key update's previous keys have had their
   // probe timeout. `afterTls` 136: once the handshake is confirmed, the
   // Handshake level's `discard`, 23 (`TlsServer`'s two handshake traffic
   // secrets it leaves to `TlsServer.wipeSecret`), the plain copy `expose`
-  // hands `keysFor` and `quicConnTakeSecret`, 2 each, besides the wipes of the derivations it runs as each level's
-  // keys arrive, the connection IDs' and reset tokens' HMACs among them.
+  // hands `keysFor` and `quicConnTakeSecret`, 2 each, besides the wipes of
+  // the derivations it runs as each level's keys arrive, the connection IDs'
+  // and reset tokens' HMACs among them. It was 134 before #674's
+  // secret-fields stage: 136 is net, -2 for the two `secureZero`s of the
+  // handshake secrets it no longer holds plain, +4 for the two clone wipes.
   //
   // The roots below pin the wipes the ones above do not reach.
   // `applyPhase` 13: the read secret a key update replaces, 1, and

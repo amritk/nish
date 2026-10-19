@@ -607,16 +607,31 @@ export const refusalChecks = (): i32 => {
 
   // A key that does not install fails the connection rather than leave a direction in the clear.
   // The traffic secrets are fixed-length `Secret` fields, so what cannot
-  // install is a direction whose secret was never kept: `readHash` and
-  // `writeHash` 0.
+  // install is a direction whose secret was never kept (`readHash` and
+  // `writeHash` 0), or one whose kept secret is held at the other hash's
+  // length than its suite's: the 48-byte secret against AES-128-GCM's
+  // SHA-256, which `advanceHeld` leaves unratcheted and `installHeld` refuses.
   const badRead = traceOpen();
   badRead.readHash = 0;
   feed(badRead, sealOne(clientWriter(), TLS_CONTENT_HANDSHAKE, keyUpdateMessage(0), ZERO));
-  t.eqI32("a read secret that installs no keys fails the client's KeyUpdate with internal_error", badRead.alert, TLS_ALERT_INTERNAL_ERROR);
+  const heldRead = traceOpen();
+  heldRead.readHash = 48;
+  feed(heldRead, sealOne(clientWriter(), TLS_CONTENT_HANDSHAKE, keyUpdateMessage(0), ZERO));
+  t.eqStr(
+    "a read secret that installs no keys fails the client's KeyUpdate with internal_error",
+    `${badRead.alert}:${heldRead.alert}`,
+    `${TLS_ALERT_INTERNAL_ERROR}:${TLS_ALERT_INTERNAL_ERROR}`
+  );
   const badWrite = traceOpen();
   badWrite.writeHash = 0;
-  t.eqI32("and a write secret that installs none fails the server's: -104", badWrite.keyUpdate(false), TLS_RECORD_RESET);
-  t.eqI32("with internal_error", badWrite.alert, TLS_ALERT_INTERNAL_ERROR);
+  const heldWrite = traceOpen();
+  heldWrite.writeHash = 48;
+  t.eqStr(
+    "and a write secret that installs none fails the server's: -104",
+    `${badWrite.keyUpdate(false)}:${heldWrite.keyUpdate(false)}`,
+    `${TLS_RECORD_RESET}:${TLS_RECORD_RESET}`
+  );
+  t.eqStr("with internal_error", `${badWrite.alert}:${heldWrite.alert}`, `${TLS_ALERT_INTERNAL_ERROR}:${TLS_ALERT_INTERNAL_ERROR}`);
 
   // --- A caller that reads slowly, and one that writes too much ------------------
   const slow = traceOpen();

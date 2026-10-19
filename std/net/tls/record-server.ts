@@ -83,11 +83,9 @@ import {
   TLS_SECRET_SERVER_HANDSHAKE,
   TlsServer,
   TlsSecretPool,
-  tlsHeldClone,
-  tlsHeldCopyIn,
   tlsHeldCopyOver,
 } from "nish/net/tls"
-import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
+import { Secret, exposeWith, secret, wipe } from "nish:secret"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
 import {
@@ -189,35 +187,6 @@ const TLS_RECORD_SERVER_FROM: i32 = 0
 const tlsTrafficZero = (held: u8[], answer: i32): i32 => {
   wipe(held)
   return answer
-}
-
-/**
- * Installs `protection` under `suite` from the traffic secret `held`. The
- * keys are derived from a plain copy that dies with the arena block and is
- * zeroed before it ends; false, as `install` answers, when they do not
- * install.
- */
-const tlsInstallHeld = (protection: TlsRecordProtection, suite: i32, held: Secret<u8[]>): boolean => {
-  using _scope = arena()
-  const plain: u8[] = expose(held, tlsHeldClone)
-  const installed: boolean = protection.install(suite, plain)
-  secureZero(plain)
-  return installed
-}
-
-/**
- * Moves `protection` to the next traffic secret (§7.2) and writes it over
- * `held`'s bytes in place, the KeyUpdate step: the plain copy it is derived
- * on dies with the arena block, zeroed. False, as `advance` answers, when
- * the keys do not install.
- */
-const tlsAdvanceHeld = (protection: TlsRecordProtection, held: Secret<u8[]>): boolean => {
-  using _scope = arena()
-  const plain: u8[] = expose(held, tlsHeldClone)
-  const installed: boolean = protection.advance(plain)
-  exposeWith(held, plain, tlsHeldCopyIn)
-  secureZero(plain)
-  return installed
 }
 
 /**
@@ -422,11 +391,11 @@ export class TlsRecordServer {
     if (this.readHash === SHA384_SIZE) {
       exposeWith(pool.clientApplication, this.readTraffic384, tlsHeldCopyOver)
       tls.wipeSecret(TLS_SECRET_CLIENT_APPLICATION)
-      installed = tlsInstallHeld(this.readProtection, tls.suite, this.readTraffic384)
+      installed = this.readProtection.installHeld(tls.suite, this.readTraffic384)
     } else {
       exposeWith(pool.clientApplication, this.readTraffic256, tlsHeldCopyOver)
       tls.wipeSecret(TLS_SECRET_CLIENT_APPLICATION)
-      installed = tlsInstallHeld(this.readProtection, tls.suite, this.readTraffic256)
+      installed = this.readProtection.installHeld(tls.suite, this.readTraffic256)
     }
     return installed
   }
@@ -443,11 +412,11 @@ export class TlsRecordServer {
     if (this.writeHash === SHA384_SIZE) {
       exposeWith(pool.serverApplication, this.writeTraffic384, tlsHeldCopyOver)
       tls.wipeSecret(TLS_SECRET_SERVER_APPLICATION)
-      installed = tlsInstallHeld(this.writeProtection, tls.suite, this.writeTraffic384)
+      installed = this.writeProtection.installHeld(tls.suite, this.writeTraffic384)
     } else {
       exposeWith(pool.serverApplication, this.writeTraffic256, tlsHeldCopyOver)
       tls.wipeSecret(TLS_SECRET_SERVER_APPLICATION)
-      installed = tlsInstallHeld(this.writeProtection, tls.suite, this.writeTraffic256)
+      installed = this.writeProtection.installHeld(tls.suite, this.writeTraffic256)
     }
     return installed
   }
@@ -781,8 +750,8 @@ export class TlsRecordServer {
   updateReadKeys(requested: boolean): i32 {
     const advanced: boolean =
       this.readHash === SHA384_SIZE
-        ? tlsAdvanceHeld(this.readProtection, this.readTraffic384)
-        : this.readHash !== 0 && tlsAdvanceHeld(this.readProtection, this.readTraffic256)
+        ? this.readProtection.advanceHeld(this.readTraffic384)
+        : this.readHash !== 0 && this.readProtection.advanceHeld(this.readTraffic256)
     if (!advanced) {
       return TLS_ALERT_INTERNAL_ERROR
     }
@@ -813,7 +782,7 @@ export class TlsRecordServer {
     }
     if (this.readLevel === TLS_LEVEL_INITIAL) {
       if (tls.readKnown(TLS_LEVEL_HANDSHAKE)) {
-        tlsInstallHeld(this.readProtection, tls.suite, tls.secrets().clientHandshake)
+        this.readProtection.installHeld(tls.suite, tls.secrets().clientHandshake)
         this.readLevel = TLS_LEVEL_HANDSHAKE
       }
     }
@@ -976,7 +945,7 @@ export class TlsRecordServer {
     // or a secret `TlsServer` never hands over; the check keeps the flight
     // from ever being sealed in the clear.
     if (this.writeLevel === TLS_LEVEL_INITIAL && tls.writeKnown(TLS_LEVEL_HANDSHAKE)) {
-      if (!tlsInstallHeld(this.writeProtection, tls.suite, tls.secrets().serverHandshake)) {
+      if (!this.writeProtection.installHeld(tls.suite, tls.secrets().serverHandshake)) {
         this.fail(TLS_ALERT_INTERNAL_ERROR)
         return
       }
@@ -1023,8 +992,8 @@ export class TlsRecordServer {
     }
     const advanced: boolean =
       this.writeHash === SHA384_SIZE
-        ? tlsAdvanceHeld(this.writeProtection, this.writeTraffic384)
-        : this.writeHash !== 0 && tlsAdvanceHeld(this.writeProtection, this.writeTraffic256)
+        ? this.writeProtection.advanceHeld(this.writeTraffic384)
+        : this.writeHash !== 0 && this.writeProtection.advanceHeld(this.writeTraffic256)
     if (!advanced) {
       this.fail(TLS_ALERT_INTERNAL_ERROR)
       return false

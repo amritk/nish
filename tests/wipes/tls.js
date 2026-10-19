@@ -20,7 +20,8 @@ export const wipeChecks = [
   // `aesKeyWipe` it is 3. `wipeWrite` 9 (`tlsTrafficZero` on the server's two
   // traffic secret fields, and `clear`), `wipeRead` 9 (the client's),
   // `wipeTraffic` 18 (both). The holders' own `wipe()`s: `TlsServer.wipe` 19
-  // (the ephemeral key, 1, and each `TlsSecretPool`'s nine secrets, 9), and
+  // = 1 + 2 × 9 (the ephemeral key, 1, and each of its two `TlsSecretPool`s'
+  // nine secrets, 9 each), and
   // the record server's `wipe` 37 (its four traffic secret fields, both
   // `clear`s and `TlsServer.wipe`), which `wipeKeys` is, so 37 too. A
   // `wipe()` that leaves out one of its `Secret` fields does not compile
