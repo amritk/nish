@@ -964,6 +964,18 @@ A server that lends byte buffers across connections takes them from
 ceiling, whose `give` zeroes the bytes a buffer used before it is lent again,
 and whose `giveSecret` wipes the buffer whole.
 
+A TLS server that resumes sessions seals its tickets with
+`nish/net/tls/ticket`: `tlsTicketSeal` and `tlsTicketOpen` take the ticket key
+as a borrowed `Secret<u8[]>`, so your program keeps the current and previous
+keys in locals — draw both with `tlsTicketKeyDraw` at start-up, each into its
+own `TlsTicketKeyInfo` — and runs the rotation itself when `tlsTicketKeyDue` says so —
+`wipe(previous)`, `previous = current`, `previousInfo.copyFrom(currentInfo)`,
+`current = tlsTicketKeyDraw(currentInfo, now)`. Every time it takes is
+`monotonicNanos()`, read by you and passed in. Strike each opened ticket's
+`id` in a `TlsTicketStrikes` before you resume from it: `take` answers false
+for a replay, and for every ticket once the register is full, so make it as
+large as the tickets you issue in two hours.
+
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";
 

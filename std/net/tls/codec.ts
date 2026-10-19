@@ -2,7 +2,7 @@
  * `nish/net/tls/codec` — the TLS 1.3 handshake messages a server reads and
  * writes (RFC 8446 §4), as bytes.
  *
- * One reader and six writers. `tlsParseClientHello` reads a ClientHello body
+ * One reader and eight writers. `tlsParseClientHello` reads a ClientHello body
  * into a `TlsClientHello`, checking its structure: every length against the
  * bytes it claims, every vector against its RFC 8446 bounds, and no extension
  * twice (§4.2). A message that breaks one answers the alert a server sends for
@@ -17,8 +17,9 @@
  * allocates nothing, and `tlsParseClientHello` copies a view's windows out.
  *
  * The writers each answer one whole handshake message, header included:
- * ServerHello, HelloRetryRequest, EncryptedExtensions, Certificate,
- * CertificateVerify and Finished. Their inputs come from the server and the
+ * ServerHello, a resumed ServerHello that names the PSK it accepts,
+ * HelloRetryRequest, EncryptedExtensions, Certificate, CertificateVerify,
+ * Finished and NewSessionTicket. Their inputs come from the server and the
  * caller's configuration rather than from the peer, so they check nothing.
  * Each is a `tlsWrite*` function that writes into the caller's array at an
  * offset — run over an empty array, it measures — and a `tlsEncode*` one
@@ -27,8 +28,11 @@
  * The extensions read are `server_name` (RFC 6066 §3), `supported_groups`,
  * `signature_algorithms`, `supported_versions` and `key_share` (RFC 8446
  * §4.2), `application_layer_protocol_negotiation` (RFC 7301 §3.1) and
- * `quic_transport_parameters` (RFC 9001 §8.2). Every other extension is
- * skipped, which is what RFC 8446 §4.2 asks of a server that does not know it.
+ * `quic_transport_parameters` (RFC 9001 §8.2), and `pre_shared_key` and
+ * `psk_key_exchange_modes` (RFC 8446 §4.2.11, §4.2.9), whose identities and
+ * binders the reader checks against their syntax but does not open: a ticket
+ * and its binder are the server's to judge. Every other extension is skipped,
+ * which is what RFC 8446 §4.2 asks of a server that does not know it.
  *
  * Written from the RFCs, not ported from another implementation. Private
  * names carry the `tls` prefix because a `std/` module's private functions
@@ -40,6 +44,7 @@
 
 export const TLS_HANDSHAKE_CLIENT_HELLO: i32 = 1
 export const TLS_HANDSHAKE_SERVER_HELLO: i32 = 2
+export const TLS_HANDSHAKE_NEW_SESSION_TICKET: i32 = 4
 export const TLS_HANDSHAKE_ENCRYPTED_EXTENSIONS: i32 = 8
 export const TLS_HANDSHAKE_CERTIFICATE: i32 = 11
 export const TLS_HANDSHAKE_CERTIFICATE_VERIFY: i32 = 15
@@ -50,8 +55,12 @@ export const TLS_HANDSHAKE_MESSAGE_HASH: i32 = 254
 // ---- Extension types (RFC 8446 §4.2, RFC 7301, RFC 9001) ------------------
 
 export const TLS_EXT_SERVER_NAME: i32 = 0
-/** `pre_shared_key` (§4.2.11): ignored here, but it must be the last extension. */
+/** `pre_shared_key` (§4.2.11): the client's identities and binders, which must be the last extension. */
 export const TLS_EXT_PRE_SHARED_KEY: i32 = 41
+/** `early_data` (§4.2.10): read past here, since the server takes no 0-RTT data. */
+export const TLS_EXT_EARLY_DATA: i32 = 42
+/** `psk_key_exchange_modes` (§4.2.9): which modes the client will resume in. */
+export const TLS_EXT_PSK_KEY_EXCHANGE_MODES: i32 = 45
 export const TLS_EXT_SUPPORTED_GROUPS: i32 = 10
 export const TLS_EXT_SIGNATURE_ALGORITHMS: i32 = 13
 export const TLS_EXT_ALPN: i32 = 16
@@ -94,6 +103,11 @@ export const TLS_ALERT_INTERNAL_ERROR: i32 = 80
 export const TLS_ALERT_MISSING_EXTENSION: i32 = 109
 /** ALPN offered no protocol the server accepts (RFC 7301 §3.2, RFC 9001 §8.1). */
 export const TLS_ALERT_NO_APPLICATION_PROTOCOL: i32 = 120
+
+/** `psk_ke` (§4.2.9): resumption from the PSK alone, without forward secrecy, which the server never selects. */
+export const TLS_PSK_KE: i32 = 0
+/** `psk_dhe_ke` (§4.2.9): resumption with an (EC)DHE exchange, the one mode the server resumes in. */
+export const TLS_PSK_DHE_KE: i32 = 1
 
 /** The size of a hello's `random` (§4.1.2). */
 export const TLS_RANDOM_SIZE: i32 = 32
@@ -195,6 +209,12 @@ const tlsReadSkipTo = (r: TlsReader, to: i32): void => {
 export class TlsClientHelloView {
   /** The buffer the windows point into: the one the last hello was read from. */
   data: u8[]
+  /** One bit per extension type read, for the duplicate check (§4.2); cleared by each read. */
+  extensionSeen: u32[]
+  /** One bit per group a share was offered for, for the duplicate check (§4.2.8). */
+  shareSeen: u32[]
+  /** The reader each read runs, kept so that a read allocates none. */
+  reader: TlsReader
   /** 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. */
   alert: i32 = 0
   legacyVersion: i32 = 0
@@ -232,6 +252,32 @@ export class TlsClientHelloView {
   /** The extensions block, every extension in it. */
   extensionsAt: i32 = 0
   extensionsLength: i32 = 0
+  /** `pre_shared_key`'s `identities` list (§4.2.11): each an identity<1..2^16-1> and a 32-bit obfuscated age. */
+  pskIdentitiesAt: i32 = 0
+  pskIdentitiesLength: i32 = 0
+  pskIdentityCount: i32 = 0
+  /**
+   * Where `binders`' two-byte length starts: the ClientHello up to here, its
+   * handshake header included, is what each binder is computed over
+   * (§4.2.11.2).
+   */
+  pskBindersPrefixAt: i32 = 0
+  /** `pre_shared_key`'s `binders` list: each a PskBinderEntry<32..255>. */
+  pskBindersAt: i32 = 0
+  pskBindersLength: i32 = 0
+  pskBinderCount: i32 = 0
+  /** `psk_key_exchange_modes`' `ke_modes`, one byte a mode (§4.2.9). */
+  pskModesAt: i32 = 0
+  pskModesLength: i32 = 0
+  /** The identity `tlsSelectPskIdentity` last chose: its bytes and its obfuscated ticket age. */
+  pskIdentityAt: i32 = 0
+  pskIdentityLength: i32 = 0
+  pskTicketAge: u32 = 0
+  /** That identity's binder, the entry of the same index in `binders`. */
+  pskBinderAt: i32 = 0
+  pskBinderLength: i32 = 0
+  /** Whether `ke_modes` lists `psk_dhe_ke`, the one mode the server resumes in. */
+  pskDheKe: boolean = false
   /** Whether `legacy_compression_methods` is the single null method TLS 1.3 requires (§4.1.2). */
   nullCompressionOnly: boolean = false
   hasSupportedVersions: boolean = false
@@ -242,12 +288,8 @@ export class TlsClientHelloView {
   hasServerName: boolean = false
   hasAlpn: boolean = false
   hasQuicTransportParameters: boolean = false
-  /** One bit per extension type read, for the duplicate check (§4.2); cleared by each read. */
-  extensionSeen: u32[]
-  /** One bit per group a share was offered for, for the duplicate check (§4.2.8). */
-  shareSeen: u32[]
-  /** The reader each read runs, kept so that a read allocates none. */
-  reader: TlsReader
+  hasPreSharedKey: boolean = false
+  hasPskModes: boolean = false
 
   constructor() {
     this.data = []
@@ -283,6 +325,21 @@ export class TlsClientHelloView {
     this.quicLength = 0
     this.extensionsAt = 0
     this.extensionsLength = 0
+    this.pskIdentitiesAt = 0
+    this.pskIdentitiesLength = 0
+    this.pskIdentityCount = 0
+    this.pskBindersPrefixAt = 0
+    this.pskBindersAt = 0
+    this.pskBindersLength = 0
+    this.pskBinderCount = 0
+    this.pskModesAt = 0
+    this.pskModesLength = 0
+    this.pskDheKe = false
+    this.pskIdentityAt = 0
+    this.pskIdentityLength = 0
+    this.pskTicketAge = toU32(0)
+    this.pskBinderAt = 0
+    this.pskBinderLength = 0
     this.nullCompressionOnly = false
     this.hasSupportedVersions = false
     this.hasSupportedGroups = false
@@ -292,6 +349,8 @@ export class TlsClientHelloView {
     this.hasServerName = false
     this.hasAlpn = false
     this.hasQuicTransportParameters = false
+    this.hasPreSharedKey = false
+    this.hasPskModes = false
     for (let k: i32 = 0; k < toI32(this.extensionSeen.length); k++) {
       this.extensionSeen[k] = toU32(0)
     }
@@ -432,6 +491,63 @@ const tlsReadAlpn = (r: TlsReader, hello: TlsClientHelloView): void => {
   r.end = outerEnd
 }
 
+/**
+ * `pre_shared_key` (§4.2.11): `identities<7..2^16-1>`, each an
+ * `identity<1..2^16-1>` and a 32-bit obfuscated ticket age, then
+ * `binders<33..2^16-1>`, each a `PskBinderEntry<32..255>`. A length the
+ * syntax forbids fails the reader, and so is `decode_error`; that the two
+ * lists hold as many entries as each other is `tlsReadClientHello`'s to check
+ * once the whole hello has parsed. Nothing is opened or verified here.
+ */
+const tlsReadPreSharedKey = (r: TlsReader, hello: TlsClientHelloView): void => {
+  hello.hasPreSharedKey = true
+  const identitiesEnd: i32 = tlsReadVector(r, 2, 7, 65535)
+  hello.pskIdentitiesAt = r.at
+  hello.pskIdentitiesLength = identitiesEnd - r.at
+  // The list's own end bounds every entry in it (see `tlsReadList`).
+  let outerEnd: i32 = tlsReadList(r, identitiesEnd)
+  while (!r.failed && r.at < identitiesEnd) {
+    const identityEnd: i32 = tlsReadVector(r, 2, 1, 65535)
+    tlsReadSkipTo(r, identityEnd)
+    // obfuscated_ticket_age, which the server reads only for the identity it selects.
+    tlsReadSkipTo(r, r.at + 4)
+    if (!r.failed) {
+      hello.pskIdentityCount = hello.pskIdentityCount + 1
+    }
+  }
+  r.end = outerEnd
+  hello.pskBindersPrefixAt = r.at
+  const bindersEnd: i32 = tlsReadVector(r, 2, 33, 65535)
+  hello.pskBindersAt = r.at
+  hello.pskBindersLength = bindersEnd - r.at
+  outerEnd = tlsReadList(r, bindersEnd)
+  while (!r.failed && r.at < bindersEnd) {
+    const binderEnd: i32 = tlsReadVector(r, 1, 32, 255)
+    tlsReadSkipTo(r, binderEnd)
+    if (!r.failed) {
+      hello.pskBinderCount = hello.pskBinderCount + 1
+    }
+  }
+  r.end = outerEnd
+}
+
+/**
+ * `psk_key_exchange_modes` (§4.2.9): `ke_modes<1..255>`, one byte a mode. An
+ * empty list fails the reader; a mode the server does not know is passed
+ * over, and `psk_dhe_ke` is the one it records.
+ */
+const tlsReadPskModes = (r: TlsReader, hello: TlsClientHelloView): void => {
+  hello.hasPskModes = true
+  const modesEnd: i32 = tlsReadVector(r, 1, 1, 255)
+  hello.pskModesAt = r.at
+  hello.pskModesLength = modesEnd - r.at
+  while (!r.failed && r.at < modesEnd) {
+    if (tlsReadU8(r) === TLS_PSK_DHE_KE) {
+      hello.pskDheKe = true
+    }
+  }
+}
+
 /** Reads one extension body, `r.at .. end`, of type `type`; an unknown type is skipped. */
 const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHelloView): void => {
   switch (type) {
@@ -458,6 +574,12 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
       break
     case TLS_EXT_KEY_SHARE:
       tlsReadKeyShare(r, hello)
+      break
+    case TLS_EXT_PRE_SHARED_KEY:
+      tlsReadPreSharedKey(r, hello)
+      break
+    case TLS_EXT_PSK_KEY_EXCHANGE_MODES:
+      tlsReadPskModes(r, hello)
       break
     case TLS_EXT_QUIC_TRANSPORT_PARAMETERS:
       hello.hasQuicTransportParameters = true
@@ -486,7 +608,11 @@ const tlsReadExtension = (r: TlsReader, type: i32, end: i32, hello: TlsClientHel
  * bounds or bytes left over, and `illegal_parameter` for an extension sent
  * twice (§4.2), a `pre_shared_key` that is not the last extension (§4.2.11),
  * two shares for one group, or a bad `server_name`. A window outside `data`
- * is `decode_error` too, rather than a panic. Nothing is copied: the windows
+ * is `decode_error` too, rather than a panic. A hello that parses but offers
+ * `pre_shared_key` with a different number of identities and binders is
+ * `illegal_parameter`, and one that offers it without
+ * `psk_key_exchange_modes` is `missing_extension` (§4.2.9): rows 10 to 13 of
+ * the fallback table in `docs/security/tls.md`, "Resumption". Nothing is copied: the windows
  * point into `data`, which must outlive the use made of them.
  */
 export const tlsReadClientHello = (hello: TlsClientHelloView, data: u8[], off: i32, len: i32): void => {
@@ -533,8 +659,8 @@ export const tlsReadClientHello = (hello: TlsClientHelloView, data: u8[], off: i
       if (tlsMarkSeen(hello.extensionSeen, type)) {
         tlsHelloRefuse(hello, TLS_ALERT_ILLEGAL_PARAMETER)
       }
-      // §4.2.11: `pre_shared_key` must be the last extension, and a server
-      // checks that even though it does not take the PSK.
+      // §4.2.11: `pre_shared_key` must be the last extension, checked
+      // before its body is read, so that this fault is reported first.
       if (type === TLS_EXT_PRE_SHARED_KEY && bodyEnd !== extensionsEnd) {
         tlsHelloRefuse(hello, TLS_ALERT_ILLEGAL_PARAMETER)
       }
@@ -548,7 +674,70 @@ export const tlsReadClientHello = (hello: TlsClientHelloView, data: u8[], off: i
   }
   if (r.failed || r.at !== end) {
     tlsHelloRefuse(hello, TLS_ALERT_DECODE_ERROR)
+    return
   }
+  // Checked once the whole hello has parsed, so that a malformed one is
+  // `decode_error` whatever these say (row 13 before rows 12 and 10).
+  if (hello.hasPreSharedKey && hello.pskIdentityCount !== hello.pskBinderCount) {
+    tlsHelloRefuse(hello, TLS_ALERT_ILLEGAL_PARAMETER)
+  }
+  if (hello.hasPreSharedKey && !hello.hasPskModes) {
+    tlsHelloRefuse(hello, TLS_ALERT_MISSING_EXTENSION)
+  }
+}
+
+/**
+ * Points `hello`'s `pskIdentity*`, `pskTicketAge` and `pskBinder*` at the
+ * offer's identity number `index` and the binder of the same number, and
+ * answers whether there is one: false for an index out of range, or a hello
+ * that offered no `pre_shared_key` or did not parse. It walks the lists
+ * `tlsReadClientHello` checked, and allocates nothing.
+ */
+export const tlsSelectPskIdentity = (hello: TlsClientHelloView, index: i32): boolean => {
+  hello.pskIdentityAt = 0
+  hello.pskIdentityLength = 0
+  hello.pskTicketAge = toU32(0)
+  hello.pskBinderAt = 0
+  hello.pskBinderLength = 0
+  if (hello.alert !== 0 || !hello.hasPreSharedKey || index < 0 || index >= hello.pskIdentityCount) {
+    return false
+  }
+  const data: u8[] = hello.data
+  let at: i32 = hello.pskIdentitiesAt
+  for (let k: i32 = 0; at >= 0 && at + 1 < toI32(data.length); k++) {
+    const length: i32 = (toI32(data[at]) << 8) | toI32(data[at + 1])
+    const age: i32 = at + 2 + length
+    if (age < 0 || age + 3 >= toI32(data.length)) {
+      return false
+    }
+    if (k === index) {
+      hello.pskIdentityAt = at + 2
+      hello.pskIdentityLength = length
+      hello.pskTicketAge =
+        (toU32(data[age]) << 24) |
+        (toU32(data[age + 1]) << 16) |
+        (toU32(data[age + 2]) << 8) |
+        toU32(data[age + 3])
+      break
+    }
+    at = age + 4
+  }
+  // An identity is never empty (§4.2.11), so an empty window means the walk
+  // ran off the data before reaching it.
+  if (hello.pskIdentityLength === 0) {
+    return false
+  }
+  at = hello.pskBindersAt
+  for (let k: i32 = 0; at >= 0 && at < toI32(data.length); k++) {
+    const length: i32 = toI32(data[at])
+    if (k === index) {
+      hello.pskBinderAt = at + 1
+      hello.pskBinderLength = length
+      return true
+    }
+    at = at + 1 + length
+  }
+  return false
 }
 
 /**
@@ -581,6 +770,19 @@ export class TlsClientHello {
   quicTransportParameters: u8[]
   /** Every extension type read, in order. */
   extensionTypes: i32[]
+  /** `pre_shared_key`'s identities, in the client's order, and each one's obfuscated ticket age (§4.2.11). */
+  pskIdentities: u8[][]
+  pskTicketAges: u32[]
+  /** `pre_shared_key`'s binders, one an identity. */
+  pskBinders: u8[][]
+  /** `psk_key_exchange_modes`, one byte a mode. */
+  pskModes: u8[]
+  /**
+   * How many bytes of the body come before `binders`: the body truncated
+   * there, after its handshake header, is what each binder covers
+   * (§4.2.11.2).
+   */
+  pskBindersPrefix: i32 = 0
   /** 0 when the message parsed, or the alert it earns: `decode_error` or `illegal_parameter`. */
   alert: i32 = 0
   legacyVersion: i32 = 0
@@ -594,6 +796,10 @@ export class TlsClientHello {
   hasServerName: boolean = false
   hasAlpn: boolean = false
   hasQuicTransportParameters: boolean = false
+  hasPreSharedKey: boolean = false
+  hasPskModes: boolean = false
+  /** Whether `psk_key_exchange_modes` lists `psk_dhe_ke`. */
+  pskDheKe: boolean = false
 
   constructor() {
     this.random = []
@@ -607,6 +813,10 @@ export class TlsClientHello {
     this.alpn = []
     this.quicTransportParameters = []
     this.extensionTypes = []
+    this.pskIdentities = []
+    this.pskTicketAges = []
+    this.pskBinders = []
+    this.pskModes = []
   }
 }
 
@@ -708,6 +918,18 @@ export const tlsParseClientHello = (data: u8[], off: i32, len: i32): TlsClientHe
   hello.hasServerName = view.hasServerName
   hello.hasAlpn = view.hasAlpn
   hello.hasQuicTransportParameters = view.hasQuicTransportParameters
+  hello.hasPreSharedKey = view.hasPreSharedKey
+  hello.hasPskModes = view.hasPskModes
+  hello.pskDheKe = view.pskDheKe
+  hello.pskModes = tlsCopyWindow(data, view.pskModesAt, view.pskModesLength)
+  if (view.hasPreSharedKey) {
+    hello.pskBindersPrefix = view.pskBindersPrefixAt - off
+  }
+  for (let k: i32 = 0; k < view.pskIdentityCount && tlsSelectPskIdentity(view, k); k++) {
+    hello.pskIdentities.push(tlsCopyWindow(data, view.pskIdentityAt, view.pskIdentityLength))
+    hello.pskTicketAges.push(view.pskTicketAge)
+    hello.pskBinders.push(tlsCopyWindow(data, view.pskBinderAt, view.pskBinderLength))
+  }
   return hello
 }
 
@@ -729,6 +951,11 @@ const tlsPutU8 = (out: u8[], at: i32, v: i32): i32 => {
 }
 
 const tlsPutU16 = (out: u8[], at: i32, v: i32): i32 => tlsPutU8(out, tlsPutU8(out, at, v >> 8), v)
+
+const tlsPutU32 = (out: u8[], at: i32, v: u32): i32 => {
+  const p: i32 = tlsPutU16(out, at, toI32((v >> 16) & 0xffff))
+  return tlsPutU16(out, p, toI32(v & 0xffff))
+}
 
 /** `bytes[off .. off + len)`, at `out[at]`. */
 const tlsPutWindow = (out: u8[], at: i32, bytes: u8[], off: i32, len: i32): i32 => {
@@ -822,6 +1049,42 @@ const tlsPutHelloHead = (
 }
 
 /**
+ * A ServerHello (§4.1.3), as `tlsWriteServerHello` and
+ * `tlsWriteServerHelloPsk` write it: with a `pre_shared_key` naming
+ * `selectedIdentity` first when that is not negative, the order RFC 8448 §4
+ * shows, then `key_share` and `supported_versions`.
+ */
+const tlsPutServerHello = (
+  out: u8[],
+  at: i32,
+  random: u8[],
+  sessionId: u8[],
+  sessionIdOff: i32,
+  sessionIdLength: i32,
+  suite: i32,
+  x25519Public: u8[],
+  selectedIdentity: i32
+): i32 => {
+  let p: i32 = tlsPutHelloHead(out, at + 4, random, false, sessionId, sessionIdOff, sessionIdLength, suite)
+  const extensions: i32 = p + 2
+  p = extensions
+  if (selectedIdentity >= 0) {
+    p = tlsPutU16(out, tlsPutU16(out, tlsPutU16(out, p, TLS_EXT_PRE_SHARED_KEY), 2), selectedIdentity)
+  }
+  p = tlsPutU16(out, p, TLS_EXT_KEY_SHARE)
+  const share: i32 = p + 2
+  p = tlsPutU16(out, share, TLS_GROUP_X25519)
+  const key: i32 = p + 2
+  p = tlsPutBytes(out, key, x25519Public)
+  tlsPutLength(out, key, p, 2)
+  tlsPutLength(out, share, p, 2)
+  p = tlsPutSelectedVersion(out, p)
+  tlsPutLength(out, extensions, p, 2)
+  tlsPutHeader(out, at, TLS_HANDSHAKE_SERVER_HELLO, p)
+  return p
+}
+
+/**
  * Writes a ServerHello (§4.1.3) at `out[at]` and answers where it ends:
  * choosing `suite` and TLS 1.3, echoing the session id
  * `sessionId[sessionIdOff .. sessionIdOff + sessionIdLength)`, and carrying
@@ -837,21 +1100,38 @@ export const tlsWriteServerHello = (
   sessionIdLength: i32,
   suite: i32,
   x25519Public: u8[]
-): i32 => {
-  let p: i32 = tlsPutHelloHead(out, at + 4, random, false, sessionId, sessionIdOff, sessionIdLength, suite)
-  const extensions: i32 = p + 2
-  p = tlsPutU16(out, extensions, TLS_EXT_KEY_SHARE)
-  const share: i32 = p + 2
-  p = tlsPutU16(out, share, TLS_GROUP_X25519)
-  const key: i32 = p + 2
-  p = tlsPutBytes(out, key, x25519Public)
-  tlsPutLength(out, key, p, 2)
-  tlsPutLength(out, share, p, 2)
-  p = tlsPutSelectedVersion(out, p)
-  tlsPutLength(out, extensions, p, 2)
-  tlsPutHeader(out, at, TLS_HANDSHAKE_SERVER_HELLO, p)
-  return p
-}
+): i32 =>
+  tlsPutServerHello(out, at, random, sessionId, sessionIdOff, sessionIdLength, suite, x25519Public, -1)
+
+/**
+ * Writes the ServerHello of a resumed handshake (§4.1.3, §4.2.11) at
+ * `out[at]` and answers where it ends: `tlsWriteServerHello`'s, with a
+ * `pre_shared_key` that names the client's identity number
+ * `selectedIdentity` (a `uint16`) ahead of `key_share`, since the server
+ * resumes only in `psk_dhe_ke` and so always sends its share.
+ */
+export const tlsWriteServerHelloPsk = (
+  out: u8[],
+  at: i32,
+  random: u8[],
+  sessionId: u8[],
+  sessionIdOff: i32,
+  sessionIdLength: i32,
+  suite: i32,
+  x25519Public: u8[],
+  selectedIdentity: i32
+): i32 =>
+  tlsPutServerHello(
+    out,
+    at,
+    random,
+    sessionId,
+    sessionIdOff,
+    sessionIdLength,
+    suite,
+    x25519Public,
+    selectedIdentity & 0xffff
+  )
 
 /**
  * Writes a HelloRetryRequest (§4.1.4) at `out[at]` and answers where it ends:
@@ -958,6 +1238,39 @@ export const tlsWriteFinished = (out: u8[], at: i32, verifyData: u8[], off: i32,
 }
 
 /**
+ * Writes a NewSessionTicket (§4.6.1) at `out[at]` and answers where it ends:
+ * `lifetime` in seconds, `ageAdd`, the nonce
+ * `nonce[nonceOff .. nonceOff + nonceLength)`, the ticket
+ * `ticket[ticketOff .. ticketOff + ticketLength)`, and `extra` as the
+ * extensions, encoded by the caller and written as they are. The server sends
+ * none; RFC 8448 §3's ticket carries `early_data`.
+ */
+export const tlsWriteNewSessionTicket = (
+  out: u8[],
+  at: i32,
+  lifetime: u32,
+  ageAdd: u32,
+  nonce: u8[],
+  nonceOff: i32,
+  nonceLength: i32,
+  ticket: u8[],
+  ticketOff: i32,
+  ticketLength: i32,
+  extra: u8[]
+): i32 => {
+  let p: i32 = tlsPutU32(out, tlsPutU32(out, at + 4, lifetime), ageAdd)
+  p = tlsPutU8(out, p, nonceLength)
+  p = tlsPutWindow(out, p, nonce, nonceOff, nonceLength)
+  p = tlsPutU16(out, p, ticketLength)
+  p = tlsPutWindow(out, p, ticket, ticketOff, ticketLength)
+  const extensions: i32 = p + 2
+  p = tlsPutBytes(out, extensions, extra)
+  tlsPutLength(out, extensions, p, 2)
+  tlsPutHeader(out, at, TLS_HANDSHAKE_NEW_SESSION_TICKET, p)
+  return p
+}
+
+/**
  * Writes what a server's CertificateVerify signs (§4.4.3) at `out[at]`: 64
  * spaces, the context string "TLS 1.3, server CertificateVerify", a zero byte,
  * and the transcript hash `transcriptHash[off .. off + len)` through
@@ -1011,6 +1324,43 @@ export const tlsEncodeServerHello = (random: u8[], sessionId: u8[], suite: i32, 
     sessionIdLength,
     suite,
     x25519Public
+  )
+  return out
+}
+
+/** A resumed handshake's ServerHello naming `selectedIdentity`, in a fresh array (`tlsWriteServerHelloPsk`). */
+export const tlsEncodeServerHelloPsk = (
+  random: u8[],
+  sessionId: u8[],
+  suite: i32,
+  x25519Public: u8[],
+  selectedIdentity: i32
+): u8[] => {
+  const none: u8[] = []
+  const sessionIdLength: i32 = toI32(sessionId.length)
+  const out: u8[] = new Array<u8>(
+    tlsWriteServerHelloPsk(
+      none,
+      TLS_CODEC_FROM,
+      random,
+      sessionId,
+      TLS_CODEC_FROM,
+      sessionIdLength,
+      suite,
+      x25519Public,
+      selectedIdentity
+    )
+  )
+  tlsWriteServerHelloPsk(
+    out,
+    TLS_CODEC_FROM,
+    random,
+    sessionId,
+    TLS_CODEC_FROM,
+    sessionIdLength,
+    suite,
+    x25519Public,
+    selectedIdentity
   )
   return out
 }
@@ -1081,6 +1431,48 @@ export const tlsEncodeFinished = (verifyData: u8[]): u8[] => {
   const length: i32 = toI32(verifyData.length)
   const out: u8[] = new Array<u8>(tlsWriteFinished(none, TLS_CODEC_FROM, verifyData, TLS_CODEC_FROM, length))
   tlsWriteFinished(out, TLS_CODEC_FROM, verifyData, TLS_CODEC_FROM, length)
+  return out
+}
+
+/** A NewSessionTicket (§4.6.1) in a fresh array (`tlsWriteNewSessionTicket`). */
+export const tlsEncodeNewSessionTicket = (
+  lifetime: u32,
+  ageAdd: u32,
+  nonce: u8[],
+  ticket: u8[],
+  extra: u8[]
+): u8[] => {
+  const none: u8[] = []
+  const nonceLength: i32 = toI32(nonce.length)
+  const ticketLength: i32 = toI32(ticket.length)
+  const out: u8[] = new Array<u8>(
+    tlsWriteNewSessionTicket(
+      none,
+      TLS_CODEC_FROM,
+      lifetime,
+      ageAdd,
+      nonce,
+      TLS_CODEC_FROM,
+      nonceLength,
+      ticket,
+      TLS_CODEC_FROM,
+      ticketLength,
+      extra
+    )
+  )
+  tlsWriteNewSessionTicket(
+    out,
+    TLS_CODEC_FROM,
+    lifetime,
+    ageAdd,
+    nonce,
+    TLS_CODEC_FROM,
+    nonceLength,
+    ticket,
+    TLS_CODEC_FROM,
+    ticketLength,
+    extra
+  )
   return out
 }
 
