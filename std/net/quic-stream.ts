@@ -660,7 +660,11 @@ export class QuicStreams {
   /**
    * The pools, made for this table alone on first use when nothing shared
    * one: a table that never moves a byte makes none. `null` when the
-   * streams have no buffers at all.
+   * streams have no buffers at all. Pools of one connection make every
+   * buffer the table could hold at once, there and then, the footprint the
+   * table had when each slot owned its buffers: how many it holds turns on
+   * when the peer acknowledges, so a lazily grown private pool would go on
+   * allocating after any warm-up. A server's shared pools grow lazily.
    */
   ownPools(): QuicStreamPools | null {
     const pools: QuicStreamPools | null = this.pools
@@ -672,6 +676,8 @@ export class QuicStreams {
       return null
     }
     const made: QuicStreamPools = new QuicStreamPools(this.bufferSize, count, 1)
+    made.prime(made.data.ceiling)
+    made.prime(QUIC_STREAM_NO_BYTES)
     this.pools = made
     return made
   }
