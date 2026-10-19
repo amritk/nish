@@ -21,9 +21,11 @@ import {
   memberSetOf,
   membersDisjoint,
   narrow,
+  narrowToTags,
   refuseExpressionForm,
   refuseNarrowingStore,
   resolveMaybeAnnotation,
+  tagVariable,
   unproven,
   WANT_INFERRED,
   WANT_MAYBE,
@@ -370,10 +372,15 @@ const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const elseScope = scope.child()
   narrow(ctx, stmt.children[0], elseScope, false)
   const elseTerminates = checkStatement(ctx, otherwise, elseScope)
+  // The arm that falls through may assign a variable the test proved
+  // something about, and then what it proved holds of the old value only:
+  // `if (p === null) { return; } else { p = q; }` leaves `p` nullable.
   if (thenTerminates && !elseTerminates) {
     narrow(ctx, stmt.children[0], scope, false)
+    clearNarrowingsAssignedIn(ctx, otherwise, scope)
   } else if (elseTerminates && !thenTerminates) {
     narrow(ctx, stmt.children[0], scope, true)
+    clearNarrowingsAssignedIn(ctx, stmt.children[1], scope)
   }
   return thenTerminates && elseTerminates
 }
@@ -908,9 +915,26 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const clauses = stmt.children[1].children
   const members = memberSetOf(ctx, stmt.children[0])
   const seen: i64[] = []
+  // `switch (s.kind)` on a union variable narrows each clause to the variants
+  // its labels name, as `===` does, so every label is checked before any body.
+  const tagged = tagVariable(ctx, stmt.children[0], scope)
+  if (tagged !== null) {
+    for (const clause of clauses) {
+      if (clause.kind !== N_DEFAULT) {
+        checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
+      }
+    }
+  }
   let hasDefault = false
   let lastTerminates = false
-  ctx.pushLoop(LOOP_SWITCH)
+  let broke = false
+  // The labels of the run of empty clauses that falls into the next body.
+  let group: i32[] = []
+  let groupDefault = false
+  // What reaches the statement after the `switch`: the labels of each body
+  // that breaks or falls out of the bottom, and whether a `default` does.
+  const reaching: i32[] = []
+  let defaultReaches = false
   let i = 0
   while (i < clauses.length) {
     const clause = clauses[i]
@@ -920,8 +944,14 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
         ctx.error(clause, "`switch` has more than one `default` clause")
       }
       hasDefault = true
+      groupDefault = true
     } else {
-      checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
+      if (tagged === null) {
+        checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
+      }
+      for (const member of memberSetOf(ctx, clause.children[0])) {
+        group.push(member)
+      }
     }
     for (const statement of body.children) {
       if (statement.kind === N_VAR) {
@@ -931,7 +961,25 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
         )
       }
     }
-    const terminates = body.children.length > 0 ? checkStatements(ctx, body.children, scope.child()) : false
+    let terminates = false
+    if (body.children.length > 0 || i === clauses.length - 1) {
+      const clauseScope = scope.child()
+      if (tagged !== null) {
+        narrowClause(ctx, clauseScope, tagged, clauses, group, groupDefault)
+      }
+      ctx.pushLoop(LOOP_SWITCH)
+      terminates = body.children.length > 0 ? checkStatements(ctx, body.children, clauseScope) : false
+      const clauseBroke = ctx.popLoop()
+      broke = broke || clauseBroke
+      if (clauseBroke || (i === clauses.length - 1 && !terminates)) {
+        for (const member of group) {
+          reaching.push(member)
+        }
+        defaultReaches = defaultReaches || groupDefault
+      }
+      group = []
+      groupDefault = false
+    }
     if (body.children.length > 0 && !terminates && i < clauses.length - 1) {
       ctx.error(
         body.children[body.children.length - 1],
@@ -943,11 +991,84 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     lastTerminates = terminates
     i = i + 1
   }
-  const broke = ctx.popLoop()
+  if (tagged !== null) {
+    narrowAfterSwitch(ctx, scope, tagged, clauses, reaching, hasDefault ? defaultReaches : true)
+    // A clause that assigns the variable leaves nothing a label proved true.
+    clearNarrowingsAssignedIn(ctx, stmt.children[1], scope)
+  }
   // Anything no clause names reaches the statement after the `switch` unless
   // a `default` catches it, and so does a `break` or a last clause that falls
   // out of the bottom.
   return hasDefault && !broke && lastTerminates
+}
+
+/** Every member a `case` label of `clauses` names. */
+const labelledMembers = (ctx: CheckContext, clauses: Node[]): i32[] => {
+  const all: i32[] = []
+  for (const clause of clauses) {
+    if (clause.kind !== N_DEFAULT) {
+      for (const member of memberSetOf(ctx, clause.children[0])) {
+        all.push(member)
+      }
+    }
+  }
+  return all
+}
+
+/** `members` without the values `drop` holds. */
+const withoutMembers = (ctx: CheckContext, members: i32[], drop: i32[]): i32[] => {
+  const left: i32[] = []
+  for (const member of members) {
+    let dropped = false
+    for (const other of drop) {
+      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+        dropped = true
+      }
+    }
+    if (!dropped) {
+      left.push(member)
+    }
+  }
+  return left
+}
+
+/**
+ * Narrow a clause body of `switch (s.kind)` to the variants its group of
+ * labels names; a group with `default` is every variant no other label names.
+ */
+const narrowClause = (
+  ctx: CheckContext,
+  clauseScope: Scope,
+  tagged: Local,
+  clauses: Node[],
+  group: i32[],
+  groupDefault: boolean
+): void => {
+  if (groupDefault) {
+    narrowToTags(ctx, clauseScope, tagged, withoutMembers(ctx, labelledMembers(ctx, clauses), group), false)
+  } else {
+    narrowToTags(ctx, clauseScope, tagged, group, true)
+  }
+}
+
+/**
+ * Narrow `s` after `switch (s.kind)` to the variants that can reach the next
+ * statement: those of a body that breaks or falls out of the bottom, and,
+ * when no `default` catches them or a reaching one does, those no label names.
+ */
+const narrowAfterSwitch = (
+  ctx: CheckContext,
+  scope: Scope,
+  tagged: Local,
+  clauses: Node[],
+  reaching: i32[],
+  unlabelledReach: boolean
+): void => {
+  if (unlabelledReach) {
+    narrowToTags(ctx, scope, tagged, withoutMembers(ctx, labelledMembers(ctx, clauses), reaching), false)
+  } else {
+    narrowToTags(ctx, scope, tagged, reaching, true)
+  }
 }
 
 /**

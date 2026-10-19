@@ -133,7 +133,7 @@ import {
   emitIndexOfAnyKernel,
   emitTemplate,
 } from "./emit-strings"
-import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
+import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
 import { AES_HW, AES_SEAM_NONE, aesKernelOf, isAesSeam, isIndexOfAnyWalk } from "./kernels"
@@ -1366,16 +1366,31 @@ export class Emitter {
         // WP17: a by-value `Result` parameter *is* a pointer to the object the
         // prologue unpacked it into, so the name lowers to that value.
         const object = this.paramObject(local.name)
-        return object.length > 0 ? object : paramValue(local.name)
+        return this.narrowedRead(expr, local, object.length > 0 ? object : paramValue(local.name))
       }
       // WP32: a maybe `const` read by name is read where a test narrowed it to its value.
       if (this.table.isMaybe(local.type)) {
         return this.maybeParts[maybeLocalIndex(this, local)].value
       }
       const ty = this.llvm(local.type)
-      return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`)
+      const value = this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`)
+      return this.narrowedRead(expr, local, value)
     }
     process.exit(internalErrorFor(`emitter: no binding for \`${expr.text}\``, this.opts.json))
+  }
+
+  /**
+   * A union variable read where a tag test narrowed it to one variant: the
+   * slot holds the `%union.tagged*`, and the read is that variant's pointer,
+   * a `bitcast` that costs no instruction (docs/IR_COOKBOOK.md, unions).
+   */
+  narrowedRead(expr: Node, local: Local, value: string): string {
+    const declared = this.table.stripNull(local.type)
+    const read = this.table.stripNull(intrinsicType(this.program, expr))
+    if (!this.table.isUnion(declared) || !this.table.isStruct(read)) {
+      return value
+    }
+    return this.fn.emitValue(`bitcast ${this.llvm(declared)} ${value} to ${this.llvm(read)}`)
   }
 
   emitBinaryExpression(expr: Node): string {

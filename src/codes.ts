@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 676
+export const RULE_COUNT: i32 = 677
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -245,6 +245,8 @@ const diagnosticRules = (): string[] => [
   "NL2523",
   " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`",
   "NL2373",
+  "` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for",
+  "NL2549",
   "` runs may reach no I/O, no clock, no entropy, no C, and no `panic` or exit whose message or status is computed, so that what it returns is all that leaves",
   "NL2448",
   "`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one",

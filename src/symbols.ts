@@ -132,6 +132,13 @@ export const unknownOrigin = (expr: Node): TypeOrigin => {
   return origin
 }
 
+/**
+ * The narrowing of a union variable every tag of which a test excluded,
+ * which TypeScript types `never`. Below every type id; `Scope.typeOf` never
+ * hands it out, and `Scope.exhausted` reports it.
+ */
+export const NARROWED_NONE: i32 = -3
+
 export class Scope {
   parent: Scope | null
   /** Name -> index into `locals`. */
@@ -213,13 +220,30 @@ export class Scope {
   typeOf(variable: Local): i32 {
     const at = this.narrowingIndex(variable)
     if (at >= 0) {
-      return this.narrowedTypes[at]
+      const type = this.narrowedTypes[at]
+      return type === NARROWED_NONE ? variable.type : type
     }
     const parent = this.parent
     if (parent !== null) {
       return parent.typeOf(variable)
     }
     return variable.type
+  }
+
+  /**
+   * Whether the innermost narrowing of `variable` left it no variant: every
+   * tag of its union was tested away, so TypeScript types it `never`.
+   */
+  exhausted(variable: Local): boolean {
+    const at = this.narrowingIndex(variable)
+    if (at >= 0) {
+      return this.narrowedTypes[at] === NARROWED_NONE
+    }
+    const parent = this.parent
+    if (parent !== null) {
+      return parent.exhausted(variable)
+    }
+    return false
   }
 
   /**

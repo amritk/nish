@@ -113,7 +113,7 @@ import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
-import { Local, STORAGE_PARAM, Scope } from "./symbols"
+import { Local, NARROWED_NONE, STORAGE_PARAM, Scope } from "./symbols"
 import {
   intBits,
   isFloat,
@@ -760,6 +760,9 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const local = scope.lookup(expr.text)
   if (local !== null) {
     ctx.program.nodeLocals[expr.id] = local
+    if (scope.exhausted(local)) {
+      return ctx.errorType(expr, exhaustedMessage(expr.text))
+    }
     return scope.typeOf(local) // the declared type, or the narrowed one inside `if (p !== null)`
   }
   // WP29: inside an arrow argument, a name of the function around it — which
@@ -1812,6 +1815,7 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   const rightAbsent = right.kind === N_NULL || isUndefinedValue(right, scope)
   const leftAbsent = left.kind === N_NULL || isUndefinedValue(left, scope)
   if (!rightAbsent && !leftAbsent) {
+    narrowTag(ctx, cond, scope, whenTrue)
     return
   }
   const variable = rightAbsent ? left : right
@@ -1837,6 +1841,105 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   const narrows = op === "!==" ? whenTrue : !whenTrue
   if (narrows) {
     scope.narrow(local, present)
+  }
+}
+
+/**
+ * `s.kind === Kind.Circle`, either way round, and `!==`: a test of a union
+ * variable's tag against one member narrows the variable to the variants
+ * that carry it where the test holds, and to the rest where it does not, as
+ * TypeScript does. Narrowed to one variant, `s` is that class, and `s.kind`
+ * is its one member, so a later comparison the first one decided is the
+ * disjoint comparison `checkEquality` already refuses.
+ */
+const narrowTag = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
+  const leftTag = tagVariable(ctx, cond.children[0], scope)
+  const local = leftTag !== null ? leftTag : tagVariable(ctx, cond.children[1], scope)
+  if (local === null) {
+    return
+  }
+  const other = leftTag !== null ? cond.children[1] : cond.children[0]
+  const members = memberSetOf(ctx, other)
+  if (members.length !== 1) {
+    return
+  }
+  narrowToTags(ctx, scope, local, members, cond.text === "===" ? whenTrue : !whenTrue)
+}
+
+/** A union variable read where tag tests excluded every variant. */
+const exhaustedMessage = (name: string): string =>
+  `\`${name}\` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types \`never\` and this version has no type for`
+
+/**
+ * The variable whose tag `node` reads — `s` in `s.kind`, where `s` is a
+ * local, a parameter or `this`'s name for a union — or `null`.
+ */
+export const tagVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
+    return null
+  }
+  const receiver = unwrapParens(read.children[0])
+  if (receiver.kind !== N_IDENT) {
+    return null
+  }
+  const local = scope.lookup(receiver.text)
+  if (local === null || scope.exhausted(local)) {
+    return null
+  }
+  const union = ctx.table.stripNull(local.type)
+  if (!ctx.table.isUnion(union) || read.text !== ctx.table.tagNameOf(union)) {
+    return null
+  }
+  const type = scope.typeOf(local)
+  return ctx.table.isUnion(type) || ctx.table.hasVariant(union, type) ? local : null
+}
+
+/**
+ * Narrow the union variable `local` to the variants it may still be whose
+ * tag is among `members` (`keep`), or to those whose tag is not: one variant
+ * reads as its class, several as the union of them, none as `NARROWED_NONE`.
+ * A variable already narrowed to one variant is that variant alone.
+ */
+export const narrowToTags = (ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void => {
+  const union = ctx.table.stripNull(local.type)
+  const current = scope.typeOf(local)
+  const variants = ctx.table.variantsOf(union)
+  const tags = ctx.table.tagsOf(union)
+  const keptVariants: i32[] = []
+  const keptTags: i32[] = []
+  let possible = 0
+  let i = 0
+  while (i < variants.length && i < tags.length) {
+    const variant = variants[i]
+    const left = ctx.table.isUnion(current) ? ctx.table.hasVariant(current, variant) : current === variant
+    if (left) {
+      possible = possible + 1
+      let named = false
+      for (const member of members) {
+        if (ctx.table.memberValue(member) === ctx.table.memberValue(tags[i])) {
+          named = true
+        }
+      }
+      if (named === keep) {
+        keptVariants.push(variant)
+        keptTags.push(tags[i])
+      }
+    }
+    i = i + 1
+  }
+  if (keptVariants.length === possible) {
+    return
+  }
+  if (keptVariants.length === 0) {
+    scope.narrow(local, NARROWED_NONE)
+  } else if (keptVariants.length === 1) {
+    scope.narrow(local, keptVariants[0])
+  } else {
+    scope.narrow(
+      local,
+      ctx.table.unionOf(keptVariants, keptTags, ctx.table.tagEnumOf(union), ctx.table.tagNameOf(union))
+    )
   }
 }
 
