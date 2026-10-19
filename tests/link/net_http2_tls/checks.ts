@@ -267,12 +267,14 @@ export const tlsChecks = (): i32 => {
     `which the two slots share: formatted once between them (${lb.server.date.formats() - shared})`,
     lb.server.date.formats() - shared === toI64(1)
   );
+  // Three bytes of a frame header and no more: the slot holds them unread when the client goes.
+  c.lb.send(c.index, sealOne(c.write, TLS_CONTENT_APPLICATION_DATA, [toU8(0), toU8(0), toU8(4)], ZERO));
   lb.hangUp(c.index);
   lb.hangUp(d.index);
   t.ok("two clients that hang up are closed", lb.awaitClosed(toI32(5)) && lb.server.busy() === 0);
   const pools: Http2Pools = lb.server.pools;
   t.ok(
-    `once every connection has ended, every pool has all its buffers back (${pools.input.lent()}, ${pools.output.lent()}, ${pools.block.lent()} lent)`,
+    `once every connection has ended, one of them mid-frame, every pool has all its buffers back (${pools.input.lent()}, ${pools.output.lent()}, ${pools.block.lent()} lent)`,
     pools.input.lent() === 0 && pools.output.lent() === 0 && pools.block.lent() === 0
   );
   t.ok(`and none made more than the slots (${pools.input.made}, ${pools.output.made}, ${pools.block.made})`, pools.input.made <= 2 && pools.output.made <= 2 && pools.block.made <= 2);

@@ -21,7 +21,7 @@ PASS  a third is accepted and shed
 PASS  each slot's response carries the one date
 PASS  which the two slots share: formatted once between them (1)
 PASS  two clients that hang up are closed
-PASS  once every connection has ended, every pool has all its buffers back (0, 0, 0 lent)
+PASS  once every connection has ended, one of them mid-frame, every pool has all its buffers back (0, 0, 0 lent)
 PASS  and none made more than the slots (1, 1, 1)
 PASS  a free slot answers H2_ERROR to next and done to the rest
 PASS  a slot out of range names the first connection
