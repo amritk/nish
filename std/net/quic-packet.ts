@@ -1102,14 +1102,14 @@ export const quicKeyUpdateSecret = (aead: i32, trafficSecret: Secret<u8[]>): Sec
  * the phase. The new generation holds its own copy of that key and its own
  * schedule, in the slot, so wiping one generation leaves the other usable.
  * Answers the slot's keys, or `null`, deriving nothing, for keys `quicKeys`
- * did not make or a secret of the wrong length.
+ * did not make, keys that live in `slot`, or a secret of the wrong length.
  */
 export const quicKeysUpdate = (
   slot: QuicKeysSlot,
   keys: QuicKeys,
   nextSecret: Secret<u8[]>
 ): QuicKeys | null => {
-  if (!quicPacketKeysUsable(keys) || !quicPacketHeldFits(keys.aead, nextSecret)) {
+  if (keys === slot.keys || !quicPacketKeysUsable(keys) || !quicPacketHeldFits(keys.aead, nextSecret)) {
     return null
   }
   quicPacketPoint(slot, keys.aead)

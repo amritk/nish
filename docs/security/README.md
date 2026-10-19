@@ -119,8 +119,9 @@ the record that found it. The notes below the table name each such finding.
     QUIC-1 (Low), the `QuicKeys` the one-shot key forms answered, was left
     open by #430's secret-boundary stage and closed by #674's secret-fields
     stage: `quicKeys` and `quicKeysUpdate` now derive into a `QuicKeysSlot`
-    the caller passes and keep nothing in the arena, and a slot the caller
-    owns is the caller's to wipe. It is counted as a fixed Low.
+    the caller passes, leave in the arena only the `HkdfScratch` each makes,
+    which wipes its hashers and output blocks before the call returns, and a
+    slot the caller owns is the caller's to wipe. It is counted as a fixed Low.
 
 ## Open findings
 

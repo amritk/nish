@@ -26,10 +26,12 @@ export const wipeChecks = [
   // plain copy `expose` hands the derivation, 1, and the two AES schedules'
   // `aesKeyInto`, 6 each. A key update ratchets a secret in place through
   // `nextKeys`, 8: the plain copy of the current secret and the next one, 1
-  // each, and the new packet key's `aesKeyInto`, 6. `updateWriteKeys` 20:
-  // the replaced packet key's key, IV and schedule, 4, and `nextKeys`, once
-  // in each of the two secret widths' arms. `prepareNextReadKeys` 12: the
-  // previous read generation's key, IV and schedule, 4, and `nextKeys`.
+  // each, and the new packet key's `aesKeyInto`, 6. Both callers ratchet
+  // through `nextKeys` in one arm per secret width, and both start with the
+  // replaced generation's key, IV and packet schedule, 4. `updateWriteKeys`
+  // 20: those 4, and `nextKeys` once in each arm, 16, since `opt` keeps both
+  // call sites. `prepareNextReadKeys` 12: those 4, and `nextKeys` once, 8,
+  // since `opt` sinks its two arms into one call over selected operands.
   // Discarding a level, `discard` 23: the read and write keys' key, IV and
   // header-protection key, 6, their packet schedules, 4, and one slot's
   // `wipe` in the loop over the space's slots, 13. `wipeAll` 88: three
@@ -47,15 +49,17 @@ export const wipeChecks = [
   // `wipeAll`. `runClocks` 188: `wipeAll` at the idle timeout and again at
   // the end of the closing or draining period, each copy counted, and
   // `prepareNextReadKeys` once a key update's previous keys have had their
-  // probe timeout. `afterTls` 151: once the handshake is confirmed, the
-  // Handshake level's `discard`, 23 (`TlsServer`'s two handshake traffic
-  // secrets it leaves to `TlsServer.wipeSecret`, which `net_quic_wipes`
-  // reads back), `prepareNextReadKeys`, 12, and `keysFrom` for each
-  // level's keys as they arrive, besides the derivations of the connection
-  // IDs and reset tokens. It was 136: the application secrets now move into
-  // the connection's fields as each width's `Secret`, and `opt` inlines
-  // `keysFrom` and the next read generation's `nextKeys` where `afterTls`
-  // called `quicKeys` and kept the secret plain.
+  // probe timeout. `afterTls` 151: `keysFrom` at five call sites, 65 (the
+  // Handshake level's read and write keys, and the 1-RTT keys, where `opt`
+  // keeps the write keys' call in each width's arm and sinks the read keys'
+  // two into one); `prepareNextReadKeys`, 12; once the handshake is
+  // confirmed, the Handshake level's `discard`, 23 (`TlsServer`'s two
+  // handshake traffic secrets it leaves to `TlsServer.wipeSecret`, which
+  // `net_quic_wipes` reads back); and `topUpConnectionIds`, 51:
+  // `deriveConnectionId`, 25, `quicConnResetTokenInto`, 25, and one wipe of
+  // its own. It was 136, when the 1-RTT keys came from `quicKeys` over the
+  // application secrets kept plain; they now come from the connection's
+  // `Secret` fields of each width, through `keysFrom`.
   //
   // The roots below pin the wipes the ones above do not reach.
   // `applyPhase` 22: `updateWriteKeys`, 20, and the next read secret the
@@ -67,10 +71,13 @@ export const wipeChecks = [
   // from the one wipe of the entropy once it is copied, which opt
   // duplicates. `establish` 29: the first ID's reset token once it is in the
   // transport parameters, and the ephemeral key once `TlsServer` has its own
-  // copy, besides its derivation. `openPacket` 293: the Initial level's
-  // `discard` on the first Handshake packet, besides the derivations and
-  // wipes of every level it opens; it was 268, and rose with `afterTls`
-  // and the key-update paths it reaches.
+  // copy, besides its derivation. `openPacket` 293: `openScoped`, 17
+  // (`quicUnprotectHeader`, 3, `quicDecryptPayload`, 10, and
+  // `receiveFrames`, 4), `establish`, 29, `applyPhase`, 22, the Initial
+  // level's `discard` on the first Handshake packet, 23, `afterTls`, 151, and
+  // `topUpConnectionIds`, 51. It was 268: `afterTls` was 136, 15 fewer,
+  // `applyPhase` 13, 9 fewer, and `establish` 28, without the wipe of the
+  // ephemeral key.
   // `quicInitialSecretsInto` 1: the Initial secret once both directions' are
   // expanded. `reset` 94: `wipeAll`, 88, and `begin`'s wipes of the next
   // connection's entropy.
