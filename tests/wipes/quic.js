@@ -20,44 +20,67 @@ export const wipeChecks = [
   // own, besides `aesGcmSeal`'s 7 and `aesHeaderMask`'s 2, 13; opening, the
   // mask's 1 and `aesHeaderMask`'s 2 in `quicUnprotectHeader`, 3, and the
   // nonce's 2 and `aesGcmOpen`'s 8 in `quicDecryptPayload`, 10. (ChaCha20's
-  // functions are in a module this group does not run through `opt`.) A key
-  // update: `updateWriteKeys` 12 (the replaced key, IV and secret, the next
-  // secret on the failure path, the replaced packet key's schedule 2, and
-  // the next generation's `aesKeyInto`, 6), `prepareNextReadKeys` 10 (the
-  // previous read generation's key and IV, its schedule 2, and `aesKeyInto`
-  // 6). Discarding a level, `discard` 23: the read and write keys' key, IV
-  // and header-protection key, 6, their packet schedules, 4, and one slot's
-  // `wipe` in the loop over the space's slots, 13. `wipeAll` 87: three
-  // `discard`s, the previous generation's packet schedule 2, and 16 wipes of
-  // its own (a loop's one call site counted once); every secret `TlsServer`
-  // holds it leaves to `TlsServer.wipe`, in `nish/net/tls`, which this group
-  // does not run through `opt` and `opt` does not inline here, so no count
-  // below pins that call: `net_quic_wipes` does (`qwConnZero` reads every
-  // field back as zero), and `tls.js` counts `TlsServer.wipe` itself;
-  // `release` is `wipeAll`. `runClocks` 184: `wipeAll` at the idle timeout and again at
+  // functions are in a module this group does not run through `opt`.) The
+  // connection holds its traffic secrets in `Secret` fields (#674), and
+  // derives a level's keys into its own slot through `keysFrom`, 13: the
+  // plain copy `expose` hands the derivation, 1, and the two AES schedules'
+  // `aesKeyInto`, 6 each. A key update ratchets a secret in place through
+  // `nextKeys`, 8: the plain copy of the current secret and the next one, 1
+  // each, and the new packet key's `aesKeyInto`, 6. Both callers ratchet
+  // through `nextKeys` in one arm per secret width, and both start with the
+  // replaced generation's key, IV and packet schedule, 4. `updateWriteKeys`
+  // 20: those 4, and `nextKeys` once in each arm, 16, since `opt` keeps both
+  // call sites. `prepareNextReadKeys` 12: those 4, and `nextKeys` once, 8,
+  // since `opt` sinks its two arms into one call over selected operands.
+  // Discarding a level, `discard` 23: the read and write keys' key, IV and
+  // header-protection key, 6, their packet schedules, 4, and one slot's
+  // `wipe` in the loop over the space's slots, 13. `wipeAll` 88: three
+  // `discard`s, 69, the previous generation's packet schedule and its key
+  // and IV, 4, the connection's own `wipe` of its `Secret` fields, 7, and 8
+  // `secureZero`s of its own (the Initial secrets, the connection ID seed,
+  // the reset tokens, the transport parameters; a loop's one call site
+  // counted once). It was 87: the `wipe` of the secret fields, 7, replaces
+  // the loops over the read and write secret pools and their own
+  // `secureZero`s, 6. Every secret `TlsServer` holds `wipeAll` leaves to
+  // `TlsServer.wipe`, in `nish/net/tls`, which this group does not run
+  // through `opt` and `opt` does not inline here, so no count below pins
+  // that call: `net_quic_wipes` does (`qwConnZero` reads every field back as
+  // zero), and `tls.js` counts `TlsServer.wipe` itself; `release` is
+  // `wipeAll`. `runClocks` 188: `wipeAll` at the idle timeout and again at
   // the end of the closing or draining period, each copy counted, and
   // `prepareNextReadKeys` once a key update's previous keys have had their
-  // probe timeout. `afterTls` 136: once the handshake is confirmed, the
-  // Handshake level's `discard`, 23 (`TlsServer`'s two handshake traffic
-  // secrets it leaves to `TlsServer.wipeSecret`), the plain copy `expose`
-  // hands `keysFor` and `quicConnTakeSecret`, 2 each, besides the wipes of
-  // the derivations it runs as each level's keys arrive, the connection IDs'
-  // and reset tokens' HMACs among them. It was 134 before #674's
-  // secret-fields stage: 136 is net, -2 for the two `secureZero`s of the
-  // handshake secrets it no longer holds plain, +4 for the two clone wipes.
+  // probe timeout. `afterTls` 151: `keysFrom` at five call sites, 65 (the
+  // Handshake level's read and write keys, and the 1-RTT keys, where `opt`
+  // keeps the write keys' call in each width's arm and sinks the read keys'
+  // two into one); `prepareNextReadKeys`, 12; once the handshake is
+  // confirmed, the Handshake level's `discard`, 23 (`TlsServer`'s two
+  // handshake traffic secrets it leaves to `TlsServer.wipeSecret`, which
+  // `net_quic_wipes` reads back); and `topUpConnectionIds`, 51:
+  // `deriveConnectionId`, 25, `quicConnResetTokenInto`, 25, and one wipe of
+  // its own. It was 136, when the 1-RTT keys came from `quicKeys` over the
+  // application secrets kept plain; they now come from the connection's
+  // `Secret` fields of each width, through `keysFrom`.
   //
   // The roots below pin the wipes the ones above do not reach.
-  // `applyPhase` 13: the read secret a key update replaces, 1, and
-  // `updateWriteKeys`, 12. The stateless reset token: `quicStatelessResetToken`
-  // 14, its HMAC output among them, and `quicConnResetTokenInto` 25, the
-  // scratch HMAC's `wipe` and the tag; `deriveConnectionId` 25, the same for
-  // a connection ID. `begin` 2: both from the one wipe of the entropy once it
-  // is copied, which opt duplicates. `establish` 28: the first ID's reset
-  // token once it is in the transport parameters, besides its derivation. `openPacket` 268: the
-  // Initial level's `discard` on the first Handshake packet, besides the
-  // derivations and wipes of every level it opens. `quicInitialSecretsInto`
-  // 1: the Initial secret once both directions' are expanded. `reset` 93:
-  // `wipeAll`, 87, and `begin`'s wipes of the next connection's entropy.
+  // `applyPhase` 22: `updateWriteKeys`, 20, and the next read secret the
+  // connection drops once the peer's key update is confirmed, in either
+  // width, 1 each. It was 13: `updateWriteKeys` was 12. The stateless reset
+  // token: `quicStatelessResetToken` 14, its HMAC output among them, and
+  // `quicConnResetTokenInto` 25, the scratch HMAC's `wipe` and the tag;
+  // `deriveConnectionId` 25, the same for a connection ID. `begin` 2: both
+  // from the one wipe of the entropy once it is copied, which opt
+  // duplicates. `establish` 29: the first ID's reset token once it is in the
+  // transport parameters, and the ephemeral key once `TlsServer` has its own
+  // copy, besides its derivation. `openPacket` 293: `openScoped`, 17
+  // (`quicUnprotectHeader`, 3, `quicDecryptPayload`, 10, and
+  // `receiveFrames`, 4), `establish`, 29, `applyPhase`, 22, the Initial
+  // level's `discard` on the first Handshake packet, 23, `afterTls`, 151, and
+  // `topUpConnectionIds`, 51. It was 268: `afterTls` was 136, 15 fewer,
+  // `applyPhase` 13, 9 fewer, and `establish` 28, without the wipe of the
+  // ephemeral key.
+  // `quicInitialSecretsInto` 1: the Initial secret once both directions' are
+  // expanded. `reset` 94: `wipeAll`, 88, and `begin`'s wipes of the next
+  // connection's entropy.
   {
     name: "quic: the wipes survive opt -O2 (a key slot's keys and AES schedules, each packet's nonce and mask, a key update's replaced generation, a discarded level and its handshake secrets, the reset tokens, connection IDs and entropy once used, and every key at release, reset, the idle timeout and the end of the closing or draining period)",
     program: "tests/link/net_quic_wipes/main.ts",
@@ -67,33 +90,33 @@ export const wipeChecks = [
       ["nish.quicSealInPlace", 13],
       ["nish.quicUnprotectHeader", 3],
       ["nish.quicDecryptPayload", 10],
-      ["nish.QuicConnection.updateWriteKeys", 12],
-      ["nish.QuicConnection.prepareNextReadKeys", 10],
+      ["nish.QuicConnection.updateWriteKeys", 20],
+      ["nish.QuicConnection.prepareNextReadKeys", 12],
       ["nish.QuicConnection.discard", 23],
-      ["nish.QuicConnection.wipeAll", 87],
-      ["nish.QuicConnection.release", 87],
-      ["nish.QuicConnection.runClocks", 184],
-      ["nish.QuicConnection.afterTls", 136],
-      ["nish.QuicConnection.applyPhase", 13],
+      ["nish.QuicConnection.wipeAll", 88],
+      ["nish.QuicConnection.release", 88],
+      ["nish.QuicConnection.runClocks", 188],
+      ["nish.QuicConnection.afterTls", 151],
+      ["nish.QuicConnection.applyPhase", 22],
       ["nish.quicStatelessResetToken", 14],
       ["nish.quicConnResetTokenInto", 25],
       ["nish.QuicConnection.deriveConnectionId", 25],
       ["nish.QuicConnection.begin", 2],
-      ["nish.QuicConnection.establish", 28],
-      ["nish.QuicConnection.openPacket", 268],
+      ["nish.QuicConnection.establish", 29],
+      ["nish.QuicConnection.openPacket", 293],
       ["nish.quicInitialSecretsInto", 1],
-      ["nish.QuicConnection.reset", 93],
+      ["nish.QuicConnection.reset", 94],
     ],
   },
   // The one-shot derivations, which take the traffic secret as a `Secret`
-  // (#430's secret-boundary stage). `quicKeys` 15: the HKDF output of the
-  // key, IV and header-protection key once each is copied out, 3, and the
-  // two AES schedules' `aesKeyInto`, 6 each; `quicKeysUpdate` 14: the key's
-  // and IV's HKDF outputs, the packet key's schedule, 6, and the schedule of
-  // the header-protection key the new generation copies for its own, `aesKey`
-  // 6. The checker refuses to
-  // drop those HKDF wipes (each output is a `Secret`, wiped or returned on
-  // every path), so the count pins only that `opt` keeps them.
+  // and write into a slot the caller owns (#430's secret-boundary stage,
+  // #674's D6). `quicKeys` 13: the plain copy `expose` hands the derivation,
+  // 1, and the two AES schedules' `aesKeyInto`, 6 each; `quicKeysUpdate` 13:
+  // the plain copy, 1, the new packet key's schedule, 6, and the schedule of
+  // the header-protection key the new generation copies for its own, 6.
+  // Each was 15 and 14 when the HKDF outputs were `Secret`s of their own,
+  // 3 and 2; they are now derived into the slot. The slot is the caller's
+  // to wipe (`QuicKeysSlot.wipe`, above).
   // `quicKeysWipe` 7: the key, IV and header-protection key, 3, and both AES
   // schedules, 2 each; deleting its wipe of the key drops it to 6.
   {
@@ -101,8 +124,8 @@ export const wipeChecks = [
     program: "tests/link/net_quic_wipes/main.ts",
     modules: QUIC_MODULES,
     roots: [
-      ["nish.quicKeys", 15],
-      ["nish.quicKeysUpdate", 14],
+      ["nish.quicKeys", 13],
+      ["nish.quicKeysUpdate", 13],
       ["nish.quicKeysWipe", 7],
     ],
   },

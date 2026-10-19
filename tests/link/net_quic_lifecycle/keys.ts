@@ -4,6 +4,7 @@
 // Phase bit, and the cap on how many updates a client can make the server
 // derive, with what each costs in the arena (QUIC-4).
 import { Suite } from "nish/testing";
+import { expose } from "nish:secret";
 import {
   QUIC_PACKET_OK,
   QuicHeader,
@@ -172,7 +173,15 @@ const lcBothWays = (t: Suite): void => {
   t.eqI32("an update the server started does not count against the client's", conn.keyUpdates, n32(1));
 
   conn.release();
-  t.ok("release() wipes the 1-RTT secrets the next generations come from", lcAllZero(conn.appReadSecret) && lcAllZero(conn.appWriteSecret));
+  t.ok(
+    "release() wipes the 1-RTT secrets the next generations come from",
+    expose(conn.readSecret256, lcAllZero) &&
+      expose(conn.nextReadSecret256, lcAllZero) &&
+      expose(conn.writeSecret256, lcAllZero) &&
+      expose(conn.readSecret384, lcAllZero) &&
+      expose(conn.nextReadSecret384, lcAllZero) &&
+      expose(conn.writeSecret384, lcAllZero)
+  );
 };
 
 /** The order RFC 9001 §6.4 requires, and a Key Phase bit nobody can back. */

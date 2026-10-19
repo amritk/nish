@@ -338,19 +338,19 @@ const qmSlotsZero = (slots: QuicKeysSlot[]): boolean => {
 
 /** Whether every key slot of `conn`, every key-update secret and the Initial secrets are zero. */
 const qmKeysZero = (conn: QuicConnection): boolean => {
-  let zero: boolean =
+  return (
     qmZero(conn.initialClient) &&
     qmZero(conn.initialServer) &&
     qmSlotsZero(conn.initial.keySlots) &&
     qmSlotsZero(conn.handshake.keySlots) &&
-    qmSlotsZero(conn.application.keySlots);
-  for (const secret of conn.readSecrets) {
-    zero = zero && qmZero(secret);
-  }
-  for (const secret of conn.writeSecrets) {
-    zero = zero && qmZero(secret);
-  }
-  return zero;
+    qmSlotsZero(conn.application.keySlots) &&
+    expose(conn.readSecret256, qmZero) &&
+    expose(conn.nextReadSecret256, qmZero) &&
+    expose(conn.writeSecret256, qmZero) &&
+    expose(conn.readSecret384, qmZero) &&
+    expose(conn.nextReadSecret384, qmZero) &&
+    expose(conn.writeSecret384, qmZero)
+  );
 };
 
 /**
