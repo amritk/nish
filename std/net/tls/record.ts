@@ -445,10 +445,12 @@ export class TlsRecordProtection {
    * `install` from a traffic secret the caller holds as a `Secret`: the key
    * and IV are derived from it straight into this direction's arrays, the
    * plain output of each derivation wiped, and the AES key schedule expanded
-   * into place inside an arena block, as `derive`'s is. `false`, leaving the
-   * direction cleartext, where `install` answers it.
+   * into place, all inside an arena block, as `derive` is, so an install
+   * leaves the arena where it was. `false`, leaving the direction cleartext,
+   * where `install` answers it.
    */
   installHeld(suite: i32, secret: Secret<u8[]>): boolean {
+    using _scope = arena()
     this.clear()
     const hashLength: i32 = tlsSuiteHashLength(suite)
     if (hashLength === 0 || expose(secret, (bytes: u8[]): i32 => toI32(bytes.length)) !== hashLength) {
@@ -458,7 +460,6 @@ export class TlsRecordProtection {
     tlsTrafficKeysFromHeld(suite, secret, this.key, this.iv)
     const aes: AesKey | null = this.aes
     if (aes !== null && suite !== TLS_CHACHA20_POLY1305_SHA256) {
-      using _scope = arena()
       aesKeyInto(this.key, aes)
     }
     this.suite = suite
@@ -479,6 +480,7 @@ export class TlsRecordProtection {
       return false
     }
     if (expose(secret, (bytes: u8[]): i32 => toI32(bytes.length)) === hashLength) {
+      using _scope = arena()
       const none: u8[] = []
       if (hashLength === SHA384_SIZE) {
         hkdfExpandLabelSha384Held(secret, secret, "traffic upd", none)
