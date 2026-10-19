@@ -4674,12 +4674,17 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   `` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
   (`reject_ffi_buffer_element`).
 - **A buffer is never null and never a result.** `u8[] | null` is refused
-  (`reject_ffi_buffer_nullable`): it has no length to hold the count to, so the
+  (`reject_ffi_buffer_nullable`, and `reject_ffi_buffer_nullable_in_run` for one
+  inside a run): it has no length to hold the count to, so the
   `NULL, 0` call C allows is declared with a `CPtr | null` parameter. A `u8[]`
   result is refused by the return rule above (`reject_ffi_buffer_return`).
 - **A call to such a declaration is refused until the release that lowers it**:
   `` a call to a declared C function that takes a `u8[]` is not lowered yet ``
-  (`reject_ffi_buffer_call`). That lowering passes the array's bytes and
+  (`reject_ffi_buffer_call`), whether the call names the function, goes
+  through a function parameter bound to it (`reject_ffi_buffer_call_param`),
+  or sits in a constructor (`reject_ffi_buffer_call_constructor`), a method
+  (`reject_ffi_buffer_call_method`) or a spawned arrow
+  (`reject_ffi_buffer_call_spawn`). That lowering passes the array's bytes and
   panics when the count is larger than any buffer of its run
   ([`docs/wp40-ffi-buffers-handles.md`](wp40-ffi-buffers-handles.md) §3a).
 
@@ -4689,7 +4694,7 @@ Each of these is refused, and each refusal is pinned by a case:
 
 - **A variadic C function, spelled variadically.** A rest parameter is
   `Rest parameters are not supported` before its type is read, `...bytes:
-  u8[]` included (`reject_ffi_variadic`). A variadic function declared with a
+  u8[]` included (`reject_ffi_variadic`, `reject_ffi_buffer_rest`). A variadic function declared with a
   fixed arity, `printf(fmt: string, x: i32)`, is accepted and is the
   declaration's contract: the compiler cannot tell `open` is variadic from its
   name.

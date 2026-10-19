@@ -187,7 +187,14 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
     // share one message built once below, so the type is spelled at one site.
     let rule = ""
     const bare = ctx.table.stripNull(sig.paramTypes[i])
-    if (run > 0) {
+    if (bare !== sig.paramTypes[i] && isForeignBuffer(ctx.table, bare)) {
+      // A null buffer has no length to hold the count to, and the `NULL, 0`
+      // C allows is a `CPtr | null` parameter's literal `null` (§3b). It is
+      // tested before the run's count, so a nullable buffer after a buffer is
+      // refused for its null and leaves the run open for the count after it.
+      rule =
+        "a buffer a declared C function takes is never null: it has no length to hold the count to, so a C function that accepts `NULL, 0` is declared with a `CPtr | null` parameter"
+    } else if (run > 0) {
       // The parameter after a run is its count whatever else it might be, so
       // a `CPtr` or a `string` there is refused rather than read as the next
       // parameter and the run reported as missing its count.
@@ -202,11 +209,6 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       // provenance for C to be wrong about.
     } else if (ctx.table.isRanged(sig.paramTypes[i])) {
       refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
-    } else if (bare !== sig.paramTypes[i] && isForeignBuffer(ctx.table, bare)) {
-      // A null buffer has no length to hold the count to, and the `NULL, 0`
-      // C allows is a `CPtr | null` parameter's literal `null` (§3b).
-      rule =
-        "a buffer a declared C function takes is never null: it has no length to hold the count to, so a C function that accepts `NULL, 0` is declared with a `CPtr | null` parameter"
     } else if (bare >= 0 && ctx.table.kindOf(bare) === K_ARRAY) {
       rule =
         "the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target"
