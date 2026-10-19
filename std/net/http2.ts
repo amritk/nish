@@ -64,10 +64,15 @@
  *
  * **Caps are start-up numbers**, all in `Http2Config`: the streams open at
  * once, the windows, the largest frame and header block accepted, the header
- * list, the output buffer and the reset budget. Every buffer and every
- * stream slot is allocated by the constructor; reading DATA, writing DATA and
- * every control frame allocate nothing. A header block does allocate, through
- * `HpackDecoder` (`docs/security/http2.md`, H2-1).
+ * list, the output buffer and the reset budget. Every stream slot is
+ * allocated by the constructor; the input, output and header-block buffers
+ * are borrowed from an `Http2Pools` when first needed and given back, zeroed
+ * as far as they were written, once each is empty or the connection ends, so
+ * an idle connection holds none. A server shares one `Http2Pools` among its
+ * slots; a connection on its own makes a private one that holds one buffer of
+ * each. Once the pools are warm, reading DATA, writing DATA and every control
+ * frame allocate nothing. A header block does allocate, through `HpackDecoder`
+ * (`docs/security/http2.md`, H2-1).
  *
  * The server sends no PUSH_PROMISE and no PRIORITY, and reads PRIORITY only to
  * check it: RFC 9113 §5.3.2 deprecates the scheme. Every field it sends is a
@@ -88,6 +93,7 @@
  *
  * Written from RFC 9113 and RFC 8441, not ported from another implementation.
  */
+import { BufferPool } from "nish/net/buffer-pool"
 import {
   HPACK_DEFAULT_TABLE_SIZE,
   HPACK_INDEX_NEVER,
@@ -248,6 +254,39 @@ export class Http2Config {
   resetBudget: i32 = 100
 }
 
+/**
+ * The three buffers a connection borrows — its input, its output and the
+ * header block it gathers — as one pool each, sized from one `Http2Config`.
+ * `Http2TlsServer` owns one with a ceiling of its slot count and shares it
+ * with every slot; a bare connection makes its own, of ceiling 1, the first
+ * time it needs a buffer.
+ */
+export class Http2Pools {
+  /** `maxFrameSize` and a frame header: the largest frame `next` reads. */
+  input: BufferPool
+  /** `outputSize`. */
+  output: BufferPool
+  /** `maxHeaderBlock`. */
+  block: BufferPool
+
+  /** Pools of at most `ceiling` buffers each, for connections under `config`; `name` prefixes each pool's own. Allocates no buffer. */
+  constructor(name: string, config: Http2Config, ceiling: i32) {
+    this.input = new BufferPool(`${name}.input`, config.maxFrameSize + H2_FRAME_HEADER_SIZE, ceiling)
+    this.output = new BufferPool(`${name}.output`, config.outputSize, ceiling)
+    this.block = new BufferPool(`${name}.block`, config.maxHeaderBlock, ceiling)
+  }
+
+  /** How many buffers of the three kinds are lent now. */
+  lent(): i32 {
+    return this.input.lent() + this.output.lent() + this.block.lent()
+  }
+
+  /** How many buffers of the three kinds have ever been made. */
+  made(): i32 {
+    return this.input.made + this.output.made + this.block.made
+  }
+}
+
 /** One stream's slot. `id` is 0 while the slot is free. */
 export class Http2Stream {
   /** What the server may still send on the stream. */
@@ -339,6 +378,12 @@ export class Http2Connection {
   // order the layout packs without padding.
   config: Http2Config
   frame: Http2Frame
+  /**
+   * Where `input`, `output` and `block` are borrowed from: the server's, or
+   * a pool of one of each the connection makes itself when it first needs a
+   * buffer. A buffer the connection does not hold is `empty`.
+   */
+  pools: Http2Pools | null = null
   /** Bytes fed and not read yet are `input[inputStart .. inputEnd)`. */
   input: u8[]
   /** Bytes to send are `output[outputStart .. outputEnd)`. */
@@ -368,8 +413,11 @@ export class Http2Connection {
   date: u8[]
   /** The bytes of `date`, the field's name, made once. */
   dateName: u8[]
-  /** GOAWAY's debug data, which the server never sends: one empty array, made once. */
-  noDebug: u8[]
+  /**
+   * One empty array, made once: GOAWAY's debug data, which the server never
+   * sends, and `input`, `output` and `block` while the connection holds none.
+   */
+  empty: u8[]
   /** The server's SETTINGS, made once and sent by every `restart`. */
   settingIds: i32[]
   settingValues: i64[]
@@ -418,6 +466,10 @@ export class Http2Connection {
   lastStreamId: i32 = 0
   /** The last stream identifier the server's first GOAWAY named, which no later one may raise (§6.8). */
   sentLast: i32 = 0
+  /** How far into `input`, `output` and `block` the connection has written since it borrowed each: what giving it back zeroes. */
+  inputUsed: i32 = 0
+  outputUsed: i32 = 0
+  blockUsed: i32 = 0
   blockEndStream: boolean = false
   /** Whether the peer has acknowledged the server's SETTINGS. */
   settingsAcked: boolean = false
@@ -431,12 +483,15 @@ export class Http2Connection {
   endStream: boolean = false
   /** Whether H2_RESET came from the peer's RST_STREAM rather than a rule its stream broke. */
   resetByPeer: boolean = false
+  /** The server's SETTINGS are not written yet: the first `room` writes them. */
+  prefaceOwed: boolean = false
 
   /**
-   * A connection under `config`, with its SETTINGS — and the WINDOW_UPDATE
+   * A connection under `config`, owing its SETTINGS — and the WINDOW_UPDATE
    * that raises the connection's window, when `connectionWindowSize` asks
-   * for one — already in `output`, since a server's preface is its SETTINGS
-   * (§3.4). A cap outside what RFC 9113 allows panics.
+   * for one — since a server's preface is its SETTINGS (§3.4): the first
+   * `wantsWrite`, `next` or response writes them into `output`. It holds no
+   * buffer until then. A cap outside what RFC 9113 allows panics.
    */
   constructor(config: Http2Config) {
     http2CheckCap("maxStreams", config.maxStreams, 1, 65536)
@@ -450,9 +505,10 @@ export class Http2Connection {
     http2CheckCap("resetBudget", config.resetBudget, 0, H2_MAX_WINDOW)
     this.config = config
     this.frame = new Http2Frame()
-    this.input = new Array<u8>(config.maxFrameSize + H2_FRAME_HEADER_SIZE)
-    this.output = new Array<u8>(config.outputSize)
-    this.block = new Array<u8>(config.maxHeaderBlock)
+    this.empty = []
+    this.input = this.empty
+    this.output = this.empty
+    this.block = this.empty
     this.encoded = []
     this.decoder = new HpackDecoder(HPACK_DEFAULT_TABLE_SIZE, config.maxHeaderListSize)
     this.encoder = new HpackEncoder(HPACK_DEFAULT_TABLE_SIZE)
@@ -464,11 +520,10 @@ export class Http2Connection {
     this.resets = new Array<i32>(config.maxStreams + H2_RECENT_RESETS)
     this.closed = new Array<i32>(config.maxStreams + H2_RECENT_RESETS)
     this.statusName = httpFieldBytes(":status")
-    this.noDebug = []
     this.statusValue = [48, 48, 48]
     this.date = []
     this.dateName = httpFieldBytes("date")
-    this.data = this.input
+    this.data = this.empty
     this.settingIds = [
       H2_SETTINGS_HEADER_TABLE_SIZE,
       H2_SETTINGS_MAX_CONCURRENT_STREAMS,
@@ -492,12 +547,13 @@ export class Http2Connection {
 
   /**
    * Puts the connection back as the constructor left it, for the next peer:
-   * every stream closed, both HPACK tables empty, and the server's SETTINGS
-   * in `output` again. It allocates nothing, which is what lets a carrier
-   * reuse one connection per slot (WP34 N9).
+   * every stream closed, both HPACK tables empty, every buffer given back,
+   * and the server's SETTINGS owed again. It allocates nothing, which is what
+   * lets a carrier reuse one connection per slot (WP34 N9).
    */
   restart(): void {
     const config: Http2Config = this.config
+    this.drop()
     this.inputStart = 0
     this.inputEnd = 0
     this.outputStart = 0
@@ -547,18 +603,119 @@ export class Http2Connection {
     const big: i64 = toI64(H2_DEFAULT_WINDOW)
     this.localInitialWindow = toI64(config.initialWindowSize) > big ? toI64(config.initialWindowSize) : big
     this.recvWindow = toI64(config.connectionWindowSize)
-    this.outputEnd = http2WriteSettings(this.output, H2_ZERO, this.settingIds, this.settingValues)
-    const raise: i32 = config.connectionWindowSize - H2_DEFAULT_WINDOW
-    if (raise > 0) {
-      this.outputEnd = http2WriteWindowUpdate(this.output, this.outputEnd, H2_ZERO, raise)
+    this.prefaceOwed = true
+  }
+
+  // ---- Borrowed buffers ---------------------------------------------------------
+
+  /** The pools the connection borrows from, made at ceiling 1 the first time a bare connection asks. */
+  lender(): Http2Pools {
+    const pools: Http2Pools | null = this.pools
+    if (pools !== null) {
+      return pools
     }
+    const own: Http2Pools = new Http2Pools("Http2Connection", this.config, 1)
+    this.pools = own
+    return own
+  }
+
+  /** Borrows `input` unless the connection holds it. */
+  holdInput(): void {
+    if (this.input.length === 0) {
+      this.input = this.lender().input.take()
+      this.inputUsed = 0
+    }
+  }
+
+  /** Borrows `output` unless the connection holds it, and writes the SETTINGS it owes. */
+  holdOutput(): void {
+    if (this.output.length === 0) {
+      this.output = this.lender().output.take()
+      this.outputUsed = 0
+    }
+    if (this.prefaceOwed) {
+      this.prefaceOwed = false
+      this.wrote(http2WriteSettings(this.output, this.outputEnd, this.settingIds, this.settingValues))
+      const raise: i32 = this.config.connectionWindowSize - H2_DEFAULT_WINDOW
+      if (raise > 0) {
+        this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, H2_ZERO, raise))
+      }
+    }
+  }
+
+  /** Gives `input` back, zeroing what was written into it; ends the last H2_DATA's window. */
+  giveInput(): void {
+    if (this.input.length > 0) {
+      this.lender().input.give(this.input, this.inputUsed)
+      this.input = this.empty
+    }
+    this.inputStart = 0
+    this.inputEnd = 0
+    this.inputUsed = 0
+    this.data = this.empty
+    this.dataStart = 0
+    this.dataLength = 0
+  }
+
+  /** Gives `output` back, zeroing what was written into it, sent or not. */
+  giveOutput(): void {
+    if (this.output.length > 0) {
+      this.lender().output.give(this.output, this.outputUsed)
+      this.output = this.empty
+    }
+    this.outputStart = 0
+    this.outputEnd = 0
+    this.outputUsed = 0
+  }
+
+  /** Gives `block` back, zeroing what was gathered into it. */
+  giveBlock(): void {
+    if (this.block.length > 0) {
+      this.lender().block.give(this.block, this.blockUsed)
+      this.block = this.empty
+    }
+    this.blockLength = 0
+    this.blockUsed = 0
+  }
+
+  /**
+   * Gives back every buffer the connection holds and does not need: the
+   * input once all of it is read, which ends the last H2_DATA's window; the
+   * output once all of it is sent; the header block while none is open. A
+   * carrier calls it once the program is done with the last event, so a
+   * connection waiting on its peer holds no buffer.
+   */
+  rest(): void {
+    if (this.inputEnd === this.inputStart) {
+      this.giveInput()
+    }
+    if (this.outputEnd === this.outputStart) {
+      this.giveOutput()
+    }
+    if (this.blockStream === 0) {
+      this.giveBlock()
+    }
+  }
+
+  /**
+   * Ends the connection where it stands, for a carrier that closes it: every
+   * buffer is given back, zeroed, with what was unread or unsent, and the
+   * connection answers H2_ERROR until `restart`. `errorCode` is left as it was.
+   */
+  drop(): void {
+    this.giveInput()
+    this.giveOutput()
+    this.blockStream = 0
+    this.giveBlock()
+    this.prefaceOwed = false
+    this.state = H2_STATE_FAILED
   }
 
   // ---- Bytes in and out ---------------------------------------------------------
 
   /** How many bytes `feed` would take now. */
   inputRoom(): i32 {
-    return toI32(this.input.length) - (this.inputEnd - this.inputStart)
+    return this.config.maxFrameSize + H2_FRAME_HEADER_SIZE - (this.inputEnd - this.inputStart)
   }
 
   /**
@@ -579,6 +736,7 @@ export class Http2Connection {
       this.input[this.inputEnd + k] = buf[off + k]
     }
     this.inputEnd = this.inputEnd + n
+    this.inputUsed = this.inputEnd > this.inputUsed ? this.inputEnd : this.inputUsed
     return n
   }
 
@@ -588,6 +746,7 @@ export class Http2Connection {
    * straight into `input` from `inputEnd`, then `received` what it read.
    */
   inputTail(): i32 {
+    this.holdInput()
     this.inputEnd = http2Compact(this.input, this.inputStart, this.inputEnd)
     this.inputStart = 0
     return toI32(this.input.length) - this.inputEnd
@@ -599,23 +758,27 @@ export class Http2Connection {
     if (n < 0 || n > room) {
       panic(`Http2Connection.received: ${n} bytes into ${room} of room`)
     }
+    // A carrier's read wrote them whatever the state, so they are zeroed when the input goes back.
+    this.inputUsed = this.inputEnd + n > this.inputUsed ? this.inputEnd + n : this.inputUsed
     if (this.state !== H2_STATE_FAILED) {
       this.inputEnd = this.inputEnd + n
     }
   }
 
-  /** Marks the first `n` bytes of the output sent. */
+  /** Marks the first `n` bytes of the output sent; once all of it is, the output goes back to its pool. */
   consume(n: i32): void {
     const pending: i32 = this.outputEnd - this.outputStart
     this.outputStart = this.outputStart + (n < pending ? n : pending)
     if (this.outputStart === this.outputEnd) {
-      this.outputStart = 0
-      this.outputEnd = 0
+      this.giveOutput()
     }
   }
 
-  /** Whether the output holds bytes to send. */
+  /** Whether the output holds bytes to send; the SETTINGS a fresh connection owes are written first. */
   wantsWrite(): boolean {
+    if (this.prefaceOwed) {
+      this.holdOutput()
+    }
     return this.outputEnd > this.outputStart
   }
 
@@ -643,6 +806,7 @@ export class Http2Connection {
 
   /** The room left at the end of the output, once what was sent is moved out of the way. */
   room(): i32 {
+    this.holdOutput()
     this.outputEnd = http2Compact(this.output, this.outputStart, this.outputEnd)
     this.outputStart = 0
     return toI32(this.output.length) - this.outputEnd
@@ -658,6 +822,7 @@ export class Http2Connection {
   wrote(end: i32): boolean {
     if (end >= 0) {
       this.outputEnd = end
+      this.outputUsed = end > this.outputUsed ? end : this.outputUsed
     }
     return end >= 0
   }
@@ -776,7 +941,7 @@ export class Http2Connection {
     const last: i32 = this.goawaySent ? this.sentLast : this.lastPeerStream
     if (
       !this.wrote(
-        http2WriteGoaway(this.output, this.outputEnd, last, toI64(code), this.noDebug, H2_ZERO, H2_ZERO)
+        http2WriteGoaway(this.output, this.outputEnd, last, toI64(code), this.empty, H2_ZERO, H2_ZERO)
       )
     ) {
       return false
@@ -979,6 +1144,10 @@ export class Http2Connection {
 
   /** Appends a fragment of a header block; a block past `maxHeaderBlock` or `H2_MAX_FRAGMENTS` ends the connection. */
   gather(f: Http2Frame): boolean {
+    if (this.block.length === 0) {
+      this.block = this.lender().block.take()
+      this.blockUsed = 0
+    }
     this.blockFragments = this.blockFragments + 1
     if (
       this.blockFragments > H2_MAX_FRAGMENTS ||
@@ -990,6 +1159,7 @@ export class Http2Connection {
       this.block[this.blockLength + k] = this.input[f.contentStart + k]
     }
     this.blockLength = this.blockLength + f.contentLength
+    this.blockUsed = this.blockLength > this.blockUsed ? this.blockLength : this.blockUsed
     return true
   }
 
@@ -1023,6 +1193,8 @@ export class Http2Connection {
     const id: i32 = this.blockStream
     this.blockStream = 0
     const decoded: i32 = this.decoder.decode(this.block, H2_ZERO, this.blockLength)
+    // The decoder copied every field out, so the block goes back before the request is read.
+    this.giveBlock()
     if (decoded < 0) {
       return this.fail(H2_COMPRESSION_ERROR)
     }

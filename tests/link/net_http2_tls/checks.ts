@@ -12,7 +12,9 @@
 //      and no HTTP/2 byte is sent.
 //   4. The pool: a client past it is shed, and a client that hangs up is
 //      closed; a free slot answers H2_ERROR and done. Two slots send one
-//      date, formatted once between them.
+//      date, formatted once between them. Every buffer a slot borrowed is
+//      back in its pool once the clients are gone.
+//   5. A server of 1,024 slots and no connection has made no frame buffer.
 //
 // A third-party client drives the same server in `serve` mode (`main.ts`).
 import { TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
@@ -20,8 +22,9 @@ import { TLS_CONTENT_ALERT, TLS_CONTENT_APPLICATION_DATA, TLS_CONTENT_HANDSHAKE,
 import { TLS_RECORD_DONE } from "nish/net/tls/record-server";
 import { TLS_GROUP_X25519, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame";
-import { H2_ERROR, Http2Config } from "nish/net/http2";
-import { H2_ALPN } from "nish/net/http2-tls";
+import { H2_ERROR, Http2Config, Http2Pools } from "nish/net/http2";
+import { netClose, tcpListen } from "nish:net";
+import { H2_ALPN, Http2TlsServer } from "nish/net/http2-tls";
 import { Suite } from "nish/testing";
 import { leafPublic, tcpConfig } from "../net_tls_common/server";
 import { GROUP_SECP256R1, clientFinish, clientHello, clientShare, extAlpn, extKeyShare, extSignatureAlgorithms, extSupportedGroups, extSupportedVersions } from "../net_tls_common/client";
@@ -171,6 +174,10 @@ export const tlsChecks = (): i32 => {
   lb.measuring = false;
   t.eqI32("a hundred DATA frames through one open stream come back", echoed, toI32(100));
   t.ok(`and the server's calls moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0));
+  t.ok(
+    `and with every frame sent, the idle slot holds none of its frame buffers (${lb.server.pools.lent()} lent)`,
+    lb.server.pools.lent() === 0 && lb.server.pools.made() > 0
+  );
   // A new stream costs the arena the same with or without a date, so what the
   // date costs is the difference between five streams on a still clock and
   // five more with the clock a second on before each.
@@ -263,6 +270,12 @@ export const tlsChecks = (): i32 => {
   lb.hangUp(c.index);
   lb.hangUp(d.index);
   t.ok("two clients that hang up are closed", lb.awaitClosed(toI32(5)) && lb.server.busy() === 0);
+  const pools: Http2Pools = lb.server.pools;
+  t.ok(
+    `once every connection has ended, every pool has all its buffers back (${pools.input.lent()}, ${pools.output.lent()}, ${pools.block.lent()} lent)`,
+    pools.input.lent() === 0 && pools.output.lent() === 0 && pools.block.lent() === 0
+  );
+  t.ok(`and none made more than the slots (${pools.input.made}, ${pools.output.made}, ${pools.block.made})`, pools.input.made <= 2 && pools.output.made <= 2 && pools.block.made <= 2);
   t.ok(
     "a free slot answers H2_ERROR to next and done to the rest",
     lb.server.next(ZERO) === H2_ERROR && (lb.server.flush(ZERO) & TLS_RECORD_DONE) !== 0 && lb.server.fd(ZERO) === -1 && !lb.server.holds(toI32(9))
@@ -270,5 +283,14 @@ export const tlsChecks = (): i32 => {
   t.ok("a slot out of range names the first connection", lb.server.connection(toI32(9)) === lb.server.connection(ZERO) && lb.server.size() === 2);
   t.eqStr("with nothing gone wrong in the loop", lb.failure, "");
   lb.shutdown();
+
+  // --- 5. Slots without connections ------------------------------------------------------------
+  const listener: i32 = tcpListen("127.0.0.1", 0, 16);
+  const big = new Http2TlsServer(tcpConfig([H2_ALPN]), new Http2Config(), listener, toI32(1024));
+  t.ok(
+    `a server of ${big.size()} slots and no connection has made no frame buffer (${big.pools.made()})`,
+    big.size() === toI32(1024) && big.pools.made() === 0
+  );
+  netClose(listener);
   return t.done();
 };

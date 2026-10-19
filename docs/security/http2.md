@@ -207,7 +207,30 @@ streams' own); two slots answered in one second share one format. Tests:
 HTTP/2 holds no key material: the record keys are TLS's (`docs/security/tls.md`).
 What it holds is application data — header blocks in `block` and the input
 buffer, bodies in the input and output buffers — which may carry credentials
-(`cookie`, `authorization`). None of it is wiped: each buffer is overwritten
-by the next frame and is zeroed by nothing, and HPACK's decoded fields stay in
-the arena (H2-1). A credential sent by the server is never indexed, and so
-never sits in a compression table where a peer could probe it.
+(`cookie`, `authorization`). HPACK's decoded fields stay in the arena (H2-1).
+A credential sent by the server is never indexed, and so never sits in a
+compression table where a peer could probe it.
+
+**The three frame buffers are borrowed, and zeroed on give-back** (written
+against `main` at `60f9cb2`, cited by function rather than by line). The input,
+output and header-block buffers are not a connection's own: it borrows each
+from an `Http2Pools` (`holdInput`, `holdOutput`, `gather`)
+and gives it back through `BufferPool.give` once it is empty — the output in
+`consume` when drained, the block once its HPACK decode is done, the input in
+`rest` when every byte is read — and every one in `drop` and `restart`.
+`give` zeroes the buffer as far as the connection wrote it (`inputUsed`,
+`outputUsed`, `blockUsed`, each a high-water mark since the take), so the next
+connection to borrow it reads none of the last one's requests, bodies or
+headers. `Http2TlsServer` shares one `Http2Pools` among its slots, each pool's
+ceiling the slot count, and calls `rest(slot)` after `readable`, `writable`,
+`signP256` and a `next` that stalls, and `drop` in `close`; a connection on its
+own makes a private pool of one buffer each. The zeroing is `give`'s plain
+fill, not `giveSecret`'s `secureZero`: the bytes are application data, not
+keys, and the buffer stays reachable on the free list, so the fill is not a
+dead store. What is not zeroed: a buffer still lent to an idle connection that
+holds unread bytes, the stream slots' and HPACK tables' per-slot state, and
+the program's own copies. Tests: `link/net_http2: exits with 0 and stdout
+matches expected.out` (section 11, "zeroed, as far as each was written" and
+"and reads nothing the first wrote past what it wrote itself", both failing
+with `give`'s fill removed), `link/net_http2_tls: exits with 0 and stdout
+matches expected.out` and their `_f64` twins.
