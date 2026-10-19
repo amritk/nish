@@ -959,6 +959,11 @@ a `TlsRecordServer` yourself rather than through `nish/net/tls-tcp`, call its
 `wipe()` once the connection is done; the carriers call it at every end of a
 connection.
 
+A server that lends byte buffers across connections takes them from
+`nish/net/buffer-pool`'s `BufferPool`: a pool of fixed-size buffers, up to a
+ceiling, whose `give` zeroes the bytes a buffer used before it is lent again,
+and whose `giveSecret` wipes the buffer whole.
+
 A TLS server that resumes sessions seals its tickets with
 `nish/net/tls/ticket`: `tlsTicketSeal` and `tlsTicketOpen` take the ticket key
 as a borrowed `Secret<u8[]>`, so your program keeps the current and previous
