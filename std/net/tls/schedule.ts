@@ -13,6 +13,17 @@
  *     master     = HKDF-Extract(Derive-Secret(handshake, "derived", ""), 0)
  *     c/s ap traffic, exporter = Derive-Secret(master, "c ap traffic" / "s ap traffic" / "exp master", CH..server Finished)
  *
+ * A resumed handshake (RFC 8446 §2.2) starts from the ticket's PSK instead,
+ * and binds the ClientHello to it before anything else is derived:
+ *
+ *     PSK        = HKDF-Expand-Label(resumption master, "resumption", ticket_nonce, HashLen)
+ *     early      = HKDF-Extract(0, PSK)
+ *     binder key = Derive-Secret(early, "res binder", "")
+ *     binder     = HMAC(Expand-Label(binder key, "finished", "", HashLen), Hash(truncated ClientHello))
+ *     handshake  = HKDF-Extract(Derive-Secret(early, "derived", ""), ECDHE)
+ *
+ * and goes on from the handshake secret as the full handshake does.
+ *
  * Every function takes the hash length (32 or 48) rather than a suite, because
  * that is all that changes between them; `tlsSuiteHashLength` turns a suite
  * into one. The traffic key and IV are here too, because T2's record layer
@@ -65,6 +76,7 @@ import {
   hmacSha384Secret,
 } from "nish/crypto/hmac"
 import { tlsHexInto } from "nish/net/tls/codec"
+import { timingSafeEqualAt } from "nish/crypto/ct"
 import { SHA256_SIZE, Sha256, sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, Sha384, sha384 } from "nish/crypto/sha512"
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
@@ -184,6 +196,40 @@ export const tlsEarlySecret = (hashLength: i32): Secret<u8[]> => {
   wipe(ikm)
   return early
 }
+
+/**
+ * The early secret of a resumed handshake: HKDF-Extract of the PSK under a
+ * zero salt (RFC 8446 §7.1). The zero salt is wiped before it returns; the
+ * PSK is the caller's.
+ */
+export const tlsPskEarlySecret = (hashLength: i32, psk: Secret<u8[]>): Secret<u8[]> => {
+  const salt: Secret<u8[]> = secret(new Array<u8>(hashLength))
+  const early: Secret<u8[]> = tlsExtract(hashLength, salt, psk)
+  wipe(salt)
+  return early
+}
+
+/** The binder key of a resumption PSK: `Derive-Secret(early, "res binder", "")` (RFC 8446 §7.1). */
+export const tlsBinderKey = (hashLength: i32, earlySecret: Secret<u8[]>): Secret<u8[]> =>
+  tlsDeriveSecret(hashLength, earlySecret, "res binder", tlsEmptyHash(hashLength))
+
+/**
+ * The salt the handshake secret is extracted under, `Derive-Secret(early,
+ * "derived", "")` (RFC 8446 §7.1): what `tlsHandshakeSecret` derives and
+ * wipes itself, answered for a caller that extracts in place.
+ */
+export const tlsHandshakeSalt = (hashLength: i32, earlySecret: Secret<u8[]>): Secret<u8[]> =>
+  tlsDeriveSecret(hashLength, earlySecret, "derived", tlsEmptyHash(hashLength))
+
+/**
+ * The PSK a ticket stands for: `HKDF-Expand-Label(resumption_master_secret,
+ * "resumption", ticket_nonce, HashLen)` (RFC 8446 §4.6.1).
+ */
+export const tlsResumptionPsk = (
+  hashLength: i32,
+  resumptionMasterSecret: Secret<u8[]>,
+  ticketNonce: u8[]
+): Secret<u8[]> => tlsExpandLabel(hashLength, resumptionMasterSecret, "resumption", ticketNonce, hashLength)
 
 /**
  * The handshake secret: HKDF-Extract of the ECDHE secret under
@@ -463,6 +509,98 @@ export const tlsFinishedVerifyDataInto = (
   }
   secureZero(finishedKey)
   kdf.wipe()
+}
+
+/**
+ * `tlsPskEarlySecret` in place: HKDF-Extract of `psk` under a zero salt
+ * (RFC 8446 §7.1), written at `out[0]`. The scratch is wiped; the zero salt
+ * holds nothing to wipe.
+ */
+export const tlsPskEarlySecretInto = (kdf: HkdfScratch, hashLength: i32, psk: u8[], out: u8[]): void => {
+  hkdfExtractInto(kdf, hashLength, new Array<u8>(hashLength), psk, out, TLS_SCHEDULE_FROM)
+}
+
+/** `tlsBinderKey` in place: `Derive-Secret(early, "res binder", "")`, written at `out[0]`. */
+export const tlsBinderKeyInto = (kdf: HkdfScratch, hashLength: i32, earlySecret: u8[], out: u8[]): void => {
+  const empty: u8[] = new Array<u8>(hashLength)
+  tlsEmptyHashInto(hashLength, empty)
+  tlsDeriveSecretInto(kdf, hashLength, earlySecret, "res binder", empty, TLS_SCHEDULE_FROM, out)
+}
+
+/**
+ * `tlsHandshakeSalt` in place: `Derive-Secret(early, "derived", "")`, the
+ * salt a resumed handshake extracts its handshake secret under, written at
+ * `out[0]`. The caller wipes it once the extract is done.
+ */
+export const tlsHandshakeSaltInto = (
+  kdf: HkdfScratch,
+  hashLength: i32,
+  earlySecret: u8[],
+  out: u8[]
+): void => {
+  const empty: u8[] = new Array<u8>(hashLength)
+  tlsEmptyHashInto(hashLength, empty)
+  tlsDeriveSecretInto(kdf, hashLength, earlySecret, "derived", empty, TLS_SCHEDULE_FROM, out)
+}
+
+/**
+ * `tlsResumptionPsk` in place: `HKDF-Expand-Label(resumption_master_secret,
+ * "resumption", ticketNonce[nonceOff .. nonceOff + nonceLength), HashLen)`
+ * (RFC 8446 §4.6.1), written at `out[0]`.
+ */
+export const tlsResumptionPskInto = (
+  kdf: HkdfScratch,
+  hashLength: i32,
+  resumptionMasterSecret: u8[],
+  ticketNonce: u8[],
+  nonceOff: i32,
+  nonceLength: i32,
+  out: u8[]
+): void => {
+  hkdfExpandLabelInto(
+    kdf,
+    hashLength,
+    resumptionMasterSecret,
+    "resumption",
+    ticketNonce,
+    nonceOff,
+    nonceLength,
+    out,
+    TLS_SCHEDULE_FROM,
+    hashLength
+  )
+}
+
+/**
+ * Whether `binder[binderOff .. binderOff + binderLength)` is the PSK binder
+ * RFC 8446 §4.2.11.2 asks for: the HMAC, under `finished_key =
+ * Expand-Label(binderKey, "finished", "", HashLen)`, of
+ * `truncatedHash[hashOff .. hashOff + hashLength)`, the transcript hash of
+ * the ClientHello up to its binders list. A binder that is not HashLen bytes
+ * long, or whose window is not inside `binder`, is `false` (row 9 of
+ * "Resumption" in `docs/security/tls.md`). The comparison reads every byte
+ * whatever it finds; the binder the server computed is wiped before it
+ * returns, as `tlsFinishedVerifyDataInto` wipes the finished key and the
+ * scratch.
+ */
+export const tlsBinderVerify = (
+  kdf: HkdfScratch,
+  hashLength: i32,
+  binderKey: u8[],
+  truncatedHash: u8[],
+  hashOff: i32,
+  binder: u8[],
+  binderOff: i32,
+  binderLength: i32
+): boolean => {
+  if (binderLength !== hashLength) {
+    return false
+  }
+  const expected: u8[] = new Array<u8>(hashLength)
+  tlsFinishedVerifyDataInto(kdf, hashLength, binderKey, truncatedHash, hashOff, expected, TLS_SCHEDULE_FROM)
+  const verified: boolean = timingSafeEqualAt(binder, binderOff, expected, TLS_SCHEDULE_FROM, hashLength)
+  secureZero(expected)
+  return verified
 }
 
 /**

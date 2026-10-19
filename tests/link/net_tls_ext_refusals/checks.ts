@@ -21,6 +21,7 @@ import {
   TLS_EXT_ALPN,
   TLS_EXT_KEY_SHARE,
   TLS_EXT_PRE_SHARED_KEY,
+  TLS_EXT_PSK_KEY_EXCHANGE_MODES,
   TLS_EXT_SERVER_NAME,
   TLS_EXT_SUPPORTED_VERSIONS,
   TLS_GROUP_X25519,
@@ -473,7 +474,20 @@ export const refusalChecks = (): i32 => {
   );
   t.eqI32(
     "last, it is ignored and the handshake goes on without the PSK",
-    refusal(hello(standardWith([extension(TLS_EXT_PRE_SHARED_KEY, fromHex("00"))]))),
+    refusal(
+      hello(
+        standardWith([
+          extension(TLS_EXT_PSK_KEY_EXCHANGE_MODES, vec8([toU8(1)])),
+          extension(
+            TLS_EXT_PRE_SHARED_KEY,
+            cat([
+              vec16(cat([vec16(fromHex("01")), fromHex("00000000")])),
+              vec16(vec8(fromHex("0000000000000000000000000000000000000000000000000000000000000000"))),
+            ])
+          ),
+        ])
+      )
+    ),
     zero
   );
   t.eqI32(
