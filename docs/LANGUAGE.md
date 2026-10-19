@@ -2931,7 +2931,22 @@ from the whole-program facts, and each rule is reported there:
   after every element: the function gets an arena scope of its own, so each
   call marks the arena of the thread it runs on and releases it before it
   returns, and a map over a million elements holds one element's temporaries
-  at a time (`tests/link/par_alloc`). It compiles with a performance warning,
+  at a time (`tests/link/par_alloc`). Under glibc, a program that has divided
+  a region or joined a scope on other threads keeps the memory a release
+  gives back rather than returning it to the kernel, so an element or a task
+  that builds a 1 MB temporary does not fault it in again on every call: 200
+  tasks that each build one took 48 ms on 1 thread, against 314 ms when every
+  release trimmed the heap. A worker that then finds no work for a second
+  gives the memory back to the kernel before it parks, its own heap included:
+  after ten rounds of 8 tasks that each build a 16 MB temporary, an idle
+  program holds 2.3 MB rather than 68 MB, and after four maps of 1.2 million
+  strings on four threads, 2.3 MB rather than 82 MB
+  (`tests/link/par_map_idle`). With no worker (one CPU, or `NISH_NUM_THREADS=1`) nothing
+  parks, so nothing gives memory back early: what a join freed is kept up to
+  the 64 MB at which glibc returns the top of the heap by itself. A region below its grain runs as the loop it would
+  have been, on the calling thread, and keeps that loop's costs: 200 elements
+  that each build a 1 MB temporary take some 320 ms, as the loop does. It
+  compiles with a performance warning,
   NL9012, because every element pays for the allocation and the release:
   `` the body of this `parallelMapInto` allocates per element: `label` answers `i32` but allocates on every call, so each thread marks and releases its arena around every element. Compute the answer without building a string, an array or an object to save both ``.
   Two things make that release unsound, and each is refused. An allocation
@@ -2944,12 +2959,21 @@ from the whole-program facts, and each rule is reported there:
 - **A map's result `U` is a number, a `boolean`, an enum, a `string`, or an
   array of numbers, booleans or enums**, because the element's memory is
   released before the next element runs and a worker's arena is freed when
-  its thread exits. A string or a scalar array crosses by copy-at-join: each
-  chunk copies what it wrote out of its arena into a `malloc`'d transfer block
-  before the arena is reused (`nish_cross_out_range`), and once every chunk has
-  finished the caller copies each block into its own arena and frees it
-  (`nish_cross_in_range`); a result the body did not allocate — a literal, a
-  string it was handed — is not copied at all
+  its thread exits. A string or a scalar array crosses by copy-at-join, and
+  the caller then adopts it: as the chunk loop rewinds its arena after each
+  element, it moves the answer to the end of the chunk's transfer block, a
+  `malloc`'d block of 4 KB doubling to 64 KB, or of the answer's size when
+  that is larger (`nish_cross_keep`). Once every chunk has finished, blocks
+  holding 64 KB or more in all are linked into the caller's arena's chunk
+  list (`nish_cross_adopt`), so the answers stay where they are and the join
+  costs one link per block rather than a copy per element; less than that is
+  copied into the caller's arena and the blocks freed, so a small map run in
+  a loop does not leave a chunk behind on every run
+  (`tests/link/par_map_join_small`). Adopted blocks are then the
+  caller's arena memory like any other, given back when the caller's scope
+  releases what the result was made in, exactly when a copied value would
+  have been (`tests/link/thread_adopt_lifetime`); a result the body did not
+  allocate — a literal, a string it was handed — is not moved at all
   (`tests/link/par_map_string`: `parallelMap`, `parallelFrom` and
   `parallelMapInto` into a `string[]`, under `churn()`). Anything else — an
   array of strings, of arrays or of objects, a `Map`, a `Set`, a class — is
@@ -2959,28 +2983,42 @@ from the whole-program facts, and each rule is reported there:
   `parallelMap` and `parallelFrom` allocate their result before the region, so
   theirs is refused there, before `std/threads.ts` is instantiated
   (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
-  The copy back is serial: the caller copies every string or array into its
-  own arena after the join, one at a time. When each element's work is cheap,
-  a map that answers strings is therefore slower than the sequential loop
-  today. Five maps of 1M `` `n${x % 1000}` `` strings each took a median of
-  270 ms on 4 threads, against 200 ms for the same loop written sequentially;
-  two byte-identical copies of the threaded binary differed by 11 ms in the
-  same 25 interleaved rounds, and single runs ranged from 249 to 356 ms. A map
-  whose per-element work outweighs the copy does gain from the threads. What
+  A map of 1M short strings, `` `s${x % 100000}` ``, took a median of 23 ms
+  on 4 threads and 24 ms on 8, against 38 ms for the same loop written
+  sequentially, and peaked at 32 MB against the loop's 55 MB; on 1 thread it
+  took 54 ms, the cost of keeping each answer. Before adoption, when the
+  caller copied every string into its arena one at a time, the map took
+  56 ms on 4 threads and peaked at 67 MB; two byte-identical copies of that
+  binary differed by 5 ms in the same 7 interleaved rounds. What
   the body allocates for an element is released with that element, also when
   the body stores what it builds into an array literal on the way, which the
   arena scope above does not cover: the chunk loop marks the arena before each
   call and keeps only the answer
-  (`nish_cross_keep` copies it out, rewinds to the mark and copies it back).
+  (`nish_cross_keep` moves it to the transfer block and rewinds to the mark;
+  on the sequential path, below a map's grain, it copies it out and back).
   A body that builds a 2 KB string, stores it in an array literal and answers
-  a 4-byte slice of it, over 1M elements, peaks at 64 MB on 1 thread and
-  68 MB on 8, where it used to hold every element's temporaries until its
-  chunk ended and peaked at 2.1 GB (`tests/link/par_map_release`).
+  a 4-byte slice of it, over 1M elements, peaks at 32 MB on 1 thread and on
+  8 (63 and 67 MB before adoption), where it used to hold every element's
+  temporaries until its chunk ended and peaked at 2.1 GB
+  (`tests/link/par_map_release`).
+- **A frame that runs a map gives its result back when it returns.** A
+  function that calls `parallelMap`, `parallelFrom` or `parallelMapInto` and
+  lets nothing the map made outlive it frees the result array, and the blocks
+  a string map adopted from its workers, when it returns, as the same loop
+  written sequentially does. A result that is returned, stored into a field
+  or an outer array, captured by a later task, or nested in an array of arrays
+  is kept with whatever holds it (`tests/link/par_map_reclaim_escapes`). A
+  function that maps 2^22 elements and answers one of them, called 40 times
+  on 4 threads, takes 140.3 ms and peaks at 33.8 MB, where it took 493.3 ms
+  and peaked at 658 MB: 1.87x its sequential loop (262.3 ms) instead of 0.56x
+  (main against a byte-identical copy of itself: about 2%). One call over
+  2^25 elements is unchanged, 251.3 against 252.5 ms, inside that band
+  (`tests/link/par_map_reclaim`).
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
   strings or objects is refused at the call:
-  `` `(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory ``
+  `` `(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory; answer a number and fold those, or run it on the thread that called it, `let joined: string = ""; for (const b of words) { const a = joined; joined = a + b }` ``
   (NL2348, `tests/cases/reject_par_reduce_result_type`, and
   `reject_par_reduce_result_class` for a class). Map the strings to numbers
   first — `parallelReduce(parallelMap(names, (s) => s.length), ...)`.
@@ -3035,12 +3073,14 @@ export const main = (): i32 => {
   `_reduce_write` and `_into_write` for the other forms). So is handing it to a
   function or a method that writes it (`_helper`, `_method`). Assigning to the
   name itself is
-  `` The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one ``
+  `` The arrow assigns to `k`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one; answer the value from the body instead, and read the answers from the array the call gives back, `const kValues = parallelMap([1, 2], (x): i32 => x)` ``
   (`reject_par_capture_assign`, and `reject_par_capture_update` for a `k++`
-  after a read).
+  after a read). A reducer that assigns to one is shown the same
+  `parallelReduce` without the write,
+  `` answer the value from the reducer instead, and let `parallelReduce` fold it, `const callsTotal = parallelReduce([1, 2, 3], (a, b): i32 => a + b, 0)` ``.
 - **A `let` is not captured**, since it could change between the call and a
   thread's read of it:
-  `` The arrow reads `m`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call ``
+  `` The arrow reads `m`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call, `const mNow = m`, and read `mNow` in the arrow ``
   (`reject_par_capture_let`).
 - **Only an arrow written directly in a function's body captures.** An arrow
   inside another arrow reads nothing from outside itself, neither the
@@ -3140,7 +3180,7 @@ export const main = (): i32 => {
   reaches, or through a [`Channel`](#channels-channelt) it sends on
   (`tests/link/thread_task_void`, `thread_task_arrow`). A block body is `void`
   without an annotation. An entry that answers a value is
-  `` `sumOf` answers `i32`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination ``
+  `` `sumOf` answers `i32`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination, `const answer2 = new Array<i32>(1)` above the scope's block and `s.spawn(sumOf, xs, answer2, 0)` ``
   (NL2511, `tests/cases/reject_thread_task_void_result`, and `_arrow` for
   `() => sumOf(xs)`). TypeScript would spell the three forms as overloads;
   the checker picks `ThreadScope`'s method by the number of arguments,
@@ -3346,7 +3386,7 @@ export const main = (): i32 => {
 - **A scope is introduced by `using`, and `using` takes only a scope, a
   [`Mutex`'s lock](#a-lock-that-owns-its-data-mutext) or an
   [`arena()`](#using-a--arena).** A scope bound any other way is
-  `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins ``
+  `` `scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins; declare it as `using s = scope()` ``
   (`tests/cases/reject_thread_scope_not_using`), and a `using` of anything else is
   `` `using` takes only `scope()` or a `Mutex`'s `lock()` from `nish/threads`, or the builtin `arena()`, in this version: they are the values whose disposal the language defines — a scope joins its tasks, a guard releases its lock, an arena releases what its block allocated — so a `using` of anything else would promise a disposal nothing performs ``
   (`tests/cases/reject_thread_using_not_scope`). A `using` declaration is a
@@ -3382,7 +3422,7 @@ element's arena, which a task does not share, and each rule is reported at the
   make, by a method of an [atomic](#atomics-atomici32-and-atomici64)
   (`tests/link/thread_atomic_tasks`), or by a `send` or a receive on a
   [`Channel`](#channels-channelt), neither of which is a write the rule counts:
-  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, `const t = new T()` ``
+  `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; hand a value the parent needs back as the task's answer, or run it on the thread that called it, `out[0] = bump(c)` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
@@ -3441,7 +3481,7 @@ element's arena, which a task does not share, and each rule is reported at the
   that holds the caller's memory, `[ys]` or `new H(ys)`, is the task's at its
   top level only, so a write below it is refused
   (`reject_thread_task_own_fresh_holds_array`, `_new`, `_object`). That
-  refusal starts with what to write: `` make scratch only this task uses inside it, `const t = new T()`, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`, `using g = m.lock()`, and hand a value the parent needs back as the task's answer, `s.spawn(task, arg, out, i)` ``.
+  refusal starts with what to write: `` make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; hand a value the parent needs back as the task's answer, or run it on the thread that called it, `out[0] = bump(c)` ``.
   A task inside a task, or
   inside a data-parallel body, is refused by this rule, because a scope's join
   stores into memory (`tests/cases/reject_thread_task_nested_spawn`); and a
@@ -3567,12 +3607,12 @@ breaks one is refused with that rule's own code:
   lock, `using g = m.lock(), s = scope()`, is R5's
   (`reject_mutex_using_lock_then_scope`). A `lock()` anywhere but a `using`
   initialiser is
-  `` `lock()` must be the initialiser of a `using` declaration, `using g = m.lock()`: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases ``
+  `` `lock()` must be the initialiser of a `using` declaration: the lock is released when the block that declares it ends, so a guard bound any other way would be one nobody releases; declare it as `using g = m.lock()` ``
   (NL2465, `reject_mutex_lock_not_using`; `reject_mutex_lock_expr_body` for
   an arrow whose expression body is `m.lock()`).
 - **R3: a guard is used only as `g.value`, and what it reaches only as the base
   of another access.** Bound, stored, returned or walked, a guard is
-  `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock ``
+  `` A guard is used only as `g.value`, and `g.value` only as the base of a field or element read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock; write `g.value.n` where the value is used, or hand `g` to a helper whose parameter is a `MutexGuard<Counter>` ``
   (NL2466, `reject_mutex_guard_helper_return`, `reject_mutex_guard_helper_field`,
   `reject_mutex_guard_helper_ternary`). The one place a guard may go is to a
   **guard helper**: a function named at the call, neither a method, a
@@ -3605,7 +3645,7 @@ breaks one is refused with that rule's own code:
   default, rest or destructured parameter, which Nish has none of
   (`reject_mutex_guard_helper_default`, `_rest`, `_destructured`).
   `link/thread_mutex_helper` is three helpers deep on four threads. Any other call is
-  `` `g` is passed to `push`, a method: a guard is handed only to a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared as the guard is, `MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; write the helper as `const f = (g: MutexGuard<T>): void => { g.value.n = g.value.n + 1 }` and call it as `f(g)` ``
+  `` `g` is passed to `push`, a method: a guard is handed only to a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared as the guard is, `MutexGuard<T>`, once per call, because that parameter is held to the rules of the guard's block; write the helper as `const useGuard = (g: MutexGuard<Counter>): void => { console.log(g.value.n) }` and call it as `useGuard(g)` ``
   (NL2536; `reject_mutex_guard_helper_array`, `_map`, `_method`, `_new`,
   `_ctor_this`, `_generic`, `_twice`, `_nullable`, and `_callback` for a
   helper that takes a function, which makes it a generic), because a method or a
@@ -3613,7 +3653,7 @@ breaks one is refused with that rule's own code:
   value, and a guard passed twice is two names for one lock. Anything read through it that is
   not a number, a `boolean`, an enum or a `string` — `const c = g.value`,
   `g.value.xs` as a value, a `for...of` over it — is
-  `` This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock ``
+  `` This reads `Counter` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock; do the work inside the guard's block, or read the numbers and strings it holds one at a time, `const n = g.value.n` ``
   (NL2467, `reject_mutex_guard_alias`; `reject_mutex_guard_alias_array` for
   `const b = g.value.bins`, which would race a guarded write once the block
   ends; `reject_mutex_guard_return` and `reject_mutex_guard_return_array` for a
@@ -3638,7 +3678,7 @@ breaks one is refused with that rule's own code:
 - **R4: a store through a guard stores a scalar or a string, and no method is
   called through it.** A number, a `boolean`, an enum or a `string`, into a
   field or an element of an array that already exists:
-  `` This stores `string[]` through a guard, which stores only a number, a `boolean`, an enum or a `string`, which the store copies, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined ``
+  `` This stores `string[]` through a guard, which stores only a number, a `boolean`, an enum or a `string`, which the store copies, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined; build the value into the one the `Mutex` is made with, or store what it holds one at a time into slots that already exist, `g.value.names[i] = v[i]` ``
   (NL2468, `reject_mutex_guard_store`; `reject_mutex_guard_store_class` for a
   class). A `null` is not stored through a guard, into a `string | null` field,
   element or `Mutex<string | null>` alike:
@@ -3665,13 +3705,13 @@ breaks one is refused with that rule's own code:
   stores through two different `Mutex`es wait on each other while it is held.
   `push` — which can move the array into the task's arena — and every other
   method are
-  `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined ``
+  `` `push` is called through a guard, which reads and stores fields and elements and calls no method: a method could keep what it reaches, or grow an array into a task's arena, which is freed when it is joined; write what it does as reads and stores through the guard, into slots that already exist, `g.value.xs[0] = 1` ``
   (NL2469, `reject_mutex_guard_push`). So a `Mutex<i32[]>` or a class with an
   `i32[]` field holds a histogram, sized when it is made.
 - **R5: one lock at a time, and nothing waited on while it is held.** Inside a
   guard's block — directly, or through any function it calls — a second
   `lock()`, `scope()`, `spawn`, `parallelMapInto` or `parallelReduce` is
-  `` A second `lock()` is reached while `ga` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held ``
+  `` A second `lock()` is reached while `ga` holds its lock: inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`, so one lock is held at a time and nothing is waited on while it is held; move `b.lock()` below the end of the block that opens with `using ga = a.lock()`, which releases the lock ``
   (NL2470; `reject_mutex_nested_lock`, and `reject_mutex_using_two_locks` and
   `reject_mutex_using_two_mutexes` for a second declarator of the same `using`;
   `reject_mutex_lock_through_call` for a callee that locks, and
@@ -3691,7 +3731,7 @@ breaks one is refused with that rule's own code:
   (`reject_mutex_region_lock_loop`).
   Natively the tasks have not run yet there, and under Node each has run at its
   spawn, so the parent would see a different value:
-  `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join ``
+  `` This `lock()` locks a `Mutex` a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent locks what they share only before the statement that holds the first `spawn` or after the join; move `m.lock()` above the block that opens with `using s = scope()`, or below the end of that block ``
   (NL2472, `reject_mutex_region_lock`; `reject_mutex_region_lock_field` for a
   `Mutex` the task reaches as a field of its argument;
   `reject_mutex_region_lock_call` for a call that takes the lock, and
@@ -3702,7 +3742,7 @@ breaks one is refused with that rule's own code:
 - **R8: a `Mutex` reaches a task as its argument, or as a field of the class
   its argument is.** An array of them, a deeper field, or a `Mutex` inside
   another's data is
-  `` The argument of `spawn` is `Mutex<Counter>[]`, which reaches a `Mutex` through `arg[i]`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer ``
+  `` The argument of `spawn` is `Mutex<Counter>[]`, which reaches a `Mutex` through `ms[i]`: a `Mutex` reaches a task as its argument or as a field of the class its argument is, never deeper, so which tasks share a lock is a question the checker can answer; hand the task the `Mutex` itself, `s.spawn(first, ms[i], done, 0)`, and declare its parameter a `Mutex` of the same data ``
   (NL2473, `reject_mutex_task_array`; `reject_mutex_task_nested` for a `Mutex`
   inside another's data, `reject_mutex_task_deep` for one two classes deep,
   `reject_mutex_task_nullable` for a nullable carrier, `reject_mutex_task_map`
@@ -3711,7 +3751,7 @@ breaks one is refused with that rule's own code:
 
 And a lock is a scope's: the body of `parallelMapInto` or `parallelReduce`,
 which runs on many threads at once, takes none
-(`` `tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body ``,
+(`` `tally` takes a `Mutex`'s lock, and `parallelMapInto` runs it on several threads at once: a lock is taken by a scope's task or by the thread that opened the scope, never by a parallel body; run it as a scope's tasks instead, `{ using s2 = scope(); for (let i = 0; i < src.length; i++) { s2.spawn(tally, src[i], dst, i) } }` ``,
 NL2474, `reject_mutex_parallel_body`; `reject_mutex_parallel_body_call` and
 `reject_mutex_parallel_body_new` for a lock taken in a callee or a
 constructor).
@@ -3833,7 +3873,7 @@ answer the same natively and under Node:
   or by a data-parallel call that does — `Mutex`'s R7, for the same reason:
   natively the tasks have not run there, and under Node each has run at its
   spawn, so a `load()` would answer differently:
-  `` This `load()` reaches an atomic a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join ``
+  `` This `load()` reaches an atomic a task of `s` can reach through `arg`, before the scope joins: natively the scope's tasks run when its block ends and under Node each runs where it is spawned, so the parent touches what they share only before the statement that holds the first `spawn` or after the join; move `a.load()` above the block that opens with `using s = scope()`, or below the end of that block ``
   (NL2513, `reject_atomic_region_direct`; `reject_atomic_region_capture` for
   an arrow task that captures it; `reject_atomic_region_field`,
   `reject_atomic_region_array`, `reject_atomic_region_map` and
@@ -3860,7 +3900,7 @@ answer the same natively and under Node:
   `spawn` on one of them whose task shares a destination, an atomic or a lock
   with a task of another scope of the same statement is refused, naming the
   other scope and the path it shares:
-  `` This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open the scopes in `using` statements of their own ``
+  `` This `spawn` on `t` hands its task an atomic through `a`, which a task of `s` also reaches: the scopes one `using` statement opens join one after the other natively, the last declared first, while under Node each task runs where it is spawned, so the tasks of sibling scopes share no lock, no atomic and no destination; open each scope in a block of its own, so the first joins before the second opens, `{ using s = scope(); s.spawn(() => { a.add(1); }) } { using t = scope(); t.spawn(() => { b.store(a.load()); }) }` ``
   (NL2516). A destination is shared when two scopes' spawns name the same
   array, at the same slot or at different ones
   (`reject_thread_sibling_destination`, `_slots`, `_arrow` for arrow tasks,
@@ -4013,7 +4053,7 @@ sends and receives:
   never takes — the loop that left with `break` — stays in the buffer, which
   is itself given back only once it has been drained closed, so the two leak
   together. Anything else would be a pointer into the sender's arena:
-  `` A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry `string[]`: a sender's arena is freed when its scope joins, and only a string is copied out of it on the way, so anything else would point into freed memory ``
+  `` A `Channel` carries a number, a `boolean`, an enum or a `string`, and this one would carry `string[]`: a sender's arena is freed when its scope joins, and only a string is copied out of it on the way, so anything else would point into freed memory; keep the values in an array the receiver can read and send each one's index, `const words = new Channel<i32>()` ``
   (NL2475, `tests/cases/reject_channel_element`). A `Channel<string>`
   pipeline — two producers, a rewriting stage and a consumer that keeps what
   it receives in an array — matches Node (`tests/link/thread_channel_string`). An `f64` channel
@@ -4026,7 +4066,7 @@ sends and receives:
   as one of its statements, before it, with no loop, condition or function
   between, so each run of the declaration makes a channel for one run of one
   scope — a scope in a loop gets a fresh one every pass:
-  `` `new Channel` must be the initialiser of a `const`: a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope ``
+  `` `new Channel` must be the initialiser of a `const`: a channel is a `const` declared in the block that holds its scope's `using s = scope()`, or in the block that has the scope's block as one of its statements, before it, so each run of the declaration makes a channel for one run of one scope; write `const ch = new Channel<i32>()` on the line before `using s = scope()` ``
   (NL2476, `reject_channel_not_const`, `reject_channel_let_second_declarator`
   for a `let` that declares it beside something else, `reject_channel_scope_conditional`
   for a scope inside an `if`, and `reject_channel_scope_loop` for one inside a
@@ -4057,18 +4097,18 @@ sends and receives:
   one it declares itself it uses as any function does. And a channel is used
   only in a top-level function's own body, never inside an arrow, which is
   lifted into a function of its own that these rules do not follow:
-  `` A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body ``
+  `` A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body; write the arrow as a module function, `const sendAll = (ch: Channel<i32>): void => { ch.send(1) }`, and pass `sendAll` where the arrow was ``
   (NL2484, `reject_channel_arrow`, and `reject_channel_arrow_nullable` for a
   channel type an arrow writes but never uses).
 - **C3: a channel is unbounded**, so `send` never waits, because under Node a
   scope's tasks run one at a time and nothing would drain a full one:
-  `` `new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full ``
+  `` `new Channel` takes no capacity: a channel is unbounded and `send` never waits, because under Node a scope's tasks run one at a time and nothing would drain a channel that was full; write `new Channel<i32>()` ``
   (NL2478, `reject_channel_capacity`).
 - **C4: one scope's tasks reach a channel, and the parent sends on it only
   before that scope's block.** After the join it only receives. "May send" is
   the call graph from a task's entry reaching `send` on a channel its argument
   holds, so an over-count only closes the channel later:
-  `` This sends on `ch` once its scope's block has begun: a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned ``
+  `` This sends on `ch` once its scope's block has begun: a channel is reachable from the tasks of one scope, the parent sends on it only before the block that holds that scope's spawns, and nobody closes it: it closes once the scope has started to join and every task that may send on it has returned; move `ch.send(7)` above the block that opens with `using s = scope()` ``
   (NL2479, `reject_channel_parent_send`, `reject_channel_send_after_join` for a
   send through a call after the join, and `reject_channel_two_scopes` for the
   two scopes of one `using`). A `spawn` hands its task only a channel the
@@ -4114,10 +4154,10 @@ sends and receives:
   spawned first would find the channel empty, and the same order makes the
   graph from senders to receivers acyclic, so **channels cannot deadlock**
   either:
-  `` `produce` may send on `ch` and is spawned after its receiver: under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking ``
+  `` `produce` may send on `ch` and is spawned after its receiver: under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking; move the `spawn` of the receiving task below every `spawn` that sends, `s.spawn(produce, new Pipe(ch, 3), out, 1)` above `s.spawn(consume, new Pipe(ch, 0), out, 0)` ``
   (NL2481, `reject_channel_receiver_first`). And no task both sends and
   receives on one channel:
-  `` `echo` may both send and receive on `ch`: no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return ``
+  `` `echo` may both send and receive on `ch`: no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return; split it into a task that sends and a task that receives, or answer the result through a second channel ``
   (NL2483, `reject_channel_send_and_receive`,
   `reject_channel_both_through_new` for a send made by a constructor a `new`
   runs, and `reject_channel_both_untraceable` for a task that reaches a
@@ -4356,19 +4396,21 @@ The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
 **A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
-scalar or `CPtr`** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`,
-`boolean`, `void`, the foreign pointer below, and in a parameter `string` and
-`string | null`. An array, a class or an interface is rejected with
+scalar, a `CPtr` or a copied `string`** — `i32`, `i64`, `u8`, `u16`, `u32`,
+`u64`, `f32`, `f64`, `boolean`, `void`, the foreign pointer below, and
+`string` and `string | null` in either position. An array, a class or an
+interface is rejected with
 `` and a declared C function takes scalars and `CPtr` only, besides a `string`
 it borrows as `const char *` `` in a parameter
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
 a `char **` the compiler built per call) and
-`` returns a scalar or `CPtr` only `` in the return position
-(`reject_ffi_string_return`). This is not a stylistic limit: **the only pointer
-this compiler allocated that crosses the boundary is a string C reads for the
-length of the call**, so there is nothing for a foreign function to capture or
-free, which is what lets the escape analysis stay correct without knowing
-anything about the callee.
+`` returns a scalar, a `CPtr` or a `string` it copies from a `const char *` ``
+in the return position (`reject_ffi_string_array_return`). This is
+not a stylistic limit: **the only pointer this compiler allocated that crosses
+the boundary is a string C reads for the length of the call, and the only one
+C hands back that the program keeps is a copy it made**, so there is nothing for
+a foreign function to capture or free, which is what lets the escape analysis
+stay correct without knowing anything about the callee.
 
 #### A `string` parameter: borrowed for the length of the call
 
@@ -4420,6 +4462,57 @@ declare i8* @strdup(i8*)
   and `readonly` would restate the borrow as an LLVM fact the C body need not
   honour, which would be a miscompile rather than a broken contract.
 
+#### A `string` result: copied out of C's `const char *`
+
+**A `declare function` that returns `string` or `string | null` answers C's
+NUL-terminated `const char *`, and the program copies its bytes into the arena
+at the call.** C keeps its buffer — `strerror`'s table, `getenv`'s environment,
+`setlocale`'s static, which the next call may overwrite — and the copy is the
+program's own string from then on, placed, kept and released like any other
+allocation of the function that made the call (`tests/cases/ffi_string_return`,
+[cookbook](IR_COOKBOOK.md#a-string-result-copied-out-of-const-char-)):
+
+```ts
+declare function strerror(errnum: i32): string;
+declare function getenv(name: string): string | null;
+
+console.log(strerror(2)); // No such file or directory
+const home = getenv("HOME");
+```
+
+```llvm
+  %0 = call i8* @strerror(i32 2)
+  %1 = icmp eq i8* %0, null
+  br i1 %1, label %ffi.null, label %ffi.copy
+
+ffi.copy:
+  %2 = call i8* @nish.ffi.str(i8* %0)
+```
+
+- **The copy is one scan for the NUL and one `nish_str_new`**, in a private
+  helper the module defines once (`@nish.ffi.str`). C's pointer is never held
+  past it, so a buffer C reuses or frees later cannot reach the program.
+- **Every call's copy is new, and is the calling function's allocation**, as
+  `s.substring(...)` is: a loop that keeps one keeps it past the pass, and a
+  `using a = arena()` block that would release one held outside it is refused,
+  as it is for any fresh string (`tests/cases/ffi_string_loops`,
+  `reject_ffi_string_arena`).
+- **The copy follows the call, so a call with a `string` result is never a
+  `tail` call**: a C function that answers a pointer into its argument
+  (`strchr`, `strstr`) is read before that argument's arena scope is released.
+- **`string | null` reads `NULL` as `null`**, tested before the copy but with
+  no panic site.
+- **A `string` result that is `NULL` panics after the call**, because a
+  `string` cannot hold it: `` `getenv` returned NULL for a `string` result;
+  declare it `string | null` `` (`tests/cases/panics_ffi_null`). That is the
+  [`ffi-null` panic site](#panic-sites). Declare the result `string | null`
+  whenever the C function's manual says it may answer `NULL`.
+- **A result C allocated for the caller to free (`strdup`, `realpath` with no
+  buffer) is a `CPtr`, not a `string`**: the copy would leave C's allocation
+  with no one to free it. Declare it `CPtr | null`, copy it with
+  [`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns), and pass the
+  pointer back to `free`.
+
 #### `CPtr`: the pointer a C function hands back
 
 **`CPtr` is an address C owns.** It is eight bytes and `i8*` in the IR, and that
@@ -4449,14 +4542,22 @@ declare function free(block: CPtr): void;
   `CPtr` is refused by whichever member rule the monomorphised class reaches
   (`reject_ffi_pointer_type_argument`), which is every shape that lays the type
   out — see `docs/wp27-ffi.md` §7a for the one that does not.
-- **`null` comes only from a foreign call.** A `declare function` may *return*
-  `CPtr | null` and may not *take* one
-  (`` cannot be nullable: a foreign pointer is narrowed with `!== null` before
-  it is passed back ``, `reject_ffi_pointer_nullable_param`), so a pointer is
-  narrowed with `if (p !== null)` before it goes back to C. The narrowing is the
-  ordinary nullable one (WP6); a `CPtr | null` local may also hold the literal
-  `null`, which is the only `CPtr` value that did not come from C and the only
-  one that cannot be passed to it.
+- **A `null` reaches C only as the literal.** A `declare function` may return
+  `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
+  either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
+  manual's "pass NULL to have it allocated" — or a pointer narrowed with
+  `if (p !== null)`. A nullable pointer the program holds is
+  `` Argument 1 of `free` is a `CPtr | null` the program holds: a nullable
+  foreign parameter takes the literal `null` or a pointer narrowed with
+  `!== null`, so C is never handed a null by a path nobody tested ``
+  (NL2539, `reject_ffi_pointer_nullable_variable`), wherever it is held: a
+  local, a parenthesised one, a ternary or `??` that may answer it, inside a
+  constructor reached by `new` or a method, and through a function parameter
+  a `declare function` is passed to (`reject_ffi_pointer_nullable_specialised`).
+  So every `NULL` C receives is one the source spells, and a pointer that may
+  be `NULL` because C said so is narrowed before it goes back. The narrowing
+  is the ordinary nullable one (WP6). The literal lowers to `i8* null`
+  (`tests/cases/ffi_owned_string`).
 - **No arithmetic, no dereference, no index, no member.** `p + 1` is
   `` Operator `+` requires two operands of the same numeric type ``
   (`reject_ffi_pointer_arithmetic`) and `p[0]` is
@@ -4468,6 +4569,70 @@ declare function free(block: CPtr): void;
   out, and it laid out none of this; `isPointerParam` in
   `src/attributes.ts` is an allow-list so that a `CPtr` falls out of it
   by construction rather than by a case somebody remembered to write.
+
+#### `readCString`: a string out of a buffer C owns
+
+**`readCString(p: CPtr): string`, from
+[`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), copies the
+NUL-terminated bytes at `p` into a new string of the program's own.** It is the
+copy a `string` result makes, offered for the pointers a `string` result cannot
+be: the ones C allocated for the caller to free. The program copies, then frees
+C's buffer itself (`tests/cases/ffi_owned_string`,
+[cookbook](IR_COOKBOOK.md#readcstring-a-string-out-of-a-buffer-c-owns)):
+
+```ts
+import { readCString } from "nish:unsafe";
+
+declare function strdup(s: string): CPtr | null;
+declare function free(p: CPtr): void;
+
+function owned(s: string): string {
+  const p = strdup(s);
+  if (p === null) {
+    return "";
+  }
+  const copy = readCString(p);
+  free(p);
+  return copy;
+}
+```
+
+```llvm
+if.end:
+  %6 = load i8*, i8** %p.addr, align 8
+  %7 = call i8* @nish.ffi.str(i8* %6)
+  store i8* %7, i8** %copy.addr, align 8
+  %8 = load i8*, i8** %p.addr, align 8
+  call void @free(i8* %8)
+```
+
+- **It is `nish:unsafe` because nothing proves the bytes end.** The copy scans
+  for the NUL with the `@nish.ffi.str` helper a `string` result uses, and a
+  pointer that is dangling, already freed, or to a buffer with no NUL is
+  undefined behaviour: the import is the author's word, as `uncheckedGet`'s is.
+  So the call is an `unchecked` [panic site](#panic-sites) that is allowed
+  under `--deny-panics`, beside the copy's `oom`; it is an `unsafe` call to
+  `--deny unsafe`, and the `CPtr` it reads came from a `declare function`,
+  which is `ffi`.
+- **`NULL` cannot reach it from a `CPtr | null`.** The parameter is `CPtr`, so
+  an unnarrowed pointer is
+  `` `readCString` expects an argument of type CPtr, got CPtr | null ``
+  (`reject_unsafe_read_cstring`) and `if (p !== null)` comes first. What the
+  compiler trusts is the declaration: a `declare function` whose result is
+  declared `CPtr` gets no check after the call, so a C function that may
+  answer `NULL` and is declared `CPtr` hands `readCString` a `NULL` it reads
+  through. Declare such a result `CPtr | null`.
+- **The copy is new on every call and is the calling function's allocation**,
+  as a `string` result's is: kept past a loop's pass, returned, stored by a
+  constructor and released with its owner, and refused inside a `using a =
+  arena()` block that would release one held outside it (`` `readCString(p)` may
+  be allocated inside the `using arena()` block ``,
+  `reject_ffi_owned_string_arena`). C's buffer is never held past the call, so
+  `free(p)` straight after it is safe.
+- **On wasm32 it lowers to the same helper.** `@nish.ffi.str` is a byte scan and
+  a `nish_str_new`, which every runtime has, so `readCString` adds nothing to
+  the link; whether the program links there is the `declare function`'s
+  question, answered by the libc the target has.
 
 **A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
 `export`ed** (`reject_ffi_export`), because `export` offers other modules a
@@ -5400,7 +5565,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
-| `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
+| `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
 import { readFileSync } from "nish:fs";
@@ -5506,9 +5671,10 @@ never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 Two things the language otherwise never does are each a decision about one
 site: reading or writing an element without the bounds check, and letting a
 signed `+ - *` wrap. `nish:unsafe` holds the five functions that make them,
-and a program reaches them only through an import, so every module that gives
-up a check or defines a wrap says so at its top and every site that does is a
-call a reader can find.
+and a sixth, `readCString`, that reads a C string through a pointer nothing
+proves. A program reaches them only through an import, so every module that
+gives up a check or defines a wrap says so at its top and every site that does
+is a call a reader can find.
 
 ```ts
 import { uncheckedGet, uncheckedSet, wrappingAdd } from "nish:unsafe";
@@ -5525,8 +5691,9 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
 | `wrappingAdd(a: T, b: T): T` | `add`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_arity`, `reject_unsafe_type` |
 | `wrappingSub(a: T, b: T): T` | `sub`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
 | `wrappingMul(a: T, b: T): T` | `mul`, never `nsw` and never checked | none | `unsafe_wrapping`; `reject_unsafe_type` |
+| `readCString(p: CPtr): string` | a call to `@nish.ffi.str`, the scan-and-copy a `string` result of a `declare function` uses ([`readCString`](#readcstring-a-string-out-of-a-buffer-c-owns)) | read; allocates | `ffi_owned_string`; `reject_unsafe_read_cstring`, `reject_ffi_owned_string_arena` |
 
-- **The import is required.** The five are declared as globals in
+- **The import is required.** The six are declared as globals in
   `runtime/nish.d.ts`, as every `nish:` export is, so `tsc` reads either
   spelling; the compiler refuses the global one with
   `` `uncheckedGet` is a `nish:unsafe` function and is called only through an import of it ``
@@ -5564,7 +5731,10 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   `xs[i]`, `xs[i] = v`, `(a + b) | 0`, `(a - b) | 0` and `Math.imul` on an
   `i32`, and `BigInt.asIntN(64, …)` on the BigInt an `i64` is there; a program
   that stays in range prints the same as natively (`unsafe_get_set` and
-  `unsafe_wrapping` are run both ways by `tests/run.js`).
+  `unsafe_wrapping` are run both ways by `tests/run.js`). `readCString` has no
+  Node form: its `CPtr` comes only from a `declare function`, which Node cannot
+  call, so a program that reads one is native only, as every FFI program is
+  outside the differential oracle (`docs/wp27-ffi.md` §5).
 - **Every import and every call is a recorded fact.** `--emit-checked` prints,
   per module, an `unsafe import <line>:<col> <name> from "nish:unsafe"` line for
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
@@ -5575,8 +5745,9 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
   the import has already said, at the top of the module, that an index out of
   range is the author's to rule out ([The no-panic scope](#the-no-panic-scope),
-  `deny_panics_unsafe`). The `wrapping*` three are not sites at all: they are
-  defined for every pair.
+  `deny_panics_unsafe`). `readCString` is an allowed `unchecked` site on the
+  same terms, with its copy's `oom` beside it (`ffi_owned_string`). The
+  `wrapping*` three are not sites at all: they are defined for every pair.
 - **`--unchecked-indexing` and `--wrapping` are deprecated**, and reach only
   the **entry package**: the modules in the entry's own package, never a
   `node_modules` dependency and never a `nish/` standard-library module. A
@@ -6031,10 +6202,10 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
 - A `Secret` parameter is borrowed. The callee may read it through `expose`
   or hand it on, and owes nothing: the caller wipes what it made. It neither
   returns it, which would give the caller a second name for a key it already
-  owns (NL2544, `reject_secret_field_launder_function` and its siblings, among
+  owns (NL2546, `reject_secret_field_launder_function` and its siblings, among
   them `reject_secret_field_launder_local` for a caller's own local), nor
   wipes it, which would leave the caller reading zeroes and wiping it again
-  (NL2546, `reject_secret_field_wipe_param` and its siblings, among them
+  (NL2548, `reject_secret_field_wipe_param` and its siblings, among them
   `reject_secret_field_wipe_param_local`). The cases are listed under
   [A `Secret` field](#a-secret-field).
 
@@ -6070,51 +6241,51 @@ class Session {
 
 - **The releaser.** A holder declares `wipe(): void`, taking no parameters
   (`` `Holder` holds the `Secret` field `k`, so it declares `wipe(): void` ``,
-  NL2538, `reject_secret_field_no_wipe`, `_wipe_signature`). Its body calls
+  NL2540, `reject_secret_field_no_wipe`, `_wipe_signature`). Its body calls
   `wipe(this.f)` itself for every `Secret` field, on every path: the field is
   walked as an owned local would be, so a `return` before it, one arm of an
   `if`, a loop that may run no pass, and a helper method that wipes it are each
-  `` `this.k` can leave this `wipe()` unwiped `` (NL2539,
+  `` `this.k` can leave this `wipe()` unwiped `` (NL2541,
   `reject_secret_field_wipe_missing`, `_wipe_return`, `_wipe_branch`,
   `_wipe_loop`, `_wipe_helper`, and `_wipe_new`, where a constructor `new`
   reaches zeroes the key in place). That method is the only place a field
   ends: `wipe(h.f)` anywhere else — a function, another method, a
   constructor, or a function the constructor hands `this` to or stores it
-  for — is `` `k` is wiped outside its holder's `wipe()` `` (NL2545,
+  for — is `` `k` is wiped outside its holder's `wipe()` `` (NL2547,
   `reject_secret_field_wipe_outside`, `_wipe_through`, `_wipe_method`,
   `_wipe_ctor`, `_this_fin`, `_this_store`); call the holder's `wipe()`.
 - **Construction.** The field is set in the constructor, by `this.f =
   secret(v)` and nothing else, and `v` is judged by the sole-reference rule
   above (NL2512, `reject_secret_field_alias_raw`). A parameter, a call that
   answers a `Secret`, or a local holding one is
-  `` `this.k` is set from something other than `secret(...)` `` (NL2540,
+  `` `this.k` is set from something other than `secret(...)` `` (NL2542,
   `reject_secret_field_param`, `_call`, `_local`); a second store while the
-  first may still be there, a later loop pass included, is NL2541
+  first may still be there, a later loop pass included, is NL2543
   (`reject_secret_field_twice`, `_ctor_loop`). The field is `readonly`, so a
   store anywhere else — a method, a function, a compound `+=`, or a second
   name for `this` — is the `readonly` refusal, NL2181
   (`reject_secret_field_store_method`, `_store_outside`, `_compound`,
   `_this_escape`). The store is a statement of its own: `const x = (this.k =
-  secret(v))` binds the key a second time, and is NL2542
+  secret(v))` binds the key a second time, and is NL2544
   (`reject_secret_field_store_value`). A holder is made only by `new`: an
-  object literal is NL2543 (`reject_secret_field_object_literal`), and typed
+  object literal is NL2545 (`reject_secret_field_object_literal`), and typed
   JSON neither encodes nor decodes one (NL2485, `reject_secret_field_json`, `_json_decode`).
 - **Reads.** `h.f` is borrowed, as a `Secret` parameter is: it is an argument
   of a call or a `new` — `expose`, `exposeWith`, or a function that
-  takes a `Secret`, and `wipe` only in the holder's own `wipe()` (NL2545) — or an operand of `===` or `!==` against another `Secret`
+  takes a `Secret`, and `wipe` only in the holder's own `wipe()` (NL2547) — or an operand of `===` or `!==` against another `Secret`
   (a field is never `null`, so `h.k === null` is a type error, NL2024). Bound to a local, assigned, returned, chosen by a ternary or `??`,
   or read through `?.` or a chain of fields, it would be a second owner of the
   key, and is `` `k` is a `Secret` field, which is read only as a call's
-  argument or an `===`/`!==` operand `` (NL2542, `reject_secret_field_bind`,
+  argument or an `===`/`!==` operand `` (NL2544, `reject_secret_field_bind`,
   `_assign_local`, `_return`, `_ternary`, `_nullish`, `_optional_chain`,
   and `_nested` for `o.h.k`; `_chain` is the chained store `this.k = this.j =
   secret(v)`). What a borrow receives stays borrowed: a function, an arrow or
   a generic `id<T>` that takes a `Secret` and returns it would hand the
   caller a second name for the holder's key, and is
   `` `s` is a `Secret` parameter, which its caller owns and wipes: returned ``
-  (NL2544, `reject_secret_field_launder_function`, `_launder_arrow`,
+  (NL2546, `reject_secret_field_launder_function`, `_launder_arrow`,
   `_launder_generic`, `_launder_method`, and `_launder_local` for a caller's
-  own local); one that wipes it is NL2546 (`reject_secret_field_wipe_param`,
+  own local); one that wipes it is NL2548 (`reject_secret_field_wipe_param`,
   `_wipe_param_new`, `_wipe_param_method`, and `_wipe_param_local` for a
   caller's own local). A ternary that picks one of two borrowed parameters to
   return is refused before it gets there, as a copy (NL2444,
@@ -7096,6 +7267,16 @@ const tally = (rows: string[]): i32 => {
   (`reject_using_arena_outer_local`).
 - **A parallel body or a task may not open one**, for the reason it may not
   call `Arena.*` (`reject_using_arena_parallel`, NL2351).
+- **A map that answers numbers or strings may run inside one.** The map's
+  region joins before the call returns, so its result array is the block's
+  alone, and the blocks of strings it adopts from its workers are the block's
+  newest memory; the release frees both (`tests/link/mem_using_arena_map`).
+  What the map answers may not outlive the block, as anything else allocated
+  in it may not (`tests/cases/reject_using_arena_map_escapes`). A map whose
+  body answers an array stores each one into its result, which the analysis
+  stops following, as it does for a loop that pushes arrays into an array, so
+  the block refuses it as NL2424 and says what to write instead: run that map
+  outside the block (`tests/cases/reject_using_arena_map_arrays`).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
   theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
@@ -7813,7 +7994,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | the five `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul` (`tests/link/caps_policy_deny_unsafe`) |
+| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`) |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
@@ -8925,8 +9106,9 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `io-exit` | `readFileSync`, `writeFileSync`, `appendFileSync` and `crypto.getRandomValues`, which exit inside the runtime on failure | nothing; `readFileSyncOrNull` is the twin that answers `null` instead (`tests/cases/panics_io_exit`) |
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
+| `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
-| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour | nothing, and nothing needs to: the call is the author's word that the index is in range, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
+| `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
 
 - **`--unchecked-indexing` is not a proof.** It removes a check and makes the
@@ -9301,7 +9483,7 @@ messages are exact for the cases cited; other rows quote the checker
 | an arrow argument whose types cannot be inferred | `` Cannot infer the type of `x` in the arrow passed to `run`: ... `` / `` The arrow passed to `map` needs a return type annotation: ... `` | `reject_fnarg_infer`, `reject_fnarg_block_return` |
 | a method type parameter named like one of its class's | `` Type parameter `T` of `Box.map` shadows `Box`'s own `T`: a class's type parameters are in scope in its methods, and a diagnostic that names `T` has to mean one of them; give the method's another name `` | `reject_generic_method_shadow` |
 | type arguments written at a method call | `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `h.get(...)` `` | `reject_generic_method` |
-| a `Secret` where a value would leave it, or a `Secret` the function made and did not return or wipe on some path | NL2428 to NL2453 and NL2538 to NL2546, worded in [Secrets](#secrets-nishsecret) | `reject_secret_*` |
+| a `Secret` where a value would leave it, or a `Secret` the function made and did not return or wipe on some path | NL2428 to NL2453 and NL2540 to NL2548, worded in [Secrets](#secrets-nishsecret) | `reject_secret_*` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
 | importing an enum or a type alias its module does not export | `` `Kind` is declared in `./kinds` but not exported (add `export`) `` | `tests/link/enum_import_not_exported`, `alias_import_not_exported` |

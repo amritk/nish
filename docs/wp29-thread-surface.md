@@ -12,8 +12,9 @@ configurable pool or `scope(n)`, decorators, a stored task handle and
 async/await, for the reasons §9 gives; and general closure capture outside the
 parallel forms and tasks, wasm threads, and work stealing and nested parallel
 regions ([wp20](wp20-threads.md)). Deferred, not declined: `parallelSort`,
-`parallelFilter`, copy-at-join for class values, and the serial copy-in at the
-join, which [#686](https://github.com/amritk/nish/pull/686) addresses. Class
+`parallelFilter`, and copy-at-join for class values. The serial copy-in at the
+join is gone: [#686](https://github.com/amritk/nish/pull/686) moves each map
+element into a block on its own thread and takes the blocks whole. Class
 values, nested arrays, `string[]`, `Map` and `Set` still do not cross (§7). The
 user guide's [threads page](guide/using-nish/threads.md) teaches the finished
 surface.
@@ -511,9 +512,18 @@ the same shape as WP15 §2a's `NL2290`/`NL2291` interior-pointer rule. Hence:
 - **A string or a scalar array crosses by copy-at-join.** Neither holds a
   pointer, so one flat copy of its bytes is the whole value. The worker copies
   its answer into a `malloc`'d transfer block before its arena is freed or
-  reused (`nish_cross_out`, `nish_cross_out_range` for a region's slots); the
-  parent, after the join, copies each block into its own arena and frees it
-  (`nish_cross_in`, `nish_cross_in_range`). A value the worker did not
+  reused (`nish_cross_out`); the parent, after the join, copies each block
+  into its own arena and frees it, or, for a block of 64 KB or more, links the
+  block into its arena as a chunk (`nish_cross_in`). A map's chunk packs its
+  elements into transfer blocks of 4 KB doubling to 64 KB as each one answers
+  (`nish_cross_keep`, between `nish_cross_begin` and `nish_cross_end`), and
+  the parent links those blocks whole after the join when they hold 64 KB or
+  more (`nish_cross_adopt`), so copying a large region's answers in costs one
+  link per block rather than a copy per element; a region that kept less is
+  copied in and its blocks freed, since each adopted block leaves the
+  parent's current chunk behind. An
+  adopted block is freed exactly when a copy would have been: with the arena
+  release that rewinds past it. A value the worker did not
   allocate since its mark — a literal, a string it was handed — is passed
   through uncopied, and a pointer's low bit tags the blocks that are transfer
   copies, so the parent frees only those. The same pair carries a

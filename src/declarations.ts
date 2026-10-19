@@ -140,9 +140,9 @@ export const collectFunctionSignature = (ctx: CheckContext, decl: Node): Functio
 }
 
 /**
- * The rules a `declare function` adds (WP27 S1, widened by S2 and S3.1): no
- * body, not exported, a scalar or a `CPtr` in every position, and a `string`
- * or `string | null` as a parameter.
+ * The rules a `declare function` adds (WP27 S1, widened by S2, S3.1 and S3.2):
+ * no body, not exported, a scalar or a `CPtr` in every position, and a
+ * `string` or `string | null` as a parameter or as the result.
  *
  * S2 adds a pointer coming back that the compiler must never mistake for one
  * of its own (`docs/wp27-ffi.md` §2, §3). S3.1 is the first pointer this
@@ -170,6 +170,10 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       i = i + 1
       continue
     }
+    // S3.3: `CPtr | null` passes, because the call site is where a null is
+    // held to the literal one (`refuseForeignNullable` in `expressions.ts`,
+    // `docs/wp27-ffi.md` §8g): the declaration cannot tell `realpath(p, null)`
+    // from handing C back a null it gave out.
     if (ctx.table.isRanged(sig.paramTypes[i])) {
       refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
     } else if (!isForeignType(ctx.table, sig.paramTypes[i])) {
@@ -178,19 +182,15 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
         decl,
         `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars and \`CPtr\` only, besides a \`string\` it borrows as \`const char *\``
       )
-    } else if (ctx.table.isNullable(sig.paramTypes[i])) {
-      // A parameter cannot be `CPtr | null`, and the asymmetry with the return
-      // type is the rule §3 states as "`null` only from a foreign call": the
-      // callee is the only thing that can say "no address", so `null` arrives
-      // from C and is narrowed before it goes back. Without this a program
-      // could hand C a null it never got from C, which is the one thing the
-      // narrowing was there to stop.
-      ctx.error(
-        decl,
-        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` cannot be nullable: a foreign pointer is narrowed with \`!== null\` before it is passed back, because only the C function it came from can hand out a null one`
-      )
     }
     i = i + 1
+  }
+  if (ctx.table.stripNull(sig.returnType) === T_STRING) {
+    // S3.2: C's `const char *`, copied into the arena at the call
+    // (`docs/wp27-ffi.md` §8d), so the string is the program's from then on
+    // and C keeps its own. `string | null` answers `null` for `NULL`, and a
+    // `string` panics on one (`ffi-null`).
+    return
   }
   if (ctx.table.isRanged(sig.returnType)) {
     refuseForeignRange(ctx, decl.children[2], name, "returns", sig.returnType)
@@ -198,7 +198,7 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
     const spelled = ctx.table.typeName(sig.returnType)
     ctx.error(
       decl.children[2],
-      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar or \`CPtr\` only`
+      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar, a \`CPtr\` or a \`string\` it copies from a \`const char *\``
     )
   }
 }

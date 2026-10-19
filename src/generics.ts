@@ -1470,7 +1470,7 @@ export const checkGenericCall = (
   }
   // WP29 P1: a reduce over a string or a class is refused at this call, before
   // `nish/threads` is instantiated for an element its body cannot hold.
-  const refused = reduceElementMessage(ctx.table, template, functions, tuple)
+  const refused = reduceElementMessage(ctx.program, ctx.table, template, functions, tuple, expr)
   if (refused.length > 0) {
     return ctx.errorType(expr, refused)
   }

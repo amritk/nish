@@ -800,7 +800,7 @@ once. It may be read only to lend it: as an argument of a call or of `new`, or
 as an operand of `===` or `!==`. Copying it into a local, returning it, or
 storing it anywhere else is refused:
 
-```ts nish:err NL2542
+```ts nish:err NL2544
 import { Secret, secret, wipe } from "nish:secret";
 
 class Session {
@@ -826,7 +826,7 @@ anywhere else is refused, so call `s.wipe()` instead. A function that takes a
 `Secret` borrows it, so it may lend it on or `expose` it, but it neither
 returns it nor wipes it:
 
-```ts nish:err NL2544
+```ts nish:err NL2546
 import { Secret, secret, wipe } from "nish:secret";
 
 const same = (k: Secret<u8[]>): Secret<u8[]> => k; // a second name for the caller's key

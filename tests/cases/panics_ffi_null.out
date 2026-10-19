@@ -1,0 +1,4 @@
+1
+1
+`getenv` returned NULL for a `string` result; declare it `string | null`
+absent exit 1

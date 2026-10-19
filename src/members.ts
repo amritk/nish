@@ -618,7 +618,7 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   }
   // WP29 P3, C3: a channel is unbounded, so there is no capacity to give it.
   if (args.children.length > 0 && isChannelClass(info)) {
-    return ctx.errorType(expr, channelCapacityMessage())
+    return ctx.errorType(expr, channelCapacityMessage(label))
   }
   const ctor = info.ctor
   if (ctor !== null) {

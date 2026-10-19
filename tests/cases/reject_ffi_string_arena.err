@@ -1,0 +1,2 @@
+`strerror(i)` may be allocated inside the `using arena()` block
+`strerror(13)` may be allocated inside the `using arena()` block

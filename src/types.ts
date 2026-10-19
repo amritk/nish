@@ -83,7 +83,9 @@ const T_FIRST_DERIVED: i32 = 13
  * It answers "does this cross as one machine value with nothing for the escape
  * analysis to be wrong about", which is the question S1 was sound by, and it is
  * still the question the parameter rule asks after this one lets `CPtr`
- * through: a nullable `CPtr` is a legal return type and not a legal parameter.
+ * through. A nullable `CPtr` is a legal return type and, since WP27 S3.3, a
+ * legal parameter whose argument is the literal `null` or a narrowed pointer;
+ * `refuseForeignNullable` in `expressions.ts` holds the argument to that.
  */
 export const isForeignType = (table: TypeTable, t: i32): boolean =>
   isForeignScalar(t) || table.stripNull(t) === T_CPTR

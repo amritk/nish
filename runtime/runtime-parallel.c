@@ -47,6 +47,9 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
+#ifdef __GLIBC__
+#include <malloc.h> /* `mallopt` and `malloc_trim`, for the pool */
+#endif
 #endif
 
 /* The ceiling on how many threads one region may use. A fixed bound keeps the
@@ -198,7 +201,8 @@ static struct {
   pthread_cond_t done; /* a caller waits here for its count to reach 0 */
   nish_job *head, *tail;
   int state;
-} nish_pool = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0};
+  int low; /* the trim threshold was lowered for a parked pool */
+} nish_pool = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0, 0};
 
 /* The front of the queue, or 0 when it is empty. The lock is held. `head` is
  * also read without it, by a thread spinning before it parks, so it is
@@ -248,9 +252,24 @@ static void nish_cpu_relax(void) {
  * stores through a guard is copied out before the job returns (runtime-cross.c),
  * and the language refuses every other result that would point into the arena
  * -- so it is rewound for the next one rather than freed, and kept only when it
- * is one ordinary chunk, so a job that allocated a large block does not leave
- * a parked worker holding it. */
+ * is one ordinary chunk. A larger one goes back to malloc, which under glibc
+ * keeps it for the next job (`nish_pool_ready`'s thresholds); a worker that
+ * then finds the queue empty for a second hands the memory back once before it
+ * sleeps for good, so a parked pool does not hold a burst's temporaries.
+ * `malloc_trim` alone cuts back only the main arena's top: a worker's own arena
+ * is cut back when a large free reaches its top and the top is past the trim
+ * threshold. So the worker lowers the threshold to glibc's own 128 KB, frees a
+ * 16 MB block through its arena to make that cut, and then trims. The
+ * threshold stays low until the next region starts (`nish_jobs_run`), so the
+ * blocks a join adopted from a worker's arena go back to the system too when
+ * the caller frees them later. The lowering and the restore both run under the
+ * pool lock, so a region never runs with the low threshold; the free and the
+ * trim run outside it, and a region that starts meanwhile only makes that free
+ * keep its block in the arena, to be trimmed after the next job it runs. */
 static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
+#ifdef __GLIBC__
+  int held = 0;
+#endif
   pthread_mutex_lock(&nish_pool.mu);
   for (;;) {
     nish_job *j = nish_job_take();
@@ -260,6 +279,9 @@ static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
       if (worker) {
         nish_reset_arena();
         if (nish_arena.cap > 65536) nish_free_arena();
+#ifdef __GLIBC__
+        held = 1;
+#endif
       }
       pthread_mutex_lock(&nish_pool.mu);
       nish_job_done(j);
@@ -272,7 +294,26 @@ static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
            i++)
         nish_cpu_relax();
       pthread_mutex_lock(&nish_pool.mu);
-      if (*pending != 0 && !nish_pool.head) pthread_cond_wait(cv, &nish_pool.mu);
+      if (*pending != 0 && !nish_pool.head) {
+#ifdef __GLIBC__
+        if (held) {
+          struct timespec t;
+          clock_gettime(CLOCK_REALTIME, &t);
+          t.tv_sec++;
+          if (pthread_cond_timedwait(cv, &nish_pool.mu, &t) != 0) {
+            held = 0;
+            if (!nish_pool.low) mallopt(M_TRIM_THRESHOLD, 128 << 10);
+            nish_pool.low = 1;
+            pthread_mutex_unlock(&nish_pool.mu);
+            void *volatile top = malloc(16 << 20);
+            free(top);
+            malloc_trim(0);
+            pthread_mutex_lock(&nish_pool.mu);
+          }
+        } else
+#endif
+          pthread_cond_wait(cv, &nish_pool.mu);
+      }
     }
   }
   pthread_mutex_unlock(&nish_pool.mu);
@@ -317,6 +358,29 @@ static int nish_pool_ready(void) {
       pthread_detach(th);
     }
     pthread_atfork(0, 0, nish_pool_child);
+#ifdef __GLIBC__
+    /* glibc otherwise trims the heap top, or unmaps, every chunk of 128 KB or
+     * more an arena release frees, and a task or element that builds a 1 MB
+     * temporary then pays a page fault per 4 KB of it on every call: 200 such
+     * tasks took 314 ms at one thread, 48 ms with these. glibc's own threshold
+     * starts at 128 KB and rises only once an mmapped chunk is freed, to at
+     * most 32 MB on a 64-bit target with a trim threshold of twice that, so
+     * these are the values it reaches by itself, from the first call on; a
+     * worker's idle trim in `nish_pool_drain` lowers the trim threshold and
+     * hands the memory back once the pool parks, and the next region sets it
+     * to 64 MB again. Without that a parked pool kept each worker's arena top,
+     * 82 MB after four maps of 1.2 million strings on four threads, rather than
+     * 2.3 MB (`tests/link/par_map_idle`). Set here, once a program first runs work on other threads; a
+     * region below its grain, or at one thread, runs as the loop it would have
+     * been and keeps that loop's costs. A pool with no worker, at one CPU or
+     * `NISH_NUM_THREADS=1`, has nothing that parks to trim, and keeps what a
+     * join freed up to the 64 MB at which glibc trims the heap top itself.
+     * Trimming at the end of each join instead took that idle 18 MB to 2 MB,
+     * but took ten joins of eight 16 MB tasks from 93 ms to 121-138 ms, since
+     * every join faulted its temporaries in again. */
+    mallopt(M_MMAP_THRESHOLD, 32 << 20);
+    mallopt(M_TRIM_THRESHOLD, 64 << 20);
+#endif
     __atomic_store_n(&nish_pool.state, 1, __ATOMIC_RELEASE);
   }
   state = nish_pool.state;
@@ -360,6 +424,12 @@ static void nish_jobs_run(nish_job *lead, nish_job *rest) {
     if (nish_pool.tail) nish_pool.tail->next = rest;
     else __atomic_store_n(&nish_pool.head, rest, __ATOMIC_RELAXED);
     nish_pool.tail = last;
+#ifdef __GLIBC__
+    /* A parked pool lowered the trim threshold (`nish_pool_drain`): a burst
+       keeps its temporaries again. */
+    if (nish_pool.low) mallopt(M_TRIM_THRESHOLD, 64 << 20);
+    nish_pool.low = 0;
+#endif
     /* One wake per job, rather than every parked worker for a job or two. */
     for (int64_t i = 0; i < pending; i++) pthread_cond_signal(&nish_pool.work);
     pthread_mutex_unlock(&nish_pool.mu);

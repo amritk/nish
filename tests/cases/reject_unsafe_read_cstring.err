@@ -1,0 +1,3 @@
+`readCString` expects an argument of type CPtr, got CPtr | null
+`readCString` expects an argument of type CPtr, got string
+`readCString` expects exactly 1 argument, got 0
