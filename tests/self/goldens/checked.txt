@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1054 programs, 135102 dump lines.
+# 1055 programs, 135143 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -15783,6 +15783,48 @@ function test(): i32 -> @test [exported]
   callee 45:10 weight -> @weight
   callee 45:27 weight -> @weight
   callee 45:44 weight -> @weight
+program tests/cases/enum_narrowing.ts
+module tests/cases/enum_narrowing.ts (entry)
+function pick(n: i32): Kind -> @pick
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function reassigned(k: Kind): i32 -> @reassigned
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: pick
+  stackSites=0 stackLocals=0
+  local 13:7 m: Kind (let)
+  callee 15:9 pick -> @pick
+function looped(k: Kind): i32 -> @looped
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 22:7 m: Kind (let)
+  local 23:7 n: i32 (let)
+function exhausted(k: Kind): i32 -> @exhausted
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function branches(k: Kind): i32 -> @branches
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function switched(k: Kind): i32 -> @switched
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: branches exhausted looped nish_arena_mark nish_arena_release nish_print nish_str_from_i32 pick reassigned switched
+  stackSites=0 stackLocals=0
+  local 63:7 i: i32 (let)
+  local 65:11 k: Kind (const)
+  callee 65:15 pick -> @pick
+  callee 66:17 reassigned -> @reassigned
+  callee 67:17 looped -> @looped
+  callee 68:17 exhausted -> @exhausted
+  callee 69:17 branches -> @branches
+  callee 70:17 switched -> @switched
 program tests/cases/export_fn.ts
 module tests/cases/export_fn.ts (entry)
 function double(n: i32): i32 -> @double [exported]
