@@ -422,6 +422,33 @@ export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
 }
 
 /**
+ * The members `node` can hold as one id, the way `memberSets` records them:
+ * a member type, a union whose tag it reads, or -1 when they are not known.
+ */
+const memberSetId = (ctx: CheckContext, node: Node): i32 => {
+  const members = memberSetOf(ctx, node)
+  if (members.length === 1) {
+    return members[0]
+  }
+  return members.length === 0 ? -1 : ctx.program.memberSets[unwrapParens(node).id]
+}
+
+/**
+ * Record what the enum variable `local` holds once `value` is stored in it,
+ * when its members are known (`Scope.hold`). The caller has dropped what it
+ * held before.
+ */
+export const holdMembers = (ctx: CheckContext, scope: Scope, local: Local, value: Node): void => {
+  if (!ctx.table.isEnum(local.type)) {
+    return
+  }
+  const set = memberSetId(ctx, value)
+  if (set >= 0) {
+    scope.hold(local, set)
+  }
+}
+
+/**
  * Whether two member sets are both known and share no value, which
  * TypeScript refuses in a comparison (TS2367) and a `case` label (TS2678).
  */
@@ -763,6 +790,10 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     if (scope.exhausted(local)) {
       return ctx.errorType(expr, exhaustedMessage(expr.text))
     }
+    const held = scope.heldBy(local)
+    if (held >= 0) {
+      ctx.program.memberSets[expr.id] = held
+    }
     return scope.typeOf(local) // the declared type, or the narrowed one inside `if (p !== null)`
   }
   // WP29: inside an arrow argument, a name of the function around it — which
@@ -773,6 +804,12 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return T_ERROR
     }
     ctx.program.nodeLocals[expr.id] = captured
+    // A `const` holds at the call what it held when it was declared.
+    const outer = captured.captureOf
+    const held = outer === null ? -1 : ctx.arrowOuterScopes[0].heldBy(outer)
+    if (held >= 0) {
+      ctx.program.memberSets[expr.id] = held
+    }
     return captured.type
   }
   // WP29: a compile-time function parameter names a callee, not a value.
@@ -2367,6 +2404,7 @@ export const assignInto = (
     const rhs = checkExpression(ctx, value, scope, slot)
     if (local !== null) {
       scope.clearNarrowing(local)
+      holdMembers(ctx, scope, local, value)
     }
     if (rhs !== T_ERROR && slot !== T_ERROR && !ctx.table.assignable(rhs, slot)) {
       const got = ctx.table.typeName(rhs)

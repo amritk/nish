@@ -147,6 +147,15 @@ export class Scope {
   /** Narrowed variables and the types they read as, in the same order. */
   narrowedVars: Local[]
   narrowedTypes: i32[]
+  /**
+   * Enum variables and the members they can hold, in the same order: a
+   * member type, or a union whose tags they were read from. Set by the
+   * value a declaration or an assignment stores, as TypeScript narrows a
+   * variable of a literal union to what was assigned to it, and dropped with
+   * the narrowings, so a comparison with a member none of them is can be refused.
+   */
+  heldVars: Local[]
+  heldSets: i32[]
 
   constructor(parent: Scope | null) {
     this.parent = parent
@@ -154,6 +163,8 @@ export class Scope {
     this.locals = []
     this.narrowedVars = []
     this.narrowedTypes = []
+    this.heldVars = []
+    this.heldSets = []
   }
 
   child(): Scope {
@@ -246,6 +257,28 @@ export class Scope {
     return false
   }
 
+  /** Record that the enum variable `variable` holds one of `set`'s members for the rest of this scope. */
+  hold(variable: Local, set: i32): void {
+    this.heldVars.push(variable)
+    this.heldSets.push(set)
+  }
+
+  /** The members `variable` can hold, as `hold` recorded them, or -1 when they are not known. */
+  heldBy(variable: Local): i32 {
+    let i = 0
+    while (i < this.heldVars.length) {
+      if (this.heldVars[i] === variable) {
+        return this.heldSets[i]
+      }
+      i = i + 1
+    }
+    const parent = this.parent
+    if (parent !== null) {
+      return parent.heldBy(variable)
+    }
+    return -1
+  }
+
   /**
    * Drop every narrowing of `variable` in the chain: it was assigned, so
    * nothing proved about its old value holds any more.
@@ -260,6 +293,18 @@ export class Scope {
       this.narrowedTypes[at] = this.narrowedTypes[last]
       this.narrowedVars.pop()
       this.narrowedTypes.pop()
+    }
+    let i = 0
+    while (i < this.heldVars.length) {
+      if (this.heldVars[i] === variable) {
+        const last = this.heldVars.length - 1
+        this.heldVars[i] = this.heldVars[last]
+        this.heldSets[i] = this.heldSets[last]
+        this.heldVars.pop()
+        this.heldSets.pop()
+      } else {
+        i = i + 1
+      }
     }
     const parent = this.parent
     if (parent !== null) {

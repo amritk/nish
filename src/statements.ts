@@ -17,6 +17,7 @@ import {
   checkCondition,
   checkExpression,
   clearNarrowingsAssignedIn,
+  holdMembers,
   memberSetName,
   memberSetOf,
   membersDisjoint,
@@ -310,6 +311,9 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     const local = ctx.program.nodeLocals[decl.id]
     if (local !== null) {
       local.typedArray = typedArray
+      if (initializer.kind !== N_EMPTY) {
+        holdMembers(ctx, scope, local, initializer)
+      }
     }
     if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
       local.fresh = allocatesArray(ctx, initializer)

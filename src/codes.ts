@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 677
+export const RULE_COUNT: i32 = 679
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -309,6 +309,8 @@ const diagnosticRules = (): string[] => [
   "NL2450",
   "` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself",
   "NL2522",
+  "` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that",
+  "NL2550",
   "` cannot be handed a `Secret`: a builtin reaches the outside world or reads the bytes, and a `Secret` is read only through `expose`",
   "NL2432",
   "A `Secret` cannot be a condition: a branch taken on key material is a timing channel, and a `Secret` is read only through `expose`",
@@ -409,6 +411,8 @@ const diagnosticRules = (): string[] => [
   "NL2025",
   ": each field is renamed and made optional at most once, and no two fields share a key on the wire",
   "NL2497",
+  "` as its type, which every variant shares, so give it the one member it holds instead: `readonly ",
+  "NL2551",
   "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",
   "NL2157",
   ", and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it",
@@ -737,6 +741,8 @@ const diagnosticRules = (): string[] => [
   "NL2068",
   "` is the opt-in to it, so a policy can only deny it",
   "NL3034",
+  "` until a test of the tag narrows it to one variant",
+  "NL2528",
   "` zero-fills the array its workers write, which a `",
   "NL2521",
   "`: an unconstrained type parameter has no members; ",
@@ -791,8 +797,6 @@ const diagnosticRules = (): string[] => [
   "NL2082",
   "` is not part of the standard library (it has: ",
   "NL3011",
-  "` is the one member a union has in this version",
-  "NL2528",
   "`, and a data-parallel body cannot capture it: ",
   "NL2504",
   "`, which the capability policy does not grant (",

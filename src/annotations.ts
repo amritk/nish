@@ -27,6 +27,7 @@ import {
   N_FIELD,
   N_IDENT,
   N_LIST,
+  N_MEMBER,
   N_TYPE_ARRAY,
   N_TYPE_FUNCTION,
   N_TYPE_LITERAL,
@@ -654,6 +655,13 @@ const variantTagOf = (ctx: CheckContext, at: Node, variant: i32, info: StructInf
     )
   }
   const tag = variantTag(ctx, info)
+  const whole = wholeEnumTag(ctx, info)
+  if (whole !== "") {
+    return ctx.errorType(
+      at,
+      `\`${ctx.table.typeName(variant)}\` cannot be a union variant: its tag \`${variantTagName(info)}\` has the whole enum \`${whole.slice(0, whole.indexOf("."))}\` as its type, which every variant shares, so give it the one member it holds instead: \`readonly ${variantTagName(info)}: ${whole} = ${whole}\``
+    )
+  }
   if (!ctx.table.isEnumMemberType(tag)) {
     return ctx.errorType(
       at,
@@ -739,6 +747,33 @@ const firstField = (info: StructInfo): Node | null => {
     }
   }
   return null
+}
+
+/**
+ * The member a variant's first field should have been typed with, `Kind.A`,
+ * when it is typed with its whole enum, `readonly kind: Kind = Kind.A`, and
+ * `""` otherwise: such a field holds a tag, but its type is every variant's,
+ * so the union could not tell them apart by it. The member is the one the
+ * initializer names, else the enum's first.
+ */
+const wholeEnumTag = (ctx: CheckContext, info: StructInfo): string => {
+  const field = firstField(info)
+  if (field === null) {
+    return ""
+  }
+  const annotation = field.children[1]
+  if (annotation.kind !== N_TYPE_REF || annotation.text.indexOf(".") >= 0 || (annotation.children.length > 0 && annotation.children[0].children.length > 0)) {
+    return ""
+  }
+  const declared = ctx.program.enumNamed(annotation.text)
+  if (declared === null) {
+    return ""
+  }
+  const init = field.children[2]
+  if (init.kind === N_MEMBER && init.children[0].kind === N_IDENT && init.children[0].text === annotation.text && declared.hasMember(init.text)) {
+    return `${annotation.text}.${init.text}`
+  }
+  return declared.memberNames.length > 0 ? `${annotation.text}.${declared.memberNames[0]}` : ""
 }
 
 /**
