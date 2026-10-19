@@ -1763,10 +1763,15 @@ export class QuicConnection {
     this.phasePending = -1
     this.resendLevel = -1
     let used: boolean = false
+    // A STREAM frame's first byte borrows a receive buffer, and nothing may
+    // be taken from a pool inside the scope, so the buffers this packet
+    // could want are readied before it and the rest given back after.
+    this.streams.prime(header.end - header.pnOffset)
     {
       using _scope = arena()
       used = this.openScoped(buf, header, space, keys)
     }
+    this.streams.settle()
     if (!used) {
       return false
     }
