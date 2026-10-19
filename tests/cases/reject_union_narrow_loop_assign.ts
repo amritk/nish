@@ -1,0 +1,63 @@
+// A loop that assigns a narrowed variable drops the narrowing before its body.
+// and `else`, a ternary, `&&`, `||`, an early return, `!==`, the operands
+// reversed, a `switch`, and composed with a null test. A narrowed variable reads
+// its variant's fields and calls its methods; an assignment drops the narrowing.
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32;
+  constructor(r: i32) {
+    this.r = r;
+  }
+
+  diameter(): i32 {
+    return this.r * 2;
+  }
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32;
+  constructor(side: i32) {
+    this.side = side;
+  }
+}
+
+interface Tri {
+  readonly kind: Kind.Tri;
+  base: i32;
+}
+
+type Shape = Circle | Square | Tri;
+
+const pick = (n: i32): Shape => {
+  if (n % 3 === 0) {
+    return new Circle(n);
+  }
+  if (n % 3 === 1) {
+    return new Square(n);
+  }
+  const t: Tri = { kind: Kind.Tri, base: n };
+  return t;
+};
+const f = (n: i32): i32 => {
+  let s: Shape = pick(n);
+  let t = 0;
+  if (s.kind === Kind.Circle) {
+    let i = 0;
+    while (i < 2) {
+      t = t + s.r;
+      s = pick(i);
+      i = i + 1;
+    }
+  }
+  return t;
+};
+export const main = (): void => {
+  console.log(f(0));
+};

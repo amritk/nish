@@ -219,7 +219,7 @@ compatible only when their types are identical.
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
 | `K.M` | an enum member type: the one member `K.M`, as `i32` | holds only that member; a read is a `K` |
 | `T \| null` | `T` a class, interface, array, or string | a scalar can never be nullable |
-| `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read |
+| `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read until a test of it narrows |
 | `Result<T, E>` | the only way to report failure | `E` may not be `void` |
 | `void` | return type only | |
 
@@ -1637,12 +1637,16 @@ const pick = (round: boolean): Shape => (round ? new Circle() : new Square());
 export const main = (): i32 => {
   const shapes: Shape[] = [pick(true), new Square()];
   let circles = 0;
+  let area = 0;
   for (const s of shapes) {
     if (s.kind === Kind.Circle) {
-      circles = circles + 1;
+      circles = circles + 1; // `s` is a `Circle` here
+      area = area + 3 * s.r * s.r;
+    } else {
+      area = area + s.side * s.side; // and a `Square` here
     }
   }
-  return circles === 1 ? 0 : 1;
+  return circles === 1 && area === 43 ? 0 : 1;
 };
 ```
 
@@ -1651,7 +1655,8 @@ export const main = (): i32 => {
   Kind.Circle`. All variants of a union take their tags from one enum, under
   one field name, with different members; a union names at least two. Each
   broken rule has its code (NL2522–NL2527); a tag that is not `readonly` is
-  NL2535. Any other union is still NL1053.
+  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2551. Any
+  other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
   (`Shape | null`). An alias may name another union, which is flattened. A
   variant, or a smaller union, converts into it wherever the union is
@@ -1659,17 +1664,20 @@ export const main = (): i32 => {
   ternary arm or `??` default whose other side is the union. A class that
   implements an interface variant converts to that interface first. A union
   crosses modules but not a sidecar (NL4009).
-- **The tag is the only member** (NL2528 for anything else, even a field every
-  variant has). It reads as the enum: `const k: Kind = s.kind` — annotate it,
-  `const k = s.kind` is NL2530. Compare `k` only with the variants' members:
-  `tsc` narrows it to those, so `k === Kind.C` with no `C` variant is TS2367
-  there and compiles here. A union is read-only, even for a field every
-  variant has (NL2529). Comparing the tag with a member no variant has is
-  NL2531, a `case` for one NL2532.
-- **Not yet:** narrowing by `if`/`switch`. Until it lands, a second test of a
-  tag already ruled out (`if (s.kind === Kind.A) { return }` then
-  `s.kind === Kind.A`) compiles here and is TS2367 in `tsc`: do not write
-  one. The same holds for a `const k: Kind = s.kind` from the start.
+- **Test the tag to read a variant.** Before a test, the tag is the only
+  member (NL2528 for anything else, even a field every variant has). A test of
+  a local's or parameter's tag narrows it as `tsc` does: `if`/`else`, a
+  ternary, `&&`, `||`, `!==`, an early `return`/`break`/`continue`, each
+  `case` of a `switch (s.kind)`, and composed with `s !== null &&`. Two or
+  more variants left still give only the tag; an assignment drops the
+  narrowing. A path does not narrow (`h.s.kind` then `h.s.r` is NL2550): copy
+  it into a local and test that. A read where every variant was excluded is
+  NL2549.
+- The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
+  `const k = s.kind` is NL2530. `k` holds only the variants' members. A
+  union is read-only, even for a field every variant has (NL2529). Comparing
+  the tag (or such a `k`) with a member it cannot hold — one no variant has,
+  or one a test already excluded — is NL2531, a `case` for one NL2532.
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`

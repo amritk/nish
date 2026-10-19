@@ -60,6 +60,11 @@ class Line {
 type Thing = Point | Line;
 ```
 
+The tag's type is the one member, `readonly kind: Kind.Circle = Kind.Circle`,
+not the whole enum: `readonly kind: Kind = Kind.Circle` is an error (NL2551),
+because every variant would then share that type and a test of it could not
+tell them apart.
+
 The tag is `readonly`, so a variant keeps the tag it was built with. A class
 that implements an interface variant is not a variant itself: convert it to
 the interface first, `const r: Ring = new Band()`.
@@ -118,12 +123,10 @@ export const main = (): i32 => {
 
 ## Reading the tag
 
-The tag is the one member a union has in this version. `s.kind` reads it, and
-it compares, switches and passes as the enum. Any other field or method of a
-variant is an error through the union, and so is writing to the union's
-fields, even one every variant has. This version has no way to get the
-variant back out of a union yet: keep the variant's own value where you need
-its other fields.
+Through the union itself, the tag is the one member you can read. `s.kind`
+reads it, and it compares, switches and passes as the enum. Any other field or
+method of a variant is an error until a test of the tag says which variant
+`s` is, and so is writing to the union's fields, even one every variant has.
 
 ```ts nish:err NL2528
 enum Kind {
@@ -150,15 +153,73 @@ Give the tag a type when you store it, `const k: Kind = s.kind`. TypeScript
 would infer the union of the variants' tags, `Kind.Circle | Kind.Square`,
 which is not a type Nish has in this version.
 
-TypeScript also narrows by a test of the tag: after
-`if (s.kind === Kind.Circle) { return 1; }` it knows `s` is not a `Circle`,
-and a second `s.kind === Kind.Circle` is an error there. This version does
-not narrow yet, so it compiles that second test, which is always `false`,
-and the same holds for a tag stored in `const k: Kind`. That local is wider
-still: TypeScript gives `k` only the variants' members, so even a first
-`k === Kind.Tri`, when no variant is a `Tri`, is an error there and compiles
-here. Do not write a test the code above it, or the variants, have already
-ruled out; the version that adds narrowing will refuse it, as TypeScript does.
+## Narrowing by the tag
+
+A test of the tag narrows the union, as in TypeScript. Inside
+`if (s.kind === Kind.Circle) { ... }`, `s` is a `Circle`, and every field and
+method of `Circle` reads through it; in the `else`, and after an `if` whose
+body always leaves with `return`, `break`, `continue` or a `panic(...)`, it is
+whatever variants remain. `!==`, the operands the other way round
+(`Kind.Circle === s.kind`), a ternary, `&&` and `||` narrow the same way, and
+so does each `case` of a `switch (s.kind)`, with `default` holding the
+variants no `case` named.
+
+```ts nish:ok
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 3;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 4;
+}
+
+type Shape = Circle | Square;
+
+const area = (s: Shape): i32 => {
+  if (s.kind === Kind.Circle) {
+    return 3 * s.r * s.r;
+  }
+  return s.side * s.side;
+};
+
+const perimeter = (s: Shape): i32 => {
+  switch (s.kind) {
+    case Kind.Circle:
+      return 6 * s.r;
+    default:
+      return 4 * s.side;
+  }
+};
+
+export const main = (): i32 => {
+  const shapes: Shape[] = [new Circle(), new Square()];
+  let total = 0;
+  for (const s of shapes) {
+    total = total + area(s) + perimeter(s);
+  }
+  console.log(total);
+  return 0;
+};
+```
+
+An assignment to the variable drops what a test proved, so a read after it
+needs a new test. A narrowing belongs to a variable or a parameter: a test of
+`a.b.kind` does not narrow `a.b`, which is an error (NL2550) — copy it into a
+`const` and test that. And where TypeScript would type a value `never`,
+because every tag has been tested away, reading it is an error (NL2549).
+
+A comparison the tests above it have already ruled out is an error, as in
+TypeScript: after `if (s.kind === Kind.Circle) { return 1; }`, a second
+`s.kind === Kind.Circle` can never be true. So is one against a tag stored in
+`const k: Kind = s.kind` that no variant has, because the local holds only the
+variants' members.
 
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case
@@ -194,5 +255,4 @@ export const main = (): i32 => {
 };
 ```
 
-Narrowing a union with `if` or `switch`, and checking that a `switch` covers
-every variant, come in later versions.
+Checking that a `switch` covers every variant comes in a later version.

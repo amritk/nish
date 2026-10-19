@@ -762,7 +762,11 @@ const wholeEnumTag = (ctx: CheckContext, info: StructInfo): string => {
     return ""
   }
   const annotation = field.children[1]
-  if (annotation.kind !== N_TYPE_REF || annotation.text.indexOf(".") >= 0 || (annotation.children.length > 0 && annotation.children[0].children.length > 0)) {
+  if (
+    annotation.kind !== N_TYPE_REF ||
+    annotation.text.indexOf(".") >= 0 ||
+    (annotation.children.length > 0 && annotation.children[0].children.length > 0)
+  ) {
     return ""
   }
   const declared = ctx.program.enumNamed(annotation.text)
@@ -770,7 +774,12 @@ const wholeEnumTag = (ctx: CheckContext, info: StructInfo): string => {
     return ""
   }
   const init = field.children[2]
-  if (init.kind === N_MEMBER && init.children[0].kind === N_IDENT && init.children[0].text === annotation.text && declared.hasMember(init.text)) {
+  if (
+    init.kind === N_MEMBER &&
+    init.children[0].kind === N_IDENT &&
+    init.children[0].text === annotation.text &&
+    declared.hasMember(init.text)
+  ) {
     return `${annotation.text}.${init.text}`
   }
   return declared.memberNames.length > 0 ? `${annotation.text}.${declared.memberNames[0]}` : ""

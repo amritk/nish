@@ -1938,7 +1938,13 @@ export const tagVariable = (ctx: CheckContext, node: Node, scope: Scope): Local 
  * reads as its class, several as the union of them, none as `NARROWED_NONE`.
  * A variable already narrowed to one variant is that variant alone.
  */
-export const narrowToTags = (ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void => {
+export const narrowToTags = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  members: i32[],
+  keep: boolean
+): void => {
   const union = ctx.table.stripNull(local.type)
   const current = scope.typeOf(local)
   const variants = ctx.table.variantsOf(union)

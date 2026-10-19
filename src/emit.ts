@@ -1373,7 +1373,9 @@ export class Emitter {
         return this.maybeParts[maybeLocalIndex(this, local)].value
       }
       const ty = this.llvm(local.type)
-      const value = this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`)
+      const value = this.fn.emitValue(
+        `load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`
+      )
       return this.narrowedRead(expr, local, value)
     }
     process.exit(internalErrorFor(`emitter: no binding for \`${expr.text}\``, this.opts.json))
