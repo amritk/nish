@@ -104,4 +104,14 @@ PASS  wipe: and leaves the salt, PSK, early secret, binder key and opened PSK ze
 PASS  QUIC: enableTickets leaves tickets off
 PASS  slot: a hundred resumptions through one restarted slot all open
 PASS  slot: and after the first, Arena.mark() does not move
-tls resume: 106 passed, 0 failed, 0 skipped
+PASS  tcp: a full handshake through the carrier opens and signs
+PASS  tcp: and is owed a ticket
+PASS  tcp: the ticket TlsTcpServer.issue sends reads back
+PASS  tcp: the slot, restarted, asks about the offered ticket
+PASS  tcp: TlsTcpServer.resume resumes it, unsigned, identity 0
+PASS  tcp: the resumed connection opens and is issued a ticket too
+PASS  tcp: one strike is live
+PASS  tcp: the same ticket again falls back to a full handshake
+PASS  tcp: resume on a slot it does not hold answers TLS_RECORD_DONE
+PASS  tcp: and so does issue
+tls resume: 116 passed, 0 failed, 0 skipped

@@ -45,6 +45,7 @@ import {
   sealTicket,
   ticketState,
 } from "./client";
+import { tcpChecks } from "./tcp";
 
 /** A fresh connection with tickets on. */
 const newConn = (): TlsRecordServer => {
@@ -415,5 +416,6 @@ export const resumeChecks = (): i32 => {
   rowsFifteenToEighteen(t);
   edges(t);
   slot(t);
+  tcpChecks(t);
   return t.done();
 };
