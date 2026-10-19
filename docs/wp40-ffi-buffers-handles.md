@@ -615,8 +615,10 @@ kind, as each was for locks:
   handle". Only a call `marksTailCall` (src/escape.ts:1474) accepts can be
   marked at all, which means every argument a number, a `bool` or an enum
   (`isScalarArgument`). A method call on the handle, `return f.readByte()`,
-  passes `f` as its first argument and is never marked, so it cannot test
-  this. The case that can is a scalar call: `return twice(n)` inside
+  is never marked: a method's `paramTypes` starts with `this`
+  (src/declarations.ts:50-53) while the call's argument list does not, so the
+  arity test at src/escape.ts:1484 refuses it. Passing the handle explicitly
+  would fail `isScalarArgument` instead. Either way it cannot test this. The case that can is a scalar call: `return twice(n)` inside
   `using f = new File(p)`, where `twice(n: i32): i32` is a function of the
   program.
 
