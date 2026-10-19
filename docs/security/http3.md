@@ -285,7 +285,20 @@ for the server's life, and `Http3Server.stop` wipes it with the listener's
 seed and the configuration's static keys (QUIC-5). What
 the connection holds is application data — request field sections in
 `section`, the decoder's buffer and the field copies, bodies in `data` — which
-may carry credentials (`cookie`, `authorization`). None of it is wiped: each
-buffer is overwritten by the next section or chunk and zeroed by nothing. A
+may carry credentials (`cookie`, `authorization`). `data` and `section` are
+fixed-size buffers lent from pools an `Http3Server` shares across its slots
+(a standalone `Http3Connection` makes a private pool of one each): `section`
+for the one read and decode of a HEADERS frame, `data` for the window an
+`H3_DATA` event hands the program, given back by the next `next()` call. Each
+is zeroed over the extent it was written as it goes back (`BufferPool.give`,
+a plain fill the next borrower's reads keep), so the next connection, or the
+next request of this one, borrows no byte of the last; the QUIC stream
+buffers under them are lent and zeroed the same way (QUIC-3 in
+[quic.md](quic.md)). Anchors at `5ac780f4`: `std/net/http3.ts:769-778`
+(`next`), `:813-820` (`giveData`), `:839-845` (`giveSection`),
+`std/net/http3-server.ts:531-534` (`share`), `:949` and `:978` (the slot's
+give-back on release and stop). Not wiped: the decoder's buffer and the field
+copies, which are the slot's own and overwritten by the next section, and a
+pooled buffer while it is lent. A
 credential the server sends is never indexed, and the dynamic table is never
 used, so none sits in a compression table where a peer could probe it.
