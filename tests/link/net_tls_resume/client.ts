@@ -441,6 +441,9 @@ export class Run {
   /** The ClientHello's record and the client Finished's, as sent, for replaying. */
   helloRecord: u8[];
   finishedRecord: u8[];
+  /** The server's own time on the handshake, in nanoseconds, and the bytes both sides put on the wire. */
+  serverNanos: i64 = 0;
+  wireBytes: i32 = 0;
 
   constructor() {
     this.session = new Session();
@@ -477,6 +480,7 @@ export const runOn = (conn: TlsRecordServer, ring: Ring, offer: Offer, now: i64,
     hello = bindHello(hello, offer.bindAlone ? none : before, offer.bindIndex, offer.psk);
   }
   run.helloRecord = clearRecord(hello);
+  let started: i64 = monotonicNanos();
   feed(conn, run.helloRecord);
   if ((conn.interest() & TLS_RECORD_TICKET) !== 0) {
     run.askedTicket = true;
@@ -494,7 +498,10 @@ export const runOn = (conn: TlsRecordServer, ring: Ring, offer: Offer, now: i64,
   run.resumed = conn.tls.resumed;
   run.state = conn.state;
   run.alert = conn.alert;
-  const records: u8[][] = splitRecords(drain(conn));
+  const flight: u8[] = drain(conn);
+  run.serverNanos = run.serverNanos + (monotonicNanos() - started);
+  run.wireBytes = toI32(run.helloRecord.length) + toI32(flight.length);
+  const records: u8[][] = splitRecords(flight);
   if (toI32(records.length) === 0 || toI32(records[0][0]) !== TLS_CONTENT_HANDSHAKE) {
     return run;
   }
@@ -511,7 +518,10 @@ export const runOn = (conn: TlsRecordServer, ring: Ring, offer: Offer, now: i64,
     return run;
   }
   run.finishedRecord = sealOne(protectionFor(SUITE, run.session.clientHandshake), TLS_CONTENT_HANDSHAKE, run.session.finished, ZERO);
+  started = monotonicNanos();
   feed(conn, run.finishedRecord);
+  run.serverNanos = run.serverNanos + (monotonicNanos() - started);
+  run.wireBytes = run.wireBytes + toI32(run.finishedRecord.length);
   run.state = conn.state;
   run.alert = conn.alert;
   run.open = conn.state === TLS_RECORD_STATE_OPEN;
@@ -519,8 +529,12 @@ export const runOn = (conn: TlsRecordServer, ring: Ring, offer: Offer, now: i64,
   if (!issue || !run.ticketOwed) {
     return run;
   }
+  started = monotonicNanos();
   conn.issue(ring.key, ring.info, now);
-  const issued: u8[][] = splitRecords(drain(conn));
+  const sent: u8[] = drain(conn);
+  run.serverNanos = run.serverNanos + (monotonicNanos() - started);
+  run.wireBytes = run.wireBytes + toI32(sent.length);
+  const issued: u8[][] = splitRecords(sent);
   if (toI32(issued.length) === 0) {
     return run;
   }

@@ -4138,6 +4138,7 @@ const INDEX_OF_ANY_REFUSALS = [
  * here, or it reads nothing in a sharded run.
  */
 const LINK_READ_LATER = [
+  "net_tls_resume_bench",
   "par_dst_short",
   "par_map_idle",
   "par_map_join_small",
@@ -4594,6 +4595,34 @@ if (!only || "par_dst_short".includes(only)) {
       String(run.stderr).includes("parallelMapInto: dst has 2 elements and src has 3") &&
       String(run.stdout).trim() === "before",
     run !== null ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : missing
+  )
+}
+
+// What TLS 1.3 resumption saves the server (docs/security/tls.md,
+// "Resumption"). `net_tls_resume_bench` runs 41 interleaved rounds of a full
+// handshake, the same full handshake again and a resumed one, each on a
+// server whose random and x25519 key are drawn fresh, and prints the medians
+// of the server's own time per handshake on stderr; the link loop above pins
+// its stdout, the counts, the bytes and a checksum folded from every
+// session's traffic secret. Measured on the head that added it, nine runs:
+// full 420-430 us, its byte-identical copy within 1.4% of it (the noise
+// band), resumed 256-262 us, 0.61x the full handshake: psk_dhe_ke still does
+// the x25519 exchange and leaves out the certificate and the P-256 signature.
+// On the wire, 854 bytes a full handshake against 637 a resumed one, both
+// sides and the NewSessionTicket counted. The bound is the resumed median
+// below 0.85x the smaller full one, far outside the band.
+if (!only || "net_tls_resume_bench".includes(only)) {
+  const fixture = linkTests.includes("net_tls_resume_bench")
+  const exe = path.join(buildDir, "link", "net_tls_resume_bench", "app")
+  const run = fixture && fs.existsSync(exe) ? spawnSync(exe, [], { encoding: "utf8" }) : null
+  const missing = fixture ? `no such binary: ${exe}` : "no such fixture: tests/link/net_tls_resume_bench"
+  const m =
+    run === null ? null : /resume bench ns: full (\d+) copy (\d+) resumed (\d+)/.exec(String(run.stderr))
+  const [full, copy, resumed] = m === null ? [0, 0, 0] : [Number(m[1]), Number(m[2]), Number(m[3])]
+  check(
+    "link/net_tls_resume_bench: a resumed handshake costs the server under 0.85x a full one",
+    run !== null && run.status === 0 && m !== null && resumed > 0 && resumed < 0.85 * Math.min(full, copy),
+    run !== null ? `exit ${run.status}\nstderr: ${run.stderr}` : missing
   )
 }
 
