@@ -1074,7 +1074,14 @@ const narrowClause = (
   groupDefault: boolean
 ): void => {
   if (groupDefault) {
-    narrowSwitched(ctx, clauseScope, tagged, held, withoutMembers(ctx, labelledMembers(ctx, clauses), group), false)
+    narrowSwitched(
+      ctx,
+      clauseScope,
+      tagged,
+      held,
+      withoutMembers(ctx, labelledMembers(ctx, clauses), group),
+      false
+    )
   } else {
     narrowSwitched(ctx, clauseScope, tagged, held, group, true)
   }
@@ -1096,7 +1103,14 @@ const narrowAfterSwitch = (
   unlabelledReach: boolean
 ): void => {
   if (unlabelledReach) {
-    narrowSwitched(ctx, scope, tagged, held, withoutMembers(ctx, labelledMembers(ctx, clauses), reaching), false)
+    narrowSwitched(
+      ctx,
+      scope,
+      tagged,
+      held,
+      withoutMembers(ctx, labelledMembers(ctx, clauses), reaching),
+      false
+    )
   } else {
     narrowSwitched(ctx, scope, tagged, held, reaching, true)
   }

@@ -824,6 +824,21 @@ and `case Kind.Tri:` of a `switch (k)` NL2532, as `tsc`'s TS2367 and TS2678 are
 `reject_enum_held_const`, `reject_enum_held_let`, `reject_enum_held_reassign`,
 `reject_union_tag_held_capture`).
 
+A test of an enum variable against a member narrows what it holds in the same
+forms, as `tsc` narrows it: `k === Kind.A` and `k !== Kind.A`, either way
+round, in an `if` and its `else`, a ternary, `&&` and `||`, after an `if` whose
+branch always leaves, and each `case` and the `default` of a `switch (k)`. This
+holds for a parameter `k: Kind` as for the tag local `const k: Kind = s.kind`,
+and an assignment drops it as it drops a union's. So after
+`if (k === Kind.A) return`, `k === Kind.A` is NL2531 and `case Kind.A:` NL2532,
+as `tsc`'s TS2367 and TS2678 are (`tests/cases/enum_narrowing`;
+`reject_enum_narrow_else`, `reject_enum_narrow_early`,
+`reject_enum_narrow_ternary`, `reject_enum_narrow_and`,
+`reject_enum_narrow_or`, `reject_enum_narrow_switch`,
+`reject_enum_narrow_tag_local`). Narrowed to one member, the variable is that
+member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
+(`reject_enum_narrow_let_member`), as in `tsc`.
+
 **Stricter than TypeScript.** Each of these programs is accepted by
 `tsc --strict` and refused here; each refusal is pinned:
 
@@ -859,6 +874,15 @@ and `case Kind.Tri:` of a `switch (k)` NL2532, as `tsc`'s TS2367 and TS2678 are
   (`reject_union_tag_array`, `reject_union_tag_ternary`,
   `reject_union_tag_arrow`). An annotation as the enum, `const k: Kind =
   s.kind`, is accepted, and the local holds the variants' members (above).
+  An enum variable narrowed to two or more members is the same: `const j = k`
+  after `if (k === Kind.A) return` is NL2530, since `tsc` would infer
+  `Kind.B | Kind.C` (`reject_enum_narrow_inferred_set`); annotate it as `Kind`.
+- **No narrowing of a variable through a tag compared with a variable.**
+  `s.kind === k`, where `k` is an enum variable that may hold several members,
+  narrows `s` in `tsc` to the variants whose tags `k` can hold; this version
+  narrows `s` only on a test against one member, so the union keeps only its
+  tag there (`reject_union_narrow_tag_variable`). Test against the members
+  themselves, or `switch (s.kind)`.
 - **No narrowing through a path.** `tsc` narrows a property path,
   `h.s.kind === Kind.Circle` then `h.s.r`; this version narrows a variable
   only, so a read through the path is

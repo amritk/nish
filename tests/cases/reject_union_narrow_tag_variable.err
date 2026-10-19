@@ -1,0 +1,1 @@
+`side` cannot be used on the union `Square | Tri`: a union has only its tag `kind` until a test of the tag narrows it to one variant

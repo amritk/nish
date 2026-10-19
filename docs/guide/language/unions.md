@@ -221,6 +221,32 @@ TypeScript: after `if (s.kind === Kind.Circle) { return 1; }`, a second
 `const k: Kind = s.kind` that no variant has, because the local holds only the
 variants' members.
 
+Any variable of an enum type narrows the same way, a parameter `k: Kind` as
+much as that tag local: a test of `k === Kind.Circle` or `k !== Kind.Circle`,
+in every form above and in a `switch (k)`, leaves `k` holding only the members
+the test allows, so a second test it already decided is an error (NL2531).
+
+```ts nish:err NL2531
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+const sides = (k: Kind): i32 => {
+  if (k === Kind.Circle) {
+    return 0;
+  }
+  return k === Kind.Circle ? 1 : 4;
+};
+```
+
+Narrowed to one member, the variable has that member's type, so `let j = k`
+is a `Kind.Square`. Narrowed to several, `const j = k` needs its annotation,
+`const j: Kind = k`, for the reason the tag does (NL2530). And `s.kind === k`
+narrows `s` only when `k` holds one member; to pick out several variants, test
+the members themselves or `switch (s.kind)`.
+
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case
 Kind.Tri:` in a `switch (s.kind)`.

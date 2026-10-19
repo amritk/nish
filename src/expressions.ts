@@ -387,7 +387,10 @@ export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): 
 const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean => {
   const set = ctx.program.memberSets[expr.id]
   const union = ctx.table.isUnion(set)
-  if ((!union && set >= MEMBERS_NONE) || (want !== WANT_MAYBE && want !== WANT_RANGE && want !== WANT_INFERRED)) {
+  if (
+    (!union && set >= MEMBERS_NONE) ||
+    (want !== WANT_MAYBE && want !== WANT_RANGE && want !== WANT_INFERRED)
+  ) {
     return false
   }
   const members = memberSetOf(ctx, expr)
@@ -406,10 +409,10 @@ const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean =>
  * which TypeScript types `never` and compares with anything. Not a set any
  * read records, so `memberSetOf` reads it as unknown.
  */
-export const MEMBERS_NONE: i32 = -2
+const MEMBERS_NONE: i32 = -2
 
 /** Whether `set`, as `memberSets` and `Scope.hold` record one, names members. */
-export const namesMembers = (set: i32): boolean => set >= 0 || set < MEMBERS_NONE
+const namesMembers = (set: i32): boolean => set >= 0 || set < MEMBERS_NONE
 
 /** `members`, two or more of one enum, as an id `memberSets` can record (`CheckedProgram.memberLists`). */
 const memberListId = (ctx: CheckContext, members: i32[]): i32 => {
@@ -1993,7 +1996,13 @@ const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
  * its type, `Kind.A`, which a `let` inferred from it takes, as TypeScript's
  * does; none left is `MEMBERS_NONE`, which compares with anything, as `never`.
  */
-export const narrowHeld = (ctx: CheckContext, scope: Scope, local: Local, members: i32[], keep: boolean): void => {
+export const narrowHeld = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  members: i32[],
+  keep: boolean
+): void => {
   const current = heldMembers(ctx, scope, local)
   const kept: i32[] = []
   for (const member of current) {

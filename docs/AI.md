@@ -1678,6 +1678,12 @@ export const main = (): i32 => {
   union is read-only, even for a field every variant has (NL2529). Comparing
   the tag (or such a `k`) with a member it cannot hold — one no variant has,
   or one a test already excluded — is NL2531, a `case` for one NL2532.
+- An enum variable, a parameter `k: Kind` as much as such a tag local, narrows
+  on `k === Kind.A` / `!==` in the same forms as a union, `switch (k)`
+  included: after `if (k === Kind.A) return`, `k === Kind.A` is NL2531.
+  Narrowed to one member, `let j = k` is a `Kind.A`; to several,
+  `const j = k` is NL2530 (annotate it `Kind`). `s.kind === k` narrows `s`
+  only when `k` is one member: test the members, or `switch (s.kind)`.
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
