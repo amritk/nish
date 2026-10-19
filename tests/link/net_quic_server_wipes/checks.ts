@@ -7,7 +7,7 @@
 // before as well as after. `tests/link/net_quic_server_wipes_f64` runs the
 // same checks under `--number-mode f64`, and `tests/wipes/quic-server.js`
 // compiles this program to count the same wipes after `opt -O2`.
-import { Secret, secret, wipe } from "nish:secret";
+import { Secret, expose, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { HkdfScratch } from "nish/crypto/hkdf";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
@@ -102,15 +102,13 @@ const swKdfZero = (kdf: HkdfScratch): boolean =>
 
 /** Whether the keys of every space of `conn`, the key-update and Initial secrets and the connection-ID seed are zero. */
 const swConnZero = (conn: QuicConnection): boolean => {
-  let zero: boolean = true;
-  for (const s of conn.readSecrets) {
-    zero = zero && swZero(s);
-  }
-  for (const s of conn.writeSecrets) {
-    zero = zero && swZero(s);
-  }
   return (
-    zero &&
+    expose(conn.readSecret256, swZero) &&
+    expose(conn.nextReadSecret256, swZero) &&
+    expose(conn.writeSecret256, swZero) &&
+    expose(conn.readSecret384, swZero) &&
+    expose(conn.nextReadSecret384, swZero) &&
+    expose(conn.writeSecret384, swZero) &&
     swSlotsZero(conn.initial.keySlots) &&
     swSlotsZero(conn.handshake.keySlots) &&
     swSlotsZero(conn.application.keySlots) &&

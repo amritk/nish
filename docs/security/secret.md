@@ -13,8 +13,9 @@ lines, because it moves every line below them.
 | `src/compilation.ts` | `Compilation.checkSecrets`, which asks the whole-program questions |
 | `src/program.ts` | `SecretNeed` and `CheckedProgram.secretNeeds`, the questions a body leaves for it |
 
-Read but not owned: `src/attributes.ts` (`PointerParamFacts.captured`, the fact
-the rule reads for "keeps its parameter").
+Read here, audited for this rule by the field section below: `src/attributes.ts`
+(`PointerParamFacts.captured`, the fact the sole-reference rule reads for "keeps
+its parameter"; its `markWipe` is in the field section's Scope).
 
 ## Threat model
 
@@ -110,3 +111,166 @@ The checks in `tests/run.js` that hold the above:
 - `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
   for `docs/guide/using-nish/standard-library.md`: the alias refused with
   NL2512, and the copy accepted.
+
+## The field rule: a `Secret` held by a class
+
+NL2430 refused every `Secret` field. The field rule (#668) admits one shape,
+and this part of the record says what that shape is held to and how. Its rows
+name functions rather than lines: the rule is new code on `main` `461489b`, so
+no base line describes it.
+
+### Scope
+
+| File | What |
+| --- | --- |
+| `src/secret.ts` | `admitsSecretField` and `secretFieldOf` (the declaration), `checkHolderReleaser` (the releaser's signature), `SecretFlow.collectSlots`, `fieldRead`, `fieldStore` and `storedType` (the walk over a holder's constructor, its `wipe()` and every other body) |
+| `src/structs.ts` | where a field's type is admitted, and where `checkHolderReleaser` runs once a class's members are known |
+| `src/members.ts` | the object literal of a holder (NL2545) |
+| `src/interop-header.ts` | `structDefinitions` and `structFieldTypes`: a `Secret` (`isSecretStruct`) and a holder (`secretFieldOf`) are opaque in an `--emit-header` sidecar |
+| `src/attributes.ts` | `markWipe`: a `wipe` marks what its argument reaches as written, for the region rule of a scope |
+| `src/codes.ts` | the field rule's diagnostics, NL2540 to NL2548, with their fragments and advice |
+| `src/types.ts` | `TypeTable.holdsSecret`, which does not look inside a struct: a holder travels as a value, since its own `wipe()` ends its field |
+
+### Threat model
+
+As above: the rule is a promise to the program's author, and the failure is a
+program that compiles while the key stays readable, or unwiped, where the
+language says it is not. A field adds two roads a local does not have: the
+holder outlives the function that made the key, and every method of the class
+can name the field.
+
+### Method
+
+- Listed each way in: a field declared on an interface, on a generic class,
+  without `readonly`, as `Secret<T> | null`, inside an array, a `Result` or
+  another `Secret`; a releaser missing, with a parameter or with another
+  return type; a `wipe()` that skips the field on one branch, in a loop, after
+  an early `return`, or by calling a helper; a constructor that sets the field
+  from a local, a parameter or a call, from an aliased array, twice, or in a
+  loop; a store from a method, from outside the class, by a compound
+  assignment, or through `this` handed out of the constructor; a read into a
+  local, a `let`, a return value, a ternary, a `??`, an optional chain, a
+  chained member, an index, a template, `console.log`, a condition and
+  `secret(h.k)`; the holder as an object literal, a JSON encode or decode
+  target, a data-parallel capture, a task's argument wiped in its scope, and a
+  `using` binding. Review round 1 added: a function, an arrow or a generic
+  `id<T>` that returns the `Secret` it borrows; `wipe(h.k)` in a function,
+  another method, a constructor, or through `this` handed out of one; a
+  helper that wipes its `Secret` parameter; a constructor reached by `new`
+  that zeroes the key in place inside `wipe()`; a field read through a nested
+  member, `o.h.k`; and the header, typings and N-API shim of an exported
+  function that takes or returns a holder. Review round 2 added: a method
+  that returns the `Secret` it borrows; a ternary that picks between two
+  borrowed keys; a helper that wipes its parameter, reached by `new` and by a
+  method call; a holder's `wipe()` that wipes a nested holder's field,
+  `wipe(this.h.k)`, or another holder's, `wipe(o.k)`; the C layout of an
+  exported holder; and an exported function that returns a bare `Secret`.
+- Wrote a program for each and compiled it with the branch's `build/nish`.
+
+### Findings
+
+Found by review rounds 1 and 2 of #685, on the branch before it landed, so
+each row names functions rather than base lines.
+
+| Id | Severity | Where | Description | Disposition |
+| --- | --- | --- | --- | --- |
+| SECRET-2 | Medium | `SecretFlow.name` (`src/secret.ts`) | Identity laundering: a function, an arrow, a generic `id<T>` or a method that returned the `Secret` it was passed handed its caller a second name for a holder's key, which outlived the holder's `wipe()` and read zeros, or read the key before it with no tie to the holder. A ternary between two borrowed keys was the same road. Medium on SECRET-1's reasoning: no input reaches it, but an accepted program holds the key under a name the rule does not see | **Fixed.** A `Secret` parameter is borrowed: returning it is NL2546, for every `Secret` parameter (a break from 0.18.0, docs/LANGUAGE.md, "Secrets"). A ternary of two is refused by the copy rule |
+| SECRET-3 | Low | `SecretFlow.fieldRead` (`src/secret.ts`) | Wipe then read: `wipe(h.k)` in a function, another method, a constructor, through `this` handed out of one, or in a holder's `wipe()` aimed at a nested or another holder's field, zeroed a key its holder went on using. A wrong answer, not a leak | **Fixed.** A field is wiped only by `wipe(this.f)` in its own holder's `wipe()` (NL2547) |
+| SECRET-4 | Low | `SecretFlow.name` (`src/secret.ts`) | A helper that wiped its `Secret` parameter, called directly, by `new` or by a method, zeroed a holder's key behind its back | **Fixed.** Wiping a borrowed `Secret` is NL2548; the owner wipes it |
+| SECRET-5 | Low | `structDefinitions`, `structFieldTypes` (`src/interop-header.ts`) | The `--emit-header` sidecar gave a `Secret`'s struct and an exported holder's layout, so a host could read the key's bytes by offset, or allocate a holder and skip the constructor that sets its key | **Fixed.** A `Secret` (`isSecretStruct`) and a holder (`secretFieldOf`) are opaque: a `typedef` with no fields, reached only as a pointer, and a function that takes or returns one is not bridged to JS |
+
+### Properties verified
+
+- A `Secret` field is `readonly`, typed exactly `Secret<T>`, on a non-generic
+  class; any other declaration is NL2430, and a `Secret` inside an array, a
+  `Result` or another `Secret` is NL2429.
+- A class with such a field has `wipe(): void` with no parameters (NL2540),
+  and that method calls `wipe(this.f)` for every field on every path out of it
+  (NL2541): a branch, a loop body, an early `return` and a helper that wipes it
+  are each refused. A field is wiped only there: `wipe(h.f)` anywhere else,
+  a constructor included, is NL2547 (`SecretFlow.fieldRead`, `src/secret.ts`).
+- A `Secret` parameter is borrowed: returning it is NL2546 and wiping it
+  NL2548 (`SecretFlow.name`), so no function, arrow or generic instantiation
+  hands a caller a second name for a holder's key.
+- The C header keeps a `Secret` opaque, as it does a `Map`
+  (`isSecretStruct`, `src/interop-header.ts`): an exported function's
+  `Secret` parameter or return is a pointer to an incomplete struct with no
+  layout. A holder is opaque too (`secretFieldOf`): a `typedef` with no
+  fields, so a host cannot allocate one and skip the constructor that sets
+  the key. The `.d.ts` and N-API shim bridge no such function.
+- The field is set only in the constructor, only from `secret(...)` (NL2542),
+  and only once (NL2543); `secret(...)` there keeps the sole-reference rule
+  (NL2512). A store anywhere else is NL2181, and the store is a statement of its
+  own: its value bound to a local is NL2544.
+- A scope's parent may not wipe a holder while a task of the scope may read
+  its key: `wipe` marks what its argument reaches as written
+  (`markWipe`, `src/attributes.ts`), so `h.wipe()`, a helper that wipes
+  `h.k`, and a constructor reached by `new` that does are each the region
+  rule's write before the join, as `wipe(h.k)` written in the block is.
+- A read of the field is a loan: an argument of a call or of `new`, or an
+  operand of `===` or `!==`. Anything else is NL2544, and the existing rules
+  (NL2428, NL2431 to NL2436, NL2439) still refuse what they refused of a local.
+- A holder made by an object literal is NL2545, and JSON encode and decode of
+  one are NL2485.
+- The `wipe()` of a holder is the same volatile `llvm.memset` a local's is, and
+  it survives `opt -O2` where a plain `fill(0)` of the twin's field is an
+  ordinary one (on the arena, `opt` keeps both; the check pins the volatile
+  flag).
+- What the rule leaves out: nothing makes a program call `wipe()`, so a holder
+  that is never wiped leaves its key in memory, unzeroed; the rule does
+  not follow a second reference to the holder itself, which is a loan of the
+  whole object rather than of the key; a function that takes a `Secret` may
+  still zero its bytes through `exposeWith` and `fill(0)`, which is a write
+  through a borrow like any other and leaves the holder reading zeros, a
+  wrong answer and not a leak; and a key made per packet or per record
+  is a local, held to NL2448 and NL2450, not a field.
+
+### Tests
+
+- `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, for
+  `reject_secret_field`, `reject_secret_field_interface`,
+  `reject_secret_field_generic_class`, `reject_secret_field_not_readonly`,
+  `reject_secret_field_nullable`, `reject_secret_field_array`,
+  `reject_secret_field_array_literal`, `reject_secret_field_result`,
+  `reject_secret_field_holder_payload`, `reject_secret_field_no_wipe`,
+  `reject_secret_field_wipe_signature`, `reject_secret_field_wipe_missing`,
+  `reject_secret_field_wipe_branch`, `reject_secret_field_wipe_loop`,
+  `reject_secret_field_wipe_return`, `reject_secret_field_wipe_helper`,
+  `reject_secret_field_local`, `reject_secret_field_param`,
+  `reject_secret_field_call`, `reject_secret_field_alias_raw`,
+  `reject_secret_field_twice`, `reject_secret_field_ctor_loop`,
+  `reject_secret_field_store_method`, `reject_secret_field_store_outside`,
+  `reject_secret_field_compound`, `reject_secret_field_this_escape`,
+  `reject_secret_field_assign_local`, `reject_secret_field_bind`,
+  `reject_secret_field_return`, `reject_secret_field_ternary`,
+  `reject_secret_field_nullish`, `reject_secret_field_optional_chain`,
+  `reject_secret_field_chain`, `reject_secret_field_index`,
+  `reject_secret_field_member`, `reject_secret_field_template`,
+  `reject_secret_field_console`, `reject_secret_field_condition`,
+  `reject_secret_field_equality`, `reject_secret_field_secret_arg`,
+  `reject_secret_field_new_arg`, `reject_secret_field_object_literal`,
+  `reject_secret_field_json`, `reject_secret_field_json_decode`,
+  `reject_secret_field_capture`, `reject_secret_field_task_wipe`,
+  `reject_secret_field_scope_wipe`, `reject_secret_field_scope_helper`,
+  `reject_secret_field_scope_new`, `reject_secret_field_store_value`,
+  `reject_secret_field_using`, `reject_secret_field_launder_function`,
+  `reject_secret_field_launder_arrow`, `reject_secret_field_launder_generic`,
+  `reject_secret_field_wipe_outside`, `reject_secret_field_wipe_through`,
+  `reject_secret_field_wipe_method`, `reject_secret_field_wipe_ctor`,
+  `reject_secret_field_this_fin`, `reject_secret_field_this_store`,
+  `reject_secret_field_wipe_param`, `reject_secret_field_wipe_new`,
+  `reject_secret_field_nested`, `reject_secret_field_launder_method`,
+  `reject_secret_field_launder_ternary`, `reject_secret_field_wipe_param_new`,
+  `reject_secret_field_wipe_param_method`, `reject_secret_field_wipe_nested`,
+  `reject_secret_field_wipe_other`, and, for a caller's own local in place of
+  a field, `reject_secret_field_launder_local` and
+  `reject_secret_field_wipe_param_local`: one road each.
+- `nish:secret: --emit-header keeps a Secret and its holder opaque, and --emit-dts / --emit-napi bridge neither`.
+- `${name}: IR matches golden` and `${name}: native output matches .out`, for
+  `secret_field`, `secret_field_wipe_o2` and `secret_field_wipe_o2_plain`.
+- `nish:secret: a holder's wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is an ordinary one`.
+- `codes: every registry code is provoked by a program, declared, or explained (${wordingsSummary})`:
+  NL2540 to NL2548 each have their `tests/wordings/` program.
+- `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
+  for `docs/AI.md` and `docs/guide/using-nish/standard-library.md`: a holder
+  accepted, and a field copied into a local refused with NL2544.

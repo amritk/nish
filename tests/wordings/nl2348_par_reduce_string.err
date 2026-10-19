@@ -1,0 +1,1 @@
+`(a, b) => ...` answers `string`, and `parallelReduce` hands back only a number, a `boolean` or an enum: a worker's arena is freed when its thread exits, so anything else would point into freed memory; answer a number and fold those, or run it on the thread that called it, `let joined: string = ""; for (const b of words) { const a = joined; joined = a + b }`

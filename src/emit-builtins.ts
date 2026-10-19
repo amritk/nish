@@ -21,6 +21,7 @@ import { isBuiltinFunction } from "./builtins"
 import { Emitter } from "./emit"
 import {
   emitConsoleError,
+  emitCStringCopy,
   emitConsoleLog,
   emitFromBytes,
   emitFromCharCode,
@@ -34,7 +35,6 @@ import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
 import {
   isNetExport,
-  isUnsafeExport,
   NET_INT,
   NET_RANGE,
   NET_STRING,
@@ -691,6 +691,11 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "wrappingMul") {
     return emitWrapping(emitter, expr, "mul")
   }
+  // WP27 S3.3: the one read through a `CPtr`, the copy a `declare function`'s
+  // `string` result makes, with no null test because the type rules one out.
+  if (name === "readCString") {
+    return emitCStringCopy(emitter, emitter.emitExpression(firstArgument(expr)))
+  }
   if (name === "parseInt") {
     const value = emitParseCall(emitter, emitter.emitExpression(firstArgument(expr)), 2)
     return callIntrinsic(emitter, SAT_I32, "i32", `double ${value}`)
@@ -1029,15 +1034,23 @@ export const identifierBuiltinCalleesNamed = (
     }
     return out
   }
+  // WP27 S3.3: `@nish.ffi.str`, the copy, calls `nish_str_new`.
+  if (name === "readCString") {
+    out.push("nish_str_new")
+    return out
+  }
   // Declared here rather than left to fall through, so the table says it:
   // `f64ToBits` / `bitsToF64` are one bitcast, `ctSelect` / `ctEq` are
-  // bitwise instructions and an empty asm (WP34 N6), and the `nish:unsafe`
+  // bitwise instructions and an empty asm (WP34 N6), and the other `nish:unsafe`
   // functions are a load, a store or one instruction, with no panic behind
   // any of them. None calls anything.
   if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
     return out
   }
-  if (isUnsafeExport(name)) {
+  if (name === "uncheckedGet" || name === "uncheckedSet") {
+    return out
+  }
+  if (name === "wrappingAdd" || name === "wrappingSub" || name === "wrappingMul") {
     return out
   }
   return out

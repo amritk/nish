@@ -402,6 +402,20 @@ export class CheckContext {
       current.poisoned = true
     }
   }
+  /** `errorOnce` with a machine-applicable fix, on the terms `errorFix` states. */
+  errorOnceFix(node: Node, message: string, edits: Edit[]): void {
+    const key = `${node.id}`
+    if (this.reportedOnce.has(key)) {
+      this.errored = true
+    } else {
+      this.reportedOnce.add(key)
+      this.errorFix(node, message, edits)
+    }
+    const current = this.current
+    if (current !== null) {
+      current.poisoned = true
+    }
+  }
 
   /**
    * WP29: whether `name` would be read from a function an arrow argument is

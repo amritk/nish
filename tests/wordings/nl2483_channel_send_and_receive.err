@@ -1,1 +1,1 @@
-`echo` may both send and receive on `ch`: no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return
+`echo` may both send and receive on `ch`: no task both sends and receives on one channel, because a channel closes only once every task that may send on it has returned, and this one would wait in its own loop for its own return; split it into a task that sends and a task that receives, or answer the result through a second channel

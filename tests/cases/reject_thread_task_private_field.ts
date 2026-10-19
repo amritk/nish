@@ -1,5 +1,5 @@
 // A task's own array stored into a field of its argument is reachable from
-// there, so the store into it before is a store into shared memory too.
+// there: the store into the field is a store into shared memory, and is named.
 import { scope } from "nish/threads";
 
 class Holder {

@@ -12,12 +12,15 @@
 // `src/attributes.ts` reads: what a construct calls has to match what it
 // emits exactly, so both live beside the lowering they describe.
 
+import { unwrapBoundsParens } from "./bounds"
 import { Emitter } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
+import { emitPanicTail, panicTailCallees } from "./emit-builtins"
 import { templateParts } from "./emit-util"
-import { IRModule } from "./ir"
+import { IRBlock, IRModule } from "./ir"
 import { INDEX_OF_ANY_KERNEL } from "./kernels"
-import { N_TEMPLATE_TEXT, Node } from "./nodes"
+import { N_NULL, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
+import { FunctionSig } from "./program"
 import { irEscape } from "./strings"
 import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
 
@@ -468,6 +471,172 @@ export const stringConstructCallees = (
     out.push("nish_str_at")
   }
   return out
+}
+
+// ---- A `string` handed to C ------------------------------------------------------
+
+/**
+ * Whether the argument a `declare function` takes as a `string` needs no NUL
+ * check (WP27 S3.1, `docs/wp27-ffi.md` §8c): a literal with no NUL byte in it,
+ * which the checker reads at compile time, or a `null` literal, which passes
+ * `NULL`. Everything else may hold a NUL that C would read as the end. The
+ * attribute pass asks this to record the `ffi-nul` site that the emitter makes.
+ */
+export const foreignStringIsNulFree = (arg: Node): boolean => {
+  const inner = unwrapBoundsParens(arg)
+  return inner.kind === N_NULL || (inner.kind === N_STRING && inner.text.indexOf(String.fromCharCode(0)) < 0)
+}
+
+/** The runtime symbols a checked string argument to C calls, for the attribute pass. */
+export const foreignStringCallees = (out: string[]): void => {
+  out.push("nish_str_index_of")
+  panicTailCallees(out)
+}
+
+/**
+ * Argument `index` of a call to the `declare function` `callee`, whose
+ * parameter is a `string` or `string | null`, lowered from `value` (the
+ * `nish_str` header) to C's `const char *` (§8a): the bytes 8 into the header,
+ * which the layout already ends with a NUL, so nothing is copied. `null` is
+ * `NULL`.
+ *
+ * A string that may hold a NUL is searched for one first, and a hit panics
+ * rather than hand C a shorter string than the program holds (§8c). The search
+ * is `nish_str_index_of` against a one-byte needle, which is `memchr` over the
+ * bytes the callee is about to read: it adds nothing to `runtime.c`, whose
+ * size budget a named `nish_ffi_cstr` would have had to grow by 45 bytes.
+ */
+export const emitForeignString = (
+  emitter: Emitter,
+  arg: Node,
+  value: string,
+  callee: FunctionSig,
+  index: i32
+): string => {
+  const fn = emitter.fn
+  if (unwrapBoundsParens(arg).kind === N_NULL) {
+    return "null"
+  }
+  if (foreignStringIsNulFree(arg)) {
+    return fn.emitValue(`getelementptr inbounds i8, i8* ${value}, i64 8`)
+  }
+  let nullBlock: IRBlock | null = null
+  let joinBlock: IRBlock | null = null
+  if (emitter.table.isNullable(emitter.typeOf(arg))) {
+    const join = fn.newBlock("ffi.join")
+    const someBlock = fn.newBlock("ffi.some")
+    nullBlock = fn.currentBlock()
+    joinBlock = join
+    const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
+    fn.emit(`br i1 ${isNull}, label %${join.label}, label %${someBlock.label}`)
+    fn.placeBlock(someBlock)
+  }
+  const nul = emitter.stringConstant(String.fromCharCode(0))
+  const at = fn.emitValue(`call i64 ${emitter.useRuntime("nish_str_index_of")}(i8* ${value}, i8* ${nul})`)
+  const holds = fn.emitValue(`icmp sge i64 ${at}, 0`)
+  const failBlock = fn.newBlock("ffi.nul")
+  const okBlock = fn.newBlock("ffi.ok")
+  fn.emit(`br i1 ${holds}, label %${failBlock.label}, label %${okBlock.label}`)
+  fn.placeBlock(failBlock)
+  const message =
+    `\`${callee.sourceName}\`: argument ${index + 1} (${callee.paramNames[index]}) holds a NUL byte, ` +
+    "which C would read as the end of the string"
+  emitPanicTail(emitter, emitter.stringConstant(message))
+  fn.placeBlock(okBlock)
+  const data = fn.emitValue(`getelementptr inbounds i8, i8* ${value}, i64 8`)
+  if (nullBlock === null || joinBlock === null) {
+    return data
+  }
+  fn.emit(`br label %${joinBlock.label}`)
+  fn.placeBlock(joinBlock)
+  return fn.emitValue(`phi i8* [ null, %${nullBlock.label} ], [ ${data}, %${okBlock.label} ]`)
+}
+
+/**
+ * The runtime symbols a `string` from a `declare function` calls (WP27 S3.2),
+ * for the attribute pass: the copy, and the panic tail when `NULL` cannot be
+ * answered as `null`.
+ */
+export const foreignResultCallees = (out: string[], nullable: boolean): void => {
+  out.push("nish_str_new")
+  if (!nullable) {
+    panicTailCallees(out)
+  }
+}
+
+/**
+ * The module's one copy of a C string into the arena, `@nish.ffi.str`: the
+ * bytes up to the NUL, counted here, then `nish_str_new`. It is a definition
+ * rather than a call of `strlen` because the program may declare `strlen`
+ * itself, with a signature of its own, and a module holds one `declare` per
+ * name; and it is not `runtime.c`'s, which has no bytes of its `.text`
+ * budget left (`tests/runtime-budgets.js`).
+ */
+const foreignCopy = (newStr: string): string => {
+  const lines: string[] = []
+  lines.push("define private i8* @nish.ffi.str(i8* %p) {")
+  lines.push("entry:")
+  lines.push("  br label %scan")
+  lines.push("")
+  lines.push("scan:")
+  lines.push("  %n = phi i64 [ 0, %entry ], [ %next, %scan ]")
+  lines.push("  %at = getelementptr inbounds i8, i8* %p, i64 %n")
+  lines.push("  %byte = load i8, i8* %at, align 1")
+  lines.push("  %next = add i64 %n, 1")
+  lines.push("  %end = icmp eq i8 %byte, 0")
+  lines.push("  br i1 %end, label %copy, label %scan")
+  lines.push("")
+  lines.push("copy:")
+  lines.push(`  %s = call i8* ${newStr}(i8* %p, i64 %n)`)
+  lines.push("  ret i8* %s")
+  lines.push("}")
+  return lines.join("\n")
+}
+
+/**
+ * The NUL-terminated bytes at `value`, an `i8*` that is not null, copied into
+ * the arena by the module's `@nish.ffi.str`: a `declare function`'s `string`
+ * result once it is known not to be `NULL`, and `readCString`'s argument
+ * (WP27 S3.3), which a `CPtr` type keeps from being null.
+ */
+export const emitCStringCopy = (emitter: Emitter, value: string): string => {
+  const copy = emitter.useRuntime("nish_str_new")
+  emitter.module.addRawDefinition(foreignCopy(copy))
+  return emitter.fn.emitValue(`call i8* @nish.ffi.str(i8* ${value})`)
+}
+
+/**
+ * The `const char *` a call of the `declare function` `callee` answered,
+ * `value`, as the `string` or `string | null` it is declared to return (§8d):
+ * copied into the arena, so the string is the program's and C keeps its own,
+ * which may be a static buffer the next call overwrites (`strerror`) or memory
+ * the environment owns (`getenv`). `NULL` is `null` for `string | null`, and
+ * for a `string` it is the `ffi-null` panic, because nothing the compiler can
+ * see says the C function never answers it.
+ */
+export const emitForeignStringResult = (emitter: Emitter, callee: FunctionSig, value: string): string => {
+  const fn = emitter.fn
+  const nullable = emitter.table.isNullable(callee.returnType)
+  const isNull = fn.emitValue(`icmp eq i8* ${value}, null`)
+  const nullBlock = fn.newBlock(nullable ? "ffi.none" : "ffi.null")
+  const someBlock = fn.newBlock("ffi.copy")
+  fn.emit(`br i1 ${isNull}, label %${nullBlock.label}, label %${someBlock.label}`)
+  if (!nullable) {
+    fn.placeBlock(nullBlock)
+    const message = `\`${callee.sourceName}\` returned NULL for a \`string\` result; declare it \`string | null\``
+    emitPanicTail(emitter, emitter.stringConstant(message))
+    fn.placeBlock(someBlock)
+    return emitCStringCopy(emitter, value)
+  }
+  const join = fn.newBlock("ffi.join")
+  fn.placeBlock(someBlock)
+  const copied = emitCStringCopy(emitter, value)
+  const copiedFrom = fn.currentBlock()
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(nullBlock)
+  fn.emit(`br label %${join.label}`)
+  fn.placeBlock(join)
+  return fn.emitValue(`phi i8* [ ${copied}, %${copiedFrom.label} ], [ null, %${nullBlock.label} ]`)
 }
 
 // ---- Operators ----------------------------------------------------------------------
