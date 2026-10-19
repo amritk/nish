@@ -80,6 +80,12 @@
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  *
+ * **The Date.** A final response carries the `date` in `conn.date`, 29
+ * bytes of IMF-fixdate, right after `:status`, unless the program's fields
+ * hold their own; a 1xx and trailers carry none. A bare connection has no
+ * clock, so `date` starts empty and nothing is sent; `Http2TlsServer` fills
+ * it from its `HttpDate` (RFC 9110 §6.6.1).
+ *
  * Written from RFC 9113 and RFC 8441, not ported from another implementation.
  */
 import {
@@ -302,6 +308,21 @@ const http2CheckWindow = (what: string, buf: u8[], off: i32, len: i32): void => 
   }
 }
 
+/** Whether one of `names` is `date` in any ASCII case (RFC 9110 §5.1). */
+const http2NamesHoldDate = (names: u8[][]): boolean => {
+  // An ASCII letter's case is its 0x20 bit, and every octet of `date` is a letter.
+  const bit: i32 = 32
+  for (const name of names) {
+    if (toI32(name.length) === 4) {
+      const d: boolean = (toI32(name[0]) | bit) === 100 && (toI32(name[1]) | bit) === 97
+      if (d && (toI32(name[2]) | bit) === 116 && (toI32(name[3]) | bit) === 101) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 /** Panics unless `value` lies in `[low, high]`: a cap out of range is the program's mistake. */
 const http2CheckCap = (what: string, value: i32, low: i32, high: i32): void => {
   if (value < low || value > high) {
@@ -338,6 +359,15 @@ export class Http2Connection {
   /** The bytes of `:status` and of a three-digit status, reused for every response. */
   statusName: u8[]
   statusValue: u8[]
+  /**
+   * The `date` every final response carries (RFC 9110 §6.6.1), as the 29
+   * bytes of an IMF-fixdate, or empty for none. A bare connection has no
+   * clock, so it starts empty; `Http2TlsServer` points it at its `HttpDate`'s
+   * bytes, which that rewrites in place once a second.
+   */
+  date: u8[]
+  /** The bytes of `date`, the field's name, made once. */
+  dateName: u8[]
   /** GOAWAY's debug data, which the server never sends: one empty array, made once. */
   noDebug: u8[]
   /** The server's SETTINGS, made once and sent by every `restart`. */
@@ -436,6 +466,8 @@ export class Http2Connection {
     this.statusName = httpFieldBytes(":status")
     this.noDebug = []
     this.statusValue = [48, 48, 48]
+    this.date = []
+    this.dateName = httpFieldBytes("date")
     this.data = this.input
     this.settingIds = [
       H2_SETTINGS_HEADER_TABLE_SIZE,
@@ -1070,7 +1102,8 @@ export class Http2Connection {
    * sending (§8.1), so the stream never reaches the program.
    */
   tooLarge(id: i32): void {
-    this.encodeStatus(H2_STATUS_TOO_LARGE)
+    // The control reserve holds this with its date: under fifty bytes.
+    this.encodeStatus(H2_STATUS_TOO_LARGE, true)
     const n: i32 = toI32(this.encoded.length)
     this.wrote(
       http2WriteHeaders(
@@ -1089,8 +1122,14 @@ export class Http2Connection {
     }
   }
 
-  /** Empties `encoded` and starts a block with `:status`, or with nothing for 0 (trailers). */
-  encodeStatus(status: i32): void {
+  /**
+   * Empties `encoded` and starts a block with `:status`, or with nothing for
+   * 0 (trailers), then with `date` when `withDate` and the status is final.
+   * Both are literals without indexing, so the dynamic table never moves:
+   * `date` is the static table's name 33 and a value of 29 bytes, in Huffman
+   * when that is shorter.
+   */
+  encodeStatus(status: i32, withDate: boolean): void {
     while (toI32(this.encoded.length) > 0) {
       this.encoded.pop()
     }
@@ -1099,6 +1138,12 @@ export class Http2Connection {
       this.statusValue[1] = toU8(((status / 10) % 10) + H2_DIGIT_ZERO)
       this.statusValue[2] = toU8((status % 10) + H2_DIGIT_ZERO)
       this.encoder.encodeField(this.encoded, this.statusName, this.statusValue, HPACK_INDEX_WITHOUT, false)
+    }
+    if (withDate && status >= 200 && toI32(this.date.length) > 0) {
+      const huffman: boolean =
+        hpackHuffmanLength(this.encoder.huffman, this.date, H2_ZERO, toI32(this.date.length)) <
+        toI32(this.date.length)
+      this.encoder.encodeField(this.encoded, this.dateName, this.date, HPACK_INDEX_WITHOUT, huffman)
     }
   }
 
@@ -1263,12 +1308,18 @@ export class Http2Connection {
     for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length); k++) {
       bound = bound + toI64(names[k].length) + toI64(values[k].length) + toI64(11)
     }
+    // The server's `date` goes on a final response unless the program sent
+    // its own, so a response never carries two.
+    const withDate: boolean = status >= 200 && toI32(this.date.length) > 0 && !http2NamesHoldDate(names)
+    if (withDate) {
+      bound = bound + toI64(this.dateName.length) + toI64(this.date.length) + toI64(11)
+    }
     const frames: i64 = bound / toI64(this.peerMaxFrameSize) + toI64(1)
     const need: i64 = bound + frames * toI64(H2_FRAME_HEADER_SIZE)
     if (need > toI64(this.bodyRoom())) {
       return toI64(this.output.length) < need + toI64(H2_CONTROL_RESERVE) ? H2_INVALID : H2_AGAIN
     }
-    this.encodeStatus(status)
+    this.encodeStatus(status, withDate)
     for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length); k++) {
       const value: u8[] = values[k]
       // One choice covers the name and the value, so Huffman is taken only

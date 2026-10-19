@@ -19,10 +19,12 @@ import {
   typedArraySpelling,
 } from "./arrays"
 import {
+  holderLiteralMessage,
   isSecretSource,
   isSecretTemplate,
   memberMessage as secretMemberMessage,
   newMessage as secretNewMessage,
+  secretFieldOf,
 } from "./secret"
 import { checkBuiltinArity, checkNamespaceProperty, dateRefusal } from "./builtins"
 import { checkResultMethod, checkResultProperty } from "./result"
@@ -616,7 +618,7 @@ export const checkNew = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   }
   // WP29 P3, C3: a channel is unbounded, so there is no capacity to give it.
   if (args.children.length > 0 && isChannelClass(info)) {
-    return ctx.errorType(expr, channelCapacityMessage())
+    return ctx.errorType(expr, channelCapacityMessage(label))
   }
   const ctor = info.ctor
   if (ctor !== null) {
@@ -684,6 +686,10 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
   const info = structOf(ctx, target)
   if (info === null) {
     return T_ERROR
+  }
+  // `nish:secret`: a holder's `Secret` field is set by its constructor alone.
+  if (secretFieldOf(ctx.table, info) !== null) {
+    return ctx.errorType(expr, holderLiteralMessage(info.name))
   }
   const seen: string[] = []
   for (const prop of expr.children) {

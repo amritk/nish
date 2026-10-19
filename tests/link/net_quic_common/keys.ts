@@ -4,13 +4,13 @@
 // wrapped in a `Secret`, a derived one read back through `expose` — and wipes
 // every `Secret` it made before it returns (docs/LANGUAGE.md, "Secrets").
 import { Secret, expose, secret, wipe } from "nish:secret";
-import { QuicKeys, quicKeyUpdateSecret, quicKeys, quicKeysUpdate } from "nish/net/quic-packet";
+import { QuicKeys, QuicKeysSlot, quicKeyUpdateSecret, quicKeys, quicKeysUpdate } from "nish/net/quic-packet";
 import { copyOf } from "../crypto_x25519/plain";
 
-/** `quicKeys` of a plain traffic secret. */
+/** `quicKeys` of a plain traffic secret, into a slot of its own. */
 export const quicKeysOf = (aead: i32, traffic: u8[]): QuicKeys | null => {
   const held: Secret<u8[]> = secret(copyOf(traffic));
-  const keys: QuicKeys | null = quicKeys(aead, held);
+  const keys: QuicKeys | null = quicKeys(new QuicKeysSlot(), aead, held);
   wipe(held);
   return keys;
 };
@@ -28,10 +28,10 @@ export const quicKeyUpdateCopy = (aead: i32, traffic: u8[]): u8[] | null => {
   return plain;
 };
 
-/** `quicKeysUpdate` with a plain next traffic secret. */
+/** `quicKeysUpdate` with a plain next traffic secret, into a slot of its own. */
 export const quicKeysUpdateOf = (keys: QuicKeys, nextTraffic: u8[]): QuicKeys | null => {
   const held: Secret<u8[]> = secret(copyOf(nextTraffic));
-  const next: QuicKeys | null = quicKeysUpdate(keys, held);
+  const next: QuicKeys | null = quicKeysUpdate(new QuicKeysSlot(), keys, held);
   wipe(held);
   return next;
 };

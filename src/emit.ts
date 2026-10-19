@@ -125,7 +125,14 @@ import {
   isGuardedAccess,
   isLockMethod,
 } from "./parallel"
-import { addStringConstant, copyString, emitIndexOfAnyKernel, emitTemplate } from "./emit-strings"
+import {
+  addStringConstant,
+  copyString,
+  emitForeignString,
+  emitForeignStringResult,
+  emitIndexOfAnyKernel,
+  emitTemplate,
+} from "./emit-strings"
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
@@ -643,6 +650,13 @@ export class Emitter {
     }
     const callee = this.program.nodeCallees[inner.id]
     if (callee === null) {
+      return false
+    }
+    // WP27 S3.2: a `string` from C is copied after the call returns
+    // (`emitForeignStringResult`), so the call is not the last thing. A call
+    // with a string argument (`strchr`) is refused by `marksTailCall` already;
+    // this keeps the copy out of a released scope for the rest by construction.
+    if (callee.foreign() && this.table.stripNull(callee.returnType) === T_STRING) {
       return false
     }
     const argTypes: i32[] = []
@@ -1472,9 +1486,13 @@ export class Emitter {
       // as the word, exactly as a `return` of one is — or as the arms when the
       // callee uses the private ABI.
       const want = sig.paramTypes[i]
-      const value = this.table.resultByValue(want)
+      let value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want, calleePrivate)
         : this.emitArgument(args.children[i], sig, i)
+      // WP27 S3.1: C takes the bytes, not the header (`emitForeignString`).
+      if (sig.foreign() && this.table.stripNull(want) === T_STRING) {
+        value = emitForeignString(this, args.children[i], value, sig, i)
+      }
       operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`)
       operandTypes.push(this.llvmAbi(want, calleePrivate))
       operandValues.push(value)
@@ -1514,13 +1532,30 @@ export class Emitter {
     // `tail`, which says the callee cannot reach this frame's stack slots, so
     // the frame may go before the jump. It is never both this and the reclaim
     // below: the proof excludes a callee the reclaim would bracket.
-    const tail = this.marksTailCall(expr)
+    //
+    // A map's or a `parallelFrom`'s chunk loop keeps each element its body
+    // answers and gives back the rest (`elementKeepSize`), ahead of WP9's
+    // reclaim: that one keeps the answer in this thread's arena, which the
+    // chunk releases, where this one moves it to the transfer block the
+    // caller adopts. The chunk keeps nothing else of an element, so no call
+    // the keep brackets is `tail`, whatever shape the loop's source takes,
+    // and the only route below that answers a string, typed JSON's, is kept
+    // too. The rest answer no element the keep covers: a number, nothing, or
+    // a `Result`, none of which `elementKeepSize` sizes.
+    const keepSize = elementKeepSize(this, this.currentSig, sig)
+    const tail = keepSize < 0 && this.marksTailCall(expr)
     if (tail) {
       this.emitScopeExit()
     }
+    const keepMark =
+      keepSize >= 0 ? this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`) : ""
     // Typed JSON: the code written from the class's fields (`src/emit-json.ts`).
     if (jsonRouteOf(sig) !== JSON_NONE) {
-      return emitJsonRoute(this, sig, operandValues)
+      const routed = emitJsonRoute(this, sig, operandValues)
+      if (keepSize < 0) {
+        return routed
+      }
+      return keepElement(this, this.llvmAbi(sig.returnType, calleePrivate), routed, keepSize, keepMark)
     }
     // WP38 S1: `nish/text`'s walk is the runtime kernel (`src/kernels.ts`),
     // which allocates nothing, so there is no bracket to open.
@@ -1533,15 +1568,10 @@ export class Emitter {
     const aesSeam = isWasmBuild(this.opts) ? AES_SEAM_NONE : isAesSeam(this.program, sig)
     const aesJoin: IRBlock | null =
       aesSeam === AES_SEAM_NONE ? null : this.emitAesKernelArm(aesSeam, operands)
-    // WP9: the mark goes after the arguments, so only the callee's own bumps
-    // are inside the bracket (`beginReclaim`).
-    // Where that does not apply, a map's or a `parallelFrom`'s chunk loop
-    // keeps each element its body answers and gives back the rest
-    // (`elementKeepSize`).
-    const reclaim = this.beginReclaim(sig)
-    const keepSize = tail || reclaim.length > 0 ? -1 : elementKeepSize(this, this.currentSig, sig)
-    const mark =
-      keepSize >= 0 ? this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`) : reclaim
+    // Elsewhere, WP9: the mark goes after the arguments, so only the
+    // callee's own bumps are inside the bracket (`beginReclaim`).
+    const reclaim = keepSize >= 0 ? "" : this.beginReclaim(sig)
+    const mark = keepSize >= 0 ? keepMark : reclaim
     const marker = tail ? "tail " : ""
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
@@ -1557,16 +1587,16 @@ export class Emitter {
     if (this.table.resultByValue(sig.returnType)) {
       return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate)
     }
-    if (keepSize >= 0) {
-      return keepElement(
-        this,
-        this.llvmAbi(sig.returnType, calleePrivate),
-        this.fn.emitValue(call),
-        keepSize,
-        mark
-      )
+    let answer = this.fn.emitValue(call)
+    // WP27 S3.2: C answers the bytes, and the program keeps a copy
+    // (`emitForeignStringResult`).
+    if (sig.foreign() && this.table.stripNull(sig.returnType) === T_STRING) {
+      answer = emitForeignStringResult(this, sig, answer)
     }
-    return this.endReclaim(mark, this.fn.emitValue(call))
+    if (keepSize >= 0) {
+      return keepElement(this, this.llvmAbi(sig.returnType, calleePrivate), answer, keepSize, mark)
+    }
+    return this.endReclaim(mark, answer)
   }
 
   /**

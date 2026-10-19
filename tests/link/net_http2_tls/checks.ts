@@ -4,13 +4,15 @@
 //   1. ALPN h2: the handshake, the server's SETTINGS once it is done, a GET
 //      answered with its body, a POST whose body is echoed back, and a
 //      hundred more DATA frames through one stream with the server's calls
-//      moving the arena not at all.
+//      moving the arena not at all; then, the server's clock pinned, a date
+//      on every response that costs the arena nothing as the clock moves on.
 //   2. The client's GOAWAY: the server finishes, sends close_notify, and its
 //      program closes the slot.
 //   3. ALPN that did not choose h2: the slot is shut down with close_notify
 //      and no HTTP/2 byte is sent.
 //   4. The pool: a client past it is shed, and a client that hangs up is
-//      closed; a free slot answers H2_ERROR and done.
+//      closed; a free slot answers H2_ERROR and done. Two slots send one
+//      date, formatted once between them.
 //
 // A third-party client drives the same server in `serve` mode (`main.ts`).
 import { TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
@@ -134,6 +136,9 @@ export const tlsChecks = (): i32 => {
 
   // --- 1. ALPN h2 ---------------------------------------------------------------------------
   const lb = new H2Loop(tcpConfig([H2_ALPN, "http/1.1"]), new Http2Config(), 2);
+  // The clock is pinned, so that whole heads compare: Fri, 16 Oct 2026 08:11:54 GMT.
+  const noon: i64 = 1792138314000;
+  lb.server.date.pin(noon);
   const a = new H2Client(lb);
   t.ok("a client offering h2 completes the handshake, the server's signature and Finished verified", a.handshake([H2_ALPN]) && a.verified);
   a.prefaces();
@@ -143,12 +148,12 @@ export const tlsChecks = (): i32 => {
   t.eqStr(
     "the server's SETTINGS come once the handshake is done, then the acknowledgement and the answer",
     a.awaitFrames(toI32(5)),
-    'SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 content-type=text/plain; DATA 1 26 "hello from nish/net/http2\n" end'
+    'SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain; DATA 1 26 "hello from nish/net/http2\n" end'
   );
   a.wire.headers(toI32(3), postOf("/echo", toI32(10)), ZERO);
   a.wire.data(toI32(3), "0123456789", H2_FLAG_END_STREAM);
   a.flush();
-  t.eqStr("a POST's body is echoed back", a.awaitFrames(toI32(2)), 'HEADERS 3 :status=200 content-type=text/plain; DATA 3 10 "0123456789" end');
+  t.eqStr("a POST's body is echoed back", a.awaitFrames(toI32(2)), 'HEADERS 3 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain; DATA 3 10 "0123456789" end');
 
   const open: string[] = [":method", "POST", ":scheme", "https", ":path", "/stream", ":authority", "example.com"];
   a.wire.headers(toI32(5), open, ZERO);
@@ -166,6 +171,37 @@ export const tlsChecks = (): i32 => {
   lb.measuring = false;
   t.eqI32("a hundred DATA frames through one open stream come back", echoed, toI32(100));
   t.ok(`and the server's calls moved the arena not at all (${lb.growth} bytes)`, lb.growth === toI64(0));
+  // A new stream costs the arena the same with or without a date, so what the
+  // date costs is the difference between five streams on a still clock and
+  // five more with the clock a second on before each.
+  lb.growth = toI64(0);
+  lb.measuring = true;
+  for (let k: i32 = 1; k <= 5; k++) {
+    a.wire.headers(toI32(5) + k * 2, getOf("/hello"), H2_FLAG_END_STREAM);
+    a.flush();
+    a.awaitFrames(toI32(2));
+  }
+  lb.measuring = false;
+  const still: i64 = lb.growth;
+  const formatted: i64 = lb.server.date.formats();
+  lb.growth = toI64(0);
+  lb.measuring = true;
+  let dated: i32 = 0;
+  for (let k: i32 = 1; k <= 5; k++) {
+    lb.server.date.pin(noon + toI64(k) * toI64(1000));
+    a.wire.headers(toI32(15) + k * 2, getOf("/hello"), H2_FLAG_END_STREAM);
+    a.flush();
+    if (a.awaitFrames(toI32(2)).indexOf(`:status=200 date=Fri, 16 Oct 2026 08:11:${54 + k} GMT content-type`) >= 0) {
+      dated = dated + 1;
+    }
+  }
+  lb.measuring = false;
+  lb.server.date.pin(noon);
+  t.eqI32("five responses, the pinned clock a second on before each, carry its date", dated, toI32(5));
+  t.ok(
+    `formatting it once a second, and the arena moves no further than on a still clock (${lb.server.date.formats() - formatted} formats, ${lb.growth} and ${still} bytes)`,
+    lb.server.date.formats() - formatted === toI64(5) && lb.growth === still
+  );
 
   // --- 2. The client's GOAWAY -------------------------------------------------------------------
   a.wire.data(toI32(5), "", H2_FLAG_END_STREAM);
@@ -196,7 +232,7 @@ export const tlsChecks = (): i32 => {
   t.eqStr(
     "its requests and its close_notify in one write: both requests are still answered",
     h.awaitFrames(toI32(7)),
-    'SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 content-type=text/plain; DATA 1 26 "hello from nish/net/http2\n" end; HEADERS 3 :status=200 content-type=text/plain; DATA 3 26 "hello from nish/net/http2\n" end'
+    'SETTINGS 1=4096,3=100,4=65535,5=16384,6=16384; WINDOW_UPDATE 0 983041; SETTINGS ack; HEADERS 1 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain; DATA 1 26 "hello from nish/net/http2\n" end; HEADERS 3 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain; DATA 3 26 "hello from nish/net/http2\n" end'
   );
   h.awaitFrames(toI32(1));
   t.ok("and only then does the server close its side", h.alerts.join(",") === "1 0" && lb.awaitClosed(toI32(3)));
@@ -208,6 +244,22 @@ export const tlsChecks = (): i32 => {
   t.ok("two clients fill the pool", c.handshake([H2_ALPN]) && d.handshake([H2_ALPN]));
   e.index = lb.connect();
   t.ok("a third is accepted and shed", lb.awaitEnd(e.index) && lb.refused === 1);
+  lb.server.date.pin(noon + toI64(60000));
+  const shared: i64 = lb.server.date.formats();
+  c.prefaces();
+  c.wire.headers(toI32(1), getOf("/c"), H2_FLAG_END_STREAM);
+  c.flush();
+  const fromC: string = c.awaitFrames(toI32(5));
+  d.prefaces();
+  d.wire.headers(toI32(1), getOf("/d"), H2_FLAG_END_STREAM);
+  d.flush();
+  const fromD: string = d.awaitFrames(toI32(5));
+  const minute: string = "HEADERS 1 :status=200 date=Fri, 16 Oct 2026 08:12:54 GMT content-type";
+  t.ok("each slot's response carries the one date", fromC.indexOf(minute) >= 0 && fromD.indexOf(minute) >= 0);
+  t.ok(
+    `which the two slots share: formatted once between them (${lb.server.date.formats() - shared})`,
+    lb.server.date.formats() - shared === toI64(1)
+  );
   lb.hangUp(c.index);
   lb.hangUp(d.index);
   t.ok("two clients that hang up are closed", lb.awaitClosed(toI32(5)) && lb.server.busy() === 0);

@@ -95,8 +95,8 @@ import { literalLength } from "./emit-arrays"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { StringSet } from "./map"
 import { Options } from "./options"
-import { isSpawnEntry } from "./parallel"
-import { CheckedProgram, elementStride, FunctionSig } from "./program"
+import { chunkDstIndex, isMapEntry, isSpawnEntry } from "./parallel"
+import { CheckedProgram, elementStride, FunctionSig, ROLE_FUNCTION } from "./program"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols"
 import { isNumeric, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
 
@@ -125,7 +125,9 @@ const worse = (a: i32, b: i32): i32 => (a >= b ? a : b)
  * a use-after-free rather than a missed optimisation, so the three `mem_*_scope`
  * cases pin one each. stage0's `src/codegen/escape.ts` holds the same four names in a
  * `Set`; a module constant in this language is a scalar or a string, so the set
- * is a function here and the two are read side by side.
+ * is a function here and the two are read side by side. `readCString` (WP27
+ * S3.3) copies C's bytes into the arena at the call, as a `declare function`'s
+ * `string` result does, and `ffi_owned_string` pins it after `churn()`.
  */
 const isAllocatingBuiltin = (name: string): boolean =>
   name === "readFileSync" ||
@@ -133,7 +135,8 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "readFileBytesSync" ||
   name === "getenv" ||
   name === "readdirSync" ||
-  name === "realpathSync"
+  name === "realpathSync" ||
+  name === "readCString"
 
 /**
  * Whether the builtin `name` answers an array whose elements were allocated by
@@ -229,6 +232,18 @@ export class EscapeResult {
    */
   carriedStores: Node[]
   carriers: Local[]
+  /**
+   * The parameter, by index, whose elements this function fills with strings
+   * the call allocated, or -1. A map's chunk loop stores each answer into
+   * `dst` (`chunkDstIndex`), and a function that only hands its own
+   * parameter on to such a call fills it in turn. Those stores are not an
+   * escape here: the array is the caller's, so the caller decides at the call
+   * (`decideFills`) whether its strings outlive the caller's frame, exactly as
+   * `storedIntoReturnedArray` decides for an array this function made. A
+   * function that fills a parameter is never `contained`, so no scope of its
+   * own releases what it stored.
+   */
+  fillsParam: i32
 
   constructor(nodeCount: i32) {
     this.escapingNodes = []
@@ -247,6 +262,7 @@ export class EscapeResult {
     this.usesArenaControl = false
     this.callSites = []
     this.escapeSite = null
+    this.fillsParam = -1
   }
 
   /** Set `allocEscapes`, remembering `node` unless an earlier escape already is its site. */
@@ -322,6 +338,8 @@ class EscapeAnalysis {
   declarations: Node[]
   /** `push` receivers that are locals, checked against the site locals below. */
   pushes: Node[]
+  /** Calls of a function that fills one of its parameters (`fillsParam`), decided last. */
+  fills: Node[]
   logsNumbers: boolean
   /** WP17: this function hands its `Result` back in a register, not as a pointer. */
   returnsByValueResult: boolean
@@ -360,6 +378,7 @@ class EscapeAnalysis {
     this.refNodes = []
     this.declarations = []
     this.pushes = []
+    this.fills = []
     this.logsNumbers = false
     this.outcomeLocals = []
     this.outcomeValues = []
@@ -485,9 +504,18 @@ class EscapeAnalysis {
     const program = this.unit.program
     const callee = program.nodeCallees[call.id]
     if (callee !== null) {
+      const g = this.facts.get(callee.name)
+      if (g !== null && g.fillsParam >= 0) {
+        this.fills.push(call)
+      }
       if (this.isPointerResult(callee.returnType)) {
         const site = new Site(call, false)
-        site.callee = callee.name
+        // WP27 S3.2: a `string` from a `declare function` is copied into this
+        // function's arena at the call (`emitForeignStringResult`), so it is
+        // this function's allocation, as `s.substring(...)` is, and no callee's.
+        if (!callee.foreign()) {
+          site.callee = callee.name
+        }
         this.sites.push(site)
       } else if (this.table.resultByValue(callee.returnType)) {
         // WP17: a `Result` returned in a register is materialised by the
@@ -636,7 +664,11 @@ class EscapeAnalysis {
     }
   }
 
-  /** Whether `callee` retains the pointer passed as parameter `index` (`this` is 0). */
+  /**
+   * Whether `callee` retains the pointer passed as parameter `index` (`this`
+   * is 0) past the call: `outlives` rather than `captured`, so an array handed
+   * to a parallel region is not kept by it (`markParallelEntry`).
+   */
   calleeCaptures(callee: FunctionSig, index: i32): boolean {
     const g = this.facts.get(callee.name)
     if (g === null || index < 0 || index >= g.paramNames.length) {
@@ -644,7 +676,7 @@ class EscapeAnalysis {
     }
     const name = g.paramNames[index]
     const pointer = g.pointerParam(name)
-    return pointer !== null ? pointer.captured : g.escaping.has(name)
+    return pointer !== null ? pointer.outlives : g.escaping.has(name)
   }
 
   /**
@@ -708,6 +740,14 @@ class EscapeAnalysis {
         found.index < callee.paramTypes.length &&
         this.table.resultByValue(callee.paramTypes[found.index])
       ) {
+        return new Outcome(FLOW_LOCAL, true, false)
+      }
+      // WP27 S3.1: a `string` handed to a `declare function` is borrowed for
+      // the length of the call, and the C function may not keep its address
+      // (`docs/wp27-ffi.md` §8b). Nothing about a C body can be proved, so
+      // this is the decision read as a fact: a read, as `console.log`'s is,
+      // and the arena scope may release once the call has returned.
+      if (callee !== null && callee.foreign()) {
         return new Outcome(FLOW_LOCAL, true, false)
       }
       const captures = callee === null ? true : this.calleeCaptures(callee, found.index)
@@ -822,6 +862,9 @@ class EscapeAnalysis {
       }
     }
     const v: Local | null = receiver === null ? null : this.freshArrayLocal(receiver)
+    if (receiver !== null && v === null && parent.kind === N_BINARY) {
+      return this.storedIntoChunkDst(parent, receiver)
+    }
     // Only a string is carried. A string is one flat block, so the caller
     // follows all of it by following the array's elements; an array or an
     // object holds pointers of its own, which no caller follows a second
@@ -844,6 +887,161 @@ class EscapeAnalysis {
     this.result.carriedStores.push(parent)
     this.result.carriers.push(v)
     return new Outcome(outcome.flow, false, false)
+  }
+
+  /**
+   * `dst[i] = expr` standing alone in a map's chunk loop, where `dst` is the
+   * parameter `chunkDstIndex` names and holds strings: the string goes to
+   * whoever owns `dst`, so it `leaks` without escaping, and the function
+   * fills that parameter (`fillsParam`). The store is carried, so a pass of
+   * the loop does not release the string it just stored.
+   */
+  storedIntoChunkDst(store: Node, receiver: Node): Outcome | null {
+    const at = chunkDstIndex(this.sig)
+    const e = unwrapParens(receiver)
+    const v: Local | null = e.kind === N_IDENT ? this.unit.program.nodeLocals[e.id] : null
+    if (
+      at < 0 ||
+      at >= this.sig.paramNames.length ||
+      at >= this.sig.paramTypes.length ||
+      v === null ||
+      v.storage !== STORAGE_PARAM ||
+      v.name !== this.sig.paramNames[at] ||
+      this.table.stripNull(this.table.refOf(this.sig.paramTypes[at])) !== T_STRING
+    ) {
+      return null
+    }
+    this.result.fillsParam = at
+    this.result.carriedStores.push(store)
+    this.result.carriers.push(v)
+    return new Outcome(FLOW_LEAKS, false, false)
+  }
+
+  /**
+   * Each call of a function that fills its parameter `k` (`fillsParam`): the
+   * strings it stores into argument `k` are this function's to account for.
+   * A parameter of this function that the body only hands on to such calls
+   * and reads the length of makes this function fill it in turn. A fresh
+   * array of this function's own that is only filled, tested and returned
+   * carries them as `storedIntoReturnedArray` carries a store: they die with
+   * a `local` array and go to the caller with a returned one. Anything else
+   * could hand a string on, and is an escape.
+   */
+  decideFills(): void {
+    const program = this.unit.program
+    for (const call of this.fills) {
+      const callee = program.nodeCallees[call.id]
+      const g: FunctionFacts | null = callee === null ? null : this.facts.get(callee.name)
+      const args = call.children[1]
+      if (
+        callee === null ||
+        callee.role !== ROLE_FUNCTION ||
+        g === null ||
+        g.fillsParam < 0 ||
+        g.fillsParam >= args.children.length
+      ) {
+        this.result.noteEscape(call)
+        continue
+      }
+      const arg = unwrapParens(args.children[g.fillsParam])
+      const v: Local | null = arg.kind === N_IDENT ? program.nodeLocals[arg.id] : null
+      if (v !== null && v.storage === STORAGE_PARAM && this.forwardsFill(v)) {
+        const at = this.sig.paramNames.indexOf(v.name)
+        if (at >= 0 && (this.result.fillsParam < 0 || this.result.fillsParam === at)) {
+          this.result.fillsParam = at
+          this.result.carriedStores.push(call)
+          this.result.carriers.push(v)
+          continue
+        }
+      }
+      const made: Local | null = v === null ? null : this.freshArrayLocal(arg)
+      if (v !== null && made !== null && made === v && this.onlyFilled(v)) {
+        const fresh: Local[] = []
+        const outcome = this.localOutcome(v, fresh)
+        if (!outcome.escapes && outcome.flow !== FLOW_LEAKS) {
+          if (outcome.flow === FLOW_RETURNED) {
+            this.result.returnsFreshElements = true
+          }
+          this.result.carriedStores.push(call)
+          this.result.carriers.push(v)
+          continue
+        }
+      }
+      this.result.noteEscape(call)
+    }
+  }
+
+  /** `ref` is the argument a call in `fills` passes where its callee fills. */
+  isFillArgument(ref: Node): boolean {
+    let node = ref
+    let list = this.unit.parents.parentOf(node)
+    while (list !== null && list.kind === N_PAREN) {
+      node = list
+      list = this.unit.parents.parentOf(node)
+    }
+    const call: Node | null = list === null ? null : this.unit.parents.parentOf(list)
+    if (
+      list === null ||
+      call === null ||
+      list.kind !== N_LIST ||
+      call.kind !== N_CALL ||
+      call.children[1] !== list
+    ) {
+      return false
+    }
+    const callee = this.unit.program.nodeCallees[call.id]
+    const g: FunctionFacts | null = callee === null ? null : this.facts.get(callee.name)
+    return (
+      g !== null &&
+      g.fillsParam >= 0 &&
+      g.fillsParam < list.children.length &&
+      list.children[g.fillsParam] === node
+    )
+  }
+
+  /**
+   * Parameter `v` of a plain function, not a lifted arrow, which may be
+   * called where no analysis sees the call: the body does nothing with it but
+   * pass it where a callee fills and read its length.
+   */
+  forwardsFill(v: Local): boolean {
+    const body = this.sig.body()
+    if (this.sig.lifted || this.sig.role !== ROLE_FUNCTION || body === null) {
+      return false
+    }
+    const refs: Node[] = []
+    identRefs(this.unit.program, body, v, refs)
+    for (const ref of refs) {
+      const access = this.unit.parents.parentOf(ref)
+      const length =
+        access !== null && access.kind === N_MEMBER && access.children[0] === ref && access.text === "length"
+      if (!length && !this.isFillArgument(ref)) {
+        return false
+      }
+    }
+    return true
+  }
+
+  /**
+   * Fresh array `v` is only filled, tested, returned and passed where a
+   * callee fills, and no arrow names it, whose uses the collection skips.
+   */
+  onlyFilled(v: Local): boolean {
+    const body = this.sig.body()
+    if (body === null || this.table.stripNull(this.table.refOf(v.type)) !== T_STRING) {
+      return false
+    }
+    const refs: Node[] = []
+    identRefs(this.unit.program, body, v, refs)
+    if (refs.length !== this.refsOf(v).length) {
+      return false
+    }
+    for (const ref of refs) {
+      if (!this.isCarrierUse(ref) && !this.isFillArgument(ref)) {
+        return false
+      }
+    }
+    return true
   }
 
   /** `node` is a statement's whole expression, so its value is dropped. */
@@ -1061,6 +1259,8 @@ class EscapeAnalysis {
       }
     }
 
+    this.decideFills()
+
     // WP17: the same decision for each by-value `Result` parameter. A
     // parameter never referenced has no refs and therefore no way to escape,
     // so its object stays an alloca (and the unpack is dead code the optimiser
@@ -1212,11 +1412,13 @@ class EscapeAnalysis {
  * bumps the arena has nothing to reclaim, so the pair of calls is skipped.
  */
 export const reclaimsReturnedString = (callee: FunctionSig, facts: FactsTable): boolean => {
-  if (callee.returnType !== T_STRING) {
+  // WP27 S3.2: a `declare function`'s copy is the caller's own allocation, the
+  // last one the call makes, so there is nothing under it to reclaim.
+  if (callee.returnType !== T_STRING || callee.foreign()) {
     return false
   }
   const g = facts.get(callee.name)
-  return g !== null && g.allocates && !g.allocEscapes && !g.usesArenaControl
+  return g !== null && g.allocates && !g.allocEscapes && g.fillsParam < 0 && !g.usesArenaControl
 }
 
 /**
@@ -1319,8 +1521,10 @@ export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
  *    store and `push` (`reject_argv_assign`, `reject_argv_push`). A callee can
  *    reach no more than it is handed, and what it is handed is either one of
  *    these parameters, something reached through them, or memory allocated
- *    during the call. No pointer this compiler allocated crosses the C
- *    boundary either (`docs/wp27-ffi.md` §7), so C holds none of them.
+ *    during the call. C holds none of them past a call either: the only
+ *    pointer this compiler allocated that crosses the C boundary is a
+ *    `string` lent to a `declare function` for the length of that call, and
+ *    the C function may not keep it (WP27 S3.1, `docs/wp27-ffi.md` §8b).
  *  - **None of that memory has a slot a pointer fits in.** A pointer outlives
  *    a call only by being stored, and a scalar field has no room for one. A
  *    string is immutable. An array is refused even of numbers, because a
@@ -1364,6 +1568,17 @@ const holdsNoPointerSlot = (program: CheckedProgram, table: TypeTable, type: i32
     }
   }
   return true
+}
+
+/** Every identifier under `node` that names `local`, arrow bodies included. */
+const identRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[]): void => {
+  const named: Local | null = node.kind === N_IDENT ? program.nodeLocals[node.id] : null
+  if (named !== null && named === local) {
+    out.push(node)
+  }
+  for (const child of node.children) {
+    identRefs(program, child, local, out)
+  }
 }
 
 export const analyzeEscapes = (
@@ -2028,10 +2243,22 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
     )
   }
   if (why === LOOP_CALLEE_STORES) {
-    return (
+    const stores =
       `\`${scope.name}\` is called inside ${block} and stores an allocation into memory, where this analysis stops ` +
       "following it: what it stores may be the block's and outlive the release"
-    )
+    // A map whose body answers arrays stores each one into its result, as a
+    // loop that pushes arrays would; one that answers numbers or strings is
+    // followed (`storedIntoChunkDst`) and may stay in the block. A `spawn`
+    // that stores its task's array gets the plain message.
+    const callee: FunctionSig | null = at.kind === N_CALL ? unit.program.nodeCallees[at.id] : null
+    if (callee !== null && isMapEntry(callee)) {
+      return (
+        stores +
+        " (a map whose body answers arrays stores each one into its result, which the block cannot follow: run that map " +
+        "outside the block, or answer numbers or strings, which a map inside a block may)"
+      )
+    }
+    return stores
   }
   if (why === LOOP_UNSEEN) {
     return (
