@@ -1873,6 +1873,10 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
     narrow(ctx, cond.children[1], scope, whenTrue)
     return
   }
+  if (op === "&&" || op === "||") {
+    narrowEither(ctx, cond, scope, whenTrue)
+    return
+  }
   if (op !== "===" && op !== "!==") {
     return
   }
@@ -2019,6 +2023,11 @@ export const narrowHeld = (
   if (current.length === 0 || kept.length === current.length) {
     return
   }
+  holdKept(ctx, scope, local, kept)
+}
+
+/** Record that the enum variable `local` holds one of `kept`, fewer members than it could before. */
+const holdKept = (ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void => {
   if (kept.length === 1) {
     scope.hold(local, kept[0])
     scope.narrow(local, kept[0])
@@ -2101,6 +2110,18 @@ export const narrowToTags = (
   if (keptVariants.length === possible) {
     return
   }
+  narrowToVariants(ctx, scope, local, keptVariants, keptTags)
+}
+
+/** Narrow the union variable `local` to `kept`, variants of its union in its order, with their tags. */
+const narrowToVariants = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  keptVariants: i32[],
+  keptTags: i32[]
+): void => {
+  const union = ctx.table.stripNull(local.type)
   if (keptVariants.length === 0) {
     scope.narrow(local, NARROWED_NONE)
   } else if (keptVariants.length === 1) {
@@ -2111,6 +2132,138 @@ export const narrowToTags = (
       ctx.table.unionOf(keptVariants, keptTags, ctx.table.tagEnumOf(union), ctx.table.tagNameOf(union))
     )
   }
+}
+
+/**
+ * The true side of `a || b`, and the false side of `a && b`: either `a`'s
+ * side holds, or `a`'s other side and then `b`'s. A union variable is
+ * narrowed to the variants either side leaves it, an enum variable to the
+ * members either side leaves it, as TypeScript joins them, so
+ * `k === Kind.A || k === Kind.B` leaves `k` one of the two and a later
+ * `k === Kind.C` is the disjoint comparison `checkEquality` refuses. A
+ * variable one side does not narrow keeps what it held before.
+ */
+const narrowEither = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
+  const first = scope.child()
+  narrow(ctx, cond.children[0], first, whenTrue)
+  const second = scope.child()
+  narrow(ctx, cond.children[0], second, !whenTrue)
+  clearNarrowingsAssignedIn(ctx, cond.children[1], second)
+  narrow(ctx, cond.children[1], second, whenTrue)
+  const tested: Local[] = []
+  addLocals(tested, first.narrowedVars)
+  addLocals(tested, first.heldVars)
+  addLocals(tested, second.narrowedVars)
+  addLocals(tested, second.heldVars)
+  for (const local of tested) {
+    if (ctx.table.isEnum(local.type)) {
+      joinHeld(ctx, scope, local, first, second)
+    } else {
+      joinVariants(ctx, scope, local, first, second)
+    }
+  }
+}
+
+/** Append to `into` each of `locals` it does not already have. */
+const addLocals = (into: Local[], locals: Local[]): void => {
+  for (const local of locals) {
+    let seen = false
+    for (const had of into) {
+      if (had === local) {
+        seen = true
+      }
+    }
+    if (!seen) {
+      into.push(local)
+    }
+  }
+}
+
+/** Narrow the enum variable `local` to the members `first` or `second` leaves it, when fewer than it holds. */
+const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
+  const current = heldMembers(ctx, scope, local)
+  const fromFirst = heldMembers(ctx, first, local)
+  const fromSecond = heldMembers(ctx, second, local)
+  const kept: i32[] = []
+  for (const member of current) {
+    let named = false
+    for (const other of fromFirst) {
+      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+        named = true
+      }
+    }
+    for (const other of fromSecond) {
+      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+        named = true
+      }
+    }
+    if (named) {
+      kept.push(member)
+    }
+  }
+  if (current.length === 0 || kept.length === current.length) {
+    return
+  }
+  holdKept(ctx, scope, local, kept)
+}
+
+/**
+ * The variants of `union` a variable of type `type` may be: `type` itself
+ * when it is one, a narrowed union's variants, or none when `type` is not
+ * made of them (`union | null`).
+ */
+const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
+  const variants: i32[] = []
+  if (ctx.table.isUnion(type)) {
+    for (const variant of ctx.table.variantsOf(type)) {
+      variants.push(variant)
+    }
+  } else if (ctx.table.hasVariant(union, type)) {
+    variants.push(type)
+  }
+  return variants
+}
+
+/** Narrow the union variable `local` to the variants `first` or `second` leaves it, when fewer than it may be. */
+const joinVariants = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
+  const union = ctx.table.stripNull(local.type)
+  if (!ctx.table.isUnion(union) || scope.exhausted(local)) {
+    return
+  }
+  const fromFirst = variantsIn(ctx, union, first.typeOf(local))
+  const fromSecond = variantsIn(ctx, union, second.typeOf(local))
+  // A side that does not leave the variable a set of variants leaves it
+  // whatever it was declared, and so does the join.
+  if (
+    (fromFirst.length === 0 && !first.exhausted(local)) ||
+    (fromSecond.length === 0 && !second.exhausted(local))
+  ) {
+    return
+  }
+  const variants = ctx.table.variantsOf(union)
+  const tags = ctx.table.tagsOf(union)
+  const keptVariants: i32[] = []
+  const keptTags: i32[] = []
+  let i = 0
+  while (i < variants.length && i < tags.length) {
+    const variant = variants[i]
+    const tag = tags[i]
+    if (fromFirst.indexOf(variant) >= 0 || fromSecond.indexOf(variant) >= 0) {
+      keptVariants.push(variant)
+      keptTags.push(tag)
+    }
+    i = i + 1
+  }
+  const current = variantsIn(ctx, union, scope.typeOf(local))
+  if (current.length > 0 && keptVariants.length === current.length) {
+    return
+  }
+  if (keptVariants.length === variants.length) {
+    // Both sides read the tag, so neither leaves it `null`.
+    scope.narrow(local, union)
+    return
+  }
+  narrowToVariants(ctx, scope, local, keptVariants, keptTags)
 }
 
 // ---- `V | undefined` (WP32) ---------------------------------------------------------
