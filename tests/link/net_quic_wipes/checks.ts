@@ -12,6 +12,7 @@ import { Suite } from "nish/testing";
 import { AesKey } from "nish/crypto/aes";
 import { QuicKeys, QuicKeysSlot, quicKeyUpdateSecret, quicKeys, quicKeysUpdate, quicKeysWipe } from "nish/net/quic-packet";
 import { quicKeyUpdateCopy, quicKeysUpdateOf } from "../net_quic_common/keys";
+import { copyOf } from "../crypto_x25519/plain";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import {
   QUIC_CONN_ENTROPY_SIZE,
@@ -102,6 +103,33 @@ const qwAllZero = (secrets: u8[][]): boolean => {
   return zero;
 };
 
+/** Whether `a` and `b` hold the same bytes. */
+const qwSame = (a: u8[], b: u8[]): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let k: i32 = 0; k < toI32(a.length); k++) {
+    if (a[k] !== b[k]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** Whether every `Secret` field of `conn` is zero: the ephemeral key, and both widths' read, next read and write secrets. */
+const qwSecretsZero = (conn: QuicConnection): boolean =>
+  expose(conn.ephemeral, qwZero) &&
+  expose(conn.readSecret256, qwZero) &&
+  expose(conn.nextReadSecret256, qwZero) &&
+  expose(conn.writeSecret256, qwZero) &&
+  expose(conn.readSecret384, qwZero) &&
+  expose(conn.nextReadSecret384, qwZero) &&
+  expose(conn.writeSecret384, qwZero);
+
+/** A plain copy of `conn`'s current 1-RTT read secret, of the width `suite` uses. */
+const qwReadSecret = (conn: QuicConnection, suite: i32): u8[] =>
+  suite === TLS_AES_256_GCM_SHA384 ? expose(conn.readSecret384, copyOf) : expose(conn.readSecret256, copyOf);
+
 /** The schedule of `slot` the suite's packet key uses, or `null` under ChaCha20-Poly1305. */
 const qwPacketAes = (slot: QuicKeysSlot, suite: i32): AesKey | null => {
   if (suite === TLS_CHACHA20_POLY1305_SHA256) {
@@ -141,12 +169,10 @@ const qwConnZero = (conn: QuicConnection): boolean => {
     qwSlotsZero(conn.initial.keySlots) &&
     qwSlotsZero(conn.handshake.keySlots) &&
     qwSlotsZero(conn.application.keySlots) &&
-    qwAllZero(conn.readSecrets) &&
-    qwAllZero(conn.writeSecrets) &&
+    qwSecretsZero(conn) &&
     qwZero(conn.initialClient) &&
     qwZero(conn.initialServer) &&
-    qwZero(conn.cidSeed) &&
-    qwZero(conn.ephemeralPrivate)
+    qwZero(conn.cidSeed)
   );
 };
 
@@ -372,7 +398,7 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
   }
   const oldWrite: QuicKeysSlot = conn.application.keySlot(QW_APP_WRITE_SLOTS + conn.appWriteSlot);
   const oldRead: QuicKeysSlot = conn.application.keySlot(conn.appReadSlot);
-  const oldReadSecret: u8[] = conn.appReadSecret;
+  const oldReadSecret: u8[] = qwReadSecret(conn, suite);
   const readSecretHeld: boolean = !qwZero(oldReadSecret);
   const oldAes: AesKey | null = qwPacketAes(oldWrite, suite);
   const wasHeld: boolean = !qwZero(qwPacketKey(oldWrite, suite)) && (oldAes === null || !qwZeroAes(oldAes));
@@ -392,7 +418,10 @@ const qwKeyUpdate = (t: Suite, name: string, suite: i32): void => {
       qwZero(oldWrite.keys.iv) &&
       (oldAes === null || qwZeroAes(oldAes))
   );
-  t.ok(`${name}: and so does the read secret the update replaced`, readSecretHeld && qwZero(oldReadSecret) && !qwZero(conn.appReadSecret));
+  const newReadSecret: u8[] = qwReadSecret(conn, suite);
+  t.ok(`${name}: and so does the read secret the update replaced`, readSecretHeld && !qwZero(newReadSecret) && !qwSame(oldReadSecret, newReadSecret));
+  secureZero(oldReadSecret);
+  secureZero(newReadSecret);
   t.ok(`${name}: but for the header-protection key, which every generation shares`, !qwZero(qwHpKey(oldWrite, suite)));
   t.ok(`${name}: the previous read generation is kept for a probe timeout`, !qwZero(qwPacketKey(oldRead, suite)));
   c.now = c.now + conn.recovery.probeTimeout() * n64(2);
@@ -455,14 +484,14 @@ const qwTraffic = (length: i32): u8[] => {
 const qwOneShot = (t: Suite, name: string, suite: i32): void => {
   const aead: i32 = qcAead(suite);
   const traffic: Secret<u8[]> = secret(qwTraffic(suite === TLS_AES_256_GCM_SHA384 ? 48 : 32));
-  const keys: QuicKeys | null = quicKeys(aead, traffic);
+  const keys: QuicKeys | null = quicKeys(new QuicKeysSlot(), aead, traffic);
   const next: Secret<u8[]> | null = quicKeyUpdateSecret(aead, traffic);
   wipe(traffic);
   if (next === null) {
     t.ok(`${name}, one-shot: quicKeys and quicKeyUpdateSecret derive from a held secret`, false);
     return;
   }
-  const updated: QuicKeys | null = keys === null ? null : quicKeysUpdate(keys, next);
+  const updated: QuicKeys | null = keys === null ? null : quicKeysUpdate(new QuicKeysSlot(), keys, next);
   wipe(next);
   if (keys === null || updated === null) {
     t.ok(`${name}, one-shot: quicKeys and quicKeyUpdateSecret derive from a held secret`, false);

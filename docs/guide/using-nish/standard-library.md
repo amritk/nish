@@ -944,8 +944,9 @@ written with a security record of their own
 the fact. TLS's one-shot key schedule (`tlsExtract`, `tlsDeriveSecret`,
 `tlsTrafficKey` and the rest of `nish/net/tls/schedule`) and QUIC's
 `quicKeys`, `quicKeysUpdate` and `quicKeyUpdateSecret` take a traffic secret
-as a `Secret<u8[]>` and answer secrets as one; the `QuicKeys` that `quicKeys`
-answers is plain, so call `quicKeysWipe` on it when you are done with it.
+as a `Secret<u8[]>` and answer secrets as one; `quicKeys` and `quicKeysUpdate`
+write the packet keys into a `QuicKeysSlot` you pass, and that slot is yours to
+wipe, so call its `wipe()` (or `quicKeysWipe` on the keys) when you are done.
 
 A `TlsServer` keeps every secret of an open connection as a
 [`Secret` field](../../LANGUAGE.md#a-secret-field): the ephemeral key, and the
