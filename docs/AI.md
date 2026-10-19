@@ -1670,7 +1670,9 @@ export const main = (): i32 => {
   ternary, `&&`, `||`, `!==`, an early `return`/`break`/`continue`, each
   `case` of a `switch (s.kind)`, and composed with `s !== null &&`. Two or
   more variants left still give only the tag; an assignment drops the
-  narrowing. A path does not narrow (`h.s.kind` then `h.s.r` is NL2550): copy
+  narrowing. Where `a || b` held (or `a && b` failed), the variable is what
+  either side proved, `Circle | Square` after two tag tests. A test reads
+  through an assignment: `(t = next()).kind === Kind.Square` narrows `t`. A path does not narrow (`h.s.kind` then `h.s.r` is NL2550): copy
   it into a local and test that. A read where every variant was excluded is
   NL2549.
 - The tag reads as the enum: `const k: Kind = s.kind` — annotate it,

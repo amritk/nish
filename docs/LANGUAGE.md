@@ -797,6 +797,22 @@ const area = (s: Shape): i32 => {
   through into narrows nothing.
 - A null test composes with it: on `s: Shape | null`,
   `s !== null && s.kind === Kind.Circle && s.r > 0` reads `s.r`.
+- Where an `||` held, either side may have made it hold, so the variable is
+  what either side proved: past `s.kind === Kind.Circle || s.kind ===
+  Kind.Square`, `s` is a `Circle | Square`, which has only its tag and whose
+  tag is not `Kind.Tri`. The same goes for the side of an `&&` where it
+  failed, for an enum variable, for any number of arms and for `===` mixed
+  with `!==`; an arm that tests something else leaves the variable as
+  declared (`tests/cases/union_narrowing_join`; `reject_union_narrow_or_if`,
+  `reject_union_narrow_or_ternary`, `reject_union_narrow_and_false`,
+  `reject_enum_narrow_or_if`, `reject_enum_narrow_or_ternary`,
+  `reject_enum_narrow_or_three`, `reject_enum_narrow_or_mixed`,
+  `reject_enum_narrow_and_false`).
+- The test may read the variable through an assignment, which answers the
+  value it stored: `(t = next()).kind === Kind.Square` narrows `t`, as
+  `(k = next()) === Kind.A` narrows an enum `k`, and so does `&&=`, `||=` or
+  `??=` (`reject_union_narrow_test_assign`, `reject_union_narrow_or_assign`,
+  `reject_enum_narrow_assign`).
 - The variable is a parameter or a `let` or `const` local; a narrowed `const`
   stays narrowed in a data-parallel arrow that reads it
   (`tests/link/union_narrowing_capture`). An

@@ -209,6 +209,15 @@ export const main = (): i32 => {
 };
 ```
 
+Where an `||` held, either side may be the one that held, so the variable is
+whatever either side proved: inside
+`if (s.kind === Kind.Circle || s.kind === Kind.Square)`, `s` is a
+`Circle | Square`. That union still has only its tag, but its tag cannot be
+`Kind.Tri`, so testing for it there is an error (NL2531). The side of an `&&`
+where it failed works the same way, and so does an enum variable. A test may
+also read the variable through an assignment, as in
+`if ((t = next()).kind === Kind.Square)`, which narrows the `t` just stored.
+
 An assignment to the variable drops what a test proved, so a read after it
 needs a new test. A narrowing belongs to a variable or a parameter: a test of
 `a.b.kind` does not narrow `a.b`, which is an error (NL2550) — copy it into a

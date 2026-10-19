@@ -1958,9 +1958,25 @@ const narrowEnumTest = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: b
   narrowHeld(ctx, scope, local, members, cond.text === "===" ? whenTrue : !whenTrue)
 }
 
+/**
+ * What a test reads through `(e)` and an assignment: `(t = next()).kind`
+ * tests `t`, whose new value the assignment answers, as TypeScript narrows it.
+ * The compound `&&=`, `||=` and `??=` count too; arithmetic ones do not.
+ */
+const testedRead = (node: Node): Node => {
+  let read = unwrapParens(node)
+  while (
+    read.kind === N_BINARY &&
+    (read.text === "=" || read.text === "&&=" || read.text === "||=" || read.text === "??=")
+  ) {
+    read = unwrapParens(read.children[0])
+  }
+  return read
+}
+
 /** The local or parameter `node` names when it is declared as an enum, or `null`. */
 export const enumVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
-  const read = unwrapParens(node)
+  const read = testedRead(node)
   if (read.kind !== N_IDENT) {
     return null
   }
@@ -2051,7 +2067,7 @@ export const tagVariable = (ctx: CheckContext, node: Node, scope: Scope): Local 
   if (read.kind !== N_MEMBER || isOptionalChain(read)) {
     return null
   }
-  const receiver = unwrapParens(read.children[0])
+  const receiver = testedRead(read.children[0])
   if (receiver.kind !== N_IDENT) {
     return null
   }

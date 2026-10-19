@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1055 programs, 135143 dump lines.
+# 1056 programs, 135219 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -55373,6 +55373,83 @@ function main(): void -> @nish_main [exported entry]
   callee 142:166 viaReassign -> @viaReassign
   callee 142:184 viaTag -> @viaTag
   callee 145:15 viaNull -> @viaNull
+program tests/cases/union_narrowing_join.ts
+module tests/cases/union_narrowing_join.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4
+  constructor -> @Square.constructor
+struct Tri (interface) size=8 align=4
+  field kind: Kind.Tri index=0 offset=0 readonly
+  field base: i32 index=1 offset=4
+function Circle.constructor(this: Circle, r: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: side
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function pick(n: i32): Circle | Square | Tri -> @pick
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  calls: Circle.constructor Square.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+  callee 35:12 new Circle -> @Circle.constructor
+  callee 38:12 new Square -> @Square.constructor
+  local 40:9 t: Tri (const)
+function size(s: Circle | Square | Tri): i32 -> @size
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function edge(s: Circle | Square | Tri): i32 -> @edge
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function level(n: i32): Level -> @level
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function rank(l: Level): i32 -> @rank
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function lift(l: Level): i32 -> @lift
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function fresh(n: i32): i32 -> @fresh
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: n
+  calls: nish_arena_mark nish_arena_release pick
+  stackSites=0 stackLocals=0
+  local 83:7 t: Circle | Square | Tri (let)
+  callee 83:18 pick -> @pick
+  callee 84:16 pick -> @pick
+  callee 90:12 pick -> @pick
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: edge fresh level lift nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 pick rank size
+  stackSites=0 stackLocals=0
+  local 97:7 total: i32 (let)
+  local 98:7 i: i32 (let)
+  local 100:11 s: Circle | Square | Tri (const)
+  callee 100:15 pick -> @pick
+  callee 101:17 size -> @size
+  callee 101:33 edge -> @edge
+  callee 102:21 size -> @size
+  callee 102:31 edge -> @edge
+  local 105:7 n: i32 (let)
+  callee 107:17 rank -> @rank
+  callee 107:22 level -> @level
+  callee 107:39 lift -> @lift
+  callee 107:44 level -> @level
+  callee 110:23 fresh -> @fresh
+  callee 110:41 fresh -> @fresh
+  callee 110:60 fresh -> @fresh
 program tests/cases/union_types.ts
 module tests/cases/union_types.ts (entry)
 struct Circle (class) size=8 align=4

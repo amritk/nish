@@ -406,6 +406,7 @@ cases/str_surrogate_pair added after R6: no rewriter to freeze it with
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with
+cases/union_narrowing_join added after R6: no rewriter to freeze it with
 cases/union_types added after R6: no rewriter to freeze it with
 cases/unsafe_get_set added after R6: no rewriter to freeze it with
 cases/unsafe_wrapping added after R6: no rewriter to freeze it with
