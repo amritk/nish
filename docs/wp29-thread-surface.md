@@ -1,6 +1,26 @@
 # WP29: The thread surface, and what is legal TypeScript
 
-**Status: P1 and P2 are built, and P3 is built, lock and channel.** P1, `parallelMapInto` and
+**Closing status: complete.** Every stage of §4 is built: P1 and P2, and P3's
+lock (§4.3), channel (§4.4) and atomics (§4.5,
+[#654](https://github.com/amritk/nish/pull/654)). Strings and scalar arrays
+now cross between threads by copy at the join (§7,
+[#669](https://github.com/amritk/nish/pull/669)), a guard may be handed to a
+helper, and `nish --fix` writes the usual repair for six thread refusals
+([#691](https://github.com/amritk/nish/pull/691)). What is declined stays
+declined: a detached spawn and `Arc<T>`, `select`, bounded channels (C3), a
+configurable pool or `scope(n)`, decorators, a stored task handle and
+async/await, for the reasons §9 gives; and general closure capture outside the
+parallel forms and tasks, wasm threads, and work stealing and nested parallel
+regions ([wp20](wp20-threads.md)). Deferred, not declined: `parallelSort`,
+`parallelFilter`, and copy-at-join for class values. The serial copy-in at the
+join is gone: [#686](https://github.com/amritk/nish/pull/686) moves each map
+element into a block on its own thread and takes the blocks whole. Class
+values, nested arrays, `string[]`, `Map` and `Set` still do not cross (§7). The
+user guide's [threads page](guide/using-nish/threads.md) teaches the finished
+surface.
+
+*History, superseded by the closing status above: the status as P3 was being
+built.* P1, `parallelMapInto` and
 `parallelReduce`, shipped in 0.11.0 ([#219](https://github.com/amritk/nish/pull/219),
 with allocating bodies and the cost-sized grain in [#223](https://github.com/amritk/nish/pull/223)).
 P2, `using s = scope()`, shipped in 0.13.0
@@ -276,7 +296,7 @@ one, which is the argument P2 used for `using`.
 | --- | --- | --- |
 | R1 | `new Mutex<T>(init)` takes a value that is fresh all the way down: `init` is a `new` expression or a literal whose every argument or element is a scalar or is itself fresh by this rule. So `new Hist(bins)` and `[row]`, with `bins` or `row` a named value, are refused. A string literal is fresh. The value inside is reachable only through a guard, and `Mutex` has no public `value`. | An alias kept outside the lock is an unguarded path to the data, which is the thing Rust's design removes. A fresh outer value with a named inner one would keep that alias one level down. A string is immutable, and R4 never stores into one through a guard, so a string literal leaves no path to write. |
 | R2 | `m.lock()` is only ever the initialiser of a `using` declaration, the third disposable beside `scope()` and `arena()`. The release is emitted at every exit of the block. At a `return` (or an `orReturn`) the order is the opposite of the join's: the join runs before the returned value is computed, and the release runs after it, before control leaves. So `return g.value.n` reads under the lock. | A guard bound any other way is one nobody releases. A join must come first so the value can read what the tasks stored; a release must come last so the value is read while the lock is held. |
-| R3 | A guard is used only as `g.value`, and `g.value` only as the base of a chain of member and element accesses. A chain that is read yields a scalar, or is itself the base of a further access or a store: `g.value.bins[i]` is a read, and `const b = g.value.bins` is refused. When `T` is itself a scalar, as in `Mutex<i32>`, `g.value` is read and stored directly: `g.value = g.value + 1`. Neither the guard nor anything a chain reaches is bound, passed, returned, stored or captured. | Nothing derived from the guard outlives the block that holds the lock. A bound `b` would be guarded data read after the release, or by a task while another writes it under the guard: a race, since R6 restricts only a task's writes. A scalar read out of the guard is a copy, so it carries no path back. |
+| R3 | A guard is used only as `g.value`, and `g.value` only as the base of a chain of member and element accesses. A chain that is read yields a scalar, or is itself the base of a further access or a store: `g.value.bins[i]` is a read, and `const b = g.value.bins` is refused. When `T` is itself a scalar, as in `Mutex<i32>`, `g.value` is read and stored directly: `g.value = g.value + 1`. Neither the guard nor anything a chain reaches is bound, returned, stored or captured, and the guard is passed only to a guard helper: a function named at the call, neither a method, a constructor nor a generic, whose parameter is declared `MutexGuard<T>`, once per call. | Nothing derived from the guard outlives the block that holds the lock. A bound `b` would be guarded data read after the release, or by a task while another writes it under the guard: a race, since R6 restricts only a task's writes. A scalar read out of the guard is a copy, so it carries no path back. |
 | R4 | Every store through a guard stores a scalar (a number, a `boolean` or an enum) or a `string`, into a field or into an element of an array that already exists. A string is copied into a block the mutex owns (`nish_guard_keep`), which frees the block it replaces; a string read through a guard is copied out to the reader. No method is called through `g.value`, so there is no `push`. | A task's arena is freed at the join (§7). A pointer into it stored in the parent's data would dangle, and a `push` can reallocate the array into that arena. A string is the one pointer that can be copied flat, so it is copied rather than refused. |
 | R5 | Inside a guard's block, directly or through any function it calls, there is no second `lock()`, no `scope()` or `spawn`, and no `parallelMapInto` or `parallelReduce`. | One lock is held at a time, and nothing is waited on while it is held. So **a P3 program cannot deadlock**, by construction, with no lock-order analysis. |
 | R6 | A task may write shared memory only through a guard, or by a `send` or a receive on a channel (§4.4). P2's rule is otherwise unchanged. | The lock is the one admitted shared write, which answers §11's question of how P3 fits P2's rule. A channel's buffer is shared too, but it is written only by the channel's own operations, which take its lock themselves. |
@@ -492,9 +512,18 @@ the same shape as WP15 §2a's `NL2290`/`NL2291` interior-pointer rule. Hence:
 - **A string or a scalar array crosses by copy-at-join.** Neither holds a
   pointer, so one flat copy of its bytes is the whole value. The worker copies
   its answer into a `malloc`'d transfer block before its arena is freed or
-  reused (`nish_cross_out`, `nish_cross_out_range` for a region's slots); the
-  parent, after the join, copies each block into its own arena and frees it
-  (`nish_cross_in`, `nish_cross_in_range`). A value the worker did not
+  reused (`nish_cross_out`); the parent, after the join, copies each block
+  into its own arena and frees it, or, for a block of 64 KB or more, links the
+  block into its arena as a chunk (`nish_cross_in`). A map's chunk packs its
+  elements into transfer blocks of 4 KB doubling to 64 KB as each one answers
+  (`nish_cross_keep`, between `nish_cross_begin` and `nish_cross_end`), and
+  the parent links those blocks whole after the join when they hold 64 KB or
+  more (`nish_cross_adopt`), so copying a large region's answers in costs one
+  link per block rather than a copy per element; a region that kept less is
+  copied in and its blocks freed, since each adopted block leaves the
+  parent's current chunk behind. An
+  adopted block is freed exactly when a copy would have been: with the arena
+  release that rewinds past it. A value the worker did not
   allocate since its mark — a literal, a string it was handed — is passed
   through uncopied, and a pointer's low bit tags the blocks that are transfer
   copies, so the parent frees only those. The same pair carries a
@@ -714,9 +743,14 @@ file at commit `c3529665`.
   string into a block the mutex owns, and a read copies it out (§4.3, R4). The
   block a slot holds when its `Mutex` is dropped is not freed, because nothing
   says when the arena holding the `Mutex` goes.
-- **Whether a guard may be passed to a function that provably does not keep
-  it.** R3 refuses every call. The escape analysis (`src/escape.ts`) could
-  admit a callee that only reads and stores through its parameter.
+- ~~Whether a guard may be passed to a function that provably does not keep
+  it.~~ **Closed: to a guard helper.** A function named at the call, neither a
+  method, a constructor nor a generic, whose parameter is declared
+  `MutexGuard<T>`, takes the guard once per call. No escape analysis is
+  needed: `walkMutexes` already holds every expression of guard type to R3 and
+  R4 wherever it is declared, so the parameter is held to them in the helper's
+  body, and R5 follows the call into it (NL2536,
+  [LANGUAGE.md R3](LANGUAGE.md#a-lock-that-owns-its-data-mutext)).
 - ~~How P3 fits P2's rule.~~ **Closed by P3's design (§4.3).** A task may write
   shared memory only through a guard or by a channel's `send` and receive
   (R6), one lock is held at a time and

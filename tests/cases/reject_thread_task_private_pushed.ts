@@ -1,5 +1,5 @@
 // A task's own array pushed onto an array its argument holds is reachable
-// from there, so the store into it is a store into shared memory.
+// from there: the push is a store into shared memory, and is named.
 import { scope } from "nish/threads";
 
 class Holder {

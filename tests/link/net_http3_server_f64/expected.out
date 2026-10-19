@@ -26,12 +26,22 @@ PASS  GOAWAY
 PASS  with every request finished the server closes: H3_NO_ERROR
 PASS  and frees the slot
 PASS  having accepted one connection
+PASS  two clients, each in a slot of its own
+PASS  the first slot's response carries the server's date, once, after :status
+PASS  and the second slot's the same date
+PASS  a still clock formats nothing more for either
+PASS  a minute on, both slots carry the new date
+PASS  which the two slots share: formatted once between them
 PASS  the pacer has no credit for a datagram
 PASS  the close goes all the same, and the slot is freed
 PASS  a handshake at an epoch-milliseconds clock
 PASS  the pacer holds the slot back, short of its idle deadline
 PASS  the slot is filed for now + the pacer's delay
 PASS  and the server's timeout is that delay
+PASS  the server hands its clock in microseconds to the connection's pacer
+PASS  and serve hands it to the pacer before any flush
+PASS  with a datagram's credit short of the quantum, the flight time is later than the pace time
+PASS  and the slot is filed at the flight time
 PASS  300,000 bytes arrive whole with the client quiet between its acknowledgements
 PASS  in under a second of the server's clock, not at the idle timeout
 PASS  a short header too short for a reset, a long one short of a full Initial, a Handshake packet no slot owns: dropped, keeping nothing
@@ -52,5 +62,6 @@ PASS  the second gets no answer, and is counted
 PASS  five connections through one slot, each closed after its GOAWAY
 PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
+PASS  though the pinned clock moved a second on for each, the date formatted once a second
 PASS  and from the second on, each handshake through the listener into the slot keeps 0 bytes: from the first Initial to the close, nothing
-http3 server: 55 passed, 0 failed, 0 skipped
+http3 server: 66 passed, 0 failed, 0 skipped

@@ -94,6 +94,7 @@ import {
   rfc8448ServerHelloRecord,
 } from "../net_tls_record_rfc8448/records";
 import { leafPrivate, serverPrivate, serverRandom, tcpConfig } from "../net_tls_common/server";
+import { poolHeld } from "../net_tls_common/held";
 import {
   GROUP_SECP256R1,
   clientHelloRaw,
@@ -566,7 +567,7 @@ export const memoryChecks = (): i32 => {
 
   // --- restart wipes what the last connection left ---------------------------------------------
   // A TlsServer driven on its own, with no record layer to wipe as it goes:
-  // after its handshake its secret arrays hold the trace's secrets, and
+  // after its handshake its pool's arrays hold the trace's secrets, and
   // `restart` must zero every one of both hashes' before the next connection.
   const loneKey: u8[] = new Array<u8>(32);
   refill(loneKey, traceKey);
@@ -574,16 +575,10 @@ export const memoryChecks = (): i32 => {
   lone.receive(TLS_LEVEL_INITIAL, rfc8448ClientHello(), ZERO, toI32(rfc8448ClientHello().length));
   lone.sign(traceSignature);
   lone.receive(TLS_LEVEL_HANDSHAKE, rfc8448ClientFinished(), ZERO, toI32(rfc8448ClientFinished().length));
-  let held256: i32 = 0;
-  for (const a of lone.secrets256) {
-    held256 = held256 + (allZero(a) ? 0 : 1);
-  }
+  const held256: i32 = poolHeld(lone.secrets256);
   t.ok("a TlsServer through RFC 8448's handshake holds its secrets in its own arrays", lone.state === TLS_STATE_CONNECTED && held256 >= 5);
   lone.restart(traceRandom, loneKey);
-  let left: i32 = 0;
-  for (const a of lone.secrets256) {
-    left = left + (allZero(a) ? 0 : 1);
-  }
+  const left: i32 = poolHeld(lone.secrets256);
   t.eqI32("and restart zeroes every array of secrets256", left, ZERO);
   // The same under SHA-384, whose secrets live in the other pool: the
   // loopback run's ClientHello, signed with its recorded signature.
@@ -592,16 +587,10 @@ export const memoryChecks = (): i32 => {
   const hello384: u8[] = paddedHello(TLS_AES_256_GCM_SHA384, toI32(16));
   lone384.receive(TLS_LEVEL_INITIAL, hello384, ZERO, toI32(hello384.length));
   lone384.sign(wired.signature);
-  let held384: i32 = 0;
-  for (const a of lone384.secrets384) {
-    held384 = held384 + (allZero(a) ? 0 : 1);
-  }
+  const held384: i32 = poolHeld(lone384.secrets384);
   t.ok("an AES-256-GCM-SHA384 handshake holds its secrets in secrets384", lone384.state !== TLS_STATE_FAILED && held384 >= 5);
   lone384.restart(wired.random, lone384Key);
-  let left384: i32 = 0;
-  for (const a of lone384.secrets384) {
-    left384 = left384 + (allZero(a) ? 0 : 1);
-  }
+  const left384: i32 = poolHeld(lone384.secrets384);
   t.eqI32("and restart zeroes every array of secrets384", left384, ZERO);
 
   // --- The slot's own refusals ------------------------------------------------------------

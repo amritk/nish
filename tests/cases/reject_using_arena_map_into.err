@@ -1,0 +1,1 @@
+`` parallelMapInto(xs, out, (x) => `w${x}`) `` may be allocated inside the `using arena()` block at 10:5 and is stored into memory

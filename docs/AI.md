@@ -227,7 +227,8 @@ compatible only when their types are identical.
 the site: `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of
 numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
-Calling one without the import is NL2456. `--unchecked-indexing` and
+The sixth export, `readCString`, copies a C string out of a `CPtr`
+([Calling C](#calling-c)). Calling one without the import is NL2456. `--unchecked-indexing` and
 `--wrapping` are deprecated (NL9014, NL9015) and reach only your own package,
 never a dependency or `nish/`. To migrate off `--unchecked-indexing`, run
 `nish --unchecked-indexing --fix` on your files: each index the flag leaves
@@ -860,11 +861,11 @@ export const main = (): i32 => {
 `parallelReduce(src, f, identity)` folds `src` with `f` — each on as many
 threads as the array is long enough for. `f` is a [function parameter](#function-parameters).
 Importing the module compiles the program with `--threads`; there is nothing
-else to switch on and no thread count to choose. (A plain block: a program
-importing `nish/threads` writes two `.ll` files, so this one is compiled by
-`tests/link/par_map` and `tests/link/par_reduce` instead.)
+else to switch on and no thread count to choose. `parallelMap(src, f)` and
+`parallelFrom(n, f)` answer a new array instead (`f(src[i])`, `f(i)`), under
+the same rules for `f`.
 
-```ts
+```ts nish:ok
 import { parallelMapInto, parallelReduce } from "nish/threads";
 
 const square = (x: f64): f64 => x * x;
@@ -878,9 +879,25 @@ export const main = (): i32 => {
 };
 ```
 
+```ts nish:ok
+import { parallelFrom, parallelMap } from "nish/threads";
+
+export const main = (): i32 => {
+  const names = parallelFrom(3, (i) => `w${i}`);    // each string copied out at the join
+  const lens = parallelMap(names, (n) => n.length); // 2 2 2
+  console.log(`${names[2]} ${lens[0]}`);            // w2 2
+  return 0;
+};
+```
+
 - **`f` writes nothing its caller can see.** No field or element store
   through its argument and no `console.log` — each is refused at the call,
-  naming the write. Reading is fine; so are a bounds check, an integer
+  naming the write (NL2345): answer the value and write after the call. An
+  arrow may read the `const` locals and parameters around it, never write
+  them (NL2503: answer the value from the body instead, and fold the answers with `parallelReduce`,
+  `const sumTotal = parallelReduce(xs, (a, b) => a + b, 0)`, or read them from the array the call
+  gives back, `const kValues = parallelMap(xs, (x): i32 => x)`)
+  and never read a `let` (NL2500: snapshot it first, `const kNow = k`). Reading is fine; so are a bounds check, an integer
   division and `panic`.
 - **What `f` allocates is freed after every element.** A string, array or
   object built on the way to the result compiles, with performance warning
@@ -890,7 +907,8 @@ export const main = (): i32 => {
 - **A map's result is a number, a `boolean`, an enum, a `string` or an array
   of numbers, booleans or enums**: a string or a scalar array is copied out of
   the worker's arena at the join. An array of strings, a nested array, a class,
-  a `Map` or a `Set` is refused (NL2348). **A reduce's `T` stays a number, a
+  a `Map` or a `Set` is refused (NL2348): answer a string or a number per
+  element and build the structure after the call. **A reduce's `T` stays a number, a
   `boolean` or an enum**: map strings to numbers first.
 - **`dst` may not be reachable from an element of `src`**: mapping `Row[]` into
   `f64[]` is refused when `Row` holds an `f64[]`, because it could be `dst`.
@@ -913,10 +931,9 @@ export const main = (): i32 => parallelReduce([1, 2, 3], (a, b) => a + b, 1);   
 
 Different functions at once, one thread each: open a scope with `using`, give
 it tasks with `spawn(entry, arg, dst, at)`, and every task has run and stored
-`entry(arg)` into `dst[at]` when the block ends. (A plain block, for the same
-reason as the one above: `tests/link/thread_scope_basic` compiles it.)
+`entry(arg)` into `dst[at]` when the block ends.
 
-```ts
+```ts nish:ok
 import { scope } from "nish/threads";
 
 const sumOf = (xs: f64[]): f64 => xs[0] + xs[1];
@@ -943,10 +960,17 @@ export const main = (): i32 => {
   end, don't read a destination, and don't write memory a task could read (a
   store into an argument, a call that writes through its argument).
 - **`using` takes only `scope()`**, a `Mutex`'s `lock()` (below), or `arena()`
-  (under [Memory](#memory)), and `scope()` only comes from `using`.
+  (under [Memory](#memory)), and `scope()` only comes from `using`
+  (NL2388): `using s = scope()`.
   The scope is only ever the receiver of a `spawn` statement: never pass it,
   store it or return it.
-- **The task is a named top-level function**, not an arrow, and it follows the
+- **The task is a top-level function named in the `spawn`, or an arrow written
+  there.** `s.spawn(entry, arg)` with no destination runs an entry that
+  answers `void`; `s.spawn(() => work(a, b))` runs an arrow that reads the
+  `const` locals and parameters around it (never a `let` or `this` (NL2506):
+  bind a `const` first, `const kNow = k`) and answers `void`. An entry that
+  answers a value has a destination (NL2511): `const answer = new Array<i32>(1)`
+  above the scope and `s.spawn(entry, arg, answer, 0)`. Either follows the
   data-parallel rules: it writes nothing anybody else can see but what it
   writes through a `Mutex`'s guard or sends on a `Channel` (below), answers a number,
   a `boolean`, an enum, a `string` or an array of numbers, booleans or enums
@@ -1018,11 +1042,18 @@ export const main = (): i32 => {
 - **Only `g.value`, and only as the base of a field or element access.** Read
   a number, a `boolean`, an enum or a `string` through it, or store one into a
   field or an element that already exists (a string is copied each way) (for a `Mutex<i32>`, `g.value = g.value + 1`).
-  Don't bind `g`, `g.value` or an array it holds, don't pass them, and call no
-  method through them (no `push`).
+  Don't bind, store, return or walk `g` itself (NL2466), nor bind, store, return
+  or walk `g.value` or an array it holds (NL2467); store only a scalar or a
+  `string` into it (NL2468), never `null` (NL2537), and call no method
+  through it (no `push`).
+- **A guard goes only to a helper**: a top-level function named at the call,
+  whose parameter is `MutexGuard<T>`, once per call — `note(g, x)` with
+  `const note = (g: MutexGuard<Stats>, x: i32): void => { … }`. The helper is
+  held to the block's rules. A method, a constructor or a generic is refused
+  (NL2536): `this` or `T` would be a way to keep the guard.
 - **Make the data fresh all the way down**: `new Mutex<Hist>(new Hist())`, not
   `new Hist(bins)` with a `bins` you still hold.
-- **`lock()` only as `using g = m.lock()`**, one lock per `using`. The lock is
+- **`lock()` only as `using g = m.lock()`** (NL2465), one lock per `using`. The lock is
   released at every exit of the block, and at a `return` after the returned
   value is computed, so `return g.value.n` reads under the lock.
 - **One lock at a time, and no waiting while it is held**: inside the guard's
@@ -1052,6 +1083,76 @@ export const main = (): i32 => {
   using g = m.lock();
   const c = g.value;   // what the guard reaches would outlive the lock
   return c.n;
+};
+```
+
+```ts nish:ok
+import { Mutex, MutexGuard } from "nish/threads";
+
+class Stats {
+  count: i32 = 0;
+}
+
+const bump = (g: MutexGuard<Stats>): void => {
+  g.value.count = g.value.count + 1;   // a helper: the block's rules, the block's lock
+};
+
+export const main = (): i32 => {
+  const m = new Mutex<Stats>(new Stats());
+  using g = m.lock();
+  bump(g);
+  return g.value.count - 1;            // 0
+};
+```
+
+### Counters without a lock: `AtomicI32` and `AtomicI64`
+
+A shared counter, minimum, maximum or flag is an atomic: `new AtomicI32(0)`,
+`new AtomicI64(toI64(0))`, updated from any task or parallel `f` by one
+indivisible method call.
+
+```ts nish:ok
+import { AtomicI32, parallelMapInto } from "nish/threads";
+
+export const main = (): i32 => {
+  const hits = new AtomicI32(0);
+  const top = new AtomicI32(0);
+  const xs: i32[] = [3, 9, 4];
+  const ys: i32[] = [0, 0, 0];
+  parallelMapInto(xs, ys, (x) => hits.add(1) + top.max(x)); // each answers the old value
+  console.log(`${hits.load()} ${top.load()}`);              // 3 9
+  return 0;
+};
+```
+
+- **Only its methods**: `load`, `store`, `add`, `sub`, `min`, `max`,
+  `exchange`, `compareExchange(expected, desired)`; each update answers the
+  value held just before it. No field to read.
+- **Not inside a scope's block after the first `spawn`** (NL2513): read it
+  before, or after the block. Two scopes of one `using` share no atomic
+  (NL2516): give each scope a block of its own, `{ using s = scope(); … }`
+  then `{ using t = scope(); … }`.
+- **Make the updates commute** — `add`, `sub`, `min`, `max` — or native and
+  Node differ.
+- **Add once per batch**: count into a local array, then one `add` per bin.
+  One `add` per value makes the cores wait on each other.
+- **`AtomicI64` takes `i64` values**, exact under Node within ±2^53.
+
+```ts nish:err NL2513
+import { AtomicI32, scope } from "nish/threads";
+
+const bump = (a: AtomicI32): i32 => a.add(1);
+
+export const main = (): i32 => {
+  const a = new AtomicI32(0);
+  const done: i32[] = [0];
+  let seen: i32 = 0;
+  {
+    using s = scope();
+    s.spawn(bump, a, done, 0);
+    seen = a.load();   // the task may not have run yet
+  }
+  return seen;
 };
 ```
 
@@ -1116,15 +1217,18 @@ export const main = (): i32 => {
   hands a task only a channel the function itself declared, never one the
   function was handed, and no task gets one channel in two fields. Hold it
   only as `Channel<T>` (no `| null`, no `Channel<T>[]`, no `Map` of them), and
-  use it only in a top-level function's body, never inside an arrow.
+  use it only in a top-level function's body, never inside an arrow
+  (NL2484): write the task as a module function,
+  `const sendAll = (ch: Channel<i32>): void => { … }`, and spawn that.
   `new Channel<i32>()` takes no capacity: it is unbounded.
 - **One scope, one receiver.** Only one scope's tasks use a channel. Its one
   receiver is either a single task spawned outside any loop, or the parent
   after the scope's block; never both, never two. The parent sends only before
   the scope's block, and receives nothing inside it.
 - **Senders before the receiver.** Spawn every task that may send before the
-  task that receives, and never let one task both send and receive on the same
-  channel. So channels cannot deadlock.
+  task that receives (NL2481: `s.spawn(produce, …)` above
+  `s.spawn(consume, …)`), and never let one task both send and receive on the
+  same channel. So channels cannot deadlock.
 - **No receive while a lock is held**, even through a call. A `send` under a
   guard is fine.
 - **Print what the interleaving cannot change**: two senders' values arrive in
@@ -1159,6 +1263,43 @@ export const main = (): i32 => {
 };
 ```
 
+### What crosses between threads, and `nish --fix`
+
+- **Crosses, by copy:** a number, a `boolean`, an enum, a `string`, an array
+  of numbers, booleans or enums — a task's answer, a `parallelMap` element, a
+  `Channel<string>` value, a string stored through a guard. Each thread moves
+  the `parallelMap` elements it answers into blocks of its own, and the caller
+  takes the blocks whole at the join; a task's answer under 64 KB is copied in
+  by the joining thread. On one thread every element still pays the move, so
+  cheap work that answers strings can be slower there than sequential.
+- **Doesn't cross:** a class value, a nested array, a `string[]`, a `Map`, a
+  `Set`. Answer what it is built from, and build it after the join.
+- **`nish --fix` writes the usual repair**: `const` to `using` for a scope or a
+  guard (NL2388, NL2465), a destination for a number or `boolean` answer
+  (NL2511), a `const kNow = k` snapshot of a `let` an arrow reads (NL2506,
+  NL2500), and a channel arrow hoisted to a top-level `const` (NL2484). It
+  leaves to you a `spawn` in a loop, a `let` another argument names or a `for`
+  header declares, and a channel arrow that captures or leaves a parameter's or
+  its result's type out.
+- **Every thread refusal ends with the code to write**, in your names where
+  the compiler has them; the guide's
+  [refusal table](guide/using-nish/threads.md#refused-and-what-to-write-instead)
+  pairs each code with an example that compiles.
+
+```ts nish:err NL2506
+import { scope } from "nish/threads";
+
+export const main = (): i32 => {
+  let k: i32 = 3;
+  const out: i32[] = [0];
+  {
+    using s = scope();
+    s.spawn((n: i32): i32 => n + k, 1, out, 0);   // --fix: `const kNow = k;` above, the arrow reads `kNow`
+  }
+  return out[0];
+};
+```
+
 ### Calling C
 
 `declare function name(params): T;` declares a C function this program calls but
@@ -1174,11 +1315,70 @@ export const main = (): i32 => {
 };
 ```
 
-- **Every position must be a scalar** — the integer and float widths, `boolean`,
-  `void`. A `string`, array, class or interface is rejected. That is not style:
-  a scalar boundary has no pointer for a foreign function to capture or free,
-  which is what lets the escape analysis stay correct without knowing anything
-  about the callee.
+- **A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
+  scalar, a `CPtr` or a copied `string`.** The scalars are the integer and float widths, `boolean`
+  and `void`. An array, class or interface is rejected, in either position.
+- **A `string` parameter is lent for the call.** C gets a NUL-terminated
+  `const char *` that it may read until it returns, and may neither keep nor
+  write; a C function that does either is declared to take a `CPtr` instead.
+  `string | null` passes `NULL` for `null`. A string with a NUL byte in it
+  panics (`ffi-nul`) before the call, because C would read only up to it; a
+  literal with no NUL is not checked.
+
+```ts nish:ok
+declare function puts(s: string): i32;
+
+export const main = (): i32 => {
+  puts("hello");
+  return 0;
+};
+```
+
+- **A `string` result is copied out of C's `const char *`** into the arena at
+  the call, so it lives like any other string and C may reuse its buffer.
+  `string | null` maps `NULL` to `null`; a `string` result that comes back
+  `NULL` panics (`ffi-null`). The copy never frees: a result the caller must
+  `free` (`strdup`) is declared `CPtr | null` instead.
+
+```ts nish:ok
+declare function strerror(errnum: i32): string;
+declare function getenv(name: string): string | null;
+
+export const main = (): i32 => {
+  console.log(strerror(2));
+  const home = getenv("HOME");
+  console.log(home === null ? "unset" : "set");
+  return 0;
+};
+```
+
+- **A buffer C allocated is read with `readCString` from `nish:unsafe`, then
+  freed.** `readCString(p: CPtr): string` copies the NUL-terminated bytes at
+  `p` into a new string; a dangling or unterminated `p` is undefined
+  behaviour, which is why it needs the import. It takes a `CPtr`, so narrow a
+  `CPtr | null` with `!== null` first.
+- **A `CPtr | null` parameter takes the literal `null` or a narrowed pointer.**
+  `realpath(path, null)` passes `NULL`; a nullable pointer held in a variable
+  is NL2539, so C is never handed a `NULL` by accident.
+
+```ts nish:ok
+import { readCString } from "nish:unsafe";
+
+declare function realpath(path: string, resolved: CPtr | null): CPtr | null;
+declare function free(p: CPtr): void;
+
+export const main = (): i32 => {
+  const p = realpath(".", null);
+  if (p === null) {
+    return 1;
+  }
+  const dir = readCString(p);
+  free(p);
+  console.log(dir.startsWith("/") ? "absolute" : "relative");
+  return 0;
+};
+```
+
 - **No body, and it cannot be `export`ed.**
 - **It costs the caller its attributes.** Nothing about a body the compiler
   cannot see is provable, so a function that calls C loses `readnone` and
@@ -1659,8 +1859,9 @@ may not drop, as a statement: how a key in a plain array is cleared once used.
 
 **Secrets.** Hold a key as a `Secret<T>` from `nish:secret` (`T` an integer
 array or a record of integer fields). It is opaque: no printing, interpolating,
-comparing with a value, branching, indexing, `.value`, field, array element or
-`Result` payload, and no builtin takes one. Read it only with `expose(s, f)` or
+comparing with a value, branching, indexing, `.value`, array element or
+`Result` payload, a field other than a holder's `readonly` one (below), and no
+builtin takes one. Read it only with `expose(s, f)` or
 `exposeWith(s, arg, f)`, where `f` is a top-level function or an arrow that
 declares its return type, reaches no I/O and no C, keeps nothing of the value
 and returns no `Secret` — that return is what leaves. A `Secret` your function
@@ -1711,6 +1912,64 @@ export const main = (): i32 => {
   const k: Secret<u8[]> = secret(raw); // NL2512: `raw` has a second reference
   wipe(k);
   return toI32(alias[0]);
+};
+```
+
+**A key kept in an object.** A class keeps a key as long as it lives in a
+`readonly` field of exactly `Secret<T>` (the class not generic). Set it once,
+in the constructor, with `this.k = secret(fresh)`; rewrite it only in place
+through `exposeWith`; read `this.k` only as a call or `new` argument (`expose`,
+`exposeWith`, a function taking a `Secret`; `wipe` only in the holder's own `wipe()`) or a `===`/`!==` operand —
+never bind, return or store it. The class declares `wipe(): void`, no
+parameters, calling `wipe(this.k)` itself for every such field on every path
+(NL2540, NL2541); a field is wiped nowhere else (NL2547). A function taking a
+`Secret` borrows it: it neither returns it (NL2546) nor wipes it (NL2548). Nothing checks that `wipe()` is called: call it when the
+holder is done.
+
+```ts nish:ok
+import { Secret, expose, secret, wipe } from "nish:secret";
+
+const width = (k: u8[]): i32 => toI32(k.length);
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32));
+  }
+  size(): i32 {
+    return expose(this.key, width);
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  const n: i32 = s.size();
+  s.wipe();
+  return n === 32 ? 0 : 1;
+};
+```
+
+```ts nish:err NL2544
+import { Secret, secret, wipe } from "nish:secret";
+
+class Session {
+  readonly key: Secret<u8[]>;
+  constructor() {
+    this.key = secret(new Array<u8>(32));
+  }
+  wipe(): void {
+    wipe(this.key);
+  }
+}
+
+export const main = (): i32 => {
+  const s = new Session();
+  const k = s.key; // NL2544: a second owner of the key
+  s.wipe();
+  return 0;
 };
 ```
 

@@ -1,0 +1,3 @@
+define internal void @bump(%struct.MutexGuard$$Counter* noundef nonnull readonly align 8 dereferenceable(16) nocapture %g)
+  call void @bump(%struct.MutexGuard$$Counter* %g)
+  call void @tally(%struct.MutexGuard$$Counter* %g, i32 %cell)

@@ -255,7 +255,9 @@ export class InteropServer {
     if (this.udp < 0) {
       return;
     }
-    const now: i64 = nowMs();
+    const nanos: i64 = monotonicNanos();
+    const now: i64 = nanos / toI64(1000000);
+    this.h3.clock(nanos / toI64(1000));
     this.h3.receive(now, key);
     this.h3.tick(now);
     let slot: i32 = this.h3.ready();

@@ -8,7 +8,7 @@
 import { Suite } from "nish/testing";
 import { H3_FRAME_DATA, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
 import { Http3Server } from "nish/net/http3-server";
-import { quicListenerPaceTime } from "nish/net/quic-listener";
+import { quicListenerFlightTime } from "nish/net/quic-listener";
 import { WebTransportConfig } from "nish/net/webtransport";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { bytesOf, textOf } from "../crypto_x509/hex";
@@ -93,14 +93,14 @@ export const http3Checks = (t: Suite): void => {
   t.ok("http/3: the client waited on the server's MAX_STREAMS to open them", lp.client.maxStreamsBidi > limits.maxStreamsBidi);
 
   // The pacer's credit spent, as a long flight just sent would: the carrier
-  // must wake the slot when the pacer next allows a datagram, which
-  // `quicListenerPaceTime` names as a time on the caller's clock.
+  // must wake the slot when the pacer next allows a flight, which
+  // `quicListenerFlightTime` names as a time on the caller's clock.
   const quic = s.quic(n32(0));
   const now: i64 = lbNowMs();
   for (let k: i32 = 0; k < 1000 && quic.recovery.pacerDelay(now, n32(1200)) <= 0; k++) {
     quic.recovery.onPaced(now, n32(1200));
   }
-  const wake: i64 = quicListenerPaceTime(quic, now) - now;
+  const wake: i64 = quicListenerFlightTime(quic, now) - now;
   s.touch(n32(0));
   s.flush(now);
   // No other timer of the connection's may be due as soon, or the check

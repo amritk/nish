@@ -1,0 +1,1 @@
+`fillOuter(xs, out, 1)` may be allocated inside the `using arena()` block at 16:5 and is stored into memory
