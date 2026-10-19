@@ -183,55 +183,45 @@ const checkForeignSignature = (ctx: CheckContext, sig: FunctionSig, decl: Node, 
       i = i + 1
       continue
     }
+    // What the refused parameter breaks, or "" when it crosses. The refusals
+    // share one message built once below, so the type is spelled at one site.
+    let rule = ""
+    const bare = ctx.table.stripNull(sig.paramTypes[i])
     if (run > 0) {
       // The parameter after a run is its count whatever else it might be, so
       // a `CPtr` or a `string` there is refused rather than read as the next
       // parameter and the run reported as missing its count.
       if (sig.paramTypes[i] !== T_U64) {
-        const spelled = ctx.table.typeName(sig.paramTypes[i])
-        ctx.error(
-          decl,
-          `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and the parameter after a run of \`u8[]\` buffers is their byte count, a \`u64\``
-        )
+        rule = "the parameter after a run of `u8[]` buffers is their byte count, a `u64`"
       }
       run = 0
-      i = i + 1
-      continue
-    }
-    if (ctx.table.stripNull(sig.paramTypes[i]) === T_STRING) {
+    } else if (bare === T_STRING) {
       // S3.1: C's `const char *`, borrowed for the call (`docs/wp27-ffi.md`
       // §8b), and `string | null` passes `NULL`. Unlike a `CPtr`'s, this null
       // is the program's to give: it names no address, so there is no
       // provenance for C to be wrong about.
-      i = i + 1
-      continue
-    }
-    // S3.3: `CPtr | null` passes, because the call site is where a null is
-    // held to the literal one (`refuseForeignNullable` in `expressions.ts`,
-    // `docs/wp27-ffi.md` §8g): the declaration cannot tell `realpath(p, null)`
-    // from handing C back a null it gave out.
-    const bare = ctx.table.stripNull(sig.paramTypes[i])
-    if (ctx.table.isRanged(sig.paramTypes[i])) {
+    } else if (ctx.table.isRanged(sig.paramTypes[i])) {
       refuseForeignRange(ctx, decl, name, `takes \`${sig.paramNames[i]}\` as`, sig.paramTypes[i])
     } else if (bare !== sig.paramTypes[i] && isForeignBuffer(ctx.table, bare)) {
       // A null buffer has no length to hold the count to, and the `NULL, 0`
       // C allows is a `CPtr | null` parameter's literal `null` (§3b).
-      const spelled = ctx.table.typeName(sig.paramTypes[i])
-      ctx.error(
-        decl,
-        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a buffer a declared C function takes is never null: it has no length to hold the count to, so a C function that accepts \`NULL, 0\` is declared with a \`CPtr | null\` parameter`
-      )
+      rule =
+        "a buffer a declared C function takes is never null: it has no length to hold the count to, so a C function that accepts `NULL, 0` is declared with a `CPtr | null` parameter"
     } else if (bare >= 0 && ctx.table.kindOf(bare) === K_ARRAY) {
-      const spelled = ctx.table.typeName(sig.paramTypes[i])
-      ctx.error(
-        decl,
-        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and the only array a declared C function takes is a \`u8[]\` or a \`readonly u8[]\`, whose bytes have one layout on every target`
-      )
+      rule =
+        "the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target"
     } else if (!isForeignType(ctx.table, sig.paramTypes[i])) {
-      const spelled = ctx.table.typeName(sig.paramTypes[i])
+      // S3.3: `CPtr | null` passes, because the call site is where a null is
+      // held to the literal one (`refuseForeignNullable` in `expressions.ts`,
+      // `docs/wp27-ffi.md` §8g): the declaration cannot tell `realpath(p, null)`
+      // from handing C back a null it gave out.
+      rule =
+        "a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count"
+    }
+    if (rule !== "") {
       ctx.error(
         decl,
-        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars, \`CPtr\`, a \`string\` it borrows as \`const char *\` and a \`u8[]\` buffer followed by its \`u64\` count`
+        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${ctx.table.typeName(sig.paramTypes[i])}, and ${rule}`
       )
     }
     i = i + 1
