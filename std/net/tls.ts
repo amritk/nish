@@ -664,7 +664,7 @@ const TLS_CERTIFICATE_VERIFY_PREFIX: i32 = 98
 /**
  * The secrets of one connection under one hash, as `TlsServer` holds them
  * in `secrets256` and `secrets384`: an array of exactly `hashLength` bytes
- * for each, allocated once and reused by every connection. The seven the key
+ * for each, allocated once and reused by every connection. The ten the key
  * schedule derives are `Secret`s (`nish:secret`), read only inside `expose`
  * and wiped by `wipe`, so the checker proves no copy of them leaves the
  * pool and that `wipe` reaches every one. The expected client Finished and
@@ -1109,7 +1109,7 @@ export class TlsServer {
     this.secrets().zero(index)
   }
 
-  /** Zeroes the ephemeral key, which the record layer does once the ServerHello is written. */
+  /** Zeroes the ephemeral key, which the record layer does once the ServerHello is written: not while a hello that offers a ticket waits for `resume`, whose exchange still needs it. */
   wipeEphemeral(): void {
     exposeWith(this.ephemeral, TLS_FROM, tlsZeroHeld)
   }
@@ -2036,9 +2036,12 @@ export class TlsServer {
    * NewSessionTicket carrying it at the Application level, for the carrier
    * to send under the server's application keys. Answers whether one was
    * written: none is when tickets are off, the client did not list
-   * `psk_dhe_ke`, or the key does not seal. Either way the resumption master
-   * secret is wiped before it returns, so a carrier that issues no ticket
-   * still calls this, or `wipeResumption`.
+   * `psk_dhe_ke`, or the key does not seal. On a connected connection's
+   * first call the resumption master secret is wiped before it returns,
+   * written or not, so a carrier that issues no ticket still calls this, or
+   * `wipeResumption`. Before the handshake is done, or on a second call, it
+   * answers false and touches nothing: a secret wiped then would leave no
+   * ticket to issue, and one wiped already has nothing left to wipe.
    */
   issue(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean {
     if (this.state !== TLS_STATE_CONNECTED || this.issued) {

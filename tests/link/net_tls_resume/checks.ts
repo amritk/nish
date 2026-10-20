@@ -4,8 +4,8 @@
 // way out of one leave, read back through `expose`; that QUIC never resumes;
 // and a resumed handshake through a reused slot, which allocates nothing.
 import { Suite } from "nish/testing";
-import { Secret } from "nish:secret";
-import { TlsServer, TlsSecretPool } from "nish/net/tls";
+import { Secret, secret, wipe } from "nish:secret";
+import { TlsServer, TlsSecretPool, tlsSignEcdsaP256 } from "nish/net/tls";
 import {
   TLS_ALERT_DECODE_ERROR,
   TLS_ALERT_DECRYPT_ERROR,
@@ -25,9 +25,9 @@ import {
 } from "nish/net/tls/record-server";
 import { TlsTicketStrikes } from "nish/net/tls/ticket";
 import { secretCopy } from "../net_tls_common/secrets";
-import { quicConfig, serverPrivate, serverRandom, tcpConfig } from "../net_tls_common/server";
-import { clearRecord } from "../net_tls_record_common/client";
-import { ZERO, allZero, feed, filled, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
+import { leafPrivate, quicConfig, serverPrivate, serverRandom, tcpConfig } from "../net_tls_common/server";
+import { ZERO, allZero, drain, feed, filled, join, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
+import { clearRecord, splitRecords } from "../net_tls_record_common/client";
 import {
   H,
   HOUR,
@@ -40,9 +40,12 @@ import {
   bindHello,
   buildHello,
   craftedPsk,
+  honestShare,
   offerOf,
   runOn,
   sealTicket,
+  selectedIdentity,
+  sessionFor,
   ticketState,
 } from "./client";
 import { tcpChecks } from "./tcp";
@@ -85,6 +88,13 @@ const resumeWiped = (conn: TlsRecordServer): boolean => {
 /** What an opened or failed connection leaves: `resumeWiped`, and the handshake secret too. */
 const handshakeWiped = (conn: TlsRecordServer): boolean => resumeWiped(conn) && zeroed(conn.tls.secrets().handshake);
 
+/** What a failed connection leaves: `handshakeWiped`, and the resumption master secret too. */
+const failedWiped = (conn: TlsRecordServer): boolean => handshakeWiped(conn) && zeroed(conn.tls.secrets().resumption);
+
+/** An opened connection, owed a ticket, issued it: whether that wrote one and left the resumption master secret zero. */
+const issuedWiped = (conn: TlsRecordServer, ring: Ring): boolean =>
+  conn.issue(ring.key, ring.info, START) && zeroed(conn.tls.secrets().resumption);
+
 /** Row 1, and what a resumed handshake leaves. */
 const rowOne = (t: Suite): void => {
   const ring = new Ring(64);
@@ -96,6 +106,11 @@ const rowOne = (t: Suite): void => {
   t.ok("row 1: the issued ticket reads back", first.ticket.ok);
   t.eqI64("row 1: a full handshake's ticket begins its chain now", firstConn.tls.issuing.chainStart, START);
   t.ok("row 1: the issued ticket's PSK and the resumption master secret are zero once issued", allZero(firstConn.tls.issuing.psk) && zeroed(firstConn.tls.secrets().resumption));
+  t.ok("row 1: once issued, TLS_RECORD_TICKET is down", !first.owedAfter);
+  t.ok("row 1: a second issue answers false and writes nothing", !first.reissued && first.reissueBytes === ZERO);
+  t.eqI32("row 1: the ticket's lifetime is 7200 seconds", first.ticket.lifetime, toI32(7200));
+  t.ok("row 1: the ticket's nonce is the one byte 0", toI32(first.ticket.nonce.length) === 1 && toI32(first.ticket.nonce[0]) === 0);
+  t.ok("row 1: a full handshake's ServerHello carries the server's own x25519 share", honestShare(first.share));
   const conn: TlsRecordServer = newConn();
   const again: Run = runOn(conn, ring, offerOf(first.ticket.ticket, first.ticket.psk), START, true, true);
   t.ok("row 1: the ticket is asked about", again.askedTicket);
@@ -106,6 +121,8 @@ const rowOne = (t: Suite): void => {
   t.ok("row 1: the resumed connection opens", again.open);
   t.eqI32("row 1: one strike is live", ring.strikes.live(START), toI32(1));
   t.ok("row 1: a resumed connection is issued a ticket too", again.ticket.ok);
+  t.ok("row 1: its ticket_age_add is not the first connection's", again.ticket.ageAdd !== first.ticket.ageAdd);
+  t.ok("row 1: a resumed ServerHello carries the server's own x25519 share", honestShare(again.share));
   t.ok("wipe: a resumed handshake leaves the PSK, early secret, binder key, salt and opened PSK zero", resumeWiped(conn));
   t.ok("wipe: and the handshake secret and resumption master secret", zeroed(conn.tls.secrets().handshake) && zeroed(conn.tls.secrets().resumption));
 
@@ -124,6 +141,18 @@ const rowOne = (t: Suite): void => {
 
   const old: u8[] = sealTicket(ring.previous, ring.previousInfo, ticketState(craftedPsk(), "", START), START);
   t.ok("row 1: a ticket sealed under the previous key resumes", isResumed(runAt(newConn(), ring, offerCrafted(old), START)));
+
+  let longName: string = "";
+  for (let k: i32 = 0; k < 256; k++) {
+    longName = longName + "a";
+  }
+  const longOffer = new Offer();
+  longOffer.name = longName;
+  const longConn: TlsRecordServer = newConn();
+  const long: Run = runOn(longConn, ring, longOffer, START, true, true);
+  t.ok("row 1: a 256-byte server name opens and is owed no ticket", long.open && !long.ticketOwed);
+  t.ok("row 1: and issue writes it none", !longConn.issue(ring.key, ring.info, START) && longConn.outputEnd === longConn.outputStart);
+  t.ok("wipe: and its resumption master secret is zero", zeroed(longConn.tls.secrets().resumption));
   ring.wipe();
 };
 
@@ -134,8 +163,11 @@ const rowsTwoThree = (t: Suite): void => {
   const tampered: u8[] = range(good, ZERO, toI32(good.length));
   tampered[toI32(tampered.length) - 3] = toU8(toI32(tampered[toI32(tampered.length) - 3]) ^ 1);
   const conn: TlsRecordServer = newConn();
-  t.ok("row 2: a tampered ticket: full handshake", isFull(runAt(conn, ring, offerCrafted(tampered), START)));
+  const tamperedRun: Run = runAt(conn, ring, offerCrafted(tampered), START);
+  t.ok("row 2: a tampered ticket: full handshake", isFull(tamperedRun));
+  t.ok("row 2: and its ServerHello carries the server's own x25519 share", honestShare(tamperedRun.share));
   t.ok("wipe: row 2 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(conn));
+  t.ok("wipe: row 2, issued its ticket, leaves the resumption master secret zero", issuedWiped(conn, ring));
   t.ok("row 2: a truncated ticket: full handshake", isFull(runAt(newConn(), ring, offerCrafted(range(good, ZERO, toI32(good.length) - 1)), START)));
   const other = new Ring(4);
   const foreign: u8[] = crafted(other, "", START, START);
@@ -147,6 +179,7 @@ const rowsTwoThree = (t: Suite): void => {
   const expiredConn: TlsRecordServer = newConn();
   t.ok("row 3: a ticket past its lifetime: full handshake", isFull(runAt(expiredConn, ring, offerCrafted(plain(ring)), START + 2 * HOUR + 1)));
   t.ok("wipe: row 3 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(expiredConn));
+  t.ok("wipe: row 3, issued its ticket, leaves the resumption master secret zero", issuedWiped(expiredConn, ring));
   t.ok("row 3 negative: at the last nanosecond of its lifetime it resumes", isResumed(runAt(newConn(), ring, offerCrafted(plain(ring)), START + 2 * HOUR)));
   t.ok("row 3: a ticket dated in the future: full handshake", isFull(runAt(newConn(), ring, offerCrafted(crafted(ring, "", START + HOUR, START + HOUR)), START + MINUTE)));
   const late: i64 = START + HOUR + 2 * MINUTE;
@@ -167,6 +200,7 @@ const rowsFourToEight = (t: Suite): void => {
   const wideConn: TlsRecordServer = newConn();
   t.ok("row 4: a SHA-384 ticket on a SHA-256 suite: full handshake", isFull(runAt(wideConn, ring, offerCrafted(sealTicket(ring.key, ring.info, wide, START)), START)));
   t.ok("wipe: row 4 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(wideConn));
+  t.ok("wipe: row 4, issued its ticket, leaves the resumption master secret zero", issuedWiped(wideConn, ring));
   const chacha = ticketState(craftedPsk(), "", START);
   chacha.suite = TLS_CHACHA20_POLY1305_SHA256;
   t.ok("row 4 negative: a ChaCha20 ticket, SHA-256 too, resumes on AES-128", isResumed(runAt(newConn(), ring, offerCrafted(sealTicket(ring.key, ring.info, chacha, START)), START)));
@@ -176,6 +210,7 @@ const rowsFourToEight = (t: Suite): void => {
   const namedConn: TlsRecordServer = newConn();
   t.ok("row 5: a ticket for another server name: full handshake", isFull(runAt(namedConn, ring, named, START)));
   t.ok("wipe: row 5 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(namedConn));
+  t.ok("wipe: row 5, issued its ticket, leaves the resumption master secret zero", issuedWiped(namedConn, ring));
   t.ok("row 5: a named ticket offered with no name: full handshake", isFull(runAt(newConn(), ring, offerCrafted(crafted(ring, "a.example", START, START)), START)));
   const unnamed: Offer = offerCrafted(plain(ring));
   unnamed.name = "a.example";
@@ -188,15 +223,41 @@ const rowsFourToEight = (t: Suite): void => {
   t.ok("row 6 negative: a ticket's first use resumes", isResumed(runAt(newConn(), ring, offerCrafted(once), START)));
   const replayConn: TlsRecordServer = newConn();
   const liveBefore: i32 = ring.strikes.live(START);
-  t.ok("row 6: its second use: full handshake", isFull(runAt(replayConn, ring, offerCrafted(once), START)));
+  const replay: Run = runAt(replayConn, ring, offerCrafted(once), START);
+  t.ok("row 6: its second use: full handshake", isFull(replay));
+  t.ok("row 6: and that fallback's ServerHello carries the server's own x25519 share", honestShare(replay.share));
   t.ok("wipe: row 6 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(replayConn));
+  t.ok("wipe: row 6, issued its ticket, leaves the resumption master secret zero", issuedWiped(replayConn, ring));
   t.eqI32("row 6: and the replay records no second strike", ring.strikes.live(START), liveBefore);
+
+  const wrongSuite: Offer = offerCrafted(plain(ring));
+  wrongSuite.tickets = [sealTicket(ring.key, ring.info, wide, START), wrongSuite.tickets[0]];
+  wrongSuite.bindIndex = 1;
+  const suiteRun: Run = runAt(newConn(), ring, wrongSuite, START);
+  t.ok("rows 4 and 1: a ticket of the wrong suite, then one that fits: resumes", isResumed(suiteRun));
+  t.eqI32("rows 4 and 1: and identity 1 is selected", suiteRun.selected, toI32(1));
+  const wrongName: Offer = offerCrafted(crafted(ring, "a.example", START, START));
+  wrongName.tickets.push(crafted(ring, "b.example", START, START));
+  wrongName.name = "b.example";
+  wrongName.bindIndex = 1;
+  const nameRun: Run = runAt(newConn(), ring, wrongName, START);
+  t.ok("rows 5 and 1: a ticket for another name, then one for this name: resumes", isResumed(nameRun));
+  t.eqI32("rows 5 and 1: and identity 1 is selected", nameRun.selected, toI32(1));
+  const replayFirst: Offer = offerCrafted(once);
+  replayFirst.tickets.push(plain(ring));
+  replayFirst.bindIndex = 1;
+  const heldRun: Run = runAt(newConn(), ring, replayFirst, START);
+  t.ok("rows 6 and 1: a replayed ticket, then a fresh one: resumes", isResumed(heldRun));
+  t.eqI32("rows 6 and 1: and identity 1 is selected", heldRun.selected, toI32(1));
+  const replayUnbound: Run = runAt(newConn(), ring, offerOf(once, []), START);
+  t.ok("rows 6 and 9: a replayed ticket with a binder that does not verify: full handshake, no decrypt_error", isFull(replayUnbound) && replayUnbound.alert === ZERO);
 
   const small = new Ring(1);
   t.ok("row 7 negative: a register with room resumes", isResumed(runAt(newConn(), small, offerCrafted(plain(small)), START)));
   const fullConn: TlsRecordServer = newConn();
   t.ok("row 7: a full register: full handshake", isFull(runAt(fullConn, small, offerCrafted(plain(small)), START)));
   t.ok("wipe: row 7 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(fullConn));
+  t.ok("wipe: row 7, issued its ticket, leaves the resumption master secret zero", issuedWiped(fullConn, small));
   t.eqI64("row 7: and it is counted", small.strikes.refusedFull, toI64(1));
   small.wipe();
   const roomy = new Ring(2);
@@ -227,7 +288,7 @@ const rowsNineToFourteen = (t: Suite): void => {
   t.eqI32("row 9: a binder that does not verify: decrypt_error", zero.alert, TLS_ALERT_DECRYPT_ERROR);
   t.ok("row 9: and the connection fails", zero.state === TLS_RECORD_STATE_FAILED && zero.askedTicket);
   t.eqI32("row 9: nothing is recorded", ring.strikes.live(START), ZERO);
-  t.ok("wipe: row 9 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(unboundConn));
+  t.ok("wipe: row 9 leaves the PSK, early secret, binder key, salt, opened PSK, handshake secret and resumption master secret zero", failedWiped(unboundConn));
   const wideBinder: Offer = offerCrafted(plain(ring));
   wideBinder.binderLengths = [48];
   t.eqI32("row 9: a binder of the wrong length: decrypt_error", runAt(newConn(), ring, wideBinder, START).alert, TLS_ALERT_DECRYPT_ERROR);
@@ -323,7 +384,7 @@ const rowsFifteenToEighteen = (t: Suite): void => {
     }
     t.ok(`row 17: ${name} after resuming: the connection does not open`, run.resumed && conn.state !== TLS_RECORD_STATE_OPEN);
     t.eqI32(`row 17: ${name}: the id stays recorded`, ring.strikes.live(START), before + 1);
-    t.ok(`wipe: row 17, ${name}, leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero`, handshakeWiped(conn));
+    t.ok(`wipe: row 17, ${name}, leaves the PSK, early secret, binder key, salt, opened PSK, handshake secret and resumption master secret zero`, failedWiped(conn));
     t.ok(`row 17: ${name}: a later offer is a full handshake`, isFull(runAt(newConn(), ring, offerCrafted(ticket), START)));
   }
 
@@ -362,10 +423,20 @@ const refill = (into: u8[], from: u8[]): void => {
   }
 };
 
-/** How many resumptions the slot runs, and where it is measured from. */
+/** How many handshakes the slot runs, and how often one of them falls back. */
 const ROUNDS: i32 = 100;
+const FALLBACK_EVERY: i32 = 10;
 
-/** A resumed handshake through one reused slot allocates nothing. */
+/** Whether `round` replays round 0's ticket, which by then is struck, and falls back to a full handshake. */
+const fallsBack = (round: i32): boolean => round % FALLBACK_EVERY === 1;
+
+/**
+ * A handshake through one reused slot allocates nothing: every round is
+ * issued a ticket once it opens, and every tenth replays round 0's ticket
+ * and falls back to a signed full handshake. Round 1, the first fallback,
+ * signs and works out the client Finished; the slot's random, key and
+ * hello are the same each time, so later fallbacks reuse both.
+ */
 const slot = (t: Suite): void => {
   const ring = new Ring(256);
   const hellos: u8[][] = [];
@@ -382,28 +453,71 @@ const slot = (t: Suite): void => {
   const tls = new TlsServer(tcpConfig([]), random, slotKey);
   tls.enableTickets();
   const conn = new TlsRecordServer(tls);
+  let signature: u8[] = [];
+  let fallbackFinished: u8[] = [];
   let resumed: i32 = 0;
+  let fellBack: i32 = 0;
+  let issued: i32 = 0;
   let mark: i64 = 0;
   for (let round: i32 = 0; round < ROUNDS; round++) {
-    if (round === 1) {
+    if (round === 2) {
       mark = Arena.mark();
     }
+    const replay: boolean = fallsBack(round);
     refill(slotKey, key);
     tls.restart(random, slotKey);
     conn.start(tls);
-    feed(conn, hellos[round]);
+    feed(conn, replay ? hellos[0] : hellos[round]);
     conn.resume(ring.key, ring.info, ring.previous, ring.previousInfo, ring.strikes, START);
-    conn.consume(conn.outputEnd - conn.outputStart);
-    feed(conn, finishes[round]);
-    if (tls.resumed && conn.state === TLS_RECORD_STATE_OPEN) {
-      resumed = resumed + 1;
+    if ((conn.interest() & TLS_RECORD_SIGN) !== 0) {
+      if (toI32(signature.length) === 0) {
+        const input: u8[] | null = conn.signatureInput();
+        const leaf: Secret<u8[]> = secret(leafPrivate());
+        const signed: u8[] | null = input === null ? null : tlsSignEcdsaP256(leaf, input);
+        wipe(leaf);
+        if (signed !== null) {
+          signature = signed;
+        }
+      }
+      conn.sign(signature);
     }
+    if (replay && toI32(fallbackFinished.length) === 0) {
+      const records: u8[][] = splitRecords(drain(conn));
+      if (toI32(records.length) > 0) {
+        const sh: u8[] = range(records[0], toI32(5), toI32(records[0].length));
+        const session = sessionFor([], range(hellos[0], toI32(5), toI32(hellos[0].length)), sh);
+        const reader = protectionFor(SUITE, session.serverHandshake);
+        const parts: u8[][] = [];
+        for (let k: i32 = 1; k < toI32(records.length); k++) {
+          parts.push(openOne(reader, records[k]).content);
+        }
+        session.finishWith(join(parts));
+        fallbackFinished = sealOne(protectionFor(SUITE, session.clientHandshake), TLS_CONTENT_HANDSHAKE, session.finished, ZERO);
+      }
+    } else {
+      conn.consume(conn.outputEnd - conn.outputStart);
+    }
+    feed(conn, replay ? fallbackFinished : finishes[round]);
+    if (conn.state === TLS_RECORD_STATE_OPEN) {
+      if (tls.resumed && !replay) {
+        resumed = resumed + 1;
+      } else if (!tls.resumed && replay) {
+        fellBack = fellBack + 1;
+      }
+      if (conn.issue(ring.key, ring.info, START)) {
+        issued = issued + 1;
+      }
+    }
+    conn.consume(conn.outputEnd - conn.outputStart);
     conn.close();
     conn.consume(conn.outputEnd - conn.outputStart);
   }
   const after: i64 = Arena.mark();
-  t.eqI32("slot: a hundred resumptions through one restarted slot all open", resumed, ROUNDS);
-  t.eqI64("slot: and after the first, Arena.mark() does not move", after - mark, toI64(0));
+  const fallbacks: i32 = ROUNDS / FALLBACK_EVERY;
+  t.eqI32("slot: ninety resumptions through one restarted slot all open", resumed, ROUNDS - fallbacks);
+  t.eqI32("slot: and the ten replays fall back to full handshakes that open", fellBack, fallbacks);
+  t.eqI32("slot: every round is issued a ticket", issued, ROUNDS);
+  t.eqI64("slot: and after the first fallback, Arena.mark() does not move", after - mark, toI64(0));
   ring.wipe();
 };
 

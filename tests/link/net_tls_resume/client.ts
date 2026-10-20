@@ -42,7 +42,7 @@ import {
   tlsTicketSize,
 } from "nish/net/tls/ticket";
 import { Secret, secret, wipe } from "nish:secret";
-import { copyOf, x25519Plain } from "../crypto_x25519/plain";
+import { copyOf, x25519BasePlain, x25519Plain } from "../crypto_x25519/plain";
 import { sameBytes } from "../crypto_x509/hex";
 import { secretCopy } from "../net_tls_common/secrets";
 import {
@@ -62,7 +62,7 @@ import {
   vec16,
   vec8,
 } from "../net_tls_common/client";
-import { leafPrivate } from "../net_tls_common/server";
+import { leafPrivate, serverPrivate } from "../net_tls_common/server";
 import { clearRecord, splitRecords } from "../net_tls_record_common/client";
 import { ZERO, drain, feed, filled, join, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
 
@@ -226,9 +226,19 @@ export const selectedIdentity = (sh: u8[]): i32 => {
 };
 
 /** The server's x25519 share, wherever its `key_share` sits. */
-const shareOf = (sh: u8[]): u8[] => {
+export const shareOf = (sh: u8[]): u8[] => {
   const at: i32 = serverExtensionAt(sh, EXT_KEY_SHARE);
   return at < 0 ? [] : range(sh, at + 8, at + 40);
+};
+
+/**
+ * Whether `share`, a ServerHello's, is the public key of the server's own
+ * x25519 key, and not that of the all-zero scalar a wiped key leaves.
+ */
+export const honestShare = (share: u8[]): boolean => {
+  const own: u8[] | null = x25519BasePlain(serverPrivate());
+  const zero: u8[] | null = x25519BasePlain(new Array<u8>(32));
+  return own !== null && zero !== null && sameBytes(share, own) && !sameBytes(share, zero);
 };
 
 /** Every secret the client derives, the Finished it sends, and what it checked of the server's. */
@@ -335,6 +345,7 @@ export class Ticket {
   ticket: u8[];
   psk: u8[];
   lifetime: i32 = 0;
+  ageAdd: i32 = 0;
   nonce: u8[];
 
   constructor() {
@@ -351,6 +362,7 @@ export const ticketFrom = (nst: u8[], rms: u8[]): Ticket => {
     return out;
   }
   out.lifetime = (toI32(nst[4]) << 24) | (toI32(nst[5]) << 16) | (toI32(nst[6]) << 8) | toI32(nst[7]);
+  out.ageAdd = (toI32(nst[8]) << 24) | (toI32(nst[9]) << 16) | (toI32(nst[10]) << 8) | toI32(nst[11]);
   const nonceLength: i32 = toI32(nst[12]);
   out.nonce = range(nst, 13, 13 + nonceLength);
   const at: i32 = 13 + nonceLength;
@@ -434,8 +446,14 @@ export class Run {
   selected: i32 = -1;
   /** Whether the client's Finished went in and the connection opened. */
   open: boolean = false;
-  /** Whether `TLS_RECORD_TICKET` was up once the connection opened. */
+  /** Whether `TLS_RECORD_TICKET` was up once the connection opened, and once a ticket was issued. */
   ticketOwed: boolean = false;
+  owedAfter: boolean = false;
+  /** Whether a second `issue` answered true, and the bytes it queued. */
+  reissued: boolean = false;
+  reissueBytes: i32 = 0;
+  /** The x25519 share the ServerHello carried. */
+  share: u8[];
   session: Session;
   ticket: Ticket;
   /** The ClientHello's record and the client Finished's, as sent, for replaying. */
@@ -450,6 +468,7 @@ export class Run {
     this.ticket = new Ticket();
     this.helloRecord = [];
     this.finishedRecord = [];
+    this.share = [];
   }
 }
 
@@ -507,6 +526,7 @@ export const runOn = (conn: TlsRecordServer, ring: Ring, offer: Offer, now: i64,
   }
   const sh: u8[] = range(records[0], 5, toI32(records[0].length));
   run.selected = selectedIdentity(sh);
+  run.share = shareOf(sh);
   run.session = sessionFor(run.selected >= 0 ? offer.psk : [], cat([before, hello]), sh);
   const reader = protectionFor(SUITE, run.session.serverHandshake);
   const parts: u8[][] = [];
@@ -534,6 +554,9 @@ export const runOn = (conn: TlsRecordServer, ring: Ring, offer: Offer, now: i64,
   const sent: u8[] = drain(conn);
   run.serverNanos = run.serverNanos + (monotonicNanos() - started);
   run.wireBytes = run.wireBytes + toI32(sent.length);
+  run.owedAfter = (conn.interest() & TLS_RECORD_TICKET) !== 0;
+  run.reissued = conn.issue(ring.key, ring.info, now);
+  run.reissueBytes = toI32(drain(conn).length);
   const issued: u8[][] = splitRecords(sent);
   if (toI32(issued.length) === 0) {
     return run;

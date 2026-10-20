@@ -835,8 +835,10 @@ export class TlsRecordServer {
         this.readLevel = TLS_LEVEL_HANDSHAKE
       }
     }
-    if (tls.state !== TLS_STATE_WAIT_CLIENT_HELLO) {
-      // The ServerHello is written, so the exchange is done with the key.
+    if (tls.state !== TLS_STATE_WAIT_CLIENT_HELLO && tls.state !== TLS_STATE_WAIT_TICKET) {
+      // The ServerHello is written, so the exchange is done with the key. A
+      // hello that offers a ticket waits for `resume` before any ServerHello,
+      // and the exchange still needs the key there.
       tls.wipeEphemeral()
     }
     if (tls.state === TLS_STATE_WAIT_FINISHED || tls.state === TLS_STATE_CONNECTED) {

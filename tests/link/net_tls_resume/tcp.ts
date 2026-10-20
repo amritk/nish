@@ -34,9 +34,11 @@ import {
   SUITE,
   bindHello,
   buildHello,
+  honestShare,
   offerOf,
   selectedIdentity,
   sessionFor,
+  shareOf,
   ticketFrom,
 } from "./client";
 
@@ -159,6 +161,7 @@ const runTcp = (carrier: Carrier, ring: Ring, offer: Offer, now: i64): Run => {
   if (toI32(records.length) > 0 && toI32(records[0][0]) === TLS_CONTENT_HANDSHAKE) {
     const sh: u8[] = range(records[0], toI32(5), toI32(records[0].length));
     run.selected = selectedIdentity(sh);
+    run.share = shareOf(sh);
     run.session = sessionFor(run.selected >= 0 ? offer.psk : [], hello, sh);
     const reader = protectionFor(SUITE, run.session.serverHandshake);
     const parts: u8[][] = [];
@@ -198,9 +201,11 @@ export const tcpChecks = (t: Suite): void => {
   t.ok("tcp: the slot, restarted, asks about the offered ticket", again.askedTicket);
   t.ok("tcp: TlsTcpServer.resume resumes it, unsigned, identity 0", again.resumed && !again.signed && again.selected === ZERO);
   t.ok("tcp: the resumed connection opens and is issued a ticket too", again.open && again.ticket.ok);
+  t.ok("tcp: a resumed ServerHello carries the server's own x25519 share", honestShare(again.share));
   t.eqI32("tcp: one strike is live", ring.strikes.live(START), toI32(1));
   const replay: Run = runTcp(carrier, ring, offerOf(first.ticket.ticket, first.ticket.psk), START);
   t.ok("tcp: the same ticket again falls back to a full handshake", replay.open && replay.signed && !replay.resumed);
+  t.ok("tcp: and that fallback's ServerHello carries the server's own x25519 share", honestShare(replay.share));
   t.eqI32("tcp: resume on a slot it does not hold answers TLS_RECORD_DONE", carrier.server.resume(toI32(0), ring.key, ring.info, ring.previous, ring.previousInfo, ring.strikes, START), TLS_RECORD_DONE);
   t.eqI32("tcp: and so does issue", carrier.server.issue(toI32(0), ring.key, ring.info, START), TLS_RECORD_DONE);
   carrier.shutdown();

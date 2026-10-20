@@ -4604,9 +4604,11 @@ if (!only || "par_dst_short".includes(only)) {
 // server whose random and x25519 key are drawn fresh, and prints the medians
 // of the server's own time per handshake on stderr; the link loop above pins
 // its stdout, the counts, the bytes and a checksum folded from every
-// session's traffic secret. Measured on the head that added it, nine runs:
-// full 420-430 us, its byte-identical copy within 1.4% of it (the noise
-// band), resumed 256-262 us, 0.61x the full handshake: psk_dhe_ke still does
+// session's traffic secret. Measured after its first review round, nine
+// runs, eight of them: full 416-436 us, its byte-identical copy within 1.2%
+// of it (the noise band), resumed 256-262 us, 0.60-0.62x the full handshake;
+// the ninth, on a loaded machine, was slower in every arm alike (712 and
+// 452 us, 0.63x). psk_dhe_ke still does
 // the x25519 exchange and leaves out the certificate and the P-256 signature.
 // On the wire, 854 bytes a full handshake against 637 a resumed one, both
 // sides and the NewSessionTicket counted. The bound is the resumed median

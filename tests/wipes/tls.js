@@ -67,7 +67,11 @@ export const wipeChecks = [
   // it begins) and `advance` 690 (`wipeEphemeral`, the handshake and client
   // handshake secrets through `wipeSecret`, the plain copy each
   // `tlsInstallHeld` installs from, the resumption master secret of a
-  // connection no ticket will be issued to, besides the `fail` it can reach), and
+  // connection no ticket will be issued to, besides the `fail` it can reach;
+  // 561 before the server-resume stage, which added 66 through two call sites,
+  // the NewSessionTicket's `sealQueue` in `pump`, 65, and `wipeResumption`, 1,
+  // and 63 through callees growing, `TlsServer.wipe` from 19 to 25 at seven
+  // sites and `wipeSecret` from 9 to 12 at seven), and
   // `updateReadKeys` 30 (the plain copy `tlsAdvanceHeld` moves on, once for
   // each hash length, and the keys it installs). Deleting any one of these
   // wipes lowers its root's count by its own share; `tlsZeroHeld`'s one
