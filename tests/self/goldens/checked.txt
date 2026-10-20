@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1076 programs, 140029 dump lines.
+# 1083 programs, 140143 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -51569,6 +51569,127 @@ function main(): i32 -> @nish_main [exported entry]
   local 22:14 e: Point (const)
   local 27:9 first: Point (const)
   local 28:12 i: i32 (let)
+program tests/cases/port_record_alias_const.ts
+module tests/cases/port_record_alias_const.ts (entry)
+struct Rec (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=3
+  local 10:9 ps: Rec[] (const)
+  local 11:9 p: Rec (const)
+  local 13:9 q: Rec (const)
+program tests/cases/port_record_alias_const_quiet.ts
+module tests/cases/port_record_alias_const_quiet.ts (entry)
+struct Rec (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=3
+  local 8:9 ps: Rec[] (const)
+  local 9:9 p: Rec (const)
+  local 11:9 q: Rec (const)
+program tests/cases/port_record_alias_ctor_write.ts
+module tests/cases/port_record_alias_ctor_write.ts (entry)
+struct Rec (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+struct Reset (class) size=4 align=4
+  field n: i32 index=0 offset=0
+  constructor -> @Reset.constructor
+function Reset.constructor(this: Reset, xs: Rec[]): void -> @Reset.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 11:5
+  calls: nish_panic_index
+  pointer this: size=4 writesThrough=true captured=false
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Reset.constructor
+  calls: Reset.constructor nish_arena_mark nish_arena_release nish_array_grow nish_panic_overflow nish_print nish_str_from_i32
+  stackSites=3 stackLocals=3
+  local 17:9 ps: Rec[] (const)
+  local 18:9 p: Rec (const)
+  local 20:9 r: Reset (const)
+  callee 20:13 new Reset -> @Reset.constructor
+program tests/cases/port_record_alias_helper_bump.ts
+module tests/cases/port_record_alias_helper_bump.ts (entry)
+struct Rec (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function bump(r: Rec): void -> @bump
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:3
+  calls: nish_panic_overflow
+  pointer r: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: bump nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 13:9 ps: Rec[] (const)
+  local 14:9 p: Rec (const)
+  callee 16:3 bump -> @bump
+program tests/cases/port_record_alias_helper_copy.ts
+module tests/cases/port_record_alias_helper_copy.ts (entry)
+struct Rec (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function add(xs: Rec[], r: Rec): void -> @add
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:3
+  calls: nish_array_grow
+  pointer xs: size=0 writesThrough=true captured=false
+  pointer r: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: add nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 13:9 ps: Rec[] (const)
+  local 14:9 p: Rec (const)
+  callee 15:3 add -> @add
+program tests/cases/port_record_alias_helper_read_quiet.ts
+module tests/cases/port_record_alias_helper_read_quiet.ts (entry)
+struct Rec (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function sum(xs: Rec[]): i32 -> @sum
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 9:7 t: i32 (let)
+  local 10:12 i: i32 (let)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_from_i32 sum
+  stackSites=2 stackLocals=2
+  local 17:9 ps: Rec[] (const)
+  local 18:9 p: Rec (const)
+  callee 20:15 sum -> @sum
+program tests/cases/port_record_alias_helper_write.ts
+module tests/cases/port_record_alias_helper_write.ts (entry)
+struct Rec (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function setFirst(xs: Rec[]): void -> @setFirst
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:3
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via setFirst
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_from_i32 setFirst
+  stackSites=2 stackLocals=2
+  local 13:9 ps: Rec[] (const)
+  local 14:9 p: Rec (const)
+  callee 16:3 setFirst -> @setFirst
 program tests/cases/port_str_ascii_literal_quiet.ts
 module tests/cases/port_str_ascii_literal_quiet.ts (entry)
 const GREETING: string = "hello there"
