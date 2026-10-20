@@ -44,20 +44,15 @@ read in 64 KiB windows, and `write`'s back-pressure decides when the next
 window is read:
 
 ```ts
-const video = fileOpen("public/kyuukurarin.mp4")   // once, at start-up
-if (video < 0) { panic("cannot open the video") }
-const size = fileSize(video)                        // the Content-Length
-const window = new Array<u8>(65536)                 // the only buffer
-
 // Per connection, the state is one i64: how far into the file it has got.
 // The answer is the new position, or -1 when the response cannot be finished
 // and the connection is to be closed.
-const pump = (c: Http1Connection, at: i64): i64 => {
+function pump(c: Http1Connection, file: i32, size: i64, window: u8[], at: i64): i64 {
   let pos = at
   while (pos < size) {
     const left = size - pos                         // never past Content-Length
     const want = left < 65536 ? toI32(left) : 65536
-    const n = fileReadAt(video, window, 0, want, pos)
+    const n = fileReadAt(file, window, 0, want, pos)
     if (n <= 0) { return -1 }                       // shrank under us, or failed
     const took = c.write(window, 0, n)
     if (took === H1_AGAIN) { return pos }           // wait for H1_WRITE, then pump again
@@ -66,6 +61,14 @@ const pump = (c: Http1Connection, at: i64): i64 => {
     if (took < n) { return pos }                    // the rest of this window on the next wake
   }
   return pos
+}
+
+function main(): void {
+  const video = fileOpen("public/kyuukurarin.mp4")  // once, at start-up
+  if (video < 0) { panic("cannot open the video") }
+  const size = fileSize(video)                      // the Content-Length
+  const window = new Array<u8>(65536)               // the only buffer
+  // ... the event loop: on each H1_WRITE, pos = pump(c, video, size, window, pos)
 }
 ```
 
