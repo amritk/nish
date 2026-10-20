@@ -710,9 +710,9 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
     const body = clause.kind === N_DEFAULT ? clause.children[0] : clause.children[1]
     if (body.children.length > 0 || i === clauses.length - 1) {
       let state = s
-      if (k >= 0 && groupDefault) {
+      if (k >= 0 && k < s.length && groupDefault) {
         state = flowSet(s, k, s[k] & ~(labelled & ~group))
-      } else if (k >= 0 && groupKnown) {
+      } else if (k >= 0 && k < s.length && groupKnown) {
         state = flowSet(s, k, s[k] & group)
       }
       for (const statement of body.children) {
