@@ -836,6 +836,9 @@ class RequestSite {
  */
 const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolean): boolean => {
   if (ctx.program.structs.has(info.name)) {
+    if (symbols) {
+      reachForeignSymbols(ctx, info.name)
+    }
     return false
   }
   if (symbols) {
@@ -843,6 +846,34 @@ const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolea
   }
   ctx.program.addStruct(info.name, info)
   return true
+}
+
+/**
+ * Give a layout this module already holds the `declare`s for its constructor
+ * and methods, when another module defines it.
+ *
+ * The first registration decides nothing about what comes later: a type
+ * argument going out registers `Box$i32` layout-only, and a call this module
+ * later makes to `box(9)` hands it a value whose methods it calls. Without the
+ * upgrade `b.get()` names a symbol nothing declares, and `llvm-as` refuses the
+ * module (#613). A struct this module defines itself is never upgraded, and one
+ * already in `reachableStructs` is not pushed twice.
+ */
+const reachForeignSymbols = (ctx: CheckContext, name: string): void => {
+  const program = ctx.program
+  let index = 0
+  while (index < program.structList.length && program.structList[index].name !== name) {
+    index = index + 1
+  }
+  if (index === program.structList.length || program.structList[index].origin === program.source) {
+    return
+  }
+  for (const reached of program.reachableStructs) {
+    if (reached === index) {
+      return
+    }
+  }
+  program.reachableStructs.push(index)
 }
 
 /** `reachForeignLayout` over `root` and everything its members reach, in `from`'s registry. */

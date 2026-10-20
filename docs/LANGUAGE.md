@@ -6246,7 +6246,9 @@ a ternary, a record and a class unannotated; `reject_secret_inferred_literal`,
 `_alias`, `_call`, `_field` and `_moved_class` are refused unannotated as
 annotated). The same holds for any generic an imported module declares:
 `const b = box(7)` holds the `Box<i32>` that `box` answers, whose layout comes
-with the call (`tests/link/generic_import_inferred`).
+with the call (`tests/link/generic_import_inferred`), with its methods even
+where the module already held `Box<i32>` as a type argument
+(`tests/link/generic_import_inferred_held`).
 
 **What a `Secret` may hold.** One run of integers, so that `wipe` reaches every
 byte with one store: `` `Secret<string>` is not key material `` (NL2428,
@@ -6310,10 +6312,10 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
   second name for the bytes would read the key outside the `Secret`, and
   zeros once `wipe` has run. A local handed in is not read again (NL2445,
   `reject_secret_moved`, and `reject_secret_inferred_moved_class`, where the
-  message names the class the plain value is), and neither is the local in either arm of
-  `secret(c ? a : b)`. A parameter, a field or an element, whose owner keeps
-  the plain bytes, is refused (NL2447, `reject_secret_unmovable`). Everything
-  else is judged where it is written:
+  message names the class the plain value is), and neither is the local in
+  either arm of `secret(c ? a : b)`. A parameter, a field or an element,
+  whose owner keeps the plain bytes, is refused (NL2447,
+  `reject_secret_unmovable`). Everything else is judged where it is written:
   - an array or object literal, `null`, and a ternary of fresh values are
     fresh, and so is a `new` whose constructor keeps no `this`;
   - a call is fresh when its callee answers a fresh value, judged over the
@@ -6533,7 +6535,8 @@ reads again, beside a twin that zeroes them with `fill(0)`, and after
 `opt -O2` the twin holds no store and the wipe holds one volatile zero per byte.
 `secret_wipe_o2_inferred` does the same for a `Secret` bound with no
 annotation, beside `secret_wipe_o2_inferred_plain` ("nish:secret: an inferred
-`Secret`'s wipe survives opt -O2").
+`Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the
+twin's fill(0) is deleted").
 Two things it does not reach, and says so: a buffer a `push` outgrew, which is
 no longer the array's, and a string, which is immutable and is not key material.
 
