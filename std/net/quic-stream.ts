@@ -719,6 +719,13 @@ export class QuicStreams {
    * could start, which is no more than the sides holding none, nor than one
    * per three bytes (the smallest STREAM frame carrying a byte, but for a
    * last one without a length).
+   *
+   * The peer's remaining stream credit is no tighter bound: an ACK earlier
+   * in the same packet can finish a stream, and `release` then raises the
+   * limit before a later STREAM frame opens past the old one. A bound that
+   * allows for every such release is one buffer per side holding none, which
+   * `idle` already is. Once warm the reserve keeps up to `hold` buffers from
+   * one packet to the next, so this costs two comparisons, not a take per side.
    */
   prime(bytes: i32): void {
     const pools: QuicStreamPools | null = this.ownPools()
