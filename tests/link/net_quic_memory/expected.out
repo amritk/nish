@@ -35,4 +35,5 @@ PASS  the slot keeps its TlsServer across connections
 PASS  before the next connection, the slot holds the last one's keys and secrets
 PASS  and reset zeroes them all: every space's key slots, AES schedules included, the key-update and Initial secrets, and TlsServer's secrets
 PASS  and the server's own parameters' reset token, and their encoding, which carries it
-quic memory: 37 passed, 0 failed, 0 skipped
+PASS  a connection that echoed and was reset has given every stream buffer back
+quic memory: 38 passed, 0 failed, 0 skipped

@@ -25,7 +25,7 @@
 // signature of a fixed input the same every time.
 import { Secret, expose, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
-import { QUIC_STREAM_END } from "nish/net/quic-stream";
+import { QUIC_STREAM_END, QuicStreamPools } from "nish/net/quic-stream";
 import { QuicKeys, QuicKeysSlot, quicKeysWipe } from "nish/net/quic-packet";
 import { quicKeyUpdateCopy, quicKeysUpdateOf } from "../net_quic_common/keys";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
@@ -400,6 +400,16 @@ const qmResetWipes = (t: Suite, conn: QuicConnection, b: QmBuffers): void => {
   );
 };
 
+/**
+ * A connection that served streams and was then `reset` holds none of their
+ * buffers: every one went back to its pool, which is how a server's slots
+ * share them.
+ */
+const qmResetGivesBack = (t: Suite, conn: QuicConnection): void => {
+  const pools: QuicStreamPools | null = conn.streams.pools;
+  t.ok("a connection that echoed and was reset has given every stream buffer back", pools !== null && pools.lent() === 0 && pools.data.made > 0);
+};
+
 /** Every check, and the exit code. */
 export const memoryChecks = (): i32 => {
   const t = new Suite("quic memory");
@@ -421,6 +431,7 @@ export const memoryChecks = (): i32 => {
     qmRun(t, names[k], conn, s, b);
     if (suites[k] === TLS_AES_256_GCM_SHA384) {
       qmResetWipes(t, conn, b);
+      qmResetGivesBack(t, conn);
     }
   }
   return t.done();

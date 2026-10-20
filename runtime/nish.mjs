@@ -104,6 +104,7 @@ for (const name of [
   "netAddress",
   "netLocalPort",
   "tcpListen",
+  "tcpListenFlags",
   "tcpAccept",
   "netRead",
   "netWrite",

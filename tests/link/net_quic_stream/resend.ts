@@ -14,6 +14,8 @@ export const resendChecks = (t: Suite): void => {
   const s = new QuicStreams(n64(4), n64(0), n64(0), n32(1024), n64(65536));
   s.setPeerLimits(n64(65536), n64(1024), n64(1024), n64(1024), n64(4), n64(0));
   const hello: u8[] = bytesOf(nqText(n32(10)));
+  // A receive side borrows from the reserve a packet readies, as `openPacket` does.
+  s.prime(n32(1200));
   s.onStream(n64(0), n64(0), hello, n32(0), n32(10), false);
   const first: u8[] = bytesOf(nqText(n32(100)));
   s.write(n64(0), first, n32(0), n32(100), false);

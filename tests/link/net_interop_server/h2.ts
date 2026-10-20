@@ -5,12 +5,16 @@
 // answers, once its body has ended, how many bytes the body carried. A body
 // the peer's flow-control window holds back is kept and written again on
 // `H2_WINDOW`, and whenever its connection is served, until it is all out — what
-// `h2spec`'s flow-control cases (§6.9) look for.
+// `h2spec`'s flow-control cases (§6.9) look for. A GET of `/close` answers
+// `closing`, then sends GOAWAY, so the connection ends once the response is
+// out: the next request a client makes needs a new connection, which is how
+// the interop job makes curl and Chromium resume (see `enableTickets`).
 import { Secret } from "nish:secret";
 import { netClose, netLocalPort, pollAdd, pollModify, tcpListen } from "nish:net";
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { TlsServerConfig } from "nish/net/tls";
-import { TLS_RECORD_DONE, TLS_RECORD_SIGN } from "nish/net/tls/record-server";
+import { TLS_RECORD_DONE, TLS_RECORD_SIGN, TLS_RECORD_STATE_OPEN, TLS_RECORD_TICKET } from "nish/net/tls/record-server";
+import { TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketStrikes, tlsTicketKeyDraw } from "nish/net/tls/ticket";
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp";
 import { httpFieldBytes, httpFieldIs } from "nish/net/http-fields";
 import { H2_AGAIN, H2_DATA, H2_TRAILERS, H2_ERROR, H2_NEED_MORE, H2_REQUEST, H2_WINDOW, Http2Config, Http2Connection } from "nish/net/http2";
@@ -76,6 +80,14 @@ export class InteropH2 {
   port: i32 = 0;
   perSlot: i32 = 0;
   logging: boolean = false;
+  /** What the loop's current and previous ticket keys are; the keys themselves are its locals. */
+  currentInfo: TlsTicketKeyInfo;
+  previousInfo: TlsTicketKeyInfo;
+  /** The tickets already resumed, so a replay falls back to a full handshake; `null` until `enableTickets`. */
+  strikes: TlsTicketStrikes | null = null;
+  tickets: boolean = false;
+  /** Whether each slot's handshake was logged as `tls: full` or `tls: resumed`. */
+  told: boolean[];
 
   /** Listens on `host`:`port` (0 for any) with `size` slots, its descriptors in `loop`. */
   constructor(loop: i32, host: string, port: i32, chain: u8[][], files: InteropFiles, size: i32) {
@@ -96,9 +108,42 @@ export class InteropH2 {
     this.notFound = httpFieldBytes("not found\n");
     this.randomBuffer = new Array<u8>(32);
     this.keyBuffer = new Array<u8>(32);
+    this.currentInfo = new TlsTicketKeyInfo();
+    this.previousInfo = new TlsTicketKeyInfo();
+    this.told = [];
+    for (let k: i32 = 0; k < size; k++) {
+      this.told.push(false);
+    }
     if (this.listener >= 0) {
       pollAdd(loop, this.listener, toI32(1), H2_LISTEN_TOKEN);
     }
+  }
+
+  /**
+   * Turns session tickets on from the next accept: each connection is issued a
+   * ticket once open, and one that offers a ticket resumes under the keys
+   * `serve` is lent, its strike register allocated here. A handshake is then
+   * logged as `tls: full` or `tls: resumed`.
+   */
+  enableTickets(): void {
+    this.strikes = new TlsTicketStrikes(TLS_TICKET_STRIKES_DEFAULT);
+    this.server.tls.enableTickets();
+    this.tickets = true;
+  }
+
+  /**
+   * One rotation turn of the ticket keys `serve` holds (docs/security/tls.md,
+   * "Ticket keys"): makes the current key's record the previous one's and
+   * draws the new current key at `now`, which it answers. The caller, which
+   * owns the keys, wipes its previous key first and then holds its old current
+   * key as the previous one, so a ticket sealed under it opens until the next
+   * turn. The wipe stays with the caller because a `Secret` is wiped by the
+   * function that owns it, and the checker refuses a turn that drops one
+   * unwiped.
+   */
+  rotateTickets(now: i64): Secret<u8[]> {
+    this.previousInfo.copyFrom(this.currentInfo);
+    return tlsTicketKeyDraw(this.currentInfo, now);
   }
 
   /** Accepts every waiting connection into a slot, each with fresh randomness. */
@@ -111,6 +156,7 @@ export class InteropH2 {
         for (let k: i32 = slot * this.perSlot; k < (slot + 1) * this.perSlot; k++) {
           this.pending[k].phase = PHASE_FREE;
         }
+        this.told[slot] = false;
         pollAdd(this.loop, this.server.fd(slot), toI32(1), H2_SLOT_TOKEN + slot);
       } else if (slot !== TLS_TCP_POOL_FULL) {
         return;
@@ -118,19 +164,45 @@ export class InteropH2 {
     }
   }
 
-  /** Slot `slot`'s descriptor is ready with `events`: drive it, answer it, then re-arm or close it. */
-  serve(slot: i32, events: i32, key: Secret<u8[]>): void {
+  /**
+   * Slot `slot`'s descriptor is ready with `events`: drive it, answer it, then
+   * re-arm or close it. `current` and `previous` are the ticket keys, lent for
+   * the call, or `null` while tickets are off.
+   */
+  serve(slot: i32, events: i32, key: Secret<u8[]>, current: Secret<u8[]> | null, previous: Secret<u8[]> | null): void {
     if (!this.server.holds(slot)) {
       return;
     }
     let wants: i32 = (events & 5) !== 0 ? this.server.readable(slot) : this.server.writable(slot);
-    if ((wants & TLS_RECORD_SIGN) !== 0) {
-      this.server.signP256(slot, key);
+    const strikes: TlsTicketStrikes | null = this.strikes;
+    // A ClientHello with tickets on asks to `resume`, which may go on in full
+    // and ask to sign; an open connection asks to be `issue`d its ticket.
+    for (let turn: i32 = 0; turn < 4 && this.server.holds(slot); turn++) {
+      if ((wants & TLS_RECORD_SIGN) !== 0) {
+        wants = this.server.signP256(slot, key);
+      } else if ((wants & TLS_RECORD_TICKET) !== 0 && current !== null && previous !== null && strikes !== null) {
+        const now: i64 = monotonicNanos();
+        wants = this.server.tls.connection(slot).state === TLS_RECORD_STATE_OPEN
+          ? this.server.tls.issue(slot, current, this.currentInfo, now)
+          : this.server.tls.resume(slot, current, this.currentInfo, previous, this.previousInfo, strikes, now);
+      } else {
+        turn = 4;
+      }
     }
+    if (!this.server.holds(slot)) {
+      return;
+    }
+    this.tell(slot);
     const conn: Http2Connection = this.server.connection(slot);
     let event: i32 = this.server.next(slot);
     while (event !== H2_NEED_MORE && event !== H2_ERROR) {
-      this.answer(slot, conn, event);
+      if (!this.answer(slot, conn, event)) {
+        if (this.logging) {
+          console.log("h2 GOAWAY not written: connection closed");
+        }
+        this.server.close(slot);
+        return;
+      }
       event = this.server.next(slot);
     }
     // A body held back by a full output goes on once `flush` has drained it,
@@ -168,6 +240,17 @@ export class InteropH2 {
     return null;
   }
 
+  /** Logs, once per connection with tickets on, whether its handshake resumed. */
+  tell(slot: i32): void {
+    if (!this.tickets || this.told[slot] || this.server.tls.connection(slot).state !== TLS_RECORD_STATE_OPEN) {
+      return;
+    }
+    this.told[slot] = true;
+    if (this.logging) {
+      console.log(this.server.tls.connection(slot).tls.resumed ? "tls: resumed" : "tls: full");
+    }
+  }
+
   /** The response being made on `stream` in `slot`, or `null`. */
   find(slot: i32, stream: i32): H2Pending | null {
     for (let k: i32 = slot * this.perSlot; k < (slot + 1) * this.perSlot; k++) {
@@ -178,14 +261,17 @@ export class InteropH2 {
     return null;
   }
 
-  /** The program's answer to one event. */
-  answer(slot: i32, conn: Http2Connection, event: i32): void {
+  /** The program's answer to one event; false when `/close`'s GOAWAY could not be written, so the connection must go. */
+  answer(slot: i32, conn: Http2Connection, event: i32): boolean {
     if (event === H2_REQUEST) {
       const p: H2Pending | null = this.take(slot, conn.stream);
       if (p === null) {
-        return;
+        return true;
       }
-      if (httpFieldIs(conn.fields.method, "GET")) {
+      if (httpFieldIs(conn.fields.method, "GET") && httpFieldIs(conn.fields.path, "/close")) {
+        this.start(conn, p, STATUS_OK, this.textValues, httpFieldBytes("closing\n"));
+        return conn.sendGoaway(toI32(0));
+      } else if (httpFieldIs(conn.fields.method, "GET")) {
         const body: u8[] | null = this.files.get(conn.fields.path);
         if (body === null) {
           this.start(conn, p, STATUS_NOT_FOUND, this.textValues, this.notFound);
@@ -209,6 +295,7 @@ export class InteropH2 {
     } else if (event === H2_WINDOW) {
       this.pushAll(slot, conn);
     }
+    return true;
   }
 
   /** Sends the head of `p`'s response with the field `values`, and as much of `body` as the windows take. */

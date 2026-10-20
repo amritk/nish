@@ -86,9 +86,11 @@
  * **No server push.** It never sends PUSH_PROMISE; a client's MAX_PUSH_ID is
  * allowed, checked and ignored.
  *
- * **Caps are start-up numbers**, all in `Http3Config`, and every buffer is
- * made by the constructor: the stream state for every QUIC stream slot, the
- * field section, the body chunk and the control frame. A field section's
+ * **Caps are start-up numbers**, all in `Http3Config`. The stream state for
+ * every QUIC stream slot and the control frame are made by the constructor;
+ * the body chunk and the field section are borrowed, around one read, from
+ * pools that a server's connections share (`share`) and that a standalone
+ * connection keeps one buffer each of. A field section's
  * names and values are copied into arrays the connection keeps, which grow to
  * the largest section seen and are then reused, so a warm connection
  * allocates nothing per request (`docs/security/http3.md`, H3-2). A peer's
@@ -198,8 +200,9 @@ import {
   h3VarintLength,
 } from "nish/net/http3-frame"
 import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic"
-import { QUIC_STREAM_END, QUIC_STREAM_ERR_RESET, QuicStream } from "nish/net/quic-stream"
+import { QUIC_STREAM_END, QUIC_STREAM_ERR_RESET, QuicStream, quicStreamGrowFree } from "nish/net/quic-stream"
 import { quicVarintPut } from "nish/net/quic-packet"
+import { BufferPool } from "nish/net/buffer-pool"
 
 /** The ALPN protocol identifier of HTTP/3 (RFC 9114 §3.1). */
 export const H3_ALPN: string = "h3"
@@ -403,10 +406,20 @@ export class Http3Connection {
   /** The client's SETTINGS. */
   peer: Http3Settings
   header: Http3FrameHeader
-  /** H3_DATA's bytes, and where a payload being skipped is read to. */
+  /**
+   * H3_DATA's bytes, and where a payload being skipped is read to: a
+   * `bodyChunk`-byte buffer borrowed from `dataPool` for the read that needs
+   * it and held while an H3_DATA window is live, else `none`.
+   */
   data: u8[]
-  /** A HEADERS payload read whole, for the decoder. */
+  /** A HEADERS payload read whole, for the decoder: a buffer borrowed from `sectionPool` around one read and decode, else `none`. */
   section: u8[]
+  /** The empty array `data` and `section` are while they hold nothing borrowed. */
+  none: u8[]
+  /** Where `data` is borrowed from: the connection's own pool until `share` hands it its server's. */
+  dataPool: BufferPool
+  /** Where `section` is borrowed from, likewise. */
+  sectionPool: BufferPool
   /** A control frame's payload, read whole. */
   control: u8[]
   /** Frame headers, SETTINGS and GOAWAY on their way out. */
@@ -491,6 +504,8 @@ export class Http3Connection {
   dataLength: i32 = 0
   /** How much of `control` is filled. */
   controlFill: i32 = 0
+  /** How far into the borrowed `data` reads have written: what its give-back zeroes. */
+  dataUsed: i32 = 0
   state: i32 = 0
   /** Requests open: taken and not yet finished both ways. */
   live: i32 = 0
@@ -554,8 +569,13 @@ export class Http3Connection {
     this.fields = new HttpFields()
     this.peer = new Http3Settings()
     this.header = new Http3FrameHeader()
-    this.data = new Array<u8>(config.bodyChunk)
-    this.section = new Array<u8>(config.maxFieldSectionSize)
+    this.none = []
+    this.data = this.none
+    this.section = this.none
+    this.dataPool = new BufferPool("Http3Connection.data", config.bodyChunk, 1)
+    this.sectionPool = new BufferPool("Http3Connection.section", config.maxFieldSectionSize, 1)
+    quicStreamGrowFree(this.dataPool.free, 1, this.none)
+    quicStreamGrowFree(this.sectionPool.free, 1, this.none)
     this.control = new Array<u8>(H3_CONTROL_FRAME_MAX)
     this.scratch = new Array<u8>(64)
     this.zeros = new Array<u8>(256)
@@ -613,9 +633,11 @@ export class Http3Connection {
   /**
    * Puts the connection back as the constructor left it, for the QUIC
    * connection's next peer (call it after `quic.reset`): no stream known,
-   * QPACK's state and the client's SETTINGS forgotten. It allocates nothing.
+   * QPACK's state and the client's SETTINGS forgotten, and any buffer
+   * still borrowed given back. It allocates nothing.
    */
   restart(): void {
+    this.giveBack()
     this.slotId.fill(H3_NONE)
     this.flags.fill(H3_ZERO)
     this.headLen.fill(H3_ZERO)
@@ -746,6 +768,89 @@ export class Http3Connection {
    * connection takes, until it answers H3_NEED_MORE or H3_ERROR.
    */
   next(): i32 {
+    // The last H3_DATA window ends here. A body read chunk by chunk keeps the
+    // one buffer; any other event, H3_NEED_MORE among them, gives it back.
+    const event: i32 = this.nextEvent()
+    if (event !== H3_DATA) {
+      this.giveData()
+    }
+    return event
+  }
+
+  /**
+   * Lends this connection its server's pools in place of its own, giving
+   * back to the old pools whatever it holds. Panics unless their buffers are
+   * `bodyChunk` and `maxFieldSectionSize` bytes long, as this connection's
+   * reads need.
+   */
+  share(data: BufferPool, section: BufferPool): void {
+    if (data.size !== this.config.bodyChunk || section.size !== this.config.maxFieldSectionSize) {
+      panic(
+        `Http3Connection: pools of ${data.size} and ${section.size} bytes shared with a connection of bodyChunk ${this.config.bodyChunk} and maxFieldSectionSize ${this.config.maxFieldSectionSize}`
+      )
+    }
+    this.giveBack()
+    this.dataPool = data
+    this.sectionPool = section
+  }
+
+  /** Releases the QUIC connection (`QuicConnection.release`) and gives back every pooled buffer this connection holds. */
+  release(): void {
+    this.quic.release()
+    this.giveBack()
+  }
+
+  /** Gives back `data` and `section` if either is borrowed: the connection holds no pooled buffer after it. */
+  giveBack(): void {
+    this.giveData()
+    this.giveSection(H3_ZERO)
+  }
+
+  /** `data`, borrowed from `dataPool` first if it is not already. */
+  borrowData(): u8[] {
+    if (this.data.length === 0) {
+      this.data = this.dataPool.take()
+      this.dataUsed = 0
+    }
+    return this.data
+  }
+
+  /** Gives `data` back to `dataPool`, zeroed as far as reads wrote, if it is borrowed. */
+  giveData(): void {
+    if (this.data.length > 0) {
+      this.dataPool.give(this.data, this.dataUsed)
+      this.data = this.none
+      this.dataUsed = 0
+    }
+  }
+
+  /** Reads up to `want` bytes of stream `id` into the start of `data`, borrowed for it: `streamRead`'s answer. */
+  readData(id: i64, want: i32): i32 {
+    const n: i32 = this.quic.streamRead(id, this.borrowData(), H3_ZERO, want)
+    if (n > this.dataUsed) {
+      this.dataUsed = n
+    }
+    return n
+  }
+
+  /** `section`, borrowed from `sectionPool`. */
+  borrowSection(): u8[] {
+    if (this.section.length === 0) {
+      this.section = this.sectionPool.take()
+    }
+    return this.section
+  }
+
+  /** Gives `section` back to `sectionPool`, zeroed over `[0, used)`, if it is borrowed. */
+  giveSection(used: i32): void {
+    if (this.section.length > 0) {
+      this.sectionPool.give(this.section, used)
+      this.section = this.none
+    }
+  }
+
+  /** `next`'s work: everything but the lending of `data` around it. */
+  nextEvent(): i32 {
     if (this.state === H3_STATE_FAILED) {
       return H3_ERROR
     }
@@ -957,7 +1062,7 @@ export class Http3Connection {
       } else if (phase === H3_PHASE_CONTROL) {
         return this.controlStep(k, id)
       } else if (phase === H3_PHASE_ENCODER || phase === H3_PHASE_DECODER) {
-        const n: i32 = this.quic.streamRead(id, this.data, H3_ZERO, toI32(this.data.length))
+        const n: i32 = this.readData(id, this.config.bodyChunk)
         if (n === 0) {
           return H3_NEED_MORE
         }
@@ -1060,10 +1165,12 @@ export class Http3Connection {
         this.controlFill = 0
       }
       if (this.frameLeft[k] > 0) {
-        const into: u8[] = this.frameType[k] === H3_SKIP_TYPE ? this.data : this.control
-        const at: i32 = this.frameType[k] === H3_SKIP_TYPE ? H3_ZERO : this.controlFill
-        const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(toI32(into.length) - at)))
-        const n: i32 = this.quic.streamRead(id, into, at, want)
+        const skip: boolean = this.frameType[k] === H3_SKIP_TYPE
+        const room: i32 = skip ? this.config.bodyChunk : toI32(this.control.length) - this.controlFill
+        const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(room)))
+        const n: i32 = skip
+          ? this.readData(id, want)
+          : this.quic.streamRead(id, this.control, this.controlFill, want)
         if (n === 0) {
           return H3_NEED_MORE
         }
@@ -1151,9 +1258,9 @@ export class Http3Connection {
 
   /** Reads stream `id` into `data` until nothing more is there; answers 0, or the `QUIC_STREAM_*` that ended it. */
   drop(id: i64): i32 {
-    let n: i32 = this.quic.streamRead(id, this.data, H3_ZERO, toI32(this.data.length))
+    let n: i32 = this.readData(id, this.config.bodyChunk)
     while (n > 0) {
-      n = this.quic.streamRead(id, this.data, H3_ZERO, toI32(this.data.length))
+      n = this.readData(id, this.config.bodyChunk)
     }
     return n
   }
@@ -1222,7 +1329,7 @@ export class Http3Connection {
     if (phase === H3_PHASE_WT) {
       if ((this.flags[k] & H3_FLAG_RECV_DONE) === 0) {
         const resetCode: i64 = stream.resetCode
-        const n: i32 = this.quic.streamRead(id, this.data, H3_ZERO, toI32(this.data.length))
+        const n: i32 = this.readData(id, this.config.bodyChunk)
         if (n > 0) {
           this.stream = id
           this.dataStart = 0
@@ -1454,24 +1561,28 @@ export class Http3Connection {
           return this.writable(k, id)
         }
         const length: i32 = toI32(this.frameLeft[k])
-        const n: i32 = this.quic.streamRead(id, this.section, H3_ZERO, length)
+        const n: i32 = this.quic.streamRead(id, this.borrowSection(), H3_ZERO, length)
         if (n < 0) {
+          this.giveSection(H3_ZERO)
           return this.ended(k, id, n, stream.resetCode)
         }
         if (n !== length) {
+          this.giveSection(n)
           return this.writable(k, id)
         }
         this.frameLeft[k] = -1
+        // `fieldSection` copies what it keeps into `fields`: the section is not read after it.
         const event: i32 = this.fieldSection(k, id, length)
+        this.giveSection(length)
         if (event !== H3_NEED_MORE) {
           return event
         }
         continue
       }
       // DATA, a payload being skipped, or an unknown frame's.
-      const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(toI32(this.data.length))))
+      const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(this.config.bodyChunk)))
       const resetCode: i64 = stream.resetCode
-      const n: i32 = this.quic.streamRead(id, this.data, H3_ZERO, want)
+      const n: i32 = this.readData(id, want)
       if (n === 0) {
         return this.writable(k, id)
       }
