@@ -1174,7 +1174,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     if (!switchCovered(ctx, unmatched, tagged, held, members, clauses)) {
       snapshotExit(ctx, unmatched)
     } else {
-      covered = tagged !== null || (held === null && readsUnionTag(ctx, stmt.children[0]))
+      covered = tagged !== null || readsUnionTag(ctx, stmt.children[0])
     }
   }
   const coverage = ctx.program.switchCoverage[stmt.id]

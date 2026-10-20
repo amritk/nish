@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1064 programs, 137219 dump lines.
+# 1065 programs, 137332 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -14758,44 +14758,46 @@ program tests/cases/enum_loop_join_gap.ts
 module tests/cases/enum_loop_join_gap.ts (entry)
 struct H (class) size=4 align=4
   field k: Kind index=0 offset=0 initialized
-  constructor -> @H.constructor
-function H.constructor(this: H, k: Kind): void -> @H.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+function keep(k: Kind): Kind -> @keep
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
-  pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function whileLoop(n: i32): boolean -> @whileLoop
-  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local 21:7 j: Kind (let)
-  local 22:7 i: i32 (let)
-function doLoop(n: i32): boolean -> @doLoop
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_overflow
-  stackSites=0 stackLocals=0
-  local 33:7 j: Kind (let)
-  local 34:7 i: i32 (let)
-function forLoop(n: i32): boolean -> @forLoop
-  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-  local 44:7 j: Kind (let)
-  local 45:12 i: i32 (let)
 function pathLoop(h: H, n: i32): boolean -> @pathLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 54:3
+  sharedWrite: 55:3
   pointer h: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 55:7 i: i32 (let)
+  local 56:7 i: i32 (let)
+function argumentStore(n: i32): boolean -> @argumentStore
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: keep
+  stackSites=0 stackLocals=0
+  local 67:7 j: Kind (let)
+  local 68:7 i: i32 (let)
+  callee 71:5 keep -> @keep
+function initializerStore(n: i32): boolean -> @initializerStore
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: keep
+  stackSites=0 stackLocals=0
+  local 79:7 j: Kind (let)
+  local 80:7 i: i32 (let)
+  local 83:11 t: Kind (const)
+  callee 84:5 keep -> @keep
+function wideLoop(n: i32): boolean -> @wideLoop
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 92:7 w: Wide (let)
+  local 93:7 i: i32 (let)
 function main(): void -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: H.constructor doLoop forLoop nish_print pathLoop whileLoop
-  stackSites=1 stackLocals=0
-  callee 66:15 whileLoop -> @whileLoop
-  callee 67:15 doLoop -> @doLoop
-  callee 68:15 forLoop -> @forLoop
-  callee 69:15 pathLoop -> @pathLoop
-  callee 69:24 new H -> @H.constructor
+  calls: argumentStore initializerStore nish_print pathLoop wideLoop
+  stackSites=1 stackLocals=1
+  local 104:9 h: H (const)
+  callee 105:15 pathLoop -> @pathLoop
+  callee 106:15 argumentStore -> @argumentStore
+  callee 107:15 initializerStore -> @initializerStore
+  callee 108:15 wideLoop -> @wideLoop
 program tests/cases/enum_member_type.ts
 module tests/cases/enum_member_type.ts (entry)
 struct ScalarNode (interface) size=8 align=4
@@ -55644,59 +55646,94 @@ function main(): void -> @nish_main [exported entry]
   callee 110:23 fresh -> @fresh
   callee 110:41 fresh -> @fresh
   callee 110:60 fresh -> @fresh
-program tests/cases/union_narrowing_loop_gap.ts
-module tests/cases/union_narrowing_loop_gap.ts (entry)
+program tests/cases/union_narrowing_loop_flow.ts
+module tests/cases/union_narrowing_loop_flow.ts (entry)
 struct Ca (class) size=4 align=4
   field kind: Kind.A index=0 offset=0 readonly initialized
-  constructor -> @Ca.constructor
 struct Cb (class) size=4 align=4
   field kind: Kind.B index=0 offset=0 readonly initialized
-  constructor -> @Cb.constructor
 struct Cc (class) size=4 align=4
   field kind: Kind.C index=0 offset=0 readonly initialized
-  constructor -> @Cc.constructor
-function Ca.constructor(this: Ca): void -> @Ca.constructor [constructor]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Cb.constructor(this: Cb): void -> @Cb.constructor [constructor]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Cc.constructor(this: Cc): void -> @Cc.constructor [constructor]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
 function make(n: i32): Ca | Cb | Cc -> @make
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: Ca.constructor Cb.constructor Cc.constructor nish_alloc_struct
+  calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-  callee 32:12 new Ca -> @Ca.constructor
-  callee 35:12 new Cb -> @Cb.constructor
-  callee 37:10 new Cc -> @Cc.constructor
-function whileLoop(n: i32): boolean -> @whileLoop
+function untilDone(n: i32): boolean -> @untilDone
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 34:7 j: Kind (let)
+  local 35:7 i: i32 (let)
+function breakOut(n: i32): boolean -> @breakOut
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 49:7 j: Kind (let)
+  local 50:7 i: i32 (let)
+function continueOn(n: i32): boolean -> @continueOn
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 63:7 j: Kind (let)
+  local 64:7 i: i32 (let)
+function switchArms(k: Kind, n: i32): boolean -> @switchArms
+  facts: effect=none willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  stackSites=0 stackLocals=0
+  local 78:7 j: Kind (let)
+  local 79:12 i: i32 (let)
+function nested(n: i32): boolean -> @nested
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+  local 93:7 j: Kind (let)
+  local 94:7 i: i32 (let)
+  local 97:9 m: i32 (let)
+function doAlternate(n: i32): boolean -> @doAlternate
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 108:7 j: Kind (let)
+  local 109:7 i: i32 (let)
+function conditionStore(k: Kind, n: i32): boolean -> @conditionStore
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 123:7 j: Kind (let)
+  local 124:7 i: i32 (let)
+function forOf(n: i32): boolean -> @forOf
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=1 stackLocals=0
+  local 134:7 j: Kind (let)
+  local 135:14 x: i32 (const)
+function forever(n: i32): boolean -> @forever
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 145:7 j: Kind (let)
+  local 146:7 i: i32 (let)
+function unionStore(n: i32): boolean -> @unionStore
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: make nish_arena_mark nish_arena_release
   stackSites=0 stackLocals=0
-  local 41:7 u: Ca | Cb | Cc (let)
-  callee 41:14 make -> @make
-  local 45:7 i: i32 (let)
-  callee 47:9 make -> @make
-function doLoop(n: i32): boolean -> @doLoop
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: make nish_arena_mark nish_arena_release nish_panic_overflow
-  stackSites=0 stackLocals=0
-  local 58:7 u: Ca | Cb | Cc (let)
-  callee 58:14 make -> @make
-  local 59:7 i: i32 (let)
-  callee 61:9 make -> @make
+  local 159:7 u: Ca | Cb | Cc (let)
+  callee 159:14 make -> @make
+  local 160:7 i: i32 (let)
+  callee 162:9 make -> @make
+  callee 163:9 make -> @make
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: doLoop nish_print whileLoop
+  calls: breakOut conditionStore continueOn doAlternate forOf forever nested nish_print switchArms unionStore untilDone
   stackSites=0 stackLocals=0
-  callee 72:15 whileLoop -> @whileLoop
-  callee 73:15 doLoop -> @doLoop
+  callee 170:15 untilDone -> @untilDone
+  callee 171:15 breakOut -> @breakOut
+  callee 172:15 continueOn -> @continueOn
+  callee 173:15 switchArms -> @switchArms
+  callee 174:15 nested -> @nested
+  callee 175:15 doAlternate -> @doAlternate
+  callee 176:15 conditionStore -> @conditionStore
+  callee 177:15 forOf -> @forOf
+  callee 178:15 forever -> @forever
+  callee 179:15 unionStore -> @unionStore
 program tests/cases/union_narrowing_paths.ts
 module tests/cases/union_narrowing_paths.ts (entry)
 struct H (class) size=4 align=4
@@ -55802,6 +55839,83 @@ function main(): void -> @nish_main [exported entry]
   callee 112:20 new H -> @H.constructor
   callee 113:15 returned -> @returned
   callee 114:15 looped -> @looped
+program tests/cases/union_switch.ts
+module tests/cases/union_switch.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4
+  constructor -> @Square.constructor
+struct Tri (interface) size=8 align=4
+  field kind: Kind.Tri index=0 offset=0 readonly
+  field base: i32 index=1 offset=4
+struct Holder (class) size=8 align=8
+  field shape: Circle | Square | Tri index=0 offset=0
+  constructor -> @Holder.constructor
+function Circle.constructor(this: Circle, r: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: side
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Holder.constructor(this: Holder, shape: Circle | Square | Tri): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: shape
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function area(s: Circle | Square | Tri): i32 -> @area
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function named(h: Holder): string -> @named
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function corners(shapes: (Circle | Square | Tri)[], i: i32): i32 -> @corners
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer shapes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function rest(s: Circle | Square | Tri): i32 -> @rest
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function total(shapes: (Circle | Square | Tri)[]): i32 -> @total
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer shapes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 86:7 sum: i32 (let)
+  local 87:14 s: Circle | Square | Tri (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Circle.constructor Holder.constructor Square.constructor area corners named nish_alloc_struct nish_print nish_str_concat nish_str_from_i32 rest total
+  stackSites=3 stackLocals=1
+  local 104:9 t: Tri (const)
+  local 105:9 shapes: (Circle | Square | Tri)[] (const)
+  callee 105:28 new Circle -> @Circle.constructor
+  callee 105:43 new Square -> @Square.constructor
+  callee 106:18 area -> @area
+  callee 106:37 area -> @area
+  callee 106:56 area -> @area
+  callee 107:18 named -> @named
+  callee 107:24 new Holder -> @Holder.constructor
+  callee 107:50 named -> @named
+  callee 107:56 new Holder -> @Holder.constructor
+  callee 108:18 corners -> @corners
+  callee 108:40 corners -> @corners
+  callee 108:62 corners -> @corners
+  callee 109:18 rest -> @rest
+  callee 109:37 rest -> @rest
+  callee 109:56 rest -> @rest
+  callee 110:18 total -> @total
 program tests/cases/union_types.ts
 module tests/cases/union_types.ts (entry)
 struct Circle (class) size=8 align=4
