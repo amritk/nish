@@ -61,7 +61,7 @@ export const main = (): i32 => {
   divided; the loop that fills `src` and the loop that reads the answers run
   on one thread. In the repository's `bench/par-heavy.ts` those two loops, an
   order-sensitive checksum among them, are about an eighth of the one-thread
-  time, which caps four cores near 2.9x; the program measures about 2.8x.
+  time, which caps four cores near 2.9x; the program measures about 2.7x.
   With a checksum the compiler vectorises, or four times the work per
   element, the same map is above 3x. The figures are in
   [BENCHMARKS.md](../../BENCHMARKS.md#scheduling-a-divided-region).
