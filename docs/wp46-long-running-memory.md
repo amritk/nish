@@ -1,4 +1,4 @@
-# WP45: Memory for programs that do not exit — regions
+# WP46: Memory for programs that do not exit — regions
 
 **Status: proposed.** Nothing here is built. The anchors below are at
 `c8a00d6`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this note is
@@ -17,7 +17,7 @@ frees.
 
 ## 1. The leak, measured
 
-`bench/wp45-memory/sessions.ts` is the server this note is about. One
+`bench/wp46-memory/sessions.ts` is the server this note is about. One
 keep-alive `Http1Connection` is fed `GET /s/<id>` requests in memory. A cache
 holds at most `live` sessions and evicts the oldest; each session holds a
 payload of 16 to 255 bytes. The client asks for ten times as many ids as the
@@ -28,8 +28,8 @@ requests the program prints how many sessions it has made and holds,
 
 ```sh
 npm run build
-build/nish bench/wp45-memory/sessions.ts --link build/wp45/sessions
-build/wp45/sessions 2000000 1000 250000
+build/nish bench/wp46-memory/sessions.ts --link build/wp46/sessions
+build/wp46/sessions 2000000 1000 250000
 ```
 
 | requests | sessions made | held | `Arena.mark()` − first | anonymous resident |
@@ -231,8 +231,10 @@ is unchanged, so a program that does not use regions emits the same `.ll`
 
 **Fragmentation.** A region's chunks come from `malloc` and go back to it
 whole. Prototype `rs` keeps 27.6 MB resident for 100,000 live sessions whose
-payloads average 136 bytes, against 26.0 MB for one `malloc` box each (`c`):
-the doubling wastes less than a tenth. What stays is `malloc`'s own
+payloads average 136 bytes, against 22.8 MB for one `malloc` box each (`c`).
+The 4.8 MB between them is 48 bytes a region, its 32-byte arena and its
+chunk's 16-byte header; the doubling itself wastes nothing here, because a
+session fits its first chunk. What stays is `malloc`'s own
 fragmentation across sizes, which `rs` did not show over 2,000,000 requests.
 
 ### 2.2 A safe arena reset
@@ -348,28 +350,37 @@ IR, so `runtime-region.c` goes into its link as `runtime.c` does (CLAUDE.md,
 
 ## 4. The options, measured
 
-`bench/wp45-memory/options.c` holds the same cache as §1 in C, once per option,
+`bench/wp46-memory/options.c` holds the same cache as §1 in C, once per option,
 linked against `runtime/runtime.c` so the arena variants use today's
 `nish_alloc_struct`.
 
 | Variant | What it is |
 | --- | --- |
 | `a` | today: sessions bumped from the arena, never freed |
-| `a2` | `a`, byte for byte, for the noise band |
+| `a2` | `a` again, the same functions compiled a second time under other names and picked at run time, for the noise band |
 | `r` | a region per session, 64 KiB chunks, freed on eviction |
-| `rs` | `r` with the first chunk sized to the first allocation, doubling after |
+| `rs` | `r` with the first chunk sized to the first allocation, doubling after, and allocated without the swap |
 | `s` | safe reset: evacuate the live sessions once the arena passes twice their bytes |
 | `c` | opt-in `Rc`: a `malloc`'d box holding session and payload, a retain and a release per request |
 | `ca` | `c` with atomic counts |
-| `g` | counting everything: session and payload counted apart, the response `malloc`'d, a retain and a release per field read |
+| `g` | counting everything: session and payload counted apart, the response `malloc`'d, a retain and a release per reference the request loads (the session from the table, the payload from the session) |
 
-`bench/wp45-memory/rc-tax.c` measures the tax that counting puts on code that
+Only `r` and `rs` carry a region's arena (an `rsession` around the session),
+so every other variant's session is the 40 bytes it needs. Neither `r` nor
+`rs` models the handle table: the thread, generation and entered checks are a
+few loads and compares per `enter` that the figures leave out. `g` is a lower
+bound on counting everything, because a compiler that cannot prove a field
+read safe counts it too.
+
+`bench/wp46-memory/rc-tax.c` measures the tax that counting puts on code that
 only reads: a random walk over `n` arena objects, plain, with an inline
-count, with a call per retain and release (`call`, as a compiler that does
+count (`rc`; at `-O2` the optimiser folds the increment and decrement and
+keeps only the zero test, so it is what is left when a compiler sees both ends
+of the pair), with a call per retain and release (`call`, as a compiler that does
 not inline its runtime would emit), and with atomic counts.
 
 ```sh
-npm run build && node bench/wp45-memory/run.mjs --rounds 9
+npm run build && node bench/wp46-memory/run.mjs --rounds 9
 ```
 
 Each round runs every variant once, in a fresh process, in an order rotated by
@@ -377,61 +388,72 @@ the round. A figure is the median over nine rounds. The ids change on every
 request (xorshift), and every variant prints the same checksum of what it
 served, which the script checks. The noise band is the median over rounds of
 the gap between `a` and `a2`. A shared VM is noisy, and the band says how
-noisy. Figures are from one such run.
+noisy. The memory rows are medians too: the anonymous resident set at exit
+(statm's resident less shared) and the peak resident set (status's `VmHWM`,
+which also counts the binary's own pages, about 1.6 MB). Figures are from one
+such run.
 
-**Churn, 1,000 live** (`options <v> 2000000 1000`; noise band 14.3%):
-
-| | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ns/request | 318.5 | 204.1 | 230.1 | 236.3 | 219.6 | 220.0 | 198.5 |
-| vs `a` | 1.00 | 0.64 | 0.72 | 0.74 | 0.69 | 0.69 | 0.62 |
-| anonymous resident | 380.8 MB | 4.6 MB | 0.42 MB | 0.99 MB | 0.41 MB | 0.41 MB | 0.41 MB |
-
-**Churn, 100,000 live** (`options <v> 2000000 100000`; noise band 6.9%):
+**Churn, 1,000 live** (`options <v> 2000000 1000`; noise band 9.8%):
 
 | | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ns/request | 585.2 | 1015.9 | 540.4 | 531.0 | 483.0 | 585.4 | 514.2 |
-| vs `a` | 1.00 | 1.74 | 0.92 | 0.91 | 0.83 | 1.00 | 0.88 |
-| anonymous resident | 384.5 MB | 447.5 MB | 27.6 MB | 87.8 MB | 26.0 MB | 26.0 MB | 27.2 MB |
+| ns/request | 279.9 | 228.8 | 216.2 | 197.5 | 192.1 | 205.1 | 191.2 |
+| vs `a` | 1.00 | 0.82 | 0.77 | 0.71 | 0.69 | 0.73 | 0.68 |
+| anonymous resident at exit | 323.1 MB | 4.6 MB | 0.43 MB | 0.92 MB | 0.37 MB | 0.37 MB | 0.39 MB |
+| peak resident | 324.7 MB | 6.2 MB | 2.0 MB | 2.5 MB | 2.0 MB | 2.0 MB | 2.0 MB |
+
+**Churn, 100,000 live** (`options <v> 2000000 100000`; noise band 1.0%):
+
+| | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ns/request | 418.3 | 887.1 | 446.4 | 427.9 | 376.6 | 433.9 | 396.9 |
+| vs `a` | 1.00 | 2.12 | 1.07 | 1.02 | 0.90 | 1.04 | 0.95 |
+| anonymous resident at exit | 326.7 MB | 447.5 MB | 27.6 MB | 75.0 MB | 22.8 MB | 22.8 MB | 24.0 MB |
+| peak resident | 328.3 MB | 449.1 MB | 29.2 MB | 76.6 MB | 24.4 MB | 24.4 MB | 25.6 MB |
 
 **Mostly hits, 1,000 live** (`options <v> 4000000 1000 2`, ids from twice the
-cache; noise band 5.9%):
+cache; noise band 6.2%):
 
 | | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ns/request | 188.5 | 154.4 | 154.3 | 159.1 | 139.3 | 142.4 | 137.7 |
-| vs `a` | 1.00 | 0.82 | 0.82 | 0.84 | 0.74 | 0.76 | 0.73 |
-| anonymous resident | 423.1 MB | 4.6 MB | 0.42 MB | 1.1 MB | 0.41 MB | 0.41 MB | 0.41 MB |
+| ns/request | 162.8 | 154.7 | 147.3 | 137.5 | 131.2 | 141.6 | 130.5 |
+| vs `a` | 1.00 | 0.95 | 0.90 | 0.84 | 0.81 | 0.87 | 0.80 |
+| anonymous resident at exit | 359.0 MB | 4.6 MB | 0.42 MB | 0.88 MB | 0.37 MB | 0.37 MB | 0.38 MB |
+| peak resident | 360.6 MB | 6.2 MB | 2.0 MB | 2.5 MB | 2.0 MB | 2.0 MB | 2.0 MB |
 
-The evacuation's longest pause was 1.4 ms over 779 flips at 1,000 live, and
-22.2 ms over 9 flips at 100,000 live.
+In the run's last round, the evacuation's longest pause was 0.49 ms over 761
+flips at 1,000 live, and 26.1 ms over 9 flips at 100,000 live.
 
 **The counting tax** (`rc-tax <v> <n> <steps>`):
 
 | objects | noise band | `plain` | `rc` | `call` | `atomic` |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,024 | 3.9% | 2.34 ns | 1.14x | 1.56x | 5.85x |
-| 1,048,576 | 11.1% | 26.41 ns | 1.09x | 1.71x | 1.84x |
+| 1,024 | 3.4% | 2.38 ns | 1.13x | 1.53x | 5.79x |
+| 1,048,576 | 9.0% | 19.69 ns | 1.20x | 1.76x | 1.92x |
 
 What the figures say:
 
-- **Every bounded option is faster than today**, because the leaking arena
-  touches a new page every few requests and the bounded ones reuse warm
-  memory. At 1,000 live the bounded options sit within or just past the
-  band of one another (the widest gap, `r` to `s`, is 16% against a 14.3%
-  band), so the choice is not made on speed.
+- **Speed does not decide it.** At 1,000 live every bounded option beats
+  today by 18–32%, past the 9.8% band, because the leaking arena touches a
+  new page every few requests and the bounded ones reuse warm memory. At
+  100,000 live, where the band is 1.0%, the picture splits: `c` is 10% faster
+  than today and `g` 5%, while `rs` is 7% slower and `s` 2%. `rs` is 19%
+  slower than `c` there; it has 48 more bytes a session to touch and a second
+  bump allocation into the region. The real region adds the handle checks
+  `rs` leaves out, so 1.07x is a floor.
 - **Memory decides it.** `rs`, `c` and `g` hold the live set and little else:
-  0.4 MB at 1,000 live, 26–28 MB at 100,000. The evacuation holds 2.4–3.4 times
-  that (0.99 MB and 87.8 MB) and pauses for a time that grows with the live set. A region
-  with 64 KiB chunks (`r`) is worse than today at 100,000 live, which is why
-  the region's first chunk is sized to its first allocation.
+  0.4 MB at 1,000 live, 23–28 MB at 100,000, where `rs` pays 48 bytes a region
+  over `c`. The evacuation holds 2.1–2.7 times what `rs` holds (0.92 MB and
+  75.0 MB) and pauses for a time that grows with the live set. A region with
+  64 KiB chunks (`r`) is worse than today at 100,000 live, 447.5 MB and 2.12x,
+  which is why the region's first chunk is sized to its first allocation.
 - **Counting everything taxes code that never frees.** A walk through
-  counted pointers costs 1.56–1.71x when each retain and release is a call,
-  and 1.84–5.85x when the counts are atomic, in every program, not only the
-  servers that need it. Inline counts cost 1.14x over 1,024 objects (band
-  3.9%) and 1.09x over a million (inside the 11.1% band, where cache misses
-  dominate).
+  counted pointers costs 1.53–1.76x when each retain and release is a call,
+  and 1.92–5.79x when the counts are atomic, in every program, not only the
+  servers that need it. The inline `rc` figure, 1.13x over 1,024 objects (band
+  3.4%) and 1.20x over a million (band 9.0%), is the best case: the optimiser
+  folded the pair to a zero test, which it can do only where it sees both ends
+  of it in one function.
 
 ## 5. WP33: no golden moves for a program that does not use it
 
@@ -443,7 +465,11 @@ size change lives in `nish_arena_grow`'s body in `runtime/runtime.c`, which no
 golden contains. Regions keep WP33's rule. The stage that builds them checks
 it with a full `npm test` in which no `tests/cases/*.ll` is updated, and records
 `bench/instructions.json` before and after, since the runtime's code size can
-move it.
+move it. The code size has a ratchet of its own: `tests/runtime-budgets.js`
+holds `runtime/runtime.c`'s `.text` at `RUNTIME_TEXT_BUDGET` (3,684 B) and
+`RUNTIME_THREADS_TEXT_BUDGET` (3,885 B), and both measure exactly at their
+ceilings today, so stage 1 raises them by what the chunk-size read adds and
+records the new figures beside them.
 
 The safe reset keeps it as well, for the same reason. `Rc<T>` keeps it. Counting
 every value does not: every store of a pointer gains a retain and a release, so
@@ -453,22 +479,26 @@ inlined path.
 ## 6. Decision
 
 **Regions, as in §2.1.** They bound memory to the live set (27.6 MB for
-100,000 sessions where today grows without bound), cost nothing for a program
+100,000 sessions where today grows without bound, at 1.07x today's time per
+request), cost nothing for a program
 that does not use them, reuse the arena block's rule and its codes, and leave
 the arena's ABI as it is.
 
 **Rejected:**
 
 - **A safe arena reset.** Making it safe needs the region's rule anyway, and on
-  top of that it holds 2.4–3.4 times what `rs` holds and pauses for a time
-  proportional to it: 22 ms at 100,000 live sessions, more than a game tick.
+  top of that it holds 2.1–2.7 times what `rs` holds and pauses for a time
+  proportional to it: 26 ms at 100,000 live sessions, more than a game tick.
   It also needs type layouts at runtime, which nothing else needs.
 - **Counting every value.** It taxes every program for the servers that need
-  it: 1.56–1.71x on a pointer walk with calls and up to 5.85x with atomic counts,
+  it: 1.53–1.76x on a pointer walk with calls and up to 5.79x with atomic counts,
   every golden moves, the ABI of every exported function changes, and cycles
   leak without a second collector.
-- **`Rc<T>` now.** It measured as fast as a region here, but the box has to
-  own what its constructor allocates, which makes it a region with a count.
+- **`Rc<T>` now.** Its prototype `c` measured 16% faster than `rs` at
+  100,000 live and 4.8 MB smaller, but only because it packs the session and
+  its payload into one `malloc` whose size the prototype knows. A real box
+  has to own whatever its constructor allocates, which makes it a region with
+  a count, with the region's 48 bytes and its allocation path.
   The count buys sharing a value between several owners, which the cache and
   the relay do not need. A single owner frees its region directly. `Rc<T>` stays
   possible on top of regions (§7, not in this work package).
@@ -479,7 +509,7 @@ the arena's ABI as it is.
 | --- | --- | --- | --- | --- |
 | 1 | The runtime. The region table, `nish_region_new`/`_enter`/`_leave`/`_free`, the thread, generation and entered checks, the region chunk size. A C test that frees a hundred thousand regions and reads RSS flat. | `runtime/runtime-region.c` (new; paired in `scripts/build.sh`'s `halves` and `src/run-cache.ts`'s `runtimeUnits()` in one commit), `runtime/runtime.c` (`nish_arena_grow`), `scripts/build.sh --profile wasm`'s link, `tests/runtime-budgets.js`: a ceiling row for the new unit, and `RUNTIME_TEXT_BUDGET` (3,684 B) and `RUNTIME_THREADS_TEXT_BUDGET` (3,885 B) raised by what the chunk-size read adds to `nish_arena_grow`, since both measure exactly at their ceilings today | a stale handle panics; `free` of an entered region panics; `enter` and `enterWith` of a region already entered panic, directly and through a nested `enter`; a handle from another thread panics | — (no construct) |
 | 2 | The language. `nish:region` with NL2556–NL2561 and NL2351's wider message, its lowering, the guide page, `docs/LANGUAGE.md`'s section, and the cookbook entry. | `src/` (the builtin module, the checker rule beside `src/escape.ts`'s arena rule, `src/parallel.ts`'s `arenaMessage`, codegen), `src/runtime.ts` and the cookbook's runtime prelude (`docs/cookbook/regen.sh`), `runtime/nish.d.ts`, `runtime/nish.mjs`, `std/region.ts` if it carries source like `nish:secret`, `tests/cases/` with the differential goldens (`node tests/differential/goldens.js --update`), `tests/self/goldens/checked.txt` and `checked-self.txt` (`node tests/self/goldens.js --update`), `docs/LANGUAGE.md`, `docs/guide/` | one per code, plus the three shapes: a constructor reached by `new` that stores `this` into module state; `using` of `region()` as each declarator; `h.l = this` with `h` the `arg`; NL2561's `region(() => moduleValue)` and `regionWith(g, (a) => a)`; NL2560's handle in a field of a task's argument, in a task's answer, in a `Map` sent on a channel and in a parallel body's capture; NL2351's `enter` in a spawned function and through a callee of a parallel body; then a negative golden after `churn()` for each element type the rule leaves out (CLAUDE.md, #520) | the first release cut after stage 2 merges (0.19.0 at the earliest, against today's 0.18.0 seed) |
-| 3 | The proof. The §1 server rewritten with regions, as a `tests/link` soak that reads `Arena.mark()` and anonymous resident memory flat across 2,000,000 requests, and WP34 N9's game-server note closed. | `bench/wp45-memory/`, `tests/link/`, `docs/wp34-hosting-cs.md` | — | — |
+| 3 | The proof. The §1 server rewritten with regions, as a `tests/link` soak that reads `Arena.mark()` and anonymous resident memory flat across 2,000,000 requests, and WP34 N9's game-server note closed. | `bench/wp46-memory/`, `tests/link/`, `docs/wp34-hosting-cs.md` | — | — |
 
 The compiler itself has no long-lived state and does not need regions; the
 column says only when the rolling freeze would allow it.

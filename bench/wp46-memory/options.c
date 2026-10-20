@@ -1,4 +1,4 @@
-/* WP45's option prototypes: the session cache of `sessions.ts` (a table of
+/* WP46's option prototypes: the session cache of `sessions.ts` (a table of
    sessions keyed by client id, a payload of 16 to 255 bytes each, the oldest
    evicted once `live` are held, ids drawn from `spread` times that many
    clients: 10 by default, so nine requests in ten make a session)

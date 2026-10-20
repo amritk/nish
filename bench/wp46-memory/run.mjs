@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Reproduces the figures in docs/wp45-long-running-memory.md: the baseline's
+// Reproduces the figures in docs/wp46-long-running-memory.md: the baseline's
 // arena and resident set over requests (`sessions.ts`), and the options'
 // prototypes (`options.c`, `rc-tax.c`) timed in interleaved rounds.
 //
-//   npm run build && node bench/wp45-memory/run.mjs [--rounds 7]
+//   npm run build && node bench/wp46-memory/run.mjs [--rounds 7]
 //
 // Each round runs every variant once, in an order rotated by the round, each
 // in a fresh process so its resident set is its own. A figure is the median
@@ -21,15 +21,15 @@ import { mkdirSync } from "node:fs"
 const args = process.argv.slice(2)
 const at = args.indexOf("--rounds")
 const rounds = at >= 0 ? Number(args[at + 1]) : 7
-const out = "build/wp45"
+const out = "build/wp46"
 mkdirSync(out, { recursive: true })
 
 const run = (file, argv) => execFileSync(file, argv, { encoding: "utf8" })
 const cc = process.env.CC ?? "clang"
 run(cc, ["-O2", "-c", "runtime/runtime.c", "-o", `${out}/runtime.o`])
-run(cc, ["-O2", "bench/wp45-memory/options.c", `${out}/runtime.o`, "-o", `${out}/options`])
-run(cc, ["-O2", "bench/wp45-memory/rc-tax.c", `${out}/runtime.o`, "-o", `${out}/rc-tax`])
-run("build/nish", ["bench/wp45-memory/sessions.ts", "--link", `${out}/sessions`])
+run(cc, ["-O2", "bench/wp46-memory/options.c", `${out}/runtime.o`, "-o", `${out}/options`])
+run(cc, ["-O2", "bench/wp46-memory/rc-tax.c", `${out}/runtime.o`, "-o", `${out}/rc-tax`])
+run("build/nish", ["bench/wp46-memory/sessions.ts", "--link", `${out}/sessions`])
 
 const median = (xs) => {
   const s = [...xs].sort((p, q) => p - q)
