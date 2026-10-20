@@ -135061,12 +135061,12 @@ function routerRun(router: Router, method: u8[], targets: u8[][], params: i32[])
   pointer targets: size=0 writesThrough=false captured=false
   pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.match#7 fold#1
   stackSites=0 stackLocals=0
-  local 345:7 sum: i64 (let)
-  local 346:12 i: i32 (let)
-  local 347:11 target: u8[] (const)
-  local 348:11 route: i32 (const)
-  callee 348:19 Router.match -> @nish.Router.match
-  callee 349:12 fold -> @fold
+  local 347:7 sum: i64 (let)
+  local 348:12 i: i32 (let)
+  local 349:11 target: u8[] (const)
+  local 350:11 route: i32 (const)
+  callee 350:19 Router.match -> @nish.Router.match
+  callee 351:12 fold -> @fold
 function linearRun(t: LinearTable, method: u8[], targets: u8[][], params: i32[]): i64 -> @linearRun
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via linearMatch
@@ -135076,11 +135076,11 @@ function linearRun(t: LinearTable, method: u8[], targets: u8[][], params: i32[])
   pointer targets: size=0 writesThrough=false captured=false
   pointer params: size=0 writesThrough=true captured=false passedTo=linearMatch#3 fold#1
   stackSites=0 stackLocals=0
-  local 355:7 sum: i64 (let)
-  local 356:12 i: i32 (let)
-  local 357:11 target: u8[] (const)
-  callee 358:12 fold -> @fold
-  callee 358:17 linearMatch -> @linearMatch
+  local 357:7 sum: i64 (let)
+  local 358:12 i: i32 (let)
+  local 359:11 target: u8[] (const)
+  callee 360:12 fold -> @fold
+  callee 360:17 linearMatch -> @linearMatch
 function linearRunCopy(t: LinearTable, method: u8[], targets: u8[][], params: i32[]): i64 -> @linearRunCopy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via linearMatchCopy
@@ -135090,87 +135090,87 @@ function linearRunCopy(t: LinearTable, method: u8[], targets: u8[][], params: i3
   pointer targets: size=0 writesThrough=false captured=false
   pointer params: size=0 writesThrough=true captured=false passedTo=linearMatchCopy#3 fold#1
   stackSites=0 stackLocals=0
-  local 364:7 sum: i64 (let)
-  local 365:12 i: i32 (let)
-  local 366:11 target: u8[] (const)
-  callee 367:12 fold -> @fold
-  callee 367:17 linearMatchCopy -> @linearMatchCopy
+  local 366:7 sum: i64 (let)
+  local 367:12 i: i32 (let)
+  local 368:11 target: u8[] (const)
+  callee 369:12 fold -> @fold
+  callee 369:17 linearMatchCopy -> @linearMatchCopy
 function median(xs: i64[]): i64 -> @median
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 378:7
+  sharedWrite: 380:7
   calls: nish_panic_index
   pointer xs: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 374:12 i: i32 (let)
-  local 375:11 x: i64 (const)
-  local 376:9 j: i32 (let)
-  local 383:9 middle: i32 (const)
+  local 376:12 i: i32 (let)
+  local 377:11 x: i64 (const)
+  local 378:9 j: i32 (let)
+  local 385:9 middle: i32 (const)
 function perLookup(total: i64): string -> @perLookup
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div nish_panic_overflow nish_str_concat nish_str_from_i64
   stackSites=0 stackLocals=0
-  local 389:9 tenths: i64 (const)
+  local 391:9 tenths: i64 (const)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.Router.add
   calls: LinearTable.add LinearTable.constructor TARGETS fold linearMatch linearRun linearRunCopy median nish.Router.add nish.Router.constructor nish.Router.match nish.Router.nodeCount nish.httpFieldBytes nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_index_of nish_str_index_of_from nish_str_new perLookup routeTable routerRun
   stackSites=9 stackLocals=8
-  local 394:9 rows: string[] (const)
-  callee 394:16 routeTable -> @routeTable
-  local 395:9 router: Router (const)
-  callee 395:18 new Router -> @nish.Router.constructor
-  local 396:9 table: LinearTable (const)
-  callee 396:17 new LinearTable -> @LinearTable.constructor
-  local 397:12 r: i32 (let)
-  local 398:11 row: string (const)
-  local 399:11 space: i32 (const)
-  local 400:11 method: string (const)
-  local 401:11 pattern: string (const)
-  callee 402:9 Router.add -> @nish.Router.add
-  callee 405:5 LinearTable.add -> @LinearTable.add
-  local 407:9 names: string[] (const)
-  callee 407:17 TARGETS -> @TARGETS
-  local 408:9 targets: u8[][] (const)
-  local 409:12 k: i32 (let)
-  callee 410:18 httpFieldBytes -> @nish.httpFieldBytes
-  local 412:9 method: u8[] (const)
+  local 396:9 rows: string[] (const)
+  callee 396:16 routeTable -> @routeTable
+  local 397:9 router: Router (const)
+  callee 397:18 new Router -> @nish.Router.constructor
+  local 398:9 table: LinearTable (const)
+  callee 398:17 new LinearTable -> @LinearTable.constructor
+  local 399:12 r: i32 (let)
+  local 400:11 row: string (const)
+  local 401:11 space: i32 (const)
+  local 402:11 method: string (const)
+  local 403:11 pattern: string (const)
+  callee 404:9 Router.add -> @nish.Router.add
+  callee 407:5 LinearTable.add -> @LinearTable.add
+  local 409:9 names: string[] (const)
+  callee 409:17 TARGETS -> @TARGETS
+  local 410:9 targets: u8[][] (const)
+  local 411:12 k: i32 (let)
   callee 412:18 httpFieldBytes -> @nish.httpFieldBytes
-  local 413:9 params: i32[] (const)
-  local 414:9 check: i32[] (const)
-  local 415:12 k: i32 (let)
-  local 416:11 target: u8[] (const)
-  local 417:11 a: i32 (const)
-  callee 417:15 Router.match -> @nish.Router.match
-  local 418:11 b: i32 (const)
-  callee 418:15 linearMatch -> @linearMatch
-  callee 419:29 fold -> @fold
-  callee 419:49 fold -> @fold
-  local 424:9 routerNs: i64[] (const)
-  local 425:9 linearNs: i64[] (const)
-  local 426:9 copyNs: i64[] (const)
-  local 427:7 checksum: i64 (let)
-  local 428:12 round: i32 (let)
-  local 429:11 a: i64 (const)
-  callee 430:17 routerRun -> @routerRun
-  local 431:11 b: i64 (const)
-  callee 432:17 linearRun -> @linearRun
-  local 433:11 c: i64 (const)
-  callee 434:17 linearRunCopy -> @linearRunCopy
-  local 435:11 d: i64 (const)
-  local 440:9 rMed: i64 (const)
-  callee 440:16 median -> @median
-  local 441:9 lMed: i64 (const)
-  callee 441:16 median -> @median
-  local 442:9 cMed: i64 (const)
+  local 414:9 method: u8[] (const)
+  callee 414:18 httpFieldBytes -> @nish.httpFieldBytes
+  local 415:9 params: i32[] (const)
+  local 416:9 check: i32[] (const)
+  local 417:12 k: i32 (let)
+  local 418:11 target: u8[] (const)
+  local 419:11 a: i32 (const)
+  callee 419:15 Router.match -> @nish.Router.match
+  local 420:11 b: i32 (const)
+  callee 420:15 linearMatch -> @linearMatch
+  callee 421:29 fold -> @fold
+  callee 421:49 fold -> @fold
+  local 426:9 routerNs: i64[] (const)
+  local 427:9 linearNs: i64[] (const)
+  local 428:9 copyNs: i64[] (const)
+  local 429:7 checksum: i64 (let)
+  local 430:12 round: i32 (let)
+  local 431:11 a: i64 (const)
+  callee 432:17 routerRun -> @routerRun
+  local 433:11 b: i64 (const)
+  callee 434:17 linearRun -> @linearRun
+  local 435:11 c: i64 (const)
+  callee 436:17 linearRunCopy -> @linearRunCopy
+  local 437:11 d: i64 (const)
+  local 442:9 rMed: i64 (const)
   callee 442:16 median -> @median
-  callee 444:37 Router.nodeCount -> @nish.Router.nodeCount
-  callee 446:35 perLookup -> @perLookup
-  callee 446:72 perLookup -> @perLookup
-  callee 447:35 perLookup -> @perLookup
-  callee 447:72 perLookup -> @perLookup
+  local 443:9 lMed: i64 (const)
+  callee 443:16 median -> @median
+  local 444:9 cMed: i64 (const)
+  callee 444:16 median -> @median
+  callee 446:37 Router.nodeCount -> @nish.Router.nodeCount
   callee 448:35 perLookup -> @perLookup
-  callee 448:70 perLookup -> @perLookup
-  local 449:9 band: i64 (const)
+  callee 448:72 perLookup -> @perLookup
+  callee 449:35 perLookup -> @perLookup
+  callee 449:72 perLookup -> @perLookup
+  callee 450:35 perLookup -> @perLookup
+  callee 450:70 perLookup -> @perLookup
+  local 451:9 band: i64 (const)
 module std/net/router.ts [package nish]
 const ROUTER_BAD_PATTERN: i32 = -1 [exported]
 const ROUTER_BAD_METHOD: i32 = -2 [exported]
