@@ -651,7 +651,9 @@ export class QuicStreams {
    */
   share(pools: QuicStreamPools): void {
     if (pools.data.size !== this.bufferSize) {
-      panic(`QuicStreams: pools of ${pools.data.size}-byte buffers shared with streams of ${this.bufferSize} bytes`)
+      panic(
+        `QuicStreams: pools of ${pools.data.size}-byte buffers shared with streams of ${this.bufferSize} bytes`
+      )
     }
     this.giveBack()
     this.pools = pools
@@ -744,7 +746,11 @@ export class QuicStreams {
   giveRecv(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (pools !== null && stream.recvBuf.length > 0) {
-      pools.keep(stream.recvBuf, stream.recvHave, toI32(quicStreamMin(stream.recvHighest, toI64(stream.size))))
+      pools.keep(
+        stream.recvBuf,
+        stream.recvHave,
+        toI32(quicStreamMin(stream.recvHighest, toI64(stream.size)))
+      )
       stream.recvBuf = this.none
       stream.recvHave = this.none
       this.recvLent = this.recvLent - 1

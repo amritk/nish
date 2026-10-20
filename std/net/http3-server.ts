@@ -524,7 +524,11 @@ export class Http3Server {
       const quic = new QuicConnection(quicConfig, this.entropy)
       this.quics.push(quic)
       if (k === 0 && quic.streams.bufferSize > 0 && quic.streams.slots.length > 0) {
-        this.streamPools = new QuicStreamPools(quic.streams.bufferSize, toI32(quic.streams.slots.length), size)
+        this.streamPools = new QuicStreamPools(
+          quic.streams.bufferSize,
+          toI32(quic.streams.slots.length),
+          size
+        )
       }
       const pools: QuicStreamPools | null = this.streamPools
       if (pools !== null) {
