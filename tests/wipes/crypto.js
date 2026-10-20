@@ -114,7 +114,12 @@ export const wipeChecks = [
   // intermediates (ECC-2): `p256PublicKeyExposed` 18, `p256SignExposed` 93 and
   // `p256SignSha256Into` 56. `opt` inlines `p256BaseMult` into
   // `p256PublicKeyExposed` and `p256SignScalar`, and that into
-  // `p256SignExposed`, so its wipes are counted there.
+  // `p256SignExposed`, so its wipes are counted there. The nonce's safegcd
+  // inversion (#758), `p256ScalarInverse`, which `opt` keeps out of line and
+  // both signing paths call, wipes d, e, f, g and the matrix t; `opt` promotes
+  // g and t to stack slots and turns their wipes into thirteen volatile `i32`
+  // stores, which this counter does not count, so it reaches 3 (d, e and f)
+  // and adds 3 to `p256SignExposed` and `p256SignSha256Into`.
   {
     name: "crypto: the wipes survive opt -O2 (P-256's selected comb entry in p256BaseMultWith; the scratch and accumulator in p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)",
     program: "tests/link/crypto_p256/main.ts",
@@ -122,8 +127,9 @@ export const wipeChecks = [
     roots: [
       ["nish.p256BaseMultWith", 3],
       ["nish.p256PublicKeyExposed", 18],
-      ["nish.p256SignExposed", 93],
-      ["nish.p256SignSha256Into", 56],
+      ["nish.p256ScalarInverse", 3],
+      ["nish.p256SignExposed", 96],
+      ["nish.p256SignSha256Into", 59],
     ],
   },
   // The derivations into a held `Secret` (#668). Each derives into a fresh

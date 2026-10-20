@@ -288,13 +288,20 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
 - **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FiatSelectznz`,
   `p256FiatScalarAdd`, `p256FieldInvert`, `p256ScalarInvert`,
   `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
+  `p256ScalarInverse` with its safegcd helpers `p256ToSigned30`,
+  `p256FromSigned30`, `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`,
+  `p256AddOrder30` and `p256Normalize30`,
   `p256SubBorrow`, `p256Below`, `p256ReduceOnce`, `p256AffineX`,
   `p256EncodePoint`, `p256DigestScalar`, `p256NonceKey`, `p256SignScalar`,
   `p256PublicKey`, `p256Sign`, `p256SignSha256`. (The field and scalar
   multiplies, add, subtract and conditional move, the point doubling and
   addition, the table move and select, and one window step are read as copies
   or reshaped copies, as are the comb's digit, fifteen-entry select, mixed
-  addition, masked keep and one comb step.) `p256Verify` handles only public data.
+  addition, masked keep and one comb step, and safegcd's thirty divsteps and
+  its two matrix updates: `ct_asm_p256`'s `p256Divsteps30`, the module's
+  divstep loop unrolled thirty times, which `tests/run.js` holds to the
+  module's loop body text, and `p256UpdateDe30` and `p256UpdateFg30` with
+  their limb loops unrolled.) `p256Verify` handles only public data.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
 
