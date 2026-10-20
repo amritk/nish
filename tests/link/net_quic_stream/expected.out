@@ -137,6 +137,49 @@ PASS  a finished stream of the server's arrives
 PASS  and once acknowledged leaves its slot: the next opens, 11
 PASS  a stream's first 100 bytes go out in one frame
 PASS  with every byte it would send again acknowledged, the next packet carries its 50 new bytes, not nothing
+PASS  a stream's 100 bytes and its FIN go out in one frame
+PASS  lost, with every byte written sent, the send buffer is still lent
+PASS  the frame sent again is the frame sent first, byte for byte, read from the kept buffer
+PASS  sent again but not acknowledged, the buffer stays lent
+PASS  with the FIN acknowledged and its first 50 bytes not, the send buffer stays lent
+PASS  acknowledged to the final size, the send buffer goes back to the pool
+PASS  the first table's stream done both ways, it holds no buffer
+PASS  every buffer back in the pools is zeroed, the bitmaps too
+PASS  the second table borrows what the first gave back, making none
+PASS  past the byte it was given, its receive buffer and bitmap are all zero
+PASS  past the byte it wrote, its send buffer is all zero
+PASS  reset, the second table gives both back: nothing lent from the shared pools
+PASS  a table that has moved no byte has no pools
+PASS  its pools make every buffer at once, and lend two buffers and two bitmaps
+PASS  reset, it holds none
+PASS  bytes 600 to 700 held past a contiguous end of 5
+PASS  reset by the peer, the receive buffer and bitmap go back, every byte to the highest zeroed
+PASS  the next borrower finds the buffer and bitmap clean past its own byte
+PASS  a reset after sending, the send buffer goes back at once, zeroed
+PASS  lost after a reset, nothing is sent again from it
+PASS  acknowledged late after a reset, the free buffers stay zero and none is lent again
+PASS  a probe after a reset sends no stream byte either
+PASS  a stop-sending after sending, the send buffer goes back at once, zeroed
+PASS  lost after a stop-sending, nothing is sent again from it
+PASS  acknowledged late after a stop-sending, the free buffers stay zero and none is lent again
+PASS  a probe after a stop-sending sends no stream byte either
+PASS  1,500 bytes received through a 1,024-byte buffer, read to the end
+PASS  1,500 bytes sent through a 1,024-byte buffer, each acknowledged
+PASS  both sides done, both buffers go back with every byte of them zeroed
+PASS  the next borrower finds the wrapped buffer clean
+PASS  the sending side acknowledged to its final size, its buffer back
+PASS  a reset after completion is refused and gives nothing back
+PASS  the receiving side reset, its buffer back
+PASS  the reset read, the slot released: nothing given back a second time
+PASS  a table reset and a second give-back after it give nothing back again
+PASS  a stop-sending answered after the stream is gone gives nothing back
+PASS  ten bytes owed after the give-back: the read answers the end, copying nothing
+PASS  a table of its own: every buffer made, the finished streams' four in the reserve
+PASS  a table of its own: a new stream's send side borrows the reserve's last, making none past the ceiling
+PASS  a table of its own: its bytes go out from the buffer it borrowed
+PASS  two tables sharing pools: every buffer made, the finished streams' four in the reserve
+PASS  two tables sharing pools: a new stream's send side borrows the reserve's last, making none past the ceiling
+PASS  two tables sharing pools: its bytes go out from the buffer it borrowed
 PASS  connected
 PASS  300 packets in and their echoes out, with ACKs and credit updates, keep no arena memory
 PASS  and the echo is all there: 32,000 bytes sent back
@@ -144,4 +187,4 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, a handshake through the slot keeps nothing either (QUIC-3)
-quic streams: 146 passed, 0 failed, 0 skipped
+quic streams: 189 passed, 0 failed, 0 skipped

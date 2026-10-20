@@ -11,12 +11,13 @@
  *
  * **Framing.** A record is a five-byte header — the content type, a legacy
  * version and a 16-bit length — and that many bytes. `TlsRecordReader` holds
- * the bytes of a stream that are not yet a whole record, in a buffer allocated
- * once and big enough for the largest record the RFC allows (2^14 + 256 bytes
- * of body), and says as soon as a header is in whether the record is one this
- * layer will read: a content type it does not know is `unexpected_message`,
- * and a length past the limit is `record_overflow`, before any of the body is
- * waited for. The legacy version is ignored, as §5.1 says it must be.
+ * the bytes of a stream that are not yet a whole record, in a buffer big
+ * enough for the largest record the RFC allows (2^14 + 256 bytes of body),
+ * borrowed from a `BufferPool` only while it holds any, and says as soon as
+ * a header is in whether the record is one this layer will read: a content
+ * type it does not know is `unexpected_message`, and a length past the limit
+ * is `record_overflow`, before any of the body is waited for. The legacy
+ * version is ignored, as §5.1 says it must be.
  *
  * **Protection.** `TlsRecordProtection` is one direction of a connection:
  * cleartext until `install` gives it a suite and a traffic secret, then
@@ -56,6 +57,7 @@
  * stream for `TlsServer`, and `nish/net/tls-tcp` puts that on a socket.
  * Written from RFC 8446 §5, not ported from another implementation.
  */
+import { BufferPool } from "nish/net/buffer-pool"
 import { AesKey, aesGcmOpen, aesGcmSeal, aesKeyInto, aesKeyWipe } from "nish/crypto/aes"
 import { chacha20Poly1305Open, chacha20Poly1305Seal } from "nish/crypto/chacha20poly1305"
 import {
@@ -194,30 +196,63 @@ export const tlsRecordLength = (buf: u8[], off: i32, avail: i32): i32 => {
 
 /**
  * The bytes of a stream that are not yet a whole record. The buffer is
- * allocated once, `TLS_MAX_RECORD` bytes, so a reader never grows: `push`
- * takes what fits, and the bytes of a record stay until `consume` lets them
- * go. The caller reads `buffer[start .. start + next())` for the record.
+ * `TLS_MAX_RECORD` bytes, borrowed from `pool` by the first `push` that brings
+ * a byte, kept between records, and given back, zeroed with `giveSecret`, by
+ * `reset`, as its connection ends: a reader that has not been pushed to since
+ * holds no buffer at all. `push` takes what fits, and the
+ * bytes of a record stay until `consume` lets them go. The caller reads
+ * `buffer[start .. start + next())` for the record, while `next()` is above 0.
+ *
+ * A reader starts with a pool of its own, one buffer deep; `borrowFrom` points
+ * it at a pool a server shares between its slots.
  */
 export class TlsRecordReader {
+  // References, then 32-bit fields: the order the layout packs without padding.
+  /** The bytes held, or `empty` while the reader holds none. */
   buffer: u8[]
+  /** The zero-length array `buffer` is while no buffer is borrowed. */
+  empty: u8[]
+  /** Where `buffer` comes from and goes back to. */
+  pool: BufferPool
   /** The first byte not yet consumed. */
   start: i32 = 0
   /** One past the last byte pushed. */
   end: i32 = 0
 
   constructor() {
-    this.buffer = new Array<u8>(TLS_MAX_RECORD)
+    this.empty = []
+    this.buffer = this.empty
+    this.pool = new BufferPool("TlsRecordReader.buffer", TLS_MAX_RECORD, 1)
   }
 
-  /** Forgets every byte, for a connection that starts again in the same slot. */
+  /**
+   * Borrows from `pool` from now on, giving back first, zeroed, any buffer
+   * held from the old one. Every byte held is forgotten, as `reset` does.
+   */
+  borrowFrom(pool: BufferPool): void {
+    this.reset()
+    this.pool = pool
+  }
+
+  /** Forgets every byte, for a connection that starts again in the same slot, and gives the buffer back. */
   reset(): void {
     this.start = 0
     this.end = 0
+    this.giveBack()
+  }
+
+  /** Gives the buffer back, zeroed, if one is held. */
+  giveBack(): void {
+    if (this.buffer.length > 0) {
+      // Every byte of it may have held a record: zero all of it.
+      this.pool.giveSecret(this.buffer, TLS_MAX_RECORD)
+      this.buffer = this.empty
+    }
   }
 
   /** How many bytes `push` would take now. */
   space(): i32 {
-    return toI32(this.buffer.length) - (this.end - this.start)
+    return TLS_MAX_RECORD - (this.end - this.start)
   }
 
   /**
@@ -229,16 +264,22 @@ export class TlsRecordReader {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
       return -TLS_ALERT_INTERNAL_ERROR
     }
+    if (len === 0) {
+      return 0
+    }
+    if (this.buffer.length === 0) {
+      this.buffer = this.pool.take()
+    }
     const held: i32 = this.end - this.start
     // The held bytes move to the front only when the new ones would not fit after them.
-    if (this.start > 0 && toI32(this.buffer.length) - this.end < len) {
+    if (this.start > 0 && TLS_MAX_RECORD - this.end < len) {
       for (let k: i32 = 0; k < held; k++) {
         this.buffer[k] = this.buffer[this.start + k]
       }
       this.start = 0
       this.end = held
     }
-    const room: i32 = toI32(this.buffer.length) - this.end
+    const room: i32 = TLS_MAX_RECORD - this.end
     const take: i32 = len < room ? len : room
     for (let k: i32 = 0; k < take; k++) {
       this.buffer[this.end + k] = data[off + k]
@@ -258,7 +299,11 @@ export class TlsRecordReader {
     return length > avail ? 0 : length
   }
 
-  /** Lets the first `n` held bytes go: the record `next` answered, once it is handled. */
+  /**
+   * Lets the first `n` held bytes go: the record `next` answered, once it is
+   * handled. When none are left the next record starts at the front; the
+   * buffer stays until `reset`.
+   */
   consume(n: i32): void {
     const held: i32 = this.end - this.start
     let take: i32 = n < held ? n : held

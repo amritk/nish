@@ -2077,8 +2077,10 @@ const pathKey = (ctx: CheckContext, node: Node, scope: Scope): string => {
  * one value while it is in scope (`Local.pathIndex`) — the number a `const`
  * is initialised with, so `xs[i]` is `xs[0]` after `const i = 0`, and for a
  * parameter, any other `const` or a `let` its block never assigns, the
- * variable itself. `""` for anything else: a `let` that is assigned, a name
- * in parentheses, any other expression.
+ * variable itself. A module constant is keyed the same way: by the number it
+ * is initialised with, so `xs[IDX]` is `xs[0]` after `const IDX: i32 = 0`,
+ * and otherwise by the constant itself. `""` for anything else: a `let` that
+ * is assigned, a name in parentheses, any other expression.
  */
 const indexKey = (ctx: CheckContext, index: Node, scope: Scope): string => {
   if (index.kind === N_NUMBER) {
@@ -2089,7 +2091,12 @@ const indexKey = (ctx: CheckContext, index: Node, scope: Scope): string => {
   }
   const local = sourceLocal(scope.lookup(index.text))
   if (local === null) {
-    return ""
+    const constant = ctx.program.constant(index.text)
+    if (constant === null) {
+      return ""
+    }
+    const literal = numberLiteralName(constant.decl.children[2])
+    return literal !== "" ? literal : `#${constant.name}@${constant.origin.path}`
   }
   if (local.pathIndex === "" && !local.mutable) {
     giveIndexKey(ctx, local)
@@ -2097,9 +2104,41 @@ const indexKey = (ctx: CheckContext, index: Node, scope: Scope): string => {
   return local.pathIndex
 }
 
+/**
+ * The name TypeScript gives the literal type of the initialiser `node` when
+ * it keys an index by a `const` holding it: a number, signed or in
+ * parentheses, as its value, so `-1` is `"-1"` and `-0` is `"0"`, and a
+ * `const` whose own type is such a literal (`Local.literalKey`) as that
+ * literal. `""` for anything else.
+ */
+export const literalIndexName = (node: Node, scope: Scope): string => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_IDENT) {
+    return numberLiteralName(read)
+  }
+  const local = sourceLocal(scope.lookup(read.text))
+  return local === null ? "" : local.literalKey
+}
+
+/** `literalIndexName` for a number literal, alone or under a unary `-` or `+`; `""` for anything else. */
+const numberLiteralName = (node: Node): string => {
+  const read = unwrapParens(node)
+  if (read.kind === N_NUMBER) {
+    return numberKey(read.text)
+  }
+  if (
+    read.kind !== N_UNARY ||
+    (read.text !== "-" && read.text !== "+") ||
+    read.children[0].kind !== N_NUMBER
+  ) {
+    return ""
+  }
+  const value = numberKey(read.children[0].text)
+  return read.text === "+" || value === "0" ? value : `-${value}`
+}
+
 /** A number literal's text as an index key: an integer as its value, so `0x1`, `1` and `1e0` are one key. */
-export const numberKey = (text: string): string =>
-  text.indexOf(".") >= 0 ? text : `${parseIntegerLiteral(text)}`
+const numberKey = (text: string): string => (text.indexOf(".") >= 0 ? text : `${parseIntegerLiteral(text)}`)
 
 /** Key every index through `local` by the variable itself (`Local.pathIndex`). */
 export const giveIndexKey = (ctx: CheckContext, local: Local): void => {
@@ -2506,7 +2545,7 @@ const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, s
  * when it is one, a narrowed union's variants, or none when `type` is not
  * made of them (`union | null`).
  */
-export const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
+const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
   const variants: i32[] = []
   if (ctx.table.isUnion(type)) {
     for (const variant of ctx.table.variantsOf(type)) {

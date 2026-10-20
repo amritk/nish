@@ -231,8 +231,10 @@ into a `const` and test that. The tag read through the path does stay
 narrowed, as in TypeScript, so a second `a.b.kind === Kind.Circle` after the
 first ruled it out is an error, until a store to `a.b`, `a.b.kind` or `a`.
 An index belongs to the path when it names one element, as in TypeScript: a
-number, a parameter, a `const` (after `const i = 0`, `xs[i]` is `xs[0]`), or a
-`let` that nothing assigns. Through a loop counter, which `i++` assigns,
+number, a parameter, a `const` (after `const i = 0`, `xs[i]` is `xs[0]`, and
+so is `xs[j]` after `const j = i`), a module constant (after
+`const IDX: i32 = 0`, `xs[IDX]` is `xs[0]` too), or a `let` that nothing
+assigns. Through a loop counter, which `i++` assigns,
 `xs[i]` is not narrowed, and a store `xs[j] = t` through it clears nothing.
 And where TypeScript would type a value `never`,
 because every tag has been tested away, reading it is an error (NL2556).

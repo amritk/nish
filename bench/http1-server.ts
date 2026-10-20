@@ -3,6 +3,10 @@
 // the module, with nothing between the socket and the handler. `bench/http.mjs`
 // pins it to one CPU and drives it with wrk; see bench/README.md, "HTTP".
 //
+// Every request is routed by one `nish/net/router` table, built at start-up,
+// and answered by a `switch` on the route it matched; a path that matches no
+// route, or matches one only for another method, is a 404.
+//
 //   GET /plaintext  13 bytes of text/plain
 //   GET /json       {"message":"Hello, World!","n":<requests so far>}, written
 //                   by a `JsonWriter` reset onto one buffer per request
@@ -15,16 +19,25 @@
 //                        integer `revision` is echoed, where /json-echo
 //                        answers 400 to anything that is not a whole order
 //   GET /           `Hi`, the ping route
-//   GET /id/<id>?name=<name>  `<id> <name>` and an `x-powered-by: benchmark`
-//                   field: one path segment and one query parameter, both
-//                   taken as they are written, with no percent-decoding
+//   GET /id/:id?name=<name>  `<id> <name>` and an `x-powered-by: benchmark`
+//                   field: the route's one parameter and one query parameter,
+//                   both taken as they are written, with no percent-decoding
 //   POST /json      any JSON document (bench/http-body.json), parsed into the
 //                   reused `JsonDocument` and written back compact
 //   the extra routes  the 112 patterns of bench/http-twins/extra-routes.mjs,
 //                   kept equal to it below, `ok` to a GET of one and to a POST
-//                   of one with `/submit` after it. They are tried last, one
-//                   by one, and never under load: they are there because
-//                   every router twin registers them
+//                   of one with `/submit` after it: every router twin
+//                   registers them
+//   the route table  bench/router.ts's 112 routes, copied below, in this
+//                   server only: 14 resources of six routes each and nested
+//                   routes up to nine segments deep. Each answers `ok`, but
+//                   GET /v1/orgs/:org/projects/:project/builds/:build/artifacts,
+//                   the "deep-route" scenario, answers `<org> <project> <build>`.
+//                   Its `GET /` is the ping route's, so it is left out
+//
+// The routes are added in that order, the real ones first. Added later, the
+// two tables' literals are tried before the real routes' at each node, so the
+// real routes pay for a table of 342, not of seven.
 //
 // A request body is gathered from `H1_BODY` events into a buffer its slot
 // keeps, and answered at `H1_END`: 400 when it is not an order. A body past
@@ -53,6 +66,8 @@ import {
   Http1Connection,
   Http1Server,
 } from "nish/net/http1-server"
+import { Http1Parser } from "nish/net/http1"
+import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router"
 import { JsonWriter } from "nish/json"
 import { JsonLimits } from "nish/json-tokenizer"
 import { JsonDecoder, jsonDecode, jsonEncode } from "nish/json-typed"
@@ -63,14 +78,22 @@ const LISTENER: i32 = -1
 const ZERO: i32 = 0
 /** The largest request body an echo takes; one byte more is answered 413. */
 const MAX_BODY: i32 = 4096
-/** What a slot's request is waiting for at `H1_END`. */
-const ROUTE_NONE: i32 = 0
-const ROUTE_ECHO: i32 = 1
-const ROUTE_ECHO_DOC: i32 = 2
-const ROUTE_BODY: i32 = 3
-const SLASH: i32 = 47
-const COLON: i32 = 58
-const QUESTION: i32 = 63
+/** The routes, in the order `Router.add` numbers them; a slot holds one until `H1_END`. */
+const ROUTE_NONE: i32 = -1
+const ROUTE_PLAINTEXT: i32 = 0
+const ROUTE_JSON: i32 = 1
+const ROUTE_ECHO: i32 = 2
+const ROUTE_ECHO_DOC: i32 = 3
+const ROUTE_PING: i32 = 4
+const ROUTE_QUERY: i32 = 5
+const ROUTE_BODY: i32 = 6
+/** The extra routes' first, a GET and its POST per pattern, then the route table's first. */
+const ROUTE_EXTRA: i32 = 7
+const ROUTE_TABLE: i32 = 231
+/** The route table's deep route, the 102nd row after its `GET /`; one past its last. */
+const ROUTE_DEEP: i32 = 332
+const ROUTE_COUNT: i32 = 342
+const DEEP_PATTERN: string = "/v1/orgs/:org/projects/:project/builds/:build/artifacts"
 const AMPERSAND: i32 = 38
 const EQUALS: i32 = 61
 /** The highest revision an echo raises; past it, an `i32` would overflow, which aborts. */
@@ -181,6 +204,126 @@ const extraRoutes = (): string[] => {
   return out
 }
 
+/**
+ * bench/router.ts's route table, copied whole: one "METHOD /pattern" per
+ * route, in `Router.add` order. This server adds every row but the first,
+ * `GET /`, which is its ping route.
+ */
+const routeTable = (): string[] => [
+  "GET /",
+  "GET /robots.txt",
+  "GET /health",
+  "GET /metrics",
+  "GET /static/*",
+  "GET /v1",
+  "GET /v1/users",
+  "POST /v1/users",
+  "GET /v1/users/:id",
+  "PUT /v1/users/:id",
+  "DELETE /v1/users/:id",
+  "GET /v1/users/:id/events",
+  "GET /v1/orgs",
+  "POST /v1/orgs",
+  "GET /v1/orgs/:id",
+  "PUT /v1/orgs/:id",
+  "DELETE /v1/orgs/:id",
+  "GET /v1/orgs/:id/events",
+  "GET /v1/projects",
+  "POST /v1/projects",
+  "GET /v1/projects/:id",
+  "PUT /v1/projects/:id",
+  "DELETE /v1/projects/:id",
+  "GET /v1/projects/:id/events",
+  "GET /v1/builds",
+  "POST /v1/builds",
+  "GET /v1/builds/:id",
+  "PUT /v1/builds/:id",
+  "DELETE /v1/builds/:id",
+  "GET /v1/builds/:id/events",
+  "GET /v1/repos",
+  "POST /v1/repos",
+  "GET /v1/repos/:id",
+  "PUT /v1/repos/:id",
+  "DELETE /v1/repos/:id",
+  "GET /v1/repos/:id/events",
+  "GET /v1/issues",
+  "POST /v1/issues",
+  "GET /v1/issues/:id",
+  "PUT /v1/issues/:id",
+  "DELETE /v1/issues/:id",
+  "GET /v1/issues/:id/events",
+  "GET /v1/pulls",
+  "POST /v1/pulls",
+  "GET /v1/pulls/:id",
+  "PUT /v1/pulls/:id",
+  "DELETE /v1/pulls/:id",
+  "GET /v1/pulls/:id/events",
+  "GET /v1/teams",
+  "POST /v1/teams",
+  "GET /v1/teams/:id",
+  "PUT /v1/teams/:id",
+  "DELETE /v1/teams/:id",
+  "GET /v1/teams/:id/events",
+  "GET /v1/keys",
+  "POST /v1/keys",
+  "GET /v1/keys/:id",
+  "PUT /v1/keys/:id",
+  "DELETE /v1/keys/:id",
+  "GET /v1/keys/:id/events",
+  "GET /v1/hooks",
+  "POST /v1/hooks",
+  "GET /v1/hooks/:id",
+  "PUT /v1/hooks/:id",
+  "DELETE /v1/hooks/:id",
+  "GET /v1/hooks/:id/events",
+  "GET /v1/releases",
+  "POST /v1/releases",
+  "GET /v1/releases/:id",
+  "PUT /v1/releases/:id",
+  "DELETE /v1/releases/:id",
+  "GET /v1/releases/:id/events",
+  "GET /v1/packages",
+  "POST /v1/packages",
+  "GET /v1/packages/:id",
+  "PUT /v1/packages/:id",
+  "DELETE /v1/packages/:id",
+  "GET /v1/packages/:id/events",
+  "GET /v1/gists",
+  "POST /v1/gists",
+  "GET /v1/gists/:id",
+  "PUT /v1/gists/:id",
+  "DELETE /v1/gists/:id",
+  "GET /v1/gists/:id/events",
+  "GET /v1/events",
+  "POST /v1/events",
+  "GET /v1/events/:id",
+  "PUT /v1/events/:id",
+  "DELETE /v1/events/:id",
+  "GET /v1/events/:id/events",
+  "GET /v1/orgs/:org/members",
+  "GET /v1/orgs/:org/members/:user",
+  "DELETE /v1/orgs/:org/members/:user",
+  "GET /v1/orgs/:org/teams/:team",
+  "GET /v1/orgs/:org/teams/:team/members",
+  "GET /v1/orgs/:org/projects/:project",
+  "PATCH /v1/orgs/:org/projects/:project",
+  "GET /v1/orgs/:org/projects/:project/settings",
+  "GET /v1/orgs/:org/projects/:project/builds",
+  "POST /v1/orgs/:org/projects/:project/builds",
+  "GET /v1/orgs/:org/projects/:project/builds/:build",
+  "DELETE /v1/orgs/:org/projects/:project/builds/:build",
+  "GET /v1/orgs/:org/projects/:project/builds/:build/artifacts",
+  "GET /v1/orgs/:org/projects/:project/builds/:build/logs/*",
+  "GET /v1/repos/:owner/:repo",
+  "GET /v1/repos/:owner/:repo/issues",
+  "GET /v1/repos/:owner/:repo/issues/:number",
+  "GET /v1/repos/:owner/:repo/issues/:number/comments",
+  "GET /v1/repos/:owner/:repo/pulls/:number/files",
+  "GET /v1/repos/:owner/:repo/contents/*",
+  "GET /v2/users/:id",
+  "GET /v2/users/:id/keys/:key",
+]
+
 /** Where `head[start .. end)` first holds `b`, or `end`. */
 const indexOf = (head: u8[], start: i32, end: i32, b: i32): i32 => {
   let i: i32 = start
@@ -188,30 +331,6 @@ const indexOf = (head: u8[], start: i32, end: i32, b: i32): i32 => {
     i = i + 1
   }
   return i
-}
-
-/** Whether the path `head[start .. end)` is one `pattern` names; a `:name` segment matches any one non-empty segment. */
-const pathMatches = (head: u8[], start: i32, end: i32, pattern: u8[]): boolean => {
-  const n: i32 = toI32(pattern.length)
-  let i: i32 = start
-  let k: i32 = 0
-  while (k >= 0 && k < n && k < pattern.length) {
-    if (toI32(pattern[k]) === COLON) {
-      const from: i32 = i
-      i = indexOf(head, i, end, SLASH)
-      if (i === from) {
-        return false
-      }
-      k = indexOf(pattern, k, n, SLASH)
-    } else {
-      if (i < 0 || i >= end || i >= head.length || head[i] !== pattern[k]) {
-        return false
-      }
-      i = i + 1
-      k = k + 1
-    }
-  }
-  return i === end
 }
 
 class Bench {
@@ -243,9 +362,9 @@ class Bench {
   queryNames: u8[][]
   queryValues: u8[][]
   space: u8[]
-  /** The extra routes' GET patterns, and the same with `/submit` after each for a POST. */
-  extraGets: u8[][]
-  extraPosts: u8[][]
+  router: Router
+  /** The matched route's parameters, `[start, end)` pairs into the head. */
+  params: i32[]
   requests: i32 = 0
   /** Return from `run` once this many requests are answered; 0 serves forever. */
   limit: i32 = 0
@@ -270,6 +389,7 @@ class Bench {
     this.route = new Array<i32>(slots)
     for (let k: i32 = 0; k < slots; k++) {
       this.bodies.push(new Array<u8>(0))
+      this.route[k] = ROUTE_NONE
     }
     this.order = new Order()
     this.decoder = new JsonDecoder(this.jsonBuf, ZERO, ZERO, new JsonLimits())
@@ -281,32 +401,74 @@ class Bench {
     this.queryNames = [bytesOf("Server"), bytesOf("Content-Type"), bytesOf("x-powered-by")]
     this.queryValues = [bytesOf("nish"), bytesOf("text/plain"), bytesOf("benchmark")]
     this.space = bytesOf(" ")
-    this.extraGets = []
-    this.extraPosts = []
+    const limits: RouterLimits = new RouterLimits()
+    this.router = new Router(limits)
+    this.params = new Array<i32>(2 * limits.maxParams)
+    this.add("GET", "/plaintext", ROUTE_PLAINTEXT)
+    this.add("GET", "/json", ROUTE_JSON)
+    this.add("POST", "/json-echo", ROUTE_ECHO)
+    this.add("POST", "/json-echo-doc", ROUTE_ECHO_DOC)
+    this.add("GET", "/", ROUTE_PING)
+    this.add("GET", "/id/:id", ROUTE_QUERY)
+    this.add("POST", "/json", ROUTE_BODY)
+    let next: i32 = ROUTE_EXTRA
     for (const pattern of extraRoutes()) {
-      this.extraGets.push(bytesOf(pattern))
-      this.extraPosts.push(bytesOf(`${pattern}/submit`))
+      this.add("GET", pattern, next)
+      this.add("POST", `${pattern}/submit`, next + 1)
+      next += 2
+    }
+    if (next !== ROUTE_TABLE) {
+      panic(`http1-server: the extra routes end at ${next}, not ${ROUTE_TABLE}`)
+    }
+    const rows: string[] = routeTable()
+    for (let r: i32 = 1; r < toI32(rows.length); r++) {
+      const row: string = rows[r]
+      const space: i32 = toI32(row.indexOf(" "))
+      const pattern: string = row.slice(space + 1)
+      if ((pattern === DEEP_PATTERN) !== (next === ROUTE_DEEP)) {
+        panic(`http1-server: ${row} is route ${next}, and ROUTE_DEEP is ${ROUTE_DEEP}`)
+      }
+      this.add(row.slice(0, space), pattern, next)
+      next += 1
+    }
+    if (next !== ROUTE_COUNT) {
+      panic(`http1-server: the route table ends at ${next}, not ${ROUTE_COUNT}`)
     }
   }
 
-  /** Starts an echo at its head, or answers any other request from the head alone. */
-  begin(slot: i32, conn: Http1Connection): void {
-    let route: i32 = ROUTE_NONE
-    if (conn.parser.methodIs("POST")) {
-      if (conn.parser.targetIs("/json-echo")) {
-        route = ROUTE_ECHO
-      } else if (conn.parser.targetIs("/json-echo-doc")) {
-        route = ROUTE_ECHO_DOC
-      } else if (conn.parser.targetIs("/json")) {
-        route = ROUTE_BODY
-      }
+  /** Adds one route, which must be numbered `route`: the `switch` in `answer` is written against the numbers. */
+  add(method: string, pattern: string, route: i32): void {
+    const got: i32 = this.router.add(method, pattern)
+    if (got !== route) {
+      panic(`http1-server: ${method} ${pattern} was answered ${got}, not route ${route}`)
     }
-    this.route[slot] = route
+  }
+
+  /** Routes a request at its head: starts a body route's body, or answers any other request from the head alone. */
+  begin(slot: i32, conn: Http1Connection): void {
+    const p: Http1Parser = conn.parser
+    const route: i32 = this.router.match(
+      p.head,
+      p.methodStart,
+      p.methodEnd,
+      p.head,
+      p.targetStart,
+      p.targetEnd,
+      this.params
+    )
     this.bodyLength[slot] = 0
-    if (route === ROUTE_NONE) {
-      this.answer(conn)
-    } else if (this.bodies[slot].length === 0) {
-      this.bodies[slot] = new Array<u8>(MAX_BODY)
+    switch (route) {
+      case ROUTE_ECHO:
+      case ROUTE_ECHO_DOC:
+      case ROUTE_BODY:
+        this.route[slot] = route
+        if (this.bodies[slot].length === 0) {
+          this.bodies[slot] = new Array<u8>(MAX_BODY)
+        }
+        break
+      default:
+        this.route[slot] = ROUTE_NONE
+        this.answer(conn, route)
     }
   }
 
@@ -415,55 +577,54 @@ class Bench {
     conn.end()
   }
 
-  /** Answers one request from its head; a body, if any, is read and ignored. */
-  answer(conn: Http1Connection): void {
+  /** Answers one request from its head and its `route`; a body, if any, is read and ignored. */
+  answer(conn: Http1Connection, route: i32): void {
     this.requests = this.requests + 1
-    if (conn.parser.targetIs("/json")) {
-      const w: JsonWriter = this.writer
-      w.reset(this.jsonBuf, ZERO)
-      w.beginObject()
-      w.key("message")
-      w.string("Hello, World!")
-      w.key("n")
-      w.i32(this.requests)
-      w.endObject()
-      conn.respond(200, this.jsonNames, this.jsonValues, w.end)
-      conn.write(this.jsonBuf, ZERO, w.end)
-      conn.end()
-    } else if (conn.parser.targetIs("/plaintext")) {
-      conn.respond(200, this.textNames, this.textValues, toI32(this.plainBody.length))
-      conn.write(this.plainBody, ZERO, toI32(this.plainBody.length))
-      conn.end()
-    } else if (conn.parser.methodIs("GET") && conn.parser.targetIs("/")) {
-      this.reply(conn, 200, this.hi)
-    } else if (conn.parser.methodIs("GET") && this.query(conn)) {
-      // `query` answered it.
-    } else if (this.extra(conn)) {
-      this.reply(conn, 200, this.ok)
-    } else {
-      this.reply(conn, 404, this.notFound)
+    switch (route) {
+      case ROUTE_PLAINTEXT:
+        conn.respond(200, this.textNames, this.textValues, toI32(this.plainBody.length))
+        conn.write(this.plainBody, ZERO, toI32(this.plainBody.length))
+        conn.end()
+        break
+      case ROUTE_JSON: {
+        const w: JsonWriter = this.writer
+        w.reset(this.jsonBuf, ZERO)
+        w.beginObject()
+        w.key("message")
+        w.string("Hello, World!")
+        w.key("n")
+        w.i32(this.requests)
+        w.endObject()
+        conn.respond(200, this.jsonNames, this.jsonValues, w.end)
+        conn.write(this.jsonBuf, ZERO, w.end)
+        conn.end()
+        break
+      }
+      case ROUTE_PING:
+        this.reply(conn, 200, this.hi)
+        break
+      case ROUTE_QUERY:
+        this.query(conn)
+        break
+      case ROUTE_DEEP:
+        this.deep(conn)
+        break
+      case ROUTER_NOT_FOUND:
+      case ROUTER_METHOD_NOT_ALLOWED:
+        this.reply(conn, 404, this.notFound)
+        break
+      default:
+        // An extra route or a row of the route table; the router answers no other number.
+        this.reply(conn, 200, this.ok)
     }
   }
 
-  /** `GET /id/<id>?name=<name>`: answers `<id> <name>`, or says the target is not that route. */
-  query(conn: Http1Connection): boolean {
+  /** `GET /id/:id?name=<name>`: answers `<id> <name>`, the name empty when the query has none. */
+  query(conn: Http1Connection): void {
     const head: u8[] = conn.parser.head
-    const start: i32 = conn.parser.targetStart
     const end: i32 = conn.parser.targetEnd
-    if (
-      end - start < 5 ||
-      toI32(head[start]) !== SLASH ||
-      head[start + 1] !== 105 ||
-      head[start + 2] !== 100 ||
-      toI32(head[start + 3]) !== SLASH
-    ) {
-      return false
-    }
-    const path: i32 = indexOf(head, start, end, QUESTION)
-    const id: i32 = start + 4
-    if (path === id || indexOf(head, id, path, SLASH) !== path) {
-      return false
-    }
+    const idStart: i32 = this.params[0]
+    const path: i32 = this.params[1]
     // The first `name` parameter's value; empty when there is none.
     let nameStart: i32 = path
     let nameEnd: i32 = path
@@ -487,31 +648,24 @@ class Bench {
         at = next + 1
       }
     }
-    conn.respond(200, this.queryNames, this.queryValues, path - id + 1 + nameEnd - nameStart)
-    conn.write(head, id, path - id)
+    conn.respond(200, this.queryNames, this.queryValues, path - idStart + 1 + nameEnd - nameStart)
+    conn.write(head, idStart, path - idStart)
     conn.write(this.space, ZERO, 1)
     conn.write(head, nameStart, nameEnd - nameStart)
     conn.end()
-    return true
   }
 
-  /** Whether the request is a GET of an extra route, or a POST of one with `/submit` after it. */
-  extra(conn: Http1Connection): boolean {
+  /** The deep route: answers its three parameters, `<org> <project> <build>`, as they are written. */
+  deep(conn: Http1Connection): void {
     const head: u8[] = conn.parser.head
-    const start: i32 = conn.parser.targetStart
-    const path: i32 = indexOf(head, start, conn.parser.targetEnd, QUESTION)
-    let patterns: u8[][] = []
-    if (conn.parser.methodIs("GET")) {
-      patterns = this.extraGets
-    } else if (conn.parser.methodIs("POST")) {
-      patterns = this.extraPosts
-    }
-    for (const pattern of patterns) {
-      if (pathMatches(head, start, path, pattern)) {
-        return true
-      }
-    }
-    return false
+    const p: i32[] = this.params
+    conn.respond(200, this.textNames, this.textValues, p[1] - p[0] + p[3] - p[2] + p[5] - p[4] + 2)
+    conn.write(head, p[0], p[1] - p[0])
+    conn.write(this.space, ZERO, 1)
+    conn.write(head, p[2], p[3] - p[2])
+    conn.write(this.space, ZERO, 1)
+    conn.write(head, p[4], p[5] - p[4])
+    conn.end()
   }
 
   acceptAll(): void {

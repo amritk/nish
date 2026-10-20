@@ -56,7 +56,7 @@ declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #4
 declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare void @nish_scope_join(i8* noundef nonnull) #0
-declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #0
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #0
 declare i64 @llvm.smin.i64(i64, i64) #5
 declare i64 @llvm.smax.i64(i64, i64) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5

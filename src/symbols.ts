@@ -52,6 +52,14 @@ export class Local {
    * Among the pointers, as `typedArray` is.
    */
   pathIndex: string
+  /**
+   * The name TypeScript gives this variable's literal type when it keys an
+   * index by it (`literalIndexName` in `src/expressions.ts`): `"0"` for
+   * `const i = 0` and `"-1"` for `const i = -1`, so that `xs[j]` is `xs[0]`
+   * after `const j = i` as well. `""` for anything else: an annotated `const`,
+   * whose type is the annotation's, a `let`, a parameter.
+   */
+  literalKey: string
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
   type: i32
   storage: i32
@@ -84,6 +92,7 @@ export class Local {
     this.fresh = false
     this.captureOf = null
     this.pathIndex = ""
+    this.literalKey = ""
   }
 }
 

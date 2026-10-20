@@ -274,6 +274,7 @@ cases/net_tcp_connect added after R6: no rewriter to freeze it with
 cases/net_tcp_connect_import added after R6: no rewriter to freeze it with
 cases/net_tcp_echo added after R6: no rewriter to freeze it with
 cases/net_tcp_import added after R6: no rewriter to freeze it with
+cases/net_tcp_reuseport added after R6: no rewriter to freeze it with
 cases/net_udp_calls added after R6: no rewriter to freeze it with
 cases/net_udp_echo added after R6: no rewriter to freeze it with
 cases/net_udp_offload added after R6: no rewriter to freeze it with
@@ -410,6 +411,7 @@ cases/union_forms added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with
 cases/union_narrowing_arms added after R6: no rewriter to freeze it with
 cases/union_narrowing_index added after R6: no rewriter to freeze it with
+cases/union_narrowing_index_const added after R6: no rewriter to freeze it with
 cases/union_narrowing_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_loop_flow added after R6: no rewriter to freeze it with
 cases/union_narrowing_paths added after R6: no rewriter to freeze it with

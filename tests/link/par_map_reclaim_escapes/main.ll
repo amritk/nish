@@ -94,7 +94,7 @@ declare void @nish_scope_join(i8* noundef nonnull) #0
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #0
 declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #0
 declare i8* @nish_cross_in(i8* noundef, i64 noundef) #0
-declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #0
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #2
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
@@ -3421,38 +3421,44 @@ forof.body:
   %33 = call i8* @nish_arena_keep(i64 %31, i8* %32)
   call void @nish_print(i8* %33)
   %34 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %35 = call i8* @ternary(%struct.nish_array* %34)
-  call void @nish_print(i8* %35)
-  %36 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %37 = call i8* @push(%struct.nish_array* %36)
+  %35 = call i64 @nish_arena_mark()
+  %36 = call i8* @ternary(%struct.nish_array* %34)
+  %37 = call i8* @nish_arena_keep(i64 %35, i8* %36)
   call void @nish_print(i8* %37)
   %38 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %39 = call i8* @maps(%struct.nish_array* %38)
+  %39 = call i8* @push(%struct.nish_array* %38)
   call void @nish_print(i8* %39)
   %40 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %41 = call i8* @channel(%struct.nish_array* %40)
+  %41 = call i8* @maps(%struct.nish_array* %40)
   call void @nish_print(i8* %41)
   %42 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %43 = call i8* @mutex(%struct.nish_array* %42)
+  %43 = call i8* @channel(%struct.nish_array* %42)
   call void @nish_print(i8* %43)
   %44 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %45 = call i8* @callee(%struct.nish_array* %44)
+  %45 = call i8* @mutex(%struct.nish_array* %44)
   call void @nish_print(i8* %45)
   %46 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %47 = call i8* @alias(%struct.nish_array* %46)
+  %47 = call i8* @callee(%struct.nish_array* %46)
   call void @nish_print(i8* %47)
   %48 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %49 = call i8* @carried(%struct.nish_array* %48)
+  %49 = call i8* @alias(%struct.nish_array* %48)
   call void @nish_print(i8* %49)
   %50 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %51 = call i8* @afterNested(%struct.nish_array* %50)
-  call void @nish_print(i8* %51)
+  %51 = call i64 @nish_arena_mark()
+  %52 = call i8* @carried(%struct.nish_array* %50)
+  %53 = call i8* @nish_arena_keep(i64 %51, i8* %52)
+  call void @nish_print(i8* %53)
+  %54 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %55 = call i64 @nish_arena_mark()
+  %56 = call i8* @afterNested(%struct.nish_array* %54)
+  %57 = call i8* @nish_arena_keep(i64 %55, i8* %56)
+  call void @nish_print(i8* %57)
   br label %forof.inc
 
 forof.inc:
-  %52 = load i64, i64* %forof.idx, align 8
-  %53 = add i64 %52, 1
-  store i64 %53, i64* %forof.idx, align 8
+  %58 = load i64, i64* %forof.idx, align 8
+  %59 = add i64 %58, 1
+  store i64 %59, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:

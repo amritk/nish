@@ -34,6 +34,7 @@ import {
   isFreshArrayLocal,
   isJoinedParts,
   LoopScope,
+  ParamUse,
   pushedOnto,
   USE_ARGUMENT,
   USE_NONE,
@@ -244,6 +245,13 @@ export class EscapeResult {
    * own releases what it stored.
    */
   fillsParam: i32
+  /**
+   * The `string[]` parameters, by name, whose elements this function neither
+   * keeps past the call nor hands back (`decideElementParams`). A caller's
+   * listing passed to one of them is not handed on, so the caller's frame
+   * may still release its strings (`passesToFreeElements`).
+   */
+  freeElementParams: string[]
 
   constructor(nodeCount: i32) {
     this.escapingNodes = []
@@ -263,6 +271,7 @@ export class EscapeResult {
     this.callSites = []
     this.escapeSite = null
     this.fillsParam = -1
+    this.freeElementParams = []
   }
 
   /** Set `allocEscapes`, remembering `node` unless an earlier escape already is its site. */
@@ -725,7 +734,7 @@ class EscapeAnalysis {
   useOutcome(expr: Node, visiting: Local[]): Outcome {
     const found = classifyUse(this.unit, this.table, expr)
     const handsOn = found.kind === USE_ARGUMENT || found.kind === USE_READ || found.kind === USE_WRITE
-    if (this.listing && handsOn && this.handsOutElements(expr)) {
+    if (this.listing && handsOn && this.handsOutElements(expr) && !this.passesToFreeElements(found)) {
       return new Outcome(FLOW_LEAKS, true, true)
     }
     if (found.kind === USE_NONE || found.kind === USE_READ || found.kind === USE_WRITE) {
@@ -1126,6 +1135,24 @@ class EscapeAnalysis {
     return access.text !== "length"
   }
 
+  /**
+   * The use is an argument to a parameter whose callee proved it keeps no
+   * element of it (`elementsFree`), so the listing is not handed on there;
+   * whether the callee keeps the array itself is `calleeCaptures`'s answer.
+   */
+  passesToFreeElements(found: ParamUse): boolean {
+    const callee = found.callee
+    if (found.kind !== USE_ARGUMENT || callee === null) {
+      return false
+    }
+    const g = this.facts.get(callee.name)
+    if (g === null || found.index < 0 || found.index >= g.paramNames.length) {
+      return false
+    }
+    const pointer = g.pointerParam(g.paramNames[found.index])
+    return pointer !== null && pointer.elementsFree
+  }
+
   memoised(v: Local): Outcome | null {
     let i = 0
     while (i < this.outcomeLocals.length) {
@@ -1195,6 +1222,86 @@ class EscapeAnalysis {
     // element's use that decides (`holder.name = names[0]` stores it).
     const used = target.used
     return this.useOutcome(this.listing && used !== null ? used : expr, visiting)
+  }
+
+  /**
+   * The `string[]` parameters this function keeps no element of
+   * (`freeElementParams`). Each reference to the parameter is read as a
+   * listing's would be (`this.listing`): an element read out of it, a
+   * `for...of` variable and an alias are followed to their uses, and the
+   * parameter is free only when every use is `local` and nothing escapes. A
+   * store into a field, a global or another array, a `return`, a `new`, an
+   * argument to a callee that is not itself proved free (`passesToFreeElements`,
+   * settled by the fixpoint in `analyzeFunctions`), and any other method all
+   * keep it. `analyzeEscapes` asks only of a body that writes no arrow or
+   * nested function, whose captures the walk does not follow.
+   *
+   * Only `string[]`: an element of a `string[][]` is an array whose own
+   * strings this walk does not follow, so that parameter keeps the
+   * conservative answer.
+   */
+  decideElementParams(body: Node): void {
+    const program = this.unit.program
+    let i = 0
+    while (i < this.sig.paramNames.length && i < this.sig.paramTypes.length) {
+      const type = this.table.stripNull(this.sig.paramTypes[i])
+      if (
+        type >= 0 &&
+        this.table.isArray(type) &&
+        this.table.stripNull(this.table.refOf(type)) === T_STRING
+      ) {
+        const refs: Node[] = []
+        paramRefs(program, body, this.sig.paramNames[i], refs)
+        if (this.elementsStay(refs)) {
+          this.result.freeElementParams.push(this.sig.paramNames[i])
+        }
+      }
+      i = i + 1
+    }
+  }
+
+  /**
+   * Every one of `refs` is a `local` use under the listing rule. The walk is
+   * a question, not a decision, so what it records on the result as it goes
+   * (`storedIntoReturnedArray`, `storedIntoChunkDst`) is put back after it.
+   */
+  elementsStay(refs: Node[]): boolean {
+    const memoLocals = this.outcomeLocals
+    const memoValues = this.outcomeValues
+    const carriedStores = this.result.carriedStores
+    const carriers = this.result.carriers
+    const returnsFreshElements = this.result.returnsFreshElements
+    const fillsParam = this.result.fillsParam
+    this.outcomeLocals = []
+    this.outcomeValues = []
+    this.result.carriedStores = []
+    this.result.carriers = []
+    this.listing = true
+    let stays = true
+    let k = 0
+    while (stays && k < refs.length) {
+      const ref = refs[k]
+      const parent = this.unit.parents.parentOf(ref)
+      const rebinds =
+        parent !== null &&
+        parent.kind === N_BINARY &&
+        parent.children[0] === ref &&
+        isAssignmentOperator(parent.text)
+      if (!rebinds) {
+        const fresh: Local[] = []
+        const step = this.valueOutcome(ref, fresh)
+        stays = step.flow === FLOW_LOCAL && !step.escapes
+      }
+      k = k + 1
+    }
+    this.listing = false
+    this.outcomeLocals = memoLocals
+    this.outcomeValues = memoValues
+    this.result.carriedStores = carriedStores
+    this.result.carriers = carriers
+    this.result.returnsFreshElements = returnsFreshElements
+    this.result.fillsParam = fillsParam
+    return stays
   }
 
   // ---- Decisions ----------------------------------------------------------------------
@@ -1581,6 +1688,29 @@ const identRefs = (program: CheckedProgram, node: Node, local: Local, out: Node[
   }
 }
 
+/** Every reference to the parameter called `name` in `node`. */
+const paramRefs = (program: CheckedProgram, node: Node, name: string, out: Node[]): void => {
+  if (node.kind === N_IDENT) {
+    const local = program.nodeLocals[node.id]
+    if (local !== null && local.storage === STORAGE_PARAM && local.name === name) {
+      out.push(node)
+    }
+  }
+  for (const child of node.children) {
+    paramRefs(program, child, name, out)
+  }
+}
+
+/** `node` writes an arrow or a function inside it. */
+const namesNestedFunction = (node: Node): boolean => {
+  for (const child of node.children) {
+    if (child.kind === N_ARROW || child.kind === N_FUNCTION || namesNestedFunction(child)) {
+      return true
+    }
+  }
+  return false
+}
+
 export const analyzeEscapes = (
   unit: AnalysisUnit,
   table: TypeTable,
@@ -1603,6 +1733,9 @@ export const analyzeEscapes = (
   }
   analysis.visit(body)
   analysis.decide()
+  if (!sig.lifted && !namesNestedFunction(body)) {
+    analysis.decideElementParams(body)
+  }
   return analysis.result
 }
 
