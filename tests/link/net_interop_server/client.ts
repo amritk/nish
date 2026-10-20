@@ -27,12 +27,28 @@ import { QPACK_OK, QpackDecoder } from "nish/net/qpack";
 import { H3_FRAME_DATA, H3_FRAME_HEADERS, Http3FrameHeader, h3ReadFrameHeader } from "nish/net/http3-frame";
 import { TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
 import { TLS_CONTENT_APPLICATION_DATA, TLS_CONTENT_HANDSHAKE, TlsRecordProtection } from "nish/net/tls/record";
-import { TLS_GROUP_X25519, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
+import { TLS_GROUP_X25519, TLS_LEGACY_VERSION, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
 import { H2_ALPN } from "nish/net/http2-tls";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPublic } from "../net_tls_common/server";
-import { GROUP_SECP256R1, clientFinish, clientHello, clientShare, extAlpn, extKeyShare, extSignatureAlgorithms, extSupportedGroups, extSupportedVersions } from "../net_tls_common/client";
-import { Opened, ZERO, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
+import {
+  GROUP_SECP256R1,
+  cat,
+  clientFinish,
+  clientHello,
+  clientHelloRaw,
+  clientShare,
+  extAlpn,
+  extKeyShare,
+  extSignatureAlgorithms,
+  extSupportedGroups,
+  extSupportedVersions,
+  extension,
+  vec16,
+  vec8,
+} from "../net_tls_common/client";
+import { Opened, ZERO, filled, openOne, protectionFor, range, sealOne } from "../net_tls_record_common/bytes";
+import { SUITE, Session, Ticket, bindHello, selectedIdentity, sessionFor, ticketFrom } from "../net_tls_resume/client";
 import { clearRecord, clientKeysFor } from "../net_tls_record_common/client";
 import { FrameLog, Wire, textAt } from "../net_http2/peer";
 import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
@@ -202,7 +218,7 @@ export class QuicClient {
     let quiet: i32 = 0;
     const had: i32 = toI32(this.datagrams.length);
     for (let turn: i32 = 0; turn < TURNS; turn++) {
-      this.server.step(n32(5), key);
+      this.server.step(n32(5), key, null, null);
       let read: i32 = 0;
       let n: i32 = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
       while (n >= 0) {
@@ -279,9 +295,15 @@ export class H2TlsClient {
   buf: u8[];
   fd: i32 = -1;
   verified: boolean = false;
+  /** Whether the server has closed its end. */
+  closed: boolean = false;
+  /** Whether `resume`'s handshake resumed, and the ticket the server issued on it. */
+  resumed: boolean = false;
+  ticket: Ticket;
 
   constructor(server: InteropServer) {
     this.server = server;
+    this.ticket = new Ticket();
     this.read = new TlsRecordProtection();
     this.write = new TlsRecordProtection();
     this.wire = new Wire();
@@ -290,21 +312,25 @@ export class H2TlsClient {
     this.buf = new Array<u8>(16384);
   }
 
-  /** Sends every byte of `bytes`, turning the server's loop while the socket is full. */
-  send(bytes: u8[], key: Secret<u8[]>): void {
+  /**
+   * Sends every byte of `bytes`, turning the server's loop while the socket is
+   * full. `current` and `previous` are the ticket keys the loop is lent, as
+   * for every method here that turns it.
+   */
+  send(bytes: u8[], key: Secret<u8[]>, current: Secret<u8[]> | null, previous: Secret<u8[]> | null): void {
     let sent: i32 = 0;
     for (let turn: i32 = 0; turn < TURNS && sent < toI32(bytes.length); turn++) {
       const w: i32 = netWrite(this.fd, bytes, sent, toI32(bytes.length) - sent);
       if (w > 0) {
         sent = sent + w;
       } else {
-        this.server.step(n32(5), key);
+        this.server.step(n32(5), key, current, previous);
       }
     }
   }
 
-  /** The next whole TLS record, turning the server's loop until it is in; empty if it never comes. */
-  nextRecord(key: Secret<u8[]>): u8[] {
+  /** The next whole TLS record, turning the server's loop until it is in; empty if it never comes, or the server closed before it was whole. */
+  nextRecord(key: Secret<u8[]>, current: Secret<u8[]> | null, previous: Secret<u8[]> | null): u8[] {
     for (let turn: i32 = 0; turn < TURNS; turn++) {
       if (toI32(this.got.length) >= 5) {
         const length: i32 = n32(5) + ((toI32(this.got[3]) << 8) | toI32(this.got[4]));
@@ -314,7 +340,10 @@ export class H2TlsClient {
           return record;
         }
       }
-      this.server.step(n32(5), key);
+      if (this.closed) {
+        break;
+      }
+      this.server.step(n32(5), key, current, previous);
       let n: i32 = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
       while (n > 0) {
         for (let k: i32 = 0; k < n; k++) {
@@ -322,8 +351,9 @@ export class H2TlsClient {
         }
         n = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
       }
+      // The records read before the end are still taken, on the next turn.
       if (n !== WOULD_BLOCK && n <= 0) {
-        break;
+        this.closed = true;
       }
     }
     return [];
@@ -348,32 +378,95 @@ export class H2TlsClient {
         extAlpn([H2_ALPN]),
       ]
     );
-    this.send(clearRecord(hello), key);
-    const serverHello: u8[] = this.nextRecord(key);
+    this.send(clearRecord(hello), key, null, null);
+    const serverHello: u8[] = this.nextRecord(key, null, null);
     if (toI32(serverHello.length) < 5) {
       return false;
     }
     const helloBody: u8[] = range(serverHello, n32(5), toI32(serverHello.length));
     const keys = clientKeysFor(32, hello, helloBody);
-    const flight: Opened = openOne(protectionFor(suite, keys.serverHandshake), this.nextRecord(key));
+    const flight: Opened = openOne(protectionFor(suite, keys.serverHandshake), this.nextRecord(key, null, null));
     const view = clientFinish(32, hello, helloBody, flight.content, leafPublic());
     this.verified = view.signatureVerifies && view.serverFinishedVerifies;
     keys.finishWith(flight.content);
     this.read.install(suite, keys.serverApplication);
     this.write.install(suite, keys.clientApplication);
-    this.send(sealOne(protectionFor(suite, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO), key);
+    this.send(sealOne(protectionFor(suite, keys.clientHandshake), TLS_CONTENT_HANDSHAKE, keys.finished, ZERO), key, null, null);
     return true;
   }
 
-  /** Seals what `wire` holds into one application-data record and sends it. */
-  flush(key: Secret<u8[]>): void {
-    this.send(sealOne(this.write, TLS_CONTENT_APPLICATION_DATA, this.wire.take(), ZERO), key);
+  /**
+   * Connects to `port` and completes a TLS 1.3 handshake offering `h2`, and
+   * `offered`'s ticket when there is one, with the ticket keys `current` and
+   * `previous` lent to the server; then reads until the server's
+   * NewSessionTicket and keeps it in `ticket`. `resumed` says whether the
+   * server took the ticket. False when anything went wrong.
+   */
+  resume(port: i32, key: Secret<u8[]>, offered: Ticket | null, current: Secret<u8[]>, previous: Secret<u8[]>): boolean {
+    const addr: u8[] = new Array<u8>(18);
+    netAddress(addr, "127.0.0.1", port);
+    this.fd = tcpConnect(addr);
+    if (this.fd < 0) {
+      return false;
+    }
+    const extensions: u8[][] = [
+      extSupportedVersions([TLS_VERSION_13]),
+      extSupportedGroups([TLS_GROUP_X25519, GROUP_SECP256R1]),
+      extSignatureAlgorithms([TLS_SIGNATURE_ECDSA_SECP256R1_SHA256]),
+      extKeyShare([TLS_GROUP_X25519], [clientShare()]),
+      extAlpn([H2_ALPN]),
+      // psk_key_exchange_modes: psk_dhe_ke
+      extension(45, vec8([toU8(1)])),
+    ];
+    const none: u8[] = [];
+    let psk: u8[] = [];
+    if (offered !== null) {
+      // pre_shared_key, last: the ticket with a zero age, and a binder `bindHello` fills in.
+      extensions.push(extension(41, cat([vec16(cat([vec16(offered.ticket), filled(4, 0)])), vec16(vec8(filled(32, 0)))])));
+      psk = offered.psk;
+    }
+    let hello: u8[] = clientHelloRaw(TLS_LEGACY_VERSION, none, [SUITE], [toU8(0)], extensions);
+    if (offered !== null) {
+      hello = bindHello(hello, none, 0, psk);
+    }
+    this.send(clearRecord(hello), key, current, previous);
+    const serverHello: u8[] = this.nextRecord(key, current, previous);
+    if (toI32(serverHello.length) < 5) {
+      return false;
+    }
+    const sh: u8[] = range(serverHello, n32(5), toI32(serverHello.length));
+    this.resumed = selectedIdentity(sh) === 0;
+    const session: Session = sessionFor(this.resumed ? psk : none, hello, sh);
+    const flight: Opened = openOne(protectionFor(SUITE, session.serverHandshake), this.nextRecord(key, current, previous));
+    session.finishWith(flight.content);
+    this.verified = session.serverFinished;
+    this.read.install(SUITE, session.serverApplication);
+    this.write.install(SUITE, session.clientApplication);
+    this.send(sealOne(protectionFor(SUITE, session.clientHandshake), TLS_CONTENT_HANDSHAKE, session.finished, ZERO), key, current, previous);
+    for (let k: i32 = 0; k < 8 && !this.ticket.ok; k++) {
+      const record: u8[] = this.nextRecord(key, current, previous);
+      if (toI32(record.length) === 0) {
+        return false;
+      }
+      const opened: Opened = openOne(this.read, record);
+      if (opened.type === TLS_CONTENT_APPLICATION_DATA) {
+        this.log.push(opened.content, ZERO, toI32(opened.content.length));
+      } else if (opened.type === TLS_CONTENT_HANDSHAKE) {
+        this.ticket = ticketFrom(opened.content, session.resumption);
+      }
+    }
+    return this.ticket.ok;
   }
 
-  /** Reads records until the log holds `n` frames; answers them joined. */
-  awaitFrames(n: i32, key: Secret<u8[]>): string {
+  /** Seals what `wire` holds into one application-data record and sends it. */
+  flush(key: Secret<u8[]>, current: Secret<u8[]> | null, previous: Secret<u8[]> | null): void {
+    this.send(sealOne(this.write, TLS_CONTENT_APPLICATION_DATA, this.wire.take(), ZERO), key, current, previous);
+  }
+
+  /** Reads records until the log holds `n` frames, or the server closes; answers them joined. */
+  awaitFrames(n: i32, key: Secret<u8[]>, current: Secret<u8[]> | null, previous: Secret<u8[]> | null): string {
     while (toI32(this.log.frames.length) < n) {
-      const record: u8[] = this.nextRecord(key);
+      const record: u8[] = this.nextRecord(key, current, previous);
       if (toI32(record.length) === 0) {
         break;
       }
