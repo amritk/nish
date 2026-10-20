@@ -180,7 +180,7 @@ const start = (bin, lay) =>
       if (seen.includes("single-core")) {
         resolve({ child, port, singleCore: true })
       } else {
-          reject(new Error(`${bin} exited ${code} before listening: ${seen}`))
+        reject(new Error(`${bin} exited ${code} before listening: ${seen}`))
       }
     })
   })
