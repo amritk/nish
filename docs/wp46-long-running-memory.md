@@ -258,19 +258,25 @@ The one change to the arena itself is the size of a chunk. Today
 process and wrong for a hundred thousand of them. Prototype `r` (§4) shows it:
 100,000 regions of 64 KiB chunks reserve 6.6 GB of address space and keep
 447 MB resident, one touched page per chunk. A region's first chunk is
-therefore sized to its first allocation, and each later chunk doubles. The
+therefore sized to its first allocation, and each later chunk doubles, or
+takes the allocation's own size when that is more. The first allocation is
+the one `region`'s `f` makes first: in §1's cache the `Session` root, so the
+payload, whose length `f` does not know when the chunk is made, grows a
+second chunk. Prototype `rs` measures exactly that. The
 size is kept in a thread-local that `enter` sets and `leave` restores, read
 only on `nish_arena_grow`'s slow path. `nish_alloc_struct`'s inlined fast path
 is unchanged, so a program that does not use regions emits the same `.ll`
 (§5).
 
 **Fragmentation.** A region's chunks come from `malloc` and go back to it
-whole. Prototype `rs` keeps 27.6 MB resident for 100,000 live sessions whose
+whole. Prototype `rs` keeps 33.2 MB resident for 100,000 live sessions whose
 payloads average 136 bytes, against 22.8 MB for one `malloc` box each (`c`).
-The 4.8 MB between them is 48 bytes a region, its 32-byte arena and its
-chunk's 16-byte header; the doubling itself wastes nothing here, because a
-session fits its first chunk. What stays is `malloc`'s own
-fragmentation across sizes, which `rs` did not show over 2,000,000 requests.
+The 10.4 MB between them, about 104 bytes a region, is the region's 32-byte
+arena, two chunks where `c` has one (two 16-byte chunk headers and two
+`malloc` headers), and the second chunk's slack: it doubles the 72-byte root
+chunk to 144 bytes, so a payload shorter than that leaves the rest unused.
+What stays is `malloc`'s own fragmentation across sizes, which `rs` did not
+show over 2,000,000 requests.
 
 ### 2.2 A safe arena reset
 
@@ -414,7 +420,7 @@ linked against `runtime/runtime.c` so the arena variants use today's
 | `a` | today: sessions bumped from the arena, never freed |
 | `a2` | `a` again, the same functions compiled a second time under other names and picked at run time, for the noise band |
 | `r` | a region per session, 64 KiB chunks, freed on eviction |
-| `rs` | `r` with the first chunk sized to the first allocation, doubling after, and allocated without the swap |
+| `rs` | `r` with the first chunk sized to the root alone (the payload grows a second chunk, twice that or its own size), and allocated without the swap |
 | `s` | safe reset: evacuate the live sessions once the arena passes twice their bytes |
 | `c` | opt-in `Rc`: a `malloc`'d box holding session and payload, a retain and a release per request |
 | `ca` | `c` with atomic counts |
@@ -438,75 +444,84 @@ not inline its runtime would emit), and with atomic counts.
 npm run build && node bench/wp46-memory/run.mjs --rounds 9
 ```
 
-Each round runs every variant once, in a fresh process, in an order rotated by
-the round. A figure is the median over nine rounds. The ids change on every
+Each round runs every variant once, in a fresh process, in an order shuffled
+afresh for the round (seeded, so a rerun repeats it), so no variant always
+follows the same one. A figure is the median over nine rounds. The ids change on every
 request (xorshift), and every variant prints the same checksum of what it
 served, which the script checks. The noise band is the median over rounds of
 the gap between `a` and `a2`. A shared VM is noisy, and the band says how
 noisy. The memory rows are medians too: the anonymous resident set at exit
-(statm's resident less shared) and the peak resident set (status's `VmHWM`,
-which also counts the binary's own pages, about 1.6 MB). Figures are from one
-such run.
+(statm's resident less shared), the peak resident set (status's `VmHWM`,
+which also counts the binary's own pages, about 1.6 MB), and the minor page
+faults (`getrusage`'s `ru_minflt`). Figures are from one such run.
 
-**Churn, 1,000 live** (`options <v> 2000000 1000`; noise band 9.8%):
-
-| | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ns/request | 279.9 | 228.8 | 216.2 | 197.5 | 192.1 | 205.1 | 191.2 |
-| vs `a` | 1.00 | 0.82 | 0.77 | 0.71 | 0.69 | 0.73 | 0.68 |
-| anonymous resident at exit | 323.1 MB | 4.6 MB | 0.43 MB | 0.92 MB | 0.37 MB | 0.37 MB | 0.39 MB |
-| peak resident | 324.7 MB | 6.2 MB | 2.0 MB | 2.5 MB | 2.0 MB | 2.0 MB | 2.0 MB |
-
-**Churn, 100,000 live** (`options <v> 2000000 100000`; noise band 1.0%):
+**Churn, 1,000 live** (`options <v> 2000000 1000`; noise band 13.7%):
 
 | | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ns/request | 418.3 | 887.1 | 446.4 | 427.9 | 376.6 | 433.9 | 396.9 |
-| vs `a` | 1.00 | 2.12 | 1.07 | 1.02 | 0.90 | 1.04 | 0.95 |
-| anonymous resident at exit | 326.7 MB | 447.5 MB | 27.6 MB | 75.0 MB | 22.8 MB | 22.8 MB | 24.0 MB |
-| peak resident | 328.3 MB | 449.1 MB | 29.2 MB | 76.6 MB | 24.4 MB | 24.4 MB | 25.6 MB |
+| ns/request | 278.3 | 218.9 | 205.4 | 217.2 | 186.5 | 194.2 | 184.4 |
+| vs `a` | 1.00 | 0.79 | 0.74 | 0.78 | 0.67 | 0.70 | 0.66 |
+| anonymous resident at exit | 323.1 MB | 4.6 MB | 0.46 MB | 0.92 MB | 0.37 MB | 0.37 MB | 0.38 MB |
+| peak resident | 324.7 MB | 6.2 MB | 2.1 MB | 2.5 MB | 2.0 MB | 2.0 MB | 2.0 MB |
+| minor faults | 78,958 | 1,187 | 188 | 6,458 | 166 | 166 | 168 |
+
+**Churn, 100,000 live** (`options <v> 2000000 100000`; noise band 7.0%):
+
+| | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ns/request | 482.4 | 898.9 | 469.9 | 450.9 | 406.5 | 457.0 | 430.7 |
+| vs `a` | 1.00 | 1.86 | 0.97 | 0.93 | 0.84 | 0.95 | 0.89 |
+| anonymous resident at exit | 326.7 MB | 447.5 MB | 33.2 MB | 75.0 MB | 22.8 MB | 22.8 MB | 24.0 MB |
+| peak resident | 328.3 MB | 449.1 MB | 34.8 MB | 76.6 MB | 24.4 MB | 24.4 MB | 25.6 MB |
+| minor faults | 80,336 | 109,834 | 8,699 | 32,028 | 6,145 | 6,145 | 6,451 |
 
 **Mostly hits, 1,000 live** (`options <v> 4000000 1000 2`, ids from twice the
-cache; noise band 6.2%):
+cache; noise band 4.3%):
 
 | | `a` | `r` | `rs` | `s` | `c` | `ca` | `g` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ns/request | 162.8 | 154.7 | 147.3 | 137.5 | 131.2 | 141.6 | 130.5 |
-| vs `a` | 1.00 | 0.95 | 0.90 | 0.84 | 0.81 | 0.87 | 0.80 |
-| anonymous resident at exit | 359.0 MB | 4.6 MB | 0.42 MB | 0.88 MB | 0.37 MB | 0.37 MB | 0.38 MB |
-| peak resident | 360.6 MB | 6.2 MB | 2.0 MB | 2.5 MB | 2.0 MB | 2.0 MB | 2.0 MB |
+| ns/request | 174.7 | 139.0 | 142.6 | 146.1 | 137.4 | 147.0 | 130.5 |
+| vs `a` | 1.00 | 0.80 | 0.82 | 0.84 | 0.79 | 0.84 | 0.75 |
+| anonymous resident at exit | 359.0 MB | 4.6 MB | 0.46 MB | 0.88 MB | 0.37 MB | 0.37 MB | 0.38 MB |
+| peak resident | 360.6 MB | 6.2 MB | 2.1 MB | 2.5 MB | 2.0 MB | 2.0 MB | 2.0 MB |
+| minor faults | 87,715 | 1,187 | 187 | 7,043 | 165 | 165 | 167 |
 
-In the run's last round, the evacuation's longest pause was 0.49 ms over 761
-flips at 1,000 live, and 26.1 ms over 9 flips at 100,000 live.
+In the run's last round, the evacuation's longest pause was 0.29 ms over 761
+flips at 1,000 live, and 20.0 ms over 9 flips at 100,000 live.
 
 **The counting tax** (`rc-tax <v> <n> <steps>`):
 
 | objects | noise band | `plain` | `rc` | `call` | `atomic` |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,024 | 3.4% | 2.38 ns | 1.13x | 1.53x | 5.79x |
-| 1,048,576 | 9.0% | 19.69 ns | 1.20x | 1.76x | 1.92x |
+| 1,024 | 1.3% | 2.38 ns | 1.13x | 1.42x | 5.74x |
+| 1,048,576 | 10.1% | 22.06 ns | 1.21x | 1.87x | 2.09x |
 
 What the figures say:
 
 - **Speed does not decide it.** At 1,000 live every bounded option beats
-  today by 18–32%, past the 9.8% band, because the leaking arena touches a
-  new page every few requests and the bounded ones reuse warm memory. At
-  100,000 live, where the band is 1.0%, the picture splits: `c` is 10% faster
-  than today and `g` 5%, while `rs` is 7% slower and `s` 2%. `rs` is 19%
-  slower than `c` there; it has 48 more bytes a session to touch and a second
-  bump allocation into the region. The real region adds the handle checks
-  `rs` leaves out, so 1.07x is a floor.
+  today by 16–34%, past the 13.7% and 4.3% bands. The likely cause, a
+  hypothesis the fault counts support rather than prove: the leaking arena
+  touches a new page every few requests, 78,958 minor faults against 166–188
+  for `c` and `rs`, and the bounded ones reuse warm memory. The 0.15 s
+  between `a` and `rs` over the run comes to 1.85 µs per extra fault, a
+  plausible price for a fault that zeroes a fresh page. At
+  100,000 live, where the band is 7.0%, the picture splits: `c` is 16% faster
+  than today and `g` 11%, past the band, while `rs` (0.97x), `s` and `ca` are
+  inside it, no different from today on this run. `rs` is 13.5% slower than
+  `c` there: it makes two `malloc`s a session where `c` makes one, and touches
+  some 104 more bytes. The real region adds the handle checks `rs` leaves out.
 - **Memory decides it.** `rs`, `c` and `g` hold the live set and little else:
-  0.4 MB at 1,000 live, 23–28 MB at 100,000, where `rs` pays 48 bytes a region
-  over `c`. The evacuation holds 2.1–2.7 times what `rs` holds (0.92 MB and
-  75.0 MB) and pauses for a time that grows with the live set. A region with
-  64 KiB chunks (`r`) is worse than today at 100,000 live, 447.5 MB and 2.12x,
-  which is why the region's first chunk is sized to its first allocation.
+  0.4–0.5 MB at 1,000 live, 23–33 MB at 100,000, where `rs` pays about 104
+  bytes a region over `c`. The evacuation holds 1.9–2.3 times what `rs` holds
+  (0.92 MB and 75.0 MB) and pauses for a time that grows with the live set. A
+  region with 64 KiB chunks (`r`) is worse than today at 100,000 live,
+  447.5 MB and 1.86x, which is why the region's first chunk is sized to its
+  first allocation.
 - **Counting everything taxes code that never frees.** A walk through
-  counted pointers costs 1.53–1.76x when each retain and release is a call,
-  and 1.92–5.79x when the counts are atomic, in every program, not only the
+  counted pointers costs 1.42–1.87x when each retain and release is a call,
+  and 2.09–5.74x when the counts are atomic, in every program, not only the
   servers that need it. The inline `rc` figure, 1.13x over 1,024 objects (band
-  3.4%) and 1.20x over a million (band 9.0%), is the best case: the optimiser
+  1.3%) and 1.21x over a million (band 10.1%), is the best case: the optimiser
   folded the pair to a zero test, which it can do only where it sees both ends
   of it in one function.
 
@@ -533,28 +548,37 @@ inlined path.
 
 ## 6. Decision
 
-**Regions, as in §2.1.** They bound memory to the live set (27.6 MB for
-100,000 sessions where today grows without bound, at 1.07x today's time per
-request), leave the `.ll` of a program that does not use them unchanged and
-add no time to any of its paths (its runtime's `.text` grows by the region
-unit and the chunk-size read, §5, stage 1), reuse the arena block's rule and its codes, and leave
-the arena's ABI as it is.
+**Regions, as in §2.1.** They bound memory to the live set (33.2 MB for
+100,000 sessions where today grows without bound, at 0.97x today's time per
+request, inside that run's 7.0% band). They leave the `.ll` of a program that
+does not use them unchanged and add no time to any of its paths, though the
+runtime's `.text` grows by the region unit and the chunk-size read (stage 1's
+budgets). They reuse the arena block's rule and its codes, and leave the
+arena's ABI as it is.
+
+Sizing `rs`'s first chunk to the root alone, as a real region must, rather
+than to the whole session, does not change the recommendation. It costs
+memory, 33.2 MB where the earlier prototype held 27.6 MB (and measured
+1.07x today's time, in a run whose band was 1.0%), and moves `rs` further
+from `c`, but it leaves `rs` bounded and no slower than today, while
+the options it is weighed against lose on memory, on pauses or on every
+program's time.
 
 **Rejected:**
 
 - **A safe arena reset.** Making it safe needs the region's rule anyway, and on
-  top of that it holds 2.1–2.7 times what `rs` holds and pauses for a time
-  proportional to it: 26 ms at 100,000 live sessions, more than a game tick.
+  top of that it holds 1.9–2.3 times what `rs` holds and pauses for a time
+  proportional to it: 20 ms at 100,000 live sessions, more than a game tick.
   It also needs type layouts at runtime, which nothing else needs.
 - **Counting every value.** It taxes every program for the servers that need
-  it: 1.53–1.76x on a pointer walk with calls and up to 5.79x with atomic counts,
+  it: 1.42–1.87x on a pointer walk with calls and up to 5.74x with atomic counts,
   every golden moves, the ABI of every exported function changes, and cycles
   leak without a second collector.
-- **`Rc<T>` now.** Its prototype `c` measured 16% faster than `rs` at
-  100,000 live and 4.8 MB smaller, but only because it packs the session and
+- **`Rc<T>` now.** Its prototype `c` measured 13.5% faster than `rs` at
+  100,000 live and 10.4 MB smaller, but only because it packs the session and
   its payload into one `malloc` whose size the prototype knows. A real box
   has to own whatever its constructor allocates, which makes it a region with
-  a count, with the region's 48 bytes and its allocation path.
+  a count, with the region's arena, its second chunk and its allocation path.
   The count buys sharing a value between several owners, which the cache and
   the relay do not need. A single owner frees its region directly. `Rc<T>` stays
   possible on top of regions (§7, not in this work package).
