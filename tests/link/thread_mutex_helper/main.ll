@@ -27,7 +27,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #1
-declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #1
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #1
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
