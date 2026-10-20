@@ -75,7 +75,10 @@ fn main() {
         b
     };
     let runtime = builder.enable_io().enable_time().build().unwrap();
-    runtime.block_on(async {
+    // The accept loop is spawned, not run inside `block_on`: on the
+    // multi-thread runtime that keeps it on the N workers rather than on an
+    // extra thread beside them.
+    let accept = runtime.spawn(async move {
         let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await.unwrap();
         println!("listening {port}");
         loop {
@@ -95,4 +98,5 @@ fn main() {
             });
         }
     });
+    runtime.block_on(accept).unwrap();
 }

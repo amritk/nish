@@ -77,13 +77,18 @@ time and RSS are summed over the server's whole process tree. Without
 | `bun` | N processes on one port with `reusePort`; the first spawns the rest |
 | `go-nethttp` | `GOMAXPROCS=N` |
 | `go-fasthttp` | `GOMAXPROCS=N` |
-| `rust-hyper` | a multi-thread tokio runtime with N workers (current-thread at N = 1) |
-| `rust-actix` | `workers(N)` |
+| `rust-hyper` | a multi-thread tokio runtime with N workers (current-thread at N = 1); the accept loop runs on a worker |
+| `rust-actix` | `workers(N)`, plus actix's own accept thread beside them |
 | `nginx` | `worker_processes N`, with `master_process on` when N > 1 |
 
 A twin that cannot use more than one core says so by printing `single-core`
 and exiting before it binds; `bench/http.mjs` records the row as not
 applicable rather than as a failure.
+
+`check.mjs` starts every twin without `BENCH_CORES`, so it checks the
+one-core path only; the N-core paths are not checked against the contract.
+Under N > 1, `n` in `/json` also counts per process where the twin runs
+several (bun, and nginx's per-connection count as ever), not across the server.
 
 Where each pin lives:
 

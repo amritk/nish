@@ -166,7 +166,14 @@ const start = (bin, lay) =>
     nextPort += 1
     const port = nextPort
     const argv = ["-c", lay.serverCpus, bin, String(port), slots]
-    const env = lay.cores === null ? process.env : { ...process.env, BENCH_CORES: String(lay.cores) }
+    // Without --cores an exported BENCH_CORES is dropped, so no server goes
+    // multi-core on the one pinned CPU unannounced.
+    const env = { ...process.env }
+    if (lay.cores === null) {
+      delete env.BENCH_CORES
+    } else {
+      env.BENCH_CORES = String(lay.cores)
+    }
     const child = spawn("taskset", argv, { stdio: ["ignore", "pipe", "inherit"], env })
     let seen = ""
     child.stdout.on("data", (d) => {
