@@ -1,0 +1,6 @@
+resume bench: 41 rounds
+full: 41 opened, signed and issued a ticket
+full copy: 41 opened, signed and issued a ticket
+resumed: 41 opened without a signature and issued a ticket
+bytes per handshake: full 854, resumed 637
+checksum: 5219080
