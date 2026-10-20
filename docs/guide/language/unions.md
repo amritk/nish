@@ -340,4 +340,92 @@ export const main = (): i32 => {
 };
 ```
 
-Checking that a `switch` covers every variant comes in a later version.
+## A `switch` that covers every variant
+
+A `switch (s.kind)` whose `case` labels name every variant, with no `default`,
+is complete: no other value can reach its end. When every clause returns, the
+function needs no `return` after it, as in TypeScript, and the compiler marks
+the case no label names unreachable rather than testing for it. The tag may be
+read through a variable, a field or an element: `s.kind`, `h.shape.kind`,
+`shapes[i].kind`.
+
+```ts nish:ok
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32 = 3;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32 = 4;
+}
+
+interface Tri {
+  readonly kind: Kind.Tri;
+  base: i32;
+}
+
+type Shape = Circle | Square | Tri;
+
+const sides = (s: Shape): i32 => {
+  switch (s.kind) {
+    case Kind.Circle:
+      return 0;
+    case Kind.Square:
+      return 4;
+    case Kind.Tri:
+      return 3;
+  }
+};
+```
+
+Leave a variant out and the function can end without a value, which is an
+error, as `tsc --strict --noImplicitReturns` reports it. Adding a variant to
+the union therefore points at every `switch` that has to handle it.
+
+```ts nish:err NL2093
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+}
+
+interface Tri {
+  readonly kind: Kind.Tri;
+}
+
+type Shape = Circle | Square | Tri;
+
+const sides = (s: Shape): i32 => {
+  switch (s.kind) {
+    case Kind.Circle:
+      return 0;
+    case Kind.Square:
+      return 4;
+  }
+};
+```
+
+A statement after a complete `switch` is unreachable code, as it is after an
+`if` whose branches both return.
+
+Only a union's own tag makes a `switch` complete. A `switch` on a plain enum
+never is, even with every member named, because a C caller can pass an enum
+any `i32`. Nor is one on the tag copied into a local, `const k: Kind =
+s.kind`, or on a field's tag that an earlier `if` narrowed, since a call in
+between could have replaced the field. TypeScript accepts all three. Give such
+a `switch` a `default`, or return after it.

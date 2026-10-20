@@ -930,6 +930,22 @@ as `tsc`'s TS2367 and TS2678 are (`tests/cases/enum_narrowing`;
 member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
 (`reject_enum_narrow_let_member`), as in `tsc`.
 
+A `switch` on a union's tag with no `default`, whose labels name every
+variant the tag can hold, is **complete**: no value reaches the case no label
+names, so when no `break` targets the `switch` and its last clause leaves, the
+`switch` terminates (see Termination) and can end a function that returns a
+value, as in `tsc`. Its unmatched case compiles to LLVM's `unreachable`. The
+tag may be read through a union variable, a field, an element or a call's
+result, `s.kind`, `h.shape.kind`, `shapes[i].kind`, and a variable that a test
+before the `switch` left fewer variants needs labels for those only
+(`tests/cases/union_switch`). With a variant unnamed, the `switch` does not
+terminate, and a function that returns a value and ends in it is the
+missing-return error, as `tsc --strict --noImplicitReturns`'s TS2366 is
+(`reject_union_switch_missing_case`, `reject_union_switch_missing_case_field`).
+Complete means the tag can hold nothing else: a variant's tag is `readonly`,
+written only with its own member, and a union never crosses the interop
+boundary, so no other `i32` reaches it.
+
 **Stricter than TypeScript.** Each of these programs is accepted by
 `tsc --strict` and refused here; each refusal is pinned:
 
@@ -974,6 +990,16 @@ member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
   read of a variant's member through the path is
   `` `r` cannot be used on the union `Circle | Square | Tri` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that ``
   (NL2557, `reject_union_narrow_path`).
+- **A complete `switch` reads the union's tag.** `tsc` treats a `switch`
+  whose labels name every member of an enum as complete, and so ends a
+  function in it; this version does so for a union's tag only (above). A
+  plain enum, `switch (k)` for `k: Kind`, can arrive from C holding any
+  `i32`, so its `switch` is never complete (`reject_union_switch_enum`), nor
+  is one on the tag copied into an enum local, `const k: Kind = s.kind`
+  (`reject_union_switch_tag_local`), nor on a path's tag a test narrowed,
+  which a call between the test and the `switch` could have reassigned
+  (`reject_union_switch_path_narrowed`). End such a function after the
+  `switch`, or give it a `default`.
 - **No `never`.** Where the tests have excluded every variant, `tsc` types the
   variable `never` and accepts a read of it; this version has no such type, so
   the read is
@@ -5084,8 +5110,12 @@ switch (node.kind) {
 - `break` inside a `switch` leaves the switch, not an enclosing loop;
   `continue` looks past the switch to the loop
   (`tests/cases/cf_switch_break`).
-- A `switch` terminates (see Termination) when it has a `default`, no `break`
-  targets it, and its last clause terminates.
+- A `switch` terminates (see Termination) when no `break` targets it, its
+  last clause terminates, and it has a `default` or is a complete `switch` on a
+  union's tag, whose labels name every variant
+  ([Discriminated unions](#discriminated-unions), `tests/cases/union_switch`).
+  A `switch` on an integer or a plain enum without a `default` never
+  terminates, whatever its labels (`reject_union_switch_enum`).
 
 ### `break` / `continue`
 
@@ -5125,8 +5155,8 @@ purposes, the current path: a non-`void` function may end with it
 
 A statement *terminates* when control cannot fall out of it: `return`,
 `break`, `continue`, `process.exit(...)`, `panic(...)`; an `if` whose branches
-both terminate; a `switch` with a `default`, no `break` aimed at it and a
-terminating last clause; a loop with no condition or the condition `true` and
+both terminate; a `switch` with a `default` or one complete on a union's tag,
+no `break` aimed at it and a terminating last clause; a loop with no condition or the condition `true` and
 no `break` aimed at it. Any other loop may run zero times and does not
 terminate. Rules (`src/statements.ts`, `checker.ts`):
 
