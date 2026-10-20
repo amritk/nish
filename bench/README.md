@@ -203,6 +203,22 @@ because a squash merge does not keep the branch's own commits.
   the bins: Nish's are an array of `AtomicI32` objects reached through the
   task's class, where Rust's and Go's are sixteen counters inline in one array:
   one more load per value in Nish, and a different layout in the cache.
+- `par-nbody`: 1.11x to 1.17x behind Rayon, past 1.10x in all three runs,
+  where on `main` at a1a5bf8a it was 0.96x to 1.06x. Part of that is
+  [#731](https://github.com/amritk/nish/pull/731), which cuts a divided region
+  into up to eight pieces per thread, claimed as threads finish: the same IR,
+  linked against the runtime from just before #731 (20a4e65f) and from
+  b1bf78f, timed in 3 runs of 41 interleaved rounds after a warm-up on four
+  threads, each binary beside a byte-identical copy, went from 54.9–58.8 /
+  63.2–65.3 ms to 63.5–63.7 / 67.6–68.9 (min / median): 1.08x to 1.16x slower
+  on the minimum and 1.06x to 1.07x on the median, against a band of 1.1% to
+  4.2% and 0% to 3.0%. [#743](https://github.com/amritk/nish/pull/743) does
+  not touch it: a number map never calls `nish_cross_keep`, and its binary
+  links byte-identical to #731's. Each step's map has 3,072 probes, so eight
+  pieces a thread is 96 probes a piece, and the cost of each claim is the
+  suspect; it is not measured which part of #731 costs it. The rest of the
+  move, from 47.4 ms then to 63.1 ms in the table now, is the machine between
+  sessions: the pre-#731 binary itself runs at 55 to 59 ms here.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
