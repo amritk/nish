@@ -20,6 +20,8 @@ import { readFileSync } from "node:fs"
 import { setFlagsFromString } from "node:v8"
 import { WASI } from "node:wasi"
 
+// Node 24 stops crashing but still collects inside the call, and no Node
+// release fixes it yet; #732 tracks when this line can go.
 setFlagsFromString("--no-turbo-fast-api-calls")
 
 const [module, ...args] = process.argv.slice(2)
