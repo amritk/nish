@@ -6148,42 +6148,45 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
 // used to pass, and none of 50 with the host turning the calls off.
 // #732 tracks the Node bug and when the host can drop the flag.
-if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
-  const agreeDir = path.join(buildDir, "p256-agree")
-  const programDir = path.join(agreeDir, "crypto_p256_agree")
-  fs.rmSync(agreeDir, { recursive: true, force: true })
-  fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
+/**
+ * Builds `tests/link/<program>`'s `main` (from `source`) beside a copy of
+ * std/crypto/p256.ts with the program's `seam.ts.in` appended, as `./p256`,
+ * natively and as a `--profile wasi` module under Node, and checks that each
+ * prints its expected.out: `label` names the checks, `dir` the scratch, and
+ * `extra` the directories of `tests/link` copied beside it.
+ */
+const p256SeamProgram = ({ label, dir, program, source, extra, nativeName }) => {
+  const seamDir = path.join(buildDir, dir)
+  const programDir = path.join(seamDir, program)
+  fs.rmSync(seamDir, { recursive: true, force: true })
+  fs.mkdirSync(path.join(seamDir, "crypto_p256"), { recursive: true })
   fs.mkdirSync(programDir, { recursive: true })
-  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
-    recursive: true,
-  })
-  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
-  fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
+  for (const name of extra) {
+    fs.cpSync(path.join(linkDir, name), path.join(seamDir, name), { recursive: true })
+  }
+  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(seamDir, "crypto_p256", "hex.ts"))
+  fs.copyFileSync(path.join(linkDir, program, source), path.join(programDir, "main.ts"))
   fs.writeFileSync(
     path.join(programDir, "p256.ts"),
     fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
-      fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "seam.ts.in"), "utf8")
+      fs.readFileSync(path.join(linkDir, program, "seam.ts.in"), "utf8")
   )
-  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, program, "expected.out"), "utf8")
   const entry = path.join(programDir, "main.ts")
   if (only !== "wasi") {
-    const exe = path.join(agreeDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
+    const exe = path.join(seamDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe], {
       cwd: root,
       encoding: "utf8",
     })
     const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
-    check(
-      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
-      built.status === 0 && ran.status === 0 && ran.stdout === want,
-      shown(ran)
-    )
+    check(nativeName, built.status === 0 && ran.status === 0 && ran.stdout === want, shown(ran))
   }
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasm = path.join(agreeDir, "app.wasm")
+    const wasm = path.join(seamDir, "app.wasm")
     const built = spawnSync(
       NISH,
-      [entry, "-o", path.join(agreeDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
+      [entry, "-o", path.join(seamDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
     const ran =
@@ -6194,15 +6197,26 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
           })
         : built
     check(
-      `p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
+      `${label}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )
   } else {
     skip(
-      `skipped: p256 agree: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_agree is not run`
+      `skipped: ${label}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program} is not run`
     )
   }
+}
+if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 agree",
+    dir: "p256-agree",
+    program: "crypto_p256_agree",
+    source: "agree.ts",
+    extra: ["crypto_wycheproof"],
+    nativeName:
+      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
+  })
 }
 
 // #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
@@ -6210,61 +6224,19 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
 // `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
 // 10,000 scalars. Neither inversion is exported, so the program reaches them
 // through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
-// std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does.
+// std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
 // Its expected.out ends in a checksum of every inverse. Natively, and as a
 // `--profile wasi` module under Node.
 if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
-  const inverseDir = path.join(buildDir, "p256-inverse")
-  const programDir = path.join(inverseDir, "crypto_p256_inverse")
-  fs.rmSync(inverseDir, { recursive: true, force: true })
-  fs.mkdirSync(path.join(inverseDir, "crypto_p256"), { recursive: true })
-  fs.mkdirSync(programDir, { recursive: true })
-  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(inverseDir, "crypto_p256", "hex.ts"))
-  fs.copyFileSync(path.join(linkDir, "crypto_p256_inverse", "inverse.ts"), path.join(programDir, "main.ts"))
-  fs.writeFileSync(
-    path.join(programDir, "p256.ts"),
-    fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
-      fs.readFileSync(path.join(linkDir, "crypto_p256_inverse", "seam.ts.in"), "utf8")
-  )
-  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_inverse", "expected.out"), "utf8")
-  const entry = path.join(programDir, "main.ts")
-  if (only !== "wasi") {
-    const exe = path.join(inverseDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(inverseDir, "native") + path.sep, "--link", exe], {
-      cwd: root,
-      encoding: "utf8",
-    })
-    const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
-    check(
+  p256SeamProgram({
+    label: "p256 inverse",
+    dir: "p256-inverse",
+    program: "crypto_p256_inverse",
+    source: "inverse.ts",
+    extra: [],
+    nativeName:
       "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
-      built.status === 0 && ran.status === 0 && ran.stdout === want,
-      shown(ran)
-    )
-  }
-  if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasm = path.join(inverseDir, "app.wasm")
-    const built = spawnSync(
-      NISH,
-      [entry, "-o", path.join(inverseDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
-      { cwd: root, encoding: "utf8" }
-    )
-    const ran =
-      built.status === 0
-        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
-            cwd: root,
-            encoding: "utf8",
-          })
-        : built
-    check(
-      `p256 inverse: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
-      built.status === 0 && ran.status === 0 && ran.stdout === want,
-      shown(ran)
-    )
-  } else {
-    skip(
-      `skipped: p256 inverse: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_inverse is not run`
-    )
-  }
+  })
 }
 
 // The comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs
