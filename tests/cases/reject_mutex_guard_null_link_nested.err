@@ -1,0 +1,1 @@
+This stores `null` through a guard into a slot that holds an object, and a guard stores only a number, a `boolean`, an enum or a `string`, and a `null` only into a `string | null` slot, where the store frees the copy the slot held; keep a `boolean` field beside the slot, `g.value.hasNext = false`, and test it before reading the object
