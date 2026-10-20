@@ -211,9 +211,10 @@ export const tcpChecks = (): i32 => {
   t.ok("and both are closed when their clients hang up", lb.awaitClosed(toI32(6)) && lb.server.busy() === 0);
   t.eqI32("with every connection ended the record pools have lent nothing: lent() is 0", lb.server.pools.lent(), ZERO);
   const pools = lb.server.pools;
-  t.ok(
-    "and two slots made no more than two buffers of any pool",
-    pools.output.made <= 2 && pools.plain.made <= 2 && pools.scratch.made <= 2 && pools.reader.made <= 2
+  t.eqStr(
+    "over every connection of the run, two slots made two output, scratch and reader buffers and one plain one: the pools only grow to what is borrowed at once",
+    `${pools.output.made} ${pools.plain.made} ${pools.scratch.made} ${pools.reader.made}`,
+    "2 1 2 2"
   );
 
   const shortRandom: u8[] = filled(31, 7);

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1054 programs, 135361 dump lines.
+# 1054 programs, 135363 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -81946,18 +81946,19 @@ function TlsRecordServer.recordRoom(this: TlsRecordServer, len: i32): i32 -> @ni
   callee 1014:47 TlsRecordServer.writePadding -> @nish.TlsRecordServer.writePadding
 function TlsRecordServer.sealRecord(this: TlsRecordServer, type: i32, data: u8[], off: i32, len: i32): boolean -> @nish.TlsRecordServer.sealRecord [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1040:5
+  sharedWrite: 1030:7
   escaping: len off type
   calls: nish.TlsRecordProtection.seal nish.TlsRecordServer.fail nish.TlsRecordServer.outputHasRoom nish.TlsRecordServer.recordRoom nish.TlsRecordServer.writePadding nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.outputHasRoom#0 nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.writePadding#0 nish.TlsRecordServer.fail#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.outputHasRoom#0 nish.TlsRecordServer.writePadding#0 nish.TlsRecordServer.fail#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordProtection.seal#2
   stackSites=0 stackLocals=0
-  callee 1024:10 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
-  callee 1024:29 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
-  local 1027:11 n: i32 (const)
-  callee 1027:20 TlsRecordProtection.seal -> @nish.TlsRecordProtection.seal
-  callee 1032:7 TlsRecordServer.writePadding -> @nish.TlsRecordServer.writePadding
-  callee 1037:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1024:11 room: i32 (const)
+  callee 1024:23 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
+  callee 1025:10 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
+  local 1032:11 n: i32 (const)
+  callee 1032:20 TlsRecordProtection.seal -> @nish.TlsRecordProtection.seal
+  callee 1037:7 TlsRecordServer.writePadding -> @nish.TlsRecordServer.writePadding
+  callee 1042:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
 function TlsRecordServer.sealQueue(this: TlsRecordServer, queue: u8[], at: i32, length: i32): i32 -> @nish.TlsRecordServer.sealQueue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.fail
@@ -81966,48 +81967,48 @@ function TlsRecordServer.sealQueue(this: TlsRecordServer, queue: u8[], at: i32, 
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.maxChunk#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.sealRecord#0
   pointer queue: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.sealRecord#2
   stackSites=0 stackLocals=0
-  local 1053:9 next: i32 (let)
-  local 1054:11 most: i32 (const)
-  callee 1054:23 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
-  callee 1056:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  local 1060:13 left: i32 (const)
-  local 1061:13 chunk: i32 (const)
-  callee 1062:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  local 1055:9 next: i32 (let)
+  local 1056:11 most: i32 (const)
+  callee 1056:23 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
+  callee 1058:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1062:13 left: i32 (const)
+  local 1063:13 chunk: i32 (const)
+  callee 1064:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
 function TlsRecordServer.pump(this: TlsRecordServer): void -> @nish.TlsRecordServer.pump [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1091:7
+  sharedWrite: 1093:7
   calls: nish.TlsRecordServer.fail nish.TlsRecordServer.keepWrite nish.TlsRecordServer.sealClose nish.TlsRecordServer.sealQueue nish.TlsRecordServer.sealRecord nish.TlsRecordServer.sendKeyUpdate nish.TlsServer.clearOutput nish.TlsServer.secrets nish.TlsServer.wipeSecret nish.TlsServer.writeKnown nish.tlsInstallHeld
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sealClose#0 nish.TlsRecordServer.sealQueue#0 nish.TlsRecordServer.sealRecord#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.sealQueue#0 nish.TlsRecordServer.keepWrite#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.sendKeyUpdate#0
   stackSites=1 stackLocals=1
-  callee 1084:7 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
-  local 1087:11 tls: TlsServer (const)
-  callee 1091:31 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
-  callee 1099:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
-  local 1103:13 ccs: u8[] (const)
-  local 1104:13 one: i32 (const)
-  callee 1105:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
-  callee 1115:50 TlsServer.writeKnown -> @nish.TlsServer.writeKnown
-  callee 1116:12 tlsInstallHeld -> @nish.tlsInstallHeld
-  callee 1116:60 TlsServer.secrets -> @nish.TlsServer.secrets
-  callee 1117:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 1123:33 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
-  callee 1131:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
-  callee 1138:7 TlsServer.wipeSecret -> @nish.TlsServer.wipeSecret
-  callee 1140:12 TlsRecordServer.keepWrite -> @nish.TlsRecordServer.keepWrite
-  callee 1141:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 1146:75 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
+  callee 1086:7 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
+  local 1089:11 tls: TlsServer (const)
+  callee 1093:31 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
+  callee 1101:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
+  local 1105:13 ccs: u8[] (const)
+  local 1106:13 one: i32 (const)
+  callee 1107:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  callee 1117:50 TlsServer.writeKnown -> @nish.TlsServer.writeKnown
+  callee 1118:12 tlsInstallHeld -> @nish.tlsInstallHeld
+  callee 1118:60 TlsServer.secrets -> @nish.TlsServer.secrets
+  callee 1119:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 1125:33 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
+  callee 1133:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
+  callee 1140:7 TlsServer.wipeSecret -> @nish.TlsServer.wipeSecret
+  callee 1142:12 TlsRecordServer.keepWrite -> @nish.TlsRecordServer.keepWrite
+  callee 1143:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 1148:75 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
 function TlsRecordServer.sendKeyUpdate(this: TlsRecordServer, request: boolean): boolean -> @nish.TlsRecordServer.sendKeyUpdate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.sealRecord
   calls: nish.TlsRecordServer.fail nish.TlsRecordServer.sealRecord nish.tlsAdvanceHeld
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sealRecord#0 nish.TlsRecordServer.fail#0
   stackSites=1 stackLocals=1
-  local 1157:11 message: u8[] (const)
-  callee 1158:10 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
-  local 1161:11 advanced: boolean (const)
-  callee 1163:11 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
-  callee 1164:35 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
-  callee 1166:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1159:11 message: u8[] (const)
+  callee 1160:10 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  local 1163:11 advanced: boolean (const)
+  callee 1165:11 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
+  callee 1166:35 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
+  callee 1168:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
 function TlsRecordServer.keyUpdate(this: TlsRecordServer, requestPeer: boolean): i32 -> @nish.TlsRecordServer.keyUpdate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.pump
@@ -82015,38 +82016,38 @@ function TlsRecordServer.keyUpdate(this: TlsRecordServer, requestPeer: boolean):
   calls: nish.TlsRecordServer.pump nish.TlsRecordServer.sendKeyUpdate
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.pump#0 nish.TlsRecordServer.sendKeyUpdate#0
   stackSites=0 stackLocals=0
-  callee 1186:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
-  callee 1187:31 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
+  callee 1188:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
+  callee 1189:31 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
 function TlsRecordServer.fail(this: TlsRecordServer, alert: i32): void -> @nish.TlsRecordServer.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1207:5
+  sharedWrite: 1209:5
   escaping: alert
   calls: nish.TlsRecordServer.dropPending nish.TlsRecordServer.sendAlert nish.TlsRecordServer.wipeKeys
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.dropPending#0 nish.TlsRecordServer.sendAlert#0 nish.TlsRecordServer.wipeKeys#0
   stackSites=0 stackLocals=0
-  local 1204:11 closed: boolean (const)
-  callee 1205:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
-  callee 1211:7 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
-  callee 1215:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
+  local 1206:11 closed: boolean (const)
+  callee 1207:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
+  callee 1213:7 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
+  callee 1217:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
 function TlsRecordServer.sendAlert(this: TlsRecordServer, level: i32, description: i32): boolean -> @nish.TlsRecordServer.sendAlert [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.sealRecord
   calls: nish.TlsRecordServer.sealRecord
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sealRecord#0
   stackSites=1 stackLocals=1
-  local 1220:11 body: u8[] (const)
-  local 1221:11 two: i32 (const)
-  callee 1222:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  local 1222:11 body: u8[] (const)
+  local 1223:11 two: i32 (const)
+  callee 1224:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
 function TlsRecordServer.consume(this: TlsRecordServer, n: i32): void -> @nish.TlsRecordServer.consume [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1235:5
+  sharedWrite: 1237:5
   escaping: n
   calls: nish.TlsRecordServer.pump nish_panic_overflow
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.pump#0
   stackSites=0 stackLocals=0
-  local 1230:11 held: i32 (const)
-  local 1231:9 take: i32 (let)
-  callee 1240:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
+  local 1232:11 held: i32 (const)
+  local 1233:9 take: i32 (let)
+  callee 1242:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
 function TlsRecordServer.write(this: TlsRecordServer, data: u8[], off: i32, len: i32): i32 -> @nish.TlsRecordServer.write [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.pump
@@ -82055,56 +82056,56 @@ function TlsRecordServer.write(this: TlsRecordServer, data: u8[], off: i32, len:
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.pump#0 nish.TlsRecordServer.sendKeyUpdate#0 nish.TlsRecordServer.maxChunk#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.outputHasRoom#0 nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.sealRecord#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.sealRecord#2
   stackSites=0 stackLocals=0
-  callee 1253:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
-  callee 1259:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
-  local 1267:9 done: i32 (let)
-  callee 1269:81 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
-  local 1272:13 most: i32 (const)
-  callee 1272:25 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
-  callee 1274:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  local 1277:13 left: i32 (const)
-  local 1278:11 chunk: i32 (let)
-  callee 1280:7 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
-  callee 1280:26 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
-  local 1281:13 room: i32 (const)
-  callee 1281:67 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
-  callee 1285:26 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  callee 1255:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
+  callee 1261:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
+  local 1269:9 done: i32 (let)
+  callee 1271:81 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
+  local 1274:13 most: i32 (const)
+  callee 1274:25 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
+  callee 1276:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1279:13 left: i32 (const)
+  local 1280:11 chunk: i32 (let)
+  callee 1282:7 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
+  callee 1282:26 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
+  local 1283:13 room: i32 (const)
+  callee 1283:67 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
+  callee 1287:26 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
 function TlsRecordServer.read(this: TlsRecordServer, buf: u8[], off: i32, len: i32): i32 -> @nish.TlsRecordServer.read [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1315:9
+  sharedWrite: 1317:9
   escaping: len off
   calls: nish.TlsRecordServer.process nish.tlsRecordWindowFits nish_panic_index nish_panic_overflow
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.process#0
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 1305:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
-  local 1311:11 avail: i32 (const)
-  local 1313:13 n: i32 (const)
-  local 1314:16 k: i32 (let)
-  callee 1322:7 TlsRecordServer.process -> @nish.TlsRecordServer.process
+  callee 1307:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
+  local 1313:11 avail: i32 (const)
+  local 1315:13 n: i32 (const)
+  local 1316:16 k: i32 (let)
+  callee 1324:7 TlsRecordServer.process -> @nish.TlsRecordServer.process
 function TlsRecordServer.close(this: TlsRecordServer): void -> @nish.TlsRecordServer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1346:5
+  sharedWrite: 1348:5
   calls: nish.TlsRecordServer.dropPending nish.TlsRecordServer.sealClose nish.TlsServer.wipeResumption
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.dropPending#0 nish.TlsRecordServer.sealClose#0
   stackSites=0 stackLocals=0
-  callee 1344:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
-  callee 1345:5 TlsServer.wipeResumption -> @nish.TlsServer.wipeResumption
-  callee 1348:5 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
+  callee 1346:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
+  callee 1347:5 TlsServer.wipeResumption -> @nish.TlsServer.wipeResumption
+  callee 1350:5 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
 function TlsRecordServer.sealClose(this: TlsRecordServer): void -> @nish.TlsRecordServer.sealClose [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1359:7
+  sharedWrite: 1361:7
   calls: nish.TlsRecordServer.sendAlert nish.TlsRecordServer.wipeWrite
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sendAlert#0 nish.TlsRecordServer.wipeWrite#0
   stackSites=0 stackLocals=0
-  callee 1358:26 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
-  callee 1360:7 TlsRecordServer.wipeWrite -> @nish.TlsRecordServer.wipeWrite
+  callee 1360:26 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
+  callee 1362:7 TlsRecordServer.wipeWrite -> @nish.TlsRecordServer.wipeWrite
 function TlsRecordServer.signatureInput(this: TlsRecordServer): u8[] | null -> @nish.TlsRecordServer.signatureInput [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.TlsServer.signatureInput
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1369:12 TlsServer.signatureInput -> @nish.TlsServer.signatureInput
+  callee 1371:12 TlsServer.signatureInput -> @nish.TlsServer.signatureInput
 function TlsRecordServer.sign(this: TlsRecordServer, signature: u8[]): i32 -> @nish.TlsRecordServer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsServer.sign
@@ -82112,23 +82113,23 @@ function TlsRecordServer.sign(this: TlsRecordServer, signature: u8[]): i32 -> @n
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.fail#0 nish.TlsRecordServer.advance#0 nish.TlsRecordServer.process#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.TlsServer.sign#1
   stackSites=0 stackLocals=0
-  local 1382:11 alert: i32 (const)
-  callee 1382:24 TlsServer.sign -> @nish.TlsServer.sign
-  callee 1384:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 1387:5 TlsRecordServer.advance -> @nish.TlsRecordServer.advance
-  callee 1388:5 TlsRecordServer.process -> @nish.TlsRecordServer.process
+  local 1384:11 alert: i32 (const)
+  callee 1384:24 TlsServer.sign -> @nish.TlsServer.sign
+  callee 1386:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 1389:5 TlsRecordServer.advance -> @nish.TlsRecordServer.advance
+  callee 1390:5 TlsRecordServer.process -> @nish.TlsRecordServer.process
 function TlsRecordServer.interest(this: TlsRecordServer): i32 -> @nish.TlsRecordServer.interest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.TlsRecordReader.next nish.TlsRecordReader.space
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1400:9 bits: i32 (let)
-  local 1401:11 sending: boolean (const)
-  local 1405:11 failed: boolean (const)
-  local 1411:11 live: boolean (const)
-  local 1414:11 blocked: boolean (const)
-  callee 1414:30 TlsRecordReader.next -> @nish.TlsRecordReader.next
-  callee 1415:64 TlsRecordReader.space -> @nish.TlsRecordReader.space
+  local 1402:9 bits: i32 (let)
+  local 1403:11 sending: boolean (const)
+  local 1407:11 failed: boolean (const)
+  local 1413:11 live: boolean (const)
+  local 1416:11 blocked: boolean (const)
+  callee 1416:30 TlsRecordReader.next -> @nish.TlsRecordReader.next
+  callee 1417:64 TlsRecordReader.space -> @nish.TlsRecordReader.space
 module std/net/tls/record.ts [package nish]
 import BufferPool from "nish/net/buffer-pool" -> struct BufferPool
 import AesKey from "nish/crypto/aes" -> struct AesKey
@@ -82621,7 +82622,7 @@ function TlsTcpServer.constructor(this: TlsTcpServer, config: TlsServerConfig, l
   callee 153:37 new TlsRecordServer -> @nish.TlsRecordServer.constructor
   callee 153:57 new TlsServer -> @nish.TlsServer.constructor
   callee 154:7 TlsRecordServer.borrowFrom -> @nish.TlsRecordServer.borrowFrom
-  callee 160:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
+  callee 161:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
 function TlsTcpServer.size(this: TlsTcpServer): i32 -> @nish.TlsTcpServer.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=72 writesThrough=false captured=false
@@ -82631,8 +82632,8 @@ function TlsTcpServer.busy(this: TlsTcpServer): i32 -> @nish.TlsTcpServer.busy [
   calls: nish_panic_overflow
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 170:9 n: i32 (let)
-  local 171:16 fd: i32 (const)
+  local 171:9 n: i32 (let)
+  local 172:16 fd: i32 (const)
 function TlsTcpServer.holds(this: TlsTcpServer, slot: i32): boolean -> @nish.TlsTcpServer.holds [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
@@ -82644,48 +82645,48 @@ function TlsTcpServer.fd(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServ
   calls: nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
-  callee 186:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 187:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
 function TlsTcpServer.connection(this: TlsTcpServer, slot: i32): TlsRecordServer -> @nish.TlsTcpServer.connection [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=200
   escaping: slot
   calls: nish_panic_index
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 195:11 at: i32 (const)
+  local 196:11 at: i32 (const)
 function TlsTcpServer.accept(this: TlsTcpServer, serverRandom: u8[], ephemeralPrivate: u8[]): i32 -> @nish.TlsTcpServer.accept [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 218:21
+  sharedWrite: 219:21
   calls: nish.TlsRecordServer.start nish.TlsServer.restart nish_net_close nish_panic_index nish_tcp_accept
   pointer this: size=72 writesThrough=false captured=false
   pointer serverRandom: size=0 writesThrough=false captured=false
   pointer ephemeralPrivate: size=0 writesThrough=true captured=false passedTo=nish.TlsServer.restart#2
   stackSites=0 stackLocals=0
-  local 218:11 fd: i32 (const)
-  local 222:9 slot: i32 (let)
-  local 223:14 k: i32 (let)
-  local 234:11 random: u8[] (const)
-  local 236:11 k: i32 (let)
-  local 242:11 conn: TlsRecordServer (const)
-  callee 244:5 TlsServer.restart -> @nish.TlsServer.restart
-  callee 245:5 TlsRecordServer.start -> @nish.TlsRecordServer.start
+  local 219:11 fd: i32 (const)
+  local 223:9 slot: i32 (let)
+  local 224:14 k: i32 (let)
+  local 235:11 random: u8[] (const)
+  local 237:11 k: i32 (let)
+  local 243:11 conn: TlsRecordServer (const)
+  callee 245:5 TlsServer.restart -> @nish.TlsServer.restart
+  callee 246:5 TlsRecordServer.start -> @nish.TlsRecordServer.start
 function TlsTcpServer.readable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.readable [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 267:22
+  sharedWrite: 268:22
   escaping: slot
   calls: nish.TlsRecordServer.abort nish.TlsRecordServer.end nish.TlsRecordServer.receive nish.TlsRecordServer.space nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_net_read nish_panic_index nish_panic_slice
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 256:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 259:11 fd: i32 (const)
-  local 260:11 conn: TlsRecordServer (const)
-  local 262:13 room: i32 (const)
-  callee 262:25 TlsRecordServer.space -> @nish.TlsRecordServer.space
-  local 263:13 want: i32 (const)
-  local 267:13 n: i32 (const)
-  callee 270:11 TlsRecordServer.end -> @nish.TlsRecordServer.end
-  callee 272:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
-  callee 276:7 TlsRecordServer.receive -> @nish.TlsRecordServer.receive
-  callee 278:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 257:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 260:11 fd: i32 (const)
+  local 261:11 conn: TlsRecordServer (const)
+  local 263:13 room: i32 (const)
+  callee 263:25 TlsRecordServer.space -> @nish.TlsRecordServer.space
+  local 264:13 want: i32 (const)
+  local 268:13 n: i32 (const)
+  callee 271:11 TlsRecordServer.end -> @nish.TlsRecordServer.end
+  callee 273:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
+  callee 277:7 TlsRecordServer.receive -> @nish.TlsRecordServer.receive
+  callee 279:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.writable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.writable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsTcpServer.flush
@@ -82693,8 +82694,8 @@ function TlsTcpServer.writable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsT
   calls: nish.TlsTcpServer.flush nish.TlsTcpServer.holds
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 283:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 286:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 284:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 287:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.flush(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.flush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_net_write
@@ -82702,28 +82703,28 @@ function TlsTcpServer.flush(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpS
   calls: nish.TlsRecordServer.abort nish.TlsRecordServer.consume nish.TlsRecordServer.interest nish_net_write nish_panic_index nish_panic_overflow nish_panic_slice
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 291:11 fd: i32 (const)
-  local 292:11 conn: TlsRecordServer (const)
-  local 294:13 n: i32 (const)
-  callee 297:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
-  callee 301:7 TlsRecordServer.consume -> @nish.TlsRecordServer.consume
-  callee 303:12 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
+  local 292:11 fd: i32 (const)
+  local 293:11 conn: TlsRecordServer (const)
+  local 295:13 n: i32 (const)
+  callee 298:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
+  callee 302:7 TlsRecordServer.consume -> @nish.TlsRecordServer.consume
+  callee 304:12 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
 function TlsTcpServer.interest(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.interest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsRecordServer.interest nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
-  callee 308:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 308:31 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
+  callee 309:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 309:31 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
 function TlsTcpServer.signatureInput(this: TlsTcpServer, slot: i32): u8[] | null -> @nish.TlsTcpServer.signatureInput [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsRecordServer.signatureInput nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
-  callee 313:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 313:31 TlsRecordServer.signatureInput -> @nish.TlsRecordServer.signatureInput
+  callee 314:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 314:31 TlsRecordServer.signatureInput -> @nish.TlsRecordServer.signatureInput
 function TlsTcpServer.sign(this: TlsTcpServer, slot: i32, signature: u8[]): i32 -> @nish.TlsTcpServer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.sign
@@ -82732,9 +82733,9 @@ function TlsTcpServer.sign(this: TlsTcpServer, slot: i32, signature: u8[]): i32 
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.sign#1
   stackSites=0 stackLocals=0
-  callee 318:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 321:5 TlsRecordServer.sign -> @nish.TlsRecordServer.sign
-  callee 322:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 319:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 322:5 TlsRecordServer.sign -> @nish.TlsRecordServer.sign
+  callee 323:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.signP256(this: TlsTcpServer, slot: i32, key: Secret<u8[]>): i32 -> @nish.TlsTcpServer.signP256 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsP256Signer.sign
@@ -82743,14 +82744,14 @@ function TlsTcpServer.signP256(this: TlsTcpServer, slot: i32, key: Secret<u8[]>)
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.signatureInput#0 nish.TlsTcpServer.interest#0 nish.TlsTcpServer.flush#0 nish.TlsTcpServer.sign#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsP256Signer.sign#1
   stackSites=0 stackLocals=0
-  local 333:11 input: u8[] | null (const)
-  callee 333:32 TlsTcpServer.signatureInput -> @nish.TlsTcpServer.signatureInput
-  callee 335:14 TlsTcpServer.interest -> @nish.TlsTcpServer.interest
-  local 337:11 signature: u8[] | null (const)
-  callee 337:36 TlsP256Signer.sign -> @nish.TlsP256Signer.sign
-  callee 339:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 340:14 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
-  callee 342:12 TlsTcpServer.sign -> @nish.TlsTcpServer.sign
+  local 334:11 input: u8[] | null (const)
+  callee 334:32 TlsTcpServer.signatureInput -> @nish.TlsTcpServer.signatureInput
+  callee 336:14 TlsTcpServer.interest -> @nish.TlsTcpServer.interest
+  local 338:11 signature: u8[] | null (const)
+  callee 338:36 TlsP256Signer.sign -> @nish.TlsP256Signer.sign
+  callee 340:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 341:14 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 343:12 TlsTcpServer.sign -> @nish.TlsTcpServer.sign
 function TlsTcpServer.read(this: TlsTcpServer, slot: i32, buf: u8[], off: i32, len: i32): i32 -> @nish.TlsTcpServer.read [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.read
@@ -82759,10 +82760,10 @@ function TlsTcpServer.read(this: TlsTcpServer, slot: i32, buf: u8[], off: i32, l
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.TlsRecordServer.read#1
   stackSites=0 stackLocals=0
-  callee 354:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 357:11 n: i32 (const)
-  callee 357:20 TlsRecordServer.read -> @nish.TlsRecordServer.read
-  callee 358:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 355:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 358:11 n: i32 (const)
+  callee 358:20 TlsRecordServer.read -> @nish.TlsRecordServer.read
+  callee 359:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.write(this: TlsTcpServer, slot: i32, data: u8[], off: i32, len: i32): i32 -> @nish.TlsTcpServer.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.write
@@ -82771,10 +82772,10 @@ function TlsTcpServer.write(this: TlsTcpServer, slot: i32, data: u8[], off: i32,
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.write#1
   stackSites=0 stackLocals=0
-  callee 369:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 372:11 n: i32 (const)
-  callee 372:20 TlsRecordServer.write -> @nish.TlsRecordServer.write
-  callee 373:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 370:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 373:11 n: i32 (const)
+  callee 373:20 TlsRecordServer.write -> @nish.TlsRecordServer.write
+  callee 374:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.keyUpdate(this: TlsTcpServer, slot: i32, requestPeer: boolean): i32 -> @nish.TlsTcpServer.keyUpdate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.keyUpdate
@@ -82782,10 +82783,10 @@ function TlsTcpServer.keyUpdate(this: TlsTcpServer, slot: i32, requestPeer: bool
   calls: nish.TlsRecordServer.keyUpdate nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 379:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 382:11 r: i32 (const)
-  callee 382:20 TlsRecordServer.keyUpdate -> @nish.TlsRecordServer.keyUpdate
-  callee 383:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 380:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 383:11 r: i32 (const)
+  callee 383:20 TlsRecordServer.keyUpdate -> @nish.TlsRecordServer.keyUpdate
+  callee 384:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.shutdown(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.shutdown [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.close
@@ -82793,22 +82794,22 @@ function TlsTcpServer.shutdown(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsT
   calls: nish.TlsRecordServer.close nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 394:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 397:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
-  callee 398:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 395:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 398:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
+  callee 399:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.close(this: TlsTcpServer, slot: i32): void -> @nish.TlsTcpServer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 417:5
+  sharedWrite: 418:5
   escaping: slot
   calls: nish.TlsRecordServer.close nish.TlsRecordServer.release nish.TlsRecordServer.wipeKeys nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_net_close nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 410:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 413:11 conn: TlsRecordServer (const)
-  callee 414:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
-  callee 415:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
-  callee 418:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
-  callee 420:5 TlsRecordServer.release -> @nish.TlsRecordServer.release
+  callee 411:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 414:11 conn: TlsRecordServer (const)
+  callee 415:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
+  callee 416:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 419:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
+  callee 421:5 TlsRecordServer.release -> @nish.TlsRecordServer.release
 module std/net/webtransport.ts [package nish]
 import HttpFields from "nish/net/http-fields" -> struct HttpFields
 import httpFieldBytes from "nish/net/http-fields" -> function @nish.httpFieldBytes
@@ -112491,18 +112492,19 @@ function TlsRecordServer.recordRoom(this: TlsRecordServer, len: i32): i32 -> @ni
   callee 1014:47 TlsRecordServer.writePadding -> @nish.TlsRecordServer.writePadding
 function TlsRecordServer.sealRecord(this: TlsRecordServer, type: i32, data: u8[], off: i32, len: i32): boolean -> @nish.TlsRecordServer.sealRecord [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1040:5
+  sharedWrite: 1030:7
   escaping: len off type
   calls: nish.TlsRecordProtection.seal nish.TlsRecordServer.fail nish.TlsRecordServer.outputHasRoom nish.TlsRecordServer.recordRoom nish.TlsRecordServer.writePadding nish_panic_overflow
-  pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.outputHasRoom#0 nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.writePadding#0 nish.TlsRecordServer.fail#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.outputHasRoom#0 nish.TlsRecordServer.writePadding#0 nish.TlsRecordServer.fail#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordProtection.seal#2
   stackSites=0 stackLocals=0
-  callee 1024:10 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
-  callee 1024:29 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
-  local 1027:11 n: i32 (const)
-  callee 1027:20 TlsRecordProtection.seal -> @nish.TlsRecordProtection.seal
-  callee 1032:7 TlsRecordServer.writePadding -> @nish.TlsRecordServer.writePadding
-  callee 1037:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1024:11 room: i32 (const)
+  callee 1024:23 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
+  callee 1025:10 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
+  local 1032:11 n: i32 (const)
+  callee 1032:20 TlsRecordProtection.seal -> @nish.TlsRecordProtection.seal
+  callee 1037:7 TlsRecordServer.writePadding -> @nish.TlsRecordServer.writePadding
+  callee 1042:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
 function TlsRecordServer.sealQueue(this: TlsRecordServer, queue: u8[], at: i32, length: i32): i32 -> @nish.TlsRecordServer.sealQueue [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.fail
@@ -112511,48 +112513,48 @@ function TlsRecordServer.sealQueue(this: TlsRecordServer, queue: u8[], at: i32, 
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.maxChunk#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.sealRecord#0
   pointer queue: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.sealRecord#2
   stackSites=0 stackLocals=0
-  local 1053:9 next: i32 (let)
-  local 1054:11 most: i32 (const)
-  callee 1054:23 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
-  callee 1056:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  local 1060:13 left: i32 (const)
-  local 1061:13 chunk: i32 (const)
-  callee 1062:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  local 1055:9 next: i32 (let)
+  local 1056:11 most: i32 (const)
+  callee 1056:23 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
+  callee 1058:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1062:13 left: i32 (const)
+  local 1063:13 chunk: i32 (const)
+  callee 1064:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
 function TlsRecordServer.pump(this: TlsRecordServer): void -> @nish.TlsRecordServer.pump [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1091:7
+  sharedWrite: 1093:7
   calls: nish.TlsRecordServer.fail nish.TlsRecordServer.keepWrite nish.TlsRecordServer.sealClose nish.TlsRecordServer.sealQueue nish.TlsRecordServer.sealRecord nish.TlsRecordServer.sendKeyUpdate nish.TlsServer.clearOutput nish.TlsServer.secrets nish.TlsServer.wipeSecret nish.TlsServer.writeKnown nish.tlsInstallHeld
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sealClose#0 nish.TlsRecordServer.sealQueue#0 nish.TlsRecordServer.sealRecord#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.sealQueue#0 nish.TlsRecordServer.keepWrite#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.sendKeyUpdate#0
   stackSites=1 stackLocals=1
-  callee 1084:7 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
-  local 1087:11 tls: TlsServer (const)
-  callee 1091:31 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
-  callee 1099:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
-  local 1103:13 ccs: u8[] (const)
-  local 1104:13 one: i32 (const)
-  callee 1105:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
-  callee 1115:50 TlsServer.writeKnown -> @nish.TlsServer.writeKnown
-  callee 1116:12 tlsInstallHeld -> @nish.tlsInstallHeld
-  callee 1116:60 TlsServer.secrets -> @nish.TlsServer.secrets
-  callee 1117:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 1123:33 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
-  callee 1131:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
-  callee 1138:7 TlsServer.wipeSecret -> @nish.TlsServer.wipeSecret
-  callee 1140:12 TlsRecordServer.keepWrite -> @nish.TlsRecordServer.keepWrite
-  callee 1141:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 1146:75 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
+  callee 1086:7 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
+  local 1089:11 tls: TlsServer (const)
+  callee 1093:31 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
+  callee 1101:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
+  local 1105:13 ccs: u8[] (const)
+  local 1106:13 one: i32 (const)
+  callee 1107:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  callee 1117:50 TlsServer.writeKnown -> @nish.TlsServer.writeKnown
+  callee 1118:12 tlsInstallHeld -> @nish.tlsInstallHeld
+  callee 1118:60 TlsServer.secrets -> @nish.TlsServer.secrets
+  callee 1119:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 1125:33 TlsRecordServer.sealQueue -> @nish.TlsRecordServer.sealQueue
+  callee 1133:7 TlsServer.clearOutput -> @nish.TlsServer.clearOutput
+  callee 1140:7 TlsServer.wipeSecret -> @nish.TlsServer.wipeSecret
+  callee 1142:12 TlsRecordServer.keepWrite -> @nish.TlsRecordServer.keepWrite
+  callee 1143:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 1148:75 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
 function TlsRecordServer.sendKeyUpdate(this: TlsRecordServer, request: boolean): boolean -> @nish.TlsRecordServer.sendKeyUpdate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.sealRecord
   calls: nish.TlsRecordServer.fail nish.TlsRecordServer.sealRecord nish.tlsAdvanceHeld
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sealRecord#0 nish.TlsRecordServer.fail#0
   stackSites=1 stackLocals=1
-  local 1157:11 message: u8[] (const)
-  callee 1158:10 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
-  local 1161:11 advanced: boolean (const)
-  callee 1163:11 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
-  callee 1164:35 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
-  callee 1166:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1159:11 message: u8[] (const)
+  callee 1160:10 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  local 1163:11 advanced: boolean (const)
+  callee 1165:11 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
+  callee 1166:35 tlsAdvanceHeld -> @nish.tlsAdvanceHeld
+  callee 1168:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
 function TlsRecordServer.keyUpdate(this: TlsRecordServer, requestPeer: boolean): i32 -> @nish.TlsRecordServer.keyUpdate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.pump
@@ -112560,38 +112562,38 @@ function TlsRecordServer.keyUpdate(this: TlsRecordServer, requestPeer: boolean):
   calls: nish.TlsRecordServer.pump nish.TlsRecordServer.sendKeyUpdate
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.pump#0 nish.TlsRecordServer.sendKeyUpdate#0
   stackSites=0 stackLocals=0
-  callee 1186:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
-  callee 1187:31 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
+  callee 1188:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
+  callee 1189:31 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
 function TlsRecordServer.fail(this: TlsRecordServer, alert: i32): void -> @nish.TlsRecordServer.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1207:5
+  sharedWrite: 1209:5
   escaping: alert
   calls: nish.TlsRecordServer.dropPending nish.TlsRecordServer.sendAlert nish.TlsRecordServer.wipeKeys
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.dropPending#0 nish.TlsRecordServer.sendAlert#0 nish.TlsRecordServer.wipeKeys#0
   stackSites=0 stackLocals=0
-  local 1204:11 closed: boolean (const)
-  callee 1205:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
-  callee 1211:7 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
-  callee 1215:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
+  local 1206:11 closed: boolean (const)
+  callee 1207:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
+  callee 1213:7 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
+  callee 1217:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
 function TlsRecordServer.sendAlert(this: TlsRecordServer, level: i32, description: i32): boolean -> @nish.TlsRecordServer.sendAlert [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.sealRecord
   calls: nish.TlsRecordServer.sealRecord
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sealRecord#0
   stackSites=1 stackLocals=1
-  local 1220:11 body: u8[] (const)
-  local 1221:11 two: i32 (const)
-  callee 1222:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  local 1222:11 body: u8[] (const)
+  local 1223:11 two: i32 (const)
+  callee 1224:12 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
 function TlsRecordServer.consume(this: TlsRecordServer, n: i32): void -> @nish.TlsRecordServer.consume [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1235:5
+  sharedWrite: 1237:5
   escaping: n
   calls: nish.TlsRecordServer.pump nish_panic_overflow
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.pump#0
   stackSites=0 stackLocals=0
-  local 1230:11 held: i32 (const)
-  local 1231:9 take: i32 (let)
-  callee 1240:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
+  local 1232:11 held: i32 (const)
+  local 1233:9 take: i32 (let)
+  callee 1242:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
 function TlsRecordServer.write(this: TlsRecordServer, data: u8[], off: i32, len: i32): i32 -> @nish.TlsRecordServer.write [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.pump
@@ -112600,56 +112602,56 @@ function TlsRecordServer.write(this: TlsRecordServer, data: u8[], off: i32, len:
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.pump#0 nish.TlsRecordServer.sendKeyUpdate#0 nish.TlsRecordServer.maxChunk#0 nish.TlsRecordServer.fail#0 nish.TlsRecordServer.outputHasRoom#0 nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.recordRoom#0 nish.TlsRecordServer.sealRecord#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.sealRecord#2
   stackSites=0 stackLocals=0
-  callee 1253:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
-  callee 1259:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
-  local 1267:9 done: i32 (let)
-  callee 1269:81 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
-  local 1272:13 most: i32 (const)
-  callee 1272:25 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
-  callee 1274:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  local 1277:13 left: i32 (const)
-  local 1278:11 chunk: i32 (let)
-  callee 1280:7 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
-  callee 1280:26 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
-  local 1281:13 room: i32 (const)
-  callee 1281:67 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
-  callee 1285:26 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
+  callee 1255:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
+  callee 1261:5 TlsRecordServer.pump -> @nish.TlsRecordServer.pump
+  local 1269:9 done: i32 (let)
+  callee 1271:81 TlsRecordServer.sendKeyUpdate -> @nish.TlsRecordServer.sendKeyUpdate
+  local 1274:13 most: i32 (const)
+  callee 1274:25 TlsRecordServer.maxChunk -> @nish.TlsRecordServer.maxChunk
+  callee 1276:9 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  local 1279:13 left: i32 (const)
+  local 1280:11 chunk: i32 (let)
+  callee 1282:7 TlsRecordServer.outputHasRoom -> @nish.TlsRecordServer.outputHasRoom
+  callee 1282:26 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
+  local 1283:13 room: i32 (const)
+  callee 1283:67 TlsRecordServer.recordRoom -> @nish.TlsRecordServer.recordRoom
+  callee 1287:26 TlsRecordServer.sealRecord -> @nish.TlsRecordServer.sealRecord
 function TlsRecordServer.read(this: TlsRecordServer, buf: u8[], off: i32, len: i32): i32 -> @nish.TlsRecordServer.read [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1315:9
+  sharedWrite: 1317:9
   escaping: len off
   calls: nish.TlsRecordServer.process nish.tlsRecordWindowFits nish_panic_index nish_panic_overflow
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.process#0
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 1305:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
-  local 1311:11 avail: i32 (const)
-  local 1313:13 n: i32 (const)
-  local 1314:16 k: i32 (let)
-  callee 1322:7 TlsRecordServer.process -> @nish.TlsRecordServer.process
+  callee 1307:10 tlsRecordWindowFits -> @nish.tlsRecordWindowFits
+  local 1313:11 avail: i32 (const)
+  local 1315:13 n: i32 (const)
+  local 1316:16 k: i32 (let)
+  callee 1324:7 TlsRecordServer.process -> @nish.TlsRecordServer.process
 function TlsRecordServer.close(this: TlsRecordServer): void -> @nish.TlsRecordServer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1346:5
+  sharedWrite: 1348:5
   calls: nish.TlsRecordServer.dropPending nish.TlsRecordServer.sealClose nish.TlsServer.wipeResumption
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.dropPending#0 nish.TlsRecordServer.sealClose#0
   stackSites=0 stackLocals=0
-  callee 1344:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
-  callee 1345:5 TlsServer.wipeResumption -> @nish.TlsServer.wipeResumption
-  callee 1348:5 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
+  callee 1346:5 TlsRecordServer.dropPending -> @nish.TlsRecordServer.dropPending
+  callee 1347:5 TlsServer.wipeResumption -> @nish.TlsServer.wipeResumption
+  callee 1350:5 TlsRecordServer.sealClose -> @nish.TlsRecordServer.sealClose
 function TlsRecordServer.sealClose(this: TlsRecordServer): void -> @nish.TlsRecordServer.sealClose [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1359:7
+  sharedWrite: 1361:7
   calls: nish.TlsRecordServer.sendAlert nish.TlsRecordServer.wipeWrite
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.sendAlert#0 nish.TlsRecordServer.wipeWrite#0
   stackSites=0 stackLocals=0
-  callee 1358:26 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
-  callee 1360:7 TlsRecordServer.wipeWrite -> @nish.TlsRecordServer.wipeWrite
+  callee 1360:26 TlsRecordServer.sendAlert -> @nish.TlsRecordServer.sendAlert
+  callee 1362:7 TlsRecordServer.wipeWrite -> @nish.TlsRecordServer.wipeWrite
 function TlsRecordServer.signatureInput(this: TlsRecordServer): u8[] | null -> @nish.TlsRecordServer.signatureInput [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.TlsServer.signatureInput
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1369:12 TlsServer.signatureInput -> @nish.TlsServer.signatureInput
+  callee 1371:12 TlsServer.signatureInput -> @nish.TlsServer.signatureInput
 function TlsRecordServer.sign(this: TlsRecordServer, signature: u8[]): i32 -> @nish.TlsRecordServer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsServer.sign
@@ -112657,23 +112659,23 @@ function TlsRecordServer.sign(this: TlsRecordServer, signature: u8[]): i32 -> @n
   pointer this: size=200 writesThrough=true captured=false passedTo=nish.TlsRecordServer.fail#0 nish.TlsRecordServer.advance#0 nish.TlsRecordServer.process#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.TlsServer.sign#1
   stackSites=0 stackLocals=0
-  local 1382:11 alert: i32 (const)
-  callee 1382:24 TlsServer.sign -> @nish.TlsServer.sign
-  callee 1384:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 1387:5 TlsRecordServer.advance -> @nish.TlsRecordServer.advance
-  callee 1388:5 TlsRecordServer.process -> @nish.TlsRecordServer.process
+  local 1384:11 alert: i32 (const)
+  callee 1384:24 TlsServer.sign -> @nish.TlsServer.sign
+  callee 1386:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 1389:5 TlsRecordServer.advance -> @nish.TlsRecordServer.advance
+  callee 1390:5 TlsRecordServer.process -> @nish.TlsRecordServer.process
 function TlsRecordServer.interest(this: TlsRecordServer): i32 -> @nish.TlsRecordServer.interest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.TlsRecordReader.next nish.TlsRecordReader.space
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1400:9 bits: i32 (let)
-  local 1401:11 sending: boolean (const)
-  local 1405:11 failed: boolean (const)
-  local 1411:11 live: boolean (const)
-  local 1414:11 blocked: boolean (const)
-  callee 1414:30 TlsRecordReader.next -> @nish.TlsRecordReader.next
-  callee 1415:64 TlsRecordReader.space -> @nish.TlsRecordReader.space
+  local 1402:9 bits: i32 (let)
+  local 1403:11 sending: boolean (const)
+  local 1407:11 failed: boolean (const)
+  local 1413:11 live: boolean (const)
+  local 1416:11 blocked: boolean (const)
+  callee 1416:30 TlsRecordReader.next -> @nish.TlsRecordReader.next
+  callee 1417:64 TlsRecordReader.space -> @nish.TlsRecordReader.space
 module std/net/tls/record.ts [package nish]
 import BufferPool from "nish/net/buffer-pool" -> struct BufferPool
 import AesKey from "nish/crypto/aes" -> struct AesKey
@@ -114267,7 +114269,7 @@ function TlsTcpServer.constructor(this: TlsTcpServer, config: TlsServerConfig, l
   callee 153:37 new TlsRecordServer -> @nish.TlsRecordServer.constructor
   callee 153:57 new TlsServer -> @nish.TlsServer.constructor
   callee 154:7 TlsRecordServer.borrowFrom -> @nish.TlsRecordServer.borrowFrom
-  callee 160:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
+  callee 161:19 new TlsP256Signer -> @nish.TlsP256Signer.constructor
 function TlsTcpServer.size(this: TlsTcpServer): i32 -> @nish.TlsTcpServer.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=72 writesThrough=false captured=false
@@ -114277,8 +114279,8 @@ function TlsTcpServer.busy(this: TlsTcpServer): i32 -> @nish.TlsTcpServer.busy [
   calls: nish_panic_overflow
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 170:9 n: i32 (let)
-  local 171:16 fd: i32 (const)
+  local 171:9 n: i32 (let)
+  local 172:16 fd: i32 (const)
 function TlsTcpServer.holds(this: TlsTcpServer, slot: i32): boolean -> @nish.TlsTcpServer.holds [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
@@ -114290,48 +114292,48 @@ function TlsTcpServer.fd(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServ
   calls: nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
-  callee 186:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 187:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
 function TlsTcpServer.connection(this: TlsTcpServer, slot: i32): TlsRecordServer -> @nish.TlsTcpServer.connection [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=200
   escaping: slot
   calls: nish_panic_index
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 195:11 at: i32 (const)
+  local 196:11 at: i32 (const)
 function TlsTcpServer.accept(this: TlsTcpServer, serverRandom: u8[], ephemeralPrivate: u8[]): i32 -> @nish.TlsTcpServer.accept [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 218:21
+  sharedWrite: 219:21
   calls: nish.TlsRecordServer.start nish.TlsServer.restart nish_net_close nish_panic_index nish_tcp_accept
   pointer this: size=72 writesThrough=false captured=false
   pointer serverRandom: size=0 writesThrough=false captured=false
   pointer ephemeralPrivate: size=0 writesThrough=true captured=false passedTo=nish.TlsServer.restart#2
   stackSites=0 stackLocals=0
-  local 218:11 fd: i32 (const)
-  local 222:9 slot: i32 (let)
-  local 223:14 k: i32 (let)
-  local 234:11 random: u8[] (const)
-  local 236:11 k: i32 (let)
-  local 242:11 conn: TlsRecordServer (const)
-  callee 244:5 TlsServer.restart -> @nish.TlsServer.restart
-  callee 245:5 TlsRecordServer.start -> @nish.TlsRecordServer.start
+  local 219:11 fd: i32 (const)
+  local 223:9 slot: i32 (let)
+  local 224:14 k: i32 (let)
+  local 235:11 random: u8[] (const)
+  local 237:11 k: i32 (let)
+  local 243:11 conn: TlsRecordServer (const)
+  callee 245:5 TlsServer.restart -> @nish.TlsServer.restart
+  callee 246:5 TlsRecordServer.start -> @nish.TlsRecordServer.start
 function TlsTcpServer.readable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.readable [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 267:22
+  sharedWrite: 268:22
   escaping: slot
   calls: nish.TlsRecordServer.abort nish.TlsRecordServer.end nish.TlsRecordServer.receive nish.TlsRecordServer.space nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_net_read nish_panic_index nish_panic_slice
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 256:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 259:11 fd: i32 (const)
-  local 260:11 conn: TlsRecordServer (const)
-  local 262:13 room: i32 (const)
-  callee 262:25 TlsRecordServer.space -> @nish.TlsRecordServer.space
-  local 263:13 want: i32 (const)
-  local 267:13 n: i32 (const)
-  callee 270:11 TlsRecordServer.end -> @nish.TlsRecordServer.end
-  callee 272:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
-  callee 276:7 TlsRecordServer.receive -> @nish.TlsRecordServer.receive
-  callee 278:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 257:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 260:11 fd: i32 (const)
+  local 261:11 conn: TlsRecordServer (const)
+  local 263:13 room: i32 (const)
+  callee 263:25 TlsRecordServer.space -> @nish.TlsRecordServer.space
+  local 264:13 want: i32 (const)
+  local 268:13 n: i32 (const)
+  callee 271:11 TlsRecordServer.end -> @nish.TlsRecordServer.end
+  callee 273:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
+  callee 277:7 TlsRecordServer.receive -> @nish.TlsRecordServer.receive
+  callee 279:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.writable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.writable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsTcpServer.flush
@@ -114339,8 +114341,8 @@ function TlsTcpServer.writable(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsT
   calls: nish.TlsTcpServer.flush nish.TlsTcpServer.holds
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 283:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 286:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 284:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 287:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.flush(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.flush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_net_write
@@ -114348,28 +114350,28 @@ function TlsTcpServer.flush(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpS
   calls: nish.TlsRecordServer.abort nish.TlsRecordServer.consume nish.TlsRecordServer.interest nish_net_write nish_panic_index nish_panic_overflow nish_panic_slice
   pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 291:11 fd: i32 (const)
-  local 292:11 conn: TlsRecordServer (const)
-  local 294:13 n: i32 (const)
-  callee 297:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
-  callee 301:7 TlsRecordServer.consume -> @nish.TlsRecordServer.consume
-  callee 303:12 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
+  local 292:11 fd: i32 (const)
+  local 293:11 conn: TlsRecordServer (const)
+  local 295:13 n: i32 (const)
+  callee 298:11 TlsRecordServer.abort -> @nish.TlsRecordServer.abort
+  callee 302:7 TlsRecordServer.consume -> @nish.TlsRecordServer.consume
+  callee 304:12 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
 function TlsTcpServer.interest(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.interest [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsRecordServer.interest nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
-  callee 308:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 308:31 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
+  callee 309:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 309:31 TlsRecordServer.interest -> @nish.TlsRecordServer.interest
 function TlsTcpServer.signatureInput(this: TlsTcpServer, slot: i32): u8[] | null -> @nish.TlsTcpServer.signatureInput [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish.TlsRecordServer.signatureInput nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0
   stackSites=0 stackLocals=0
-  callee 313:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 313:31 TlsRecordServer.signatureInput -> @nish.TlsRecordServer.signatureInput
+  callee 314:12 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 314:31 TlsRecordServer.signatureInput -> @nish.TlsRecordServer.signatureInput
 function TlsTcpServer.sign(this: TlsTcpServer, slot: i32, signature: u8[]): i32 -> @nish.TlsTcpServer.sign [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.sign
@@ -114378,9 +114380,9 @@ function TlsTcpServer.sign(this: TlsTcpServer, slot: i32, signature: u8[]): i32 
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer signature: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.sign#1
   stackSites=0 stackLocals=0
-  callee 318:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 321:5 TlsRecordServer.sign -> @nish.TlsRecordServer.sign
-  callee 322:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 319:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 322:5 TlsRecordServer.sign -> @nish.TlsRecordServer.sign
+  callee 323:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.signP256(this: TlsTcpServer, slot: i32, key: Secret<u8[]>): i32 -> @nish.TlsTcpServer.signP256 [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsP256Signer.sign
@@ -114389,14 +114391,14 @@ function TlsTcpServer.signP256(this: TlsTcpServer, slot: i32, key: Secret<u8[]>)
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.signatureInput#0 nish.TlsTcpServer.interest#0 nish.TlsTcpServer.flush#0 nish.TlsTcpServer.sign#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.TlsP256Signer.sign#1
   stackSites=0 stackLocals=0
-  local 333:11 input: u8[] | null (const)
-  callee 333:32 TlsTcpServer.signatureInput -> @nish.TlsTcpServer.signatureInput
-  callee 335:14 TlsTcpServer.interest -> @nish.TlsTcpServer.interest
-  local 337:11 signature: u8[] | null (const)
-  callee 337:36 TlsP256Signer.sign -> @nish.TlsP256Signer.sign
-  callee 339:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
-  callee 340:14 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
-  callee 342:12 TlsTcpServer.sign -> @nish.TlsTcpServer.sign
+  local 334:11 input: u8[] | null (const)
+  callee 334:32 TlsTcpServer.signatureInput -> @nish.TlsTcpServer.signatureInput
+  callee 336:14 TlsTcpServer.interest -> @nish.TlsTcpServer.interest
+  local 338:11 signature: u8[] | null (const)
+  callee 338:36 TlsP256Signer.sign -> @nish.TlsP256Signer.sign
+  callee 340:7 TlsRecordServer.fail -> @nish.TlsRecordServer.fail
+  callee 341:14 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 343:12 TlsTcpServer.sign -> @nish.TlsTcpServer.sign
 function TlsTcpServer.read(this: TlsTcpServer, slot: i32, buf: u8[], off: i32, len: i32): i32 -> @nish.TlsTcpServer.read [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.read
@@ -114405,10 +114407,10 @@ function TlsTcpServer.read(this: TlsTcpServer, slot: i32, buf: u8[], off: i32, l
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.TlsRecordServer.read#1
   stackSites=0 stackLocals=0
-  callee 354:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 357:11 n: i32 (const)
-  callee 357:20 TlsRecordServer.read -> @nish.TlsRecordServer.read
-  callee 358:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 355:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 358:11 n: i32 (const)
+  callee 358:20 TlsRecordServer.read -> @nish.TlsRecordServer.read
+  callee 359:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.write(this: TlsTcpServer, slot: i32, data: u8[], off: i32, len: i32): i32 -> @nish.TlsTcpServer.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.write
@@ -114417,10 +114419,10 @@ function TlsTcpServer.write(this: TlsTcpServer, slot: i32, data: u8[], off: i32,
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsRecordServer.write#1
   stackSites=0 stackLocals=0
-  callee 369:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 372:11 n: i32 (const)
-  callee 372:20 TlsRecordServer.write -> @nish.TlsRecordServer.write
-  callee 373:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 370:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 373:11 n: i32 (const)
+  callee 373:20 TlsRecordServer.write -> @nish.TlsRecordServer.write
+  callee 374:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.keyUpdate(this: TlsTcpServer, slot: i32, requestPeer: boolean): i32 -> @nish.TlsTcpServer.keyUpdate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.keyUpdate
@@ -114428,10 +114430,10 @@ function TlsTcpServer.keyUpdate(this: TlsTcpServer, slot: i32, requestPeer: bool
   calls: nish.TlsRecordServer.keyUpdate nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 379:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 382:11 r: i32 (const)
-  callee 382:20 TlsRecordServer.keyUpdate -> @nish.TlsRecordServer.keyUpdate
-  callee 383:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 380:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 383:11 r: i32 (const)
+  callee 383:20 TlsRecordServer.keyUpdate -> @nish.TlsRecordServer.keyUpdate
+  callee 384:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.shutdown(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsTcpServer.shutdown [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordServer.close
@@ -114439,22 +114441,22 @@ function TlsTcpServer.shutdown(this: TlsTcpServer, slot: i32): i32 -> @nish.TlsT
   calls: nish.TlsRecordServer.close nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 394:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  callee 397:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
-  callee 398:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 395:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  callee 398:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
+  callee 399:12 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
 function TlsTcpServer.close(this: TlsTcpServer, slot: i32): void -> @nish.TlsTcpServer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 417:5
+  sharedWrite: 418:5
   escaping: slot
   calls: nish.TlsRecordServer.close nish.TlsRecordServer.release nish.TlsRecordServer.wipeKeys nish.TlsTcpServer.flush nish.TlsTcpServer.holds nish_net_close nish_panic_index
   pointer this: size=72 writesThrough=false captured=false passedTo=nish.TlsTcpServer.holds#0 nish.TlsTcpServer.flush#0
   stackSites=0 stackLocals=0
-  callee 410:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
-  local 413:11 conn: TlsRecordServer (const)
-  callee 414:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
-  callee 415:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
-  callee 418:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
-  callee 420:5 TlsRecordServer.release -> @nish.TlsRecordServer.release
+  callee 411:10 TlsTcpServer.holds -> @nish.TlsTcpServer.holds
+  local 414:11 conn: TlsRecordServer (const)
+  callee 415:5 TlsRecordServer.close -> @nish.TlsRecordServer.close
+  callee 416:5 TlsTcpServer.flush -> @nish.TlsTcpServer.flush
+  callee 419:5 TlsRecordServer.wipeKeys -> @nish.TlsRecordServer.wipeKeys
+  callee 421:5 TlsRecordServer.release -> @nish.TlsRecordServer.release
 module std/json.ts [package nish]
 const JSON_BACKSPACE: i32 = 8
 const JSON_TAB: i32 = 9

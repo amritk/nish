@@ -144,14 +144,15 @@ export class TlsTcpServer {
     // A placeholder key for the slots' first handshakes, which never run.
     const zeros: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
     for (let k: i32 = 0; k < slots; k++) {
-      // Each slot's own handshake, waiting for a ClientHello it is never
-      // given until `accept` restarts it for a connection with real
-      // randomness; every later connection reuses its state. It starts
-      // waiting rather than failed, so no alert is sealed and the slot
+      // Each slot's own handshake, never given a ClientHello: `accept`
+      // restarts it for a connection with real randomness, and every later
+      // connection reuses its state. It is marked failed without sealing an
+      // alert, so a stray call on a free slot fails closed and the slot
       // borrows no buffer until a connection moves bytes through it.
       this.randoms.push(new Array<u8>(TLS_TCP_KEY_SIZE))
       const conn: TlsRecordServer = new TlsRecordServer(new TlsServer(config, this.randoms[k], zeros))
       conn.borrowFrom(this.pools)
+      conn.state = TLS_RECORD_STATE_FAILED
       this.connections.push(conn)
       this.fds.push(TLS_TCP_FREE)
     }

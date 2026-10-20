@@ -1021,8 +1021,13 @@ export class TlsRecordServer {
    * mistake here could cause, fails the connection.
    */
   sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean {
-    if (!this.outputHasRoom(this.recordRoom(len))) {
+    const room: i32 = this.recordRoom(len)
+    if (!this.outputHasRoom(room)) {
       return false
+    }
+    // Counted before the seal, so a refused seal's partial write is wiped when the buffer goes back.
+    if (this.outputEnd + room > this.outputUsed) {
+      this.outputUsed = this.outputEnd + room
     }
     const n: i32 = this.writeProtection.seal(
       type,
@@ -1038,9 +1043,6 @@ export class TlsRecordServer {
       return false
     }
     this.outputEnd = this.outputEnd + n
-    if (this.outputEnd > this.outputUsed) {
-      this.outputUsed = this.outputEnd
-    }
     return true
   }
 

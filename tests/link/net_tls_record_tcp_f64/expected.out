@@ -35,7 +35,7 @@ PASS  each accept copied the key into its slot and wiped the one buffer the prog
 PASS  two pending handshakes whose randoms the program drew into one buffer each send their own (the slot keeps a copy)
 PASS  and both are closed when their clients hang up
 PASS  with every connection ended the record pools have lent nothing: lent() is 0
-PASS  and two slots made no more than two buffers of any pool
+PASS  over every connection of the run, two slots made two output, scratch and reader buffers and one plain one: the pools only grow to what is borrowed at once
 PASS  a random of 31 bytes is refused with -22 before any connection is taken, and both arrays are left as they were
 PASS  so is a key of 33 bytes, which stays unwiped
 PASS  a slot that holds nothing: done to every call, -22 to reads, writes and key updates, no descriptor
