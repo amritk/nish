@@ -73,6 +73,8 @@ const GO = process.env.GO || "go"
 const VALIDATE_ITERATIONS = 3
 /** How long a timed run aims to take, in nanoseconds. */
 const TARGET_NS = 200e6
+/** A run that takes longer than this has hung, or calibrated to something absurd. */
+const RUN_TIMEOUT_MS = 120e3
 /** The portable proof's default: a portable column at least this much slower than its twin's default one. */
 const PORTABLE_MIN_RATIO = 1.2
 const TWINS = ["openssl", "go", "rust", "node"]
@@ -249,6 +251,13 @@ const loadFamily = (name) => {
       if (Object.keys(portable).length === 0) {
         fail(`${at}.portable: names what makes the build portable, or is a string saying why there is none`)
       }
+      // OpenSSL's portable column runs the default binary, so its env is all
+      // that makes it portable, and only the time ratio can prove it.
+      if (twin === "openssl" && Object.keys(portable.env ?? {}).length === 0) {
+        fail(
+          `${at}.portable.env: OpenSSL's portable column is the same binary, so its env must mask something`
+        )
+      }
     } else {
       fail(`${at}.portable: an object, or a string saying why the twin has no portable column`)
     }
@@ -261,6 +270,9 @@ const loadFamily = (name) => {
       fail(`${where}: \`portableProof\` must be "<kernel>@<size>" naming one of its kernels`)
     }
     proof = { kernel: m[1], size: Number(m[2]) }
+    if (!kernels.find((k) => k.name === proof.kernel).sizes.includes(proof.size)) {
+      fail(`${where}: \`portableProof\`'s size must be one of ${proof.kernel}'s sizes`)
+    }
   }
   // One number for every portable column, or one per twin.
   const ratioSpec = spec.portableMinRatio ?? PORTABLE_MIN_RATIO
@@ -286,6 +298,11 @@ const loadFamily = (name) => {
       return [t, t in ratioSpec ? ratioSpec[t] : PORTABLE_MIN_RATIO]
     })
   )
+  if (minRatio.openssl === null) {
+    fail(
+      `${where}: \`portableMinRatio.openssl\` cannot be null: the same binary leaves only the time to prove it`
+    )
+  }
   if (spec.portableMinRatio !== undefined && proof === null) {
     fail(`${where}: \`portableMinRatio\` without a \`portableProof\``)
   }
@@ -513,7 +530,14 @@ const buildFamily = (family) => {
     copyFiles(path.join(family.dir, "rust", "src"), path.join(crate, "src"))
     fs.copyFileSync(path.join(libDir, "gen.rs"), path.join(crate, "src", "gen.rs"))
     const bin = /^name\s*=\s*"([^"]+)"/m.exec(fs.readFileSync(path.join(crate, "Cargo.toml"), "utf8"))?.[1]
-    const env = { ...process.env, ...t.env }
+    if (bin === undefined) {
+      fail(`bench/crypto/${family.name}/rust/cargo.toml: no \`name = "…"\` line names the binary`)
+    }
+    // Both builds take their flags from CARGO_ENCODED_RUSTFLAGS alone, so a
+    // RUSTFLAGS in the environment reaches neither and the pair differs only by
+    // the portable flags.
+    const env = { ...process.env, ...t.env, CARGO_ENCODED_RUSTFLAGS: "" }
+    delete env.RUSTFLAGS
     const fetched = spawnSync("cargo", ["fetch", "--locked", "--quiet"], {
       cwd: crate,
       env,
@@ -557,11 +581,15 @@ const runOnce = (variant, kernel, size, iterations) => {
     encoding: "utf8",
     env: variant.env,
     maxBuffer: 1 << 20,
+    timeout: RUN_TIMEOUT_MS,
   })
   const ns = /^ns (\d+)$/m.exec(r.stderr ?? "")
   const sum = /^checksum ([0-9a-f]{8})\n$/.exec(r.stdout ?? "")
   if (r.error !== undefined || r.status !== 0 || ns === null || sum === null) {
-    const why = r.error?.message ?? `exit ${r.status}`
+    let why = r.error?.message ?? `exit ${r.status}`
+    if (r.error?.code === "ETIMEDOUT") {
+      why = `no answer within ${RUN_TIMEOUT_MS / 1000} s`
+    }
     return { error: `${why}\nstdout: ${r.stdout ?? ""}\nstderr: ${r.stderr ?? ""}` }
   }
   return { checksum: sum[1], ns: Number(ns[1]) }
@@ -595,10 +623,14 @@ const calibrate = (variant, kernel, size, target) => {
   }
 }
 
-/** Every variant once per round, the order rotated by one each round; `{ id: [ns, …] }` and the checksums seen. */
+/**
+ * Every variant once per round, the order rotated by one each round:
+ * `{ id: [ns, …] }`, and the checksums seen, `{ id: Set }`. A deterministic
+ * program prints one checksum every round, so a set of two is a mismatch.
+ */
 const interleave = (variants, kernel, size, iterations, rounds) => {
   const times = new Map(variants.map((v) => [v.id, []]))
-  const sums = new Map()
+  const sums = new Map(variants.map((v) => [v.id, new Set()]))
   for (let round = 0; round < rounds; round++) {
     for (let i = 0; i < variants.length; i++) {
       const v = variants[(i + round) % variants.length]
@@ -608,7 +640,7 @@ const interleave = (variants, kernel, size, iterations, rounds) => {
         process.exit(1)
       }
       times.get(v.id).push(r.ns)
-      sums.set(v.id, r.checksum)
+      sums.get(v.id).add(r.checksum)
     }
   }
   return { times, sums }
@@ -626,21 +658,29 @@ if (opts.validate) {
     }
     if (family.needs.includes("loopback") && !loopback) {
       note(`${family.name}: needs a loopback socket and 127.0.0.1 refused one; not validated`)
+      console.log(`${family.name}: skipped (needs loopback)`)
       continue
     }
     const variants = buildFamily(family)
     const expected = readExpected(family)
-    const written = []
+    // --write-expected replaces the lines it ran and keeps the rest, so
+    // `--only <kernel>` does not drop the other kernels' checksums.
+    const written = new Map(expected)
     let matched = 0
-    for (const kernel of family.kernels.filter((k) => wanted(family, k))) {
-      const key = `${kernel.name} ${kernel.validateSize} ${VALIDATE_ITERATIONS}`
+    const checks = family.kernels
+      .filter((k) => wanted(family, k))
+      .flatMap((kernel) =>
+        [...new Set([kernel.validateSize, ...kernel.sizes])].map((size) => ({ kernel, size }))
+      )
+    for (const { kernel, size } of checks) {
+      const key = `${kernel.name} ${size} ${VALIDATE_ITERATIONS}`
       const want = expected.get(key)
       const runners = runnersOf(family, kernel, variants)
       const sums = new Map()
       for (const v of runners) {
-        const r = runOnce(v, kernel.name, kernel.validateSize, VALIDATE_ITERATIONS)
+        const r = runOnce(v, kernel.name, size, VALIDATE_ITERATIONS)
         if (r.error !== undefined) {
-          console.log(`FAILED ${kernel.name} ${v.id}: ${r.error}`)
+          console.log(`FAILED ${kernel.name} ${size} ${v.id}: ${r.error}`)
           mismatches++
           continue
         }
@@ -651,21 +691,23 @@ if (opts.validate) {
       if (opts.writeExpected) {
         if (distinct.size !== 1) {
           console.log(
-            `CHECKSUM MISMATCH ${kernel.name}: ${[...sums].map(([id, s]) => `${id} ${s}`).join(", ")}`
+            `CHECKSUM MISMATCH ${kernel.name} ${size}: ${[...sums].map(([id, s]) => `${id} ${s}`).join(", ")}`
           )
           mismatches++
         } else {
-          written.push(`${key} ${[...distinct][0]}`)
+          written.set(key, [...distinct][0])
         }
       } else if (want === undefined) {
         console.log(
-          `CHECKSUM MISMATCH ${kernel.name}: bench/crypto/${family.name}/expected.txt has no \`${key}\` line`
+          `CHECKSUM MISMATCH ${kernel.name} ${size}: bench/crypto/${family.name}/expected.txt has no \`${key}\` line`
         )
         mismatches++
       } else {
         for (const [id, sum] of sums) {
           if (sum !== want) {
-            console.log(`CHECKSUM MISMATCH ${kernel.name} ${id}: printed ${sum}, expected.txt has ${want}`)
+            console.log(
+              `CHECKSUM MISMATCH ${kernel.name} ${size} ${id}: printed ${sum}, expected.txt has ${want}`
+            )
             mismatches++
           }
         }
@@ -674,7 +716,7 @@ if (opts.validate) {
         }
       }
       if (sums.size === 0) {
-        console.log(`CHECKSUM MISMATCH ${kernel.name}: no variant ran`)
+        console.log(`CHECKSUM MISMATCH ${kernel.name} ${size}: no variant ran`)
         mismatches++
       }
       kernelCount++
@@ -682,10 +724,22 @@ if (opts.validate) {
     if (opts.writeExpected && mismatches === 0) {
       const head =
         "# <kernel> <size> <iterations> <checksum>, written by `node bench/crypto/run.mjs --validate --write-expected`.\n"
-      fs.writeFileSync(path.join(family.dir, "expected.txt"), `${head}${written.join("\n")}\n`)
-      console.log(`${family.name}: wrote expected.txt (${written.length} line(s))`)
+      // In family.json's order: each kernel's sizes, smallest first.
+      const rank = (k) => {
+        const [name, size] = k.split(" ")
+        return [family.kernels.findIndex((x) => x.name === name), Number(size)]
+      }
+      const lines = [...written]
+        .sort(([a], [b]) => {
+          const [ka, sa] = rank(a)
+          const [kb, sb] = rank(b)
+          return ka - kb || sa - sb
+        })
+        .map(([k, sum]) => `${k} ${sum}`)
+      fs.writeFileSync(path.join(family.dir, "expected.txt"), `${head}${lines.join("\n")}\n`)
+      console.log(`${family.name}: wrote expected.txt (${lines.length} line(s))`)
     } else if (!opts.writeExpected) {
-      console.log(`${family.name}: ${matched} kernel(s) match expected.txt`)
+      console.log(`${family.name}: ${matched} of ${checks.length} kernel size(s) match expected.txt`)
     }
     // The portable proof: each portable column must be measurably slower than
     // its twin's default one, so the mask, tag or flag really took the
@@ -696,6 +750,14 @@ if (opts.validate) {
         const fast = variants.find((v) => v.id === twin)
         const slow = variants.find((v) => v.id === PORTABLE_IDS[twin])
         if (fast === undefined || slow === undefined || family.twins[twin].lacks[kernel] !== undefined) {
+          const t = family.twins[twin]
+          let why = `this machine built no ${fast === undefined ? twin : PORTABLE_IDS[twin]}`
+          if (t.absent !== undefined || t.portable.absent !== undefined) {
+            why = "the family has no such column"
+          } else if (t.lacks[kernel] !== undefined) {
+            why = `${twin} lacks ${kernel}`
+          }
+          console.log(`portable ${family.name} ${PORTABLE_IDS[twin]}: unproved (${why})`)
           continue
         }
         const need = family.minRatio[twin]
@@ -739,7 +801,7 @@ if (opts.validate) {
     process.exit(1)
   }
   if (!opts.writeExpected) {
-    console.log(`crypto: checksums agree over ${kernelCount} kernel(s) and ${seen.size} variant(s)`)
+    console.log(`crypto: checksums agree over ${kernelCount} kernel size(s) and ${seen.size} variant(s)`)
   }
   process.exit(0)
 }
@@ -772,16 +834,22 @@ for (const family of families) {
   const rows = []
   for (const kernel of kernels) {
     const runners = runnersOf(family, kernel, variants)
+    if (runners.length === 0) {
+      note(`${family.name}: no variant on this machine implements ${kernel.name}; not timed`)
+      continue
+    }
     for (const size of kernel.sizes) {
       const iterations = calibrate(runners[0], kernel.name, size, TARGET_NS)
       const { times, sums } = interleave(runners, kernel.name, size, iterations, opts.rounds)
-      const sum = sums.get(runners[0].id)
-      for (const [id, s] of sums) {
-        if (s !== sum) {
-          console.error(
-            `CHECKSUM MISMATCH ${kernel.name} ${id}: printed ${s}, ${runners[0].id} printed ${sum}`
-          )
-          mismatches++
+      const [sum] = sums.get(runners[0].id)
+      for (const [id, seen] of sums) {
+        for (const s of seen) {
+          if (s !== sum) {
+            console.error(
+              `CHECKSUM MISMATCH ${kernel.name} ${size} ${id}: printed ${s}, ${runners[0].id} printed ${sum}`
+            )
+            mismatches++
+          }
         }
       }
       const medians = new Map([...times].map(([id, ns]) => [id, median(ns)]))

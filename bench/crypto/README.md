@@ -48,7 +48,7 @@ build.
 | Stream | Content |
 | --- | --- |
 | stdout | Exactly `checksum <8 lower-case hex digits>\n`: FNV-1a 32 over every output byte of every iteration, in order. |
-| stderr | A line `ns <integer>`: the nanoseconds the timed loop took, read from a monotonic clock. Only the loop is timed, never input generation, key setup or the fold of the last output. Other stderr lines are ignored. |
+| stderr | A line `ns <integer>`: the nanoseconds the timed loop took, read from a monotonic clock. Only the loop is timed, never input generation or key setup. Every iteration's fold is inside the loop, and so is timed, the same in every language. Other stderr lines are ignored. |
 | exit status | 0 on success. 1 when an operation fails (a decrypt that does not authenticate, a handshake that does not complete). 2 on a usage error or an unknown kernel. |
 
 `size` is the message length in bytes. For an `op/s` kernel it is whatever
@@ -66,7 +66,8 @@ Every input is drawn from one stream, so every language sees the same bytes.
 - **Order:** the key, then the nonce, then the AAD, then the message, each with
   the length its kernel declares (0 for an input the kernel does not use).
 - **Tweak:** iteration `i` (from 0) XORs `i`, as a little-endian u32, into
-  the first four bytes of the message. It starts from the message's original
+  the first four bytes of the message, so every message has at least four
+  bytes; a size that gives a shorter one is not a valid case. It starts from the message's original
   four bytes each time, never from the previous iteration's. Each iteration
   therefore hashes, seals or signs a different message, and the optimiser
   cannot hoist the work out of the loop.
@@ -91,7 +92,9 @@ a family writes only its kernels.
 | `lib/gen.mjs` | Node (`import … from "../lib/gen.mjs"`) | `inputs`, `tweak`, `fold`, `FOLD_START`, `parseArgs`, `now`, `report` |
 
 `inputs(kernel, size, keyLen, nonceLen, aadLen, msgLen)` returns the four
-buffers. `parseArgs` exits 2 on a bad command line. `report` prints the
+buffers. `tweak(bytes, at, base, i)` XORs `i` into `bytes[at..at + 4)`
+against the four original bytes `base`; C's `tweak(bytes, base, i)` takes
+`bytes + at` instead of an offset. `parseArgs` exits 2 on a bad command line. `report` prints the
 checksum line on stdout and the `ns` line on stderr. A change to one file is a
 change to all five, and to every family's `expected.txt`.
 
@@ -100,8 +103,8 @@ change to all five, and to every family's `expected.txt`.
 | File | Required | What it is |
 | --- | --- | --- |
 | `family.json` | yes | The schema below. |
-| `expected.txt` | yes | The pinned checksums: `<kernel> <size> <iterations> <checksum>` per line, at each kernel's `validateSize` and 3 iterations. `#` starts a comment line. Written by `--validate --write-expected`, never by hand. |
-| `README.md` | yes | The inputs each kernel draws and their lengths, the library call each twin makes, and any reason a column differs from the others. |
+| `expected.txt` | yes | The pinned checksums: `<kernel> <size> <iterations> <checksum>` per line, at 3 iterations of every size in each kernel's `sizes` and its `validateSize`. `#` starts a comment line. Written by `--validate --write-expected`, never by hand; with `--only`, it replaces the lines that ran and keeps the rest. |
+| `README.md` | yes, by review | The inputs each kernel draws and their lengths, the library call each twin makes, and any reason a column differs from the others. |
 | `main.ts` | when a kernel has `nish` true | The Nish program, built with `nish --link --profile speed`. |
 | `openssl.c` | unless `twins.openssl` is a string | Built with `$CC -O3 -I lib … -lssl -lcrypto`. |
 | `go/` | unless `twins.go` is a string | A module (`go.mod`, `go.sum` when it has dependencies, `*.go`, package `main`). It is built with `GOTOOLCHAIN=local GOWORK=off GOFLAGS=-mod=readonly`, after a `go mod download`. |
@@ -142,7 +145,7 @@ cannot fall back to a default.
 | `twins` | object | All four twins, `openssl`, `go`, `rust` and `node`, each either an object (below) or a string saying why the family has none, which the table's footnotes print. |
 | `portableProof` | `"<kernel>@<size>"`, optional | The case `--validate` times to prove each portable column is portable. |
 | `portableMinRatio` | number above 1, or an object, optional | How much slower a portable column must be than its default one at `portableProof`; the default is 1.2. An object sets it per twin (`openssl`, `go` and `rust`; a twin it leaves out keeps 1.2). A twin's value of `null` measures and reports the ratio without gating on it. Only valid with `portableProof`. |
-| `needs` | array, optional | `["loopback"]` when the programs listen on and connect to `127.0.0.1`, as a handshake does. On a machine that refuses a loopback socket, the family is noted and left out, rather than failing. |
+| `needs` | array, optional | `["loopback"]` when the programs listen on and connect to `127.0.0.1`, as a handshake does. On a machine that refuses a loopback socket, the family is noted and left out, rather than failing; `--validate` prints `<family>: skipped (needs loopback)`. |
 
 ### Kernel fields
 
@@ -152,7 +155,7 @@ cannot fall back to a default.
 | `sizes` | integers of at least 4 | The sizes the table times, one row each. The tweak needs four message bytes. |
 | `unit` | `"MB/s"` or `"op/s"` | `MB/s` is 10⁶ message bytes a second, the right unit for a hash or an AEAD. `op/s` is operations a second, for a key derivation, a signature or a handshake, whose cost does not scale with a message. |
 | `nish` | boolean, default `true` | `false` makes the kernel twins-only. It has no Nish column, and its verdicts read —. Use it for a kernel `std/crypto` does not have yet, so the comparison exists before the Nish side does. A family whose kernels are all twins-only needs no `main.ts`. |
-| `validateSize` | integer of at least 4, default the smallest size | The size `--validate` runs and `expected.txt` pins. |
+| `validateSize` | integer of at least 4, default the smallest size | A size `--validate` runs and `expected.txt` pins besides `sizes`, for a case too slow to time but worth pinning. |
 
 ### Twin fields
 
@@ -160,15 +163,15 @@ cannot fall back to a default.
 | --- | --- | --- |
 | `env` | object of strings, optional | The environment every run of this twin gets: the default and the portable column alike. For Go and Rust it is also the build's environment. |
 | `portable` | object, or string | How to build or run the twin without assembly or CPU extensions. A string says why the twin has none; Node must give one. |
-| `lacks` | object, optional | A kernel name mapped to why this twin does not implement it. That cell reads —, and the footnote prints the reason. |
+| `lacks` | object, optional | A kernel name mapped to why this twin does not implement it. That cell reads —, in the default and the portable column alike, and the footnote prints the reason. |
 
 ### `portable` objects, one shape per twin
 
 | Twin | Fields | What the runner does |
 | --- | --- | --- |
-| `openssl` | `env` | Runs the same binary under these variables, typically `OPENSSL_ia32cap`, a mask that clears the CPU capability bits OpenSSL's assembly dispatches on. |
+| `openssl` | `env`, required | Runs the same binary under these variables, typically `OPENSSL_ia32cap`, a mask that clears the CPU capability bits OpenSSL's assembly dispatches on. |
 | `go` | `tags`, `env` | Builds a second binary with `-tags <tags joined by ,>` (`purego` turns off the standard library's assembly), with `env` at build time and at run time. |
-| `rust` | `rustflags`, `env` | Builds a second binary into a target directory of its own, with `CARGO_ENCODED_RUSTFLAGS` set to these flags, one element each. The usual flag is a backend `--cfg` that the crate reads. |
+| `rust` | `rustflags`, `env` | Builds a second binary into a target directory of its own, with `CARGO_ENCODED_RUSTFLAGS` set to these flags, one element each. The usual flag is a backend `--cfg` that the crate reads. The default build gets an empty `CARGO_ENCODED_RUSTFLAGS`, and neither build sees a `RUSTFLAGS` from the environment, so the two differ by these flags alone. |
 
 ### `portableProof`
 
@@ -185,9 +188,16 @@ with both a default column and a portable one, `--validate` does two things:
    long. A short result is measured once more over 11 rounds before it counts
    as `NOT PORTABLE`.
 
+`portableProof`'s size must be one of that kernel's `sizes`. A column the proof
+cannot reach (this machine built neither side, or the twin lacks the kernel)
+prints `portable <family> <column>: unproved (<why>)` rather than passing
+silently.
+
 Choose a kernel and size at which the twin's assembly really is faster on the
 machines CI uses. Where it is only marginally faster, give that twin `null`:
-the bytes check still gates it, and the ratio is printed. The hash family does
+the bytes check (step 1) still gates it, and the ratio is printed. OpenSSL
+cannot take `null`: its portable column is the same binary, so there is no
+bytes check, and only the time proves its mask did anything. The hash family does
 this for Rust, whose SHA-512 AVX2 path is about 10% faster than its soft path
 on a CPU without SHA extensions.
 
@@ -199,8 +209,12 @@ Each case (a kernel and a size) works in three steps:
    about 200 ms.
 2. Run every column for `--rounds` rounds at that count, rotating the order by
    one place each round.
-3. Report the median of each column's own `ns` lines. A column whose checksum
-   differs from the first column's fails the run, and nothing is written.
+3. Report the median of each column's own `ns` lines. A checksum, in any
+   round, that differs from the first column's fails the run, and nothing is
+   written.
+
+A run that takes longer than 120 s, in the table or in `--validate`, counts as
+a failed one.
 
 The two verdict columns divide Nish's median time by the fastest column in a
 group:

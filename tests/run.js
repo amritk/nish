@@ -15576,9 +15576,10 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
 // bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
 // directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
 // every program to print the checksums its expected.txt pins, and proves the
-// portable columns portable. Each family must report its match line, found by
-// listing the directories, so a new family is checked without an edit here. A
-// missing toolchain is the runner's note and a column of —, not a failure.
+// portable columns portable. Each family must report every kernel size matched,
+// found by listing the directories, so a new family is checked without an edit
+// here. A missing toolchain is the runner's note and a column of —, not a
+// failure; so is a family that needs a loopback socket the machine refuses.
 if (!only || "crypto-bench".includes(only)) {
   if (HAS_CLANG) {
     const families = fs
@@ -15596,7 +15597,10 @@ if (!only || "crypto-bench".includes(only)) {
         families.length > 0 &&
         v.stdout.includes("crypto: checksums agree") &&
         families.every((f) =>
-          new RegExp(`^${f}: \\d+ kernel\\(s\\) match expected\\.txt$`, "m").test(v.stdout)
+          new RegExp(
+            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
+            "m"
+          ).test(v.stdout)
         ),
       `${v.stdout}${v.stderr}`
     )
