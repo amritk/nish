@@ -125,23 +125,24 @@ its own LANGUAGE.md rule.
 
 ## 3. Measured
 
-`bench/router.ts` builds a table of 112 routes (77 nodes, the root among them, as `nodes` in its output counts): statics, 14 REST
-resources of six routes each, and nested routes up to nine segments deep.
+`bench/router.ts` builds a table of 112 routes (77 nodes, the root among
+them, as `nodes` in its output counts): statics, 14 REST resources of six
+routes each, and nested routes up to nine segments deep.
 It looks up four deep targets 200,000 times per round, for 15 rounds, against
 a linear scan over the same patterns. A byte-identical copy of the scan gives
-the noise band. Each lookup's result is folded into a printed checksum, and the
-target rotates every iteration.
+the noise band. Each lookup's route and all four parameter pairs are folded
+into a printed checksum, and the target rotates every iteration.
 
 On this head, each a median over the 15 rounds on one x86-64 core:
 
 | Run | Router | Linear scan | Linear copy | Noise band | Linear / router |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `nish run` | 426.3 ns | 3,386.2 ns | 3,290.7 ns | 28‰ | 7.9x |
-| `nish run --profile speed` | 150.3 ns | 1,065.9 ns | 1,095.2 ns | 27‰ | 7.1x |
+| `nish run` | 458.8 ns | 3,495.0 ns | 3,316.0 ns | 51‰ | 7.6x |
+| `nish run --profile speed` | 154.5 ns | 1,028.3 ns | 1,076.4 ns | 46‰ | 6.7x |
 
 The router's lead is far outside the band: it reads each segment once and
 visits at most the table's 77 nodes, where the scan compares every one of 112
-patterns that shares a method. The checksum, 951787444500000, is the same in
+patterns that shares a method. The checksum, 971760048750000, is the same in
 both runs.
 
 ## 4. Later stages of #485
