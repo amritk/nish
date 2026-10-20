@@ -739,9 +739,9 @@ prebuilt slot, so the handshake's randomness and key are what they were and
 a slot built this way is in the state a prebuilt one was in when its first
 connection came. What a stray call can reach is unchanged too: a slot never
 built holds no descriptor, so `holds` refuses it and `flush` answers
-`TLS_RECORD_DONE`, and `connection` of one answers `vacant`: a failed
-connection no slot holds, made on the first such read, with no ALPN and
-never open, as a free slot's own connection reads. It is never slot 0's,
+`TLS_RECORD_DONE`, and `connection` of one answers `vacant`: one failed
+connection no slot holds, shared by every such slot and allocated on the
+first such read, once per server, with no ALPN, no tickets and never open, as a free slot's own connection reads. It is never slot 0's,
 which may be another client's live session, and reading it builds no slot.
 `Http1TlsServer.connection`, `alpn` and `refused` read the same way. A
 slot out of range still names slot 0's connection, or `vacant` while slot

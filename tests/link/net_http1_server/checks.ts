@@ -397,9 +397,11 @@ const tlsAcceptOrder = (t: Suite): void => {
   for (let k: i32 = 0; k < 4; k++) {
     clients.push(tcpConnect(addr));
     const before: i64 = Arena.mark();
-    slots.push(tlsAcceptWaiting(server, loop, ready));
+    const accepted: i32 = tlsAcceptWaiting(server, loop, ready);
+    const after: i64 = Arena.mark();
+    slots.push(accepted);
     if (k < 3) {
-      firstMoved = firstMoved && Arena.mark() !== before;
+      firstMoved = firstMoved && after !== before;
     }
   }
   t.ok(
@@ -831,8 +833,10 @@ export const serverChecks = (): i32 => {
   t.ok("a client offering http/1.1 completes the handshake, the server's signature and Finished verified", s.handshake([H1_ALPN]) && s.verified);
   t.eqStr("ALPN chose http/1.1", lb.secure.alpn(ZERO), "http/1.1");
   t.ok(
-    "TLS: while slot 0 is open, a slot never built reads as a free one: no ALPN, not refused, not slot 0's connection",
+    "TLS: while slot 0 is open, a slot never built reads as a free one: not held, no descriptor, no ALPN, not refused, not slot 0's connection",
     toI32(lb.secure.connections.length) === 1 &&
+      !lb.secure.holds(toI32(3)) &&
+      lb.secure.fd(toI32(3)) === -1 &&
       lb.secure.alpn(toI32(3)) === "" &&
       !lb.secure.refused(toI32(3)) &&
       lb.secure.connection(toI32(3)) !== lb.secure.connection(ZERO) &&

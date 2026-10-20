@@ -115,7 +115,8 @@ export class TlsTcpServer {
   config: TlsServerConfig
   /**
    * The connections built so far, slot `k`'s at `k`: one per slot ever
-   * accepted into, and slot 0's once `connection` has asked for it.
+   * accepted into. `connection` never adds to it; a slot never built reads
+   * `vacant` instead.
    */
   connections: TlsRecordServer[]
   /**
@@ -150,9 +151,11 @@ export class TlsTcpServer {
   /** Whether `enableTickets` has run, so a slot built after it resumes too. */
   tickets: boolean = false
   /**
-   * What `connection` answers for a slot never built: a failed connection no
-   * slot holds, made on the first such read, so the slot reads as a free one
-   * does (no ALPN, not open) and never as another slot's live session.
+   * What `connection` answers for every slot never built: one failed
+   * connection no slot holds and every such slot shares, so the slot reads
+   * as a free one does (no ALPN, not open) and never as another slot's live
+   * session. Its first read allocates it, once per server; it has no
+   * tickets, and a caller must not change it.
    */
   vacant: TlsRecordServer | null = null
   /**

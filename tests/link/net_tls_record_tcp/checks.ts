@@ -126,7 +126,7 @@ const acceptOrder = (t: Suite): void => {
   netClose(listener);
 };
 
-/** A pool of 16,384 on no socket: a slot never built answers every call as a free slot does, and only `connection` builds one. */
+/** A pool of 16,384 on no socket: a slot never built answers every call as a free slot does, and only `accept` builds one. */
 const neverBuilt = (t: Suite): void => {
   const server = new TlsTcpServer(tcpConfig([]), toI32(-1), toI32(16384));
   const last: i32 = toI32(16383);
@@ -278,9 +278,11 @@ export const tcpChecks = (): i32 => {
 
   const unbuilt = lb.server.connection(toI32(1));
   t.ok(
-    "while slot 0 is open, the slot never built reads as a free one, not as slot 0's connection",
+    "while slot 0 is open, the slot never built reads as a free one: not held, no descriptor, not slot 0's connection",
     toI32(lb.server.connections.length) === 1 &&
       lb.server.connection(ZERO).state === TLS_RECORD_STATE_OPEN &&
+      !lb.server.holds(toI32(1)) &&
+      lb.server.fd(toI32(1)) === -1 &&
       unbuilt !== lb.server.connection(ZERO) &&
       unbuilt.state === TLS_RECORD_STATE_FAILED &&
       unbuilt.tls.alpn === ""

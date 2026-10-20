@@ -93,7 +93,7 @@ PASS  TLS: closing it, expiring the pool and an accept with no listener build no
 PASS  TLS: a never-built slot's connection is one no slot holds, made once, with no ALPN and building no slot
 PASS  a client offering http/1.1 completes the handshake, the server's signature and Finished verified
 PASS  ALPN chose http/1.1
-PASS  TLS: while slot 0 is open, a slot never built reads as a free one: no ALPN, not refused, not slot 0's connection
+PASS  TLS: while slot 0 is open, a slot never built reads as a free one: not held, no descriptor, no ALPN, not refused, not slot 0's connection
 PASS  a GET over TLS
 PASS  a chunked POST echoed over TLS
 PASS  fifty exchanges over TLS on the warmed slot

@@ -1498,13 +1498,15 @@ export class Http1TlsServer {
   tls: TlsTcpServer
   /**
    * The connections built so far, slot `k`'s at `k`: one per slot ever
-   * accepted into, and slot 0's once `connection` has asked for it.
+   * accepted into. `connection` never adds to it; a slot never built reads
+   * `vacant` instead.
    */
   connections: Http1Connection[]
   /**
-   * What `connection` answers for a slot never built: a connection no slot
-   * holds, made on the first such read, so the slot never reads as another
-   * slot's live request.
+   * What `connection` answers for every slot never built: one connection no
+   * slot holds and every such slot shares, so the slot never reads as
+   * another slot's live request. Its first read allocates it, once per
+   * server, and a caller must not change it.
    */
   vacant: Http1Connection | null = null
   /** The `Date` every slot's responses carry, as `Http1Server.date` is. */
@@ -1570,6 +1572,15 @@ export class Http1TlsServer {
   }
 
   /**
+   * Whether `slot` holds a connection and has its HTTP/1.1 connection built,
+   * as `Http2TlsServer.live` asks: a slot accepted on `tls` directly holds a
+   * TLS session and no `Http1Connection`, and reads as free here.
+   */
+  live(slot: i32): boolean {
+    return this.tls.holds(slot) && slot < toI32(this.connections.length)
+  }
+
+  /**
    * The HTTP/1.1 connection of `slot`. A slot never accepted into answers
    * `vacant`, as a free slot answers a connection that holds nothing, and
    * builds no slot; a slot out of range names slot 0's.
@@ -1622,7 +1633,7 @@ export class Http1TlsServer {
 
   /** The socket of `slot` is readable: TLS reads it, and what the connection has to send goes after. Answers the interest. */
   readable(slot: i32): i32 {
-    if (this.holds(slot)) {
+    if (this.live(slot)) {
       this.connections[slot].lastActive = monotonicNanos()
     }
     this.tls.readable(slot)
@@ -1647,7 +1658,7 @@ export class Http1TlsServer {
    * slot, or one whose ALPN was another protocol, answers `H1_ERROR`.
    */
   next(slot: i32): i32 {
-    if (!this.holds(slot) || this.refused(slot)) {
+    if (!this.live(slot) || this.refused(slot)) {
       return H1_ERROR
     }
     const conn: Http1Connection = this.connections[slot]
@@ -1680,7 +1691,7 @@ export class Http1TlsServer {
    * connection still holds bytes.
    */
   flush(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    if (!this.live(slot)) {
       return TLS_RECORD_DONE
     }
     if (this.refused(slot)) {

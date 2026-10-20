@@ -19,7 +19,7 @@ PASS  and data under the client's next keys is echoed under the server's
 PASS  the program asks for a KeyUpdate of its own, wanting one back
 PASS  it arrives asking
 PASS  both sides move on, and the echo follows
-PASS  while slot 0 is open, the slot never built reads as a free one, not as slot 0's connection
+PASS  while slot 0 is open, the slot never built reads as a free one: not held, no descriptor, not slot 0's connection
 PASS  the last record the key may protect
 PASS  the next is preceded by the writer's own KeyUpdate
 PASS  and comes under the next key
