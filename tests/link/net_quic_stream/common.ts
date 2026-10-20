@@ -4,7 +4,7 @@
 // `nextStreamEvent`, and readers for what the server sent on each stream.
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
-import { QUIC_FRAME_STREAM, QuicFrame, quicParseFrame, quicPushAck, quicPushStream } from "nish/net/quic-frame";
+import { QUIC_FRAME_STREAM, QuicFrame, quicParseFrame, quicPushStream } from "nish/net/quic-frame";
 import { QuicTransportParameters, quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QuicConnection, QuicServerConfig } from "nish/net/quic";
 import { QUIC_STREAM_END, QUIC_STREAM_ERR_RESET } from "nish/net/quic-stream";
@@ -12,7 +12,7 @@ import { leafCertificate } from "../net_tls_common/server";
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
-import { CLIENT_SCID, QcClient, qcConnect, qcDrain, qcExchange, qcHello, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcConnect, qcDrain, qcExchange, qcHello, qcPushAppAck, qcShort } from "../net_quic_conn/client";
 
 /** What a case configures: the server's limits and buffers, and what the client gives the server. */
 export class NqLimits {
@@ -114,7 +114,7 @@ export const nqAck = (p: NqPair): void => {
     return;
   }
   const ack: u8[] = [];
-  quicPushAck(ack, [n64(0), p.c.largestApp], n32(1), n64(0));
+  qcPushAppAck(ack, p.c);
   nqSend(p, ack);
 };
 

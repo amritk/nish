@@ -9,7 +9,7 @@
 // cost is the QUIC handshake's (TLS-3).
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
-import { quicPushAck, quicPushStream, quicPutDatagram, quicDatagramSize } from "nish/net/quic-frame";
+import { quicPushStream, quicPutDatagram, quicDatagramSize } from "nish/net/quic-frame";
 import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
@@ -30,7 +30,7 @@ import { fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
-import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcReadFlight, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcPushAppAck, qcReadFlight, qcShort } from "../net_quic_conn/client";
 import { NqMeter, nqMeteredDrain, nqMeteredReceive } from "../net_quic_stream/arena";
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, h3Cat, h3Frame, h3Pattern, h3Section, h3Varint } from "../net_http3/peer";
 import {
@@ -104,7 +104,7 @@ const wtMeteredServe = (s: WtArenaServer, m: NqMeter): void => {
 const wtMeteredPacket = (s: WtArenaServer, c: QcClient, payload: u8[], m: NqMeter): void => {
   const all: u8[] = [];
   if (c.largestApp >= n64(0)) {
-    quicPushAck(all, [n64(0), c.largestApp], n32(1), n64(0));
+    qcPushAppAck(all, c);
   }
   for (const b of payload) {
     all.push(b);
