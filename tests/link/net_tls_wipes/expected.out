@@ -91,9 +91,12 @@ PASS  a client's KeyUpdate asking for one back is answered under the old write k
 PASS  both traffic secrets are the next generation, written over the one they replace
 PASS  and the next-secret scratch of both directions reads zero
 PASS  abort after the update leaves every key reading zero
+PASS  connection A holds the pattern it was sent and the record it seals, borrowed from the pools
+PASS  A ends and gives every buffer back: lent() is 0
+PASS  the next borrower takes the same buffer from each pool and reads every byte zero: output, plain, scratch, reader
 PASS  after a handshake the exchange's words read zero, the handshake secret's and the ephemeral key's
 PASS  and so do the client's handshake and application secrets TlsServer handed over
 PASS  an all-zero x25519 share is refused with illegal_parameter
 PASS  and the exchange's words read zero after the refusal too
 PASS  with every other key the refused connection held
-tls wipes: 98 passed, 0 failed, 0 skipped
+tls wipes: 101 passed, 0 failed, 0 skipped

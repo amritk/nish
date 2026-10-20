@@ -611,6 +611,18 @@ const QPACK_NEW = [
   "tests/link/net_qpack_bad_window/main.ts",
 ]
 
+/** Programs new with `nish/net/router` (#485), which the reference refuses: its std/ has no such module. */
+const ROUTER_NEW = [
+  "bench/router.ts",
+  "tests/link/net_router/main.ts",
+  "tests/link/net_router_f64/main.ts",
+  "tests/link/net_router_negative_ambiguous/main.ts",
+  "tests/link/net_router_negative_duplicate/main.ts",
+  "tests/link/net_router_negative_limits/main.ts",
+  "tests/link/net_router_negative_too_long/main.ts",
+  "tests/link/net_router_negative_too_many_params/main.ts",
+]
+
 const DECLARED = [
   {
     program: "tests/link/par_map_new/main.ts",
@@ -3087,6 +3099,11 @@ const DECLARED = [
     QPACK_NEW,
     "QPACK with the static table and dynamic capacity 0",
     "a new program: it imports `nish/net/qpack`, which the reference compiler's standard library does not have"
+  ),
+  ...declareMoved(
+    ROUTER_NEW,
+    "HTTP router in nish/net/router",
+    "a new program: it imports `nish/net/router`, which the reference compiler's standard library does not have"
   ),
   {
     program: "tests/cases/str_index_of_from.ts",
