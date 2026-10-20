@@ -19,7 +19,7 @@ and #397 ended cancelled before that rule).
 | Job | Runner | What it does |
 | --- | --- | --- |
 | `test (ubuntu-latest, shard <i>/4)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard <i>/4` ([shards](#shards-and-time-limits)), then, in shard 1 only, the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
-| `test (macos-latest)` | — | **commented out** of the matrix, on six named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net (macos-latest)` runs the network runtime on a mac; `nish-cmp` is Linux-only |
+| `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net (macos-latest)` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
@@ -100,22 +100,25 @@ the failures is a compiler bug: each check read an ELF fact out of a linked
 binary instead of the property it tests. Three were ported (`lineTableOf` in
 `tests/run.js` reads the `.dSYM` the Darwin driver writes; the `--threads`
 runtime mismatch is caught as a segfault on Darwin rather than as a link
-error). The six that still hold the row out, listed with the run in the
+error). The two `runtime objects:` byte comparisons were the next two: they
+linked their two binaries at different output paths, and `LC_UUID` (next
+section) varies with the path. They now link at one path and move each binary
+aside, and `runtime-net (macos-latest)` measures the default runtime's green on
+a mac (#358). The four that still hold the row out, listed with the run in the
 comment beside `os:` in `ci.yml`, are three causes and one simulation:
 
 - the `--threads` mismatch again, in the prebuilt runtime-object gate;
 - the Mach-O debug map, read through `.debug_info` in the self-hosting `-g`
   check;
-- `LC_UUID` (next section) in `tests/self/bootstrap.js`'s `stage3 == stage2`
-  and the two `runtime objects:` byte comparisons, each of which links its two
-  binaries at different output paths;
+- `LC_UUID` in `tests/self/bootstrap.js`'s `stage3 == stage2`, which links its
+  two stages at different output paths;
 - plus one check that simulates Darwin from Linux through `NISH_UNAME_S` and
   has nothing to report on a real mac.
 
 The macOS row also skips two more checks than Linux (the runtime `.text`
 budgets are measured on `linux-x64`; `verify-binaries`'s debug-map arms need a
 toolchain this one is not). Restoring the row is the one commented line plus
-those six ports; the macOS LLVM install step is already written and guarded by
+those four ports; the macOS LLVM install step is already written and guarded by
 `runner.os`. Two bash 3.2 defects that used to stop the row first — empty
 arrays under `set -u` in `scripts/build.sh`, and `mapfile` in
 `scripts/smoke.sh` — are fixed.

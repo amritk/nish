@@ -5,7 +5,7 @@
 #       stage1 the last released nish builds, then a binary size table in the
 #       job summary, and the IR cookbook staleness check. The matrix is
 #       written for macOS too and that row is commented out; the comment beside
-#       it names the six checks that still fail there, with the run that
+#       it names the four checks that still fail there, with the run that
 #       measured them. `bootstrap` below has had darwin rows since the 0.4.0
 #       seeds, `runtime-net` runs the network runtime on a mac, and `nish-cmp`
 #       runs on the Linux rows only (.github/seed-matrix.sh says why).
@@ -140,8 +140,15 @@ jobs:
         #     the binary segfaults on its first allocation, where the matched
         #     build of the same inputs prints `alloc_smoke delta = 16`. The
         #     check names which mechanism caught it.
+        #   * Both `runtime objects: linking <case> ... gives the bytes the
+        #     sources do` checks (#358). They compared two links made to two
+        #     output paths, and LC_UUID is what ld64 varies with the path
+        #     (docs/wp10-ci.md#what-ld64-varies-measured); both now link at one
+        #     path and move each binary aside, as scripts/bootstrap.sh does.
+        #     The default runtime's is measured green on a mac by
+        #     `runtime-net (macos-latest)`; the `--threads` one is the same loop.
         #
-        # STILL RED, six checks in three causes, and none of them is this line:
+        # STILL RED, four checks in three causes, and none of them is this line:
         #
         #   1. `runtime objects: a --threads module refuses to link against the
         #      default runtime` -- the same ld64 finding as the ported one
@@ -151,15 +158,13 @@ jobs:
         #      linked program carries DWARF` -- the same Mach-O debug map, read
         #      through `.debug_info` rather than `.debug_line`. It wants
         #      `lineTableOf`.
-        #   3,4,5. `stage3 == stage2` in tests/self/bootstrap.js, and both
-        #      `runtime objects: linking <case> ... gives the bytes the sources
-        #      do` checks. All three compare two links of one input made to two
-        #      *different output paths*, and LC_UUID is what ld64 varies with
-        #      the path -- measured on both darwin rows,
-        #      docs/wp10-ci.md#what-ld64-varies-measured. That is why each
-        #      fails at identical size. scripts/bootstrap.sh already links its
-        #      comparable stages at one path; these three do not.
-        #   6. `verify-binaries: NISH_UNAME_S says on stderr that it overrode
+        #   3. `stage3 == stage2` in tests/self/bootstrap.js. It compares two
+        #      links of one input made to two *different output paths*, and
+        #      LC_UUID is what ld64 varies with the path -- measured on both
+        #      darwin rows, docs/wp10-ci.md#what-ld64-varies-measured. That is
+        #      why it fails at identical size. scripts/bootstrap.sh already
+        #      links its comparable stages at one path; this check does not.
+        #   4. `verify-binaries: NISH_UNAME_S says on stderr that it overrode
         #      the platform` -- a check that drives the script's Darwin branch
         #      from Linux and reads the sentence saying so. On a mac there is
         #      no override to report, so the check is about the simulation
@@ -178,12 +183,12 @@ jobs:
         #
         # The install half is written and has now been exercised twice: the two
         # "Install LLVM 18 + lld" steps below are guarded by `runner.os`, so
-        # restoring the row is this line plus the six checks above.
+        # restoring the row is this line plus the four checks above.
         #
         # `fail-fast: false` above is what would keep a macOS-only failure from
         # cancelling the Linux row that says whether it is the platform or the
         # change.
-        os: [ubuntu-latest] # , macos-latest -- see the six checks above
+        os: [ubuntu-latest] # , macos-latest -- see the four checks above
         # `npm test` is split four ways by `--shard` (tests/run.js, "Shards"):
         # shard 1 runs every section after the tests/link programs but WP14
         # self-hosting, and the programs and that section are dealt by their
@@ -496,7 +501,7 @@ jobs:
   # the network runtime is the part `runtime-net` covers) and `nish-cmp`,
   # which runs on the Linux rows only. The `stage3 == stage2` comparison that tests/self/bootstrap.js
   # makes is *not* the one settled here -- it links its two stages at two
-  # paths and is one of the six checks named up there.
+  # paths and is one of the four checks named up there.
   seeds:
     name: which seeds the last release attaches
     runs-on: ubuntu-latest
