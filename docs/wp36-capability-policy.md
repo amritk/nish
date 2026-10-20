@@ -11,8 +11,8 @@ program the build would have compiled without one.
 
 **The living reference is [LANGUAGE.md](LANGUAGE.md#the-capability-policy)**,
 under "Capabilities"; where this note disagrees with it, LANGUAGE.md wins.
-**Holding a running process to the same set is WP37's**, which has no note
-yet: `--sandbox`, where the native `main` wrapper confines the process with
+**Holding a running process to the same set is WP37's**, proposed in
+[wp37-os-sandbox.md](wp37-os-sandbox.md) and not built: `--sandbox`, where the native `main` wrapper confines the process with
 Landlock and seccomp to the set the compiler computed, and which is where the
 `fs.read=<dir>` scopes this package refuses (§2) would be accepted, because
 there something can enforce them.
@@ -49,8 +49,9 @@ a capability both allowed and denied, either flag with no value, and **a
 directory scope, `fs.read=<dir>`**. The compiler cannot prove which path a
 program opens — a path is a runtime string, and WP35 rules out argument-level
 precision — and nothing at run time holds the program to it yet, so a scope
-accepted here would be a promise nobody keeps. WP37 accepts the suffix together
-with `--sandbox`. The policy is not part of `nish run`'s cache key: a refused
+accepted here would be a promise nobody keeps. WP37, proposed and unbuilt,
+would accept the suffix together with `--sandbox`
+([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags)). The policy is not part of `nish run`'s cache key: a refused
 program writes no entry, and an accepted one writes the IR it would without
 the policy.
 
@@ -95,9 +96,11 @@ compile anyway, so a policy costs only the walk over the refused bits.
 
 ## 6. Out of scope
 
-- **Enforcement at run time**: WP37's `--sandbox`, confining the process to
+- **Enforcement at run time**: WP37's `--sandbox`
+  ([wp37-os-sandbox.md](wp37-os-sandbox.md)), confining the process to
   `main`'s *computed* set. A policy narrower than that set has already been
   refused here.
-- Directory scopes (`fs.read=<dir>`), refused as §2 says until WP37.
+- Directory scopes (`fs.read=<dir>`), refused as §2 says until WP37
+  ([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags)).
 - Per-dependency policies, and argument-level checks such as a literal path.
 - What C behind `ffi` does: that is `ffi`, and nothing finer.

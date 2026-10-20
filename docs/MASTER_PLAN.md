@@ -420,8 +420,10 @@ major. Whether it happens at all is still wp22 §10's open question.
    `bench/instructions.json`.
 3. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
    the process with Landlock and seccomp to the capabilities the compiler
-   computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. WP35, the
-   capability report ([wp35-capabilities.md](wp35-capabilities.md)), and
+   computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. Its note,
+   [wp37-os-sandbox.md](wp37-os-sandbox.md), is written and proposed, not
+   built. WP35, the capability report
+   ([wp35-capabilities.md](wp35-capabilities.md)), and
    WP36, the compile-time policy
    ([wp36-capability-policy.md](wp36-capability-policy.md)), are built.
 4. **WP39, the HTTP server** ([wp39-http-server.md](wp39-http-server.md)):
