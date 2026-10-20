@@ -567,12 +567,25 @@ exact bytes, and to the `x-powered-by` header on `query`.
 round's order, it spawns the server pinned to CPU 0 and asks `GET /` every
 millisecond until one answers; it reports the median time from spawn to that
 first answer, the spread, and the RSS at that moment. It runs with the other
-scenarios when `--only` is not given, and needs no wrk. A Nish server's
-startup includes building its whole pool, so it moves with `--slots`. On the
-commit that adds it, on a shared four-vCPU VM and two rounds (eight starts a
-build), `nish` took 51.7 ms and 65.3 MB at 16,384 slots, with its byte-identical
-copy 3.8% away; at `--slots 1024` it took 7.4 ms and 5.8 MB (the copy 18.7%
-away), and Go's `net/http`, which allocates per connection, 9.6 ms and 7.4 MB.
+scenarios when `--only` is not given, and needs no wrk. On the commit that
+added the scenario, a Nish server built its whole pool before it listened, so
+its startup moved with `--slots`: 51.7 ms and 65.3 MB at 16,384 slots, 7.4 ms
+and 5.8 MB at 1,024, against 9.6 ms and 7.4 MB for Go's `net/http`, which
+allocates per connection. Now an `Http1Server` builds a slot's connection on
+the first accept into it, the way Go does, and its start-up is the read
+scratch and the slot bookkeeping. Five rounds, 20 starts a build, on a shared
+four-vCPU VM, the base being `std/net/http1-server.ts` before that change:
+
+| slots | base | base's copy | lazy slots | its copy |
+| ---: | ---: | ---: | ---: | ---: |
+| 16,384 | 36.2 ms, 65.3 MB | 36.2 ms, 65.3 MB | 4.7 ms, 2.6 MB | 4.6 ms, 2.6 MB |
+| 1,024 | 6.2 ms, 5.8 MB | | 5.3 ms, 1.8 MB | 5.0 ms, 1.8 MB |
+
+Under load, the peak RSS at 500 keep-alive connections fell from 65 MB to
+4 MB on `ping` and `query` and from 67 MB to 7 MB on `body`: the slots the
+connections never reached are never built. Throughput did not move outside the
+noise band. Over seven rounds, the two byte-identical copies differed by up to
+37% in a scenario, and the lazy build's medians fell inside that band.
 
 **Measured on the commit that adds this section.** x86-64, four-core Intel
 Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3, wrk 4.1.0, `-t3`.
@@ -713,8 +726,11 @@ With `Connection: close`, `nish` is above the next twin, uws, by 17.0% and
 20.8% (bands 6.7% and 3.1%). In those rows uws and bun also took the read
 errors of note 4.
 
-`nish`'s 65 MB is the 16,384-slot pool it builds at start-up (the table above
-gives 64 MB). It does not grow with the 8,000 idle connections. Every twin's
+`nish`'s 65 MB was the 16,384-slot pool it built at start-up when this table
+was measured (the table above gives 64 MB). It did not grow with the 8,000 idle
+connections. A pool now builds a slot's connection on the first accept into
+it, so the pool's share follows the connections it has held (see `startup`
+above). Every twin's
 peak grows with them, except nginx, which stays at 14 MB.
 
 **What was measured, header by header.** Every server sends a `Date` field:
