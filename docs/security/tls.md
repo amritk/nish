@@ -454,15 +454,18 @@ kept as written.
 `net_tls_psk_wire` and `net_tls_psk_wire_f64` (the codec's half of the
 fallback table and RFC 8448's resumption values), `net_tls_ticket` and
 `net_tls_ticket_f64` (the seal, the open, the keys' rotation and the strike
-register), and `net_tls_resume` and `net_tls_resume_f64`, 145 checks: rows 1
+register), and `net_tls_resume` and `net_tls_resume_f64`, 148 checks: rows 1
 to 18 of the fallback and abort table, each with a negative case, and four
 offers of two identities where the first is refused (rows 4, 5 and 6 then a
 ticket that resumes, and a replay then none); the PSK, early secret, binder
 key, salt, opened PSK and handshake secret read back as zero after rows 1 to
 9 and 17, and the resumption master secret after rows 9 and 17 and once rows
-2 to 7 are issued their tickets; every ServerHello's x25519 share, resumed
-or a ticket-offering fallback, equal to the server's own public key and not
-the zero scalar's; `issue` pinned (a second call answers false and writes
+2 to 7 are issued their tickets; the ephemeral key read back as zero once
+the ServerHello is written, after a resumed run (row 1) and a
+ticket-offering fallback (row 2), which keeping it on every ticket-enabled
+or every resumed connection fails; every ServerHello's x25519 share, resumed,
+a ticket-offering fallback or resumed after a HelloRetryRequest (row 15),
+equal to the server's own public key and not the zero scalar's; `issue` pinned (a second call answers false and writes
 nothing, `TLS_RECORD_TICKET` drops, a lifetime of 7200, the nonce `[0]`, a
 `ticket_age_add` that differs across connections, and no ticket for a server
 name over 255 bytes, whose resumption master secret is zeroed); a resumed

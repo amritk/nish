@@ -19,6 +19,7 @@ PASS  row 1: one strike is live
 PASS  row 1: a resumed connection is issued a ticket too
 PASS  row 1: its ticket_age_add is not the first connection's
 PASS  row 1: a resumed ServerHello carries the server's own x25519 share
+PASS  wipe: a resumed handshake leaves the ephemeral key zero once its ServerHello is written
 PASS  wipe: a resumed handshake leaves the PSK, early secret, binder key, salt and opened PSK zero
 PASS  wipe: and the handshake secret and resumption master secret
 PASS  row 1: a crafted ticket resumes
@@ -31,6 +32,7 @@ PASS  row 1: and issue writes it none
 PASS  wipe: and its resumption master secret is zero
 PASS  row 2: a tampered ticket: full handshake
 PASS  row 2: and its ServerHello carries the server's own x25519 share
+PASS  wipe: row 2, a fallback from a ticket offer, leaves the ephemeral key zero once its ServerHello is written
 PASS  wipe: row 2 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
 PASS  wipe: row 2, issued its ticket, leaves the resumption master secret zero
 PASS  row 2: a truncated ticket: full handshake
@@ -101,6 +103,7 @@ PASS  row 14: no signature_algorithms, a ticket that does not open: missing_exte
 PASS  row 14: not the server's scheme, a ticket that does not open: handshake_failure
 PASS  row 14 negative: no signature_algorithms with a ticket that opens resumes
 PASS  row 15: after a HelloRetryRequest, binders over both hellos and the retry resume
+PASS  row 15: and its ServerHello carries the server's own x25519 share
 PASS  row 15 negative: a binder over the second hello alone: decrypt_error
 PASS  row 16: early_data is ignored and the handshake resumes
 PASS  row 16: a 0-RTT record after it: bad_record_mac
@@ -143,4 +146,4 @@ PASS  tcp: the same ticket again falls back to a full handshake
 PASS  tcp: and that fallback's ServerHello carries the server's own x25519 share
 PASS  tcp: resume on a slot it does not hold answers TLS_RECORD_DONE
 PASS  tcp: and so does issue
-tls resume: 145 passed, 0 failed, 0 skipped
+tls resume: 148 passed, 0 failed, 0 skipped

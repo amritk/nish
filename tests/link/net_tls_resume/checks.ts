@@ -123,6 +123,7 @@ const rowOne = (t: Suite): void => {
   t.ok("row 1: a resumed connection is issued a ticket too", again.ticket.ok);
   t.ok("row 1: its ticket_age_add is not the first connection's", again.ticket.ageAdd !== first.ticket.ageAdd);
   t.ok("row 1: a resumed ServerHello carries the server's own x25519 share", honestShare(again.share));
+  t.ok("wipe: a resumed handshake leaves the ephemeral key zero once its ServerHello is written", zeroed(conn.tls.ephemeral));
   t.ok("wipe: a resumed handshake leaves the PSK, early secret, binder key, salt and opened PSK zero", resumeWiped(conn));
   t.ok("wipe: and the handshake secret and resumption master secret", zeroed(conn.tls.secrets().handshake) && zeroed(conn.tls.secrets().resumption));
 
@@ -166,6 +167,7 @@ const rowsTwoThree = (t: Suite): void => {
   const tamperedRun: Run = runAt(conn, ring, offerCrafted(tampered), START);
   t.ok("row 2: a tampered ticket: full handshake", isFull(tamperedRun));
   t.ok("row 2: and its ServerHello carries the server's own x25519 share", honestShare(tamperedRun.share));
+  t.ok("wipe: row 2, a fallback from a ticket offer, leaves the ephemeral key zero once its ServerHello is written", zeroed(conn.tls.ephemeral));
   t.ok("wipe: row 2 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero", handshakeWiped(conn));
   t.ok("wipe: row 2, issued its ticket, leaves the resumption master secret zero", issuedWiped(conn, ring));
   t.ok("row 2: a truncated ticket: full handshake", isFull(runAt(newConn(), ring, offerCrafted(range(good, ZERO, toI32(good.length) - 1)), START)));
@@ -346,7 +348,9 @@ const rowsFifteenToEighteen = (t: Suite): void => {
   const ring = new Ring(64);
   const retry: Offer = offerCrafted(plain(ring));
   retry.retry = true;
-  t.ok("row 15: after a HelloRetryRequest, binders over both hellos and the retry resume", isResumed(runAt(newConn(), ring, retry, START)));
+  const retried: Run = runAt(newConn(), ring, retry, START);
+  t.ok("row 15: after a HelloRetryRequest, binders over both hellos and the retry resume", isResumed(retried));
+  t.ok("row 15: and its ServerHello carries the server's own x25519 share", honestShare(retried.share));
   const alone: Offer = offerCrafted(plain(ring));
   alone.retry = true;
   alone.bindAlone = true;
