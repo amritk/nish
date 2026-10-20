@@ -33,11 +33,12 @@ func main() {
 	case "sha512":
 		once = func() []byte { d := sha512.Sum512(msg); return d[:] }
 	case "hmac-sha256":
-		mac := hmac.New(sha256.New, inp.key)
-		once = func() []byte { mac.Reset(); mac.Write(msg); return mac.Sum(nil) }
+		// Keyed per message, as every other twin's one-shot HMAC is.
+		once = func() []byte { mac := hmac.New(sha256.New, inp.key); mac.Write(msg); return mac.Sum(nil) }
 	case "hkdf-sha256":
+		info := string(inp.aad)
 		once = func() []byte {
-			out, err := hkdf.Key(sha256.New, msg, inp.key, string(inp.aad), 42)
+			out, err := hkdf.Key(sha256.New, msg, inp.key, info, 42)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "go: hkdf: %v\n", err)
 				os.Exit(1)

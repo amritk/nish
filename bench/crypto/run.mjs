@@ -44,6 +44,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { compilerFrom } from "../compiler.mjs"
+import { roundOrder, roundsFor } from "../json-compare/rounds.mjs"
 import { sideOf, times3 } from "../par-reading.mjs"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -624,16 +625,17 @@ const calibrate = (variant, kernel, size, target) => {
 }
 
 /**
- * Every variant once per round, the order rotated by one each round:
- * `{ id: [ns, …] }`, and the checksums seen, `{ id: Set }`. A deterministic
- * program prints one checksum every round, so a set of two is a mismatch.
+ * Every variant once per round, in json-compare's balanced order (rotated,
+ * reversed every other block, the rounds rounded up so every variant takes
+ * every position equally often): `{ id: [ns, …] }`, and the checksums seen,
+ * `{ id: Set }`. A deterministic program prints one checksum every round, so a
+ * set of two is a mismatch.
  */
 const interleave = (variants, kernel, size, iterations, rounds) => {
   const times = new Map(variants.map((v) => [v.id, []]))
   const sums = new Map(variants.map((v) => [v.id, new Set()]))
-  for (let round = 0; round < rounds; round++) {
-    for (let i = 0; i < variants.length; i++) {
-      const v = variants[(i + round) % variants.length]
+  for (let round = 0; round < roundsFor(variants.length, rounds); round++) {
+    for (const v of roundOrder(variants, round)) {
       const r = runOnce(v, kernel, size, iterations)
       if (r.error !== undefined) {
         console.error(`crypto: ${v.id} ${kernel} ${size} failed: ${r.error}`)
@@ -675,7 +677,8 @@ if (opts.validate) {
     for (const { kernel, size } of checks) {
       const key = `${kernel.name} ${size} ${VALIDATE_ITERATIONS}`
       const want = expected.get(key)
-      const runners = runnersOf(family, kernel, variants)
+      // nish-copy is nish's bytes: it can only print nish's checksum.
+      const runners = runnersOf(family, kernel, variants).filter((v) => v.id !== "nish-copy")
       const sums = new Map()
       for (const v of runners) {
         const r = runOnce(v, kernel.name, size, VALIDATE_ITERATIONS)
@@ -770,8 +773,8 @@ if (opts.validate) {
         }
         // The fastest round of each: a shared machine's noise only ever adds time.
         // A short ratio is measured once more, longer, before it counts.
+        const iterations = calibrate(fast, kernel, size, TARGET_NS / 2)
         const measure = (rounds) => {
-          const iterations = calibrate(fast, kernel, size, TARGET_NS / 2)
           const { times } = interleave([fast, slow], kernel, size, iterations, rounds)
           return Math.min(...times.get(slow.id)) / Math.min(...times.get(fast.id))
         }
@@ -884,6 +887,9 @@ const machine = () => {
   return `${model} (${os.arch()}, ${os.cpus().length} CPUs); flags: ${shown}`
 }
 
+/** The noise band of a row: how far Nish's median is from its byte-identical copy's. */
+const bandOf = (row) => Math.abs(row.medians.get("nish") / row.medians.get("nish-copy") - 1)
+
 /** A quotient read against the noise band: `1.23x slower (rust-soft)`, or the band's word when within it. */
 const verdict = (row, ids) => {
   const have = ids.filter((id) => row.medians.has(id))
@@ -891,13 +897,11 @@ const verdict = (row, ids) => {
     return "—"
   }
   const best = have.reduce((a, b) => (row.medians.get(b) < row.medians.get(a) ? b : a))
-  const band = Math.abs(row.medians.get("nish") / row.medians.get("nish-copy") - 1)
   const quotient = row.medians.get("nish") / row.medians.get(best)
-  const side = sideOf(quotient, band)
+  const side = sideOf(quotient, bandOf(row))
   return `${times3(quotient)} ${side === "within" ? "within the band" : side} (${best})`
 }
 
-const ASM_IDS = ["openssl", "go", "rust", "node"]
 const PORTABLE_COLUMN_IDS = Object.values(PORTABLE_IDS)
 const lines = [
   "<!-- crypto:begin -->",
@@ -909,7 +913,7 @@ const lines = [
   "",
   `Machine: ${machine()}.`,
   "",
-  `Toolchains: Nish ${tools.nish.replace(/^nish /, "")}; ${tools.cc?.replace(/\s*\(.*$/, "") ?? "no C compiler"}${tools.openssl ? `, ${tools.openssl}` : ""}; ${tools.go ?? "no Go"}; ${tools.rustc ?? "no Rust"}; Node ${tools.node ?? "—"}. ${opts.rounds} round(s).`,
+  `Toolchains: Nish ${tools.nish.replace(/^nish /, "")}; ${tools.cc?.replace(/\s*\(.*$/, "") ?? "no C compiler"}${tools.openssl ? `, ${tools.openssl}` : ""}; ${tools.go ?? "no Go"}; ${tools.rustc ?? "no Rust"}; Node ${tools.node ?? "—"}. ${opts.rounds} round(s) asked, each case rounded up to a multiple of twice its columns.`,
   "",
 ]
 for (const { family, variants, rows } of sections) {
@@ -925,12 +929,10 @@ for (const { family, variants, rows } of sections) {
       return ns === undefined ? "—" : fmtRate(rateOf(row.kernel.unit, row.size, row.iterations, ns))
     }
     lines.push(
-      `| ${row.kernel.name} | ${fmtSize(row.size)} | ${row.kernel.unit} | ${COLUMNS.map(([id]) => cell(id)).join(" | ")} | ${verdict(row, PORTABLE_COLUMN_IDS)} | ${verdict(row, ASM_IDS)} |`
+      `| ${row.kernel.name} | ${fmtSize(row.size)} | ${row.kernel.unit} | ${COLUMNS.map(([id]) => cell(id)).join(" | ")} | ${verdict(row, PORTABLE_COLUMN_IDS)} | ${verdict(row, TWINS)} |`
     )
   }
-  const bands = rows
-    .filter((r) => r.medians.has("nish-copy"))
-    .map((r) => Math.abs(r.medians.get("nish") / r.medians.get("nish-copy") - 1))
+  const bands = rows.filter((r) => r.medians.has("nish-copy")).map(bandOf)
   lines.push("")
   if (bands.length > 0) {
     lines.push(

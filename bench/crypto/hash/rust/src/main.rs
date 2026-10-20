@@ -22,7 +22,6 @@ fn main() {
     };
     let mut inp = gen::inputs(&kernel, size, key_len, 0, aad_len, size);
     let base = [inp.msg[0], inp.msg[1], inp.msg[2], inp.msg[3]];
-    let mac = Hmac::<Sha256>::new_from_slice(&inp.key).unwrap_or_else(|_| std::process::exit(1));
     let mut okm = [0u8; 42];
     let mut sum = gen::FOLD_START;
     let started = Instant::now();
@@ -32,7 +31,9 @@ fn main() {
             "sha256" => gen::fold(sum, &Sha256::digest(&inp.msg)),
             "sha512" => gen::fold(sum, &Sha512::digest(&inp.msg)),
             "hmac-sha256" => {
-                let mut m = mac.clone();
+                // Keyed per message, as every other twin's one-shot HMAC is.
+                let mut m = Hmac::<Sha256>::new_from_slice(&inp.key)
+                    .unwrap_or_else(|_| std::process::exit(1));
                 m.update(&inp.msg);
                 gen::fold(sum, &m.finalize().into_bytes())
             }

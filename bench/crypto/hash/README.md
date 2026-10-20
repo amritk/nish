@@ -24,9 +24,13 @@ HMACs, whatever the IKM's length.
 | --- | --- | --- |
 | `main.ts` | Nish | `sha256` and `sha512` from `nish/crypto/sha256` and `nish/crypto/sha512`, `hmacSha256` from `nish/crypto/hmac`, and `hkdfExtractSha256` then `hkdfExpandSha256` from `nish/crypto/hkdf`. |
 | `openssl.c` | OpenSSL 3 | `EVP_Digest` with the digest fetched once; an `EVP_MAC` context re-initialised per message; `EVP_KDF_derive`, with the KDF fetched once. The one-shot `HMAC()` and the `EVP_PKEY` HKDF route would fetch the algorithm on every call, timing OpenSSL's lookup rather than its hash. |
-| `go/` | Go's standard library | `sha256.Sum256`, `sha512.Sum512`, one `hmac.New` with `Reset` per message, and `hkdf.Key` (Go 1.24's `crypto/hkdf`). It has no dependencies. |
-| `rust/` | RustCrypto | `sha2` 0.11.1, `hmac` 0.13.0 and `hkdf` 0.13.0, pinned exactly in `cargo.toml` and locked. The keyed `Hmac` is cloned per message. |
+| `go/` | Go's standard library | `sha256.Sum256`, `sha512.Sum512`, `hmac.New` per message, and `hkdf.Key` (Go 1.24's `crypto/hkdf`). It has no dependencies. |
+| `rust/` | RustCrypto | `sha2` 0.11.1, `hmac` 0.13.0 and `hkdf` 0.13.0, pinned exactly in `cargo.toml` and locked. `Hmac::new_from_slice` per message. |
 | `node.mjs` | `node:crypto` | `createHash`, `createHmac` and `hkdfSync`. |
+
+Every twin keys its HMAC once per message, as Nish's one-shot `hmacSha256`,
+Node's `createHmac` and OpenSSL's re-initialised `EVP_MAC` do: reusing a keyed
+state would skip two of the five compressions a 64-byte HMAC costs.
 
 ## The portable columns
 

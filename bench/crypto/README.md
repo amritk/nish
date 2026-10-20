@@ -182,10 +182,11 @@ with both a default column and a portable one, `--validate` does two things:
    when it is a separate binary (Go and Rust). This step is exact: it shows the
    tag or flag reached the compiler. A misspelt `--cfg` is silently ignored, and
    it would produce the same bytes.
-2. It times both columns at `portableProof` in 5 interleaved rounds and
+2. It times both columns at `portableProof` in 5 interleaved rounds (8, once
+   rounded up as below) and
    compares their fastest rounds: noise on a shared machine only ever adds
    time. The portable column must take at least `portableMinRatio` times as
-   long. A short result is measured once more over 11 rounds before it counts
+   long. A short result is measured once more over 11 rounds (12) before it counts
    as `NOT PORTABLE`.
 
 `portableProof`'s size must be one of that kernel's `sizes`. A column the proof
@@ -207,8 +208,11 @@ Each case (a kernel and a size) works in three steps:
 
 1. Calibrate one iteration count on its first column, so that a run takes
    about 200 ms.
-2. Run every column for `--rounds` rounds at that count, rotating the order by
-   one place each round.
+2. Run every column for `--rounds` rounds at that count, in
+   `bench/json-compare/rounds.mjs`'s order: rotated one place each round and
+   reversed on every other block, with the rounds rounded up to a multiple of
+   twice the columns, so every column takes every place equally often and Nish
+   and its copy take turns going first.
 3. Report the median of each column's own `ns` lines. A checksum, in any
    round, that differs from the first column's fails the run, and nothing is
    written.
