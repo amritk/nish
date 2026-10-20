@@ -74,7 +74,8 @@ export const main = (): i32 => {
   answers in when they hold less, so the array you get back holds strings you
   own. They are freed like anything else your function allocates: a function
   that runs a map and returns only a number gives the result and its strings
-  back when it returns, and a map may run inside
+  back when it returns, even when it passes the strings to a helper that only
+  reads them, and a map may run inside
   [`using a = arena()`](../language/memory.md#freeing-a-batch-yourself-using-a--arena)
   unless its body answers arrays. An array of strings, an array of arrays,
   an object, a `Map` or a `Set` is refused: copying one would mean following
@@ -88,6 +89,40 @@ export const main = (): i32 => {
   sixty-four. For that to be the fold you meant, `f` must be associative and
   `identity` its identity: `(a, b) => a - b`, or `+` with an identity of `1`,
   is refused.
+
+A `string | null` field shared through a `Mutex` takes a string or `null`.
+The `Mutex` keeps its own copy of a stored string, and storing `null` frees it;
+read the field back through `?.`:
+
+```ts nish:ok
+import { Mutex, scope } from "nish/threads";
+
+class Last {
+  name: string | null = null;
+}
+
+const record = (last: Mutex<Last>, i: i32): void => {
+  using g = last.lock();
+  if (i % 2 === 0) {
+    g.value.name = `task ${i}`;
+  } else {
+    g.value.name = null; // the copy the slot held is freed
+  }
+};
+
+export const main = (): i32 => {
+  const last = new Mutex<Last>(new Last());
+  {
+    using s = scope();
+    s.spawn(() => record(last, 2));
+  }
+  using g = last.lock();
+  console.log(`${g.value.name?.length ?? -1}`); // 6
+  g.value.name = null;
+  console.log(`${g.value.name?.length ?? -1}`); // -1
+  return 0;
+};
+```
 
 **What is refused, and why.** An `f` that prints, stores through its
 argument or writes anything else its caller can see is refused at the call
@@ -519,8 +554,9 @@ refused too (NL2536), since `this` or a type parameter is a way for the guard
 to be kept, and so is handing it twice in one call. Binding, storing,
 returning or walking an object read through the guard, `const c = g.value`, is
 refused (NL2467); storing anything but a number, a `boolean`, an enum or a
-`string` into it is refused (NL2468), and so is storing `null` (NL2537), which has
-no string to copy into the `Mutex`.
+`string` into it is refused (NL2468). `null` is stored only into a
+`string | null` slot; into a slot that holds an object, `next: Link | null`,
+it is refused (NL2537), since a guard stores no object.
 A guard bound with `const` would never be released (NL2465). A second lock
 inside a guard's block is refused because two tasks each holding one lock and
 waiting for the other would wait forever.

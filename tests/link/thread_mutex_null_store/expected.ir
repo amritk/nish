@@ -1,0 +1,2 @@
+call i8* @nish_guard_keep(
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef)

@@ -226,6 +226,9 @@ export class AnalysisUnit {
 /** What a function does with one pointer-typed parameter: a struct (`this` included) or an array. */
 export class PointerParamFacts {
   name: string
+  /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
+  passedToCallees: string[]
+  passedToIndices: i32[]
   /** `sizeof` of the pointee, for `dereferenceable`; 0 when it is not emitted (arrays). */
   size: i32
   /** The alignment the pointer is guaranteed to have; see `pointerAlign`. */
@@ -262,9 +265,13 @@ export class PointerParamFacts {
    * the caller's own handed here may hold anything (`DIRT_CALL`).
    */
   polluted: boolean
-  /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
-  passedToCallees: string[]
-  passedToIndices: i32[]
+  /**
+   * A `string[]` parameter none of whose elements the function keeps past the
+   * call or hands back (`freeElementParams` in `src/escape.ts`), settled with
+   * the fresh-element fixpoint (`markFreshElements`). A caller's listing
+   * passed here is not handed on, so its frame may still release it.
+   */
+  elementsFree: boolean
 
   constructor(name: string, size: i32, align: i32) {
     this.name = name
@@ -279,6 +286,7 @@ export class PointerParamFacts {
     this.polluted = false
     this.passedToCallees = []
     this.passedToIndices = []
+    this.elementsFree = false
   }
 }
 
@@ -3932,7 +3940,8 @@ const analyzeInstanceEscapes = (
 
 /**
  * Record in `known` each function whose result now says it returns fresh
- * elements or fills a parameter; answer the new ones.
+ * elements, fills a parameter or keeps no element of one; answer the new
+ * ones.
  */
 const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: FactsTable): StringSet => {
   const added = new StringSet()
@@ -3946,6 +3955,15 @@ const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: Facts
     if (result !== null && f !== null && result.fillsParam >= 0 && f.fillsParam < 0) {
       f.fillsParam = result.fillsParam
       added.add(sig.name)
+    }
+    if (result !== null && f !== null) {
+      for (const name of result.freeElementParams) {
+        const pointer = f.pointerParam(name)
+        if (pointer !== null && !pointer.elementsFree) {
+          pointer.elementsFree = true
+          added.add(sig.name)
+        }
+      }
     }
   }
   return added
