@@ -273,6 +273,41 @@ const full = (t: Suite): void => {
   t.ok("the second gets no answer, and is counted", toI32(second.c.datagrams.length) === n32(0) && loop.server.refused >= n32(1));
 };
 
+/**
+ * A server builds a slot on the first Initial accepted into it and keeps it:
+ * none before the first client, one per slot ever busy after, and a slot
+ * released is taken again before one never built. A slot never built holds
+ * nothing, and the server refuses exactly when every slot is busy.
+ */
+const lazy = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(1024), n32(0));
+  const server: Http3Server = loop.server;
+  t.ok("a server of 1,024 slots has built none of them", toI32(server.quics.length) === n32(0) && toI32(server.conns.length) === n32(0) && toI32(server.addresses.length) === n32(0));
+  t.ok("and a slot never built holds nothing, nor counts as busy", !server.holds(n32(5)) && server.busy() === n32(0) && server.size() === n32(1024));
+  const first: H3Peer = h3WireConnect(server, loop.port, limits);
+  t.ok("the first client builds one slot, and takes it", first.conn.handshakeComplete && toI32(server.quics.length) === n32(1) && server.busy() === n32(1) && server.holds(n32(0)));
+  const second: H3Peer = h3WireConnect(server, loop.port, limits);
+  t.ok("the second builds the next", second.c.datagrams.length > 0 && toI32(server.quics.length) === n32(2) && server.holds(n32(1)) && server.busy() === n32(2));
+  server.connection(n32(0)).goaway();
+  server.touch(n32(0));
+  first.settle();
+  t.ok("the first, closed, frees its slot and keeps it built", !server.holds(n32(0)) && server.busy() === n32(1) && toI32(server.quics.length) === n32(2));
+  const third: H3Peer = h3WireConnect(server, loop.port, limits);
+  t.ok("a third takes the slot released, building nothing", third.c.datagrams.length > 0 && server.holds(n32(0)) && toI32(server.quics.length) === n32(2));
+  const bound: Http3Connection = server.connection(n32(3));
+  t.ok("asking for a slot not built builds it and those before it, and takes none", toI32(server.quics.length) === n32(4) && server.busy() === n32(2) && !server.holds(n32(3)));
+  t.ok("and the connection bound up front is the one the slot keeps", bound === server.connection(n32(3)) && server.quic(n32(3)) === server.quics[3]);
+  server.stop();
+  const pair = new LoopServer(h3QuicConfig(limits), n32(2), n32(0));
+  h3WireConnect(pair.server, pair.port, limits);
+  h3WireConnect(pair.server, pair.port, limits);
+  t.ok("a server of two slots takes two clients and refuses none", pair.server.busy() === n32(2) && pair.server.refused === n32(0) && toI32(pair.server.quics.length) === n32(2));
+  const late: H3Peer = h3WireConnect(pair.server, pair.port, limits);
+  t.ok("the third, with both busy, is refused and counted, and builds nothing", toI32(late.c.datagrams.length) === n32(0) && pair.server.refused === n32(1) && toI32(pair.server.quics.length) === n32(2));
+  pair.server.stop();
+};
+
 /** What one `receive` of the datagram `d`, sent from `fd`, keeps in the arena, measured in a fresh chunk. */
 const receiveCost = (loop: LoopServer, fd: i32, to: u8[], d: u8[], now: i64): i64 => {
   udpSendTo(fd, d, n32(0), toI32(d.length), to, n32(0), n32(0));
@@ -631,4 +666,5 @@ export const loopbackChecks = (t: Suite): void => {
   full(t);
   reused(t);
   idle(t);
+  lazy(t);
 };

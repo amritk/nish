@@ -71,6 +71,7 @@ reference: where one disagrees with LANGUAGE.md, LANGUAGE.md wins.
 | [wp43-http-app-layer.md](wp43-http-app-layer.md) | In progress. The HTTP application layer: what goes into `std/net` (a router, one handler interface across HTTP/1.1, 2 and 3, static files, compression) and what stays an example, and the order. Stage 1, `nish/net/router`, is built: method and path to a route index, with ambiguity refused when a route is added. |
 | [wp44-streaming-files.md](wp44-streaming-files.md) | Proposed, design only. Streaming file reads for #710: `fileOpen`, `fileReadAt`, `fileSize` and `fileClose` over a plain `i32` descriptor, positional and allocation-free, their Node and WASI readings, `fs.read`, the memory rules, and the questions left for the owner. |
 | [wp45-name-resolution.md](wp45-name-resolution.md) | Proposed. Name resolution for `nish:net`: `getaddrinfo`, a DNS stub resolver in `std/net/dns`, or both, weighed on capability, blocking and WASI; recommends the stub resolver alone, its message parser apart so it builds on wasm32, and the stages. |
+| [wp46-long-running-memory.md](wp46-long-running-memory.md) | Proposed. Memory for programs that do not exit: regions (`nish:region`), a safe arena reset and reference counting weighed on a measured session churn, the interactions with secrets, `nish:net` slot buffers, scopes, tasks and wasm, and the recommendation — regions — in three stages. |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
