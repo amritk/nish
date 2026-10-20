@@ -76,6 +76,41 @@ export const urlFuzzVerdict = (text) => {
     if (JSON.stringify(got) !== JSON.stringify(want)) {
       bad.push(`${where}: pairs ${JSON.stringify(got)}, URLSearchParams ${JSON.stringify(want)}`)
     }
+    // urlDecode: the strict bytes where they are UTF-8, as decodeURIComponent reads them.
+    let decWant = "null"
+    try {
+      decWant = Buffer.from(decodeURIComponent(escaped), "utf8").toString("hex")
+    } catch {
+      decWant = "null"
+    }
+    if (strictWant !== null) {
+      decWant = "null"
+    }
+    if (c.decode !== decWant) {
+      bad.push(`${where}: urlDecode gave ${c.decode}, decodeURIComponent ${decWant}`)
+    }
+    // urlQueryGet on the value `v=` + the input up to its first `&`: strict form
+    // decoding, null where it is malformed or not UTF-8, else URLSearchParams.get.
+    const value = s.split("&")[0]
+    let getWant = "null"
+    if (!/%(?![0-9A-Fa-f]{2})|%00/.test(value)) {
+      const bytes = Buffer.from(
+        value.replace(/%([0-9A-Fa-f]{2})|\+/g, (_m, h) =>
+          h === undefined ? " " : String.fromCharCode(Number.parseInt(h, 16))
+        ),
+        "latin1"
+      ).toString("hex")
+      if (isUtf8(bytes)) {
+        const param = new URLSearchParams(`v=${escaped}`).get("v")
+        getWant = Buffer.from(param ?? "", "utf8").toString("hex")
+        if (param === null || getWant !== bytes) {
+          bad.push(`${where}: URLSearchParams.get ${JSON.stringify(param)}, the strict form bytes ${bytes}`)
+        }
+      }
+    }
+    if (c.get !== getWant) {
+      bad.push(`${where}: urlQueryGet gave ${c.get}, want ${getWant}`)
+    }
     if (c.end !== 0) {
       bad.push(`${where}: the iterator ended with ${c.end}`)
     }
@@ -86,7 +121,16 @@ export const urlFuzzVerdict = (text) => {
     const f = line.split(" ")
     if (f[0] === "I") {
       finish()
-      pending = { input: f[1], strict: 0, strictHex: "", loose: "", pairs: [], end: null }
+      pending = {
+        input: f[1],
+        strict: 0,
+        strictHex: "",
+        loose: "",
+        pairs: [],
+        end: null,
+        decode: null,
+        get: null,
+      }
     } else if (pending === null) {
       // A line before the first input belongs to no case.
     } else if (f[0] === "S") {
@@ -98,6 +142,10 @@ export const urlFuzzVerdict = (text) => {
       pending.pairs.push([f[1], f[2]])
     } else if (f[0] === "E") {
       pending.end = Number(f[1])
+    } else if (f[0] === "D") {
+      pending.decode = f[1]
+    } else if (f[0] === "G") {
+      pending.get = f[1]
     }
   }
   finish()

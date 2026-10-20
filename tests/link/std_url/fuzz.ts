@@ -10,6 +10,8 @@
 //   L <hex>                        lenient | form | allow-NUL
 //   P <key hex> <value hex or !>   each pair, both decoded as L is
 //   E <the iterator's last answer>
+//   D <hex or null>                urlDecode of the input as a string, flags 0
+//   G <hex or null>                urlQueryGet("/?v=" + the input, "v")
 import { Rng } from "nish/random"
 import {
   URL_DECODE_ALLOW_NUL,
@@ -19,16 +21,20 @@ import {
   UrlQuery,
   UrlQueryLimits,
   percentDecode,
+  urlDecode,
+  urlQueryGet,
 } from "nish/net/url"
 
 const ALPHABET: string = "%%%%0123456789aAbBcCdDeEfFgz+&&==/x"
 /**
  * UTF-8 sequences in hex, space-separated: valid two-, three- and four-byte
- * ones, then an overlong `/`, a surrogate, a code point past U+10FFFF, a lone
- * continuation, a truncated three-byte lead, a lead with an ASCII byte after
- * it, and 0xFF.
+ * ones, each at the edge of its lead's range, then overlong forms (`C0`, `C1`,
+ * `E0 80..9F`, `F0 80..8F`), a surrogate, code points past U+10FFFF, a lone
+ * continuation, truncated two-, three- and four-byte leads, a lead with an
+ * ASCII byte after it, and 0xFF.
  */
-const SEQUENCES: string = "c3a9 c280 e282ac efbfbd f09f9880 f48fbfbf c0af e080af eda080 f4908080 80 e282 c341 ff"
+const SEQUENCES: string =
+  "c3a9 c280 dfbf e0a080 e282ac ed9fbf efbfbd f0908080 f09f9880 f48fbfbf c0af c1bf e080af e09fbf f08fbfbf eda080 f4908080 f5808080 80 c3 e282 f09f98 c341 e2c3a9 ff"
 /** The most bytes one input step writes: a four-byte sequence, escaped. */
 const STEP_MAX: i32 = 12
 const STEPS: i32 = 16
@@ -61,6 +67,22 @@ const hexDigit = (v: i32, upper: i32): i32 => {
 const looseHex = (src: u8[], off: i32, len: i32, out: u8[]): string => {
   const n: i32 = percentDecode(src, off, len, out, 0, LOOSE)
   return n >= 0 ? hexOf(out, 0, n) : `err${n}`
+}
+
+/** A string's bytes as hex, or `null`. */
+const stringHex = (s: string | null): string => {
+  if (s === null) {
+    return "null"
+  }
+  const parts: string[] = []
+  let i: i32 = 0
+  while (i < toI32(s.length)) {
+    const b: i32 = toI32(s.charCodeAt(i))
+    parts.push(DIGITS.substring(b >> 4, (b >> 4) + 1))
+    parts.push(DIGITS.substring(b & 15, (b & 15) + 1))
+    i += 1
+  }
+  return parts.join("")
 }
 
 export const main = (): i32 => {
@@ -144,6 +166,9 @@ export const main = (): i32 => {
       kind = q.next()
     }
     lines.push(`E ${kind}`)
+    const text: string = String.fromBytes(src, 0, len)
+    lines.push(`D ${stringHex(urlDecode(text, 0))}`)
+    lines.push(`G ${stringHex(urlQueryGet("/?v=" + text, "v"))}`)
     c += 1
   }
   console.log(lines.join("\n"))

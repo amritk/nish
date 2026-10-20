@@ -1095,6 +1095,27 @@ const bytesOf = (s: string): u8[] => {
   return out;
 };
 
+const route = (text: string, path: UrlPathSegments, query: UrlQuery): void => {
+  const target = bytesOf(text);
+  const len = toI32(target.length);
+  const out: u8[] = new Array<u8>(len);
+  const q = urlQueryStart(target, 0, len); // the `?`, or -1 when there is none
+  path.reset(target, 0, q < 0 ? len : q);
+  while (path.next()) {
+    const n = percentDecodePathSegment(target, path.start, path.length, out, 0, 0);
+    console.log(`segment of ${n} bytes`); // files, a/b (one segment), c
+  }
+  if (q < 0) {
+    console.log("no query");
+    return;
+  }
+  query.reset(target, q + 1, len - q - 1);
+  if (urlQueryFind(query, "name") === URL_QUERY_PAIR) {
+    const n = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM);
+    console.log(`name is ${String.fromBytes(out, 0, n)}`); // name is J Doe
+  }
+};
+
 export const main = (): i32 => {
   // The string API: one call, an allocated answer, null on anything malformed.
   const q0 = urlQueryGet("/search?q=a+b%21&page=2", "q");
@@ -1104,22 +1125,10 @@ export const main = (): i32 => {
   console.log(`${urlDecode("100%", 0) === null}`); // true: a `%` without two hex digits is refused
 
   // The byte API: offsets into the target, decoded into a buffer you own.
-  const target = bytesOf("/files/a%2Fb/c?name=J%20Doe&flag");
-  const len = toI32(target.length);
-  const out: u8[] = new Array<u8>(len);
-  const q = urlQueryStart(target, 0, len); // the `?`, or -1
   const path = new UrlPathSegments();
-  path.reset(target, 0, q);
-  while (path.next()) {
-    const n = percentDecodePathSegment(target, path.start, path.length, out, 0, 0);
-    console.log(`segment of ${n} bytes`); // files, a/b (one segment), c
-  }
   const query = new UrlQuery(new UrlQueryLimits()); // at most 100 pairs
-  query.reset(target, q + 1, len - q - 1);
-  if (urlQueryFind(query, "name") === URL_QUERY_PAIR) {
-    const n = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM);
-    console.log(`name is ${String.fromBytes(out, 0, n)}`); // name is J Doe
-  }
+  route("/files/a%2Fb/c?name=J%20Doe&flag", path, query);
+  route("/files/readme", path, query);
   return 0;
 };
 ```
@@ -1132,6 +1141,9 @@ segment of 5 bytes
 segment of 3 bytes
 segment of 1 bytes
 name is J Doe
+segment of 5 bytes
+segment of 6 bytes
+no query
 ```
 
 **Decoding is strict by default.** With flags 0, `percentDecode` answers
@@ -1140,9 +1152,11 @@ name is J Doe
 want: `URL_DECODE_FORM` reads `+` as a space, as a form or a query does;
 `URL_DECODE_LENIENT` copies a malformed escape as it is; `URL_DECODE_ALLOW_NUL`
 decodes `%00` to a 0 byte. All three together decode as `URLSearchParams`
-does. A buffer as long as the input is always big enough; one shorter than
-the decoded result answers `URL_DECODE_ERR_SPACE`, with the bytes before it
-written.
+does for valid UTF-8; where it replaces an invalid sequence with U+FFFD,
+`percentDecode` keeps the bytes. A buffer as long as the input is always big
+enough; one shorter than the decoded result answers `URL_DECODE_ERR_SPACE`,
+with the bytes before it written. `percentDecodeErrorAt`, called with the same
+arguments, answers the offset of the byte an error is at, or -1.
 
 **A path is split before it is decoded**, so `%2F` stays inside its segment:
 `/a%2Fb/c` is the two segments `a/b` and `c`, never three. `+` is literal in a

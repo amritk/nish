@@ -92,6 +92,38 @@ const shownOrNull = (s: string | null): string => {
   return "\"" + s + "\""
 }
 
+/** `s`'s bytes as hex, or `null`. */
+const stringHex = (s: string | null): string => {
+  if (s === null) {
+    return "null"
+  }
+  const bytes: u8[] = new Array<u8>(toI32(s.length))
+  let i: i32 = 0
+  while (i < toI32(bytes.length)) {
+    bytes[i] = toU8(s.charCodeAt(i))
+    i += 1
+  }
+  return hexOf(bytes, 0, toI32(bytes.length))
+}
+
+/** `urlDecode(input, 0)` as hex: a well-formed sequence at an edge of its lead's range, or one just past it. */
+const utf8 = (input: string): void => {
+  console.log("utf8 " + input + " -> " + stringHex(urlDecode(input, 0)))
+}
+
+/** `urlDecode` of raw bytes given in hex, a sequence cut short at the end of its string. */
+const rawUtf8 = (hex: string): void => {
+  const bytes: u8[] = new Array<u8>(toI32(hex.length) >> 1)
+  let i: i32 = 0
+  while (i < toI32(bytes.length)) {
+    const hi: i32 = HEX.indexOf(hex.substring(2 * i, 2 * i + 1))
+    const lo: i32 = HEX.indexOf(hex.substring(2 * i + 1, 2 * i + 2))
+    bytes[i] = toU8(hi * 16 + lo)
+    i += 1
+  }
+  console.log("raw " + hex + " -> " + stringHex(urlDecode(String.fromBytes(bytes, 0, toI32(bytes.length)), 0)))
+}
+
 const split = (target: string): void => {
   const src: u8[] = bytesOf(target)
   const q: i32 = urlQueryStart(src, 0, toI32(src.length))
@@ -178,6 +210,12 @@ export const main = (): i32 => {
   console.log("find %zz -> " + `${urlQueryFind(fq, "%zz")}`)
   fq.reset(fb, 0, toI32(fb.length))
   console.log("find nam -> " + `${urlQueryFind(fq, "nam")}`)
+  // A key that is a strict prefix of the name never matches it.
+  const pb: u8[] = bytesOf("a=1&n%61=2")
+  fq.reset(pb, 0, toI32(pb.length))
+  console.log("find ab -> " + `${urlQueryFind(fq, "ab")}`)
+  fq.reset(pb, 0, toI32(pb.length))
+  console.log("find name over na -> " + `${urlQueryFind(fq, "name")}`)
   const capped: UrlQuery = new UrlQuery(three)
   const cb: u8[] = bytesOf("a&b&c&name=late")
   capped.reset(cb, 0, toI32(cb.length))
@@ -270,12 +308,46 @@ export const main = (): i32 => {
   console.log("urlDecode " + shownOrNull(urlDecode("%C0%AF", 0)))
   console.log("urlDecode " + shownOrNull(urlDecode("%ED%A0%80", 0)))
   console.log("urlDecode " + shownOrNull(urlDecode("", 0)))
+  // Every edge of RFC 3629's table: the first and last well-formed sequence of
+  // each restricted lead, and the byte just outside it.
+  utf8("%C2%80")
+  utf8("%DF%BF")
+  utf8("%C1%BF")
+  utf8("%E0%A0%80")
+  utf8("%E0%9F%BF")
+  utf8("%E0%80%AF")
+  utf8("%E2%82%AC")
+  utf8("%ED%9F%BF")
+  utf8("%ED%A0%80")
+  utf8("%EF%BF%BF")
+  utf8("%F0%90%80%80")
+  utf8("%F0%8F%BF%BF")
+  utf8("%F0%9F%98%80")
+  utf8("%F4%8F%BF%BF")
+  utf8("%F4%90%80%80")
+  utf8("%F5%80%80%80")
+  // A continuation byte missing in the middle, and a sequence cut short at the end.
+  utf8("%E2%41%AC")
+  utf8("%E2%82%41")
+  utf8("%F0%9F%41%80")
+  utf8("%F0%9F%98%41")
+  utf8("%C3")
+  utf8("%E2%82")
+  utf8("%F0%9F%98")
+  utf8("a%C3%A9%E2")
+  rawUtf8("c3")
+  rawUtf8("e282")
+  rawUtf8("f09f98")
+  rawUtf8("61c3a9")
   console.log("get " + shownOrNull(urlQueryGet("/s?na%6De=J%20Doe&name=2", "name")))
   console.log("get " + shownOrNull(urlQueryGet("/s?flag&x=1", "flag")))
   console.log("get " + shownOrNull(urlQueryGet("/s?x=1", "flag")))
   console.log("get " + shownOrNull(urlQueryGet("/s", "x")))
   console.log("get " + shownOrNull(urlQueryGet("/s?x=%zz", "x")))
   console.log("get " + shownOrNull(urlQueryGet("/s?x=%FF", "x")))
+  console.log("get " + stringHex(urlQueryGet("/s?x=%F0%9F%98%80", "x")))
+  console.log("get " + stringHex(urlQueryGet("/s?x=%F4%90%80%80", "x")))
+  console.log("get " + stringHex(urlQueryGet("/s?x=%E0%80%AF", "x")))
   console.log("get " + shownOrNull(urlQueryGet("/s?x=a+b%2Bc", "x")))
   console.log("get " + shownOrNull(urlQueryGet("/s?" + hundred + "&late=1", "late")))
   console.log("get " + shownOrNull(urlQueryGet("/s?y=1#x=2", "x")))

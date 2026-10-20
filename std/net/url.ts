@@ -8,12 +8,14 @@
  *
  *     import { UrlQuery, UrlQueryLimits, URL_DECODE_FORM, URL_QUERY_PAIR, percentDecode, urlQueryFind, urlQueryStart } from "nish/net/url";
  *
- *     const q: i32 = urlQueryStart(target, 0, len)
- *     const query: UrlQuery = new UrlQuery(new UrlQueryLimits())
- *     query.reset(target, q + 1, len - q - 1)          // when q >= 0
- *     if (urlQueryFind(query, "name") === URL_QUERY_PAIR) {
- *       const n: i32 = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM)
- *       // n >= 0: out[0, n) is the value; n < 0: a URL_DECODE_ERR_* code
+ *     const q: i32 = urlQueryStart(target, 0, len)    // -1: no `?`, so no query
+ *     if (q >= 0) {
+ *       const query: UrlQuery = new UrlQuery(new UrlQueryLimits())
+ *       query.reset(target, q + 1, len - q - 1)
+ *       if (urlQueryFind(query, "name") === URL_QUERY_PAIR) {
+ *         const n: i32 = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM)
+ *         // n >= 0: out[0, n) is the value; n < 0: a URL_DECODE_ERR_* code
+ *       }
  *     }
  *
  * **The byte API allocates nothing.** `urlQueryStart`, `percentDecode`,
@@ -31,8 +33,8 @@
  * `application/x-www-form-urlencoded` does; `URL_DECODE_LENIENT` copies a
  * malformed escape as it stands, as the WHATWG URL Standard's percent-decode
  * and `URLSearchParams` do; `URL_DECODE_ALLOW_NUL` decodes `%00` to a 0 byte.
- * `URLSearchParams` is `URL_DECODE_FORM | URL_DECODE_LENIENT |
- * URL_DECODE_ALLOW_NUL`.
+ * For valid UTF-8, `URLSearchParams` is `URL_DECODE_FORM | URL_DECODE_LENIENT |
+ * URL_DECODE_ALLOW_NUL`; it replaces an invalid sequence with U+FFFD.
  *
  * **Decoded bytes are bytes.** The byte API does not check that what it
  * decodes is UTF-8, where `decodeURIComponent` throws on `%FF`: a path segment

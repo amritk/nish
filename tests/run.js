@@ -1168,8 +1168,11 @@ const buildCaseIn = (dir, name) => {
 const runCaseUnderPrelude = (name, args) =>
   runUnderPrelude(path.join(casesDir, `${name}.ts`), [name, ...args])
 
-/** `entry` run under `runtime/nish.mjs`, its `main` answering the exit status; `args` follow `-e`'s script. */
-const runUnderPrelude = (entry, args, exported = "main") =>
+/**
+ * `entry` run under `runtime/nish.mjs`, its `main` answering the exit status;
+ * `args` follow `-e`'s script and `options` join `spawnSync`'s.
+ */
+const runUnderPrelude = (entry, args, exported = "main", options = {}) =>
   spawnSync(
     "node",
     [
@@ -1181,7 +1184,7 @@ const runUnderPrelude = (entry, args, exported = "main") =>
       `const m = await import(${JSON.stringify(entry)}); process.exit(m.${exported}());`,
       ...args,
     ],
-    { cwd: root, encoding: "utf8" }
+    { cwd: root, encoding: "utf8", ...options }
   )
 
 /** A spawned run's status and both streams, for a failed check's message. */
@@ -6172,8 +6175,10 @@ if (!only || "std_json_tokenizer".includes(only)) {
 // programs run under `runtime/nish.mjs` and print the same bytes, `alloc.ts`
 // reads a target 10,000 times without moving the arena, and `fuzz.ts`'s 3,000
 // seeded inputs are held to `decodeURIComponent`, `URLSearchParams` and the
-// strict rule's regex, natively and under Node.
-if (!only || "std_url".includes(only)) {
+// strict rule's regex, natively and under Node. Four programs beside them pass
+// a window or an `at` outside its array, and each panics with its message on
+// both sides.
+if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
   for (const name of ["std_url", "std_url_escape", "std_url_pairs", "std_url_space", "std_url_window"]) {
     const dir = path.join(linkDir, name)
     const run = runUnderPrelude(path.join(dir, "main.ts"), [])
@@ -6205,8 +6210,35 @@ if (!only || "std_url".includes(only)) {
   } else {
     skip("skipped: link/std_url: no clang, so alloc.ts is not built")
   }
+  for (const [file, message] of [
+    ["panic-decode-window", "percentDecode: the window is outside the array"],
+    ["panic-decode-at", "percentDecode: at is outside out"],
+    ["panic-start-window", "urlQueryStart: the window is outside the array"],
+    ["panic-segments-window", "UrlPathSegments: the window is outside the array"],
+  ]) {
+    const entry = path.join(urlDir, `${file}.ts`)
+    const fromNode = runUnderPrelude(entry, [])
+    check(
+      `link/std_url: ${file}.ts under the Node prelude exits 1 with "${message}"`,
+      fromNode.status === 1 && fromNode.stdout === "" && fromNode.stderr === `${message}\n`,
+      shown(fromNode)
+    )
+    if (HAS_CLANG) {
+      const outDir = path.join(buildDir, `std_url_${file}`) + path.sep
+      const exe = path.join(outDir, "app")
+      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+      const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+      check(
+        `link/std_url: ${file}.ts built natively exits 1 with "${message}"`,
+        native.status === 1 && native.stdout === "" && native.stderr === `${message}\n`,
+        shown(native)
+      )
+    } else {
+      skip(`skipped: link/std_url: no clang, so ${file}.ts is not built natively`)
+    }
+  }
   const fuzzEntry = path.join(urlDir, "fuzz.ts")
-  const fuzzNode = runUnderPrelude(fuzzEntry, [])
+  const fuzzNode = runUnderPrelude(fuzzEntry, [], "main", { maxBuffer: 1 << 24 })
   const fromNode = urlFuzzVerdict(fuzzNode.stdout ?? "")
   check(
     "link/std_url: 3,000 seeded inputs under Node decode as decodeURIComponent, URLSearchParams and the strict rule say",

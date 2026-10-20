@@ -69,9 +69,31 @@ bytes are not UTF-8, and elsewhere its answer, multi-byte included, is the
 same bytes (one such value is pinned in `std_url`:
 `multibyte -> 13 636166c3a920e282acf09f9880`);
 the three flags together agree with the model decoder reading `+` as a space,
-and the pairs, each decoded so, with `URLSearchParams`'s entries — run under
-Node and, built natively, printing the same lines byte for byte. The refusal as a handler
+and the pairs, each decoded so, with `URLSearchParams`'s entries; `urlDecode`
+of each input, flags 0, answers null exactly where `decodeURIComponent` throws
+or the strict rule refuses and is otherwise its bytes, and `urlQueryGet` of
+`/?v=` and the input answers null exactly where the value is malformed, holds
+`%00` or is not UTF-8 and is otherwise `URLSearchParams.get`'s bytes — run
+under Node and, built natively, printing the same lines byte for byte. The refusal as a handler
 meets it: `tests/link/std_url_escape` exits 1 on `%zz`.
+
+**The string forms check UTF-8 as RFC 3629 does** (`std_url`): `urlIsUtf8`,
+behind `urlDecode` and `urlQueryGet`, takes each lead's range and length and
+refuses an overlong form, a surrogate, a code point past U+10FFFF, a bad
+continuation byte and a sequence cut short. Each edge is a line of
+`expected.out`: the first and last of each range decode
+(`utf8 %E0%A0%80 -> e0a080`, `utf8 %ED%9F%BF -> ed9fbf`,
+`utf8 %F0%90%80%80 -> f0908080`, `utf8 %F4%8F%BF%BF -> f48fbfbf`) and the
+byte past it is refused (`utf8 %E0%9F%BF -> null`, `utf8 %ED%A0%80 -> null`,
+`utf8 %F0%8F%BF%BF -> null`, `utf8 %F4%90%80%80 -> null`,
+`utf8 %F5%80%80%80 -> null`, `utf8 %C1%BF -> null`); a bad continuation in
+the second, third or fourth byte is refused (`utf8 %F0%9F%41%80 -> null`), and
+so is a 2-, 3- or 4-byte sequence cut at the end, escaped (`utf8 %F0%9F%98 ->
+null`) and as raw bytes, where only the length check stops a read past the
+string (`raw f09f98 -> null`). `urlQueryGet` refuses the same
+(`get null` for `%F4%90%80%80`). Dropping any range bound, the truncation
+check or a continuation check, or refusing every 3- and 4-byte lead, fails
+`std_url` or the fuzz.
 
 **A path is split before it is decoded** (`std_url`): `UrlPathSegments` splits
 on the raw `/` only, so `/a%2Fb/c` is the two segments `a/b` and `c`, and
@@ -101,7 +123,10 @@ and a key cut before its escape's last digit matches nothing
 (`window find kA -> 0`, `window find kA whole -> 1`). Output that does not fit
 is `URL_DECODE_ERR_SPACE` at the byte with no room, and nothing is written
 past `out`'s end. A window outside its array panics with
-`…: the window is outside the array`, once, at 2 and at 8 threads.
+`…: the window is outside the array`, once, at 2 and at 8 threads; so does
+each of `percentDecode`, `urlQueryStart` and `UrlPathSegments.reset`, and an
+`at` outside `out` panics with `percentDecode: at is outside out`, natively
+and under Node (`tests/link/std_url/panic-*.ts`).
 
 **The byte API allocates nothing** (`tests/link/std_url/alloc.ts`): one
 `UrlPathSegments`, one `UrlQuery` and one output buffer, reused across 10,000
@@ -129,6 +154,13 @@ exits ${wantCode}`;
 `link/std_url: 10,000 targets split, decoded and searched leave Arena.used() where it was`;
 `link/std_url: 3,000 seeded inputs under Node decode as decodeURIComponent, URLSearchParams and the strict rule say`;
 `link/std_url: the same 3,000 inputs, built natively, print the Node run's lines byte for byte`;
+`link/std_url: panic-decode-window.ts under the Node prelude exits 1 with "percentDecode: the window is outside the array"`,
+`link/std_url: panic-decode-at.ts under the Node prelude exits 1 with "percentDecode: at is outside out"`,
+`link/std_url: panic-start-window.ts under the Node prelude exits 1 with "urlQueryStart: the window is outside the array"`,
+`link/std_url: panic-segments-window.ts under the Node prelude exits 1 with "UrlPathSegments: the window is outside the array"`
+and the same four `… built natively exits 1 with …` — the templates
+`link/std_url: ${file}.ts under the Node prelude exits 1 with "${message}"` and
+`link/std_url: ${file}.ts built natively exits 1 with "${message}"`;
 and, for each of the five programs, the template `link/${name}: under the
 Node prelude it exits ${code} and prints expected.out${err === null ? "" : "
 and expected.stderr"}`, all in `tests/run.js`.
@@ -140,7 +172,8 @@ Each is deliberate and pinned above.
 - Strict decoding refuses what `decodeURIComponent` refuses (a malformed
   escape) and also `%00`, which it accepts; `URLSearchParams` repairs both.
   `URL_DECODE_FORM | URL_DECODE_LENIENT | URL_DECODE_ALLOW_NUL` is
-  `URLSearchParams`'s reading.
+  `URLSearchParams`'s reading for valid UTF-8; where `URLSearchParams`
+  replaces an invalid sequence with U+FFFD, the byte API keeps its bytes.
 - The byte API does not check UTF-8 (URL-1); the string forms do.
 - `urlQueryFind` and `urlQueryGet` expect an ASCII `name`: natively it is
   compared with the key's bytes, under Node with its UTF-16 code units.
