@@ -3979,9 +3979,9 @@ const p256AddOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
   for (let i: i32 = 0; i < 9; i++) {
     a[i] = (((a[i] + (n[i] & mask)) ^ negate) - negate)
   }
-  for (let i: i32 = 0; i < 8; i++) {
-    a[i + 1] = a[i + 1] + p256Shift30(a[i])
-    a[i] = a[i] & 0x3fffffff
+  for (let i: i32 = 1; i < 9; i++) {
+    a[i] = a[i] + p256Shift30(a[i - 1])
+    a[i - 1] = a[i - 1] & 0x3fffffff
   }
 }
 
