@@ -1,1 +1,1 @@
-Parameter `argv` of `declare function execvp` is string[], and a declared C function takes scalars and `CPtr` only, besides a `string` it borrows as `const char *`
+Parameter `argv` of `declare function execvp` is string[], and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`

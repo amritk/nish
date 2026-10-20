@@ -1,0 +1,1 @@
+Parameter `xs` of `declare function sum` is readonly i32[], and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target

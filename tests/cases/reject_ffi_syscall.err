@@ -1,0 +1,1 @@
+`declare function syscall` is refused: `syscall` is variadic in C and bypasses libc, so declare the libc function that wraps the system call instead
