@@ -37,7 +37,8 @@
                 ]
               },
               "panics": [
-                { "kind": "index", "at": "caps_process_wait.ts:7:10", "proven": false }
+                { "kind": "index", "at": "caps_process_wait.ts:7:10", "proven": false },
+                { "kind": "oom", "at": "caps_process_wait.ts:7:10", "allowed": true }
               ]
             }
           ]

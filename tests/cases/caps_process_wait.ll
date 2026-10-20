@@ -7,6 +7,8 @@
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_free_arena() #2
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #2
@@ -40,6 +42,7 @@ slow:
 
 define noundef i32 @stop(i32 noundef %pid) #0 {
 entry:
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @nish_kill(i32 %pid, i32 15)
   %1 = call %struct.nish_array* @nish_wait_pid(i32 %pid, i32 0)
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
@@ -57,6 +60,7 @@ bounds.ok:
   %7 = bitcast i8* %6 to i32*
   %8 = getelementptr inbounds i32, i32* %7, i64 1
   %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %9
 }
 
