@@ -18,7 +18,8 @@
 //     --rounds N        timed rounds (default 11); the median is reported
 //     --out <file>      also write the section to <file>
 //     --record          splice the section into docs/BENCHMARKS.md between
-//                       <!-- crypto:begin --> and <!-- crypto:end -->
+//                       <!-- crypto:begin --> and <!-- crypto:end -->; the
+//                       whole table, so not with --only or --no-<twin>
 //     --no-openssl, --no-go, --no-rust, --no-node
 //                       leave that twin out; its cells read —
 //     --compiler <nish> the compiler under test (default build/nish)
@@ -144,6 +145,11 @@ if (opts.writeExpected && !opts.validate) {
 if (opts.validate && (opts.record || opts.out !== null)) {
   fail("--validate times nothing, so it has no section to --record or --out")
 }
+// docs/BENCHMARKS.md's section is the whole table: a part of it, or one with
+// a twin left out, goes to --out.
+if (opts.record && (opts.only !== null || opts.skip.size > 0)) {
+  fail("--record writes the whole table, so it takes no --only or --no-<twin>; use --out for a part")
+}
 
 // ---- Families --------------------------------------------------------------------
 
@@ -173,7 +179,7 @@ const loadFamily = (name) => {
   if (!isObject(spec)) {
     fail(`${where}: not an object`)
   }
-  onlyKeys(where, spec, ["title", "kernels", "twins", "portableProof", "portableMinRatio", "needs"])
+  onlyKeys(where, spec, ["title", "kernels", "twins", "portableProof", "portableMinRatio", "needs", "notes"])
   if (typeof spec.title !== "string") {
     fail(`${where}: \`title\` must be a string`)
   }
@@ -196,8 +202,9 @@ const loadFamily = (name) => {
     if (k.unit !== "MB/s" && k.unit !== "op/s") {
       fail(`${at}: \`unit\` must be "MB/s" or "op/s"`)
     }
-    if (k.nish !== undefined && typeof k.nish !== "boolean") {
-      fail(`${at}: \`nish\` must be a boolean`)
+    // A kernel without a Nish column says why, and the table's footnote prints it.
+    if (k.nish !== undefined && k.nish !== true && !(typeof k.nish === "string" && k.nish !== "")) {
+      fail(`${at}: \`nish\` is true, or a string saying why the kernel has no Nish column`)
     }
     const validateSize = k.validateSize ?? Math.min(...sizes)
     if (!Number.isInteger(validateSize) || validateSize < 4) {
@@ -228,7 +235,8 @@ const loadFamily = (name) => {
     if (t.env !== undefined && !isStringMap(t.env)) {
       fail(`${at}.env: an object of strings`)
     }
-    if (t.lacks !== undefined && !(isStringMap(t.lacks) && Object.keys(t.lacks).every((k) => names.has(k)))) {
+    const kernelMap = (v) => v === undefined || (isStringMap(v) && Object.keys(v).every((k) => names.has(k)))
+    if (!kernelMap(t.lacks)) {
       fail(`${at}.lacks: an object from this family's kernel names to the reason the twin lacks each`)
     }
     let portable = t.portable
@@ -239,7 +247,12 @@ const loadFamily = (name) => {
       portable = { absent: portable }
     } else if (isObject(portable)) {
       const fields = { openssl: ["env"], go: ["tags", "env"], rust: ["rustflags", "env"] }[twin]
-      onlyKeys(`${at}.portable`, portable, fields)
+      onlyKeys(`${at}.portable`, portable, [...fields, "lacks"])
+      if (!kernelMap(portable.lacks)) {
+        fail(
+          `${at}.portable.lacks: an object from this family's kernel names to the reason the portable build lacks each`
+        )
+      }
       if (portable.env !== undefined && !isStringMap(portable.env)) {
         fail(`${at}.portable.env: an object of strings`)
       }
@@ -249,7 +262,7 @@ const loadFamily = (name) => {
       if (portable.rustflags !== undefined && !isStringList(portable.rustflags)) {
         fail(`${at}.portable.rustflags: an array of strings`)
       }
-      if (Object.keys(portable).length === 0) {
+      if (fields.every((f) => portable[f] === undefined)) {
         fail(`${at}.portable: names what makes the build portable, or is a string saying why there is none`)
       }
       // OpenSSL's portable column runs the default binary, so its env is all
@@ -262,7 +275,11 @@ const loadFamily = (name) => {
     } else {
       fail(`${at}.portable: an object, or a string saying why the twin has no portable column`)
     }
-    twins[twin] = { env: t.env ?? {}, portable, lacks: t.lacks ?? {} }
+    twins[twin] = {
+      env: t.env ?? {},
+      portable: { ...portable, lacks: portable.lacks ?? {} },
+      lacks: t.lacks ?? {},
+    }
   }
   let proof = null
   if (spec.portableProof !== undefined) {
@@ -311,10 +328,14 @@ const loadFamily = (name) => {
   if (!(isStringList(needs) && needs.every((n) => n === "loopback"))) {
     fail(`${where}: \`needs\` is an array whose only allowed entry is "loopback"`)
   }
-  if (kernels.some((k) => k.nish) && !fs.existsSync(path.join(dir, "main.ts"))) {
+  if (kernels.some((k) => k.nish === true) && !fs.existsSync(path.join(dir, "main.ts"))) {
     fail(`bench/crypto/${name}: a kernel with \`nish\` true needs main.ts`)
   }
-  return { name, dir, title: spec.title, kernels, twins, proof, minRatio, needs }
+  const familyNotes = spec.notes ?? []
+  if (!isStringList(familyNotes)) {
+    fail(`${where}: \`notes\` is an array of strings, each a footnote under the family's table`)
+  }
+  return { name, dir, title: spec.title, kernels, twins, proof, minRatio, needs, notes: familyNotes }
 }
 
 /** `<kernel> <size> <iterations> <checksum>` per line of a family's expected.txt; `#` lines are comments. */
@@ -417,6 +438,85 @@ for (const twin of TWINS) {
   }
 }
 
+/** /proc/cpuinfo, or "" off Linux, where os.cpus() names the CPU and the flags are unknown. */
+const cpuinfo = (() => {
+  try {
+    return fs.readFileSync("/proc/cpuinfo", "utf8")
+  } catch {
+    return ""
+  }
+})()
+const cpuFlags = new Set((/^flags\s*:\s*(.+)$/m.exec(cpuinfo)?.[1] ?? "").split(/\s+/).filter(Boolean))
+
+/**
+ * The /proc/cpuinfo flag each OPENSSL_ia32cap bit stands for, per word. The
+ * first word is CPUID(1) EDX in its low half and ECX in its high half; the
+ * second is CPUID(7) EBX, then ECX.
+ */
+const IA32CAP_FLAGS = [
+  { 33: "pclmulqdq", 41: "ssse3", 44: "fma", 51: "sse4_1", 52: "sse4_2", 54: "movbe", 57: "aes", 60: "avx" },
+  {
+    3: "bmi1",
+    5: "avx2",
+    8: "bmi2",
+    16: "avx512f",
+    19: "adx",
+    29: "sha_ni",
+    30: "avx512bw",
+    31: "avx512vl",
+    41: "vaes",
+    42: "vpclmulqdq",
+  },
+]
+
+/**
+ * The cpuinfo flags an OPENSSL_ia32cap value takes away: a `~x` word clears
+ * x's bits, a bare word keeps only its own, and an absent word clears nothing.
+ */
+const ia32capCleared = (value) => {
+  const cleared = []
+  value.split(":").forEach((word, i) => {
+    const m = /^(~?)(0x[0-9a-f]+|\d+)$/i.exec(word.trim())
+    if (m === null || IA32CAP_FLAGS[i] === undefined) {
+      return
+    }
+    const bits = BigInt(m[2])
+    for (const [bit, flag] of Object.entries(IA32CAP_FLAGS[i])) {
+      const set = ((bits >> BigInt(bit)) & 1n) === 1n
+      if (m[1] === "~" ? set : !set) {
+        cleared.push(flag)
+      }
+    }
+  })
+  return cleared
+}
+
+/** Where a portable column's assembly exists to be taken away; elsewhere its proof has nothing to measure. */
+const PROOF_ARCHES = { openssl: ["x64"], go: ["x64", "arm64"], rust: ["x64", "arm64"] }
+
+/**
+ * Why this host cannot prove `twin`'s portable column, or null when it can: the
+ * default build must have assembly here that the portable one gives up, and
+ * for OpenSSL the CPU must have an extension the family's mask clears.
+ */
+const proofBlocked = (twin, family) => {
+  if (!PROOF_ARCHES[twin].includes(os.arch())) {
+    return `${TWIN_LABELS[twin]}'s assembly is checked on ${PROOF_ARCHES[twin].join(" and ")} only, and this is ${os.arch()}`
+  }
+  if (twin !== "openssl") {
+    return null
+  }
+  const mask = family.twins.openssl.portable.env?.OPENSSL_ia32cap
+  if (mask === undefined) {
+    return "the portable env sets no OPENSSL_ia32cap to read"
+  }
+  if (cpuFlags.size === 0) {
+    return "no /proc/cpuinfo flags to hold the mask against"
+  }
+  const hit = ia32capCleared(mask).filter((f) => cpuFlags.has(f))
+  return hit.length > 0 ? null : "this CPU has none of the extensions the OPENSSL_ia32cap mask clears"
+}
+
 /** Whether this machine lets a program listen on and connect to 127.0.0.1, which a handshake family may need. */
 const loopbackWorks = () =>
   new Promise((resolve) => {
@@ -428,15 +528,25 @@ const loopback = families.some((f) => f.needs.includes("loopback")) ? await loop
 
 // ---- Builds ----------------------------------------------------------------------
 
-/** Copies `from`'s files (not its subdirectories) into `to`, renaming by `rename`. */
-const copyFiles = (from, to, rename = {}) => {
-  fs.mkdirSync(to, { recursive: true })
-  for (const e of fs.readdirSync(from, { withFileTypes: true })) {
-    if (e.isFile()) {
-      fs.copyFileSync(path.join(from, e.name), path.join(to, rename[e.name] ?? e.name))
+/**
+ * Copies `from` into `to`, subdirectories included, renaming `from`'s own
+ * files by `rename`. A `target` directory is a local cargo build, never a source.
+ */
+const copyTree = (from, to, rename = {}) => {
+  fs.cpSync(from, to, {
+    recursive: true,
+    filter: (src) => !(path.basename(src) === "target" && fs.statSync(src).isDirectory()),
+  })
+  for (const [name, renamed] of Object.entries(rename)) {
+    if (fs.existsSync(path.join(to, name))) {
+      fs.renameSync(path.join(to, name), path.join(to, renamed))
     }
   }
 }
+
+/** The CPU-capability masks a portable env may set; the caller's own never reach a default column. */
+const CAP_MASKS = ["OPENSSL_ia32cap", "OPENSSL_armcap"]
+const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !CAP_MASKS.includes(k)))
 
 /**
  * Builds a family's programs into build/bench/crypto/<family>/ and returns
@@ -448,9 +558,9 @@ const buildFamily = (family) => {
   fs.mkdirSync(dir, { recursive: true })
   const variants = []
   const add = (id, twin, portable, cmd, args, env = {}) =>
-    variants.push({ id, twin, portable, cmd, args, env: { ...process.env, ...env } })
+    variants.push({ id, twin, portable, cmd, args, env: { ...baseEnv, ...env } })
 
-  if (family.kernels.some((k) => k.nish)) {
+  if (family.kernels.some((k) => k.nish === true)) {
     const exe = path.join(dir, "nish", "main")
     fs.mkdirSync(path.dirname(exe), { recursive: true })
     build(`${family.name} (Nish)`, nishc.cmd, [
@@ -496,7 +606,7 @@ const buildFamily = (family) => {
   if (twinUsable("go")) {
     const t = family.twins.go
     const src = path.join(dir, "go")
-    copyFiles(path.join(family.dir, "go"), src)
+    copyTree(path.join(family.dir, "go"), src)
     fs.copyFileSync(path.join(libDir, "gen.go"), path.join(src, "gen.go"))
     // No toolchain download and no workspace from above: the module as committed.
     const env = { ...process.env, GOTOOLCHAIN: "local", GOWORK: "off", GOFLAGS: "-mod=readonly", ...t.env }
@@ -524,11 +634,10 @@ const buildFamily = (family) => {
     const t = family.twins.rust
     const crate = path.join(dir, "rust")
     // Cargo reads only Cargo.toml and Cargo.lock, names the repository's kebab-case rule refuses.
-    copyFiles(path.join(family.dir, "rust"), crate, {
+    copyTree(path.join(family.dir, "rust"), crate, {
       "cargo.toml": "Cargo.toml",
       "cargo.lock": "Cargo.lock",
     })
-    copyFiles(path.join(family.dir, "rust", "src"), path.join(crate, "src"))
     fs.copyFileSync(path.join(libDir, "gen.rs"), path.join(crate, "src", "gen.rs"))
     const bin = /^name\s*=\s*"([^"]+)"/m.exec(fs.readFileSync(path.join(crate, "Cargo.toml"), "utf8"))?.[1]
     if (bin === undefined) {
@@ -596,11 +705,18 @@ const runOnce = (variant, kernel, size, iterations) => {
   return { checksum: sum[1], ns: Number(ns[1]) }
 }
 
-/** The variants that implement `kernel`: Nish only where the kernel says so, a twin unless it lacks it. */
+/**
+ * The variants that implement `kernel`: Nish only where the kernel says so, a
+ * twin unless it lacks it, and a portable column unless its build lacks it.
+ */
 const runnersOf = (family, kernel, variants) =>
-  variants.filter((v) =>
-    v.twin === null ? kernel.nish : family.twins[v.twin].lacks[kernel.name] === undefined
-  )
+  variants.filter((v) => {
+    if (v.twin === null) {
+      return kernel.nish === true
+    }
+    const t = family.twins[v.twin]
+    return t.lacks[kernel.name] === undefined && !(v.portable && t.portable.lacks[kernel.name] !== undefined)
+  })
 
 const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b)
@@ -752,14 +868,20 @@ if (opts.validate) {
       for (const twin of Object.keys(PORTABLE_IDS)) {
         const fast = variants.find((v) => v.id === twin)
         const slow = variants.find((v) => v.id === PORTABLE_IDS[twin])
-        if (fast === undefined || slow === undefined || family.twins[twin].lacks[kernel] !== undefined) {
-          const t = family.twins[twin]
-          let why = `this machine built no ${fast === undefined ? twin : PORTABLE_IDS[twin]}`
-          if (t.absent !== undefined || t.portable.absent !== undefined) {
-            why = "the family has no such column"
-          } else if (t.lacks[kernel] !== undefined) {
-            why = `${twin} lacks ${kernel}`
-          }
+        const t = family.twins[twin]
+        let why = null
+        if (t.absent !== undefined || t.portable.absent !== undefined) {
+          why = "the family has no such column"
+        } else if (t.lacks[kernel] !== undefined) {
+          why = `${twin} lacks ${kernel}`
+        } else if (t.portable.lacks[kernel] !== undefined) {
+          why = `${PORTABLE_IDS[twin]} lacks ${kernel}`
+        } else if (fast === undefined || slow === undefined) {
+          why = `this machine built no ${fast === undefined ? twin : PORTABLE_IDS[twin]}`
+        } else {
+          why = proofBlocked(twin, family)
+        }
+        if (why !== null) {
           console.log(`portable ${family.name} ${PORTABLE_IDS[twin]}: unproved (${why})`)
           continue
         }
@@ -873,17 +995,10 @@ if (mismatches > 0) {
 
 /** The CPU's name and the flags a crypto kernel's speed turns on, from /proc/cpuinfo. */
 const machine = () => {
-  let text = ""
-  try {
-    text = fs.readFileSync("/proc/cpuinfo", "utf8")
-  } catch {
-    // Not Linux: os.cpus() names the CPU and the flags are unknown.
-  }
-  const model = /^model name\s*:\s*(.+)$/m.exec(text)?.[1].trim() ?? os.cpus()[0]?.model ?? "unknown CPU"
-  const flags = new Set((/^flags\s*:\s*(.+)$/m.exec(text)?.[1] ?? "").split(/\s+/))
+  const model = /^model name\s*:\s*(.+)$/m.exec(cpuinfo)?.[1].trim() ?? os.cpus()[0]?.model ?? "unknown CPU"
   const listed = ["aes", "pclmulqdq", "sha_ni", "avx2", "avx512f"]
   const shown =
-    flags.size > 1 ? listed.map((f) => `${f} ${flags.has(f) ? "yes" : "no"}`).join(", ") : "unknown"
+    cpuFlags.size > 0 ? listed.map((f) => `${f} ${cpuFlags.has(f) ? "yes" : "no"}`).join(", ") : "unknown"
   return `${model} (${os.arch()}, ${os.cpus().length} CPUs); flags: ${shown}`
 }
 
@@ -954,13 +1069,17 @@ for (const { family, variants, rows } of sections) {
     for (const [kernel, reason] of Object.entries(t.lacks)) {
       why.push(`${TWIN_LABELS[twin]} has no ${kernel}: ${reason}`)
     }
-    if (t.portable?.absent !== undefined) {
+    if (t.portable.absent !== undefined) {
       why.push(`${TWIN_LABELS[twin]} has no portable column: ${t.portable.absent}`)
     }
+    for (const [kernel, reason] of Object.entries(t.portable.lacks)) {
+      why.push(`${TWIN_LABELS[twin]} has no portable ${kernel}: ${reason}`)
+    }
   }
-  for (const kernel of family.kernels.filter((k) => !k.nish)) {
-    why.push(`${kernel.name} has no Nish column: the family marks it twins-only`)
+  for (const kernel of family.kernels.filter((k) => k.nish !== true)) {
+    why.push(`${kernel.name} has no Nish column: ${kernel.nish}`)
   }
+  why.push(...family.notes)
   for (const w of why) {
     lines.push(`- ${w}`)
   }
@@ -985,8 +1104,14 @@ if (opts.record) {
   const end = "<!-- crypto:end -->"
   const from = text.indexOf(begin)
   const to = text.indexOf(end)
+  // Both markers once, in order, or neither: anything else is a hand edit
+  // that a splice or an append would turn into a second section.
+  const count = (marker) => text.split(marker).length - 1
+  if (count(begin) > 1 || count(end) > 1 || from < 0 !== to < 0 || to < from) {
+    fail(`${path.relative(root, file)}: want ${begin} and ${end} once each, in that order, or neither`)
+  }
   const next =
-    from >= 0 && to > from
+    from >= 0
       ? `${text.slice(0, from)}${section}${text.slice(to + end.length)}`
       : `${text.trimEnd()}\n\n${section}\n`
   fs.writeFileSync(file, next)

@@ -15579,30 +15579,76 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
 // portable columns portable. Each family must report every kernel size matched,
 // found by listing the directories, so a new family is checked without an edit
 // here. A missing toolchain is the runner's note and a column of —, not a
-// failure; so is a family that needs a loopback socket the machine refuses.
+// failure; so is a family that needs a loopback socket the machine refuses, and
+// a portable column this host cannot prove. Those notes and unproved lines are
+// printed under the check on a pass too, so a green run says what it left out.
 if (!only || "crypto-bench".includes(only)) {
   if (HAS_CLANG) {
     const families = fs
       .readdirSync(path.join(root, "bench", "crypto"))
       .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
       .sort()
+    const proved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .portableProof !== undefined
+    )
     const v = spawnSync(
       "node",
       [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
       { cwd: root, encoding: "utf8" }
     )
+    // Nish and its copy are two variants; a third is a twin, which Node always is.
+    const variants = Number(
+      /^crypto: checksums agree over \d+ kernel size\(s\) and (\d+) variant\(s\)$/m.exec(v.stdout)?.[1] ?? 0
+    )
     check(
       `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
       v.status === 0 &&
         families.length > 0 &&
-        v.stdout.includes("crypto: checksums agree") &&
+        variants > 2 &&
         families.every((f) =>
           new RegExp(
             `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
             "m"
           ).test(v.stdout)
+        ) &&
+        proved.every((f) =>
+          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
+            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
+          )
         ),
       `${v.stdout}${v.stderr}`
+    )
+    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line)) {
+        console.log(`      ${line}`)
+      }
+    }
+    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
+    // compiler it was given reaches the child, and the child's status comes
+    // back. A wrapper answers --version from the compiler under test and fails
+    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    const wrapDir = path.join(buildDir, "crypto-bench")
+    const wrapper = path.join(wrapDir, "nish-wrapper")
+    const wrapLog = path.join(wrapDir, "wrapper.log")
+    fs.mkdirSync(wrapDir, { recursive: true })
+    fs.rmSync(wrapLog, { force: true })
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
+      { mode: 0o755 }
+    )
+    const deleg = spawnSync(
+      "node",
+      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
+      deleg.status === 1 && forwarded.includes(path.join("bench", "crypto", "hash", "main.ts")),
+      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
     )
     // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
     // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C

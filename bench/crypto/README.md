@@ -21,7 +21,10 @@ node bench/run.mjs --only crypto                      # the same --record, throu
 
 `--compiler <nish>` names the compiler under test, and defaults to
 `build/nish`. `--only` takes family names (`hash`) or kernel names (`sha256`).
-`node bench/crypto/run.mjs --help` lists every option.
+`node bench/crypto/run.mjs --help` lists every option. `--record` writes the
+whole table, so it refuses `--only` and `--no-<twin>`, which time a part of it:
+send a part to `--out` or stdout instead. It also refuses a `docs/BENCHMARKS.md`
+whose markers are not each there once, `begin` before `end`, or both absent.
 
 `tests/run.js crypto-bench` runs `--validate` over every family it finds. A new
 family therefore needs no edit to the test harness: CI picks up its directory.
@@ -122,7 +125,7 @@ cannot fall back to a default.
   "kernels": [
     { "name": "sha256", "sizes": [64, 1024, 1048576], "unit": "MB/s" },
     { "name": "hkdf-sha256", "sizes": [32], "unit": "op/s" },
-    { "name": "x448", "sizes": [56], "unit": "op/s", "nish": false }
+    { "name": "x448", "sizes": [56], "unit": "op/s", "nish": "std/crypto has no X448 yet" }
   ],
   "twins": {
     "openssl": { "portable": { "env": { "OPENSSL_ia32cap": "~0x1000020000000000:~0x20000120" } } },
@@ -132,7 +135,8 @@ cannot fall back to a default.
   },
   "portableProof": "sha256@1048576",
   "portableMinRatio": { "rust": null },
-  "needs": []
+  "needs": [],
+  "notes": []
 }
 ```
 
@@ -145,6 +149,7 @@ cannot fall back to a default.
 | `twins` | object | All four twins, `openssl`, `go`, `rust` and `node`, each either an object (below) or a string saying why the family has none, which the table's footnotes print. |
 | `portableProof` | `"<kernel>@<size>"`, optional | The case `--validate` times to prove each portable column is portable. |
 | `portableMinRatio` | number above 1, or an object, optional | How much slower a portable column must be than its default one at `portableProof`; the default is 1.2. An object sets it per twin (`openssl`, `go` and `rust`; a twin it leaves out keeps 1.2). A twin's value of `null` measures and reports the ratio without gating on it. Only valid with `portableProof`. |
+| `notes` | array of strings, optional | Footnotes printed under the family's table after the generated ones, for anything about its columns a reader needs and no other field says. |
 | `needs` | array, optional | `["loopback"]` when the programs listen on and connect to `127.0.0.1`, as a handshake does. On a machine that refuses a loopback socket, the family is noted and left out, rather than failing; `--validate` prints `<family>: skipped (needs loopback)`. |
 
 ### Kernel fields
@@ -154,7 +159,7 @@ cannot fall back to a default.
 | `name` | lower-case letters, digits and `-` | What the programs take as `<kernel>`. Unique in the family. |
 | `sizes` | integers of at least 4 | The sizes the table times, one row each. The tweak needs four message bytes. |
 | `unit` | `"MB/s"` or `"op/s"` | `MB/s` is 10⁶ message bytes a second, the right unit for a hash or an AEAD. `op/s` is operations a second, for a key derivation, a signature or a handshake, whose cost does not scale with a message. |
-| `nish` | boolean, default `true` | `false` makes the kernel twins-only. It has no Nish column, and its verdicts read —. Use it for a kernel `std/crypto` does not have yet, so the comparison exists before the Nish side does. A family whose kernels are all twins-only needs no `main.ts`. |
+| `nish` | `true` (the default), or a string | A string makes the kernel twins-only and says why; the table's footnote prints it. The kernel has no Nish column, and its verdicts read —. `false` is refused, so the reason is never left out. Use it for a kernel `std/crypto` does not have yet, so the comparison exists before the Nish side does. A family whose kernels are all twins-only needs no `main.ts`. |
 | `validateSize` | integer of at least 4, default the smallest size | A size `--validate` runs and `expected.txt` pins besides `sizes`, for a case too slow to time but worth pinning. |
 
 ### Twin fields
@@ -173,6 +178,12 @@ cannot fall back to a default.
 | `go` | `tags`, `env` | Builds a second binary with `-tags <tags joined by ,>` (`purego` turns off the standard library's assembly), with `env` at build time and at run time. |
 | `rust` | `rustflags`, `env` | Builds a second binary into a target directory of its own, with `CARGO_ENCODED_RUSTFLAGS` set to these flags, one element each. The usual flag is a backend `--cfg` that the crate reads. The default build gets an empty `CARGO_ENCODED_RUSTFLAGS`, and neither build sees a `RUSTFLAGS` from the environment, so the two differ by these flags alone. |
 
+Each shape also takes `lacks`, a kernel name mapped to why the portable build
+does not implement it: only that kernel's portable cell reads —, the default
+column still runs it, and the footnote prints the reason. `lacks` is not what
+makes the build portable, so a `portable` object still needs one of the
+twin's other fields.
+
 ### `portableProof`
 
 The proof checks that a portable column really is portable. For each twin
@@ -190,9 +201,21 @@ with both a default column and a portable one, `--validate` does two things:
    as `NOT PORTABLE`.
 
 `portableProof`'s size must be one of that kernel's `sizes`. A column the proof
-cannot reach (this machine built neither side, or the twin lacks the kernel)
-prints `portable <family> <column>: unproved (<why>)` rather than passing
-silently.
+cannot reach prints `portable <family> <column>: unproved (<why>)` rather than
+passing silently or failing. That is a column this machine did not build, a
+twin or a portable build that `lacks` the kernel, or a host with nothing for the
+portable build to give up:
+
+- Go and Rust are proved on x86-64 and arm64 only, where the default builds
+  carry the assembly the tag or flag takes away.
+- OpenSSL is proved on x86-64 only, and only when `/proc/cpuinfo` lists an
+  extension its `OPENSSL_ia32cap` mask clears. On a CPU with none of them, the
+  masked and the unmasked run take the same path, and a ratio would fail a
+  column that is portable.
+
+Neither run inherits an `OPENSSL_ia32cap` or `OPENSSL_armcap` from the caller's
+environment: the default column runs unmasked, and the portable one under the
+family's mask alone.
 
 Choose a kernel and size at which the twin's assembly really is faster on the
 machines CI uses. Where it is only marginally faster, give that twin `null`:
@@ -228,7 +251,13 @@ group:
   build.
 
 Each quotient is read against that row's noise band, `|nish / nish-copy − 1|`,
-by `bench/par-reading.mjs`'s `sideOf`:
+by `bench/par-reading.mjs`'s `sideOf`. The band is Nish's gap alone, not
+`bench/run.mjs`'s `judge`, the larger of both binaries' gaps to their copies. A
+copy of every twin would add up to seven columns to every row, and the noise a
+band measures is mostly the machine's: every column runs in the same
+interleaved rounds and meets it alike. A twin whose own runs spread wider than
+Nish's is not caught by it, so a quotient just past the band is weak evidence;
+the table prints each family's band range for that reading.
 
 - **within the band:** no difference;
 - **edge:** too close to call;
