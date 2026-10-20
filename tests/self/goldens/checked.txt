@@ -64919,57 +64919,57 @@ function QuicStreamPools.constructor(this: QuicStreamPools, bufferSize: i32, str
   calls: nish.BufferPool.constructor nish_alloc_struct nish_array_grow nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 257:17 new BufferPool -> @nish.BufferPool.constructor
-  callee 258:17 new BufferPool -> @nish.BufferPool.constructor
-  local 263:14 k: i32 (let)
+  callee 260:17 new BufferPool -> @nish.BufferPool.constructor
+  callee 261:17 new BufferPool -> @nish.BufferPool.constructor
+  local 266:14 k: i32 (let)
 function QuicStreamPools.prime(this: QuicStreamPools, need: i32): void -> @nish.QuicStreamPools.prime [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 277:7
+  sharedWrite: 280:7
   calls: nish.BufferPool.take nish.QuicStreamPools.drain nish.QuicStreamPools.fit nish_panic_index nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.QuicStreamPools.drain#0 nish.QuicStreamPools.fit#0
   stackSites=0 stackLocals=0
-  callee 275:5 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
-  callee 277:36 BufferPool.take -> @nish.BufferPool.take
-  callee 278:36 BufferPool.take -> @nish.BufferPool.take
-  callee 281:5 QuicStreamPools.fit -> @nish.QuicStreamPools.fit
+  callee 278:5 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
+  callee 280:36 BufferPool.take -> @nish.BufferPool.take
+  callee 281:36 BufferPool.take -> @nish.BufferPool.take
+  callee 284:5 QuicStreamPools.fit -> @nish.QuicStreamPools.fit
 function QuicStreamPools.drain(this: QuicStreamPools, most: i32): void -> @nish.QuicStreamPools.drain [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 287:7
+  sharedWrite: 290:7
   calls: nish.BufferPool.give nish_panic_index nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 288:7 BufferPool.give -> @nish.BufferPool.give
-  callee 289:7 BufferPool.give -> @nish.BufferPool.give
+  callee 291:7 BufferPool.give -> @nish.BufferPool.give
+  callee 292:7 BufferPool.give -> @nish.BufferPool.give
 function QuicStreamPools.fit(this: QuicStreamPools): void -> @nish.QuicStreamPools.fit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 317:5
+  sharedWrite: 320:5
   calls: nish.quicStreamGrowFree nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 304:11 made: i32 (const)
-  local 308:9 target: i32 (let)
-  callee 315:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
-  callee 316:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
+  local 307:11 made: i32 (const)
+  local 311:9 target: i32 (let)
+  callee 318:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
+  callee 319:5 quicStreamGrowFree -> @nish.quicStreamGrowFree
 function QuicStreamPools.lend(this: QuicStreamPools, stream: QuicStream): void -> @nish.QuicStreamPools.lend [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 325:5
+  sharedWrite: 328:5
   calls: nish_panic nish_panic_index nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false
   pointer stream: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicStreamPools.lendSend(this: QuicStreamPools, stream: QuicStream): void -> @nish.QuicStreamPools.lendSend [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 341:7
+  sharedWrite: 344:7
   calls: nish.BufferPool.take nish.QuicStreamPools.fit nish_panic_index nish_panic_overflow
   pointer this: size=56 writesThrough=true captured=false passedTo=nish.QuicStreamPools.fit#0
   pointer stream: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 348:22 BufferPool.take -> @nish.BufferPool.take
-  callee 349:24 BufferPool.take -> @nish.BufferPool.take
-  callee 350:5 QuicStreamPools.fit -> @nish.QuicStreamPools.fit
+  callee 351:22 BufferPool.take -> @nish.BufferPool.take
+  callee 352:24 BufferPool.take -> @nish.BufferPool.take
+  callee 353:5 QuicStreamPools.fit -> @nish.QuicStreamPools.fit
 function QuicStreamPools.keep(this: QuicStreamPools, buf: u8[], have: u8[], used: i32): void -> @nish.QuicStreamPools.keep [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 363:5
+  sharedWrite: 366:5
   escaping: buf have
   calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
   pointer this: size=56 writesThrough=true captured=false
@@ -64981,17 +64981,17 @@ function QuicStreamPools.lent(this: QuicStreamPools): i32 -> @nish.QuicStreamPoo
   calls: nish.BufferPool.lent nish_panic_overflow
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 372:12 BufferPool.lent -> @nish.BufferPool.lent
-  callee 372:31 BufferPool.lent -> @nish.BufferPool.lent
+  callee 375:12 BufferPool.lent -> @nish.BufferPool.lent
+  callee 375:31 BufferPool.lent -> @nish.BufferPool.lent
 function quicStreamGrowFree(free: u8[][], target: i32, none: u8[]): void -> @nish.quicStreamGrowFree [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 384:5
+  sharedWrite: 387:5
   escaping: none
   calls: nish_array_grow nish_panic_index
   pointer free: size=0 writesThrough=true captured=false
   pointer none: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 382:9 length: i32 (const)
+  local 385:9 length: i32 (const)
 function QuicStream.constructor(this: QuicStream, bufferSize: i32, none: u8[]): void -> @nish.QuicStream.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: bufferSize none
@@ -65021,28 +65021,28 @@ function QuicStream.finished(this: QuicStream): boolean -> @nish.QuicStream.fini
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=200 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 503:11 sendDone: boolean (const)
-  local 507:11 recvDone: boolean (const)
+  local 506:11 sendDone: boolean (const)
+  local 510:11 recvDone: boolean (const)
 function QuicStream.open(this: QuicStream, id: i64, recvLimit: i64, sendLimit: i64): void -> @nish.QuicStream.open [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 520:5
+  sharedWrite: 523:5
   escaping: id recvLimit sendLimit
   calls: nish.quicStreamIsLocal nish.quicStreamIsUni
   pointer this: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 539:11 uni: boolean (const)
-  callee 539:26 quicStreamIsUni -> @nish.quicStreamIsUni
-  local 540:11 local: boolean (const)
-  callee 540:28 quicStreamIsLocal -> @nish.quicStreamIsLocal
+  local 542:11 uni: boolean (const)
+  callee 542:26 quicStreamIsUni -> @nish.quicStreamIsUni
+  local 543:11 local: boolean (const)
+  callee 543:28 quicStreamIsLocal -> @nish.quicStreamIsLocal
 function QuicStream.resend(this: QuicStream, offset: i64, length: i32, fin: boolean): void -> @nish.QuicStream.resend [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 564:9
+  sharedWrite: 567:9
   escaping: offset
   calls: nish_panic_overflow
   pointer this: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 560:11 low: i64 (const)
-  local 561:11 high: i64 (const)
+  local 563:11 low: i64 (const)
+  local 564:11 high: i64 (const)
 function QuicStreams.constructor(this: QuicStreams, maxBidi: i64, maxUni: i64, localStreams: i64, bufferSize: i32, windowData: i64): void -> @nish.QuicStreams.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.QuicStreams.reset
@@ -65050,74 +65050,74 @@ function QuicStreams.constructor(this: QuicStreams, maxBidi: i64, maxUni: i64, l
   calls: nish.QuicStream.constructor nish.QuicStreams.reset nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.reset#0
   stackSites=0 stackLocals=0
-  local 679:11 count: i32 (const)
-  local 682:14 k: i32 (let)
-  callee 683:23 new QuicStream -> @nish.QuicStream.constructor
-  local 685:9 size: i32 (let)
-  callee 697:5 QuicStreams.reset -> @nish.QuicStreams.reset
+  local 682:11 count: i32 (const)
+  local 685:14 k: i32 (let)
+  callee 686:23 new QuicStream -> @nish.QuicStream.constructor
+  local 688:9 size: i32 (let)
+  callee 700:5 QuicStreams.reset -> @nish.QuicStreams.reset
 function QuicStreams.share(this: QuicStreams, pools: QuicStreamPools): void -> @nish.QuicStreams.share [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 713:5
+  sharedWrite: 716:5
   escaping: pools
   calls: nish.QuicStreams.giveBack nish_panic nish_str_concat nish_str_from_i32
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.giveBack#0
   pointer pools: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 712:5 QuicStreams.giveBack -> @nish.QuicStreams.giveBack
+  callee 715:5 QuicStreams.giveBack -> @nish.QuicStreams.giveBack
 function QuicStreams.ownPools(this: QuicStreams): QuicStreamPools | null -> @nish.QuicStreams.ownPools [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 737:5
+  sharedWrite: 740:5
   calls: nish.QuicStreamPools.constructor nish.QuicStreamPools.drain nish.QuicStreamPools.prime nish_alloc_struct
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 726:11 pools: QuicStreamPools | null (const)
-  local 730:11 count: i32 (const)
-  local 734:11 made: QuicStreamPools (const)
-  callee 734:35 new QuicStreamPools -> @nish.QuicStreamPools.constructor
-  callee 735:5 QuicStreamPools.prime -> @nish.QuicStreamPools.prime
-  callee 736:5 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
+  local 729:11 pools: QuicStreamPools | null (const)
+  local 733:11 count: i32 (const)
+  local 737:11 made: QuicStreamPools (const)
+  callee 737:35 new QuicStreamPools -> @nish.QuicStreamPools.constructor
+  callee 738:5 QuicStreamPools.prime -> @nish.QuicStreamPools.prime
+  callee 739:5 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
 function QuicStreams.prime(this: QuicStreams, bytes: i32): void -> @nish.QuicStreams.prime [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicStreams.ownPools
   calls: nish.QuicStreamPools.prime nish.QuicStreams.ownPools nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.ownPools#0
   stackSites=0 stackLocals=0
-  local 757:11 pools: QuicStreamPools | null (const)
-  callee 757:43 QuicStreams.ownPools -> @nish.QuicStreams.ownPools
-  local 759:13 idle: i32 (const)
-  local 760:13 most: i32 (const)
-  callee 761:7 QuicStreamPools.prime -> @nish.QuicStreamPools.prime
+  local 760:11 pools: QuicStreamPools | null (const)
+  callee 760:43 QuicStreams.ownPools -> @nish.QuicStreams.ownPools
+  local 762:13 idle: i32 (const)
+  local 763:13 most: i32 (const)
+  callee 764:7 QuicStreamPools.prime -> @nish.QuicStreamPools.prime
 function QuicStreams.giveBack(this: QuicStreams): void -> @nish.QuicStreams.giveBack [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicStreamPools.drain
   calls: nish.QuicStreamPools.drain nish.QuicStreams.giveRecv nish.QuicStreams.giveSend
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.giveRecv#0 nish.QuicStreams.giveSend#0
   stackSites=0 stackLocals=0
-  local 767:11 pools: QuicStreamPools | null (const)
-  callee 769:7 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
-  local 771:16 stream: QuicStream (const)
-  callee 772:7 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
-  callee 773:7 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
-  callee 776:7 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
+  local 770:11 pools: QuicStreamPools | null (const)
+  callee 772:7 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
+  local 774:16 stream: QuicStream (const)
+  callee 775:7 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
+  callee 776:7 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
+  callee 779:7 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
 function QuicStreams.borrowRecv(this: QuicStreams, stream: QuicStream): void -> @nish.QuicStreams.borrowRecv [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 795:5
+  sharedWrite: 798:5
   calls: nish.QuicStreamPools.lend nish_panic nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false
   pointer stream: size=200 writesThrough=true captured=false passedTo=nish.QuicStreamPools.lend#1
   stackSites=0 stackLocals=0
-  local 787:11 pools: QuicStreamPools | null (const)
-  callee 794:5 QuicStreamPools.lend -> @nish.QuicStreamPools.lend
+  local 790:11 pools: QuicStreamPools | null (const)
+  callee 797:5 QuicStreamPools.lend -> @nish.QuicStreamPools.lend
 function QuicStreams.giveRecv(this: QuicStreams, stream: QuicStream): void -> @nish.QuicStreams.giveRecv [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 811:7
+  sharedWrite: 814:7
   calls: nish.QuicStreamPools.keep nish.quicStreamMin nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false
   pointer stream: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 804:11 pools: QuicStreamPools | null (const)
-  callee 806:7 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
-  callee 809:15 quicStreamMin -> @nish.quicStreamMin
+  local 807:11 pools: QuicStreamPools | null (const)
+  callee 809:7 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
+  callee 812:15 quicStreamMin -> @nish.quicStreamMin
 function QuicStreams.borrowSend(this: QuicStreams, stream: QuicStream): void -> @nish.QuicStreams.borrowSend [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicStreams.ownPools
@@ -65125,33 +65125,33 @@ function QuicStreams.borrowSend(this: QuicStreams, stream: QuicStream): void -> 
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.ownPools#0
   pointer stream: size=200 writesThrough=true captured=false passedTo=nish.QuicStreamPools.lendSend#1
   stackSites=0 stackLocals=0
-  local 819:11 pools: QuicStreamPools | null (const)
-  callee 819:43 QuicStreams.ownPools -> @nish.QuicStreams.ownPools
-  callee 821:7 QuicStreamPools.lendSend -> @nish.QuicStreamPools.lendSend
+  local 822:11 pools: QuicStreamPools | null (const)
+  callee 822:43 QuicStreams.ownPools -> @nish.QuicStreams.ownPools
+  callee 824:7 QuicStreamPools.lendSend -> @nish.QuicStreamPools.lendSend
 function QuicStreams.giveSend(this: QuicStreams, stream: QuicStream): void -> @nish.QuicStreams.giveSend [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 836:7
+  sharedWrite: 839:7
   calls: nish.QuicStreamPools.keep nish.quicStreamMin
   pointer this: size=344 writesThrough=false captured=false
   pointer stream: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 833:11 pools: QuicStreamPools | null (const)
-  callee 835:7 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
-  callee 835:58 quicStreamMin -> @nish.quicStreamMin
+  local 836:11 pools: QuicStreamPools | null (const)
+  callee 838:7 QuicStreamPools.keep -> @nish.QuicStreamPools.keep
+  callee 838:58 quicStreamMin -> @nish.quicStreamMin
 function QuicStreams.reset(this: QuicStreams): void -> @nish.QuicStreams.reset [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 849:7
+  sharedWrite: 852:7
   calls: nish.QuicStreams.giveBack nish.QuicStreams.pushFree
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.giveBack#0 nish.QuicStreams.pushFree#0
   stackSites=0 stackLocals=0
-  callee 847:5 QuicStreams.giveBack -> @nish.QuicStreams.giveBack
-  local 848:16 stream: QuicStream (const)
-  local 853:11 count: i32 (const)
-  local 855:14 k: i32 (let)
-  callee 856:7 QuicStreams.pushFree -> @nish.QuicStreams.pushFree
+  callee 850:5 QuicStreams.giveBack -> @nish.QuicStreams.giveBack
+  local 851:16 stream: QuicStream (const)
+  local 856:11 count: i32 (const)
+  local 858:14 k: i32 (let)
+  callee 859:7 QuicStreams.pushFree -> @nish.QuicStreams.pushFree
 function QuicStreams.setPeerLimits(this: QuicStreams, maxData: i64, bidiLocal: i64, bidiRemote: i64, uni: i64, maxStreamsBidi: i64, maxStreamsUni: i64): void -> @nish.QuicStreams.setPeerLimits [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 908:5
+  sharedWrite: 911:5
   escaping: bidiLocal bidiRemote maxData maxStreamsBidi maxStreamsUni uni
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -65159,91 +65159,91 @@ function QuicStreams.bucket(this: QuicStreams, id: i64): i32 -> @nish.QuicStream
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=344 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 918:11 mixed: i64 (const)
+  local 921:11 mixed: i64 (const)
 function QuicStreams.slotOf(this: QuicStreams, id: i64): i32 -> @nish.QuicStreams.slotOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
   calls: nish.QuicStreams.bucket nish_panic_overflow
   pointer this: size=344 writesThrough=false captured=false passedTo=nish.QuicStreams.bucket#0
   stackSites=0 stackLocals=0
-  local 924:11 size: i32 (const)
-  local 925:9 h: i32 (let)
-  callee 925:18 QuicStreams.bucket -> @nish.QuicStreams.bucket
-  local 926:14 probe: i32 (let)
-  local 930:13 entry: i32 (const)
+  local 927:11 size: i32 (const)
+  local 928:9 h: i32 (let)
+  callee 928:18 QuicStreams.bucket -> @nish.QuicStreams.bucket
+  local 929:14 probe: i32 (let)
+  local 933:13 entry: i32 (const)
 function QuicStreams.find(this: QuicStreams, id: i64): QuicStream | null -> @nish.QuicStreams.find [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
   calls: nish.QuicStreams.slotOf
   pointer this: size=344 writesThrough=false captured=false passedTo=nish.QuicStreams.slotOf#0
   stackSites=0 stackLocals=0
-  local 944:11 k: i32 (const)
-  callee 944:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 947:11 k: i32 (const)
+  callee 947:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
 function QuicStreams.indexInsert(this: QuicStreams, k: i32, id: i64): void -> @nish.QuicStreams.indexInsert [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 957:9
+  sharedWrite: 960:9
   escaping: id
   calls: nish.QuicStreams.bucket nish_panic_overflow
   pointer this: size=344 writesThrough=false captured=false passedTo=nish.QuicStreams.bucket#0
   stackSites=0 stackLocals=0
-  local 950:11 size: i32 (const)
-  local 951:9 h: i32 (let)
-  callee 951:18 QuicStreams.bucket -> @nish.QuicStreams.bucket
-  local 952:14 probe: i32 (let)
+  local 953:11 size: i32 (const)
+  local 954:9 h: i32 (let)
+  callee 954:18 QuicStreams.bucket -> @nish.QuicStreams.bucket
+  local 955:14 probe: i32 (let)
 function QuicStreams.indexRemove(this: QuicStreams, k: i32, id: i64): void -> @nish.QuicStreams.indexRemove [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 999:9
+  sharedWrite: 1002:9
   escaping: id
   calls: nish.QuicStreams.bucket nish_panic_overflow
   pointer this: size=344 writesThrough=false captured=false passedTo=nish.QuicStreams.bucket#0 nish.QuicStreams.bucket#0
   stackSites=0 stackLocals=0
-  local 966:11 size: i32 (const)
-  local 967:11 mask: i32 (const)
-  local 968:9 h: i32 (let)
-  callee 968:18 QuicStreams.bucket -> @nish.QuicStreams.bucket
-  local 969:9 found: i32 (let)
-  local 970:14 probe: i32 (let)
-  local 983:9 hole: i32 (let)
-  local 984:9 next: i32 (let)
-  local 986:11 probe: i32 (let)
-  local 990:13 entry: i32 (const)
-  local 994:13 home: i32 (const)
-  callee 994:60 QuicStreams.bucket -> @nish.QuicStreams.bucket
-  local 996:13 distanceNext: i32 (const)
-  local 997:13 distanceHole: i32 (const)
+  local 969:11 size: i32 (const)
+  local 970:11 mask: i32 (const)
+  local 971:9 h: i32 (let)
+  callee 971:18 QuicStreams.bucket -> @nish.QuicStreams.bucket
+  local 972:9 found: i32 (let)
+  local 973:14 probe: i32 (let)
+  local 986:9 hole: i32 (let)
+  local 987:9 next: i32 (let)
+  local 989:11 probe: i32 (let)
+  local 993:13 entry: i32 (const)
+  local 997:13 home: i32 (const)
+  callee 997:60 QuicStreams.bucket -> @nish.QuicStreams.bucket
+  local 999:13 distanceNext: i32 (const)
+  local 1000:13 distanceHole: i32 (const)
 function QuicStreams.queue(this: QuicStreams, k: i32): void -> @nish.QuicStreams.queue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1017:7
+  sharedWrite: 1020:7
   escaping: k
   calls: nish_panic_div nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1011:11 size: i32 (const)
-  local 1015:11 at: i32 (const)
+  local 1014:11 size: i32 (const)
+  local 1018:11 at: i32 (const)
 function QuicStreams.nextEvent(this: QuicStreams): i64 -> @nish.QuicStreams.nextEvent [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1034:7
+  sharedWrite: 1037:7
   calls: nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1031:11 size: i32 (const)
-  local 1033:13 at: i32 (const)
-  local 1036:13 k: i32 (const)
-  local 1038:15 stream: QuicStream (const)
+  local 1034:11 size: i32 (const)
+  local 1036:13 at: i32 (const)
+  local 1039:13 k: i32 (const)
+  local 1041:15 stream: QuicStream (const)
 function QuicStreams.pushFree(this: QuicStreams, k: i32): void -> @nish.QuicStreams.pushFree [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1052:7
+  sharedWrite: 1055:7
   escaping: k
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1050:11 at: i32 (const)
+  local 1053:11 at: i32 (const)
 function QuicStreams.takeFree(this: QuicStreams): i32 -> @nish.QuicStreams.takeFree [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1063:5
+  sharedWrite: 1066:5
   calls: nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1059:11 at: i32 (const)
+  local 1062:11 at: i32 (const)
 function QuicStreams.openSlot(this: QuicStreams, id: i64): i32 -> @nish.QuicStreams.openSlot [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicStreams.takeFree
@@ -65251,59 +65251,59 @@ function QuicStreams.openSlot(this: QuicStreams, id: i64): i32 -> @nish.QuicStre
   calls: nish.QuicStream.open nish.QuicStreams.indexInsert nish.QuicStreams.takeFree nish.quicStreamIsLocal nish.quicStreamIsUni
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.takeFree#0 nish.QuicStreams.indexInsert#0
   stackSites=0 stackLocals=0
-  local 1069:11 k: i32 (const)
-  callee 1069:20 QuicStreams.takeFree -> @nish.QuicStreams.takeFree
-  local 1073:11 local: boolean (const)
-  callee 1073:28 quicStreamIsLocal -> @nish.quicStreamIsLocal
-  local 1074:11 uni: boolean (const)
-  callee 1074:26 quicStreamIsUni -> @nish.quicStreamIsUni
-  local 1075:11 buffer: i64 (const)
-  local 1078:11 recvLimit: i64 (const)
-  local 1079:9 sendLimit: i64 (let)
-  callee 1083:5 QuicStream.open -> @nish.QuicStream.open
-  callee 1084:5 QuicStreams.indexInsert -> @nish.QuicStreams.indexInsert
+  local 1072:11 k: i32 (const)
+  callee 1072:20 QuicStreams.takeFree -> @nish.QuicStreams.takeFree
+  local 1076:11 local: boolean (const)
+  callee 1076:28 quicStreamIsLocal -> @nish.quicStreamIsLocal
+  local 1077:11 uni: boolean (const)
+  callee 1077:26 quicStreamIsUni -> @nish.quicStreamIsUni
+  local 1078:11 buffer: i64 (const)
+  local 1081:11 recvLimit: i64 (const)
+  local 1082:9 sendLimit: i64 (let)
+  callee 1086:5 QuicStream.open -> @nish.QuicStream.open
+  callee 1087:5 QuicStreams.indexInsert -> @nish.QuicStreams.indexInsert
 function QuicStreams.release(this: QuicStreams, k: i32): void -> @nish.QuicStreams.release [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1105:5
+  sharedWrite: 1108:5
   escaping: k
   calls: nish.QuicStream.finished nish.QuicStreams.giveRecv nish.QuicStreams.giveSend nish.QuicStreams.indexRemove nish.QuicStreams.pushFree nish.quicStreamIsLocal nish.quicStreamIsUni nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.giveRecv#0 nish.QuicStreams.giveSend#0 nish.QuicStreams.indexRemove#0 nish.QuicStreams.pushFree#0
   stackSites=0 stackLocals=0
-  local 1097:11 stream: QuicStream (const)
-  callee 1098:27 QuicStream.finished -> @nish.QuicStream.finished
-  local 1101:11 id: i64 (const)
-  callee 1102:5 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
-  callee 1103:5 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
-  callee 1104:5 QuicStreams.indexRemove -> @nish.QuicStreams.indexRemove
-  callee 1106:5 QuicStreams.pushFree -> @nish.QuicStreams.pushFree
-  callee 1107:9 quicStreamIsLocal -> @nish.quicStreamIsLocal
-  callee 1111:9 quicStreamIsUni -> @nish.quicStreamIsUni
+  local 1100:11 stream: QuicStream (const)
+  callee 1101:27 QuicStream.finished -> @nish.QuicStream.finished
+  local 1104:11 id: i64 (const)
+  callee 1105:5 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
+  callee 1106:5 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
+  callee 1107:5 QuicStreams.indexRemove -> @nish.QuicStreams.indexRemove
+  callee 1109:5 QuicStreams.pushFree -> @nish.QuicStreams.pushFree
+  callee 1110:9 quicStreamIsLocal -> @nish.quicStreamIsLocal
+  callee 1114:9 quicStreamIsUni -> @nish.quicStreamIsUni
 function QuicStreams.locate(this: QuicStreams, id: i64, receiving: boolean): i32 -> @nish.QuicStreams.locate [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1139:7
+  sharedWrite: 1142:7
   escaping: id
   calls: nish.QuicStreams.openSlot nish.QuicStreams.queue nish.QuicStreams.slotOf nish.quicStreamIsLocal nish.quicStreamIsUni nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.slotOf#0 nish.QuicStreams.slotOf#0 nish.QuicStreams.openSlot#0 nish.QuicStreams.queue#0
   stackSites=0 stackLocals=0
-  callee 1138:9 quicStreamIsUni -> @nish.quicStreamIsUni
-  callee 1138:32 quicStreamIsLocal -> @nish.quicStreamIsLocal
-  local 1142:11 sequence: i64 (const)
-  local 1143:11 uni: boolean (const)
-  callee 1143:26 quicStreamIsUni -> @nish.quicStreamIsUni
-  callee 1144:9 quicStreamIsLocal -> @nish.quicStreamIsLocal
-  local 1145:13 opened: i64 (const)
-  callee 1150:14 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local 1152:11 limit: i64 (const)
-  local 1157:9 opened: i64 (let)
-  callee 1159:14 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local 1162:9 found: i32 (let)
-  local 1164:13 next: i64 (const)
-  local 1165:13 k: i32 (const)
-  callee 1165:22 QuicStreams.openSlot -> @nish.QuicStreams.openSlot
-  callee 1168:9 QuicStreams.queue -> @nish.QuicStreams.queue
+  callee 1141:9 quicStreamIsUni -> @nish.quicStreamIsUni
+  callee 1141:32 quicStreamIsLocal -> @nish.quicStreamIsLocal
+  local 1145:11 sequence: i64 (const)
+  local 1146:11 uni: boolean (const)
+  callee 1146:26 quicStreamIsUni -> @nish.quicStreamIsUni
+  callee 1147:9 quicStreamIsLocal -> @nish.quicStreamIsLocal
+  local 1148:13 opened: i64 (const)
+  callee 1153:14 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 1155:11 limit: i64 (const)
+  local 1160:9 opened: i64 (let)
+  callee 1162:14 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 1165:9 found: i32 (let)
+  local 1167:13 next: i64 (const)
+  local 1168:13 k: i32 (const)
+  callee 1168:22 QuicStreams.openSlot -> @nish.QuicStreams.openSlot
+  callee 1171:9 QuicStreams.queue -> @nish.QuicStreams.queue
 function QuicStreams.creditReceived(this: QuicStreams, stream: QuicStream, end: i64): i64 -> @nish.QuicStreams.creditReceived [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1190:7
+  sharedWrite: 1193:7
   escaping: end
   calls: nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false
@@ -65311,68 +65311,68 @@ function QuicStreams.creditReceived(this: QuicStreams, stream: QuicStream, end: 
   stackSites=0 stackLocals=0
 function QuicStreams.onStream(this: QuicStreams, id: i64, offset: i64, buf: u8[], from: i32, length: i32, fin: boolean): i64 -> @nish.QuicStreams.onStream [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1230:7
+  sharedWrite: 1233:7
   escaping: id
   calls: nish.QuicStream.at nish.QuicStreams.borrowRecv nish.QuicStreams.creditReceived nish.QuicStreams.locate nish.QuicStreams.queue nish.quicStreamBit nish.quicStreamSetBit nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.locate#0 nish.QuicStreams.creditReceived#0 nish.QuicStreams.borrowRecv#0 nish.QuicStreams.queue#0
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1206:11 k: i32 (const)
-  callee 1206:20 QuicStreams.locate -> @nish.QuicStreams.locate
-  local 1213:11 stream: QuicStream (const)
-  local 1214:11 end: i64 (const)
-  local 1221:11 credit: i64 (const)
-  callee 1221:25 QuicStreams.creditReceived -> @nish.QuicStreams.creditReceived
-  local 1233:11 before: i64 (const)
-  callee 1235:7 QuicStreams.borrowRecv -> @nish.QuicStreams.borrowRecv
-  local 1237:11 size: i32 (const)
-  local 1238:14 k2: i32 (let)
-  local 1239:13 position: i64 (const)
-  local 1240:13 src: i32 (const)
-  local 1242:15 slot: i32 (const)
-  callee 1242:27 QuicStream.at -> @nish.QuicStream.at
-  callee 1245:11 quicStreamSetBit -> @nish.quicStreamSetBit
-  callee 1251:7 quicStreamBit -> @nish.quicStreamBit
-  callee 1251:38 QuicStream.at -> @nish.QuicStream.at
-  callee 1259:7 QuicStreams.queue -> @nish.QuicStreams.queue
+  local 1209:11 k: i32 (const)
+  callee 1209:20 QuicStreams.locate -> @nish.QuicStreams.locate
+  local 1216:11 stream: QuicStream (const)
+  local 1217:11 end: i64 (const)
+  local 1224:11 credit: i64 (const)
+  callee 1224:25 QuicStreams.creditReceived -> @nish.QuicStreams.creditReceived
+  local 1236:11 before: i64 (const)
+  callee 1238:7 QuicStreams.borrowRecv -> @nish.QuicStreams.borrowRecv
+  local 1240:11 size: i32 (const)
+  local 1241:14 k2: i32 (let)
+  local 1242:13 position: i64 (const)
+  local 1243:13 src: i32 (const)
+  local 1245:15 slot: i32 (const)
+  callee 1245:27 QuicStream.at -> @nish.QuicStream.at
+  callee 1248:11 quicStreamSetBit -> @nish.quicStreamSetBit
+  callee 1254:7 quicStreamBit -> @nish.quicStreamBit
+  callee 1254:38 QuicStream.at -> @nish.QuicStream.at
+  callee 1262:7 QuicStreams.queue -> @nish.QuicStreams.queue
 function QuicStreams.onReset(this: QuicStreams, id: i64, code: i64, finalSize: i64): i64 -> @nish.QuicStreams.onReset [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1281:5
+  sharedWrite: 1284:5
   escaping: code finalSize id
   calls: nish.QuicStreams.consume nish.QuicStreams.creditReceived nish.QuicStreams.giveRecv nish.QuicStreams.locate nish.QuicStreams.queue nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.locate#0 nish.QuicStreams.creditReceived#0 nish.QuicStreams.consume#0 nish.QuicStreams.giveRecv#0 nish.QuicStreams.queue#0
   stackSites=0 stackLocals=0
-  local 1266:11 k: i32 (const)
-  callee 1266:20 QuicStreams.locate -> @nish.QuicStreams.locate
-  local 1273:11 stream: QuicStream (const)
-  local 1277:11 credit: i64 (const)
-  callee 1277:25 QuicStreams.creditReceived -> @nish.QuicStreams.creditReceived
-  callee 1286:5 QuicStreams.consume -> @nish.QuicStreams.consume
-  callee 1290:5 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
-  callee 1295:5 QuicStreams.queue -> @nish.QuicStreams.queue
+  local 1269:11 k: i32 (const)
+  callee 1269:20 QuicStreams.locate -> @nish.QuicStreams.locate
+  local 1276:11 stream: QuicStream (const)
+  local 1280:11 credit: i64 (const)
+  callee 1280:25 QuicStreams.creditReceived -> @nish.QuicStreams.creditReceived
+  callee 1289:5 QuicStreams.consume -> @nish.QuicStreams.consume
+  callee 1293:5 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
+  callee 1298:5 QuicStreams.queue -> @nish.QuicStreams.queue
 function QuicStreams.onStopSending(this: QuicStreams, id: i64, code: i64): i64 -> @nish.QuicStreams.onStopSending [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1314:7
+  sharedWrite: 1317:7
   escaping: code id
   calls: nish.QuicStreams.locate nish.QuicStreams.queue nish.QuicStreams.resetSlot
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.locate#0 nish.QuicStreams.resetSlot#0 nish.QuicStreams.queue#0
   stackSites=0 stackLocals=0
-  local 1305:11 k: i32 (const)
-  callee 1305:20 QuicStreams.locate -> @nish.QuicStreams.locate
-  local 1312:11 stream: QuicStream (const)
-  callee 1315:7 QuicStreams.resetSlot -> @nish.QuicStreams.resetSlot
-  callee 1316:7 QuicStreams.queue -> @nish.QuicStreams.queue
+  local 1308:11 k: i32 (const)
+  callee 1308:20 QuicStreams.locate -> @nish.QuicStreams.locate
+  local 1315:11 stream: QuicStream (const)
+  callee 1318:7 QuicStreams.resetSlot -> @nish.QuicStreams.resetSlot
+  callee 1319:7 QuicStreams.queue -> @nish.QuicStreams.queue
 function QuicStreams.onMaxStreamData(this: QuicStreams, id: i64, limit: i64): i64 -> @nish.QuicStreams.onMaxStreamData [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1330:9
+  sharedWrite: 1333:9
   escaping: id limit
   calls: nish.QuicStreams.locate nish.QuicStreams.queue
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.locate#0 nish.QuicStreams.queue#0
   stackSites=0 stackLocals=0
-  local 1323:11 k: i32 (const)
-  callee 1323:20 QuicStreams.locate -> @nish.QuicStreams.locate
-  local 1328:13 stream: QuicStream (const)
-  callee 1333:11 QuicStreams.queue -> @nish.QuicStreams.queue
+  local 1326:11 k: i32 (const)
+  callee 1326:20 QuicStreams.locate -> @nish.QuicStreams.locate
+  local 1331:13 stream: QuicStream (const)
+  callee 1336:11 QuicStreams.queue -> @nish.QuicStreams.queue
 function QuicStreams.onStreamDataBlocked(this: QuicStreams, id: i64): i64 -> @nish.QuicStreams.onStreamDataBlocked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicStreams.locate
@@ -65380,90 +65380,90 @@ function QuicStreams.onStreamDataBlocked(this: QuicStreams, id: i64): i64 -> @ni
   calls: nish.QuicStreams.locate
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.locate#0
   stackSites=0 stackLocals=0
-  local 1342:11 k: i32 (const)
-  callee 1342:20 QuicStreams.locate -> @nish.QuicStreams.locate
+  local 1345:11 k: i32 (const)
+  callee 1345:20 QuicStreams.locate -> @nish.QuicStreams.locate
 function QuicStreams.onMaxData(this: QuicStreams, limit: i64): void -> @nish.QuicStreams.onMaxData [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1349:7
+  sharedWrite: 1352:7
   escaping: limit
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicStreams.onMaxStreams(this: QuicStreams, uni: boolean, limit: i64): void -> @nish.QuicStreams.onMaxStreams [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1357:7
+  sharedWrite: 1360:7
   escaping: limit
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicStreams.consume(this: QuicStreams, bytes: i64): void -> @nish.QuicStreams.consume [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1367:5
+  sharedWrite: 1370:5
   calls: nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicStreams.open(this: QuicStreams, bidi: boolean): i64 -> @nish.QuicStreams.open [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1388:9
+  sharedWrite: 1391:9
   calls: nish.QuicStreams.openSlot nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.openSlot#0
   stackSites=0 stackLocals=0
-  local 1384:11 opened: i64 (const)
-  local 1385:11 limit: i64 (const)
-  local 1397:11 id: i64 (const)
-  callee 1398:9 QuicStreams.openSlot -> @nish.QuicStreams.openSlot
+  local 1387:11 opened: i64 (const)
+  local 1388:11 limit: i64 (const)
+  local 1400:11 id: i64 (const)
+  callee 1401:9 QuicStreams.openSlot -> @nish.QuicStreams.openSlot
 function QuicStreams.write(this: QuicStreams, id: i64, buf: u8[], from: i32, length: i32, fin: boolean): i32 -> @nish.QuicStreams.write [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1446:9
+  sharedWrite: 1449:9
   escaping: id length
   calls: nish.QuicStream.at nish.QuicStream.room nish.QuicStreams.borrowSend nish.QuicStreams.slotOf nish_panic_index nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.slotOf#0 nish.QuicStreams.borrowSend#0
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1417:11 k: i32 (const)
-  callee 1417:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local 1427:11 stream: QuicStream (const)
-  local 1437:11 room: i64 (const)
-  callee 1437:23 QuicStream.room -> @nish.QuicStream.room
-  local 1438:11 n: i32 (const)
-  callee 1440:7 QuicStreams.borrowSend -> @nish.QuicStreams.borrowSend
-  local 1442:11 size: i32 (const)
-  local 1443:14 j: i32 (let)
-  local 1444:13 slot: i32 (const)
-  callee 1444:25 QuicStream.at -> @nish.QuicStream.at
+  local 1420:11 k: i32 (const)
+  callee 1420:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 1430:11 stream: QuicStream (const)
+  local 1440:11 room: i64 (const)
+  callee 1440:23 QuicStream.room -> @nish.QuicStream.room
+  local 1441:11 n: i32 (const)
+  callee 1443:7 QuicStreams.borrowSend -> @nish.QuicStreams.borrowSend
+  local 1445:11 size: i32 (const)
+  local 1446:14 j: i32 (let)
+  local 1447:13 slot: i32 (const)
+  callee 1447:25 QuicStream.at -> @nish.QuicStream.at
 function QuicStreams.read(this: QuicStreams, id: i64, buf: u8[], at: i32, length: i32): i32 -> @nish.QuicStreams.read [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1481:7
+  sharedWrite: 1484:7
   escaping: id length
   calls: nish.QuicStream.at nish.QuicStream.readable nish.QuicStreamPools.drain nish.QuicStreams.consume nish.QuicStreams.giveRecv nish.QuicStreams.release nish.QuicStreams.slotOf nish.quicStreamSetBit nish_panic_index nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.slotOf#0 nish.QuicStreams.release#0 nish.QuicStreams.consume#0 nish.QuicStreams.giveRecv#0 nish.QuicStreams.release#0
   pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 1472:11 k: i32 (const)
-  callee 1472:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local 1476:11 stream: QuicStream (const)
-  callee 1482:7 QuicStreams.release -> @nish.QuicStreams.release
-  local 1485:11 available: i64 (const)
-  callee 1485:28 QuicStream.readable -> @nish.QuicStream.readable
-  local 1491:11 n: i32 (const)
-  local 1492:11 size: i32 (const)
-  local 1493:14 j: i32 (let)
-  local 1494:13 slot: i32 (const)
-  callee 1494:25 QuicStream.at -> @nish.QuicStream.at
-  callee 1497:9 quicStreamSetBit -> @nish.quicStreamSetBit
-  callee 1502:7 QuicStreams.consume -> @nish.QuicStreams.consume
-  local 1505:11 window: i32 (const)
-  local 1521:13 pools: QuicStreamPools | null (const)
-  callee 1523:9 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
-  callee 1525:7 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
-  callee 1526:7 QuicStreams.release -> @nish.QuicStreams.release
+  local 1475:11 k: i32 (const)
+  callee 1475:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 1479:11 stream: QuicStream (const)
+  callee 1485:7 QuicStreams.release -> @nish.QuicStreams.release
+  local 1488:11 available: i64 (const)
+  callee 1488:28 QuicStream.readable -> @nish.QuicStream.readable
+  local 1494:11 n: i32 (const)
+  local 1495:11 size: i32 (const)
+  local 1496:14 j: i32 (let)
+  local 1497:13 slot: i32 (const)
+  callee 1497:25 QuicStream.at -> @nish.QuicStream.at
+  callee 1500:9 quicStreamSetBit -> @nish.quicStreamSetBit
+  callee 1505:7 QuicStreams.consume -> @nish.QuicStreams.consume
+  local 1508:11 window: i32 (const)
+  local 1524:13 pools: QuicStreamPools | null (const)
+  callee 1526:9 QuicStreamPools.drain -> @nish.QuicStreamPools.drain
+  callee 1528:7 QuicStreams.giveRecv -> @nish.QuicStreams.giveRecv
+  callee 1529:7 QuicStreams.release -> @nish.QuicStreams.release
 function QuicStreams.resetSlot(this: QuicStreams, k: i32, code: i64): void -> @nish.QuicStreams.resetSlot [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1544:5
+  sharedWrite: 1547:5
   escaping: code k
   calls: nish.QuicStreams.giveSend nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.giveSend#0
   stackSites=0 stackLocals=0
-  local 1537:11 stream: QuicStream (const)
-  callee 1543:5 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
+  local 1540:11 stream: QuicStream (const)
+  callee 1546:5 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
 function QuicStreams.resetStream(this: QuicStreams, id: i64, code: i64): i32 -> @nish.QuicStreams.resetStream [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicStreams.resetSlot
@@ -65471,160 +65471,160 @@ function QuicStreams.resetStream(this: QuicStreams, id: i64, code: i64): i32 -> 
   calls: nish.QuicStreams.resetSlot nish.QuicStreams.slotOf
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.slotOf#0 nish.QuicStreams.resetSlot#0
   stackSites=0 stackLocals=0
-  local 1559:11 k: i32 (const)
-  callee 1559:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local 1563:11 stream: QuicStream (const)
-  callee 1570:5 QuicStreams.resetSlot -> @nish.QuicStreams.resetSlot
+  local 1562:11 k: i32 (const)
+  callee 1562:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 1566:11 stream: QuicStream (const)
+  callee 1573:5 QuicStreams.resetSlot -> @nish.QuicStreams.resetSlot
 function QuicStreams.stopSending(this: QuicStreams, id: i64, code: i64): i32 -> @nish.QuicStreams.stopSending [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1588:7
+  sharedWrite: 1591:7
   escaping: code id
   calls: nish.QuicStreams.slotOf
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.slotOf#0
   stackSites=0 stackLocals=0
-  local 1576:11 k: i32 (const)
-  callee 1576:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local 1580:11 stream: QuicStream (const)
+  local 1579:11 k: i32 (const)
+  callee 1579:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 1583:11 stream: QuicStream (const)
 function QuicStreams.beginPacket(this: QuicStreams): void -> @nish.QuicStreams.beginPacket [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1597:5
+  sharedWrite: 1600:5
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicStreams.putNextChunk(this: QuicStreams, buf: u8[], at: i32, end: i32): i32 -> @nish.QuicStreams.putNextChunk [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1612:7
+  sharedWrite: 1615:7
   escaping: at end
   calls: nish.QuicStream.wantsToSend nish.QuicStreams.putNew nish.QuicStreams.putResend nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.putResend#0 nish.QuicStreams.putNew#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.QuicStreams.putResend#2 nish.QuicStreams.putNew#3
   stackSites=0 stackLocals=0
-  local 1609:11 count: i32 (const)
-  local 1611:13 k: i32 (const)
-  local 1615:15 stream: QuicStream (const)
-  callee 1616:31 QuicStream.wantsToSend -> @nish.QuicStream.wantsToSend
-  local 1617:15 next: i32 (let)
-  callee 1619:20 QuicStreams.putResend -> @nish.QuicStreams.putResend
-  callee 1625:20 QuicStreams.putNew -> @nish.QuicStreams.putNew
+  local 1612:11 count: i32 (const)
+  local 1614:13 k: i32 (const)
+  local 1618:15 stream: QuicStream (const)
+  callee 1619:31 QuicStream.wantsToSend -> @nish.QuicStream.wantsToSend
+  local 1620:15 next: i32 (let)
+  callee 1622:20 QuicStreams.putResend -> @nish.QuicStreams.putResend
+  callee 1628:20 QuicStreams.putNew -> @nish.QuicStreams.putNew
 function QuicStreams.putResend(this: QuicStreams, stream: QuicStream, buf: u8[], at: i32, end: i32): i32 -> @nish.QuicStreams.putResend [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1650:9
+  sharedWrite: 1653:9
   escaping: at end
   calls: nish.QuicStream.at nish.QuicStreams.noteChunk nish.quicPutStream nish.quicStreamBit nish.quicStreamOverhead nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.noteChunk#0 nish.QuicStreams.noteChunk#0
   pointer stream: size=200 writesThrough=true captured=false passedTo=nish.QuicStream.at#0 nish.QuicStream.at#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.quicPutStream#0 nish.quicPutStream#0
   stackSites=0 stackLocals=0
-  local 1644:11 low: i64 (let)
-  callee 1645:41 quicStreamBit -> @nish.quicStreamBit
-  callee 1645:73 QuicStream.at -> @nish.QuicStream.at
-  local 1648:13 want: i32 (const)
-  local 1653:15 room: i32 (const)
-  callee 1653:38 quicStreamOverhead -> @nish.quicStreamOverhead
-  local 1657:15 n: i32 (const)
-  local 1658:15 fin: boolean (const)
-  local 1659:15 next: i32 (const)
-  callee 1659:27 quicPutStream -> @nish.quicPutStream
-  callee 1659:87 QuicStream.at -> @nish.QuicStream.at
-  callee 1663:9 QuicStreams.noteChunk -> @nish.QuicStreams.noteChunk
-  local 1679:11 next: i32 (const)
-  callee 1679:23 quicPutStream -> @nish.quicPutStream
-  callee 1693:5 QuicStreams.noteChunk -> @nish.QuicStreams.noteChunk
+  local 1647:11 low: i64 (let)
+  callee 1648:41 quicStreamBit -> @nish.quicStreamBit
+  callee 1648:73 QuicStream.at -> @nish.QuicStream.at
+  local 1651:13 want: i32 (const)
+  local 1656:15 room: i32 (const)
+  callee 1656:38 quicStreamOverhead -> @nish.quicStreamOverhead
+  local 1660:15 n: i32 (const)
+  local 1661:15 fin: boolean (const)
+  local 1662:15 next: i32 (const)
+  callee 1662:27 quicPutStream -> @nish.quicPutStream
+  callee 1662:87 QuicStream.at -> @nish.QuicStream.at
+  callee 1666:9 QuicStreams.noteChunk -> @nish.QuicStreams.noteChunk
+  local 1682:11 next: i32 (const)
+  callee 1682:23 quicPutStream -> @nish.quicPutStream
+  callee 1696:5 QuicStreams.noteChunk -> @nish.QuicStreams.noteChunk
 function QuicStreams.noteChunk(this: QuicStreams, id: i64, offset: i64, length: i32, fin: boolean): void -> @nish.QuicStreams.noteChunk [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1700:5
+  sharedWrite: 1703:5
   escaping: fin id length offset
   pointer this: size=344 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicStreams.putNew(this: QuicStreams, stream: QuicStream, k: i32, buf: u8[], at: i32, end: i32): i32 -> @nish.QuicStreams.putNew [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1720:9
+  sharedWrite: 1723:9
   escaping: at end k
   calls: nish.QuicStream.at nish.QuicStream.room nish.QuicStreams.noteChunk nish.QuicStreams.queue nish.quicPutStream nish.quicStreamMin nish.quicStreamOverhead nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.noteChunk#0 nish.QuicStreams.queue#0
   pointer stream: size=200 writesThrough=true captured=false passedTo=nish.QuicStream.at#0 nish.QuicStream.room#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.quicPutStream#0
   stackSites=0 stackLocals=0
-  local 1711:11 unsent: i64 (const)
-  local 1712:11 streamCredit: i64 (const)
-  local 1713:11 connectionCredit: i64 (const)
-  local 1714:9 allowed: i64 (let)
-  callee 1714:24 quicStreamMin -> @nish.quicStreamMin
-  callee 1714:46 quicStreamMin -> @nish.quicStreamMin
-  local 1727:11 want: i32 (const)
-  local 1728:11 finNow: boolean (const)
-  local 1732:11 room: i32 (const)
-  callee 1732:34 quicStreamOverhead -> @nish.quicStreamOverhead
-  local 1736:11 n: i32 (const)
-  local 1737:11 fin: boolean (const)
-  local 1738:11 next: i32 (const)
-  callee 1738:23 quicPutStream -> @nish.quicPutStream
-  callee 1745:7 QuicStream.at -> @nish.QuicStream.at
-  callee 1752:5 QuicStreams.noteChunk -> @nish.QuicStreams.noteChunk
-  callee 1759:40 QuicStream.room -> @nish.QuicStream.room
-  callee 1760:7 QuicStreams.queue -> @nish.QuicStreams.queue
+  local 1714:11 unsent: i64 (const)
+  local 1715:11 streamCredit: i64 (const)
+  local 1716:11 connectionCredit: i64 (const)
+  local 1717:9 allowed: i64 (let)
+  callee 1717:24 quicStreamMin -> @nish.quicStreamMin
+  callee 1717:46 quicStreamMin -> @nish.quicStreamMin
+  local 1730:11 want: i32 (const)
+  local 1731:11 finNow: boolean (const)
+  local 1735:11 room: i32 (const)
+  callee 1735:34 quicStreamOverhead -> @nish.quicStreamOverhead
+  local 1739:11 n: i32 (const)
+  local 1740:11 fin: boolean (const)
+  local 1741:11 next: i32 (const)
+  callee 1741:23 quicPutStream -> @nish.quicPutStream
+  callee 1748:7 QuicStream.at -> @nish.QuicStream.at
+  callee 1755:5 QuicStreams.noteChunk -> @nish.QuicStreams.noteChunk
+  callee 1762:40 QuicStream.room -> @nish.QuicStream.room
+  callee 1763:7 QuicStreams.queue -> @nish.QuicStreams.queue
 function QuicStreams.putNextControl(this: QuicStreams, buf: u8[], at: i32, end: i32): i32 -> @nish.QuicStreams.putNextControl [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1774:5
+  sharedWrite: 1777:5
   escaping: at end
   calls: nish.QuicStreams.putStreamControl nish.quicPutValue
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.putStreamControl#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.quicPutValue#0 nish.quicPutValue#0 nish.quicPutValue#0 nish.quicPutValue#0 nish.quicPutValue#0 nish.quicPutValue#0 nish.QuicStreams.putStreamControl#2
   stackSites=0 stackLocals=0
-  local 1776:13 next: i32 (const)
-  callee 1776:25 quicPutValue -> @nish.quicPutValue
-  local 1784:13 next: i32 (const)
-  callee 1784:25 quicPutValue -> @nish.quicPutValue
-  local 1792:13 next: i32 (const)
-  callee 1792:25 quicPutValue -> @nish.quicPutValue
-  local 1800:13 next: i32 (const)
-  callee 1800:25 quicPutValue -> @nish.quicPutValue
-  local 1809:13 next: i32 (const)
-  callee 1809:25 quicPutValue -> @nish.quicPutValue
-  local 1818:13 next: i32 (const)
-  callee 1818:25 quicPutValue -> @nish.quicPutValue
-  local 1829:9 fits: boolean (let)
-  local 1830:16 stream: QuicStream (const)
-  local 1835:15 next: i32 (const)
-  callee 1835:27 QuicStreams.putStreamControl -> @nish.QuicStreams.putStreamControl
+  local 1779:13 next: i32 (const)
+  callee 1779:25 quicPutValue -> @nish.quicPutValue
+  local 1787:13 next: i32 (const)
+  callee 1787:25 quicPutValue -> @nish.quicPutValue
+  local 1795:13 next: i32 (const)
+  callee 1795:25 quicPutValue -> @nish.quicPutValue
+  local 1803:13 next: i32 (const)
+  callee 1803:25 quicPutValue -> @nish.quicPutValue
+  local 1812:13 next: i32 (const)
+  callee 1812:25 quicPutValue -> @nish.quicPutValue
+  local 1821:13 next: i32 (const)
+  callee 1821:25 quicPutValue -> @nish.quicPutValue
+  local 1832:9 fits: boolean (let)
+  local 1833:16 stream: QuicStream (const)
+  local 1838:15 next: i32 (const)
+  callee 1838:27 QuicStreams.putStreamControl -> @nish.QuicStreams.putStreamControl
 function QuicStreams.putStreamControl(this: QuicStreams, stream: QuicStream, buf: u8[], at: i32, end: i32): i32 -> @nish.QuicStreams.putStreamControl [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1861:9
+  sharedWrite: 1864:9
   escaping: at end
   calls: nish.quicPutStreamError nish.quicPutStreamValue
   pointer this: size=344 writesThrough=true captured=false
   pointer stream: size=200 writesThrough=true captured=false
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.quicPutStreamValue#0 nish.quicPutStreamValue#0 nish.quicPutStreamError#0 nish.quicPutStreamError#0
   stackSites=0 stackLocals=0
-  local 1852:13 next: i32 (const)
-  callee 1852:25 quicPutStreamValue -> @nish.quicPutStreamValue
-  local 1867:13 next: i32 (const)
-  callee 1867:25 quicPutStreamValue -> @nish.quicPutStreamValue
-  local 1883:13 next: i32 (const)
-  callee 1883:25 quicPutStreamError -> @nish.quicPutStreamError
-  local 1891:13 next: i32 (const)
-  callee 1891:25 quicPutStreamError -> @nish.quicPutStreamError
+  local 1855:13 next: i32 (const)
+  callee 1855:25 quicPutStreamValue -> @nish.quicPutStreamValue
+  local 1870:13 next: i32 (const)
+  callee 1870:25 quicPutStreamValue -> @nish.quicPutStreamValue
+  local 1886:13 next: i32 (const)
+  callee 1886:25 quicPutStreamError -> @nish.quicPutStreamError
+  local 1894:13 next: i32 (const)
+  callee 1894:25 quicPutStreamError -> @nish.quicPutStreamError
 function QuicStreams.chunkAcked(this: QuicStreams, id: i64, offset: i64, length: i32, fin: boolean): void -> @nish.QuicStreams.chunkAcked [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1924:7
+  sharedWrite: 1927:7
   escaping: id offset
   calls: nish.QuicStream.at nish.QuicStreams.giveSend nish.QuicStreams.queue nish.QuicStreams.release nish.QuicStreams.slotOf nish.quicStreamBit nish.quicStreamSetBit nish_panic_overflow
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.slotOf#0 nish.QuicStreams.giveSend#0 nish.QuicStreams.release#0 nish.QuicStreams.queue#0
   stackSites=0 stackLocals=0
-  local 1908:11 k: i32 (const)
-  callee 1908:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  local 1912:11 stream: QuicStream (const)
-  local 1917:11 top: i64 (const)
-  local 1918:14 o: i64 (let)
-  callee 1919:7 quicStreamSetBit -> @nish.quicStreamSetBit
-  callee 1919:42 QuicStream.at -> @nish.QuicStream.at
-  local 1921:11 before: i64 (const)
-  callee 1922:49 quicStreamBit -> @nish.quicStreamBit
-  callee 1922:81 QuicStream.at -> @nish.QuicStream.at
-  callee 1923:7 quicStreamSetBit -> @nish.quicStreamSetBit
-  callee 1923:42 QuicStream.at -> @nish.QuicStream.at
-  callee 1933:7 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
-  callee 1934:7 QuicStreams.release -> @nish.QuicStreams.release
-  callee 1938:7 QuicStreams.queue -> @nish.QuicStreams.queue
+  local 1911:11 k: i32 (const)
+  callee 1911:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  local 1915:11 stream: QuicStream (const)
+  local 1920:11 top: i64 (const)
+  local 1921:14 o: i64 (let)
+  callee 1922:7 quicStreamSetBit -> @nish.quicStreamSetBit
+  callee 1922:42 QuicStream.at -> @nish.QuicStream.at
+  local 1924:11 before: i64 (const)
+  callee 1925:49 quicStreamBit -> @nish.quicStreamBit
+  callee 1925:81 QuicStream.at -> @nish.QuicStream.at
+  callee 1926:7 quicStreamSetBit -> @nish.quicStreamSetBit
+  callee 1926:42 QuicStream.at -> @nish.QuicStream.at
+  callee 1936:7 QuicStreams.giveSend -> @nish.QuicStreams.giveSend
+  callee 1937:7 QuicStreams.release -> @nish.QuicStreams.release
+  callee 1941:7 QuicStreams.queue -> @nish.QuicStreams.queue
 function QuicStreams.chunkLost(this: QuicStreams, id: i64, offset: i64, length: i32, fin: boolean): void -> @nish.QuicStreams.chunkLost [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicStream.resend
@@ -65632,36 +65632,36 @@ function QuicStreams.chunkLost(this: QuicStreams, id: i64, offset: i64, length: 
   calls: nish.QuicStream.resend nish.QuicStreams.find
   pointer this: size=344 writesThrough=false captured=false passedTo=nish.QuicStreams.find#0
   stackSites=0 stackLocals=0
-  local 1944:11 stream: QuicStream | null (const)
-  callee 1944:39 QuicStreams.find -> @nish.QuicStreams.find
-  callee 1946:7 QuicStream.resend -> @nish.QuicStream.resend
+  local 1947:11 stream: QuicStream | null (const)
+  callee 1947:39 QuicStreams.find -> @nish.QuicStreams.find
+  callee 1949:7 QuicStream.resend -> @nish.QuicStream.resend
 function QuicStreams.controlAcked(this: QuicStreams, kind: i32, value: i64): void -> @nish.QuicStreams.controlAcked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1961:7
+  sharedWrite: 1964:7
   escaping: value
   calls: nish.QuicStreams.release nish.QuicStreams.slotOf
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.slotOf#0 nish.QuicStreams.release#0
   stackSites=0 stackLocals=0
-  local 1959:11 k: i32 (const)
-  callee 1959:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
-  callee 1962:7 QuicStreams.release -> @nish.QuicStreams.release
+  local 1962:11 k: i32 (const)
+  callee 1962:20 QuicStreams.slotOf -> @nish.QuicStreams.slotOf
+  callee 1965:7 QuicStreams.release -> @nish.QuicStreams.release
 function QuicStreams.controlLost(this: QuicStreams, kind: i32, value: i64): void -> @nish.QuicStreams.controlLost [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1973:7
+  sharedWrite: 1976:7
   escaping: kind value
   calls: nish.QuicStreams.streamControlLost
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.streamControlLost#0
   stackSites=0 stackLocals=0
-  callee 1985:7 QuicStreams.streamControlLost -> @nish.QuicStreams.streamControlLost
+  callee 1988:7 QuicStreams.streamControlLost -> @nish.QuicStreams.streamControlLost
 function QuicStreams.streamControlLost(this: QuicStreams, kind: i32, id: i64): void -> @nish.QuicStreams.streamControlLost [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1995:5
+  sharedWrite: 1998:5
   escaping: id
   calls: nish.QuicStreams.find
   pointer this: size=344 writesThrough=true captured=false passedTo=nish.QuicStreams.find#0
   stackSites=0 stackLocals=0
-  local 1991:11 stream: QuicStream | null (const)
-  callee 1991:39 QuicStreams.find -> @nish.QuicStreams.find
+  local 1994:11 stream: QuicStream | null (const)
+  callee 1994:39 QuicStreams.find -> @nish.QuicStreams.find
 module std/net/buffer-pool.ts [package nish]
 struct BufferPool (class) size=32 align=8 exported
   field free: u8[][] index=0 offset=0
