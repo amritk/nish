@@ -1765,11 +1765,15 @@ export class QuicConnection {
     this.resendLevel = -1
     let used: boolean = false
     // A STREAM frame's first byte borrows a receive buffer, and no pool may
-    // make one inside the scope, so the free lists are lengthened before it
-    // to what this packet could want. Only 0-RTT and 1-RTT packets carry
-    // STREAM frames (RFC 9000 §12.4).
+    // take one inside the scope, so the reserve is primed before it with what
+    // this packet could want. Only 0-RTT and 1-RTT packets carry STREAM
+    // frames (RFC 9000 §12.4); any other still makes a standalone
+    // connection's private pools, so the handshake, not the first 1-RTT
+    // packet, pays for them.
     if (type === QUIC_PACKET_SHORT || type === QUIC_PACKET_ZERO_RTT) {
       this.streams.prime(header.end - header.pnOffset)
+    } else {
+      this.streams.ownPools()
     }
     {
       using _scope = arena()
