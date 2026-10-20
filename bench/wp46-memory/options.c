@@ -19,8 +19,8 @@
          without the swap; neither `r` nor `rs` models the handle
          table's lookup and generation check, a load and a compare per enter
      s   safe reset: sessions in one of two arenas; once the current one has
-         bumped 2x the live bytes since the last flip, the live sessions are
-         copied into the other and the old one is freed
+         bumped 2x the live bytes plus 64 KiB since the last flip, the
+         live sessions are copied into the other and the old one is freed
      c   opt-in Rc<T>: a malloc'd box with a count, its payload inside; one
          retain and one release per request for the handle the handler holds
      ca  as `c`, with the count atomic (a box shared across threads)

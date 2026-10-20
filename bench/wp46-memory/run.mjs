@@ -3,7 +3,7 @@
 // arena and resident set over requests (`sessions.ts`), and the options'
 // prototypes (`options.c`, `rc-tax.c`) timed in interleaved rounds.
 //
-//   npm run build && node bench/wp46-memory/run.mjs [--rounds 7]
+//   npm run build && node bench/wp46-memory/run.mjs [--rounds 9]
 //
 // Each round runs every variant once, in an order shuffled afresh for the
 // round (a seeded shuffle, so a rerun repeats it), each in a fresh process so
@@ -21,7 +21,7 @@ import { mkdirSync } from "node:fs"
 
 const args = process.argv.slice(2)
 const at = args.indexOf("--rounds")
-const rounds = at >= 0 ? Number(args[at + 1]) : 7
+const rounds = at >= 0 ? Number(args[at + 1]) : 9
 const out = "build/wp46"
 mkdirSync(out, { recursive: true })
 
