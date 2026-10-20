@@ -2777,8 +2777,9 @@ export const main = (): i32 => {
   runs under Node and what `npm run check` type-checks. The compiler recognises
   the two templates by module and name and lowers one call in each instance —
   the loop over the whole range — onto `nish_parallel_range`
-  (`runtime/runtime-parallel.c`), which hands each thread a contiguous chunk
-  and joins them all before it returns. Everything else in the instance is
+  (`runtime/runtime-parallel.c`), which cuts the range into contiguous pieces,
+  up to eight per thread, that the threads claim one at a time as they finish
+  the last, and joins them all before it returns. Everything else in the instance is
   emitted as written (`tests/link/par_map`, whose `threads.ll` is the whole
   lowering).
 - **`parallelMapInto(src, dst, f)`** writes `f(src[i])` into `dst[i]` for every
@@ -2804,9 +2805,9 @@ export const main = (): i32 => {
   `f` costs: 2^21 over the estimate, which counts one per operation, 32 per
   allocation, 4 per call, and a loop's body as many times as its literal
   bound says or 64 times when the bound is not a literal. A map longer than
-  the grain is divided into `ceil(length / grain)` chunks, at most one per
-  core, so the first division is two chunks of half the grain: 2^20 units
-  each. That is where a measured body, `(x) => x + 1` at an estimate of 3,
+  the grain is divided into `ceil(length / grain)` chunks, at most eight per
+  thread with one thread per core, so the first division is two chunks of
+  half the grain: 2^20 units each. That is where a measured body, `(x) => x + 1` at an estimate of 3,
   beat its loop by 1.31x on the minimum and 1.19x on the median, more than
   any difference between the loop and a byte-identical copy of it (at most
   3.3% and 9.1%); at two chunks of 2^19 units the minimum won by 1.16x and

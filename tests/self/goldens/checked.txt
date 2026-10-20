@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1057 programs, 138178 dump lines.
+# 1062 programs, 139287 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -134720,6 +134720,699 @@ function mapRange<f64, f64, settle>(src: f64[], dst: f64[], f: void, lo: i32, hi
   local 77:12 i: i32 (let)
   local 78:11 y: f64 (const)
   callee 78:15 settle -> @settle$
+program bench/par-heavy-fold.ts
+module bench/par-heavy-fold.ts (entry)
+import parallelMap from "nish/threads" -> generic function parallelMap
+function work(x: i32, k: i32): i32 -> @work
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 10:7 h: i32 (let)
+  local 11:12 r: i32 (let)
+function fold(ys: i32[]): i32 -> @fold
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 20:7 w: u32 (let)
+  local 21:12 i: i32 (let)
+function onceSeq(xs: i32[], k: i32): i32 -> @onceSeq
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: k
+  calls: fold nish_arena_mark nish_arena_release nish_panic work
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 28:9 ys: i32[] (const)
+  local 29:12 i: i32 (let)
+  local 30:11 y: i32 (const)
+  callee 30:15 work -> @work
+  callee 35:10 fold -> @fold
+function oncePar(xs: i32[], k: i32): i32 -> @oncePar
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  calls: fold nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 nish_arena_mark nish_arena_release
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMap$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 39:9 ys: i32[] (const)
+  callee 39:14 parallelMap<i32, i32, (x) => ...> -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  callee 39:47 work -> @work
+  callee 40:10 fold -> @fold
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 49:5
+  calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32 oncePar onceSeq
+  stackSites=0 stackLocals=0
+  local 44:9 par: boolean (const)
+  local 45:9 calls: i32 (const)
+  local 46:9 n: i32 (const)
+  local 47:9 xs: i32[] (const)
+  local 48:12 i: i32 (let)
+  local 51:7 check: i32 (let)
+  local 52:12 c: i32 (let)
+  local 53:11 k: i32 (const)
+  callee 54:47 oncePar -> @oncePar
+  callee 54:64 onceSeq -> @onceSeq
+function (x) => ...(x: i32, k: i32): i32 -> @oncePar$arrow0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k x
+  calls: work
+  stackSites=0 stackLocals=0
+  callee 39:47 work -> @work
+module std/threads.ts [package nish]
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
+unsafe import 50:10 wrappingAdd from "nish:unsafe"
+unsafe import 50:23 wrappingSub from "nish:unsafe"
+unsafe call 442:18 wrappingAdd (node 1283)
+unsafe call 449:18 wrappingSub (node 1312)
+const BLOCK: i32 = 1048576
+const MAX_BLOCKS: i32 = 64
+struct ThreadScope (class) size=4 align=4 exported
+  field tag: i32 index=0 offset=0 initialized
+struct AtomicI32 (class) size=4 align=4 exported
+  field value: i32 index=0 offset=0
+  constructor -> @nish.AtomicI32.constructor
+  method load -> @nish.AtomicI32.load
+  method store -> @nish.AtomicI32.store
+  method add -> @nish.AtomicI32.add
+  method sub -> @nish.AtomicI32.sub
+  method min -> @nish.AtomicI32.min
+  method max -> @nish.AtomicI32.max
+  method exchange -> @nish.AtomicI32.exchange
+  method compareExchange -> @nish.AtomicI32.compareExchange
+struct AtomicI64 (class) size=8 align=8 exported
+  field value: i64 index=0 offset=0
+  constructor -> @nish.AtomicI64.constructor
+  method load -> @nish.AtomicI64.load
+  method store -> @nish.AtomicI64.store
+  method add -> @nish.AtomicI64.add
+  method sub -> @nish.AtomicI64.sub
+  method min -> @nish.AtomicI64.min
+  method max -> @nish.AtomicI64.max
+  method exchange -> @nish.AtomicI64.exchange
+  method compareExchange -> @nish.AtomicI64.compareExchange
+function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 104:9 wanted: i32 (const)
+function reduceBlockStart(n: i32, blocks: i32, k: i32): i32 -> @nish.reduceBlockStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function dstTooShort(have: i32, want: i32): void -> @nish.dstTooShort
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotOutOfRange(at: i32, length: i32): void -> @nish.slotOutOfRange
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotWritten(at: i32): boolean -> @nish.slotWritten
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function scope(): ThreadScope -> @nish.scope [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function AtomicI32.constructor(this: AtomicI32, value: i32): void -> @nish.AtomicI32.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.load(this: AtomicI32): i32 -> @nish.AtomicI32.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.store(this: AtomicI32, value: i32): void -> @nish.AtomicI32.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.add(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 441:11 old: i32 (const)
+function AtomicI32.sub(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 448:11 old: i32 (const)
+function AtomicI32.min(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 455:11 old: i32 (const)
+function AtomicI32.max(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 464:11 old: i32 (const)
+function AtomicI32.exchange(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 473:11 old: i32 (const)
+function AtomicI32.compareExchange(this: AtomicI32, expected: i32, desired: i32): i32 -> @nish.AtomicI32.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 480:11 old: i32 (const)
+function AtomicI64.constructor(this: AtomicI64, value: i64): void -> @nish.AtomicI64.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.load(this: AtomicI64): i64 -> @nish.AtomicI64.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.store(this: AtomicI64, value: i64): void -> @nish.AtomicI64.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.add(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 525:11 old: i64 (const)
+function AtomicI64.sub(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 532:11 old: i64 (const)
+function AtomicI64.min(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 539:11 old: i64 (const)
+function AtomicI64.max(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 548:11 old: i64 (const)
+function AtomicI64.exchange(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 557:11 old: i64 (const)
+function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64): i64 -> @nish.AtomicI64.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 564:11 old: i64 (const)
+function parallelMap<i32, i32, (x) => ...>(src: i32[], f: void): i32[] -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+  calls: nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 nish_panic
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 193:9 dst: i32[] (const)
+  callee 194:3 parallelMapInto<i32, i32, (x) => ...> -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+function parallelMapInto<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+  escaping: dst f src
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.14.oncePar$arrow0 nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#1
+  stackSites=0 stackLocals=0
+  local 161:9 n: i32 (const)
+  callee 163:5 dstTooShort -> @nish.dstTooShort
+  callee 165:3 mapRange<i32, i32, (x) => ...> -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+function mapRange<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 80:7
+  escaping: lo
+  calls: oncePar$arrow0
+  pointer src: size=0 writesThrough=true captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 77:12 i: i32 (let)
+  local 78:11 y: i32 (const)
+  callee 78:15 (x) => ... -> @oncePar$arrow0
+program bench/par-heavy.ts
+module bench/par-heavy.ts (entry)
+import parallelMap from "nish/threads" -> generic function parallelMap
+function work(x: i32, k: i32): i32 -> @work
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 11:7 h: i32 (let)
+  local 12:12 r: i32 (let)
+function fold(ys: i32[]): i32 -> @fold
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 21:7 f: i32 (let)
+  local 22:12 i: i32 (let)
+function onceSeq(xs: i32[], k: i32): i32 -> @onceSeq
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: k
+  calls: fold nish_arena_mark nish_arena_release nish_panic work
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 29:9 ys: i32[] (const)
+  local 30:12 i: i32 (let)
+  local 31:11 y: i32 (const)
+  callee 31:15 work -> @work
+  callee 36:10 fold -> @fold
+function oncePar(xs: i32[], k: i32): i32 -> @oncePar
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  calls: fold nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 nish_arena_mark nish_arena_release
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMap$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 40:9 ys: i32[] (const)
+  callee 40:14 parallelMap<i32, i32, (x) => ...> -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  callee 40:47 work -> @work
+  callee 41:10 fold -> @fold
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 50:5
+  calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32 oncePar onceSeq
+  stackSites=0 stackLocals=0
+  local 45:9 par: boolean (const)
+  local 46:9 calls: i32 (const)
+  local 47:9 n: i32 (const)
+  local 48:9 xs: i32[] (const)
+  local 49:12 i: i32 (let)
+  local 52:7 check: i32 (let)
+  local 53:12 c: i32 (let)
+  local 54:11 k: i32 (const)
+  callee 55:47 oncePar -> @oncePar
+  callee 55:64 onceSeq -> @onceSeq
+function (x) => ...(x: i32, k: i32): i32 -> @oncePar$arrow0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k x
+  calls: work
+  stackSites=0 stackLocals=0
+  callee 40:47 work -> @work
+module std/threads.ts [package nish]
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
+unsafe import 50:10 wrappingAdd from "nish:unsafe"
+unsafe import 50:23 wrappingSub from "nish:unsafe"
+unsafe call 442:18 wrappingAdd (node 1283)
+unsafe call 449:18 wrappingSub (node 1312)
+const BLOCK: i32 = 1048576
+const MAX_BLOCKS: i32 = 64
+struct ThreadScope (class) size=4 align=4 exported
+  field tag: i32 index=0 offset=0 initialized
+struct AtomicI32 (class) size=4 align=4 exported
+  field value: i32 index=0 offset=0
+  constructor -> @nish.AtomicI32.constructor
+  method load -> @nish.AtomicI32.load
+  method store -> @nish.AtomicI32.store
+  method add -> @nish.AtomicI32.add
+  method sub -> @nish.AtomicI32.sub
+  method min -> @nish.AtomicI32.min
+  method max -> @nish.AtomicI32.max
+  method exchange -> @nish.AtomicI32.exchange
+  method compareExchange -> @nish.AtomicI32.compareExchange
+struct AtomicI64 (class) size=8 align=8 exported
+  field value: i64 index=0 offset=0
+  constructor -> @nish.AtomicI64.constructor
+  method load -> @nish.AtomicI64.load
+  method store -> @nish.AtomicI64.store
+  method add -> @nish.AtomicI64.add
+  method sub -> @nish.AtomicI64.sub
+  method min -> @nish.AtomicI64.min
+  method max -> @nish.AtomicI64.max
+  method exchange -> @nish.AtomicI64.exchange
+  method compareExchange -> @nish.AtomicI64.compareExchange
+function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 104:9 wanted: i32 (const)
+function reduceBlockStart(n: i32, blocks: i32, k: i32): i32 -> @nish.reduceBlockStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function dstTooShort(have: i32, want: i32): void -> @nish.dstTooShort
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotOutOfRange(at: i32, length: i32): void -> @nish.slotOutOfRange
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotWritten(at: i32): boolean -> @nish.slotWritten
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function scope(): ThreadScope -> @nish.scope [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function AtomicI32.constructor(this: AtomicI32, value: i32): void -> @nish.AtomicI32.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.load(this: AtomicI32): i32 -> @nish.AtomicI32.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.store(this: AtomicI32, value: i32): void -> @nish.AtomicI32.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.add(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 441:11 old: i32 (const)
+function AtomicI32.sub(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 448:11 old: i32 (const)
+function AtomicI32.min(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 455:11 old: i32 (const)
+function AtomicI32.max(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 464:11 old: i32 (const)
+function AtomicI32.exchange(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 473:11 old: i32 (const)
+function AtomicI32.compareExchange(this: AtomicI32, expected: i32, desired: i32): i32 -> @nish.AtomicI32.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 480:11 old: i32 (const)
+function AtomicI64.constructor(this: AtomicI64, value: i64): void -> @nish.AtomicI64.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.load(this: AtomicI64): i64 -> @nish.AtomicI64.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.store(this: AtomicI64, value: i64): void -> @nish.AtomicI64.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.add(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 525:11 old: i64 (const)
+function AtomicI64.sub(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 532:11 old: i64 (const)
+function AtomicI64.min(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 539:11 old: i64 (const)
+function AtomicI64.max(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 548:11 old: i64 (const)
+function AtomicI64.exchange(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 557:11 old: i64 (const)
+function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64): i64 -> @nish.AtomicI64.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 564:11 old: i64 (const)
+function parallelMap<i32, i32, (x) => ...>(src: i32[], f: void): i32[] -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+  calls: nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 nish_panic
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 193:9 dst: i32[] (const)
+  callee 194:3 parallelMapInto<i32, i32, (x) => ...> -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+function parallelMapInto<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+  escaping: dst f src
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.14.oncePar$arrow0 nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#1
+  stackSites=0 stackLocals=0
+  local 161:9 n: i32 (const)
+  callee 163:5 dstTooShort -> @nish.dstTooShort
+  callee 165:3 mapRange<i32, i32, (x) => ...> -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+function mapRange<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 80:7
+  escaping: lo
+  calls: oncePar$arrow0
+  pointer src: size=0 writesThrough=true captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 77:12 i: i32 (let)
+  local 78:11 y: i32 (const)
+  callee 78:15 (x) => ... -> @oncePar$arrow0
+program bench/par-heavy4.ts
+module bench/par-heavy4.ts (entry)
+import parallelMap from "nish/threads" -> generic function parallelMap
+function work(x: i32, k: i32): i32 -> @work
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: x
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 8:7 h: i32 (let)
+  local 9:12 r: i32 (let)
+function fold(ys: i32[]): i32 -> @fold
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:7 f: i32 (let)
+  local 19:12 i: i32 (let)
+function onceSeq(xs: i32[], k: i32): i32 -> @onceSeq
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: k
+  calls: fold nish_arena_mark nish_arena_release nish_panic work
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 26:9 ys: i32[] (const)
+  local 27:12 i: i32 (let)
+  local 28:11 y: i32 (const)
+  callee 28:15 work -> @work
+  callee 33:10 fold -> @fold
+function oncePar(xs: i32[], k: i32): i32 -> @oncePar
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  calls: fold nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 nish_arena_mark nish_arena_release
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMap$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 37:9 ys: i32[] (const)
+  callee 37:14 parallelMap<i32, i32, (x) => ...> -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  callee 37:47 work -> @work
+  callee 38:10 fold -> @fold
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 47:5
+  calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32 oncePar onceSeq
+  stackSites=0 stackLocals=0
+  local 42:9 par: boolean (const)
+  local 43:9 calls: i32 (const)
+  local 44:9 n: i32 (const)
+  local 45:9 xs: i32[] (const)
+  local 46:12 i: i32 (let)
+  local 49:7 check: i32 (let)
+  local 50:12 c: i32 (let)
+  local 51:11 k: i32 (const)
+  callee 52:47 oncePar -> @oncePar
+  callee 52:64 onceSeq -> @onceSeq
+function (x) => ...(x: i32, k: i32): i32 -> @oncePar$arrow0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k x
+  calls: work
+  stackSites=0 stackLocals=0
+  callee 37:47 work -> @work
+module std/threads.ts [package nish]
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
+unsafe import 50:10 wrappingAdd from "nish:unsafe"
+unsafe import 50:23 wrappingSub from "nish:unsafe"
+unsafe call 442:18 wrappingAdd (node 1283)
+unsafe call 449:18 wrappingSub (node 1312)
+const BLOCK: i32 = 1048576
+const MAX_BLOCKS: i32 = 64
+struct ThreadScope (class) size=4 align=4 exported
+  field tag: i32 index=0 offset=0 initialized
+struct AtomicI32 (class) size=4 align=4 exported
+  field value: i32 index=0 offset=0
+  constructor -> @nish.AtomicI32.constructor
+  method load -> @nish.AtomicI32.load
+  method store -> @nish.AtomicI32.store
+  method add -> @nish.AtomicI32.add
+  method sub -> @nish.AtomicI32.sub
+  method min -> @nish.AtomicI32.min
+  method max -> @nish.AtomicI32.max
+  method exchange -> @nish.AtomicI32.exchange
+  method compareExchange -> @nish.AtomicI32.compareExchange
+struct AtomicI64 (class) size=8 align=8 exported
+  field value: i64 index=0 offset=0
+  constructor -> @nish.AtomicI64.constructor
+  method load -> @nish.AtomicI64.load
+  method store -> @nish.AtomicI64.store
+  method add -> @nish.AtomicI64.add
+  method sub -> @nish.AtomicI64.sub
+  method min -> @nish.AtomicI64.min
+  method max -> @nish.AtomicI64.max
+  method exchange -> @nish.AtomicI64.exchange
+  method compareExchange -> @nish.AtomicI64.compareExchange
+function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 104:9 wanted: i32 (const)
+function reduceBlockStart(n: i32, blocks: i32, k: i32): i32 -> @nish.reduceBlockStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function dstTooShort(have: i32, want: i32): void -> @nish.dstTooShort
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotOutOfRange(at: i32, length: i32): void -> @nish.slotOutOfRange
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotWritten(at: i32): boolean -> @nish.slotWritten
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function scope(): ThreadScope -> @nish.scope [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function AtomicI32.constructor(this: AtomicI32, value: i32): void -> @nish.AtomicI32.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.load(this: AtomicI32): i32 -> @nish.AtomicI32.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.store(this: AtomicI32, value: i32): void -> @nish.AtomicI32.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.add(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 441:11 old: i32 (const)
+function AtomicI32.sub(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 448:11 old: i32 (const)
+function AtomicI32.min(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 455:11 old: i32 (const)
+function AtomicI32.max(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 464:11 old: i32 (const)
+function AtomicI32.exchange(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 473:11 old: i32 (const)
+function AtomicI32.compareExchange(this: AtomicI32, expected: i32, desired: i32): i32 -> @nish.AtomicI32.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 480:11 old: i32 (const)
+function AtomicI64.constructor(this: AtomicI64, value: i64): void -> @nish.AtomicI64.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.load(this: AtomicI64): i64 -> @nish.AtomicI64.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.store(this: AtomicI64, value: i64): void -> @nish.AtomicI64.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.add(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 525:11 old: i64 (const)
+function AtomicI64.sub(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 532:11 old: i64 (const)
+function AtomicI64.min(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 539:11 old: i64 (const)
+function AtomicI64.max(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 548:11 old: i64 (const)
+function AtomicI64.exchange(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 557:11 old: i64 (const)
+function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64): i64 -> @nish.AtomicI64.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 564:11 old: i64 (const)
+function parallelMap<i32, i32, (x) => ...>(src: i32[], f: void): i32[] -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+  calls: nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 nish_panic
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 193:9 dst: i32[] (const)
+  callee 194:3 parallelMapInto<i32, i32, (x) => ...> -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+function parallelMapInto<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+  escaping: dst f src
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.14.oncePar$arrow0 nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#1
+  stackSites=0 stackLocals=0
+  local 161:9 n: i32 (const)
+  callee 163:5 dstTooShort -> @nish.dstTooShort
+  callee 165:3 mapRange<i32, i32, (x) => ...> -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+function mapRange<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 80:7
+  escaping: lo
+  calls: oncePar$arrow0
+  pointer src: size=0 writesThrough=true captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 77:12 i: i32 (let)
+  local 78:11 y: i32 (const)
+  callee 78:15 (x) => ... -> @oncePar$arrow0
 program bench/par-histogram.ts
 module bench/par-histogram.ts (entry)
 import Mutex from "nish/threads" -> generic class Mutex
@@ -135431,6 +136124,225 @@ function mapRange<i32, i32, scramble>(src: i32[], dst: i32[], f: void, lo: i32, 
   local 77:12 i: i32 (let)
   local 78:11 y: i32 (const)
   callee 78:15 scramble -> @scramble$
+program bench/par-scale.ts
+module bench/par-scale.ts (entry)
+import parallelMap from "nish/threads" -> generic function parallelMap
+function fold(ys: i32[]): i32 -> @fold
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer ys: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 10:7 f: i32 (let)
+  local 11:12 i: i32 (let)
+function onceSeq(xs: i32[], k: i32): i32 -> @onceSeq
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: fold nish_arena_mark nish_arena_release nish_panic nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 18:9 ys: i32[] (const)
+  local 19:12 i: i32 (let)
+  local 20:11 y: i32 (const)
+  callee 25:10 fold -> @fold
+function oncePar(xs: i32[], k: i32): i32 -> @oncePar
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  calls: fold nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 nish_arena_mark nish_arena_release
+  pointer xs: size=0 writesThrough=true captured=true passedTo=nish.parallelMap$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 29:9 ys: i32[] (const)
+  callee 29:14 parallelMap<i32, i32, (x) => ...> -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0
+  callee 30:10 fold -> @fold
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 39:5
+  calls: nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_print nish_str_eq nish_str_from_i32 oncePar onceSeq
+  stackSites=0 stackLocals=0
+  local 34:9 par: boolean (const)
+  local 35:9 calls: i32 (const)
+  local 36:9 n: i32 (const)
+  local 37:9 xs: i32[] (const)
+  local 38:12 i: i32 (let)
+  local 41:7 check: i32 (let)
+  local 42:12 c: i32 (let)
+  local 43:11 k: i32 (const)
+  callee 44:47 oncePar -> @oncePar
+  callee 44:64 onceSeq -> @onceSeq
+function (x) => ...(x: i32, k: i32): i32 -> @oncePar$arrow0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+module std/threads.ts [package nish]
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
+unsafe import 50:10 wrappingAdd from "nish:unsafe"
+unsafe import 50:23 wrappingSub from "nish:unsafe"
+unsafe call 442:18 wrappingAdd (node 1283)
+unsafe call 449:18 wrappingSub (node 1312)
+const BLOCK: i32 = 1048576
+const MAX_BLOCKS: i32 = 64
+struct ThreadScope (class) size=4 align=4 exported
+  field tag: i32 index=0 offset=0 initialized
+struct AtomicI32 (class) size=4 align=4 exported
+  field value: i32 index=0 offset=0
+  constructor -> @nish.AtomicI32.constructor
+  method load -> @nish.AtomicI32.load
+  method store -> @nish.AtomicI32.store
+  method add -> @nish.AtomicI32.add
+  method sub -> @nish.AtomicI32.sub
+  method min -> @nish.AtomicI32.min
+  method max -> @nish.AtomicI32.max
+  method exchange -> @nish.AtomicI32.exchange
+  method compareExchange -> @nish.AtomicI32.compareExchange
+struct AtomicI64 (class) size=8 align=8 exported
+  field value: i64 index=0 offset=0
+  constructor -> @nish.AtomicI64.constructor
+  method load -> @nish.AtomicI64.load
+  method store -> @nish.AtomicI64.store
+  method add -> @nish.AtomicI64.add
+  method sub -> @nish.AtomicI64.sub
+  method min -> @nish.AtomicI64.min
+  method max -> @nish.AtomicI64.max
+  method exchange -> @nish.AtomicI64.exchange
+  method compareExchange -> @nish.AtomicI64.compareExchange
+function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 104:9 wanted: i32 (const)
+function reduceBlockStart(n: i32, blocks: i32, k: i32): i32 -> @nish.reduceBlockStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function dstTooShort(have: i32, want: i32): void -> @nish.dstTooShort
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotOutOfRange(at: i32, length: i32): void -> @nish.slotOutOfRange
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotWritten(at: i32): boolean -> @nish.slotWritten
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function scope(): ThreadScope -> @nish.scope [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function AtomicI32.constructor(this: AtomicI32, value: i32): void -> @nish.AtomicI32.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.load(this: AtomicI32): i32 -> @nish.AtomicI32.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.store(this: AtomicI32, value: i32): void -> @nish.AtomicI32.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.add(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 441:11 old: i32 (const)
+function AtomicI32.sub(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 448:11 old: i32 (const)
+function AtomicI32.min(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 455:11 old: i32 (const)
+function AtomicI32.max(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 464:11 old: i32 (const)
+function AtomicI32.exchange(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 473:11 old: i32 (const)
+function AtomicI32.compareExchange(this: AtomicI32, expected: i32, desired: i32): i32 -> @nish.AtomicI32.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 480:11 old: i32 (const)
+function AtomicI64.constructor(this: AtomicI64, value: i64): void -> @nish.AtomicI64.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.load(this: AtomicI64): i64 -> @nish.AtomicI64.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.store(this: AtomicI64, value: i64): void -> @nish.AtomicI64.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.add(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 525:11 old: i64 (const)
+function AtomicI64.sub(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 532:11 old: i64 (const)
+function AtomicI64.min(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 539:11 old: i64 (const)
+function AtomicI64.max(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 548:11 old: i64 (const)
+function AtomicI64.exchange(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 557:11 old: i64 (const)
+function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64): i64 -> @nish.AtomicI64.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 564:11 old: i64 (const)
+function parallelMap<i32, i32, (x) => ...>(src: i32[], f: void): i32[] -> @nish.parallelMap$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+  calls: nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 nish_panic
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0#0
+  stackSites=0 stackLocals=0
+  local 193:9 dst: i32[] (const)
+  callee 194:3 parallelMapInto<i32, i32, (x) => ...> -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0
+function parallelMapInto<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.14.oncePar$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+  escaping: dst f src
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.14.oncePar$arrow0 nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.14.oncePar$arrow0#1
+  stackSites=0 stackLocals=0
+  local 161:9 n: i32 (const)
+  callee 163:5 dstTooShort -> @nish.dstTooShort
+  callee 165:3 mapRange<i32, i32, (x) => ...> -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0
+function mapRange<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.14.oncePar$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 80:7
+  escaping: lo
+  calls: oncePar$arrow0
+  pointer src: size=0 writesThrough=true captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 77:12 i: i32 (let)
+  local 78:11 y: i32 (const)
+  callee 78:15 (x) => ... -> @oncePar$arrow0
 program bench/par-short.ts
 module bench/par-short.ts (entry)
 import parallelMapInto from "nish/threads" -> generic function parallelMapInto
@@ -135624,6 +136536,208 @@ function mapRange<i32, i32, bump>(src: i32[], dst: i32[], f: void, lo: i32, hi: 
   local 77:12 i: i32 (let)
   local 78:11 y: i32 (const)
   callee 78:15 bump -> @bump$
+program bench/par-single.ts
+module bench/par-single.ts (entry)
+import parallelMap from "nish/threads" -> generic function parallelMap
+function tripled(xs: i32[]): i32[] -> @tripled
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic nish_panic_overflow
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 9:9 ys: i32[] (const)
+  local 10:12 i: i32 (let)
+  local 11:11 y: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 24:5
+  calls: nish.parallelMap$i32$i32$fn.16.nish_main$arrow0 nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_print nish_str_eq nish_str_from_i32 tripled
+  stackSites=0 stackLocals=0
+  local 20:9 par: boolean (const)
+  local 21:9 n: i32 (const)
+  local 22:9 xs: i32[] (const)
+  local 23:12 i: i32 (let)
+  local 26:9 ys: i32[] (const)
+  callee 26:20 parallelMap<i32, i32, (x) => ...> -> @nish.parallelMap$i32$i32$fn.16.nish_main$arrow0
+  callee 26:62 tripled -> @tripled
+  local 27:7 f: i32 (let)
+  local 28:12 i: i32 (let)
+function (x) => ...(x: i32): i32 -> @nish_main$arrow0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+module std/threads.ts [package nish]
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
+unsafe import 50:10 wrappingAdd from "nish:unsafe"
+unsafe import 50:23 wrappingSub from "nish:unsafe"
+unsafe call 442:18 wrappingAdd (node 1283)
+unsafe call 449:18 wrappingSub (node 1312)
+const BLOCK: i32 = 1048576
+const MAX_BLOCKS: i32 = 64
+struct ThreadScope (class) size=4 align=4 exported
+  field tag: i32 index=0 offset=0 initialized
+struct AtomicI32 (class) size=4 align=4 exported
+  field value: i32 index=0 offset=0
+  constructor -> @nish.AtomicI32.constructor
+  method load -> @nish.AtomicI32.load
+  method store -> @nish.AtomicI32.store
+  method add -> @nish.AtomicI32.add
+  method sub -> @nish.AtomicI32.sub
+  method min -> @nish.AtomicI32.min
+  method max -> @nish.AtomicI32.max
+  method exchange -> @nish.AtomicI32.exchange
+  method compareExchange -> @nish.AtomicI32.compareExchange
+struct AtomicI64 (class) size=8 align=8 exported
+  field value: i64 index=0 offset=0
+  constructor -> @nish.AtomicI64.constructor
+  method load -> @nish.AtomicI64.load
+  method store -> @nish.AtomicI64.store
+  method add -> @nish.AtomicI64.add
+  method sub -> @nish.AtomicI64.sub
+  method min -> @nish.AtomicI64.min
+  method max -> @nish.AtomicI64.max
+  method exchange -> @nish.AtomicI64.exchange
+  method compareExchange -> @nish.AtomicI64.compareExchange
+function reduceBlockCount(n: i32): i32 -> @nish.reduceBlockCount
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+  local 104:9 wanted: i32 (const)
+function reduceBlockStart(n: i32, blocks: i32, k: i32): i32 -> @nish.reduceBlockStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.floor.f64 llvm.fptosi.sat.i32.f64
+  stackSites=0 stackLocals=0
+function dstTooShort(have: i32, want: i32): void -> @nish.dstTooShort
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotOutOfRange(at: i32, length: i32): void -> @nish.slotOutOfRange
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function slotWritten(at: i32): boolean -> @nish.slotWritten
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function scope(): ThreadScope -> @nish.scope [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  stackSites=0 stackLocals=0
+function AtomicI32.constructor(this: AtomicI32, value: i32): void -> @nish.AtomicI32.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.load(this: AtomicI32): i32 -> @nish.AtomicI32.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.store(this: AtomicI32, value: i32): void -> @nish.AtomicI32.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI32.add(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 441:11 old: i32 (const)
+function AtomicI32.sub(this: AtomicI32, delta: i32): i32 -> @nish.AtomicI32.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 448:11 old: i32 (const)
+function AtomicI32.min(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 455:11 old: i32 (const)
+function AtomicI32.max(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 464:11 old: i32 (const)
+function AtomicI32.exchange(this: AtomicI32, value: i32): i32 -> @nish.AtomicI32.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 473:11 old: i32 (const)
+function AtomicI32.compareExchange(this: AtomicI32, expected: i32, desired: i32): i32 -> @nish.AtomicI32.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 480:11 old: i32 (const)
+function AtomicI64.constructor(this: AtomicI64, value: i64): void -> @nish.AtomicI64.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.load(this: AtomicI64): i64 -> @nish.AtomicI64.load [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.store(this: AtomicI64, value: i64): void -> @nish.AtomicI64.store [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function AtomicI64.add(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.add [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 525:11 old: i64 (const)
+function AtomicI64.sub(this: AtomicI64, delta: i64): i64 -> @nish.AtomicI64.sub [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 532:11 old: i64 (const)
+function AtomicI64.min(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.min [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 539:11 old: i64 (const)
+function AtomicI64.max(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.max [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 548:11 old: i64 (const)
+function AtomicI64.exchange(this: AtomicI64, value: i64): i64 -> @nish.AtomicI64.exchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 557:11 old: i64 (const)
+function AtomicI64.compareExchange(this: AtomicI64, expected: i64, desired: i64): i64 -> @nish.AtomicI64.compareExchange [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 564:11 old: i64 (const)
+function parallelMap<i32, i32, (x) => ...>(src: i32[], f: void): i32[] -> @nish.parallelMap$i32$i32$fn.16.nish_main$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0
+  calls: nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0 nish_panic
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0#0
+  stackSites=0 stackLocals=0
+  local 193:9 dst: i32[] (const)
+  callee 194:3 parallelMapInto<i32, i32, (x) => ...> -> @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0
+function parallelMapInto<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void): void -> @nish.parallelMapInto$i32$i32$fn.16.nish_main$arrow0 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.mapRange$i32$i32$fn.16.nish_main$arrow0
+  escaping: dst f src
+  calls: nish.dstTooShort nish.mapRange$i32$i32$fn.16.nish_main$arrow0 nish_parallel_range
+  pointer src: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.16.nish_main$arrow0#0
+  pointer dst: size=0 writesThrough=true captured=true passedTo=nish.mapRange$i32$i32$fn.16.nish_main$arrow0#1
+  stackSites=0 stackLocals=0
+  local 161:9 n: i32 (const)
+  callee 163:5 dstTooShort -> @nish.dstTooShort
+  callee 165:3 mapRange<i32, i32, (x) => ...> -> @nish.mapRange$i32$i32$fn.16.nish_main$arrow0
+function mapRange<i32, i32, (x) => ...>(src: i32[], dst: i32[], f: void, lo: i32, hi: i32): void -> @nish.mapRange$i32$i32$fn.16.nish_main$arrow0 [instance]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 80:7
+  escaping: lo
+  calls: nish_main$arrow0
+  pointer src: size=0 writesThrough=true captured=false
+  pointer dst: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 77:12 i: i32 (let)
+  local 78:11 y: i32 (const)
+  callee 78:15 (x) => ... -> @nish_main$arrow0
 program bench/result.ts
 module bench/result.ts (entry)
 function half(n: i32): Result<i32, i32> -> @half
