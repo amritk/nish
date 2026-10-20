@@ -21322,17 +21322,21 @@ if (!only || "differential".includes(only)) {
 if (linkSpecimens.size > 0) {
   for (const [key, spec] of linkSpecimens) {
     const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`
-    // The two binaries share a file name and differ in their directory: Darwin's
-    // linker signs every arm64 binary ad hoc, and the signature carries the
-    // output's file name, so two links named `specimen.src` and `specimen.obj`
-    // differ in those bytes however equal the code is (#358).
+    // Both links write one path and are moved aside after: ld64's LC_UUID, and
+    // the ad-hoc signature's page hash over it, differ between two output paths
+    // (docs/wp10-ci.md, "What ld64 varies, measured"), so two names would give
+    // two binaries however equal the code. scripts/bootstrap.sh does the same.
     const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`)
-    const [src, obj] = ["src", "obj"].map((side) => {
-      fs.mkdirSync(`${stem}-${side}`, { recursive: true })
-      return path.join(`${stem}-${side}`, "specimen")
-    })
-    const bySource = spawnSync("clang", [...spec.fromSource, "-o", src], { cwd: root })
-    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", obj], { cwd: root })
+    const [src, obj] = [`${stem}.src`, `${stem}.obj`]
+    const linkAt = (args, dest) => {
+      const r = spawnSync("clang", [...args, "-o", stem], { cwd: root })
+      if (r.status === 0) {
+        fs.renameSync(stem, dest)
+      }
+      return r
+    }
+    const bySource = linkAt(spec.fromSource, src)
+    const byObjects = linkAt(spec.fromObjects, obj)
     const linked = bySource.status === 0 && byObjects.status === 0
     const [a, b] = linked ? [fs.readFileSync(src), fs.readFileSync(obj)] : []
     const same = linked && a.equals(b)
