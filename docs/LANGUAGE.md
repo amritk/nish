@@ -2986,8 +2986,13 @@ from the whole-program facts, and each rule is reported there:
   (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
   A map of 1M short strings, `` `s${x % 100000}` ``, took a median of 23 ms
   on 4 threads and 24 ms on 8, against 38 ms for the same loop written
-  sequentially, and peaked at 32 MB against the loop's 55 MB; on 1 thread it
-  took 54 ms, the cost of keeping each answer. Before adoption, when the
+  sequentially, and peaked at 32 MB against the loop's 55 MB. On 1 thread it
+  is the loop's time: 54.9 ms against the loop's 57.6 ms and its copy's
+  56.4 ms, minima of 9 interleaved rounds on one machine. It used to take
+  72.8 ms there, because the mark sat at the end of the full chunk the result
+  had filled, so every element's body allocated a fresh 64 KB chunk and the
+  rewind freed it; the rewind now keeps that chunk, emptied
+  (`tests/runtime-test.c`'s `test_cross_keep_rewind`). Before adoption, when the
   caller copied every string into its arena one at a time, the map took
   56 ms on 4 threads and peaked at 67 MB; two byte-identical copies of that
   binary differed by 5 ms in the same 7 interleaved rounds. What
