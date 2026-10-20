@@ -1,0 +1,2 @@
+GET /files/* is route 0
+GET /files/:name is route 1
