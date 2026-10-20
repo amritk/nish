@@ -1,13 +1,15 @@
 # WP40: byte buffers and owned handles across `declare function`
 
 **Status: decided (owner, 2026-10-19), and building.** B1.1 is built: the
-`u8[]` parameter rule, the run-and-count rule and the refusals of §8, with a
-call to a buffer-taking declaration refused (NL2554) until B1.2 lowers it.
-B1.2, B1.3 and H1 are unbuilt. NL2554 is what keeps B1.1 sound: no call
-reaches C, so no foreign write goes unrecorded. B1.2 therefore lifts NL2554
-in the same change that records the foreign call's write through a `u8[]`
-argument (`writesThrough = true` for the parameter it came from, §5); lifting
-it alone would let C write a buffer the facts call unwritten. It widens [WP27](wp27-ffi.md) in two places.
+`u8[]` parameter rule, the run-and-count rule and the refusals of §8. B1.2 is
+built: a call to a buffer-taking declaration lowers (§3a), with the
+`ffi-length` check, and NL2554, which refused every such call under B1.1, is
+retired in the same change that records the foreign call's write through a
+`u8[]` argument (`writesThrough = true` for the parameter it came from, §5),
+so no foreign write goes unrecorded. A task a scope spawns is refused a
+foreign call by the existing shared-write rule, whose message (`` writes
+memory its caller can see ``) stands in for the one §5 sketches. B1.3 and H1
+are unbuilt. It widens [WP27](wp27-ffi.md) in two places.
 The first is B, a `u8[]` parameter on a `declare function`: plan stage 5 of
 the ffi-reach run, built as B1. The second is H, a class that owns one `CPtr`
 and is closed by `using`: plan stage 6, built as H1. The stage names are B and

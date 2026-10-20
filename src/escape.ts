@@ -1522,9 +1522,12 @@ export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
  *    reach no more than it is handed, and what it is handed is either one of
  *    these parameters, something reached through them, or memory allocated
  *    during the call. C holds none of them past a call either: the only
- *    pointer this compiler allocated that crosses the C boundary is a
- *    `string` lent to a `declare function` for the length of that call, and
- *    the C function may not keep it (WP27 S3.1, `docs/wp27-ffi.md` §8b).
+ *    pointers this compiler allocated that cross the C boundary are a
+ *    `string`'s bytes and a `u8[]`'s data block, each lent to a `declare
+ *    function` for the length of that call, and the C function may keep
+ *    neither (WP27 S3.1, `docs/wp27-ffi.md` §8b; WP40 B1.2,
+ *    `docs/wp40-ffi-buffers-handles.md` §3a). A `u8[]` C writes through is
+ *    written by the call, and holds bytes, not pointers.
  *  - **None of that memory has a slot a pointer fits in.** A pointer outlives
  *    a call only by being stored, and a scalar field has no room for one. A
  *    string is immutable. An array is refused even of numbers, because a

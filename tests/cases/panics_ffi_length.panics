@@ -1,0 +1,4 @@
+{"functions":[
+{"name":"fits","symbol":"fits","module":"tests/cases/panics_ffi_length.ts","line":6,"panics":[{"kind":"ffi-length","line":8,"column":25,"proven":false}]},
+{"name":"over","symbol":"over","module":"tests/cases/panics_ffi_length.ts","line":11,"panics":[{"kind":"ffi-length","line":13,"column":25,"proven":false}]}
+]}

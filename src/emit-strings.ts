@@ -12,6 +12,7 @@
 // `src/attributes.ts` reads: what a construct calls has to match what it
 // emits exactly, so both live beside the lowering they describe.
 
+import { foreignBufferCount, foreignBufferCountProven } from "./attributes"
 import { unwrapBoundsParens } from "./bounds"
 import { Emitter } from "./emit"
 import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loadLength } from "./emit-arrays"
@@ -22,7 +23,7 @@ import { INDEX_OF_ANY_KERNEL } from "./kernels"
 import { N_NULL, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
 import { FunctionSig } from "./program"
 import { irEscape } from "./strings"
-import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
+import { isFloat, isForeignBuffer, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } from "./types"
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -550,6 +551,51 @@ export const emitForeignString = (
   fn.emit(`br label %${joinBlock.label}`)
   fn.placeBlock(joinBlock)
   return fn.emitValue(`phi i8* [ null, %${nullBlock.label} ], [ ${data}, %${okBlock.label} ]`)
+}
+
+/**
+ * WP40 B1.2: the `u8[]` and `readonly u8[]` arguments of the call `call` to the
+ * `declare function` `callee`, whose evaluated operands are `operands` and
+ * `values`, lowered to the `i8*` C takes: the array's `data`, rewritten into
+ * `operands` in place. Each is read here, after every argument is evaluated and
+ * with nothing of the program's between the read and the call, because an
+ * argument may push to the buffer and move its bytes (`docs/wp40-ffi-buffers-
+ * handles.md` §3a).
+ *
+ * A buffer whose count is not proven (`foreignBufferCountProven`) is held
+ * against its `len` first, never its `cap`, and a larger count panics as
+ * `ffi-length`. `--unchecked-indexing` keeps the check: the count is C's to
+ * act on, and no index check of the program's covers it.
+ */
+export const emitForeignBuffers = (
+  emitter: Emitter,
+  call: Node,
+  callee: FunctionSig,
+  operands: string[],
+  values: string[]
+): void => {
+  const fn = emitter.fn
+  let i = 0
+  while (i < callee.paramTypes.length) {
+    if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
+      const count = foreignBufferCount(emitter.table, callee, i)
+      if (!foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts)) {
+        const len = loadLength(emitter, values[i])
+        const fits = fn.emitValue(`icmp ule i64 ${values[count]}, ${len}`)
+        const okBlock = fn.newBlock("ffi.ok")
+        const failBlock = fn.newBlock("ffi.length")
+        fn.emit(`br i1 ${fits}, label %${okBlock.label}, label %${failBlock.label}`)
+        fn.placeBlock(failBlock)
+        const message =
+          `\`${callee.sourceName}\`: argument ${count + 1} (${callee.paramNames[count]}) counts more bytes than ` +
+          `argument ${i + 1} (${callee.paramNames[i]}) holds`
+        emitPanicTail(emitter, emitter.stringConstant(message))
+        fn.placeBlock(okBlock)
+      }
+      operands[i] = `i8* ${loadData(emitter, values[i])}`
+    }
+    i = i + 1
+  }
 }
 
 /**

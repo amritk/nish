@@ -116,7 +116,6 @@ import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
 import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import {
   intBits,
-  isForeignBuffer,
   isFloat,
   isInteger,
   isNumeric,
@@ -2496,33 +2495,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     }
     i = i + 1
   }
-  refuseForeignBufferCall(ctx, expr, sig, sig.name)
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
-}
-
-/**
- * A call to a `declare function` that takes a `u8[]` buffer (WP40 B1.1). The
- * declaration is checked now, but the call's lowering, which passes the
- * array's data pointer and holds the count to its length (`ffi-length`,
- * `docs/wp40-ffi-buffers-handles.md` §3a), lands with B1.2. Until then the
- * call is refused, so no build can pass C the array's header for its bytes.
- */
-const refuseForeignBufferCall = (ctx: CheckContext, expr: Node, sig: FunctionSig, shown: string): void => {
-  if (!sig.foreign()) {
-    return
-  }
-  let i = 0
-  while (i < sig.paramTypes.length) {
-    if (isForeignBuffer(ctx.table, sig.paramTypes[i])) {
-      ctx.error(
-        expr,
-        `\`${shown}\` takes the buffer \`${sig.paramNames[i]}\`, and a call to a declared C function that takes a \`u8[]\` is not lowered yet: the declaration is checked, and the call waits for the release that passes the bytes and checks the count`
-      )
-      return
-    }
-    i = i + 1
-  }
 }
 
 /**
@@ -2602,7 +2576,6 @@ const checkDirectCall = (
       `Argument ${bad + 1} of \`${shown}\`: expected ${want}, got ${ctx.table.typeName(badType)}`
     )
   }
-  refuseForeignBufferCall(ctx, expr, sig, shown)
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
 }

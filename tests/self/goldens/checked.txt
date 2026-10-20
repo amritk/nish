@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1054 programs, 135023 dump lines.
+# 1068 programs, 135439 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -15947,18 +15947,129 @@ function test(): i32 -> @test [exported]
   local 14:9 wide: i64 (const)
   callee 14:16 widen -> @widen
   callee 15:10 pick -> @pick
+program tests/cases/ffi_buffer_call_sites.ts
+module tests/cases/ffi_buffer_call_sites.ts (entry)
+struct Greeter (class) size=8 align=8
+  field written: i64 index=0 offset=0
+  constructor -> @Greeter.constructor
+  method greet -> @Greeter.greet
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Greeter.constructor(this: Greeter): void -> @Greeter.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via write
+  calls: write
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
+  local 13:11 b: u8[] (const)
+  callee 14:20 write -> @write
+function Greeter.greet(this: Greeter): i64 -> @Greeter.greet [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: write
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 17:11 b: u8[] (const)
+  callee 18:12 write -> @write
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: Greeter.constructor Greeter.greet nish_panic via$fn.5.write write
+  stackSites=2 stackLocals=2
+  local 28:9 b: u8[] (const)
+  callee 29:3 write -> @write
+  local 30:9 g: Greeter (const)
+  callee 30:13 new Greeter -> @Greeter.constructor
+  callee 31:3 Greeter.greet -> @Greeter.greet
+  callee 32:3 via<write> -> @via$fn.5.write
+function via<write>(f: void): i64 -> @via$fn.5.write [instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  stackSites=1 stackLocals=1
+  local 23:9 b: u8[] (const)
+  callee 24:10 write -> @write
+program tests/cases/ffi_buffer_count_proved.ts
+module tests/cases/ffi_buffer_count_proved.ts (entry)
+struct Holder (class) size=8 align=8
+  field buf: u8[] index=0 offset=0
+  constructor -> @Holder.constructor
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Holder.constructor(this: Holder, buf: u8[]): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: buf
+  pointer this: size=8 writesThrough=true captured=false
+  pointer buf: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function constLocal(): i64 -> @constLocal
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: write
+  stackSites=1 stackLocals=1
+  local 17:9 b: u8[] (const)
+  callee 18:10 write -> @write
+function param(b: readonly u8[]): i64 -> @param
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: write
+  pointer b: size=0 writesThrough=false captured=false passedTo=write#1
+  stackSites=0 stackLocals=0
+  callee 22:10 write -> @write
+function field(h: Holder): i64 -> @field
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 26:10 write -> @write
+function alias(b: u8[]): i64 -> @alias
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  escaping: b
+  calls: nish_panic write
+  pointer b: size=0 writesThrough=true captured=true passedTo=write#1
+  stackSites=0 stackLocals=0
+  local 30:9 other: u8[] (const)
+  callee 31:10 write -> @write
+function another(b: u8[], c: u8[]): i64 -> @another
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  pointer b: size=0 writesThrough=false captured=false passedTo=write#1
+  pointer c: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 35:10 write -> @write
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via constLocal
+  calls: Holder.constructor alias another constLocal field param
+  stackSites=4 stackLocals=1
+  callee 39:3 constLocal -> @constLocal
+  local 40:9 p: u8[] (const)
+  callee 41:3 param -> @param
+  callee 42:3 field -> @field
+  callee 42:9 new Holder -> @Holder.constructor
+  callee 43:3 alias -> @alias
+  callee 44:3 another -> @another
 program tests/cases/ffi_buffer_declared.ts
 module tests/cases/ffi_buffer_declared.ts (entry)
 function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr -> @memcpy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
-  pointer dst: size=0 writesThrough=false captured=false
+  pointer dst: size=0 writesThrough=true captured=false
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function getentropy(buf: u8[], n: u64): i32 -> @getentropy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
-  pointer buf: size=0 writesThrough=false captured=false
+  pointer buf: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): i32 -> @compare
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -15976,6 +16087,185 @@ function main(): i32 -> @nish_main [exported entry]
   calls: abs nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=0 stackLocals=0
   callee 12:18 abs -> @abs
+program tests/cases/ffi_buffer_export_written.ts
+module tests/cases/ffi_buffer_export_written.ts (entry)
+function getentropy(buf: u8[], n: u64): i32 -> @getentropy
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function fill(b: u8[]): i32 -> @fill [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 11:10
+  calls: getentropy
+  pointer b: size=0 writesThrough=true captured=false passedTo=getentropy#0
+  stackSites=0 stackLocals=0
+  callee 11:10 getentropy -> @getentropy
+function peek(b: u8[]): i64 -> @peek [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: write
+  pointer b: size=0 writesThrough=false captured=false passedTo=write#1
+  stackSites=0 stackLocals=0
+  callee 15:10 write -> @write
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fill
+  calls: fill
+  stackSites=1 stackLocals=1
+  local 19:9 b: u8[] (const)
+  callee 20:10 fill -> @fill
+program tests/cases/ffi_buffer_late_load.ts
+module tests/cases/ffi_buffer_late_load.ts (entry)
+struct Popper (class) size=8 align=8
+  field off: i64 index=0 offset=0
+  constructor -> @Popper.constructor
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function pwrite(fd: i32, buf: readonly u8[], n: u64, off: i64): i64 -> @pwrite
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function grow(b: u8[]): i32 -> @grow
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 12:3
+  calls: nish_array_grow
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function zero(): i64 -> @zero
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function shrink(b: u8[]): i64 -> @shrink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 22:3
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Popper.constructor(this: Popper, b: u8[]): void -> @Popper.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 29:5
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=true captured=false
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function noResize(): i64 -> @noResize [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pwrite
+  calls: pwrite zero
+  stackSites=1 stackLocals=1
+  local 35:9 buf: u8[] (const)
+  callee 36:10 pwrite -> @pwrite
+  callee 36:45 zero -> @zero
+function resizing(): i64 -> @resizing [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pwrite
+  calls: nish_panic pwrite shrink
+  stackSites=1 stackLocals=1
+  local 40:9 buf: u8[] (const)
+  callee 41:10 pwrite -> @pwrite
+  callee 41:45 shrink -> @shrink
+function inlinePop(): i64 -> @inlinePop [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pwrite
+  calls: nish_panic nish_panic_index pwrite
+  stackSites=1 stackLocals=1
+  local 45:9 buf: u8[] (const)
+  callee 46:10 pwrite -> @pwrite
+function viaNew(): i64 -> @viaNew [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pwrite
+  calls: Popper.constructor nish_panic pwrite
+  stackSites=2 stackLocals=1
+  local 50:9 buf: u8[] (const)
+  callee 51:10 pwrite -> @pwrite
+  callee 51:45 new Popper -> @Popper.constructor
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: grow nish_arena_mark nish_arena_release nish_panic noResize write
+  stackSites=3 stackLocals=1
+  local 55:9 b: u8[] (const)
+  callee 56:3 write -> @write
+  callee 56:9 grow -> @grow
+  local 57:9 r: i64 (const)
+  callee 57:13 noResize -> @noResize
+  callee 58:3 write -> @write
+program tests/cases/ffi_buffer_memcpy.ts
+module tests/cases/ffi_buffer_memcpy.ts (entry)
+function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr -> @memcpy
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via memcpy
+  calls: memcpy nish_panic write
+  stackSites=2 stackLocals=2
+  local 8:9 dst: u8[] (const)
+  local 9:9 src: u8[] (const)
+  callee 10:3 memcpy -> @memcpy
+  callee 11:3 write -> @write
+program tests/cases/ffi_buffer_read.ts
+module tests/cases/ffi_buffer_read.ts (entry)
+function read(fd: i32, buf: u8[], n: u64): i64 -> @read
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function echo(fd: i32): i64 -> @echo
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via read
+  escaping: fd
+  calls: nish_panic read write
+  stackSites=1 stackLocals=1
+  local 10:9 buf: u8[] (const)
+  local 11:9 n: i64 (const)
+  callee 11:13 read -> @read
+  callee 13:5 write -> @write
+function run(fd: i32): i32 -> @run [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via echo
+  escaping: fd
+  calls: echo
+  stackSites=0 stackLocals=0
+  callee 19:16 echo -> @echo
+program tests/cases/ffi_buffer_write.ts
+module tests/cases/ffi_buffer_write.ts (entry)
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  stackSites=2 stackLocals=2
+  local 9:9 bytes: u8[] (const)
+  callee 10:3 write -> @write
+  local 11:9 prefix: u8[] (const)
+  callee 12:3 write -> @write
 program tests/cases/ffi_owned_string.ts
 module tests/cases/ffi_owned_string.ts (entry)
 import readCString from "nish:unsafe" -> builtin readCString
@@ -49248,6 +49538,131 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   callee 15:15 strict -> @strict
   callee 16:15 lenient -> @lenient
+program tests/cases/panics_ffi_length.ts
+module tests/cases/panics_ffi_length.ts (entry)
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function fits(): i32 -> @fits [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  stackSites=1 stackLocals=1
+  local 7:9 b: u8[] (const)
+  callee 8:16 write -> @write
+function over(): i32 -> @over [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  stackSites=1 stackLocals=1
+  local 12:9 b: u8[] (const)
+  callee 13:16 write -> @write
+program tests/cases/panics_ffi_length_inline_pop.ts
+module tests/cases/panics_ffi_length_inline_pop.ts (entry)
+function pwrite(fd: i32, buf: readonly u8[], n: u64, off: i64): i64 -> @pwrite
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function inlinePop(): i32 -> @inlinePop [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pwrite
+  calls: nish_panic nish_panic_index pwrite
+  stackSites=1 stackLocals=1
+  local 7:9 buf: u8[] (const)
+  callee 8:16 pwrite -> @pwrite
+program tests/cases/panics_ffi_length_memcpy.ts
+module tests/cases/panics_ffi_length_memcpy.ts (entry)
+function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr -> @memcpy
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function shortSource(): i32 -> @shortSource [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via memcpy
+  calls: memcpy nish_panic
+  stackSites=2 stackLocals=2
+  local 7:9 dst: u8[] (const)
+  local 8:9 src: u8[] (const)
+  callee 9:3 memcpy -> @memcpy
+program tests/cases/panics_ffi_length_shrink.ts
+module tests/cases/panics_ffi_length_shrink.ts (entry)
+struct Popper (class) size=8 align=8
+  field off: i64 index=0 offset=0
+  constructor -> @Popper.constructor
+function pwrite(fd: i32, buf: readonly u8[], n: u64, off: i64): i64 -> @pwrite
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function shrink(b: u8[]): i64 -> @shrink
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 9:3
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Popper.constructor(this: Popper, b: u8[]): void -> @Popper.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 16:5
+  calls: nish_panic_index
+  pointer this: size=8 writesThrough=true captured=false
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function viaCall(): i32 -> @viaCall [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pwrite
+  calls: nish_panic pwrite shrink
+  stackSites=1 stackLocals=1
+  local 22:9 buf: u8[] (const)
+  callee 23:16 pwrite -> @pwrite
+  callee 23:51 shrink -> @shrink
+function viaNew(): i32 -> @viaNew [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via pwrite
+  calls: Popper.constructor nish_panic pwrite
+  stackSites=2 stackLocals=1
+  local 27:9 buf: u8[] (const)
+  callee 28:16 pwrite -> @pwrite
+  callee 28:51 new Popper -> @Popper.constructor
+program tests/cases/panics_ffi_length_unchecked.ts
+module tests/cases/panics_ffi_length_unchecked.ts (entry)
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function fits(): i32 -> @fits [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  stackSites=1 stackLocals=1
+  local 7:9 b: u8[] (const)
+  callee 8:16 write -> @write
+function over(): i32 -> @over [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  stackSites=1 stackLocals=1
+  local 12:9 b: u8[] (const)
+  callee 13:16 write -> @write
+program tests/cases/panics_ffi_length_wrapped.ts
+module tests/cases/panics_ffi_length_wrapped.ts (entry)
+function read(fd: i32, buf: u8[], n: u64): i64 -> @read
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function wrapped(): i32 -> @wrapped [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via read
+  calls: nish_panic read
+  stackSites=1 stackLocals=1
+  local 7:9 buf: u8[] (const)
+  callee 8:16 read -> @read
 program tests/cases/panics_ffi_nul.ts
 module tests/cases/panics_ffi_nul.ts (entry)
 function strlen(s: string): u64 -> @strlen
@@ -85490,6 +85905,21 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 19:9 k: Kind (const)
   callee 20:27 weight -> @weight
+program docs/cookbook/decl-ffi-buffer.ts
+module docs/cookbook/decl-ffi-buffer.ts (entry)
+function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via write
+  calls: nish_panic write
+  stackSites=1 stackLocals=1
+  local 4:9 bytes: u8[] (const)
+  callee 5:3 write -> @write
+  callee 6:3 write -> @write
 program docs/cookbook/decl-ffi-owned-string.ts
 module docs/cookbook/decl-ffi-owned-string.ts (entry)
 import readCString from "nish:unsafe" -> builtin readCString
