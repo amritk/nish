@@ -81,6 +81,7 @@ import {
   TLS_STATE_WAIT_CLIENT_HELLO,
   TLS_STATE_WAIT_FINISHED,
   TLS_STATE_WAIT_SIGNATURE,
+  TLS_STATE_WAIT_TICKET,
   TLS_SECRET_CLIENT_APPLICATION,
   TLS_SECRET_CLIENT_HANDSHAKE,
   TLS_SECRET_HANDSHAKE,
@@ -92,6 +93,7 @@ import {
   tlsHeldCopyIn,
   tlsHeldCopyOver,
 } from "nish/net/tls"
+import { TlsTicketKeyInfo, TlsTicketStrikes } from "nish/net/tls/ticket"
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
@@ -144,6 +146,12 @@ export const TLS_RECORD_DATA: i32 = 4
 export const TLS_RECORD_SIGN: i32 = 8
 /** Nothing more will happen: the connection failed or closed, and everything to send is sent. */
 export const TLS_RECORD_DONE: i32 = 16
+/**
+ * A ticket is the carrier's to handle, with the keys and strike register it
+ * lends: during the handshake the ClientHello offers one, so `resume` reads
+ * it; once the connection is open the client may be issued one, so `issue`.
+ */
+export const TLS_RECORD_TICKET: i32 = 32
 
 /** What `read` and `write` answer once the connection has failed: Linux's ECONNRESET, as `nish:net` spells it. */
 export const TLS_RECORD_RESET: i32 = -104
@@ -325,13 +333,15 @@ export class TlsRecordServer {
   pendingInitialAt: i32 = 0
   /** How much of `TlsServer`'s Handshake-level output is already in records. */
   pendingHandshakeAt: i32 = 0
-  /** The server's flight is signed and finished, so its Handshake-level output may be sealed. */
-  flightReady: boolean = false
+  /** How much of `TlsServer`'s Application-level output, a NewSessionTicket, is already in records. */
+  pendingApplicationAt: i32 = 0
   postHandshakeLength: i32 = 0
   /** Records in a row that carried nothing for the caller, against `TLS_RECORD_IDLE_LIMIT`. */
   idleRecords: i32 = 0
   /** KeyUpdates taken from the client, against `TLS_RECORD_MAX_KEY_UPDATES`. */
   keyUpdates: i32 = 0
+  /** The server's flight is signed and finished, so its Handshake-level output may be sealed. */
+  flightReady: boolean = false
   peerClosed: boolean = false
   /** The client's TCP stream ended. Without a `close_notify` before it, that is truncation and the connection failed. */
   ended: boolean = false
@@ -636,12 +646,17 @@ export class TlsRecordServer {
     this.dropPending()
   }
 
-  /** Forgets what is owed but not yet sealed: the handshake queues, the compatibility record, a KeyUpdate and a close. */
+  /**
+   * Forgets what is owed but not yet sealed: the handshake queues, a
+   * NewSessionTicket, the compatibility record, a KeyUpdate and a close.
+   */
   dropPending(): void {
     this.tls.clearOutput(TLS_LEVEL_INITIAL)
     this.tls.clearOutput(TLS_LEVEL_HANDSHAKE)
+    this.tls.clearOutput(TLS_LEVEL_APPLICATION)
     this.pendingInitialAt = 0
     this.pendingHandshakeAt = 0
+    this.pendingApplicationAt = 0
     this.flightReady = false
     this.ccsDue = false
     this.keyUpdateDue = false
@@ -657,7 +672,7 @@ export class TlsRecordServer {
    */
   process(): void {
     while (this.state !== TLS_RECORD_STATE_FAILED && !this.peerClosed) {
-      if (this.tls.state === TLS_STATE_WAIT_SIGNATURE) {
+      if (this.tls.state === TLS_STATE_WAIT_SIGNATURE || this.tls.state === TLS_STATE_WAIT_TICKET) {
         break
       }
       const n: i32 = this.reader.next()
@@ -944,8 +959,10 @@ export class TlsRecordServer {
         this.readLevel = TLS_LEVEL_HANDSHAKE
       }
     }
-    if (tls.state !== TLS_STATE_WAIT_CLIENT_HELLO) {
-      // The ServerHello is written, so the exchange is done with the key.
+    if (tls.state !== TLS_STATE_WAIT_CLIENT_HELLO && tls.state !== TLS_STATE_WAIT_TICKET) {
+      // The ServerHello is written, so the exchange is done with the key. A
+      // hello that offers a ticket waits for `resume` before any ServerHello,
+      // and the exchange still needs the key there.
       tls.wipeEphemeral()
     }
     if (tls.state === TLS_STATE_WAIT_FINISHED || tls.state === TLS_STATE_CONNECTED) {
@@ -965,6 +982,11 @@ export class TlsRecordServer {
       this.readLevel = TLS_LEVEL_APPLICATION
       if (this.state === TLS_RECORD_STATE_HANDSHAKE) {
         this.state = TLS_RECORD_STATE_OPEN
+      }
+      // With tickets on, a connection no ticket will be issued to has no use
+      // for the resumption master secret: wiped at once, not at close.
+      if (tls.tickets && !tls.ticketWanted) {
+        tls.wipeResumption()
       }
     }
     this.pump()
@@ -1144,6 +1166,20 @@ export class TlsRecordServer {
         return
       }
       this.writeLevel = TLS_LEVEL_APPLICATION
+    }
+    // A NewSessionTicket is a post-handshake message, under the application
+    // keys (§4.6.1).
+    if (this.writeLevel === TLS_LEVEL_APPLICATION && tls.outputApplicationLength > 0) {
+      this.pendingApplicationAt = this.sealQueue(
+        tls.outputApplication,
+        this.pendingApplicationAt,
+        tls.outputApplicationLength
+      )
+      if (this.pendingApplicationAt < tls.outputApplicationLength) {
+        return
+      }
+      tls.clearOutput(TLS_LEVEL_APPLICATION)
+      this.pendingApplicationAt = 0
     }
     if (this.keyUpdateDue && this.writeLevel === TLS_LEVEL_APPLICATION && this.sendKeyUpdate(false)) {
       this.keyUpdateDue = false
@@ -1392,11 +1428,54 @@ export class TlsRecordServer {
   }
 
   /**
+   * While `interest` says `TLS_RECORD_TICKET` in the handshake: reads the
+   * ClientHello's tickets under the keys the carrier lends (`TlsServer.resume`)
+   * and seals the flight that answers it, resumed or in full. Answers 0, or
+   * the alert the connection failed with — `internal_error` when no ticket
+   * waits.
+   */
+  resume(
+    current: Secret<u8[]>,
+    currentInfo: TlsTicketKeyInfo,
+    previous: Secret<u8[]>,
+    previousInfo: TlsTicketKeyInfo,
+    strikes: TlsTicketStrikes,
+    now: i64
+  ): i32 {
+    if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
+      return this.state === TLS_RECORD_STATE_FAILED ? this.alert : TLS_ALERT_INTERNAL_ERROR
+    }
+    const alert: i32 = this.tls.resume(current, currentInfo, previous, previousInfo, strikes, now)
+    if (alert !== 0) {
+      this.fail(alert)
+      return alert
+    }
+    this.advance()
+    this.process()
+    return this.state === TLS_RECORD_STATE_FAILED ? this.alert : 0
+  }
+
+  /**
+   * While `interest` says `TLS_RECORD_TICKET` on an open connection: seals a
+   * ticket under `key` (`TlsServer.issue`) and queues its NewSessionTicket.
+   * Whether one was queued; either way the resumption master secret is
+   * wiped, and no second ticket is issued.
+   */
+  issue(key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): boolean {
+    if (this.state !== TLS_RECORD_STATE_OPEN) {
+      return false
+    }
+    const written: boolean = this.tls.issue(key, info, now)
+    this.pump()
+    return written
+  }
+
+  /**
    * What the connection wants next, as `TLS_RECORD_*` bits: read the socket
    * (there is room, and the stream has not ended), write it (`output` holds
    * bytes), `read` (application data, or the end of the client's stream),
-   * sign, or nothing more ever (`TLS_RECORD_DONE`: failed or closed, and
-   * everything is sent).
+   * sign, handle a ticket, or nothing more ever (`TLS_RECORD_DONE`: failed
+   * or closed, and everything is sent).
    */
   interest(): i32 {
     let bits: i32 = 0
@@ -1424,6 +1503,16 @@ export class TlsRecordServer {
     }
     if (this.state === TLS_RECORD_STATE_HANDSHAKE && this.tls.state === TLS_STATE_WAIT_SIGNATURE) {
       bits = bits | TLS_RECORD_SIGN
+    }
+    const ticketHello: boolean =
+      this.state === TLS_RECORD_STATE_HANDSHAKE && this.tls.state === TLS_STATE_WAIT_TICKET
+    const ticketOwed: boolean =
+      this.state === TLS_RECORD_STATE_OPEN &&
+      this.tls.state === TLS_STATE_CONNECTED &&
+      this.tls.ticketWanted &&
+      !this.tls.issued
+    if (ticketHello || ticketOwed) {
+      bits = bits | TLS_RECORD_TICKET
     }
     return bits
   }
