@@ -746,24 +746,30 @@ target against its routes by hand. It now registers them on one
 [`http-twins/`](http-twins/README.md#the-route-table), and switches on the
 index `match` returns. `old` is the hand-dispatching server at `main` before
 the change (142,960 bytes), and `nish` and `nish-copy` are two builds of the
-router server (158,192 bytes). All are `--profile speed`, timed in the same
-interleaved rounds with `http.mjs --rounds 5 --duration 5` on 2026-10-20, at
-`c1507260`. The machine was the same kind of shared four-vCPU KVM VM, this
-time an Intel Xeon @ 2.10 GHz. The band is `nish-copy`'s median against
-`nish`'s:
+router server (158,192 bytes), byte-identical to a build of this file at
+`189685eb`. All are `--profile speed`, timed in the same interleaved rounds
+with `http.mjs --rounds 10 --duration 5` on 2026-10-20. The machine was the
+same kind of shared four-vCPU KVM VM, this time an Intel Xeon @ 2.10 GHz. The
+band is `nish-copy`'s median against `nish`'s:
 
 | scenario | old | nish | nish-copy | band |
 | --- | ---: | ---: | ---: | ---: |
-| plaintext keep-alive c=256 | 165,078<br>147,906–170,216 | 160,279<br>150,004–165,103 | 135,104<br>103,990–156,949 | −15.7% |
-| json keep-alive c=256 | 159,958<br>120,747–169,992 | 150,831<br>118,618–161,892 | 144,132<br>104,549–159,947 | −4.4% |
-| post-json keep-alive c=256 | 48,329<br>46,425–61,459 | 50,606<br>49,431–56,595 | 51,337<br>49,834–54,536 | +1.4% |
-| deep-route keep-alive c=256 | n/a | 138,037<br>134,089–155,895 | 130,333<br>126,148–155,247 | −5.6% |
+| plaintext keep-alive c=256 | 152,503<br>129,487–160,160 | 138,960<br>125,688–163,109 | 151,752<br>142,624–160,480 | +9.2% |
+| json keep-alive c=256 | 151,313<br>112,094–161,204 | 151,972<br>127,956–169,453 | 139,871<br>127,577–150,452 | −8.0% |
+| post-json keep-alive c=256 | 50,527<br>41,938–55,854 | 49,527<br>45,653–55,062 | 50,051<br>46,853–56,613 | +1.1% |
+| deep-route keep-alive c=256 | n/a | 140,405<br>110,905–157,388 | 128,958<br>93,781–152,177 | −8.2% |
 
-`nish` against `old` is −2.9% on plaintext, inside its band. It is −5.7% on
-json and +4.7% on post-json, outside those rows' bands of 4.4% and 1.4%, but
-the two spreads overlap on every row, so this run cannot call any of the three
-different. The deep route, eight segments and three parameters deep in the
-table, runs at 138,037: 86% of plaintext's rate, with its answer built from
+`nish` against `old` is −8.9% on plaintext and +0.4% on json, both inside
+those rows' bands of 9.2% and 8.0%: this run finds neither faster nor slower.
+On post-json it is −2.0%, outside that row's 1.1% band: by this run's own
+measure, the router server is 2.0% slower than the hand-dispatching one on
+post-json. The CPU columns lean the same way: user time per request is 1.52 µs
+against `old`'s 1.35 on plaintext and 9.86 against 9.50 on post-json, though
+`nish-copy`'s 1.49 and 9.82 show how far a byte-identical build moves. A
+five-round run at `c1507260` gave −2.9%, −5.7% and +4.7% on the same three
+rows, so the sign of a delta this size changes from run to run. The deep
+route, eight segments and three parameters deep in the table, runs at 140,405:
+101% of `nish`'s plaintext rate in the same rounds, with its answer built from
 the three parameters. `old` has no such route, so its cell is n/a.
 
 ## P-256
