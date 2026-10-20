@@ -4395,7 +4395,7 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   (NL2556; `tests/cases/reject_class_literal_decl`, `…_return`,
   `…_arrow_body`, `…_call_arg`, `…_method_arg`, `…_new_arg`,
   `…_array_elem`, `…_push`, `…_index_assign`, `…_map_set`,
-  `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`,
+  `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`, `…_alias`,
   `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
   `…_imported`). A generic method counts as a method; a constructor does
   not. A class with fields alone, and an interface, still take a literal

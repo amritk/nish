@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 88 programs, 2713267 dump lines live, 88 distinct modules.
+# 88 programs, 2714507 dump lines live, 88 distinct modules.
 entry src/annotations.ts: src/annotations.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/builtins.ts src/arrays.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/branding.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/result.ts src/structs.ts src/parents.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arena-report.ts: src/arena-report.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/emit-util.ts src/symbols.ts src/options.ts src/checker.ts src/expressions.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/parents.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 entry src/arrays.ts: src/arrays.ts src/secret.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/emit-json.ts src/emit-arrays.ts src/bounds.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/checker.ts src/expressions.ts src/constants.ts src/types.ts src/ice.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/declarations.ts src/parallel.ts src/escape.ts src/emit-util.ts src/symbols.ts src/emit-result.ts src/emit-builtins.ts src/builtins.ts src/members.ts src/result.ts src/structs.ts src/fusion.ts src/parents.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/options.ts src/assignment.ts src/statements.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
@@ -15620,7 +15620,7 @@ const UNCODED: string = "NL0000"
 const SYNTAX: string = "NL0001"
 const TOOLCHAIN: string = "NL0002" [exported]
 const INTERNAL: string = "NL0003" [exported]
-const RULE_COUNT: i32 = 683 [exported]
+const RULE_COUNT: i32 = 684 [exported]
 function diagnosticRules(): string[] -> @diagnosticRules
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -15638,20 +15638,20 @@ function firstMatch(rules: string[], text: string): string -> @firstMatch
   calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from
   pointer rules: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1457:7 i: i32 (let)
+  local 1459:7 i: i32 (let)
 function codeFor(kind: string, text: string): string -> @codeFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: text
   calls: deprecationRules diagnosticRules firstMatch nish_arena_mark nish_arena_release nish_str_eq performanceRules portabilityRules
   stackSites=0 stackLocals=0
-  callee 1479:12 firstMatch -> @firstMatch
-  callee 1479:23 performanceRules -> @performanceRules
-  callee 1482:12 firstMatch -> @firstMatch
-  callee 1482:23 portabilityRules -> @portabilityRules
-  callee 1485:12 firstMatch -> @firstMatch
-  callee 1485:23 deprecationRules -> @deprecationRules
-  callee 1487:10 firstMatch -> @firstMatch
-  callee 1487:21 diagnosticRules -> @diagnosticRules
+  callee 1481:12 firstMatch -> @firstMatch
+  callee 1481:23 performanceRules -> @performanceRules
+  callee 1484:12 firstMatch -> @firstMatch
+  callee 1484:23 portabilityRules -> @portabilityRules
+  callee 1487:12 firstMatch -> @firstMatch
+  callee 1487:23 deprecationRules -> @deprecationRules
+  callee 1489:10 firstMatch -> @firstMatch
+  callee 1489:21 diagnosticRules -> @diagnosticRules
 module src/strings.ts
 const HEX_LOWER: string = "0123456789abcdef"
 const HEX_UPPER: string = "0123456789ABCDEF"
@@ -28198,31 +28198,37 @@ function isAtomicType(program: CheckedProgram, table: TypeTable, type: i32): boo
   stackSites=0 stackLocals=0
   callee 3739:3 isAtomicClass -> @isAtomicClass
   callee 3739:17 classLayoutOf -> @classLayoutOf
+function isThreadsStruct(info: StructInfo): boolean -> @isThreadsStruct [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isAtomicClass isThreadsLayout
+  pointer info: size=136 writesThrough=false captured=false passedTo=isAtomicClass#0 isThreadsLayout#0
+  stackSites=0 stackLocals=0
+  callee 3742:63 isAtomicClass -> @isAtomicClass
+  callee 3742:86 isThreadsLayout -> @isThreadsLayout
 function isThreadsObjectType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isThreadsObjectType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
-  calls: classLayoutOf isAtomicClass isThreadsLayout
+  calls: classLayoutOf isThreadsStruct
   pointer program: size=640 writesThrough=false captured=false passedTo=classLayoutOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=classLayoutOf#1
   stackSites=0 stackLocals=0
-  local 3743:9 info: StructInfo | null (const)
-  callee 3743:16 classLayoutOf -> @classLayoutOf
-  callee 3744:28 isAtomicClass -> @isAtomicClass
-  callee 3744:51 isThreadsLayout -> @isThreadsLayout
+  local 3746:9 info: StructInfo | null (const)
+  callee 3746:16 classLayoutOf -> @classLayoutOf
+  callee 3747:27 isThreadsStruct -> @isThreadsStruct
 function isAtomicMethod(sig: FunctionSig): boolean -> @isAtomicMethod [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAtomicClass
   pointer sig: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 3749:3 isAtomicClass -> @isAtomicClass
+  callee 3752:3 isAtomicClass -> @isAtomicClass
 function isLockCall(program: CheckedProgram, node: Node): boolean -> @isLockCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isLockMethod nish_panic_index
   pointer program: size=640 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 3756:9 callee: FunctionSig | null (const)
-  callee 3757:29 isLockMethod -> @isLockMethod
+  local 3759:9 callee: FunctionSig | null (const)
+  callee 3760:29 isLockMethod -> @isLockMethod
 function isGuardedAccess(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @isGuardedAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isGuardType isGuardedAccess nish_panic_index nish_str_eq unwrapParens
@@ -28230,12 +28236,12 @@ function isGuardedAccess(program: CheckedProgram, table: TypeTable, node: Node):
   pointer table: size=96 writesThrough=false captured=false passedTo=isGuardType#1 isGuardedAccess#1
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 3770:9 e: Node (const)
-  callee 3770:13 unwrapParens -> @unwrapParens
-  local 3774:9 base: Node (const)
-  callee 3774:16 unwrapParens -> @unwrapParens
-  callee 3775:52 isGuardType -> @isGuardType
-  callee 3778:10 isGuardedAccess -> @isGuardedAccess
+  local 3773:9 e: Node (const)
+  callee 3773:13 unwrapParens -> @unwrapParens
+  local 3777:9 base: Node (const)
+  callee 3777:16 unwrapParens -> @unwrapParens
+  callee 3778:52 isGuardType -> @isGuardType
+  callee 3781:10 isGuardedAccess -> @isGuardedAccess
 function mutexFreshMessage(): string -> @mutexFreshMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -28254,7 +28260,7 @@ function threadsLiteralMessage(table: TypeTable, type: i32): string -> @threadsL
   calls: TypeTable.typeName nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  callee 3804:8 TypeTable.typeName -> @TypeTable.typeName
+  callee 3807:8 TypeTable.typeName -> @TypeTable.typeName
 function lockNotUsingMessage(name: string, mutex: string): string -> @lockNotUsingMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -28266,11 +28272,11 @@ function guardSlot(program: CheckedProgram, table: TypeTable, guard: i32, name: 
   pointer program: size=640 writesThrough=false captured=false passedTo=classLayoutOf#0 copiedSlot#0
   pointer table: size=96 writesThrough=false captured=false passedTo=classLayoutOf#1 copiedSlot#1
   stackSites=0 stackLocals=0
-  local 3815:9 info: StructInfo | null (const)
-  callee 3815:16 classLayoutOf -> @classLayoutOf
-  local 3817:16 field: FieldInfo (const)
-  local 3819:15 slot: CopiedSlot (const)
-  callee 3819:22 copiedSlot -> @copiedSlot
+  local 3818:9 info: StructInfo | null (const)
+  callee 3818:16 classLayoutOf -> @classLayoutOf
+  local 3820:16 field: FieldInfo (const)
+  local 3822:15 slot: CopiedSlot (const)
+  callee 3822:22 copiedSlot -> @copiedSlot
 function guardUseIn(program: CheckedProgram, table: TypeTable, call: Node, arg: Node): string -> @guardUseIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.body FunctionSig.definedIn guardUseUnder nish_panic_index nish_panic_overflow nish_str_eq
@@ -28279,19 +28285,19 @@ function guardUseIn(program: CheckedProgram, table: TypeTable, call: Node, arg: 
   pointer call: size=40 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 3836:9 callee: FunctionSig | null (const)
-  local 3843:9 instance: Instantiation | null (const)
-  local 3844:9 template: TemplateInfo | null (const)
-  local 3845:9 home: boolean (const)
-  callee 3845:73 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local 3849:9 body: Node | null (const)
-  callee 3849:16 FunctionSig.body -> @FunctionSig.body
-  local 3850:9 args: Node[] (const)
-  local 3851:7 index: i32 (let)
-  local 3852:7 found: boolean (let)
-  local 3853:14 a: Node (const)
-  local 3863:9 types: i32[] (const)
-  callee 3864:10 guardUseUnder -> @guardUseUnder
+  local 3839:9 callee: FunctionSig | null (const)
+  local 3846:9 instance: Instantiation | null (const)
+  local 3847:9 template: TemplateInfo | null (const)
+  local 3848:9 home: boolean (const)
+  callee 3848:73 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local 3852:9 body: Node | null (const)
+  callee 3852:16 FunctionSig.body -> @FunctionSig.body
+  local 3853:9 args: Node[] (const)
+  local 3854:7 index: i32 (let)
+  local 3855:7 found: boolean (let)
+  local 3856:14 a: Node (const)
+  local 3866:9 types: i32[] (const)
+  callee 3867:10 guardUseUnder -> @guardUseUnder
 function guardUseUnder(program: CheckedProgram, table: TypeTable, types: i32[], node: Node, param: string): string -> @guardUseUnder
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: node param
@@ -28301,16 +28307,16 @@ function guardUseUnder(program: CheckedProgram, table: TypeTable, types: i32[], 
   pointer types: size=0 writesThrough=true captured=false passedTo=guardUseUnder#2
   pointer node: size=40 writesThrough=true captured=true passedTo=shownSource#1
   stackSites=0 stackLocals=0
-  local 3876:9 root: Node (let)
-  callee 3878:14 unwrapParens -> @unwrapParens
-  local 3880:11 head: string (const)
-  local 3881:11 text: string (const)
-  callee 3881:18 shownSource -> @shownSource
-  local 3883:13 slot: CopiedSlot (const)
-  callee 3883:20 copiedSlot -> @copiedSlot
-  local 3889:14 child: Node (const)
-  local 3890:11 found: string (const)
-  callee 3890:19 guardUseUnder -> @guardUseUnder
+  local 3879:9 root: Node (let)
+  callee 3881:14 unwrapParens -> @unwrapParens
+  local 3883:11 head: string (const)
+  local 3884:11 text: string (const)
+  callee 3884:18 shownSource -> @shownSource
+  local 3886:13 slot: CopiedSlot (const)
+  callee 3886:20 copiedSlot -> @copiedSlot
+  local 3892:14 child: Node (const)
+  local 3893:11 found: string (const)
+  callee 3893:19 guardUseUnder -> @guardUseUnder
 function guardUseMessage(name: string, guard: string, slot: string): string -> @guardUseMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -28325,24 +28331,24 @@ function guardDerivedMessage(table: TypeTable, type: i32, read: string, field: s
   calls: TypeTable.isNullable TypeTable.typeName nish_str_concat nullableFieldRemedy
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 nullableFieldRemedy#0 TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  local 3916:7 remedy: string (let)
-  callee 3917:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 3918:14 nullableFieldRemedy -> @nullableFieldRemedy
-  callee 3923:21 TypeTable.typeName -> @TypeTable.typeName
+  local 3919:7 remedy: string (let)
+  callee 3920:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 3921:14 nullableFieldRemedy -> @nullableFieldRemedy
+  callee 3926:21 TypeTable.typeName -> @TypeTable.typeName
 function nullableFieldRemedy(table: TypeTable, type: i32, field: string): string -> @nullableFieldRemedy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.stripNull nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0
   stackSites=0 stackLocals=0
-  callee 3932:3 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 3935:3 TypeTable.stripNull -> @TypeTable.stripNull
 function guardStoreMessage(table: TypeTable, type: i32, store: string): string -> @guardStoreMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.typeName nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  callee 3937:20 TypeTable.typeName -> @TypeTable.typeName
+  callee 3940:20 TypeTable.typeName -> @TypeTable.typeName
 function guardMethodMessage(name: string, store: string): string -> @guardMethodMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -28357,14 +28363,14 @@ function regionLockMessage(state: RegionState, what: string, path: string, call:
   calls: nish_str_concat regionMoveRemedy
   pointer state: size=48 writesThrough=false captured=false passedTo=regionMoveRemedy#0
   stackSites=0 stackLocals=0
-  callee 3982:3 regionMoveRemedy -> @regionMoveRemedy
+  callee 3985:3 regionMoveRemedy -> @regionMoveRemedy
 function regionAtomicMessage(state: RegionState, what: string, path: string, call: string): string -> @regionAtomicMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: call
   calls: nish_str_concat regionMoveRemedy
   pointer state: size=48 writesThrough=false captured=false passedTo=regionMoveRemedy#0
   stackSites=0 stackLocals=0
-  callee 3988:3 regionMoveRemedy -> @regionMoveRemedy
+  callee 3991:3 regionMoveRemedy -> @regionMoveRemedy
 function regionMoveRemedy(state: RegionState, call: string): string -> @regionMoveRemedy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -28376,14 +28382,14 @@ function taskCaptureMutexMessage(table: TypeTable, name: string, type: i32, path
   calls: TypeTable.typeName nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  callee 3995:53 TypeTable.typeName -> @TypeTable.typeName
+  callee 3998:53 TypeTable.typeName -> @TypeTable.typeName
 function taskMutexMessage(table: TypeTable, type: i32, path: string, spawn: string): string -> @taskMutexMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.typeName nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  callee 4000:37 TypeTable.typeName -> @TypeTable.typeName
+  callee 4003:37 TypeTable.typeName -> @TypeTable.typeName
 function spawnWithArgument(program: CheckedProgram, spawn: Node, arg: string): string -> @spawnWithArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: arg
@@ -28391,21 +28397,21 @@ function spawnWithArgument(program: CheckedProgram, spawn: Node, arg: string): s
   pointer program: size=640 writesThrough=false captured=false passedTo=oneLine#0 oneLine#0 oneLine#0
   pointer spawn: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 4007:9 callee: Node (const)
-  callee 4007:18 unwrapParens -> @unwrapParens
-  local 4008:9 args: Node[] (const)
-  local 4012:9 shown: string[] (const)
-  callee 4012:28 oneLine -> @oneLine
-  local 4013:12 k: i32 (let)
-  callee 4014:16 oneLine -> @oneLine
-  callee 4016:13 oneLine -> @oneLine
+  local 4010:9 callee: Node (const)
+  callee 4010:18 unwrapParens -> @unwrapParens
+  local 4011:9 args: Node[] (const)
+  local 4015:9 shown: string[] (const)
+  callee 4015:28 oneLine -> @oneLine
+  local 4016:12 k: i32 (let)
+  callee 4017:16 oneLine -> @oneLine
+  callee 4019:13 oneLine -> @oneLine
 function bodyLockMessage(sig: FunctionSig, fn: FunctionSig, remedy: string): string -> @bodyLockMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: intrinsicName nish_str_concat
   pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0
   pointer fn: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 4020:59 intrinsicName -> @intrinsicName
+  callee 4023:59 intrinsicName -> @intrinsicName
 function bodyLockRemedy(program: CheckedProgram, table: TypeTable, sig: FunctionSig, node: Node): string -> @bodyLockRemedy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.typeName freshName nish_panic_index nish_panic_overflow nish_str_concat oneLine parallelRoleOf scopeTasks
@@ -28414,58 +28420,58 @@ function bodyLockRemedy(program: CheckedProgram, table: TypeTable, sig: Function
   pointer sig: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4029:9 args: Node[] (const)
-  local 4030:9 role: i32 (const)
-  callee 4030:16 parallelRoleOf -> @parallelRoleOf
-  local 4031:9 instance: Instantiation | null (const)
-  local 4032:9 want: i32 (const)
-  local 4036:9 text: string (const)
-  local 4037:9 i: string (const)
-  callee 4037:13 freshName -> @freshName
-  local 4038:9 src: string (const)
-  callee 4038:15 oneLine -> @oneLine
-  local 4040:11 acc: string (const)
-  callee 4040:17 freshName -> @freshName
-  local 4041:11 x: string (const)
-  callee 4041:15 freshName -> @freshName
-  callee 4044:25 oneLine -> @oneLine
-  callee 4044:93 oneLine -> @oneLine
-  local 4048:11 tasks: string (const)
-  callee 4048:19 scopeTasks -> @scopeTasks
-  callee 4053:7 oneLine -> @oneLine
-  callee 4054:7 oneLine -> @oneLine
-  local 4058:9 out: string (const)
-  callee 4058:15 freshName -> @freshName
-  local 4059:9 answer: string (const)
-  callee 4059:18 TypeTable.typeName -> @TypeTable.typeName
-  local 4060:9 count: string (const)
-  local 4061:9 each: string (const)
-  local 4062:9 tasks: string (const)
-  callee 4062:17 scopeTasks -> @scopeTasks
-  callee 4062:50 oneLine -> @oneLine
+  local 4032:9 args: Node[] (const)
+  local 4033:9 role: i32 (const)
+  callee 4033:16 parallelRoleOf -> @parallelRoleOf
+  local 4034:9 instance: Instantiation | null (const)
+  local 4035:9 want: i32 (const)
+  local 4039:9 text: string (const)
+  local 4040:9 i: string (const)
+  callee 4040:13 freshName -> @freshName
+  local 4041:9 src: string (const)
+  callee 4041:15 oneLine -> @oneLine
+  local 4043:11 acc: string (const)
+  callee 4043:17 freshName -> @freshName
+  local 4044:11 x: string (const)
+  callee 4044:15 freshName -> @freshName
+  callee 4047:25 oneLine -> @oneLine
+  callee 4047:93 oneLine -> @oneLine
+  local 4051:11 tasks: string (const)
+  callee 4051:19 scopeTasks -> @scopeTasks
+  callee 4056:7 oneLine -> @oneLine
+  callee 4057:7 oneLine -> @oneLine
+  local 4061:9 out: string (const)
+  callee 4061:15 freshName -> @freshName
+  local 4062:9 answer: string (const)
+  callee 4062:18 TypeTable.typeName -> @TypeTable.typeName
+  local 4063:9 count: string (const)
+  local 4064:9 each: string (const)
+  local 4065:9 tasks: string (const)
+  callee 4065:17 scopeTasks -> @scopeTasks
+  callee 4065:50 oneLine -> @oneLine
 function scopeTasks(text: string, i: string, count: string, each: string, task: string, dst: string): string -> @scopeTasks
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
   calls: freshName nish_str_concat
   stackSites=0 stackLocals=0
-  local 4078:9 s: string (const)
-  callee 4078:13 freshName -> @freshName
+  local 4081:9 s: string (const)
+  callee 4081:13 freshName -> @freshName
 function isFreshValue(program: CheckedProgram, table: TypeTable, init: Node): boolean -> @isFreshValue
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 4106:7
+  sharedWrite: 4109:7
   calls: isFreshValue isScalarArgument nish_arena_mark nish_arena_release nish_array_grow nish_panic_index unwrapParens
   pointer program: size=640 writesThrough=false captured=false passedTo=isFreshValue#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isScalarArgument#0 isFreshValue#1
   pointer init: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 4091:9 e: Node (const)
-  callee 4091:13 unwrapParens -> @unwrapParens
-  local 4092:9 type: i32 (const)
-  callee 4093:21 isScalarArgument -> @isScalarArgument
-  local 4096:7 parts: Node[] (let)
-  local 4102:16 property: Node (const)
-  local 4111:14 part: Node (const)
-  callee 4112:10 isFreshValue -> @isFreshValue
+  local 4094:9 e: Node (const)
+  callee 4094:13 unwrapParens -> @unwrapParens
+  local 4095:9 type: i32 (const)
+  callee 4096:21 isScalarArgument -> @isScalarArgument
+  local 4099:7 parts: Node[] (let)
+  local 4105:16 property: Node (const)
+  local 4114:14 part: Node (const)
+  callee 4115:10 isFreshValue -> @isFreshValue
 function isWaitSymbol(name: string, locksOnly: boolean, scopeName: string): boolean -> @isWaitSymbol
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -28478,14 +28484,14 @@ function reachesWait(facts: FactsTable, name: string, locksOnly: boolean, scopeN
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 reachesWait#0
   pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 reachesWait#4
   stackSites=0 stackLocals=0
-  callee 4148:7 isWaitSymbol -> @isWaitSymbol
-  callee 4151:8 StringSet.add -> @StringSet.add
-  local 4154:9 own: FunctionFacts | null (const)
-  callee 4154:15 FactsTable.get -> @FactsTable.get
-  local 4158:7 c: i32 (let)
-  callee 4159:14 StringSet.size -> @StringSet.size
-  callee 4160:9 reachesWait -> @reachesWait
-  callee 4160:28 StringSet.at -> @StringSet.at
+  callee 4151:7 isWaitSymbol -> @isWaitSymbol
+  callee 4154:8 StringSet.add -> @StringSet.add
+  local 4157:9 own: FunctionFacts | null (const)
+  callee 4157:15 FactsTable.get -> @FactsTable.get
+  local 4161:7 c: i32 (let)
+  callee 4162:14 StringSet.size -> @StringSet.size
+  callee 4163:9 reachesWait -> @reachesWait
+  callee 4163:28 StringSet.at -> @StringSet.at
 function reachesAtomic(facts: FactsTable, name: string, seen: StringSet): boolean -> @reachesAtomic
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
@@ -28494,13 +28500,13 @@ function reachesAtomic(facts: FactsTable, name: string, seen: StringSet): boolea
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 reachesAtomic#0
   pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 reachesAtomic#2
   stackSites=0 stackLocals=0
-  callee 4170:8 StringSet.add -> @StringSet.add
-  local 4173:9 own: FunctionFacts | null (const)
-  callee 4173:15 FactsTable.get -> @FactsTable.get
-  local 4180:7 c: i32 (let)
-  callee 4181:14 StringSet.size -> @StringSet.size
-  callee 4182:9 reachesAtomic -> @reachesAtomic
-  callee 4182:30 StringSet.at -> @StringSet.at
+  callee 4173:8 StringSet.add -> @StringSet.add
+  local 4176:9 own: FunctionFacts | null (const)
+  callee 4176:15 FactsTable.get -> @FactsTable.get
+  local 4183:7 c: i32 (let)
+  callee 4184:14 StringSet.size -> @StringSet.size
+  callee 4185:9 reachesAtomic -> @reachesAtomic
+  callee 4185:30 StringSet.at -> @StringSet.at
 function takesLock(facts: FactsTable, fn: FunctionSig): boolean -> @takesLock
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachesWait
@@ -28508,8 +28514,8 @@ function takesLock(facts: FactsTable, fn: FunctionSig): boolean -> @takesLock
   pointer facts: size=16 writesThrough=false captured=false passedTo=reachesWait#0
   pointer fn: size=136 writesThrough=false captured=false
   stackSites=1 stackLocals=0
-  callee 4192:3 reachesWait -> @reachesWait
-  callee 4192:41 new StringSet -> @StringSet.constructor
+  callee 4195:3 reachesWait -> @reachesWait
+  callee 4195:41 new StringSet -> @StringSet.constructor
 function bodyLockMessageFor(program: CheckedProgram, table: TypeTable, node: Node, sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string -> @bodyLockMessageFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via takesLock
@@ -28521,9 +28527,9 @@ function bodyLockMessageFor(program: CheckedProgram, table: TypeTable, node: Nod
   pointer fn: size=136 writesThrough=false captured=false passedTo=takesLock#1 bodyLockMessage#1
   pointer facts: size=16 writesThrough=false captured=false passedTo=takesLock#0
   stackSites=0 stackLocals=0
-  callee 4202:15 takesLock -> @takesLock
-  callee 4202:38 bodyLockMessage -> @bodyLockMessage
-  callee 4202:63 bodyLockRemedy -> @bodyLockRemedy
+  callee 4205:15 takesLock -> @takesLock
+  callee 4205:38 bodyLockMessage -> @bodyLockMessage
+  callee 4205:63 bodyLockRemedy -> @bodyLockRemedy
 function mutexPath(table: TypeTable, program: CheckedProgram, type: i32, want: i32, root: string, seen: StringSet): string -> @mutexPath
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via heldPath
@@ -28533,7 +28539,7 @@ function mutexPath(table: TypeTable, program: CheckedProgram, type: i32, want: i
   pointer program: size=640 writesThrough=false captured=false passedTo=heldPath#1
   pointer seen: size=8 writesThrough=false captured=false passedTo=heldPath#6
   stackSites=0 stackLocals=0
-  callee 4217:14 heldPath -> @heldPath
+  callee 4220:14 heldPath -> @heldPath
 function heldPath(table: TypeTable, program: CheckedProgram, type: i32, want: i32, atomics: boolean, root: string, seen: StringSet): string -> @heldPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via heldPath
@@ -28543,26 +28549,26 @@ function heldPath(table: TypeTable, program: CheckedProgram, type: i32, want: i3
   pointer program: size=640 writesThrough=false captured=false passedTo=heldPath#1 heldPath#1 heldPath#1 heldPath#1 classLayoutOf#0 heldPath#1
   pointer seen: size=8 writesThrough=false captured=false passedTo=heldPath#6 heldPath#6 heldPath#6 heldPath#6 StringSet.add#0 heldPath#6
   stackSites=0 stackLocals=0
-  local 4232:9 kind: i32 (const)
-  callee 4232:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 4234:12 heldPath -> @heldPath
-  callee 4234:37 TypeTable.refOf -> @TypeTable.refOf
+  local 4235:9 kind: i32 (const)
+  callee 4235:16 TypeTable.kindOf -> @TypeTable.kindOf
   callee 4237:12 heldPath -> @heldPath
   callee 4237:37 TypeTable.refOf -> @TypeTable.refOf
-  local 4240:11 ok: string (const)
-  callee 4240:16 heldPath -> @heldPath
-  callee 4240:41 TypeTable.okOf -> @TypeTable.okOf
-  callee 4243:9 heldPath -> @heldPath
-  callee 4243:34 TypeTable.errOf -> @TypeTable.errOf
-  local 4245:9 info: StructInfo | null (const)
-  callee 4245:16 classLayoutOf -> @classLayoutOf
-  local 4249:9 held: boolean (const)
-  callee 4249:26 isAtomicClass -> @isAtomicClass
-  callee 4249:48 isThreadsClass -> @isThreadsClass
-  callee 4253:8 StringSet.add -> @StringSet.add
-  local 4256:14 field: FieldInfo (const)
-  local 4257:11 path: string (const)
-  callee 4257:18 heldPath -> @heldPath
+  callee 4240:12 heldPath -> @heldPath
+  callee 4240:37 TypeTable.refOf -> @TypeTable.refOf
+  local 4243:11 ok: string (const)
+  callee 4243:16 heldPath -> @heldPath
+  callee 4243:41 TypeTable.okOf -> @TypeTable.okOf
+  callee 4246:9 heldPath -> @heldPath
+  callee 4246:34 TypeTable.errOf -> @TypeTable.errOf
+  local 4248:9 info: StructInfo | null (const)
+  callee 4248:16 classLayoutOf -> @classLayoutOf
+  local 4252:9 held: boolean (const)
+  callee 4252:26 isAtomicClass -> @isAtomicClass
+  callee 4252:48 isThreadsClass -> @isThreadsClass
+  callee 4256:8 StringSet.add -> @StringSet.add
+  local 4259:14 field: FieldInfo (const)
+  local 4260:11 path: string (const)
+  callee 4260:18 heldPath -> @heldPath
 function mutexInside(table: TypeTable, program: CheckedProgram, type: i32, root: string): string -> @mutexInside
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via mutexPath
@@ -28571,12 +28577,12 @@ function mutexInside(table: TypeTable, program: CheckedProgram, type: i32, root:
   pointer table: size=96 writesThrough=false captured=false passedTo=classLayoutOf#1 mutexPath#0
   pointer program: size=640 writesThrough=false captured=false passedTo=classLayoutOf#0 mutexPath#1
   stackSites=1 stackLocals=0
-  local 4270:9 info: StructInfo | null (const)
-  callee 4270:16 classLayoutOf -> @classLayoutOf
-  local 4274:14 field: FieldInfo (const)
-  local 4275:11 path: string (const)
-  callee 4275:18 mutexPath -> @mutexPath
-  callee 4275:85 new StringSet -> @StringSet.constructor
+  local 4273:9 info: StructInfo | null (const)
+  callee 4273:16 classLayoutOf -> @classLayoutOf
+  local 4277:14 field: FieldInfo (const)
+  local 4278:11 path: string (const)
+  callee 4278:18 mutexPath -> @mutexPath
+  callee 4278:85 new StringSet -> @StringSet.constructor
 function taskMutexMessageFor(table: TypeTable, program: CheckedProgram, sig: FunctionSig, node: Node): string -> @taskMutexMessageFor [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via taskMutexPath
@@ -28586,23 +28592,23 @@ function taskMutexMessageFor(table: TypeTable, program: CheckedProgram, sig: Fun
   pointer sig: size=136 writesThrough=true captured=true passedTo=taskArgTypeOf#0 capturesOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=spawnWithArgument#1
   stackSites=1 stackLocals=1
-  local 4293:9 arg: i32 (const)
-  callee 4293:15 taskArgTypeOf -> @taskArgTypeOf
-  local 4295:11 none: Node[] (const)
-  local 4296:11 args: Node[] (const)
-  local 4297:11 root: string (const)
-  local 4298:11 path: string (const)
-  callee 4298:18 taskMutexPath -> @taskMutexPath
-  callee 4300:14 taskMutexMessage -> @taskMutexMessage
-  callee 4300:49 spawnWithArgument -> @spawnWithArgument
-  local 4304:14 slot: CaptureSlot (const)
-  callee 4304:22 capturesOf -> @capturesOf
-  local 4305:11 name: string (const)
-  local 4306:11 path: string (const)
-  callee 4306:18 taskMutexPath -> @taskMutexPath
-  callee 4306:48 CaptureSlot.type -> @CaptureSlot.type
-  callee 4308:14 taskCaptureMutexMessage -> @taskCaptureMutexMessage
-  callee 4308:51 CaptureSlot.type -> @CaptureSlot.type
+  local 4296:9 arg: i32 (const)
+  callee 4296:15 taskArgTypeOf -> @taskArgTypeOf
+  local 4298:11 none: Node[] (const)
+  local 4299:11 args: Node[] (const)
+  local 4300:11 root: string (const)
+  local 4301:11 path: string (const)
+  callee 4301:18 taskMutexPath -> @taskMutexPath
+  callee 4303:14 taskMutexMessage -> @taskMutexMessage
+  callee 4303:49 spawnWithArgument -> @spawnWithArgument
+  local 4307:14 slot: CaptureSlot (const)
+  callee 4307:22 capturesOf -> @capturesOf
+  local 4308:11 name: string (const)
+  local 4309:11 path: string (const)
+  callee 4309:18 taskMutexPath -> @taskMutexPath
+  callee 4309:48 CaptureSlot.type -> @CaptureSlot.type
+  callee 4311:14 taskCaptureMutexMessage -> @taskCaptureMutexMessage
+  callee 4311:51 CaptureSlot.type -> @CaptureSlot.type
 function taskMutexPath(table: TypeTable, program: CheckedProgram, type: i32, root: string): string -> @taskMutexPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via mutexPath
@@ -28611,20 +28617,20 @@ function taskMutexPath(table: TypeTable, program: CheckedProgram, type: i32, roo
   pointer table: size=96 writesThrough=false captured=false passedTo=classLayoutOf#1 mutexPath#0 mutexInside#0 isMutexType#1 mutexInside#0 mutexPath#0
   pointer program: size=640 writesThrough=false captured=false passedTo=classLayoutOf#0 mutexPath#1 mutexInside#1 isMutexType#0 mutexInside#1 mutexPath#1
   stackSites=2 stackLocals=0
-  local 4316:9 info: StructInfo | null (const)
-  callee 4316:16 classLayoutOf -> @classLayoutOf
-  callee 4318:12 mutexPath -> @mutexPath
-  callee 4318:54 new StringSet -> @StringSet.constructor
-  callee 4320:7 isThreadsClass -> @isThreadsClass
-  callee 4321:12 mutexInside -> @mutexInside
-  local 4323:7 path: string (let)
-  local 4324:7 k: i32 (let)
-  local 4326:11 field: FieldInfo (const)
-  local 4327:11 at: string (const)
-  callee 4328:12 isMutexType -> @isMutexType
-  callee 4329:9 mutexInside -> @mutexInside
-  callee 4330:9 mutexPath -> @mutexPath
-  callee 4330:55 new StringSet -> @StringSet.constructor
+  local 4319:9 info: StructInfo | null (const)
+  callee 4319:16 classLayoutOf -> @classLayoutOf
+  callee 4321:12 mutexPath -> @mutexPath
+  callee 4321:54 new StringSet -> @StringSet.constructor
+  callee 4323:7 isThreadsClass -> @isThreadsClass
+  callee 4324:12 mutexInside -> @mutexInside
+  local 4326:7 path: string (let)
+  local 4327:7 k: i32 (let)
+  local 4329:11 field: FieldInfo (const)
+  local 4330:11 at: string (const)
+  callee 4331:12 isMutexType -> @isMutexType
+  callee 4332:9 mutexInside -> @mutexInside
+  callee 4333:9 mutexPath -> @mutexPath
+  callee 4333:55 new StringSet -> @StringSet.constructor
 function storeTargetType(program: CheckedProgram, table: TypeTable, target: Node): i32 -> @storeTargetType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.field classLayoutOf nish_panic_index unwrapParens
@@ -28632,24 +28638,24 @@ function storeTargetType(program: CheckedProgram, table: TypeTable, target: Node
   pointer table: size=96 writesThrough=false captured=false passedTo=classLayoutOf#1
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 4342:9 e: Node (const)
-  callee 4342:13 unwrapParens -> @unwrapParens
-  local 4346:9 info: StructInfo | null (const)
-  callee 4346:16 classLayoutOf -> @classLayoutOf
-  callee 4346:64 unwrapParens -> @unwrapParens
-  local 4347:9 field: FieldInfo | null (const)
-  callee 4347:51 StructInfo.field -> @StructInfo.field
+  local 4345:9 e: Node (const)
+  callee 4345:13 unwrapParens -> @unwrapParens
+  local 4349:9 info: StructInfo | null (const)
+  callee 4349:16 classLayoutOf -> @classLayoutOf
+  callee 4349:64 unwrapParens -> @unwrapParens
+  local 4350:9 field: FieldInfo | null (const)
+  callee 4350:51 StructInfo.field -> @StructInfo.field
 function isStoreTarget(at: Node, parents: Node[], depth: i32): boolean -> @isStoreTarget
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isAssignmentOperator nish_panic_index nish_str_eq
   pointer at: size=40 writesThrough=false captured=false
   pointer parents: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4356:9 parent: Node (const)
-  callee 4357:35 isAssignmentOperator -> @isAssignmentOperator
+  local 4359:9 parent: Node (const)
+  callee 4360:35 isAssignmentOperator -> @isAssignmentOperator
 function walkMutexes(program: CheckedProgram, table: TypeTable, node: Node, parents: Node[], out: ScopeFinding[]): void -> @walkMutexes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4388:7
+  sharedWrite: 4391:7
   escaping: node
   calls: ScopeFinding.constructor TypeTable.isArray TypeTable.stripNull TypeTable.typeName atomicMemberMessage boundNameOf copiedSlot fixedFinding freshName guardArgumentMessage guardArgumentWhy guardDerivedMessage guardMethodMessage guardSlot guardStoreMessage guardUseIn guardUseMessage isAtomicType isFreshValue isGuardType isGuardedAccess isLockCall isMutexType isScalarArgument isStoreTarget isThreadsObjectType isUsingInitialiser lastWordOf lockNotUsingMessage mutexFreshMessage mutexMemberMessage nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq shownSource slotLiteral storeTargetType storedInto threadsLiteralMessage unwrapParens usingEdits walkMutexes
   pointer program: size=640 writesThrough=false captured=false passedTo=isMutexType#0 isFreshValue#0 isMutexType#0 isThreadsObjectType#0 isAtomicType#0 isLockCall#0 shownSource#0 usingEdits#0 isGuardType#0 guardArgumentWhy#0 guardSlot#0 guardUseIn#0 guardSlot#0 isGuardedAccess#0 shownSource#0 copiedSlot#0 storedInto#0 storeTargetType#0 shownSource#0 copiedSlot#0 storedInto#0 copiedSlot#0 shownSource#0 walkMutexes#0
@@ -28658,107 +28664,107 @@ function walkMutexes(program: CheckedProgram, table: TypeTable, node: Node, pare
   pointer parents: size=0 writesThrough=true captured=false passedTo=isUsingInitialiser#1 boundNameOf#1 usingEdits#2 isStoreTarget#1 boundNameOf#1 walkMutexes#3
   pointer out: size=0 writesThrough=true captured=false passedTo=walkMutexes#4
   stackSites=0 stackLocals=0
-  local 4372:7 at: Node (let)
-  local 4373:7 depth: i32 (let)
-  local 4378:9 parent: Node | null (const)
-  local 4379:9 type: i32 (const)
-  local 4380:9 declaresName: boolean (const)
-  local 4382:9 called: boolean (const)
-  callee 4385:37 isMutexType -> @isMutexType
-  local 4386:11 args: Node[] (const)
-  callee 4387:29 isFreshValue -> @isFreshValue
-  callee 4388:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4388:42 mutexFreshMessage -> @mutexFreshMessage
-  callee 4390:40 isMutexType -> @isMutexType
-  callee 4392:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4392:39 mutexMemberMessage -> @mutexMemberMessage
-  callee 4395:40 isThreadsObjectType -> @isThreadsObjectType
-  callee 4396:14 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4396:37 threadsLiteralMessage -> @threadsLiteralMessage
-  callee 4398:40 isAtomicType -> @isAtomicType
-  callee 4400:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4400:39 atomicMemberMessage -> @atomicMemberMessage
-  callee 4403:14 isLockCall -> @isLockCall
-  callee 4404:10 isUsingInitialiser -> @isUsingInitialiser
-  local 4405:13 callee: Node (const)
-  callee 4405:22 unwrapParens -> @unwrapParens
-  local 4406:13 mutex: string (const)
-  callee 4406:48 shownSource -> @shownSource
-  local 4407:13 message: string (const)
-  callee 4407:23 lockNotUsingMessage -> @lockNotUsingMessage
-  callee 4407:43 boundNameOf -> @boundNameOf
-  callee 4408:16 fixedFinding -> @fixedFinding
-  callee 4408:44 usingEdits -> @usingEdits
-  callee 4410:14 isGuardType -> @isGuardType
-  local 4411:11 named: string (const)
-  local 4412:11 asValue: boolean (const)
-  local 4419:13 call: Node | null (const)
-  local 4420:13 passed: boolean (const)
-  local 4421:13 why: string (const)
-  callee 4421:45 guardArgumentWhy -> @guardArgumentWhy
-  local 4422:13 guard: string (const)
-  callee 4422:21 TypeTable.typeName -> @TypeTable.typeName
-  callee 4425:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4425:34 guardUseMessage -> @guardUseMessage
-  callee 4425:64 guardSlot -> @guardSlot
-  local 4430:15 helper: string (const)
-  callee 4430:24 freshName -> @freshName
-  local 4431:15 used: string (const)
-  callee 4431:38 guardUseIn -> @guardUseIn
-  local 4432:15 slot: string (const)
-  callee 4432:47 guardSlot -> @guardSlot
-  local 4433:15 message: string (const)
-  callee 4433:25 guardArgumentMessage -> @guardArgumentMessage
-  callee 4434:18 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4438:14 isGuardedAccess -> @isGuardedAccess
-  local 4441:11 base: boolean (const)
-  local 4443:11 above: Node | null (const)
-  local 4453:13 chain: string (const)
-  callee 4453:21 shownSource -> @shownSource
-  local 4454:13 slot: CopiedSlot (const)
-  callee 4454:20 copiedSlot -> @copiedSlot
-  local 4455:13 args: Node[] (const)
-  local 4456:13 from: Node | null (const)
-  callee 4456:51 unwrapParens -> @unwrapParens
-  local 4457:13 value: string (const)
-  callee 4457:38 TypeTable.isArray -> @TypeTable.isArray
-  callee 4457:60 storedInto -> @storedInto
-  local 4458:13 store: string (const)
-  callee 4459:79 slotLiteral -> @slotLiteral
-  callee 4460:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4460:40 guardMethodMessage -> @guardMethodMessage
-  callee 4463:35 isStoreTarget -> @isStoreTarget
-  local 4465:13 stored: i32 (const)
-  callee 4466:39 unwrapParens -> @unwrapParens
-  local 4467:15 slot: i32 (const)
-  callee 4467:22 storeTargetType -> @storeTargetType
-  callee 4468:25 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 4469:20 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4471:34 isScalarArgument -> @isScalarArgument
-  local 4472:15 target: string (const)
-  callee 4472:24 shownSource -> @shownSource
-  local 4473:15 from: Node | null (const)
-  callee 4473:62 unwrapParens -> @unwrapParens
-  local 4474:15 slot: CopiedSlot (const)
-  callee 4474:22 copiedSlot -> @copiedSlot
-  local 4475:15 store: string (const)
-  callee 4475:64 storedInto -> @storedInto
-  callee 4476:18 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4476:43 guardStoreMessage -> @guardStoreMessage
-  callee 4478:30 isScalarArgument -> @isScalarArgument
-  local 4479:13 slot: CopiedSlot (const)
-  callee 4479:20 copiedSlot -> @copiedSlot
-  callee 4479:47 shownSource -> @shownSource
-  local 4480:13 bound: string (const)
-  callee 4480:21 boundNameOf -> @boundNameOf
-  local 4481:13 read: string (const)
-  callee 4483:49 freshName -> @freshName
-  callee 4483:80 lastWordOf -> @lastWordOf
-  local 4485:13 field: string (const)
-  callee 4486:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4486:39 guardDerivedMessage -> @guardDerivedMessage
-  local 4491:14 child: Node (const)
-  callee 4492:5 walkMutexes -> @walkMutexes
+  local 4375:7 at: Node (let)
+  local 4376:7 depth: i32 (let)
+  local 4381:9 parent: Node | null (const)
+  local 4382:9 type: i32 (const)
+  local 4383:9 declaresName: boolean (const)
+  local 4385:9 called: boolean (const)
+  callee 4388:37 isMutexType -> @isMutexType
+  local 4389:11 args: Node[] (const)
+  callee 4390:29 isFreshValue -> @isFreshValue
+  callee 4391:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4391:42 mutexFreshMessage -> @mutexFreshMessage
+  callee 4393:40 isMutexType -> @isMutexType
+  callee 4395:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4395:39 mutexMemberMessage -> @mutexMemberMessage
+  callee 4398:40 isThreadsObjectType -> @isThreadsObjectType
+  callee 4399:14 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4399:37 threadsLiteralMessage -> @threadsLiteralMessage
+  callee 4401:40 isAtomicType -> @isAtomicType
+  callee 4403:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4403:39 atomicMemberMessage -> @atomicMemberMessage
+  callee 4406:14 isLockCall -> @isLockCall
+  callee 4407:10 isUsingInitialiser -> @isUsingInitialiser
+  local 4408:13 callee: Node (const)
+  callee 4408:22 unwrapParens -> @unwrapParens
+  local 4409:13 mutex: string (const)
+  callee 4409:48 shownSource -> @shownSource
+  local 4410:13 message: string (const)
+  callee 4410:23 lockNotUsingMessage -> @lockNotUsingMessage
+  callee 4410:43 boundNameOf -> @boundNameOf
+  callee 4411:16 fixedFinding -> @fixedFinding
+  callee 4411:44 usingEdits -> @usingEdits
+  callee 4413:14 isGuardType -> @isGuardType
+  local 4414:11 named: string (const)
+  local 4415:11 asValue: boolean (const)
+  local 4422:13 call: Node | null (const)
+  local 4423:13 passed: boolean (const)
+  local 4424:13 why: string (const)
+  callee 4424:45 guardArgumentWhy -> @guardArgumentWhy
+  local 4425:13 guard: string (const)
+  callee 4425:21 TypeTable.typeName -> @TypeTable.typeName
+  callee 4428:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4428:34 guardUseMessage -> @guardUseMessage
+  callee 4428:64 guardSlot -> @guardSlot
+  local 4433:15 helper: string (const)
+  callee 4433:24 freshName -> @freshName
+  local 4434:15 used: string (const)
+  callee 4434:38 guardUseIn -> @guardUseIn
+  local 4435:15 slot: string (const)
+  callee 4435:47 guardSlot -> @guardSlot
+  local 4436:15 message: string (const)
+  callee 4436:25 guardArgumentMessage -> @guardArgumentMessage
+  callee 4437:18 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4441:14 isGuardedAccess -> @isGuardedAccess
+  local 4444:11 base: boolean (const)
+  local 4446:11 above: Node | null (const)
+  local 4456:13 chain: string (const)
+  callee 4456:21 shownSource -> @shownSource
+  local 4457:13 slot: CopiedSlot (const)
+  callee 4457:20 copiedSlot -> @copiedSlot
+  local 4458:13 args: Node[] (const)
+  local 4459:13 from: Node | null (const)
+  callee 4459:51 unwrapParens -> @unwrapParens
+  local 4460:13 value: string (const)
+  callee 4460:38 TypeTable.isArray -> @TypeTable.isArray
+  callee 4460:60 storedInto -> @storedInto
+  local 4461:13 store: string (const)
+  callee 4462:79 slotLiteral -> @slotLiteral
+  callee 4463:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4463:40 guardMethodMessage -> @guardMethodMessage
+  callee 4466:35 isStoreTarget -> @isStoreTarget
+  local 4468:13 stored: i32 (const)
+  callee 4469:39 unwrapParens -> @unwrapParens
+  local 4470:15 slot: i32 (const)
+  callee 4470:22 storeTargetType -> @storeTargetType
+  callee 4471:25 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 4472:20 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4474:34 isScalarArgument -> @isScalarArgument
+  local 4475:15 target: string (const)
+  callee 4475:24 shownSource -> @shownSource
+  local 4476:15 from: Node | null (const)
+  callee 4476:62 unwrapParens -> @unwrapParens
+  local 4477:15 slot: CopiedSlot (const)
+  callee 4477:22 copiedSlot -> @copiedSlot
+  local 4478:15 store: string (const)
+  callee 4478:64 storedInto -> @storedInto
+  callee 4479:18 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4479:43 guardStoreMessage -> @guardStoreMessage
+  callee 4481:30 isScalarArgument -> @isScalarArgument
+  local 4482:13 slot: CopiedSlot (const)
+  callee 4482:20 copiedSlot -> @copiedSlot
+  callee 4482:47 shownSource -> @shownSource
+  local 4483:13 bound: string (const)
+  callee 4483:21 boundNameOf -> @boundNameOf
+  local 4484:13 read: string (const)
+  callee 4486:49 freshName -> @freshName
+  callee 4486:80 lastWordOf -> @lastWordOf
+  local 4488:13 field: string (const)
+  callee 4489:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4489:39 guardDerivedMessage -> @guardDerivedMessage
+  local 4494:14 child: Node (const)
+  callee 4495:5 walkMutexes -> @walkMutexes
 function guardArgumentWhy(program: CheckedProgram, table: TypeTable, call: Node, arg: Node, name: string): string -> @guardArgumentWhy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.isCompileTime TypeTable.typeName nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq unwrapParens
@@ -28767,19 +28773,19 @@ function guardArgumentWhy(program: CheckedProgram, table: TypeTable, call: Node,
   pointer call: size=40 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 4524:9 callee: FunctionSig | null (const)
-  local 4525:9 target: Node (const)
-  callee 4525:18 unwrapParens -> @unwrapParens
-  local 4538:9 args: Node[] (const)
-  local 4539:7 index: i32 (let)
-  local 4540:7 named: i32 (let)
-  local 4541:12 i: i32 (let)
-  local 4542:11 e: Node (const)
-  callee 4542:15 unwrapParens -> @unwrapParens
-  local 4553:9 type: i32 (const)
-  callee 4553:34 unwrapParens -> @unwrapParens
-  callee 4554:57 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee 4558:62 TypeTable.typeName -> @TypeTable.typeName
+  local 4527:9 callee: FunctionSig | null (const)
+  local 4528:9 target: Node (const)
+  callee 4528:18 unwrapParens -> @unwrapParens
+  local 4541:9 args: Node[] (const)
+  local 4542:7 index: i32 (let)
+  local 4543:7 named: i32 (let)
+  local 4544:12 i: i32 (let)
+  local 4545:11 e: Node (const)
+  callee 4545:15 unwrapParens -> @unwrapParens
+  local 4556:9 type: i32 (const)
+  callee 4556:34 unwrapParens -> @unwrapParens
+  callee 4557:57 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
+  callee 4561:62 TypeTable.typeName -> @TypeTable.typeName
 function lockCallName(node: Node, callee: FunctionSig): string -> @lockCallName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_concat
@@ -28795,15 +28801,15 @@ function heldWhat(program: CheckedProgram, facts: FactsTable, node: Node, scopeT
   pointer facts: size=16 writesThrough=false captured=false passedTo=reachesWait#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isLockCall#1 isScopeCall#1 lockCallName#0
   stackSites=1 stackLocals=0
-  callee 4581:7 isLockCall -> @isLockCall
-  callee 4584:7 isScopeCall -> @isScopeCall
-  local 4587:9 callee: FunctionSig | null (const)
-  callee 4591:7 isSpawnEntry -> @isSpawnEntry
-  callee 4591:31 isParallelEntry -> @isParallelEntry
-  callee 4592:17 intrinsicName -> @intrinsicName
-  callee 4594:7 reachesWait -> @reachesWait
-  callee 4594:57 new StringSet -> @StringSet.constructor
-  callee 4595:15 lockCallName -> @lockCallName
+  callee 4584:7 isLockCall -> @isLockCall
+  callee 4587:7 isScopeCall -> @isScopeCall
+  local 4590:9 callee: FunctionSig | null (const)
+  callee 4594:7 isSpawnEntry -> @isSpawnEntry
+  callee 4594:31 isParallelEntry -> @isParallelEntry
+  callee 4595:17 intrinsicName -> @intrinsicName
+  callee 4597:7 reachesWait -> @reachesWait
+  callee 4597:57 new StringSet -> @StringSet.constructor
+  callee 4598:15 lockCallName -> @lockCallName
 function HeldContext.constructor(this: HeldContext, scopeType: i32, scopeName: string, summaries: ChannelSummaries): void -> @HeldContext.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: scopeName scopeType summaries
@@ -28812,7 +28818,7 @@ function HeldContext.constructor(this: HeldContext, scopeType: i32, scopeName: s
   stackSites=0 stackLocals=0
 function walkHeld(program: CheckedProgram, facts: FactsTable, node: Node, name: string, lock: string, held: HeldContext, out: ScopeFinding[]): void -> @walkHeld
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 4634:5
+  sharedWrite: 4637:5
   escaping: lock name
   calls: ScopeFinding.constructor guardHeldMessage guardReceiveMessage heldWhat nish_alloc_struct nish_array_grow oneLine receiveWhat walkHeld
   pointer program: size=640 writesThrough=false captured=false passedTo=receiveWhat#0 heldWhat#0 oneLine#0 walkHeld#0
@@ -28821,17 +28827,17 @@ function walkHeld(program: CheckedProgram, facts: FactsTable, node: Node, name: 
   pointer held: size=24 writesThrough=false captured=false passedTo=walkHeld#5
   pointer out: size=0 writesThrough=true captured=false passedTo=walkHeld#6
   stackSites=0 stackLocals=0
-  local 4632:9 receive: string (const)
-  callee 4632:19 receiveWhat -> @receiveWhat
-  callee 4634:14 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4634:37 guardReceiveMessage -> @guardReceiveMessage
-  local 4637:9 what: string (const)
-  callee 4637:16 heldWhat -> @heldWhat
-  callee 4639:14 new ScopeFinding -> @ScopeFinding.constructor
-  callee 4639:37 guardHeldMessage -> @guardHeldMessage
-  callee 4639:72 oneLine -> @oneLine
-  local 4642:14 child: Node (const)
-  callee 4643:5 walkHeld -> @walkHeld
+  local 4635:9 receive: string (const)
+  callee 4635:19 receiveWhat -> @receiveWhat
+  callee 4637:14 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4637:37 guardReceiveMessage -> @guardReceiveMessage
+  local 4640:9 what: string (const)
+  callee 4640:16 heldWhat -> @heldWhat
+  callee 4642:14 new ScopeFinding -> @ScopeFinding.constructor
+  callee 4642:37 guardHeldMessage -> @guardHeldMessage
+  callee 4642:72 oneLine -> @oneLine
+  local 4645:14 child: Node (const)
+  callee 4646:5 walkHeld -> @walkHeld
 function findGuardBlocks(program: CheckedProgram, facts: FactsTable, node: Node, held: HeldContext, out: ScopeFinding[]): void -> @findGuardBlocks
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walkHeld
@@ -28842,21 +28848,21 @@ function findGuardBlocks(program: CheckedProgram, facts: FactsTable, node: Node,
   pointer held: size=24 writesThrough=false captured=false passedTo=walkHeld#5 walkHeld#5 findGuardBlocks#3
   pointer out: size=0 writesThrough=true captured=false passedTo=walkHeld#6 walkHeld#6 findGuardBlocks#4
   stackSites=0 stackLocals=0
-  local 4661:9 i: i32 (let)
-  local 4663:13 stmt: Node (const)
-  local 4665:15 decls: Node[] (const)
-  local 4666:13 d: i32 (let)
-  local 4668:17 name: string (const)
-  callee 4669:15 isLockCall -> @isLockCall
-  callee 4669:35 unwrapParens -> @unwrapParens
-  local 4670:19 lock: string (const)
-  callee 4670:26 shownSource -> @shownSource
-  local 4671:17 e: i32 (let)
-  callee 4673:15 walkHeld -> @walkHeld
-  local 4676:17 j: i32 (let)
-  callee 4678:15 walkHeld -> @walkHeld
-  local 4688:14 child: Node (const)
-  callee 4689:5 findGuardBlocks -> @findGuardBlocks
+  local 4664:9 i: i32 (let)
+  local 4666:13 stmt: Node (const)
+  local 4668:15 decls: Node[] (const)
+  local 4669:13 d: i32 (let)
+  local 4671:17 name: string (const)
+  callee 4672:15 isLockCall -> @isLockCall
+  callee 4672:35 unwrapParens -> @unwrapParens
+  local 4673:19 lock: string (const)
+  callee 4673:26 shownSource -> @shownSource
+  local 4674:17 e: i32 (let)
+  callee 4676:15 walkHeld -> @walkHeld
+  local 4679:17 j: i32 (let)
+  callee 4681:15 walkHeld -> @walkHeld
+  local 4691:14 child: Node (const)
+  callee 4692:5 findGuardBlocks -> @findGuardBlocks
 function regionLockMessageFor(program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node, state: RegionState): string -> @regionLockMessageFor
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via takesLock
@@ -28867,21 +28873,21 @@ function regionLockMessageFor(program: CheckedProgram, table: TypeTable, facts: 
   pointer node: size=40 writesThrough=false captured=false passedTo=lockCallName#0 regionAtomicMessageFor#3 oneLine#1 regionAtomicMessageFor#3
   pointer state: size=48 writesThrough=false captured=false passedTo=regionAtomicMessageFor#5 regionLockMessage#0 regionAtomicMessageFor#5
   stackSites=1 stackLocals=0
-  local 4706:9 callee: FunctionSig | null (const)
-  local 4710:7 want: i32 (let)
-  local 4711:7 what: string (let)
-  callee 4711:14 lockCallName -> @lockCallName
-  callee 4712:7 isLockMethod -> @isLockMethod
-  callee 4713:30 unwrapParens -> @unwrapParens
-  callee 4715:15 takesLock -> @takesLock
-  callee 4716:12 regionAtomicMessageFor -> @regionAtomicMessageFor
-  local 4718:7 k: i32 (let)
-  local 4720:11 path: string (const)
-  callee 4720:18 mutexPath -> @mutexPath
-  callee 4720:92 new StringSet -> @StringSet.constructor
-  callee 4723:14 regionLockMessage -> @regionLockMessage
-  callee 4723:51 oneLine -> @oneLine
-  callee 4726:10 regionAtomicMessageFor -> @regionAtomicMessageFor
+  local 4709:9 callee: FunctionSig | null (const)
+  local 4713:7 want: i32 (let)
+  local 4714:7 what: string (let)
+  callee 4714:14 lockCallName -> @lockCallName
+  callee 4715:7 isLockMethod -> @isLockMethod
+  callee 4716:30 unwrapParens -> @unwrapParens
+  callee 4718:15 takesLock -> @takesLock
+  callee 4719:12 regionAtomicMessageFor -> @regionAtomicMessageFor
+  local 4721:7 k: i32 (let)
+  local 4723:11 path: string (const)
+  callee 4723:18 mutexPath -> @mutexPath
+  callee 4723:92 new StringSet -> @StringSet.constructor
+  callee 4726:14 regionLockMessage -> @regionLockMessage
+  callee 4726:51 oneLine -> @oneLine
+  callee 4729:10 regionAtomicMessageFor -> @regionAtomicMessageFor
 function regionAtomicMessageFor(program: CheckedProgram, table: TypeTable, facts: FactsTable, node: Node, callee: FunctionSig, state: RegionState): string -> @regionAtomicMessageFor
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachesAtomic
@@ -28893,32 +28899,32 @@ function regionAtomicMessageFor(program: CheckedProgram, table: TypeTable, facts
   pointer callee: size=136 writesThrough=false captured=false passedTo=lockCallName#1 isAtomicMethod#0
   pointer state: size=48 writesThrough=false captured=false passedTo=regionAtomicMessage#0
   stackSites=2 stackLocals=0
-  local 4743:7 want: i32 (let)
-  local 4744:7 what: string (let)
-  callee 4744:14 lockCallName -> @lockCallName
-  callee 4745:7 isAtomicMethod -> @isAtomicMethod
-  callee 4746:30 unwrapParens -> @unwrapParens
-  callee 4748:15 reachesAtomic -> @reachesAtomic
-  callee 4748:49 new StringSet -> @StringSet.constructor
-  local 4751:7 k: i32 (let)
-  local 4753:11 path: string (const)
-  callee 4753:18 heldPath -> @heldPath
-  callee 4760:7 new StringSet -> @StringSet.constructor
-  callee 4764:14 regionAtomicMessage -> @regionAtomicMessage
-  callee 4764:53 oneLine -> @oneLine
+  local 4746:7 want: i32 (let)
+  local 4747:7 what: string (let)
+  callee 4747:14 lockCallName -> @lockCallName
+  callee 4748:7 isAtomicMethod -> @isAtomicMethod
+  callee 4749:30 unwrapParens -> @unwrapParens
+  callee 4751:15 reachesAtomic -> @reachesAtomic
+  callee 4751:49 new StringSet -> @StringSet.constructor
+  local 4754:7 k: i32 (let)
+  local 4756:11 path: string (const)
+  callee 4756:18 heldPath -> @heldPath
+  callee 4763:7 new StringSet -> @StringSet.constructor
+  callee 4767:14 regionAtomicMessage -> @regionAtomicMessage
+  callee 4767:53 oneLine -> @oneLine
 function scopeNameOf(site: ScopeSite): string -> @scopeNameOf
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer site: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4828:9 local: Local | null (const)
+  local 4831:9 local: Local | null (const)
 function thisStatement(node: Node, parents: Node[]): Node -> @thisStatement
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   escaping: node
   pointer node: size=40 writesThrough=true captured=true
   pointer parents: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4834:7 at: Node (let)
-  local 4835:7 k: i32 (let)
+  local 4837:7 at: Node (let)
+  local 4838:7 k: i32 (let)
 function channelOrderRemedy(sender: string, receiver: string): string -> @channelOrderRemedy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -28933,15 +28939,15 @@ function channelElementMessage(table: TypeTable, type: i32, name: string): strin
   calls: TypeTable.typeName nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  callee 4874:8 TypeTable.typeName -> @TypeTable.typeName
+  callee 4877:8 TypeTable.typeName -> @TypeTable.typeName
 function channelDeclareMessage(table: TypeTable, what: string, name: string, element: i32, scope: string): string -> @channelDeclareMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: element
   calls: TypeTable.typeName nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  local 4886:9 carried: string (const)
-  callee 4886:41 TypeTable.typeName -> @TypeTable.typeName
+  local 4889:9 carried: string (const)
+  callee 4889:41 TypeTable.typeName -> @TypeTable.typeName
 function channelUseMessage(what: string): string -> @channelUseMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -28957,10 +28963,10 @@ function channelArrowMessage(program: CheckedProgram, table: TypeTable, sig: Fun
   pointer arrow: size=40 writesThrough=false captured=false passedTo=hoistedArrow#2
   pointer parents: size=0 writesThrough=true captured=false passedTo=hoistedName#2
   stackSites=0 stackLocals=0
-  local 4901:7 name: string (let)
-  callee 4901:14 hoistedName -> @hoistedName
-  callee 4903:12 freshName -> @freshName
-  callee 4908:46 hoistedArrow -> @hoistedArrow
+  local 4904:7 name: string (let)
+  callee 4904:14 hoistedName -> @hoistedName
+  callee 4906:12 freshName -> @freshName
+  callee 4911:46 hoistedArrow -> @hoistedArrow
 function hoistedArrow(program: CheckedProgram, table: TypeTable, arrow: Node, name: string, channel: i32): string -> @hoistedArrow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via capturesOf
@@ -28970,44 +28976,44 @@ function hoistedArrow(program: CheckedProgram, table: TypeTable, arrow: Node, na
   pointer table: size=96 writesThrough=false captured=false passedTo=channelElement#1 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0
   pointer arrow: size=40 writesThrough=false captured=false
   stackSites=2 stackLocals=1
-  local 4927:9 lifted: FunctionSig | null (const)
-  callee 4928:26 capturesOf -> @capturesOf
-  local 4929:11 element: i32 (const)
-  callee 4929:21 channelElement -> @channelElement
-  local 4930:11 carried: i32 (const)
-  local 4931:11 sent: string (const)
-  callee 4931:18 slotLiteral -> @slotLiteral
-  callee 4931:30 new CopiedSlot -> @CopiedSlot.constructor
-  callee 4932:46 TypeTable.typeName -> @TypeTable.typeName
-  local 4934:9 params: StringBuilder (const)
-  callee 4934:18 new StringBuilder -> @StringBuilder.constructor
-  local 4935:12 i: i32 (let)
-  callee 4935:23 FunctionSig.writtenArity -> @FunctionSig.writtenArity
-  callee 4937:7 StringBuilder.add -> @StringBuilder.add
-  callee 4939:5 StringBuilder.add -> @StringBuilder.add
-  callee 4940:5 StringBuilder.add -> @StringBuilder.add
-  callee 4941:5 StringBuilder.add -> @StringBuilder.add
-  callee 4941:16 TypeTable.typeName -> @TypeTable.typeName
-  local 4943:9 head: string (const)
-  callee 4943:36 StringBuilder.toText -> @StringBuilder.toText
-  callee 4943:57 TypeTable.typeName -> @TypeTable.typeName
-  local 4944:9 body: Node (const)
-  local 4945:9 written: string (const)
-  callee 4945:19 oneLineBody -> @oneLineBody
+  local 4930:9 lifted: FunctionSig | null (const)
+  callee 4931:26 capturesOf -> @capturesOf
+  local 4932:11 element: i32 (const)
+  callee 4932:21 channelElement -> @channelElement
+  local 4933:11 carried: i32 (const)
+  local 4934:11 sent: string (const)
+  callee 4934:18 slotLiteral -> @slotLiteral
+  callee 4934:30 new CopiedSlot -> @CopiedSlot.constructor
+  callee 4935:46 TypeTable.typeName -> @TypeTable.typeName
+  local 4937:9 params: StringBuilder (const)
+  callee 4937:18 new StringBuilder -> @StringBuilder.constructor
+  local 4938:12 i: i32 (let)
+  callee 4938:23 FunctionSig.writtenArity -> @FunctionSig.writtenArity
+  callee 4940:7 StringBuilder.add -> @StringBuilder.add
+  callee 4942:5 StringBuilder.add -> @StringBuilder.add
+  callee 4943:5 StringBuilder.add -> @StringBuilder.add
+  callee 4944:5 StringBuilder.add -> @StringBuilder.add
+  callee 4944:16 TypeTable.typeName -> @TypeTable.typeName
+  local 4946:9 head: string (const)
+  callee 4946:36 StringBuilder.toText -> @StringBuilder.toText
+  callee 4946:57 TypeTable.typeName -> @TypeTable.typeName
+  local 4947:9 body: Node (const)
+  local 4948:9 written: string (const)
+  callee 4948:19 oneLineBody -> @oneLineBody
 function oneLineBody(text: string, body: Node): string -> @oneLineBody
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText nish_panic_slice nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
   pointer body: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 4957:9 written: string (const)
-  local 4964:9 out: StringBuilder (const)
-  callee 4964:15 new StringBuilder -> @StringBuilder.constructor
-  callee 4965:3 StringBuilder.add -> @StringBuilder.add
-  local 4966:14 stmt: Node (const)
-  local 4967:11 line: string (const)
-  callee 4971:5 StringBuilder.add -> @StringBuilder.add
-  callee 4973:3 StringBuilder.add -> @StringBuilder.add
-  callee 4974:10 StringBuilder.toText -> @StringBuilder.toText
+  local 4960:9 written: string (const)
+  local 4967:9 out: StringBuilder (const)
+  callee 4967:15 new StringBuilder -> @StringBuilder.constructor
+  callee 4968:3 StringBuilder.add -> @StringBuilder.add
+  local 4969:14 stmt: Node (const)
+  local 4970:11 line: string (const)
+  callee 4974:5 StringBuilder.add -> @StringBuilder.add
+  callee 4976:3 StringBuilder.add -> @StringBuilder.add
+  callee 4977:10 StringBuilder.toText -> @StringBuilder.toText
 function channelSendersMessage(what: string, remedy: string): string -> @channelSendersMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -29019,21 +29025,21 @@ function ownChannelRemedy(program: CheckedProgram, table: TypeTable, node: Node)
   pointer table: size=96 writesThrough=false captured=false passedTo=channelElement#1 TypeTable.typeName#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4982:9 element: i32 (const)
-  callee 4982:19 channelElement -> @channelElement
-  local 4983:9 shown: string (const)
-  callee 4983:32 TypeTable.typeName -> @TypeTable.typeName
-  local 4984:9 name: string (const)
-  callee 4984:16 freshName -> @freshName
+  local 4985:9 element: i32 (const)
+  callee 4985:19 channelElement -> @channelElement
+  local 4986:9 shown: string (const)
+  callee 4986:32 TypeTable.typeName -> @TypeTable.typeName
+  local 4987:9 name: string (const)
+  callee 4987:16 freshName -> @freshName
 function spawnOn(program: CheckedProgram, spawn: Node, name: string): string -> @spawnOn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: collapsed nish_panic_index nish_panic_slice nish_str_concat nish_str_new
   pointer program: size=640 writesThrough=false captured=false
   pointer spawn: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 4990:9 args: Node[] (const)
-  local 4994:9 inner: string (const)
-  callee 4994:17 collapsed -> @collapsed
+  local 4993:9 args: Node[] (const)
+  local 4997:9 inner: string (const)
+  callee 4997:17 collapsed -> @collapsed
 function channelReceiverMessage(what: string): string -> @channelReceiverMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -29043,7 +29049,7 @@ function channelOrderMessage(what: string, sender: string, receiver: string): st
   escaping: receiver sender
   calls: channelOrderRemedy nish_str_concat
   stackSites=0 stackLocals=0
-  callee 5001:34 channelOrderRemedy -> @channelOrderRemedy
+  callee 5004:34 channelOrderRemedy -> @channelOrderRemedy
 function channelBothMessage(what: string): string -> @channelBothMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -29065,22 +29071,22 @@ function channelRef(program: CheckedProgram, sig: FunctionSig, expr: Node, field
   pointer sig: size=136 writesThrough=false captured=false passedTo=channelRef#1
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 5033:9 e: Node (const)
-  callee 5033:13 unwrapParens -> @unwrapParens
-  local 5034:9 none: Local | null (const)
-  local 5035:7 index: i32 (let)
-  local 5039:11 local: Local | null (const)
-  callee 5043:14 new ChannelRef -> @ChannelRef.constructor
-  callee 5046:12 channelRef -> @channelRef
-  callee 5049:12 new ChannelRef -> @ChannelRef.constructor
-  callee 5051:10 new ChannelRef -> @ChannelRef.constructor
+  local 5036:9 e: Node (const)
+  callee 5036:13 unwrapParens -> @unwrapParens
+  local 5037:9 none: Local | null (const)
+  local 5038:7 index: i32 (let)
+  local 5042:11 local: Local | null (const)
+  callee 5046:14 new ChannelRef -> @ChannelRef.constructor
+  callee 5049:12 channelRef -> @channelRef
+  callee 5052:12 new ChannelRef -> @ChannelRef.constructor
+  callee 5054:10 new ChannelRef -> @ChannelRef.constructor
 function ChannelOps.constructor(this: ChannelOps): void -> @ChannelOps.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=24 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function ChannelOps.add(this: ChannelOps, site: Node, ref: ChannelRef, send: boolean): void -> @ChannelOps.add [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5072:5
+  sharedWrite: 5075:5
   escaping: ref send site
   calls: nish_array_grow
   pointer this: size=24 writesThrough=false captured=false
@@ -29092,69 +29098,69 @@ function ChannelSummaries.constructor(this: ChannelSummaries): void -> @ChannelS
   calls: StringMap.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 5091:18 new StringMap -> @StringMap.constructor
+  callee 5094:18 new StringMap -> @StringMap.constructor
 function ChannelSummaries.at(this: ChannelSummaries, name: string): i32 -> @ChannelSummaries.at [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.get
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 5099:12 StringMap.get -> @StringMap.get
+  callee 5102:12 StringMap.get -> @StringMap.get
 function ChannelSummaries.slot(this: ChannelSummaries, name: string): i32 -> @ChannelSummaries.slot [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5108:5
+  sharedWrite: 5111:5
   escaping: name
   calls: ChannelSummaries.at StringMap.set StringSet.constructor nish_alloc_struct nish_array_grow
   pointer this: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.at#0
   stackSites=0 stackLocals=0
-  local 5103:11 at: i32 (const)
-  callee 5103:16 ChannelSummaries.at -> @ChannelSummaries.at
-  callee 5107:5 StringMap.set -> @StringMap.set
-  callee 5108:21 new StringSet -> @StringSet.constructor
-  callee 5109:24 new StringSet -> @StringSet.constructor
+  local 5106:11 at: i32 (const)
+  callee 5106:16 ChannelSummaries.at -> @ChannelSummaries.at
+  callee 5110:5 StringMap.set -> @StringMap.set
+  callee 5111:21 new StringSet -> @StringSet.constructor
+  callee 5112:24 new StringSet -> @StringSet.constructor
 function ChannelSummaries.merge(this: ChannelSummaries, name: string, ops: ChannelOps): boolean -> @ChannelSummaries.merge [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5126:9
+  sharedWrite: 5129:9
   escaping: name
   calls: ChannelSummaries.slot StringSet.add nish_panic_index
   pointer this: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.slot#0
   pointer ops: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5117:11 at: i32 (const)
-  callee 5117:16 ChannelSummaries.slot -> @ChannelSummaries.slot
-  local 5118:9 grew: boolean (let)
-  local 5119:9 k: i32 (let)
-  local 5121:13 ref: ChannelRef (const)
-  local 5122:13 send: boolean (const)
-  callee 5124:24 StringSet.add -> @StringSet.add
-  callee 5124:55 StringSet.add -> @StringSet.add
+  local 5120:11 at: i32 (const)
+  callee 5120:16 ChannelSummaries.slot -> @ChannelSummaries.slot
+  local 5121:9 grew: boolean (let)
+  local 5122:9 k: i32 (let)
+  local 5124:13 ref: ChannelRef (const)
+  local 5125:13 send: boolean (const)
+  callee 5127:24 StringSet.add -> @StringSet.add
+  callee 5127:55 StringSet.add -> @StringSet.add
 function ChannelSummaries.receivesHanded(this: ChannelSummaries, name: string): boolean -> @ChannelSummaries.receivesHanded [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: ChannelSummaries.at StringSet.size nish_panic_index
   pointer this: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.at#0
   stackSites=0 stackLocals=0
-  local 5143:11 at: i32 (const)
-  callee 5143:16 ChannelSummaries.at -> @ChannelSummaries.at
-  callee 5144:48 StringSet.size -> @StringSet.size
+  local 5146:11 at: i32 (const)
+  callee 5146:16 ChannelSummaries.at -> @ChannelSummaries.at
+  callee 5147:48 StringSet.size -> @StringSet.size
 function ChannelSummaries.untraceable(this: ChannelSummaries, name: string): boolean -> @ChannelSummaries.untraceable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: ChannelSummaries.at nish_panic_index
   pointer this: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.at#0
   stackSites=0 stackLocals=0
-  local 5149:11 at: i32 (const)
-  callee 5149:16 ChannelSummaries.at -> @ChannelSummaries.at
+  local 5152:11 at: i32 (const)
+  callee 5152:16 ChannelSummaries.at -> @ChannelSummaries.at
 function ChannelSummaries.may(this: ChannelSummaries, name: string, path: string, send: boolean): boolean -> @ChannelSummaries.may [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name path
   calls: ChannelSummaries.at StringSet.has nish_panic_index
   pointer this: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.at#0
   stackSites=0 stackLocals=0
-  local 5155:11 at: i32 (const)
-  callee 5155:16 ChannelSummaries.at -> @ChannelSummaries.at
-  callee 5160:30 StringSet.has -> @StringSet.has
-  callee 5161:33 StringSet.has -> @StringSet.has
+  local 5158:11 at: i32 (const)
+  callee 5158:16 ChannelSummaries.at -> @ChannelSummaries.at
+  callee 5163:30 StringSet.has -> @StringSet.has
+  callee 5164:33 StringSet.has -> @StringSet.has
 function operandFor(node: Node, callee: FunctionSig, k: i32): Node | null -> @operandFor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
@@ -29162,9 +29168,9 @@ function operandFor(node: Node, callee: FunctionSig, k: i32): Node | null -> @op
   pointer node: size=40 writesThrough=false captured=false
   pointer callee: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5167:9 args: Node[] (const)
-  local 5168:7 at: i32 (let)
-  local 5171:13 target: Node (const)
+  local 5170:9 args: Node[] (const)
+  local 5171:7 at: i32 (let)
+  local 5174:13 target: Node (const)
 function mappedRef(program: CheckedProgram, sig: FunctionSig, node: Node, callee: FunctionSig, path: string): ChannelRef | null -> @mappedRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: channelRef llvm.fptosi.sat.i32.f64 nish_panic_overflow nish_parse_number nish_str_index_of nish_str_index_of_from nish_str_new operandFor
@@ -29173,11 +29179,11 @@ function mappedRef(program: CheckedProgram, sig: FunctionSig, node: Node, callee
   pointer node: size=40 writesThrough=false captured=false passedTo=operandFor#0
   pointer callee: size=136 writesThrough=false captured=false passedTo=operandFor#1
   stackSites=0 stackLocals=0
-  local 5187:9 dot: i32 (const)
-  local 5188:9 k: i32 (const)
-  local 5189:9 operand: Node | null (const)
-  callee 5189:19 operandFor -> @operandFor
-  callee 5193:10 channelRef -> @channelRef
+  local 5190:9 dot: i32 (const)
+  local 5191:9 k: i32 (const)
+  local 5192:9 operand: Node | null (const)
+  callee 5192:19 operandFor -> @operandFor
+  callee 5196:10 channelRef -> @channelRef
 function addCalleeOps(program: CheckedProgram, sig: FunctionSig, node: Node, callee: FunctionSig, summaries: ChannelSummaries, ops: ChannelOps): void -> @addCalleeOps
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ChannelOps.add
@@ -29189,26 +29195,26 @@ function addCalleeOps(program: CheckedProgram, sig: FunctionSig, node: Node, cal
   pointer summaries: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.at#0
   pointer ops: size=24 writesThrough=false captured=false passedTo=ChannelOps.add#0 ChannelOps.add#0 ChannelOps.add#0
   stackSites=0 stackLocals=0
-  local 5205:9 at: i32 (const)
-  callee 5205:14 ChannelSummaries.at -> @ChannelSummaries.at
-  local 5209:9 none: Local | null (const)
-  local 5210:7 k: i32 (let)
-  local 5212:11 send: boolean (const)
-  local 5213:11 paths: StringSet (const)
-  local 5214:9 p: i32 (let)
-  callee 5215:16 StringSet.size -> @StringSet.size
-  local 5216:13 ref: ChannelRef | null (const)
-  callee 5216:19 mappedRef -> @mappedRef
-  callee 5216:57 StringSet.at -> @StringSet.at
-  callee 5218:9 ChannelOps.add -> @ChannelOps.add
-  callee 5223:7 ChannelOps.add -> @ChannelOps.add
-  callee 5223:21 new ChannelRef -> @ChannelRef.constructor
-  local 5225:11 o: i32 (let)
-  local 5227:15 operand: Node | null (const)
-  callee 5227:25 operandFor -> @operandFor
-  local 5228:15 ref: ChannelRef | null (const)
-  callee 5228:66 channelRef -> @channelRef
-  callee 5230:11 ChannelOps.add -> @ChannelOps.add
+  local 5208:9 at: i32 (const)
+  callee 5208:14 ChannelSummaries.at -> @ChannelSummaries.at
+  local 5212:9 none: Local | null (const)
+  local 5213:7 k: i32 (let)
+  local 5215:11 send: boolean (const)
+  local 5216:11 paths: StringSet (const)
+  local 5217:9 p: i32 (let)
+  callee 5218:16 StringSet.size -> @StringSet.size
+  local 5219:13 ref: ChannelRef | null (const)
+  callee 5219:19 mappedRef -> @mappedRef
+  callee 5219:57 StringSet.at -> @StringSet.at
+  callee 5221:9 ChannelOps.add -> @ChannelOps.add
+  callee 5226:7 ChannelOps.add -> @ChannelOps.add
+  callee 5226:21 new ChannelRef -> @ChannelRef.constructor
+  local 5228:11 o: i32 (let)
+  local 5230:15 operand: Node | null (const)
+  callee 5230:25 operandFor -> @operandFor
+  local 5231:15 ref: ChannelRef | null (const)
+  callee 5231:66 channelRef -> @channelRef
+  callee 5233:11 ChannelOps.add -> @ChannelOps.add
 function collectChannelOps(program: CheckedProgram, sig: FunctionSig, node: Node, summaries: ChannelSummaries, ops: ChannelOps): void -> @collectChannelOps
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ChannelOps.add
@@ -29219,18 +29225,18 @@ function collectChannelOps(program: CheckedProgram, sig: FunctionSig, node: Node
   pointer summaries: size=40 writesThrough=false captured=false passedTo=addCalleeOps#4 collectChannelOps#3
   pointer ops: size=24 writesThrough=false captured=false passedTo=ChannelOps.add#0 ChannelOps.add#0 addCalleeOps#5 collectChannelOps#4
   stackSites=0 stackLocals=0
-  local 5251:11 read: FunctionSig | null (const)
-  callee 5252:26 isChannelReader -> @isChannelReader
-  callee 5253:7 ChannelOps.add -> @ChannelOps.add
-  callee 5253:21 channelRef -> @channelRef
-  local 5257:11 callee: FunctionSig | null (const)
-  callee 5258:28 isChannelSend -> @isChannelSend
-  callee 5259:7 ChannelOps.add -> @ChannelOps.add
-  callee 5259:21 channelRef -> @channelRef
-  callee 5260:36 isSpawnEntry -> @isSpawnEntry
-  callee 5261:7 addCalleeOps -> @addCalleeOps
-  local 5264:14 child: Node (const)
-  callee 5265:5 collectChannelOps -> @collectChannelOps
+  local 5254:11 read: FunctionSig | null (const)
+  callee 5255:26 isChannelReader -> @isChannelReader
+  callee 5256:7 ChannelOps.add -> @ChannelOps.add
+  callee 5256:21 channelRef -> @channelRef
+  local 5260:11 callee: FunctionSig | null (const)
+  callee 5261:28 isChannelSend -> @isChannelSend
+  callee 5262:7 ChannelOps.add -> @ChannelOps.add
+  callee 5262:21 channelRef -> @channelRef
+  callee 5263:36 isSpawnEntry -> @isSpawnEntry
+  callee 5264:7 addCalleeOps -> @addCalleeOps
+  local 5267:14 child: Node (const)
+  callee 5268:5 collectChannelOps -> @collectChannelOps
 function channelOpsOf(program: CheckedProgram, sig: FunctionSig, summaries: ChannelSummaries): ChannelOps -> @channelOpsOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: via CheckedProgram.enterInstance
@@ -29239,37 +29245,37 @@ function channelOpsOf(program: CheckedProgram, sig: FunctionSig, summaries: Chan
   pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.body#0 collectChannelOps#1
   pointer summaries: size=40 writesThrough=false captured=false passedTo=collectChannelOps#3
   stackSites=0 stackLocals=0
-  local 5271:9 ops: ChannelOps (const)
-  callee 5271:15 new ChannelOps -> @ChannelOps.constructor
-  local 5272:9 body: Node | null (const)
-  callee 5272:16 FunctionSig.body -> @FunctionSig.body
-  local 5276:9 instance: Instantiation | null (const)
-  callee 5278:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee 5280:3 collectChannelOps -> @collectChannelOps
-  callee 5282:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 5274:9 ops: ChannelOps (const)
+  callee 5274:15 new ChannelOps -> @ChannelOps.constructor
+  local 5275:9 body: Node | null (const)
+  callee 5275:16 FunctionSig.body -> @FunctionSig.body
+  local 5279:9 instance: Instantiation | null (const)
+  callee 5281:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee 5283:3 collectChannelOps -> @collectChannelOps
+  callee 5285:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 function channelSummaries(programs: CheckedProgram[]): ChannelSummaries -> @channelSummaries [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via ChannelSummaries.merge
   calls: ChannelSummaries.constructor ChannelSummaries.merge FunctionSig.definedIn channelOpsOf namesChannel nish_alloc_struct threadsLoaded
   pointer programs: size=0 writesThrough=false captured=false passedTo=threadsLoaded#0 namesChannel#0
   stackSites=0 stackLocals=0
-  local 5293:9 out: ChannelSummaries (const)
-  callee 5293:15 new ChannelSummaries -> @ChannelSummaries.constructor
-  callee 5294:8 threadsLoaded -> @threadsLoaded
-  callee 5294:36 namesChannel -> @namesChannel
-  local 5297:7 changed: boolean (let)
-  local 5300:16 program: CheckedProgram (const)
-  local 5301:18 sig: FunctionSig (const)
-  callee 5302:13 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 5302:46 ChannelSummaries.merge -> @ChannelSummaries.merge
-  callee 5302:66 channelOpsOf -> @channelOpsOf
+  local 5296:9 out: ChannelSummaries (const)
+  callee 5296:15 new ChannelSummaries -> @ChannelSummaries.constructor
+  callee 5297:8 threadsLoaded -> @threadsLoaded
+  callee 5297:36 namesChannel -> @namesChannel
+  local 5300:7 changed: boolean (let)
+  local 5303:16 program: CheckedProgram (const)
+  local 5304:18 sig: FunctionSig (const)
+  callee 5305:13 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 5305:46 ChannelSummaries.merge -> @ChannelSummaries.merge
+  callee 5305:66 channelOpsOf -> @channelOpsOf
 function namesChannel(programs: CheckedProgram[]): boolean -> @namesChannel
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsModule nish_str_index_of nish_str_index_of_from
   pointer programs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5313:14 program: CheckedProgram (const)
-  callee 5314:10 isThreadsModule -> @isThreadsModule
+  local 5316:14 program: CheckedProgram (const)
+  callee 5317:10 isThreadsModule -> @isThreadsModule
 function channelElement(program: CheckedProgram, table: TypeTable, type: i32): i32 -> @channelElement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -29277,9 +29283,9 @@ function channelElement(program: CheckedProgram, table: TypeTable, type: i32): i
   pointer program: size=640 writesThrough=false captured=false passedTo=classLayoutOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=classLayoutOf#1
   stackSites=0 stackLocals=0
-  local 5323:9 info: StructInfo | null (const)
-  callee 5323:16 classLayoutOf -> @classLayoutOf
-  local 5324:9 instance: StructInstantiation | null (const)
+  local 5326:9 info: StructInfo | null (const)
+  callee 5326:16 classLayoutOf -> @classLayoutOf
+  local 5327:9 instance: StructInstantiation | null (const)
 function isTaskArgument(program: CheckedProgram, at: Node, parents: Node[], depth: i32): boolean -> @isTaskArgument
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index spawnCallee
@@ -29287,9 +29293,9 @@ function isTaskArgument(program: CheckedProgram, at: Node, parents: Node[], dept
   pointer at: size=40 writesThrough=false captured=false
   pointer parents: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5333:9 list: Node (const)
-  local 5334:9 call: Node (const)
-  callee 5340:5 spawnCallee -> @spawnCallee
+  local 5336:9 list: Node (const)
+  local 5337:9 call: Node (const)
+  callee 5343:5 spawnCallee -> @spawnCallee
 function isChannelLocal(program: CheckedProgram, node: Node, locals: Local[]): boolean -> @isChannelLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: namedLocal
@@ -29297,11 +29303,11 @@ function isChannelLocal(program: CheckedProgram, node: Node, locals: Local[]): b
   pointer node: size=40 writesThrough=true captured=true passedTo=namedLocal#1
   pointer locals: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5346:9 local: Local | null (const)
-  callee 5346:17 namedLocal -> @namedLocal
+  local 5349:9 local: Local | null (const)
+  callee 5349:17 namedLocal -> @namedLocal
 function walkChannelUses(program: CheckedProgram, table: TypeTable, sig: FunctionSig, node: Node, parents: Node[], locals: Local[], out: ScopeFinding[]): void -> @walkChannelUses
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5370:7
+  sharedWrite: 5373:7
   escaping: node
   calls: ScopeFinding.constructor arrowChannel channelArrowMessage channelUseFinding channelUseMessage fixedFinding hoistArrowEdits isChannelType liftedTakesChannel nish_alloc_struct nish_array_grow nish_panic_index walkChannelUses
   pointer program: size=640 writesThrough=false captured=false passedTo=arrowChannel#0 channelArrowMessage#0 hoistArrowEdits#0 liftedTakesChannel#0 channelArrowMessage#0 hoistArrowEdits#0 isChannelType#0 channelUseFinding#0 walkChannelUses#0
@@ -29312,29 +29318,29 @@ function walkChannelUses(program: CheckedProgram, table: TypeTable, sig: Functio
   pointer locals: size=0 writesThrough=false captured=false passedTo=channelUseFinding#7 walkChannelUses#5
   pointer out: size=0 writesThrough=true captured=false passedTo=walkChannelUses#6
   stackSites=0 stackLocals=0
-  local 5367:11 used: Node | null (const)
-  callee 5367:18 arrowChannel -> @arrowChannel
-  local 5369:13 message: string (const)
-  callee 5369:23 channelArrowMessage -> @channelArrowMessage
-  callee 5370:16 fixedFinding -> @fixedFinding
-  callee 5370:44 hoistArrowEdits -> @hoistArrowEdits
-  callee 5371:16 liftedTakesChannel -> @liftedTakesChannel
+  local 5370:11 used: Node | null (const)
+  callee 5370:18 arrowChannel -> @arrowChannel
   local 5372:13 message: string (const)
   callee 5372:23 channelArrowMessage -> @channelArrowMessage
   callee 5373:16 fixedFinding -> @fixedFinding
   callee 5373:44 hoistArrowEdits -> @hoistArrowEdits
-  local 5377:7 at: Node (let)
-  local 5378:7 depth: i32 (let)
-  local 5383:9 parent: Node | null (const)
-  local 5384:9 type: i32 (const)
-  local 5385:9 declaresName: boolean (const)
-  callee 5387:49 isChannelType -> @isChannelType
-  local 5390:11 message: string (const)
-  callee 5392:11 channelUseMessage -> @channelUseMessage
-  callee 5393:11 channelUseFinding -> @channelUseFinding
-  callee 5395:16 new ScopeFinding -> @ScopeFinding.constructor
-  local 5400:14 child: Node (const)
-  callee 5401:5 walkChannelUses -> @walkChannelUses
+  callee 5374:16 liftedTakesChannel -> @liftedTakesChannel
+  local 5375:13 message: string (const)
+  callee 5375:23 channelArrowMessage -> @channelArrowMessage
+  callee 5376:16 fixedFinding -> @fixedFinding
+  callee 5376:44 hoistArrowEdits -> @hoistArrowEdits
+  local 5380:7 at: Node (let)
+  local 5381:7 depth: i32 (let)
+  local 5386:9 parent: Node | null (const)
+  local 5387:9 type: i32 (const)
+  local 5388:9 declaresName: boolean (const)
+  callee 5390:49 isChannelType -> @isChannelType
+  local 5393:11 message: string (const)
+  callee 5395:11 channelUseMessage -> @channelUseMessage
+  callee 5396:11 channelUseFinding -> @channelUseFinding
+  callee 5398:16 new ScopeFinding -> @ScopeFinding.constructor
+  local 5403:14 child: Node (const)
+  callee 5404:5 walkChannelUses -> @walkChannelUses
 function arrowChannel(program: CheckedProgram, table: TypeTable, node: Node): Node | null -> @arrowChannel
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: arrowChannel holdsChannelType nish_panic_index
@@ -29342,12 +29348,12 @@ function arrowChannel(program: CheckedProgram, table: TypeTable, node: Node): No
   pointer table: size=96 writesThrough=false captured=false passedTo=holdsChannelType#1 arrowChannel#1
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5408:14 child: Node (const)
-  local 5409:11 local: Local | null (const)
-  local 5411:9 type: i32 (let)
-  callee 5415:9 holdsChannelType -> @holdsChannelType
-  local 5418:11 below: Node | null (const)
-  callee 5418:19 arrowChannel -> @arrowChannel
+  local 5411:14 child: Node (const)
+  local 5412:11 local: Local | null (const)
+  local 5414:9 type: i32 (let)
+  callee 5418:9 holdsChannelType -> @holdsChannelType
+  local 5421:11 below: Node | null (const)
+  callee 5421:19 arrowChannel -> @arrowChannel
 function liftedTakesChannel(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @liftedTakesChannel
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: holdsChannelType nish_panic_index
@@ -29355,9 +29361,9 @@ function liftedTakesChannel(program: CheckedProgram, table: TypeTable, node: Nod
   pointer table: size=96 writesThrough=false captured=false passedTo=holdsChannelType#1
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5432:9 lifted: FunctionSig | null (const)
-  local 5436:14 type: i32 (const)
-  callee 5437:9 holdsChannelType -> @holdsChannelType
+  local 5435:9 lifted: FunctionSig | null (const)
+  local 5439:14 type: i32 (const)
+  callee 5440:9 holdsChannelType -> @holdsChannelType
 function channelUseFinding(program: CheckedProgram, table: TypeTable, sig: FunctionSig, node: Node, at: Node, parents: Node[], depth: i32, locals: Local[]): string -> @channelUseFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: depth
@@ -29370,37 +29376,37 @@ function channelUseFinding(program: CheckedProgram, table: TypeTable, sig: Funct
   pointer parents: size=0 writesThrough=true captured=false passedTo=boundNameOf#1 boundNameOf#1 isTaskArgument#2
   pointer locals: size=0 writesThrough=false captured=false passedTo=isChannelLocal#2 isChannelLocal#2 isChannelLocal#2
   stackSites=0 stackLocals=0
-  local 5455:9 parent: Node (const)
-  local 5456:9 type: i32 (const)
-  local 5458:11 element: i32 (const)
-  callee 5458:21 channelElement -> @channelElement
-  callee 5459:26 isScalarArgument -> @isScalarArgument
-  callee 5460:14 channelElementMessage -> @channelElementMessage
-  callee 5460:52 boundNameOf -> @boundNameOf
-  local 5462:11 declared: boolean (const)
-  callee 5466:7 isConstDeclaration -> @isConstDeclaration
-  local 5470:11 bound: string (const)
-  callee 5470:19 boundNameOf -> @boundNameOf
-  callee 5471:12 channelDeclareMessage -> @channelDeclareMessage
-  local 5481:9 constructing: boolean (const)
-  callee 5481:58 isChannelLocal -> @isChannelLocal
-  callee 5483:33 isAssignmentOperator -> @isAssignmentOperator
-  callee 5487:74 isFieldFromParam -> @isFieldFromParam
-  local 5491:11 above: Node | null (const)
-  callee 5495:12 channelUseMessage -> @channelUseMessage
-  local 5501:11 call: Node (const)
-  callee 5502:64 spawnCallee -> @spawnCallee
-  callee 5503:14 isChannelLocal -> @isChannelLocal
-  callee 5505:11 channelSendersMessage -> @channelSendersMessage
-  callee 5507:13 ownChannelRemedy -> @ownChannelRemedy
-  callee 5511:14 takesChannelParameter -> @takesChannelParameter
-  callee 5513:11 channelUseMessage -> @channelUseMessage
-  callee 5520:7 isTaskArgument -> @isTaskArgument
-  callee 5522:11 isChannelLocal -> @isChannelLocal
-  callee 5525:14 channelSendersMessage -> @channelSendersMessage
-  callee 5527:9 ownChannelRemedy -> @ownChannelRemedy
-  callee 5532:12 channelUseMessage -> @channelUseMessage
-  callee 5536:10 channelUseMessage -> @channelUseMessage
+  local 5458:9 parent: Node (const)
+  local 5459:9 type: i32 (const)
+  local 5461:11 element: i32 (const)
+  callee 5461:21 channelElement -> @channelElement
+  callee 5462:26 isScalarArgument -> @isScalarArgument
+  callee 5463:14 channelElementMessage -> @channelElementMessage
+  callee 5463:52 boundNameOf -> @boundNameOf
+  local 5465:11 declared: boolean (const)
+  callee 5469:7 isConstDeclaration -> @isConstDeclaration
+  local 5473:11 bound: string (const)
+  callee 5473:19 boundNameOf -> @boundNameOf
+  callee 5474:12 channelDeclareMessage -> @channelDeclareMessage
+  local 5484:9 constructing: boolean (const)
+  callee 5484:58 isChannelLocal -> @isChannelLocal
+  callee 5486:33 isAssignmentOperator -> @isAssignmentOperator
+  callee 5490:74 isFieldFromParam -> @isFieldFromParam
+  local 5494:11 above: Node | null (const)
+  callee 5498:12 channelUseMessage -> @channelUseMessage
+  local 5504:11 call: Node (const)
+  callee 5505:64 spawnCallee -> @spawnCallee
+  callee 5506:14 isChannelLocal -> @isChannelLocal
+  callee 5508:11 channelSendersMessage -> @channelSendersMessage
+  callee 5510:13 ownChannelRemedy -> @ownChannelRemedy
+  callee 5514:14 takesChannelParameter -> @takesChannelParameter
+  callee 5516:11 channelUseMessage -> @channelUseMessage
+  callee 5523:7 isTaskArgument -> @isTaskArgument
+  callee 5525:11 isChannelLocal -> @isChannelLocal
+  callee 5528:14 channelSendersMessage -> @channelSendersMessage
+  callee 5530:9 ownChannelRemedy -> @ownChannelRemedy
+  callee 5535:12 channelUseMessage -> @channelUseMessage
+  callee 5539:10 channelUseMessage -> @channelUseMessage
 function takesChannelParameter(program: CheckedProgram, table: TypeTable, call: Node, arg: Node): boolean -> @takesChannelParameter
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isChannelType nish_panic_index operandFor
@@ -29409,11 +29415,11 @@ function takesChannelParameter(program: CheckedProgram, table: TypeTable, call: 
   pointer call: size=40 writesThrough=false captured=false passedTo=operandFor#0
   pointer arg: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5546:9 callee: FunctionSig | null (const)
-  local 5550:7 k: i32 (let)
-  local 5552:11 operand: Node | null (const)
-  callee 5552:21 operandFor -> @operandFor
-  callee 5554:14 isChannelType -> @isChannelType
+  local 5549:9 callee: FunctionSig | null (const)
+  local 5553:7 k: i32 (let)
+  local 5555:11 operand: Node | null (const)
+  callee 5555:21 operandFor -> @operandFor
+  callee 5557:14 isChannelType -> @isChannelType
 function isConstDeclaration(stmt: Node): boolean -> @isConstDeclaration
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer stmt: size=40 writesThrough=false captured=false
@@ -29424,12 +29430,12 @@ function isFieldFromParam(program: CheckedProgram, assign: Node): boolean -> @is
   pointer program: size=640 writesThrough=false captured=false
   pointer assign: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5567:9 target: Node (const)
-  callee 5567:18 unwrapParens -> @unwrapParens
-  local 5568:9 value: Node (const)
-  callee 5568:17 unwrapParens -> @unwrapParens
-  callee 5571:5 unwrapParens -> @unwrapParens
-  local 5576:9 local: Local | null (const)
+  local 5570:9 target: Node (const)
+  callee 5570:18 unwrapParens -> @unwrapParens
+  local 5571:9 value: Node (const)
+  callee 5571:17 unwrapParens -> @unwrapParens
+  callee 5574:5 unwrapParens -> @unwrapParens
+  local 5579:9 local: Local | null (const)
 function isNewChannel(program: CheckedProgram, table: TypeTable, init: Node): boolean -> @isNewChannel
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isChannelType nish_panic_index unwrapParens
@@ -29437,12 +29443,12 @@ function isNewChannel(program: CheckedProgram, table: TypeTable, init: Node): bo
   pointer table: size=96 writesThrough=false captured=false passedTo=isChannelType#1
   pointer init: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 5582:9 e: Node (const)
-  callee 5582:13 unwrapParens -> @unwrapParens
-  callee 5583:30 isChannelType -> @isChannelType
+  local 5585:9 e: Node (const)
+  callee 5585:13 unwrapParens -> @unwrapParens
+  callee 5586:30 isChannelType -> @isChannelType
 function collectChannelLocals(program: CheckedProgram, table: TypeTable, node: Node, locals: Local[], decls: Node[]): void -> @collectChannelLocals
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5602:9
+  sharedWrite: 5605:9
   calls: collectChannelLocals isNewChannel nish_array_grow nish_panic_index
   pointer program: size=640 writesThrough=false captured=false passedTo=isNewChannel#0 collectChannelLocals#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isNewChannel#1 collectChannelLocals#1
@@ -29450,11 +29456,11 @@ function collectChannelLocals(program: CheckedProgram, table: TypeTable, node: N
   pointer locals: size=0 writesThrough=true captured=false passedTo=collectChannelLocals#3
   pointer decls: size=0 writesThrough=true captured=false passedTo=collectChannelLocals#4
   stackSites=0 stackLocals=0
-  local 5599:16 decl: Node (const)
-  local 5600:13 local: Local | null (const)
-  callee 5601:29 isNewChannel -> @isNewChannel
-  local 5607:14 child: Node (const)
-  callee 5608:5 collectChannelLocals -> @collectChannelLocals
+  local 5602:16 decl: Node (const)
+  local 5603:13 local: Local | null (const)
+  callee 5604:29 isNewChannel -> @isNewChannel
+  local 5610:14 child: Node (const)
+  callee 5611:5 collectChannelLocals -> @collectChannelLocals
 function opensScope(program: CheckedProgram, stmt: Node, decl: Node, scopeType: i32): boolean -> @opensScope
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: scopeType
@@ -29463,8 +29469,8 @@ function opensScope(program: CheckedProgram, stmt: Node, decl: Node, scopeType: 
   pointer stmt: size=40 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 5616:3 isScopeCall -> @isScopeCall
-  callee 5616:24 unwrapParens -> @unwrapParens
+  callee 5619:3 isScopeCall -> @isScopeCall
+  callee 5619:24 unwrapParens -> @unwrapParens
 function firstScopeName(program: CheckedProgram, stmt: Node, scopeType: i32): string -> @firstScopeName
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: scopeType
@@ -29472,11 +29478,11 @@ function firstScopeName(program: CheckedProgram, stmt: Node, scopeType: i32): st
   pointer program: size=640 writesThrough=false captured=false passedTo=opensScope#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=opensScope#1
   stackSites=0 stackLocals=0
-  local 5621:16 decl: Node (const)
-  callee 5622:11 opensScope -> @opensScope
+  local 5624:16 decl: Node (const)
+  callee 5625:11 opensScope -> @opensScope
 function addScopeSites(program: CheckedProgram, stmt: Node, scopeType: i32, body: Node, index: i32, out: ScopeSite[]): void -> @addScopeSites
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5644:7
+  sharedWrite: 5647:7
   escaping: index scopeType
   calls: ScopeSite.constructor nish_alloc_struct nish_array_grow nish_panic_index opensScope
   pointer program: size=640 writesThrough=false captured=false passedTo=opensScope#0
@@ -29484,9 +29490,9 @@ function addScopeSites(program: CheckedProgram, stmt: Node, scopeType: i32, body
   pointer body: size=40 writesThrough=true captured=true passedTo=ScopeSite.constructor#3
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 5642:14 decl: Node (const)
-  callee 5643:9 opensScope -> @opensScope
-  callee 5644:16 new ScopeSite -> @ScopeSite.constructor
+  local 5645:14 decl: Node (const)
+  callee 5646:9 opensScope -> @opensScope
+  callee 5647:16 new ScopeSite -> @ScopeSite.constructor
 function ScopeSite.constructor(this: ScopeSite, decl: Node, local: Local | null, body: Node, stmt: i32): void -> @ScopeSite.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: body decl local stmt
@@ -29503,12 +29509,12 @@ function candidateScopes(program: CheckedProgram, block: Node, index: i32, scope
   pointer program: size=640 writesThrough=false captured=false passedTo=addScopeSites#0 addScopeSites#0
   pointer block: size=40 writesThrough=true captured=true passedTo=addScopeSites#3
   stackSites=0 stackLocals=0
-  local 5671:9 out: ScopeSite[] (const)
-  local 5672:7 j: i32 (let)
-  local 5674:11 stmt: Node (const)
-  callee 5675:5 addScopeSites -> @addScopeSites
-  local 5677:18 inner: Node (const)
-  callee 5678:9 addScopeSites -> @addScopeSites
+  local 5674:9 out: ScopeSite[] (const)
+  local 5675:7 j: i32 (let)
+  local 5677:11 stmt: Node (const)
+  callee 5678:5 addScopeSites -> @addScopeSites
+  local 5680:18 inner: Node (const)
+  callee 5681:9 addScopeSites -> @addScopeSites
 function StatementSite.constructor(this: StatementSite, block: Node | null, index: i32): void -> @StatementSite.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: block index
@@ -29521,14 +29527,14 @@ function statementSiteOf(node: Node, decl: Node): StatementSite -> @statementSit
   pointer node: size=40 writesThrough=true captured=true passedTo=StatementSite.constructor#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=statementSiteOf#1
   stackSites=0 stackLocals=0
-  local 5699:9 i: i32 (let)
-  local 5701:13 stmt: Node (const)
-  callee 5703:16 new StatementSite -> @StatementSite.constructor
-  local 5708:14 child: Node (const)
-  local 5710:13 found: StatementSite (const)
-  callee 5710:21 statementSiteOf -> @statementSiteOf
-  local 5716:9 none: Node | null (const)
-  callee 5717:10 new StatementSite -> @StatementSite.constructor
+  local 5702:9 i: i32 (let)
+  local 5704:13 stmt: Node (const)
+  callee 5706:16 new StatementSite -> @StatementSite.constructor
+  local 5711:14 child: Node (const)
+  local 5713:13 found: StatementSite (const)
+  callee 5713:21 statementSiteOf -> @statementSiteOf
+  local 5719:9 none: Node | null (const)
+  callee 5720:10 new StatementSite -> @StatementSite.constructor
 function isWithin(outer: Node, inner: Node): boolean -> @isWithin
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer outer: size=40 writesThrough=false captured=false
@@ -29536,16 +29542,16 @@ function isWithin(outer: Node, inner: Node): boolean -> @isWithin
   stackSites=0 stackLocals=0
 function collectSpawns(program: CheckedProgram, node: Node, out: Node[]): void -> @collectSpawns
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5729:5
+  sharedWrite: 5732:5
   escaping: node
   calls: collectSpawns nish_array_grow spawnCallee
   pointer program: size=640 writesThrough=false captured=false passedTo=spawnCallee#0 collectSpawns#0
   pointer node: size=40 writesThrough=true captured=true passedTo=spawnCallee#1
   pointer out: size=0 writesThrough=true captured=false passedTo=collectSpawns#2
   stackSites=0 stackLocals=0
-  callee 5728:7 spawnCallee -> @spawnCallee
-  local 5731:14 child: Node (const)
-  callee 5732:5 collectSpawns -> @collectSpawns
+  callee 5731:7 spawnCallee -> @spawnCallee
+  local 5734:14 child: Node (const)
+  callee 5735:5 collectSpawns -> @collectSpawns
 function pathsInTaskArgument(program: CheckedProgram, spawn: Node, local: Local): string[] -> @pathsInTaskArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.body fieldsAssignedIn holdsChannelLocal nish_array_grow nish_panic_index unwrapParens
@@ -29553,18 +29559,18 @@ function pathsInTaskArgument(program: CheckedProgram, spawn: Node, local: Local)
   pointer spawn: size=40 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false passedTo=holdsChannelLocal#2 holdsChannelLocal#2
   stackSites=0 stackLocals=0
-  local 5744:9 out: string[] (const)
-  local 5745:9 args: Node[] (const)
-  local 5749:9 arg: Node (const)
-  callee 5749:15 unwrapParens -> @unwrapParens
-  callee 5750:7 holdsChannelLocal -> @holdsChannelLocal
-  local 5754:9 ctor: FunctionSig | null (const)
-  local 5758:9 body: Node | null (const)
-  callee 5758:16 FunctionSig.body -> @FunctionSig.body
-  local 5759:9 values: Node[] (const)
-  local 5760:7 k: i32 (let)
-  callee 5762:60 holdsChannelLocal -> @holdsChannelLocal
-  callee 5763:7 fieldsAssignedIn -> @fieldsAssignedIn
+  local 5747:9 out: string[] (const)
+  local 5748:9 args: Node[] (const)
+  local 5752:9 arg: Node (const)
+  callee 5752:15 unwrapParens -> @unwrapParens
+  callee 5753:7 holdsChannelLocal -> @holdsChannelLocal
+  local 5757:9 ctor: FunctionSig | null (const)
+  local 5761:9 body: Node | null (const)
+  callee 5761:16 FunctionSig.body -> @FunctionSig.body
+  local 5762:9 values: Node[] (const)
+  local 5763:7 k: i32 (let)
+  callee 5765:60 holdsChannelLocal -> @holdsChannelLocal
+  callee 5766:7 fieldsAssignedIn -> @fieldsAssignedIn
 function holdsChannelLocal(program: CheckedProgram, node: Node, local: Local): boolean -> @holdsChannelLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: namedLocal
@@ -29572,23 +29578,23 @@ function holdsChannelLocal(program: CheckedProgram, node: Node, local: Local): b
   pointer node: size=40 writesThrough=true captured=true passedTo=namedLocal#1
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 5772:9 named: Local | null (const)
-  callee 5772:17 namedLocal -> @namedLocal
+  local 5775:9 named: Local | null (const)
+  callee 5775:17 namedLocal -> @namedLocal
 function fieldsAssignedIn(node: Node, param: string, out: string[]): void -> @fieldsAssignedIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5787:7
+  sharedWrite: 5790:7
   escaping: param
   calls: fieldsAssignedIn nish_array_grow nish_panic_index nish_str_eq unwrapParens
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=fieldsAssignedIn#2
   stackSites=0 stackLocals=0
-  local 5779:11 target: Node (const)
-  callee 5779:20 unwrapParens -> @unwrapParens
-  local 5780:11 value: Node (const)
-  callee 5780:19 unwrapParens -> @unwrapParens
-  callee 5783:7 unwrapParens -> @unwrapParens
-  local 5790:14 child: Node (const)
-  callee 5791:5 fieldsAssignedIn -> @fieldsAssignedIn
+  local 5782:11 target: Node (const)
+  callee 5782:20 unwrapParens -> @unwrapParens
+  local 5783:11 value: Node (const)
+  callee 5783:19 unwrapParens -> @unwrapParens
+  callee 5786:7 unwrapParens -> @unwrapParens
+  local 5793:14 child: Node (const)
+  callee 5794:5 fieldsAssignedIn -> @fieldsAssignedIn
 function taskPath(path: string): string -> @taskPath
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
@@ -29600,13 +29606,13 @@ function inLoopWithin(outer: Node, node: Node, at: Node): boolean -> @inLoopWith
   pointer node: size=40 writesThrough=false captured=false passedTo=isWithin#1 inLoopWithin#1
   pointer at: size=40 writesThrough=false captured=false passedTo=isWithin#0
   stackSites=0 stackLocals=0
-  callee 5803:8 isWithin -> @isWithin
-  local 5806:9 loop: boolean (const)
-  local 5810:14 child: Node (const)
-  callee 5811:9 inLoopWithin -> @inLoopWithin
+  callee 5806:8 isWithin -> @isWithin
+  local 5809:9 loop: boolean (const)
+  local 5813:14 child: Node (const)
+  callee 5814:9 inLoopWithin -> @inLoopWithin
 function checkChannels(program: CheckedProgram, table: TypeTable, summaries: ChannelSummaries, sig: FunctionSig, body: Node, scopeType: i32, out: ScopeFinding[]): void -> @checkChannels
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5846:7
+  sharedWrite: 5849:7
   escaping: scopeType
   calls: ChannelOps.constructor ScopeFinding.constructor channelUseMessage checkChannel checkChannelTypes collectChannelLocals collectChannelOps collectSpawns findScopeReceives findThisEscapes handsNullableChannel holdsChannelDeep nish_alloc_struct nish_array_grow nish_panic_index recordSenders walkChannelUses
   pointer program: size=640 writesThrough=false captured=false passedTo=checkChannelTypes#0 holdsChannelDeep#0 findThisEscapes#0 collectChannelLocals#0 walkChannelUses#0 collectSpawns#0 recordSenders#0 handsNullableChannel#0 findScopeReceives#0 collectChannelOps#0 checkChannel#0
@@ -29616,27 +29622,27 @@ function checkChannels(program: CheckedProgram, table: TypeTable, summaries: Cha
   pointer body: size=40 writesThrough=true captured=true passedTo=checkChannelTypes#3 findThisEscapes#2 collectChannelLocals#2 walkChannelUses#3 collectSpawns#1 findScopeReceives#2 collectChannelOps#2 checkChannel#3
   pointer out: size=0 writesThrough=true captured=false passedTo=checkChannelTypes#4 findThisEscapes#4 walkChannelUses#6 findScopeReceives#4 checkChannel#9
   stackSites=6 stackLocals=5
-  local 5832:9 locals: Local[] (const)
-  local 5833:9 decls: Node[] (const)
-  callee 5834:3 checkChannelTypes -> @checkChannelTypes
-  callee 5835:40 holdsChannelDeep -> @holdsChannelDeep
-  local 5836:11 parents: Node[] (const)
-  callee 5837:5 findThisEscapes -> @findThisEscapes
-  callee 5839:3 collectChannelLocals -> @collectChannelLocals
-  callee 5840:3 walkChannelUses -> @walkChannelUses
-  local 5841:9 spawns: Node[] (const)
-  callee 5842:3 collectSpawns -> @collectSpawns
-  callee 5843:3 recordSenders -> @recordSenders
-  local 5844:14 spawn: Node (const)
-  callee 5845:9 handsNullableChannel -> @handsNullableChannel
-  callee 5847:9 new ScopeFinding -> @ScopeFinding.constructor
-  callee 5847:33 channelUseMessage -> @channelUseMessage
-  callee 5851:3 findScopeReceives -> @findScopeReceives
-  local 5852:9 ops: ChannelOps (const)
-  callee 5852:15 new ChannelOps -> @ChannelOps.constructor
-  callee 5853:3 collectChannelOps -> @collectChannelOps
-  local 5854:7 c: i32 (let)
-  callee 5856:5 checkChannel -> @checkChannel
+  local 5835:9 locals: Local[] (const)
+  local 5836:9 decls: Node[] (const)
+  callee 5837:3 checkChannelTypes -> @checkChannelTypes
+  callee 5838:40 holdsChannelDeep -> @holdsChannelDeep
+  local 5839:11 parents: Node[] (const)
+  callee 5840:5 findThisEscapes -> @findThisEscapes
+  callee 5842:3 collectChannelLocals -> @collectChannelLocals
+  callee 5843:3 walkChannelUses -> @walkChannelUses
+  local 5844:9 spawns: Node[] (const)
+  callee 5845:3 collectSpawns -> @collectSpawns
+  callee 5846:3 recordSenders -> @recordSenders
+  local 5847:14 spawn: Node (const)
+  callee 5848:9 handsNullableChannel -> @handsNullableChannel
+  callee 5850:9 new ScopeFinding -> @ScopeFinding.constructor
+  callee 5850:33 channelUseMessage -> @channelUseMessage
+  callee 5854:3 findScopeReceives -> @findScopeReceives
+  local 5855:9 ops: ChannelOps (const)
+  callee 5855:15 new ChannelOps -> @ChannelOps.constructor
+  callee 5856:3 collectChannelOps -> @collectChannelOps
+  local 5857:7 c: i32 (let)
+  callee 5859:5 checkChannel -> @checkChannel
 function wrapsChannel(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @wrapsChannel
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -29644,8 +29650,8 @@ function wrapsChannel(program: CheckedProgram, table: TypeTable, type: i32): boo
   pointer program: size=640 writesThrough=false captured=false passedTo=isChannelType#0 holdsChannelType#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isChannelType#1 holdsChannelType#1
   stackSites=0 stackLocals=0
-  callee 5868:19 isChannelType -> @isChannelType
-  callee 5871:10 holdsChannelType -> @holdsChannelType
+  callee 5871:19 isChannelType -> @isChannelType
+  callee 5874:10 holdsChannelType -> @holdsChannelType
 function holdsChannelType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @holdsChannelType
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -29653,31 +29659,31 @@ function holdsChannelType(program: CheckedProgram, table: TypeTable, type: i32):
   pointer program: size=640 writesThrough=false captured=false passedTo=isChannelType#0 holdsChannelType#0 holdsChannelType#0 holdsChannelType#0 classLayoutOf#0 holdsChannelType#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isChannelType#1 TypeTable.kindOf#0 holdsChannelType#1 TypeTable.refOf#0 holdsChannelType#1 TypeTable.okOf#0 holdsChannelType#1 TypeTable.errOf#0 classLayoutOf#1 holdsChannelType#1
   stackSites=0 stackLocals=0
-  callee 5879:7 isChannelType -> @isChannelType
-  local 5882:9 kind: i32 (const)
-  callee 5882:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 5884:12 holdsChannelType -> @holdsChannelType
-  callee 5884:45 TypeTable.refOf -> @TypeTable.refOf
-  callee 5888:7 holdsChannelType -> @holdsChannelType
-  callee 5888:40 TypeTable.okOf -> @TypeTable.okOf
-  callee 5889:7 holdsChannelType -> @holdsChannelType
-  callee 5889:40 TypeTable.errOf -> @TypeTable.errOf
-  local 5892:9 info: StructInfo | null (const)
-  callee 5892:16 classLayoutOf -> @classLayoutOf
-  local 5893:9 instance: StructInstantiation | null (const)
-  local 5897:14 arg: i32 (const)
-  callee 5898:9 holdsChannelType -> @holdsChannelType
+  callee 5882:7 isChannelType -> @isChannelType
+  local 5885:9 kind: i32 (const)
+  callee 5885:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 5887:12 holdsChannelType -> @holdsChannelType
+  callee 5887:45 TypeTable.refOf -> @TypeTable.refOf
+  callee 5891:7 holdsChannelType -> @holdsChannelType
+  callee 5891:40 TypeTable.okOf -> @TypeTable.okOf
+  callee 5892:7 holdsChannelType -> @holdsChannelType
+  callee 5892:40 TypeTable.errOf -> @TypeTable.errOf
+  local 5895:9 info: StructInfo | null (const)
+  callee 5895:16 classLayoutOf -> @classLayoutOf
+  local 5896:9 instance: StructInstantiation | null (const)
+  local 5900:14 arg: i32 (const)
+  callee 5901:9 holdsChannelType -> @holdsChannelType
 function wrappedChannelMessage(table: TypeTable, type: i32): string -> @wrappedChannelMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.typeName channelUseMessage nish_str_concat
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0
   stackSites=0 stackLocals=0
-  callee 5906:3 channelUseMessage -> @channelUseMessage
-  callee 5906:26 TypeTable.typeName -> @TypeTable.typeName
+  callee 5909:3 channelUseMessage -> @channelUseMessage
+  callee 5909:26 TypeTable.typeName -> @TypeTable.typeName
 function checkChannelTypes(program: CheckedProgram, table: TypeTable, sig: FunctionSig, body: Node, out: ScopeFinding[]): void -> @checkChannelTypes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5924:7
+  sharedWrite: 5927:7
   calls: ScopeFinding.constructor checkLocalTypes nish_alloc_struct nish_array_grow nish_panic_index wrappedChannelMessage wrapsChannel
   pointer program: size=640 writesThrough=false captured=false passedTo=wrapsChannel#0 wrapsChannel#0 checkLocalTypes#0
   pointer table: size=96 writesThrough=false captured=false passedTo=wrapsChannel#1 wrappedChannelMessage#0 wrapsChannel#1 wrappedChannelMessage#0 checkLocalTypes#1
@@ -29685,50 +29691,50 @@ function checkChannelTypes(program: CheckedProgram, table: TypeTable, sig: Funct
   pointer body: size=40 writesThrough=true captured=true passedTo=checkLocalTypes#2
   pointer out: size=0 writesThrough=true captured=false passedTo=checkLocalTypes#3
   stackSites=0 stackLocals=0
-  local 5921:7 k: i32 (let)
-  callee 5923:9 wrapsChannel -> @wrapsChannel
-  callee 5924:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 5924:43 wrappedChannelMessage -> @wrappedChannelMessage
-  callee 5929:32 wrapsChannel -> @wrapsChannel
-  callee 5930:14 new ScopeFinding -> @ScopeFinding.constructor
-  callee 5930:41 wrappedChannelMessage -> @wrappedChannelMessage
-  callee 5933:3 checkLocalTypes -> @checkLocalTypes
+  local 5924:7 k: i32 (let)
+  callee 5926:9 wrapsChannel -> @wrapsChannel
+  callee 5927:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 5927:43 wrappedChannelMessage -> @wrappedChannelMessage
+  callee 5932:32 wrapsChannel -> @wrapsChannel
+  callee 5933:14 new ScopeFinding -> @ScopeFinding.constructor
+  callee 5933:41 wrappedChannelMessage -> @wrappedChannelMessage
+  callee 5936:3 checkLocalTypes -> @checkLocalTypes
 function checkFieldTypes(program: CheckedProgram, table: TypeTable, node: Node, out: ScopeFinding[]): void -> @checkFieldTypes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5949:11
+  sharedWrite: 5952:11
   calls: CheckedProgram.struct ScopeFinding.constructor StructInfo.field nish_alloc_struct nish_array_grow nish_panic_index wrappedChannelMessage wrapsChannel
   pointer program: size=640 writesThrough=false captured=false passedTo=CheckedProgram.struct#0 wrapsChannel#0
   pointer table: size=96 writesThrough=false captured=false passedTo=wrapsChannel#1 wrappedChannelMessage#0
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 5943:14 decl: Node (const)
-  local 5944:11 info: StructInfo | null (const)
-  callee 5944:61 CheckedProgram.struct -> @CheckedProgram.struct
-  local 5946:18 member: Node (const)
-  local 5947:15 field: FieldInfo | null (const)
-  callee 5947:67 StructInfo.field -> @StructInfo.field
-  callee 5948:31 wrapsChannel -> @wrapsChannel
-  callee 5949:20 new ScopeFinding -> @ScopeFinding.constructor
-  callee 5949:45 wrappedChannelMessage -> @wrappedChannelMessage
+  local 5946:14 decl: Node (const)
+  local 5947:11 info: StructInfo | null (const)
+  callee 5947:61 CheckedProgram.struct -> @CheckedProgram.struct
+  local 5949:18 member: Node (const)
+  local 5950:15 field: FieldInfo | null (const)
+  callee 5950:67 StructInfo.field -> @StructInfo.field
+  callee 5951:31 wrapsChannel -> @wrapsChannel
+  callee 5952:20 new ScopeFinding -> @ScopeFinding.constructor
+  callee 5952:45 wrappedChannelMessage -> @wrappedChannelMessage
 function checkLocalTypes(program: CheckedProgram, table: TypeTable, node: Node, out: ScopeFinding[]): boolean -> @checkLocalTypes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 5969:7
+  sharedWrite: 5972:7
   calls: ScopeFinding.constructor checkLocalTypes nish_alloc_struct nish_array_grow nish_panic_index wrappedChannelMessage wrapsChannel
   pointer program: size=640 writesThrough=false captured=false passedTo=wrapsChannel#0 checkLocalTypes#0
   pointer table: size=96 writesThrough=false captured=false passedTo=wrapsChannel#1 wrappedChannelMessage#0 checkLocalTypes#1
   pointer node: size=40 writesThrough=true captured=true passedTo=ScopeFinding.constructor#1
   pointer out: size=0 writesThrough=true captured=false passedTo=checkLocalTypes#3
   stackSites=0 stackLocals=0
-  local 5967:11 local: Local | null (const)
-  callee 5968:27 wrapsChannel -> @wrapsChannel
-  callee 5969:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 5969:39 wrappedChannelMessage -> @wrappedChannelMessage
-  local 5973:14 child: Node (const)
-  callee 5974:9 checkLocalTypes -> @checkLocalTypes
+  local 5970:11 local: Local | null (const)
+  callee 5971:27 wrapsChannel -> @wrapsChannel
+  callee 5972:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 5972:39 wrappedChannelMessage -> @wrappedChannelMessage
+  local 5976:14 child: Node (const)
+  callee 5977:9 checkLocalTypes -> @checkLocalTypes
 function findThisEscapes(program: CheckedProgram, table: TypeTable, node: Node, parents: Node[], out: ScopeFinding[]): boolean -> @findThisEscapes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 6001:5
+  sharedWrite: 6004:5
   escaping: node
   calls: ScopeFinding.constructor channelSendersMessage findThisEscapes isOwnFieldUse nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat oneLine thisStatement
   pointer program: size=640 writesThrough=false captured=false passedTo=isOwnFieldUse#0 oneLine#0 findThisEscapes#0
@@ -29737,21 +29743,21 @@ function findThisEscapes(program: CheckedProgram, table: TypeTable, node: Node, 
   pointer parents: size=0 writesThrough=true captured=false passedTo=isOwnFieldUse#2 thisStatement#1 findThisEscapes#3
   pointer out: size=0 writesThrough=true captured=false passedTo=findThisEscapes#4
   stackSites=0 stackLocals=0
-  callee 6000:32 isOwnFieldUse -> @isOwnFieldUse
-  callee 6002:7 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6004:9 channelSendersMessage -> @channelSendersMessage
-  callee 6006:78 oneLine -> @oneLine
-  callee 6006:95 thisStatement -> @thisStatement
-  local 6014:7 found: boolean (let)
-  local 6015:14 child: Node (const)
-  callee 6016:22 findThisEscapes -> @findThisEscapes
+  callee 6003:32 isOwnFieldUse -> @isOwnFieldUse
+  callee 6005:7 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6007:9 channelSendersMessage -> @channelSendersMessage
+  callee 6009:78 oneLine -> @oneLine
+  callee 6009:95 thisStatement -> @thisStatement
+  local 6017:7 found: boolean (let)
+  local 6018:14 child: Node (const)
+  callee 6019:22 findThisEscapes -> @findThisEscapes
 function outsideParens(parents: Node[], depth: i32): i32 -> @outsideParens
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: depth
   calls: nish_panic_index
   pointer parents: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 6024:7 d: i32 (let)
+  local 6027:7 d: i32 (let)
 function isOwnFieldUse(program: CheckedProgram, table: TypeTable, parents: Node[]): boolean -> @isOwnFieldUse
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.stripNull holdsChannelDeep isChannelType isInertValue isStoreTarget nish_panic_index nish_panic_overflow outsideParens
@@ -29759,35 +29765,35 @@ function isOwnFieldUse(program: CheckedProgram, table: TypeTable, parents: Node[
   pointer table: size=96 writesThrough=false captured=false passedTo=isInertValue#0 isChannelType#1 TypeTable.stripNull#0 holdsChannelDeep#1 TypeTable.stripNull#0
   pointer parents: size=0 writesThrough=true captured=false passedTo=outsideParens#0 outsideParens#0 isStoreTarget#1 outsideParens#0 isStoreTarget#1
   stackSites=0 stackLocals=0
-  local 6047:9 fieldDepth: i32 (const)
-  callee 6047:22 outsideParens -> @outsideParens
-  local 6051:9 field: Node (const)
-  local 6052:9 usedAt: i32 (const)
-  callee 6052:18 outsideParens -> @outsideParens
-  local 6053:9 fieldAt: Node (const)
-  callee 6054:7 isStoreTarget -> @isStoreTarget
-  local 6057:9 user: Node | null (const)
-  local 6061:9 type: i32 (const)
-  callee 6062:7 isInertValue -> @isInertValue
-  callee 6070:5 isChannelType -> @isChannelType
-  callee 6070:35 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 6071:5 holdsChannelDeep -> @holdsChannelDeep
-  callee 6071:38 TypeTable.stripNull -> @TypeTable.stripNull
-  local 6075:9 storedAt: i32 (const)
-  callee 6075:20 outsideParens -> @outsideParens
-  callee 6076:10 isStoreTarget -> @isStoreTarget
+  local 6050:9 fieldDepth: i32 (const)
+  callee 6050:22 outsideParens -> @outsideParens
+  local 6054:9 field: Node (const)
+  local 6055:9 usedAt: i32 (const)
+  callee 6055:18 outsideParens -> @outsideParens
+  local 6056:9 fieldAt: Node (const)
+  callee 6057:7 isStoreTarget -> @isStoreTarget
+  local 6060:9 user: Node | null (const)
+  local 6064:9 type: i32 (const)
+  callee 6065:7 isInertValue -> @isInertValue
+  callee 6073:5 isChannelType -> @isChannelType
+  callee 6073:35 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 6074:5 holdsChannelDeep -> @holdsChannelDeep
+  callee 6074:38 TypeTable.stripNull -> @TypeTable.stripNull
+  local 6078:9 storedAt: i32 (const)
+  callee 6078:20 outsideParens -> @outsideParens
+  callee 6079:10 isStoreTarget -> @isStoreTarget
 function isInertValue(table: TypeTable, type: i32): boolean -> @isInertValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isArray TypeTable.refOf TypeTable.stripNull isInertValue isScalarArgument
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 isScalarArgument#0 TypeTable.isArray#0 isInertValue#0 TypeTable.refOf#0
   stackSites=0 stackLocals=0
-  local 6084:9 t: i32 (const)
-  callee 6084:13 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 6085:25 isScalarArgument -> @isScalarArgument
-  callee 6088:10 TypeTable.isArray -> @TypeTable.isArray
-  callee 6088:30 isInertValue -> @isInertValue
-  callee 6088:50 TypeTable.refOf -> @TypeTable.refOf
+  local 6087:9 t: i32 (const)
+  callee 6087:13 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 6088:25 isScalarArgument -> @isScalarArgument
+  callee 6091:10 TypeTable.isArray -> @TypeTable.isArray
+  callee 6091:30 isInertValue -> @isInertValue
+  callee 6091:50 TypeTable.refOf -> @TypeTable.refOf
 function holdsChannelDeep(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @holdsChannelDeep
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -29795,12 +29801,12 @@ function holdsChannelDeep(program: CheckedProgram, table: TypeTable, type: i32):
   pointer program: size=640 writesThrough=false captured=false passedTo=holdsChannelField#0 classLayoutOf#0 holdsChannelField#0
   pointer table: size=96 writesThrough=false captured=false passedTo=holdsChannelField#1 classLayoutOf#1 holdsChannelField#1 TypeTable.stripNull#0
   stackSites=0 stackLocals=0
-  callee 6093:7 holdsChannelField -> @holdsChannelField
-  local 6096:9 info: StructInfo | null (const)
-  callee 6096:16 classLayoutOf -> @classLayoutOf
-  local 6100:14 field: FieldInfo (const)
-  callee 6101:9 holdsChannelField -> @holdsChannelField
-  callee 6101:43 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 6096:7 holdsChannelField -> @holdsChannelField
+  local 6099:9 info: StructInfo | null (const)
+  callee 6099:16 classLayoutOf -> @classLayoutOf
+  local 6103:14 field: FieldInfo (const)
+  callee 6104:9 holdsChannelField -> @holdsChannelField
+  callee 6104:43 TypeTable.stripNull -> @TypeTable.stripNull
 function handsNullableChannel(program: CheckedProgram, table: TypeTable, spawn: Node): boolean -> @handsNullableChannel
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isNullable TypeTable.stripNull holdsChannelField isChannelType spawnCallee taskArgTypeOf
@@ -29808,15 +29814,15 @@ function handsNullableChannel(program: CheckedProgram, table: TypeTable, spawn: 
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.isNullable#0 TypeTable.stripNull#0 isChannelType#1 holdsChannelField#1
   pointer spawn: size=40 writesThrough=false captured=false passedTo=spawnCallee#1
   stackSites=0 stackLocals=0
-  local 6115:9 callee: FunctionSig | null (const)
-  callee 6115:18 spawnCallee -> @spawnCallee
-  local 6116:9 arg: i32 (const)
-  callee 6116:38 taskArgTypeOf -> @taskArgTypeOf
-  callee 6117:19 TypeTable.isNullable -> @TypeTable.isNullable
-  local 6118:11 inner: i32 (const)
-  callee 6118:19 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 6119:12 isChannelType -> @isChannelType
-  callee 6119:52 holdsChannelField -> @holdsChannelField
+  local 6118:9 callee: FunctionSig | null (const)
+  callee 6118:18 spawnCallee -> @spawnCallee
+  local 6119:9 arg: i32 (const)
+  callee 6119:38 taskArgTypeOf -> @taskArgTypeOf
+  callee 6120:19 TypeTable.isNullable -> @TypeTable.isNullable
+  local 6121:11 inner: i32 (const)
+  callee 6121:19 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 6122:12 isChannelType -> @isChannelType
+  callee 6122:52 holdsChannelField -> @holdsChannelField
 function holdsChannelField(program: CheckedProgram, table: TypeTable, type: i32, nullable: boolean): boolean -> @holdsChannelField
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -29824,40 +29830,40 @@ function holdsChannelField(program: CheckedProgram, table: TypeTable, type: i32,
   pointer program: size=640 writesThrough=false captured=false passedTo=classLayoutOf#0 isChannelType#0
   pointer table: size=96 writesThrough=false captured=false passedTo=classLayoutOf#1 TypeTable.isNullable#0 isChannelType#1 TypeTable.stripNull#0
   stackSites=0 stackLocals=0
-  local 6131:9 info: StructInfo | null (const)
-  callee 6131:16 classLayoutOf -> @classLayoutOf
-  local 6135:14 field: FieldInfo (const)
-  local 6136:11 maybe: boolean (const)
-  callee 6136:19 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 6137:33 isChannelType -> @isChannelType
-  callee 6137:63 TypeTable.stripNull -> @TypeTable.stripNull
+  local 6134:9 info: StructInfo | null (const)
+  callee 6134:16 classLayoutOf -> @classLayoutOf
+  local 6138:14 field: FieldInfo (const)
+  local 6139:11 maybe: boolean (const)
+  callee 6139:19 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 6140:33 isChannelType -> @isChannelType
+  callee 6140:63 TypeTable.stripNull -> @TypeTable.stripNull
 function recordSenders(program: CheckedProgram, table: TypeTable, summaries: ChannelSummaries, spawns: Node[]): void -> @recordSenders
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 6186:5
+  sharedWrite: 6189:5
   calls: ChannelSummaries.may classLayoutOf isChannelType nish_array_grow parallelBodyOf spawnCallee taskArgTypeOf taskPath
   pointer program: size=640 writesThrough=false captured=false passedTo=spawnCallee#0 isChannelType#0 classLayoutOf#0 isChannelType#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isChannelType#1 classLayoutOf#1 isChannelType#1
   pointer summaries: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.may#0
   pointer spawns: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 6156:14 spawn: Node (const)
-  local 6157:11 callee: FunctionSig | null (const)
-  callee 6157:20 spawnCallee -> @spawnCallee
-  local 6161:11 instance: Instantiation | null (const)
-  local 6162:11 entry: FunctionSig | null (const)
-  callee 6162:19 parallelBodyOf -> @parallelBodyOf
-  local 6163:11 arg: i32 (const)
-  callee 6163:17 taskArgTypeOf -> @taskArgTypeOf
-  local 6167:11 paths: string[] (const)
-  callee 6168:9 isChannelType -> @isChannelType
-  local 6171:13 info: StructInfo | null (const)
-  callee 6171:20 classLayoutOf -> @classLayoutOf
-  local 6173:20 field: FieldInfo (const)
-  callee 6174:15 isChannelType -> @isChannelType
-  local 6180:11 senders: string[] (const)
-  local 6181:16 path: string (const)
-  callee 6182:11 ChannelSummaries.may -> @ChannelSummaries.may
-  callee 6182:37 taskPath -> @taskPath
+  local 6159:14 spawn: Node (const)
+  local 6160:11 callee: FunctionSig | null (const)
+  callee 6160:20 spawnCallee -> @spawnCallee
+  local 6164:11 instance: Instantiation | null (const)
+  local 6165:11 entry: FunctionSig | null (const)
+  callee 6165:19 parallelBodyOf -> @parallelBodyOf
+  local 6166:11 arg: i32 (const)
+  callee 6166:17 taskArgTypeOf -> @taskArgTypeOf
+  local 6170:11 paths: string[] (const)
+  callee 6171:9 isChannelType -> @isChannelType
+  local 6174:13 info: StructInfo | null (const)
+  callee 6174:20 classLayoutOf -> @classLayoutOf
+  local 6176:20 field: FieldInfo (const)
+  callee 6177:15 isChannelType -> @isChannelType
+  local 6183:11 senders: string[] (const)
+  local 6184:16 path: string (const)
+  callee 6185:11 ChannelSummaries.may -> @ChannelSummaries.may
+  callee 6185:37 taskPath -> @taskPath
 function findScopeReceives(program: CheckedProgram, summaries: ChannelSummaries, node: Node, scopeType: i32, out: ScopeFinding[]): void -> @findScopeReceives
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walkScopeReceives
@@ -29868,16 +29874,16 @@ function findScopeReceives(program: CheckedProgram, summaries: ChannelSummaries,
   pointer node: size=40 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=walkScopeReceives#4 findScopeReceives#4
   stackSites=0 stackLocals=0
-  local 6202:9 i: i32 (let)
-  local 6204:13 name: string (const)
-  callee 6204:20 firstScopeName -> @firstScopeName
-  local 6206:13 j: i32 (let)
-  callee 6208:11 walkScopeReceives -> @walkScopeReceives
-  local 6215:14 child: Node (const)
-  callee 6216:5 findScopeReceives -> @findScopeReceives
+  local 6205:9 i: i32 (let)
+  local 6207:13 name: string (const)
+  callee 6207:20 firstScopeName -> @firstScopeName
+  local 6209:13 j: i32 (let)
+  callee 6211:11 walkScopeReceives -> @walkScopeReceives
+  local 6218:14 child: Node (const)
+  callee 6219:5 findScopeReceives -> @findScopeReceives
 function walkScopeReceives(program: CheckedProgram, summaries: ChannelSummaries, node: Node, name: string, out: ScopeFinding[]): void -> @walkScopeReceives
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 6233:5
+  sharedWrite: 6236:5
   escaping: name node
   calls: ScopeFinding.constructor channelReceiverMessage nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat receiveWhat spawnCallee walkScopeReceives
   pointer program: size=640 writesThrough=false captured=false passedTo=receiveWhat#0 spawnCallee#0 walkScopeReceives#0
@@ -29885,14 +29891,14 @@ function walkScopeReceives(program: CheckedProgram, summaries: ChannelSummaries,
   pointer node: size=40 writesThrough=true captured=true passedTo=receiveWhat#2 ScopeFinding.constructor#1 spawnCallee#1
   pointer out: size=0 writesThrough=true captured=false passedTo=walkScopeReceives#4
   stackSites=0 stackLocals=0
-  local 6231:9 what: string (const)
-  callee 6231:16 receiveWhat -> @receiveWhat
-  callee 6233:14 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6233:37 channelReceiverMessage -> @channelReceiverMessage
-  local 6238:9 below: Node (const)
-  callee 6238:17 spawnCallee -> @spawnCallee
-  local 6239:14 child: Node (const)
-  callee 6240:5 walkScopeReceives -> @walkScopeReceives
+  local 6234:9 what: string (const)
+  callee 6234:16 receiveWhat -> @receiveWhat
+  callee 6236:14 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6236:37 channelReceiverMessage -> @channelReceiverMessage
+  local 6241:9 below: Node (const)
+  callee 6241:17 spawnCallee -> @spawnCallee
+  local 6242:14 child: Node (const)
+  callee 6243:5 walkScopeReceives -> @walkScopeReceives
 function receiveWhat(program: CheckedProgram, summaries: ChannelSummaries, node: Node): string -> @receiveWhat
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: ChannelSummaries.receivesHanded isChannelReader isSpawnEntry nish_panic_index nish_str_concat
@@ -29900,14 +29906,14 @@ function receiveWhat(program: CheckedProgram, summaries: ChannelSummaries, node:
   pointer summaries: size=40 writesThrough=false captured=false passedTo=ChannelSummaries.receivesHanded#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 6247:11 read: FunctionSig | null (const)
-  callee 6248:29 isChannelReader -> @isChannelReader
-  local 6254:9 callee: FunctionSig | null (const)
-  callee 6255:26 isSpawnEntry -> @isSpawnEntry
-  callee 6255:51 ChannelSummaries.receivesHanded -> @ChannelSummaries.receivesHanded
+  local 6250:11 read: FunctionSig | null (const)
+  callee 6251:29 isChannelReader -> @isChannelReader
+  local 6257:9 callee: FunctionSig | null (const)
+  callee 6258:26 isSpawnEntry -> @isSpawnEntry
+  callee 6258:51 ChannelSummaries.receivesHanded -> @ChannelSummaries.receivesHanded
 function checkChannel(program: CheckedProgram, table: TypeTable, summaries: ChannelSummaries, body: Node, local: Local, decl: Node, spawns: Node[], ops: ChannelOps, scopeType: i32, out: ScopeFinding[]): void -> @checkChannel
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 6278:5
+  sharedWrite: 6281:5
   escaping: scopeType
   calls: ChannelSummaries.may ChannelSummaries.untraceable ScopeFinding.constructor candidateScopes channelBothMessage channelDeclareMessage channelElement channelOrderMessage channelReceiverMessage channelSendersMessage channelUseMessage checkParentOps inLoopWithin nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat oneLine parallelBodyOf pathsInTaskArgument recordSeal scopeNameOf spawnCallee spawnOn spawnReceiver statementSiteOf taskPath
   pointer program: size=640 writesThrough=false captured=false passedTo=channelElement#0 candidateScopes#0 pathsInTaskArgument#0 spawnReceiver#0 spawnOn#0 recordSeal#0 spawnCallee#0 oneLine#0 oneLine#0 checkParentOps#0
@@ -29920,70 +29926,70 @@ function checkChannel(program: CheckedProgram, table: TypeTable, summaries: Chan
   pointer ops: size=24 writesThrough=false captured=false passedTo=checkParentOps#6
   pointer out: size=0 writesThrough=true captured=false passedTo=checkParentOps#7
   stackSites=2 stackLocals=2
-  local 6274:9 site: StatementSite (const)
-  callee 6274:16 statementSiteOf -> @statementSiteOf
-  local 6275:9 block: Node | null (const)
-  local 6276:9 element: i32 (const)
-  callee 6276:19 channelElement -> @channelElement
-  callee 6279:7 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6281:9 channelDeclareMessage -> @channelDeclareMessage
-  local 6286:9 candidates: ScopeSite[] (const)
-  callee 6286:22 candidateScopes -> @candidateScopes
-  local 6288:9 holders: Node[] (const)
-  local 6289:9 paths: string[] (const)
-  local 6290:14 spawn: Node (const)
-  local 6291:11 found: string[] (const)
-  callee 6291:19 pathsInTaskArgument -> @pathsInTaskArgument
-  callee 6293:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6293:40 channelUseMessage -> @channelUseMessage
-  local 6301:7 chosen: ScopeSite | null (let)
-  local 6302:7 split: Node | null (let)
-  local 6303:7 splitScope: ScopeSite | null (let)
-  local 6304:14 spawn: Node (const)
-  local 6305:11 receiver: Local | null (const)
-  callee 6305:22 spawnReceiver -> @spawnReceiver
-  local 6306:9 found: ScopeSite | null (let)
-  local 6307:16 candidate: ScopeSite (const)
-  local 6308:13 own: Local | null (const)
-  local 6314:13 what: string (const)
-  callee 6316:9 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6318:11 channelDeclareMessage -> @channelDeclareMessage
-  callee 6333:7 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6335:9 channelSendersMessage -> @channelSendersMessage
-  callee 6337:78 spawnOn -> @spawnOn
-  callee 6337:102 scopeNameOf -> @scopeNameOf
-  callee 6348:7 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6350:9 channelDeclareMessage -> @channelDeclareMessage
-  callee 6355:3 recordSeal -> @recordSeal
-  local 6357:7 receiver: Node | null (let)
-  local 6358:7 k: i32 (let)
-  local 6360:11 spawn: Node (const)
-  local 6361:11 callee: FunctionSig | null (const)
-  callee 6361:20 spawnCallee -> @spawnCallee
-  local 6362:11 entry: FunctionSig | null (const)
-  callee 6362:64 parallelBodyOf -> @parallelBodyOf
-  local 6364:13 path: string (const)
-  callee 6364:20 taskPath -> @taskPath
-  local 6365:13 sends: boolean (const)
-  callee 6365:21 ChannelSummaries.may -> @ChannelSummaries.may
-  local 6366:13 receives: boolean (const)
-  callee 6366:24 ChannelSummaries.may -> @ChannelSummaries.may
-  callee 6369:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6371:13 channelBothMessage -> @channelBothMessage
-  callee 6372:15 ChannelSummaries.untraceable -> @ChannelSummaries.untraceable
-  callee 6382:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6382:35 channelReceiverMessage -> @channelReceiverMessage
-  callee 6386:23 inLoopWithin -> @inLoopWithin
-  callee 6388:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6390:13 channelReceiverMessage -> @channelReceiverMessage
-  callee 6397:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6399:13 channelOrderMessage -> @channelOrderMessage
-  callee 6401:15 oneLine -> @oneLine
-  callee 6402:15 oneLine -> @oneLine
-  callee 6414:3 checkParentOps -> @checkParentOps
+  local 6277:9 site: StatementSite (const)
+  callee 6277:16 statementSiteOf -> @statementSiteOf
+  local 6278:9 block: Node | null (const)
+  local 6279:9 element: i32 (const)
+  callee 6279:19 channelElement -> @channelElement
+  callee 6282:7 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6284:9 channelDeclareMessage -> @channelDeclareMessage
+  local 6289:9 candidates: ScopeSite[] (const)
+  callee 6289:22 candidateScopes -> @candidateScopes
+  local 6291:9 holders: Node[] (const)
+  local 6292:9 paths: string[] (const)
+  local 6293:14 spawn: Node (const)
+  local 6294:11 found: string[] (const)
+  callee 6294:19 pathsInTaskArgument -> @pathsInTaskArgument
+  callee 6296:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6296:40 channelUseMessage -> @channelUseMessage
+  local 6304:7 chosen: ScopeSite | null (let)
+  local 6305:7 split: Node | null (let)
+  local 6306:7 splitScope: ScopeSite | null (let)
+  local 6307:14 spawn: Node (const)
+  local 6308:11 receiver: Local | null (const)
+  callee 6308:22 spawnReceiver -> @spawnReceiver
+  local 6309:9 found: ScopeSite | null (let)
+  local 6310:16 candidate: ScopeSite (const)
+  local 6311:13 own: Local | null (const)
+  local 6317:13 what: string (const)
+  callee 6319:9 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6321:11 channelDeclareMessage -> @channelDeclareMessage
+  callee 6336:7 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6338:9 channelSendersMessage -> @channelSendersMessage
+  callee 6340:78 spawnOn -> @spawnOn
+  callee 6340:102 scopeNameOf -> @scopeNameOf
+  callee 6351:7 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6353:9 channelDeclareMessage -> @channelDeclareMessage
+  callee 6358:3 recordSeal -> @recordSeal
+  local 6360:7 receiver: Node | null (let)
+  local 6361:7 k: i32 (let)
+  local 6363:11 spawn: Node (const)
+  local 6364:11 callee: FunctionSig | null (const)
+  callee 6364:20 spawnCallee -> @spawnCallee
+  local 6365:11 entry: FunctionSig | null (const)
+  callee 6365:64 parallelBodyOf -> @parallelBodyOf
+  local 6367:13 path: string (const)
+  callee 6367:20 taskPath -> @taskPath
+  local 6368:13 sends: boolean (const)
+  callee 6368:21 ChannelSummaries.may -> @ChannelSummaries.may
+  local 6369:13 receives: boolean (const)
+  callee 6369:24 ChannelSummaries.may -> @ChannelSummaries.may
+  callee 6372:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6374:13 channelBothMessage -> @channelBothMessage
+  callee 6375:15 ChannelSummaries.untraceable -> @ChannelSummaries.untraceable
+  callee 6385:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6385:35 channelReceiverMessage -> @channelReceiverMessage
+  callee 6389:23 inLoopWithin -> @inLoopWithin
+  callee 6391:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6393:13 channelReceiverMessage -> @channelReceiverMessage
+  callee 6400:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6402:13 channelOrderMessage -> @channelOrderMessage
+  callee 6404:15 oneLine -> @oneLine
+  callee 6405:15 oneLine -> @oneLine
+  callee 6417:3 checkParentOps -> @checkParentOps
 function checkParentOps(program: CheckedProgram, block: Node, index: i32, chosen: ScopeSite, local: Local, taskReceives: boolean, ops: ChannelOps, out: ScopeFinding[]): void -> @checkParentOps
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 6457:9
+  sharedWrite: 6460:9
   calls: ScopeFinding.constructor channelReceiverMessage channelSendersMessage nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat oneLine scopeNameOf statementIndexIn
   pointer program: size=640 writesThrough=false captured=false passedTo=oneLine#0
   pointer block: size=40 writesThrough=false captured=false passedTo=statementIndexIn#0
@@ -29992,46 +29998,46 @@ function checkParentOps(program: CheckedProgram, block: Node, index: i32, chosen
   pointer ops: size=24 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 6433:9 apart: boolean (const)
-  local 6434:7 lateSend: Node | null (let)
-  local 6435:7 k: i32 (let)
-  local 6437:11 ref: ChannelRef (const)
-  local 6438:11 node: Node (const)
-  local 6439:11 named: Local | null (const)
-  local 6441:13 at: i32 (const)
-  callee 6441:18 statementIndexIn -> @statementIndexIn
-  local 6448:13 using: i32 (const)
-  callee 6448:21 statementIndexIn -> @statementIndexIn
-  local 6449:13 afterUsing: boolean (const)
-  callee 6450:33 statementIndexIn -> @statementIndexIn
-  callee 6458:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6458:34 channelReceiverMessage -> @channelReceiverMessage
-  callee 6464:11 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6466:13 channelReceiverMessage -> @channelReceiverMessage
-  callee 6477:7 new ScopeFinding -> @ScopeFinding.constructor
-  callee 6479:9 channelSendersMessage -> @channelSendersMessage
-  callee 6481:21 oneLine -> @oneLine
-  callee 6481:93 scopeNameOf -> @scopeNameOf
+  local 6436:9 apart: boolean (const)
+  local 6437:7 lateSend: Node | null (let)
+  local 6438:7 k: i32 (let)
+  local 6440:11 ref: ChannelRef (const)
+  local 6441:11 node: Node (const)
+  local 6442:11 named: Local | null (const)
+  local 6444:13 at: i32 (const)
+  callee 6444:18 statementIndexIn -> @statementIndexIn
+  local 6451:13 using: i32 (const)
+  callee 6451:21 statementIndexIn -> @statementIndexIn
+  local 6452:13 afterUsing: boolean (const)
+  callee 6453:33 statementIndexIn -> @statementIndexIn
+  callee 6461:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6461:34 channelReceiverMessage -> @channelReceiverMessage
+  callee 6467:11 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6469:13 channelReceiverMessage -> @channelReceiverMessage
+  callee 6480:7 new ScopeFinding -> @ScopeFinding.constructor
+  callee 6482:9 channelSendersMessage -> @channelSendersMessage
+  callee 6484:21 oneLine -> @oneLine
+  callee 6484:93 scopeNameOf -> @scopeNameOf
 function statementIndexIn(block: Node, node: Node): i32 -> @statementIndexIn
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isWithin
   pointer block: size=40 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=isWithin#1
   stackSites=0 stackLocals=0
-  local 6490:7 i: i32 (let)
-  callee 6492:9 isWithin -> @isWithin
+  local 6493:7 i: i32 (let)
+  callee 6495:9 isWithin -> @isWithin
 function recordSeal(program: CheckedProgram, scope: Node, channel: Node): void -> @recordSeal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 6505:9
+  sharedWrite: 6508:9
   escaping: channel
   calls: ScopeChannels.constructor nish_alloc_struct nish_array_grow
   pointer program: size=640 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=ScopeChannels.constructor#1
   pointer channel: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 6502:14 record: ScopeChannels (const)
-  local 6510:9 record: ScopeChannels (const)
-  callee 6510:18 new ScopeChannels -> @ScopeChannels.constructor
+  local 6505:14 record: ScopeChannels (const)
+  local 6513:9 record: ScopeChannels (const)
+  callee 6513:18 new ScopeChannels -> @ScopeChannels.constructor
 module src/escape.ts
 import classifyUse from "./attributes" -> function @classifyUse
 import constructorOf from "./attributes" -> function @constructorOf
@@ -39389,6 +39395,7 @@ import Node from "./nodes" -> struct Node
 import ParentTable from "./parents" -> struct ParentTable
 import channelCapacityMessage from "./parallel" -> function @channelCapacityMessage
 import isChannelClass from "./parallel" -> function @isChannelClass
+import isThreadsStruct from "./parallel" -> function @isThreadsStruct
 import spawnFormFor from "./parallel" -> function @spawnFormFor
 import EnumInfo from "./program" -> struct EnumInfo
 import FunctionSig from "./program" -> struct FunctionSig
@@ -39807,51 +39814,64 @@ function takesDeclaredContext(value: Node): boolean -> @takesDeclaredContext
   callee 669:12 takesDeclaredContext -> @takesDeclaredContext
   callee 669:55 takesDeclaredContext -> @takesDeclaredContext
   callee 672:12 takesDeclaredContext -> @takesDeclaredContext
+function hasMethods(info: StructInfo): boolean -> @hasMethods
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer info: size=136 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function classLiteralMessage(name: string): string -> @classLiteralMessage
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkObjectLiteral [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   escaping: want
-  calls: CheckContext.error CheckContext.errorType StructInfo.field TypeTable.assignable TypeTable.isEntered TypeTable.isStruct TypeTable.stripNull TypeTable.typeName checkExpression holderLiteralMessage nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf structOf takesDeclaredContext
-  pointer ctx: size=224 writesThrough=true captured=true passedTo=CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.error#1
+  calls: CheckContext.error CheckContext.errorType StructInfo.field TypeTable.assignable TypeTable.isEntered TypeTable.isStruct TypeTable.stripNull TypeTable.typeName checkExpression classLiteralMessage hasMethods holderLiteralMessage isThreadsStruct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf structOf takesDeclaredContext
+  pointer ctx: size=224 writesThrough=true captured=true passedTo=CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=1 stackLocals=1
-  callee 679:20 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 679:39 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 680:12 CheckContext.errorType -> @CheckContext.errorType
-  local 685:9 target: i32 (const)
-  callee 685:18 TypeTable.stripNull -> @TypeTable.stripNull
-  local 686:9 info: StructInfo | null (const)
-  callee 686:16 structOf -> @structOf
-  callee 691:7 secretFieldOf -> @secretFieldOf
-  callee 692:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 692:32 holderLiteralMessage -> @holderLiteralMessage
-  local 694:9 seen: string[] (const)
-  local 695:14 prop: Node (const)
-  local 699:11 field: FieldInfo | null (const)
-  callee 699:19 StructInfo.field -> @StructInfo.field
-  callee 701:7 CheckContext.error -> @CheckContext.error
-  callee 701:28 TypeTable.typeName -> @TypeTable.typeName
-  local 704:9 duplicate: boolean (let)
-  local 705:16 name: string (const)
-  callee 711:7 CheckContext.error -> @CheckContext.error
-  local 715:11 value: Node (const)
-  local 719:11 context: i32 (const)
-  callee 719:21 takesDeclaredContext -> @takesDeclaredContext
-  callee 719:52 TypeTable.isEntered -> @TypeTable.isEntered
-  local 720:11 got: i32 (const)
-  callee 720:17 checkExpression -> @checkExpression
-  callee 721:29 TypeTable.assignable -> @TypeTable.assignable
-  local 722:13 spelled: string (const)
-  callee 722:23 TypeTable.typeName -> @TypeTable.typeName
-  callee 723:7 CheckContext.error -> @CheckContext.error
-  callee 725:40 TypeTable.typeName -> @TypeTable.typeName
-  callee 725:115 TypeTable.typeName -> @TypeTable.typeName
-  local 729:14 field: FieldInfo (const)
-  local 730:9 set: boolean (let)
-  local 731:16 name: string (const)
-  callee 737:7 CheckContext.error -> @CheckContext.error
-  callee 739:33 TypeTable.typeName -> @TypeTable.typeName
+  callee 688:20 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 688:39 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 689:12 CheckContext.errorType -> @CheckContext.errorType
+  local 694:9 target: i32 (const)
+  callee 694:18 TypeTable.stripNull -> @TypeTable.stripNull
+  local 695:9 info: StructInfo | null (const)
+  callee 695:16 structOf -> @structOf
+  callee 700:7 secretFieldOf -> @secretFieldOf
+  callee 701:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 701:32 holderLiteralMessage -> @holderLiteralMessage
+  callee 706:37 hasMethods -> @hasMethods
+  callee 706:58 isThreadsStruct -> @isThreadsStruct
+  callee 707:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 707:32 classLiteralMessage -> @classLiteralMessage
+  callee 707:52 TypeTable.typeName -> @TypeTable.typeName
+  local 709:9 seen: string[] (const)
+  local 710:14 prop: Node (const)
+  local 714:11 field: FieldInfo | null (const)
+  callee 714:19 StructInfo.field -> @StructInfo.field
+  callee 716:7 CheckContext.error -> @CheckContext.error
+  callee 716:28 TypeTable.typeName -> @TypeTable.typeName
+  local 719:9 duplicate: boolean (let)
+  local 720:16 name: string (const)
+  callee 726:7 CheckContext.error -> @CheckContext.error
+  local 730:11 value: Node (const)
+  local 734:11 context: i32 (const)
+  callee 734:21 takesDeclaredContext -> @takesDeclaredContext
+  callee 734:52 TypeTable.isEntered -> @TypeTable.isEntered
+  local 735:11 got: i32 (const)
+  callee 735:17 checkExpression -> @checkExpression
+  callee 736:29 TypeTable.assignable -> @TypeTable.assignable
+  local 737:13 spelled: string (const)
+  callee 737:23 TypeTable.typeName -> @TypeTable.typeName
+  callee 738:7 CheckContext.error -> @CheckContext.error
+  callee 740:40 TypeTable.typeName -> @TypeTable.typeName
+  callee 740:115 TypeTable.typeName -> @TypeTable.typeName
+  local 744:14 field: FieldInfo (const)
+  local 745:9 set: boolean (let)
+  local 746:16 name: string (const)
+  callee 752:7 CheckContext.error -> @CheckContext.error
+  callee 754:33 TypeTable.typeName -> @TypeTable.typeName
 function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMemberAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -39860,44 +39880,44 @@ function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32
   pointer expr: size=40 writesThrough=false captured=false passedTo=assignInto#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=isValueReceiver#2 checkExpression#2 refuseParameterMember#6 assignInto#2
   stackSites=0 stackLocals=0
-  local 749:9 target: Node (const)
-  local 750:9 receiverExpr: Node (const)
-  callee 751:8 isValueReceiver -> @isValueReceiver
-  callee 752:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 752:56 CheckContext.textOf -> @CheckContext.textOf
-  local 754:9 receiver: i32 (const)
-  callee 754:20 checkExpression -> @checkExpression
-  callee 758:7 refuseParameterMember -> @refuseParameterMember
-  callee 761:7 refuseSecretMember -> @refuseSecretMember
-  callee 764:7 TypeTable.isUnion -> @TypeTable.isUnion
+  local 764:9 target: Node (const)
+  local 765:9 receiverExpr: Node (const)
+  callee 766:8 isValueReceiver -> @isValueReceiver
   callee 767:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 769:66 TypeTable.typeName -> @TypeTable.typeName
-  callee 772:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 773:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 775:41 TypeTable.typeName -> @TypeTable.typeName
-  callee 778:7 TypeTable.isResult -> @TypeTable.isResult
-  callee 779:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 781:49 TypeTable.typeName -> @TypeTable.typeName
-  callee 784:8 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 785:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 787:58 TypeTable.typeName -> @TypeTable.typeName
-  local 790:9 info: StructInfo | null (const)
-  callee 790:16 structOf -> @structOf
-  callee 794:33 isCollectionStruct -> @isCollectionStruct
-  callee 794:62 CheckedProgram.isCollections -> @CheckedProgram.isCollections
-  callee 795:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 797:24 TypeTable.typeName -> @TypeTable.typeName
-  callee 800:7 refuseCollectionMember -> @refuseCollectionMember
-  local 803:9 field: FieldInfo | null (const)
-  callee 803:17 StructInfo.field -> @StructInfo.field
-  local 805:11 kind: string (const)
-  callee 806:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 808:56 TypeTable.typeName -> @TypeTable.typeName
-  callee 812:26 assignableReadonly -> @assignableReadonly
-  local 813:11 where: string (const)
-  callee 814:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 816:65 TypeTable.typeName -> @TypeTable.typeName
-  callee 819:10 assignInto -> @assignInto
+  callee 767:56 CheckContext.textOf -> @CheckContext.textOf
+  local 769:9 receiver: i32 (const)
+  callee 769:20 checkExpression -> @checkExpression
+  callee 773:7 refuseParameterMember -> @refuseParameterMember
+  callee 776:7 refuseSecretMember -> @refuseSecretMember
+  callee 779:7 TypeTable.isUnion -> @TypeTable.isUnion
+  callee 782:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 784:66 TypeTable.typeName -> @TypeTable.typeName
+  callee 787:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 788:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 790:41 TypeTable.typeName -> @TypeTable.typeName
+  callee 793:7 TypeTable.isResult -> @TypeTable.isResult
+  callee 794:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 796:49 TypeTable.typeName -> @TypeTable.typeName
+  callee 799:8 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 800:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 802:58 TypeTable.typeName -> @TypeTable.typeName
+  local 805:9 info: StructInfo | null (const)
+  callee 805:16 structOf -> @structOf
+  callee 809:33 isCollectionStruct -> @isCollectionStruct
+  callee 809:62 CheckedProgram.isCollections -> @CheckedProgram.isCollections
+  callee 810:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 812:24 TypeTable.typeName -> @TypeTable.typeName
+  callee 815:7 refuseCollectionMember -> @refuseCollectionMember
+  local 818:9 field: FieldInfo | null (const)
+  callee 818:17 StructInfo.field -> @StructInfo.field
+  local 820:11 kind: string (const)
+  callee 821:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 823:56 TypeTable.typeName -> @TypeTable.typeName
+  callee 827:26 assignableReadonly -> @assignableReadonly
+  local 828:11 where: string (const)
+  callee 829:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 831:65 TypeTable.typeName -> @TypeTable.typeName
+  callee 834:10 assignInto -> @assignInto
 function refuseCollectionMember(ctx: CheckContext, info: StructInfo, at: Node, call: boolean): boolean -> @refuseCollectionMember
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtProperty
@@ -39907,19 +39927,19 @@ function refuseCollectionMember(ctx: CheckContext, info: StructInfo, at: Node, c
   pointer info: size=136 writesThrough=false captured=false passedTo=isCollectionStruct#0 isMapOwner#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 iteratorPlaceReason#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
-  callee 832:8 isCollectionStruct -> @isCollectionStruct
-  callee 832:36 CheckedProgram.isCollections -> @CheckedProgram.isCollections
-  local 835:9 name: string (const)
-  local 836:9 isMap: boolean (const)
-  callee 836:17 isMapOwner -> @isMapOwner
-  local 843:9 shown: string (const)
-  callee 843:17 TypeTable.typeName -> @TypeTable.typeName
-  callee 849:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  local 853:11 spelled: string (const)
-  callee 854:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 854:62 iteratorPlaceReason -> @iteratorPlaceReason
-  callee 858:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 864:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 847:8 isCollectionStruct -> @isCollectionStruct
+  callee 847:36 CheckedProgram.isCollections -> @CheckedProgram.isCollections
+  local 850:9 name: string (const)
+  local 851:9 isMap: boolean (const)
+  callee 851:17 isMapOwner -> @isMapOwner
+  local 858:9 shown: string (const)
+  callee 858:17 TypeTable.typeName -> @TypeTable.typeName
+  callee 864:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  local 868:11 spelled: string (const)
+  callee 869:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 869:62 iteratorPlaceReason -> @iteratorPlaceReason
+  callee 873:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 879:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
 function iteratorPlaceReason(ctx: CheckContext, access: Node, call: boolean): string -> @iteratorPlaceReason
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ParentTable.constructor
@@ -39927,17 +39947,17 @@ function iteratorPlaceReason(ctx: CheckContext, access: Node, call: boolean): st
   pointer ctx: size=224 writesThrough=false captured=false
   pointer access: size=40 writesThrough=false captured=false passedTo=linkedParent#1
   stackSites=1 stackLocals=1
-  local 883:9 parents: ParentTable (const)
-  callee 883:19 new ParentTable -> @ParentTable.constructor
-  local 884:9 callNode: Node | null (const)
-  callee 884:20 linkedParent -> @linkedParent
-  local 888:7 node: Node (let)
-  local 889:7 parent: Node | null (let)
-  callee 889:16 linkedParent -> @linkedParent
-  callee 892:14 linkedParent -> @linkedParent
-  local 904:11 owner: Node | null (const)
-  callee 904:19 linkedParent -> @linkedParent
-  local 905:11 isArguments: boolean (const)
+  local 898:9 parents: ParentTable (const)
+  callee 898:19 new ParentTable -> @ParentTable.constructor
+  local 899:9 callNode: Node | null (const)
+  callee 899:20 linkedParent -> @linkedParent
+  local 903:7 node: Node (let)
+  local 904:7 parent: Node | null (let)
+  callee 904:16 linkedParent -> @linkedParent
+  callee 907:14 linkedParent -> @linkedParent
+  local 919:11 owner: Node | null (const)
+  callee 919:19 linkedParent -> @linkedParent
+  local 920:11 isArguments: boolean (const)
 function assignableReadonly(ctx: CheckContext, info: StructInfo, target: Node, receiverExpr: Node, op: string): boolean -> @assignableReadonly
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.field nish_str_eq
@@ -39946,9 +39966,9 @@ function assignableReadonly(ctx: CheckContext, info: StructInfo, target: Node, r
   pointer target: size=40 writesThrough=false captured=false
   pointer receiverExpr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 941:9 current: FunctionSig | null (const)
-  callee 948:7 StructInfo.field -> @StructInfo.field
-  local 951:9 owner: StructInfo | null (const)
+  local 956:9 current: FunctionSig | null (const)
+  callee 963:7 StructInfo.field -> @StructInfo.field
+  local 966:9 owner: StructInfo | null (const)
 function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 -> @checkStringProperty
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtProperty
@@ -39957,9 +39977,9 @@ function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   pointer ctx: size=224 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
-  callee 966:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 968:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 968:69 TypeTable.typeName -> @TypeTable.typeName
+  callee 981:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 983:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 983:69 TypeTable.typeName -> @TypeTable.typeName
 function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void -> @checkIndexArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -39968,12 +39988,12 @@ function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: st
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 973:9 type: i32 (const)
-  callee 973:16 checkExpression -> @checkExpression
-  callee 973:49 CheckContext.numberType -> @CheckContext.numberType
-  callee 974:28 isNumeric -> @isNumeric
-  callee 975:5 CheckContext.error -> @CheckContext.error
-  callee 975:63 TypeTable.typeName -> @TypeTable.typeName
+  local 988:9 type: i32 (const)
+  callee 988:16 checkExpression -> @checkExpression
+  callee 988:49 CheckContext.numberType -> @CheckContext.numberType
+  callee 989:28 isNumeric -> @isNumeric
+  callee 990:5 CheckContext.error -> @CheckContext.error
+  callee 990:63 TypeTable.typeName -> @TypeTable.typeName
 function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void -> @checkStringArgument
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
@@ -39982,10 +40002,10 @@ function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: s
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 980:9 type: i32 (const)
-  callee 980:16 checkExpression -> @checkExpression
-  callee 985:5 CheckContext.error -> @CheckContext.error
-  callee 985:75 TypeTable.typeName -> @TypeTable.typeName
+  local 995:9 type: i32 (const)
+  callee 995:16 checkExpression -> @checkExpression
+  callee 1000:5 CheckContext.error -> @CheckContext.error
+  callee 1000:75 TypeTable.typeName -> @TypeTable.typeName
 function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkStringMethod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
@@ -39996,24 +40016,24 @@ function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: No
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkIndexArgument#2 checkIndexArgument#2 checkIndexArgument#2 checkStringArgument#2 checkIndexArgument#2 checkStringArgument#2
   stackSites=0 stackLocals=0
-  local 990:9 name: string (const)
-  local 991:9 count: i32 (const)
-  callee 993:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 994:7 checkIndexArgument -> @checkIndexArgument
-  callee 996:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 1000:14 CheckContext.errorType -> @CheckContext.errorType
-  local 1002:16 arg: Node (const)
-  callee 1003:7 checkIndexArgument -> @checkIndexArgument
-  callee 1009:14 CheckContext.errorType -> @CheckContext.errorType
-  local 1011:16 arg: Node (const)
-  callee 1012:7 checkIndexArgument -> @checkIndexArgument
-  callee 1020:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 1022:5 checkStringArgument -> @checkStringArgument
-  callee 1024:7 checkIndexArgument -> @checkIndexArgument
-  callee 1026:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 1029:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 1030:7 checkStringArgument -> @checkStringArgument
-  callee 1034:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  local 1005:9 name: string (const)
+  local 1006:9 count: i32 (const)
+  callee 1008:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 1009:7 checkIndexArgument -> @checkIndexArgument
+  callee 1011:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 1015:14 CheckContext.errorType -> @CheckContext.errorType
+  local 1017:16 arg: Node (const)
+  callee 1018:7 checkIndexArgument -> @checkIndexArgument
+  callee 1024:14 CheckContext.errorType -> @CheckContext.errorType
+  local 1026:16 arg: Node (const)
+  callee 1027:7 checkIndexArgument -> @checkIndexArgument
+  callee 1035:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 1037:5 checkStringArgument -> @checkStringArgument
+  callee 1039:7 checkIndexArgument -> @checkIndexArgument
+  callee 1041:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 1044:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 1045:7 checkStringArgument -> @checkStringArgument
+  callee 1049:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
 module src/fusion.ts
 import CheckContext from "./context" -> struct CheckContext
 import isAssignmentOperator from "./emit-util" -> function @isAssignmentOperator
