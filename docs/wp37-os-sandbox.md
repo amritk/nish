@@ -124,7 +124,9 @@ a linked C object or a shared library is already confined (below, "What runs
 before the call"). The wrapper is `tests/cases/argv_echo.ll:211-217` as it is
 today (optimized, so the return carries `noundef`, `src/emit.ts:766-769`),
 apart from its first call; that call and the lines above `@main` are the
-proposal:
+proposal. The `nish_argv_init` call is there because `argv_echo` reads its
+arguments: the wrapper emits it only when `this.program.usesArgv`
+(`src/emit.ts:780`), with or without `--sandbox`:
 
 ```llvm
 @.sandbox.read = private unnamed_addr constant [11 x i8] c"/srv/data\00\00"
@@ -269,8 +271,13 @@ the sandbox's entry is first, and §8 pins that.
    `PR_CAPBSET_DROP` empties the bounding set first.
    `PR_CAP_AMBIENT_CLEAR_ALL` empties the ambient set, and `capset` empties
    the effective, permitted and inheritable sets, which needs no privilege.
-   `capget` then reads them back. Any set left non-empty is a failure in
-   both modes, exit 126. A process started as root, with file capabilities,
+   Each is then read back: the effective, permitted and inheritable sets by
+   `capget`, the ambient set by `PR_CAP_AMBIENT_IS_SET` for each capability,
+   and the bounding set by `PR_CAPBSET_READ`, required empty only when
+   `CAP_SETPCAP` was held. Without it the bounding set cannot be dropped,
+   and it need not be: with `NO_NEW_PRIVS` and an empty permitted set,
+   nothing the bounding set allows can be gained. Any checked set left
+   non-empty is a failure in both modes, exit 126. A process started as root, with file capabilities,
    or with a container's default set therefore runs confined and
    unprivileged. After step 2, a program it `exec`s gains nothing either.
    Without this step, an `ffi` callee holding `CAP_SYS_MODULE`,
@@ -346,7 +353,7 @@ request (open question 12). `dev.tty.legacy_tiocsti=0` (6.2) closes
 
 **What Landlock leaves alone.** `stat`, `lstat`, `readlink` and `access` are not
 Landlock rights, so `isDirectorySync` (`runtime/runtime-os.c:204`),
-`statMtimeSync` (`runtime/runtime-host.c:104`), `lstatOwnerModeSync` (`:128`),
+`statMtimeSync` (`nish_stat_mtime`, `runtime/runtime-host.c:102`), `lstatOwnerModeSync` (`nish_lstat_owner_mode`, `:126`),
 `isExecutableSync`'s `access(X_OK)` (`:135`) and `realpathSync`'s walk keep
 working without `fs.read`. All of them but `statMtimeSync` (`clock`) are
 `fs.read` in WP35's table, so a program that uses them has the bit anyway; the
@@ -568,7 +575,11 @@ live there. `runtime-sandbox.c` gets its own row in the table at
 `["runtime/runtime-sandbox.c", RUNTIME_SANDBOX_TEXT_BUDGET,
 "RUNTIME_SANDBOX_TEXT_BUDGET", []]`, its ceiling set from the implementation's
 measurement with the figure in the comment beside it. `node tests/run.js
-runtime-budget` gates it.
+runtime-budget` gates it. Splitting `nish_cpu_prime` out of
+`nish_cpu_count` (§4) edits `runtime/runtime-parallel.c`, so
+`RUNTIME_PARALLEL_TEXT_BUDGET` and `RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`
+(`tests/runtime-budgets.js:148`, `:228`) may move too, each with its
+comment's figure re-measured.
 
 **The CI grep step.** The fs checks pass on a kernel with Landlock and skip on
 one without, so a runner that lost Landlock would stay green. CLAUDE.md's rule
@@ -653,6 +664,10 @@ first as well, and the program then refuses to run (§3, §7).
 - the metadata reads of §4: `stat`, `lstat`, `statx`, `readlink`, `access`,
   `getxattr`, `listxattr`, `O_PATH`, `chdir`, `inotify` and `fanotify`;
 - io_uring, when both `net` and `process.spawn` are granted;
+- the same-uid routes no row kills: SysV shared memory and message queues
+  (`shmget`, `shmat`, `msgget`) shared with an unconfined process of the
+  same user, `perf_event_open` within what `perf_event_paranoid` allows, and
+  `kcmp`'s comparison of another process's descriptors;
 - signals to its own uid (until ABI 6), the clock, entropy and the
   environment;
 - under best-effort without Landlock, every file the user can reach,
