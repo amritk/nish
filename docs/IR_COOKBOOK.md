@@ -19819,6 +19819,55 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end builtin-net-udp -->
 
+### `nish:net`: `tcpListenFlags`
+
+`tcpListen` with a fourth argument (WP34 N5): flag `1` sets `SO_REUSEPORT`
+before the bind, so several listeners, in one process or in several, can
+share a port and the kernel spreads new connections across their accept
+queues. It is the same one call into `runtime/runtime-net.c` as `tcpListen`,
+with the same attributes: making, configuring and binding a socket never
+waits, so it keeps `willreturn`, and it is a write, so two calls never fold
+into one. The flags are a runtime value and are checked there, `-22` for any
+bit but `1`, so the IR carries no check of its own
+([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
+
+<!-- cookbook:begin builtin-net-reuseport -->
+```ts
+// WP34 N5: `tcpListenFlags`, `tcpListen` with a flags word. Flag 1 is
+// `SO_REUSEPORT`, so a second listener can take the first one's port. It lowers
+// to one call into runtime-net.c, `nounwind willreturn` as `tcpListen`'s is:
+// making, configuring and binding a socket never waits. The flags are checked
+// there, not in the IR, since they are a runtime value.
+import { netLocalPort, tcpListenFlags } from "nish:net"
+
+export const shared = (port: i32, backlog: i32): i32 => tcpListenFlags("0.0.0.0", port, backlog, 1)
+
+export const beside = (fd: i32, backlog: i32): i32 => shared(netLocalPort(fd), backlog)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"0.0.0.0\00" }, align 8
+
+declare noundef i32 @nish_net_local_port(i32 noundef) #0
+declare noundef i32 @nish_tcp_listen_flags(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #0
+
+define noundef i32 @shared(i32 noundef %port, i32 noundef %backlog) #0 {
+entry:
+  %0 = call i32 @nish_tcp_listen_flags(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*), i32 %port, i32 %backlog, i32 1)
+  ret i32 %0
+}
+
+define noundef i32 @beside(i32 noundef %fd, i32 noundef %backlog) #0 {
+entry:
+  %0 = call i32 @nish_net_local_port(i32 %fd)
+  %1 = tail call i32 @shared(i32 %0, i32 %backlog)
+  ret i32 %1
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end builtin-net-reuseport -->
+
 ### `nish:net`: `pollCreate`, `pollAdd` and `pollWait`
 
 The readiness loop (WP34 N5), one call into `runtime/runtime-net.c` each,
@@ -21324,6 +21373,7 @@ declare noundef i32 @nish_read_signal(i32 noundef) #3
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare noundef i32 @nish_net_local_port(i32 noundef) #2
 declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_tcp_listen_flags(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_tcp_accept(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #3
 declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
