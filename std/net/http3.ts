@@ -86,9 +86,11 @@
  * **No server push.** It never sends PUSH_PROMISE; a client's MAX_PUSH_ID is
  * allowed, checked and ignored.
  *
- * **Caps are start-up numbers**, all in `Http3Config`, and every buffer is
- * made by the constructor: the stream state for every QUIC stream slot, the
- * field section, the body chunk and the control frame. A field section's
+ * **Caps are start-up numbers**, all in `Http3Config`. The stream state for
+ * every QUIC stream slot and the control frame are made by the constructor;
+ * the body chunk and the field section are borrowed, around one read, from
+ * pools that a server's connections share (`share`) and that a standalone
+ * connection keeps one buffer each of. A field section's
  * names and values are copied into arrays the connection keeps, which grow to
  * the largest section seen and are then reused, so a warm connection
  * allocates nothing per request (`docs/security/http3.md`, H3-2). A peer's
