@@ -22,6 +22,7 @@ PASS  the response went in DATA frames of at most writeChunk
 PASS  held back by the send buffer and resumed: H3_WRITABLE came
 PASS  and the request ended whole: its content-length matched
 PASS  the client never sent past the credit it had: no error
+PASS  between events the connection holds neither its body chunk nor its field section: both went back to their pools
 PASS  twelve GETs open at once, ended in reverse: twelve whole responses
 PASS  the program had every request before any ended
 PASS  two large responses at once, each whole
@@ -131,4 +132,4 @@ PASS  each served its ten requests
 PASS  resetting the slot for the next, QUIC and HTTP/3, keeps no arena memory
 PASS  after its handshake a connection keeps none: its streams, SETTINGS, ten requests, a close
 PASS  and from the second on, a handshake keeps nothing either: its state is the slot's (QUIC-3)
-http3: 133 passed, 0 failed, 0 skipped
+http3: 134 passed, 0 failed, 0 skipped
