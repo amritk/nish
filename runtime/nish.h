@@ -679,10 +679,10 @@ int32_t nish_channel_receive(int64_t *state, int64_t *out);
  * `nish_guard_keep(old, s)` is a guard's string store (`g.value = s`): it
  * answers a copy of `s` that the `Mutex` owns, outside every arena, and frees
  * `old`, the string the slot held, when it is such a copy. `old` is null for a
- * `string | null` slot that held none; `s` is never null, since the checker
- * stores only a `string` through a guard. A copy still held
- * when its `Mutex` is dropped stays until the process ends: one block per
- * string slot, not one per store. */
+ * `string | null` slot that held none, and `s` is null for a `null` stored into
+ * one: the slot's copy is freed, nothing is kept, and the store answers null.
+ * A copy still held when its `Mutex` is dropped stays until the process ends:
+ * one block per string slot, not one per store. */
 void *nish_cross_out(void *v, uint64_t esize, uint64_t mark);
 void *nish_cross_send(void *s);
 void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark);
