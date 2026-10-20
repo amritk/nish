@@ -116,4 +116,12 @@ PASS  the server's own 431 is a final response too, and carries the date
 PASS  a head that fills the output room exactly, with no date: sent
 PASS  the same head with the date counted against the room: H2_INVALID
 PASS  and nothing went out for the head the date overfills
-http2 connection: 118 passed, 0 failed, 0 skipped
+PASS  a connection borrows nothing before it is asked to write
+PASS  it borrowed one buffer from each pool
+PASS  and an idle connection, all read and all sent, holds none of them
+PASS  a connection that ends with bytes unread gives every buffer back
+PASS  zeroed, as far as each was written
+PASS  the next connection on the same pools serves its own request
+PASS  from the buffers the first gave back, not new ones
+PASS  and reads nothing the first wrote past what it wrote itself
+http2 connection: 126 passed, 0 failed, 0 skipped

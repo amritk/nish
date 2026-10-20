@@ -28,7 +28,7 @@ cmp build/bench/h1 build/bench/h1-copy || {
 node bench/http-twins/check.mjs
 
 servers=(nish=build/bench/h1 nish-copy=build/bench/h1-copy)
-for name in node-http uws bun go-nethttp go-fasthttp rust-hyper rust-actix nginx; do
+for name in node-http uws bun bun-elysia bun-hono go-nethttp go-fasthttp rust-hyper rust-actix nginx; do
   if [ -x "build/http-twins/$name/serve" ]; then
     servers+=("$name=build/http-twins/$name/serve")
   fi
