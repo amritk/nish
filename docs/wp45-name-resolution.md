@@ -66,7 +66,9 @@ packet, and `Arena.used()` is flat in a soak (`docs/wp34-hosting-cs.md:233-262`)
 
 **Capability.** The call would be a `nish:net` export, so the report would say
 `net`, and that would not be true. Checked on this container (Ubuntu glibc
-2.39, `strace` of a program that resolves `localhost`): `getaddrinfo` opens
+2.39, `strace` of a program that resolves `localhost`: `getaddrinfo("localhost",
+0, 0, &r)` in a C `main`, built with `cc gai.c -o gai` and `cc -static gai.c -o
+gaid`, each run as `strace -f -e trace=openat,connect,socket ./gai`): `getaddrinfo` opens
 `/etc/host.conf`, `/etc/resolv.conf`, `/etc/nsswitch.conf` and `/etc/hosts`,
 tries `nscd`'s Unix socket twice, and opens a netlink socket, dynamically and
 under `-static` alike. Native builds link glibc dynamically (`scripts/build.sh`
@@ -108,15 +110,18 @@ name servers from the caller, as addresses; a separate parser turns the bytes
 of a `resolv.conf` or a `hosts` file into them, and the program reads the file
 itself, at start-up, under its own `fs.read`. IDs come from
 `crypto.getRandomValues`, so the resolver reports `net` and `entropy`, and a
-program granted `net` alone is refused for the second, truly. For WP37 the
+program granted `net` alone is refused for the second, truly. The caller that
+hands it the time on each wake (§3, blocking) calls `monotonicNanos`, which is
+`clock` (LANGUAGE.md:8167), so a program using the resolver reaches `clock`
+too. For WP37 the
 confined process needs UDP and TCP to the servers it was given and, only if it
 reads them, the two files.
 
 **Blocking.** A query is a non-blocking UDP socket in the caller's `pollWait`,
 with its token. The resolver keeps a deadline per query and reports the
 nearest one, so the caller passes `min(its own, the resolver's)` as
-`pollWait`'s timeout and hands the resolver the time on each wake. It reads no
-clock itself, so it reaches no `clock`. A timeout retries on the next server,
+`pollWait`'s timeout and hands the resolver the time on each wake. The
+resolver reads no clock itself; the caller's `monotonicNanos` is `clock`. A timeout retries on the next server,
 and a reply with the TC bit set retries over `tcpConnect` with a two-byte
 length prefix, a second socket in the same loop. No path waits.
 
@@ -148,7 +153,7 @@ paths double the tests and the security surface.
 | Shape | Capability | Blocking | WASI |
 | --- | --- | --- | --- |
 | `getaddrinfo` | reported `net`; reads four files, a Unix socket and NSS modules the walk cannot see | stalls the loop up to the resolver's timeout; cannot move to a task; start-up only by convention | refused, NL2404; no `getaddrinfo` in preview 1 |
-| Stub resolver | `net` and `entropy`, true; files read by the caller under `fs.read` | a socket in the caller's loop; deadlines through `pollWait`'s timeout; TCP on truncation | resolver refused; message code usable on wasm32 |
+| Stub resolver | `net` and `entropy`, true, and `clock` in the caller that passes the time; files read by the caller under `fs.read` | a socket in the caller's loop; deadlines through `pollWait`'s timeout; TCP on truncation | resolver refused; message code usable on wasm32 |
 | Both | the union, with `getaddrinfo`'s hidden reads | the loop stalls whenever the blocking half is called | as the stub resolver |
 
 On each axis the stub resolver is as good or better: it is the only shape
@@ -189,7 +194,7 @@ From #479, for this shape:
   A `docs/security/dns.md` record, in the shape of the others
   ([docs/security/README.md](security/README.md)), lists each of these with
   the test that pins it.
-- **The `net` capability**, with `entropy` beside it (§3), pinned by a
+- **The `net` capability**, with `entropy` beside it and `clock` in the caller (§3), pinned by a
   `caps_` case.
 - **N9.** The query pool and the receive buffers are sized at start-up and
   owned by the caller; a query allocates nothing.
