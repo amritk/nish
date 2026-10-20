@@ -116,7 +116,10 @@ and a generic one (`reject_ffi_generic`) are each refused by name. A `string`
 parameter was refused too (`reject_ffi_string_param`) until S3.1 accepted it,
 and a `string` return (`reject_ffi_string_return`) until S3.2 did; a
 `string[]` is refused in either position (`reject_ffi_string_array_param`,
-`reject_ffi_string_array_return`).
+`reject_ffi_string_array_return`), as is every other array, save the one
+exception: a `u8[]` or `readonly u8[]` parameter followed by its `u64` count,
+which WP40 B1.1 accepts ([wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md)
+§3a). A `u8[]` return stays refused there too (`reject_ffi_buffer_return`).
 
 ## 5. What FFI costs the test strategy
 
@@ -501,8 +504,11 @@ Still refused, each by name, each with a `reject_*` case:
   S3's rule over an allocation the compiler would have to build per call.
 - `u8[]` as `uint8_t *` and a length: the byte-buffer stage. It is the next
   most-asked-for shape (`read`, `write`, compression and hashing libraries)
-  and is not a string, because it carries a length and may be written; it is
-  proposed separately rather than folded in.
+  and is not a string, because it carries a length and may be written, so it
+  was designed separately rather than folded in:
+  [wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md). Its B1.1 stage
+  accepts the parameter with its `u64` count in a declaration and still
+  refuses a call to one (NL2554) until B1.2 lowers it.
 - A Nish function passed as a C callback: a function pointer, and with it a
   call *into* the program from a frame it did not set up.
 - Variadic C functions (`printf`): the C variadic convention is a different

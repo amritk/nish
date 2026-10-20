@@ -30,6 +30,6 @@
     "tests/differential/arrow-parity/**"
   ],
   "ignoreDependencies": ["nish", "cookbook-pkg"],
-  "ignoreBinaries": ["clang", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace"],
+  "ignoreBinaries": ["clang", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load"],
   "ignoreExportsUsedInFile": false
 }
