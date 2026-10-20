@@ -509,9 +509,11 @@ Evidence:
 - **Flat after warm-up**: `net_tls_memory`'s thousand connections over
   loopback make four buffers in all, one of each ("the first connection made
   one buffer of each of the four pools and the other 999 made none: flat
-  after warm-up"), and move `Arena.mark()` 0 bytes after the first; the 0-byte checks above (`net_tls_record_refusals`'
-  echoes and KeyUpdates, `net_tls_memory`'s handshakes, `net_http2_tls`)
-  pass unchanged.
+  after warm-up"), and move `Arena.mark()` 0 bytes after the first. The
+  0-byte checks above pass: `net_tls_record_refusals`' echoes and
+  KeyUpdates and `net_http2_tls` unchanged, and `net_tls_memory`'s
+  handshakes in one slot with their mark taken after the second `start`,
+  the slot's first give-back, which grows each pool's free list once.
 - **An idle pool holds none**: a `TlsTcpServer` of 1,024 slots that no
   client connects to has made no buffer in any pool (`net_tls_memory`, "a
   TlsTcpServer with 1,024 slots and no connections has made no buffer in any
@@ -519,7 +521,9 @@ Evidence:
 
 Measured as resident memory over the HTTP/1.1 carrier with nothing
 connected, a slot is about 52 KB where it was about 160 KB (64 and 256
-slots, three runs each), and a pool of 256 listens in 13 ms where it took 25.
+slots, three runs each). HTTPS/1.1 throughput over the interoperability
+server (h2load, 64 slots, five rounds) is 1.023 (1.006–1.058) of what it
+was, against an A/A band of 0.890–1.027: no change outside the noise.
 
 ## What is not checked here
 
