@@ -138,10 +138,14 @@ and a key cut before its escape's last digit matches nothing
 (`window find kA -> 0`, `window find kA whole -> 1`). Output that does not fit
 is `URL_DECODE_ERR_SPACE` at the byte with no room, and nothing is written
 past `out`'s end. A window outside its array panics with
-`…: the window is outside the array`, once, at 2 and at 8 threads; so does
-each of `percentDecode`, `urlQueryStart` and `UrlPathSegments.reset`, a
-negative `len` among them, and an `at` outside `out`, a negative one included, panics with `percentDecode: at is outside out`, natively
-and under Node (`tests/link/std_url/panic-*.ts`).
+`…: the window is outside the array`: `UrlQuery.reset`'s once in each of 50
+runs at 2 and at 8 threads (`std_url_window`), and `percentDecode`'s,
+`urlQueryStart`'s and `UrlPathSegments.reset`'s each in one program run once
+natively and once under Node (`tests/link/std_url/panic-*-window.ts`). A
+negative `len` is pinned for `percentDecode` only
+(`panic-decode-negative-len.ts`), and an `at` outside `out`, past its end or
+negative, panics with `percentDecode: at is outside out` in the same two runs
+(`panic-decode-at.ts`, `panic-decode-negative-at.ts`).
 
 **The byte API allocates nothing** (`tests/link/std_url/alloc.ts`): one
 `UrlPathSegments`, one `UrlQuery` and one output buffer, reused across 10,000
@@ -150,9 +154,11 @@ look up a key with `Arena.used()` where it was; a control push the same meter
 sees proves the meter is not blind. `urlDecode` and `urlQueryGet` allocate
 their answer and are the convenience forms.
 
-**Under Node the same bytes** (`std_url` and its six refusals under
-`runtime/nish.mjs`): every program exits as it does natively and prints the
-same stdout, and `std_url_window` the same stderr.
+**Under Node the same bytes** (`std_url` and its four refusal programs, `std_url_escape`, `std_url_pairs`,
+`std_url_space` and `std_url_window`, under `runtime/nish.mjs`): every
+program exits as it does natively and prints the same stdout, and
+`std_url_window` the same stderr. The six `panic-*.ts` programs are run under
+Node and natively apart from these.
 
 Tests:
 `link/std_url: exits with 0 and stdout matches expected.out`,
@@ -196,7 +202,11 @@ Each is deliberate and pinned above.
   compared with the key's bytes, under Node with its UTF-16 code units.
 - `urlDecode` and `urlQueryGet` expect an ASCII string, as a URL on the wire
   is; under Node a non-ASCII decoded byte comes back as Latin-1 where the
-  native build gives UTF-8, as `String.fromBytes` does everywhere.
+  native build gives UTF-8, as `String.fromBytes` does everywhere. The input
+  half differs too: natively a string's UTF-8 bytes are decoded, while under
+  Node each UTF-16 code unit up to 0xFF is read as one byte (Latin-1) and a
+  code unit above 0xFF makes the answer null, so `urlDecode("aĀb", 0)` is
+  `aĀb` natively and null under Node.
 - `urlQueryGet` decodes strictly and stops at 100 pairs, where
   `URLSearchParams` repairs and has no cap.
 - `urlQueryFind` compares `name` with the key decoded strictly in form mode,
