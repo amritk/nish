@@ -87,6 +87,7 @@ The owner's decision of 2026-10-20 settles this. Stage 2 *builds* the extra-rout
 - `docs/security/README.md`
 - `tests/self/goldens/**`
 - `tests/run.js` (only if a new link program needs a registration line there)
+- `src/std-modules.ts` and `.github/workflows/release.yml`: only the module's registration lines (`"net/router"` in `stdModuleNames`, `net/router.ts` in the presence gates). The owner allowed these on 2026-10-20 after stage 1 found that tests/run.js requires them. Because this touches `src/`, the stage also runs `node tests/run.js wasi` and `node tests/run.js performance` and regenerates `checked-self.txt`.
 
 ### The design note
 
