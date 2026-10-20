@@ -9,8 +9,8 @@
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
-declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #2
 
 define noundef i8 @getByte(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %buf, i32 noundef %i) #0 {
 entry:
@@ -138,7 +138,7 @@ entry:
   ret i32 %2
 }
 
-define void @Slot.constructor(%struct.Slot* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #2 {
+define void @Slot.constructor(%struct.Slot* noundef nonnull noalias readonly align 8 dereferenceable(4) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Slot, %struct.Slot* %this, i32 0, i32 0
   store i32 1, i32* %0, align 4, !tbaa !16
@@ -154,9 +154,8 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readnone }
 attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

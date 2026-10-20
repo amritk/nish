@@ -119,7 +119,6 @@ cases/caps_net added after R6: no rewriter to freeze it with
 cases/caps_process_spawn added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with
 cases/caps_signal added after R6: no rewriter to freeze it with
-cases/cls_ctor_field_init added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with
 cases/cls_inline_array_dynamic added after R6: no rewriter to freeze it with
@@ -419,7 +418,6 @@ cases/union_narrowing_paths added after R6: no rewriter to freeze it with
 cases/union_narrowing_switch_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_tested_join added after R6: no rewriter to freeze it with
 cases/union_switch added after R6: no rewriter to freeze it with
-cases/union_switch_ctor_init added after R6: no rewriter to freeze it with
 cases/union_switch_generic added after R6: no rewriter to freeze it with
 cases/union_types added after R6: no rewriter to freeze it with
 cases/unsafe_get_set added after R6: no rewriter to freeze it with
