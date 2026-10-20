@@ -7381,6 +7381,7 @@ const tally = (rows: string[]): i32 => {
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
   | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
   | `s.spawn(...)` on a scope the same `using` declares ahead of `arena()`, `using s = scope(), a = arena()` | an argument is not older than the block: `s` is disposed after the arena, so it joins after the release | NL2427 | `reject_using_arena_spawn_declarator` |
+  | the same, ahead of the statement's last `arena()`, `using a = arena(), s = scope(), b = arena()` | an argument is not older than the block: `b` releases before `s` joins | NL2427 | `reject_using_arena_spawn_last` |
 
   A number, a `boolean` or an `enum` leaves the block freely, and so does a
   value older than it. The rule is the escape analysis's, so it is
@@ -7404,7 +7405,9 @@ const tally = (rows: string[]): i32 => {
 - **A task filed on a scope the block declares may read what it allocated.**
   That scope joins before the block releases, inner `using s = scope()` or
   `using a = arena(), s = scope()` alike, so the block may hand its task an
-  array or an object it made (`tests/link/thread_scope_reclaim`). The task
+  array or an object it made (`tests/link/thread_scope_reclaim`). A scope
+  declared ahead of the statement's last `arena()` is not one: that arena
+  releases first (`reject_using_arena_spawn_last`). The task
   is followed as any callee is: one that answers its argument into an older
   destination stores it (NL2424, `tests/cases/reject_using_arena_spawn_relay`,
   as `reject_using_arena_spawn_stores` for any array answer), and a

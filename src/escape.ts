@@ -2044,8 +2044,8 @@ class PassWalk {
     // block has released, for a scope the block did not declare. A pass may
     // file one on an older scope with what is older than the pass: what the
     // pass allocated would be released before the task reads it. A scope the
-    // block's own `using` declares ahead of its `arena()` joins after the
-    // release as well, and is held to the pass's rule.
+    // block's own `using` declares ahead of its last `arena()` joins after
+    // that release as well, and is held to the pass's rule.
     if (isSpawnEntry(callee) && node.children[0].kind === N_MEMBER) {
       const receiver = unwrapParens(node.children[0].children[0])
       const local: Local | null = receiver.kind === N_IDENT ? this.unit.program.nodeLocals[receiver.id] : null
@@ -2348,14 +2348,25 @@ const decideArenaBlock = (
   const walk = new PassWalk(unit, table, facts, scope)
   walk.block = true
   walk.returnsByValue = table.resultByValue(sig.returnType)
-  for (const decl of block.children[from].children[0].children) {
-    if (isArenaCall(unit.program, unwrapParens(decl.children[2]))) {
-      break
+  // Every declarator ahead of the statement's last `arena()` is disposed after
+  // that arena releases: in `using a = arena(), s = scope(), b = arena()`, `b`
+  // releases before `s` joins.
+  const decls = block.children[from].children[0].children
+  let last = 0
+  let d = 0
+  while (d < decls.length) {
+    if (isArenaCall(unit.program, unwrapParens(decls[d].children[2]))) {
+      last = d
     }
-    const local = unit.program.nodeLocals[decl.id]
+    d = d + 1
+  }
+  d = 0
+  while (d < last) {
+    const local = unit.program.nodeLocals[decls[d].id]
     if (local !== null) {
       walk.outer.push(local)
     }
+    d = d + 1
   }
   let i = from
   while (i < block.children.length) {

@@ -374,7 +374,8 @@ export const main = (): i32 => {
   keep it. Inside an arena block, declare the scope after the arena —
   `using a = arena(), s = scope()`, or a `using s = scope()` of its own
   further in — so it joins before the release; a scope declared before the
-  arena joins after it and may not be handed what the block made.
+  arena, or before a second `arena()` of the same statement, joins after a
+  release and may not be handed what the block made.
 
 ### Tasks without a destination, and arrow tasks
 
