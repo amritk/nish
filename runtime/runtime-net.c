@@ -281,12 +281,13 @@ static void nish_net_put(nish_array *out, const nish_sockaddr *s, socklen_t n) {
    A listener opened with `tcpListenFlags` flag 2 holds `TCP_NODELAY`, and the
    connection gets it here. Linux copies the option to an accepted socket,
    but that is not a rule other systems keep, so it is read off the listener
-   and set on the connection everywhere. The listener is the record of the flag, rather than
-   a table beside the descriptors, so it holds for a descriptor however the
-   program came by it, and a closed listener's number reused leaves nothing
-   stale behind. A listener that cannot answer (not TCP) has no Nagle to turn
-   off; a connection on which the set fails is closed and its failure
-   answered, so a flag-2 listener never hands out a socket without it. */
+   and set on the connection everywhere. The listener is the record of the
+   flag, rather than a table beside the descriptors, so it holds for a
+   descriptor however the program came by it, and a closed listener's number
+   reused leaves nothing stale behind. A listener that cannot answer (not
+   TCP) has no Nagle to turn off; a connection on which the set fails is
+   closed and its failure answered, so a flag-2 listener never hands out a
+   socket without it. */
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   if (peer->len < NISH_ADDR_BYTES) return -22;
   nish_sockaddr s;
