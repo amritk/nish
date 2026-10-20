@@ -282,11 +282,14 @@ static int32_t nish_exit_code(int status) {
    start is -1, the answer they have always given. */
 static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, const nish_str *err) {
   int32_t pid = nish_spawn_start(argv, out, err);
-#ifndef __wasi__
-  int status;
-  if (pid >= 0 && waitpid(pid, &status, 0) >= 0) return nish_exit_code(status);
-#endif
+  if (pid < 0) return -1;
+#ifdef __wasi__
   return -1;
+#else
+  int status;
+  if (waitpid(pid, &status, 0) < 0) return -1;
+  return nish_exit_code(status);
+#endif
 }
 
 int32_t nish_spawn(const nish_array *argv) { return nish_spawn_impl(argv, 0, 0); }
