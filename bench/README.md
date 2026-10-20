@@ -118,8 +118,9 @@ same program in Rust and in Go:
 Each twin does the same work at the same size (its `bench:n` line follows
 `--n`) and must print the checksum the Nish `par` run prints, or the run fails.
 The map twins cut the array into one contiguous chunk per thread and run the
-first on the calling thread, which is how Nish's partitioner divides these
-kernels; the Rayon twins split as Rayon does. `par-regions`' scope twin starts
+first on the calling thread, as Nish's partitioner did before it cut up to
+eight pieces per thread for the threads to claim as they finish; the Rayon
+twins split as Rayon does. `par-regions`' scope twin starts
 its threads on every call, because a scope cannot outlive it; the Rayon twin
 and the Go twin are the ones with a pool to compare with Nish's workers. The
 histogram takes a lock per value in every language (`Mutex`,

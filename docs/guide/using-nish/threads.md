@@ -53,6 +53,18 @@ export const main = (): i32 => {
 - **A short array is just a loop.** The work is split only when every thread's
   share is big enough to pay for handing it to another thread, judged from
   what `f` costs, so there is no reason to guard a call by size.
+- **A slow thread does not hold the others up.** A long array is cut into up
+  to eight pieces per thread, and a thread that finishes one takes the next,
+  so a core shared with another program, or elements that cost more than
+  their neighbours, end up spread over the threads that have time.
+- **The speedup is capped by what runs outside the map.** Only the call is
+  divided; the loop that fills `src` and the loop that reads the answers run
+  on one thread. In the repository's `bench/par-heavy.ts` those two loops, an
+  order-sensitive checksum among them, are about an eighth of the one-thread
+  time, which caps four cores near 2.9x; the program measures about 2.7x.
+  With a checksum the compiler vectorises, or four times the work per
+  element, the same map is above 3x. The figures are in
+  [BENCHMARKS.md](../../BENCHMARKS.md#scheduling-a-divided-region).
 - **`dst` must be at least as long as `src`**, or the call panics before it
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
@@ -89,6 +101,40 @@ export const main = (): i32 => {
   sixty-four. For that to be the fold you meant, `f` must be associative and
   `identity` its identity: `(a, b) => a - b`, or `+` with an identity of `1`,
   is refused.
+
+A `string | null` field shared through a `Mutex` takes a string or `null`.
+The `Mutex` keeps its own copy of a stored string, and storing `null` frees it;
+read the field back through `?.`:
+
+```ts nish:ok
+import { Mutex, scope } from "nish/threads";
+
+class Last {
+  name: string | null = null;
+}
+
+const record = (last: Mutex<Last>, i: i32): void => {
+  using g = last.lock();
+  if (i % 2 === 0) {
+    g.value.name = `task ${i}`;
+  } else {
+    g.value.name = null; // the copy the slot held is freed
+  }
+};
+
+export const main = (): i32 => {
+  const last = new Mutex<Last>(new Last());
+  {
+    using s = scope();
+    s.spawn(() => record(last, 2));
+  }
+  using g = last.lock();
+  console.log(`${g.value.name?.length ?? -1}`); // 6
+  g.value.name = null;
+  console.log(`${g.value.name?.length ?? -1}`); // -1
+  return 0;
+};
+```
 
 **What is refused, and why.** An `f` that prints, stores through its
 argument or writes anything else its caller can see is refused at the call
@@ -520,8 +566,9 @@ refused too (NL2536), since `this` or a type parameter is a way for the guard
 to be kept, and so is handing it twice in one call. Binding, storing,
 returning or walking an object read through the guard, `const c = g.value`, is
 refused (NL2467); storing anything but a number, a `boolean`, an enum or a
-`string` into it is refused (NL2468), and so is storing `null` (NL2537), which has
-no string to copy into the `Mutex`.
+`string` into it is refused (NL2468). `null` is stored only into a
+`string | null` slot; into a slot that holds an object, `next: Link | null`,
+it is refused (NL2537), since a guard stores no object.
 A guard bound with `const` would never be released (NL2465). A second lock
 inside a guard's block is refused because two tasks each holding one lock and
 waiting for the other would wait forever.

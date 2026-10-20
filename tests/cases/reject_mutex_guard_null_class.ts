@@ -1,6 +1,6 @@
 // A `null` stored through a guard into a `Link | null` field: the slot holds
-// a pointer, which a guard stores in no form, so it is refused with the same
-// message as a `string | null` slot, whose advice names both kinds of slot.
+// a pointer, which a guard stores in no form, `null` included. Only a
+// `string | null` slot takes a `null` (`thread_mutex_null_store`).
 import { Mutex } from "nish/threads"
 
 class Link {
