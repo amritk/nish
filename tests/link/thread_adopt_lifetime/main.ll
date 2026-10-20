@@ -72,7 +72,7 @@ declare void @nish_scope_join(i8* noundef nonnull) #0
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #0
 declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #0
 declare i8* @nish_cross_in(i8* noundef, i64 noundef) #0
-declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #0
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #0
 declare i64 @llvm.smin.i64(i64, i64) #2
 declare i64 @llvm.smax.i64(i64, i64) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2

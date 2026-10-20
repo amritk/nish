@@ -264,7 +264,8 @@ void nish_cross_adopt(void *list, void *dst, uint64_t esize) {
  * `g.value = s` keeps `s` in memory the `Mutex` owns, since the task that
  * stores it may have made it in its arena: `nish_guard_keep` copies it into a
  * block of its own and answers the copy, and frees `old`, the string the slot
- * held, when it is a copy made here. A read that keeps the string past the
+ * held, when it is a copy made here; `g.value = null` into a `string | null`
+ * slot frees that copy and keeps nothing. A read that keeps the string past the
  * lock's block copies it into the reader's arena (the compiler calls
  * `nish_str_new`), so nothing outside the lock points at a block, and the
  * next store frees it. The copies are recorded in one set, `nish_kept`, which
@@ -322,14 +323,16 @@ static int nish_kept_take(uintptr_t p) {
   return 0;
 }
 
-/* `old` is null when the slot is a `string | null` that held none. */
+/* `old` is null when the slot is a `string | null` that held none, and `s`
+ * is null for a `null` stored into one: the slot's copy is freed and nothing
+ * is kept in its place, so the store answers null. */
 void *nish_guard_keep(void *old, const void *s) {
-  void *b = (void *)((uintptr_t)nish_cross_copy(s, 0) & ~(uintptr_t)1);
+  void *b = s ? (void *)((uintptr_t)nish_cross_copy(s, 0) & ~(uintptr_t)1) : 0;
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_lock(&nish_kept.mu);
 #endif
   int mine = old && nish_kept_take((uintptr_t)((nish_xchunk *)old - 1));
-  nish_kept_put((uintptr_t)((nish_xchunk *)b - 1));
+  if (b) nish_kept_put((uintptr_t)((nish_xchunk *)b - 1));
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_unlock(&nish_kept.mu);
 #endif

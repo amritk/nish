@@ -3600,7 +3600,8 @@ const checkBody = (
 //     string store into a field or an element that already exists: nothing
 //     derived from it outlives the block, and nothing a task's arena holds is
 //     stored into it. A string is the one pointer that crosses, by copy: a
-//     store keeps a copy the `Mutex` owns (`nish_guard_keep`), and a read
+//     store keeps a copy the `Mutex` owns (`nish_guard_keep`, which a `null`
+//     stored into a `string | null` slot hands nothing), and a read
 //     answers a copy in the reader's arena (`Emitter.guardedRead`);
 //   - R5: inside a guard's block, directly or through any call, no second
 //     lock, no scope, no `spawn` and no data-parallel call, so one lock is
@@ -3841,19 +3842,17 @@ const guardStoreMessage = (table: TypeTable, type: i32, store: string): string =
     : COPIED_NONE_REMEDY)
 
 /**
- * A `null` stored through a guard, into any slot. The store into a
- * `string | null` slot is `nish_guard_keep`'s exchange of one kept copy for
- * another, which reads the length of the string it is given, so a `null`
- * handed to it would be dereferenced; written past it, the `null` would leave
- * the copy it replaces allocated, one block per store rather than one per
- * slot. Any other nullable slot holds a pointer, which a guard stores in no form.
+ * A `null` stored through a guard into a slot that is not a `string | null`.
+ * Into a `string | null` slot the store is `nish_guard_keep`'s exchange, which
+ * frees the copy the slot held and keeps nothing; any other nullable slot holds
+ * a pointer, which a guard stores in no form, `null` included, so that the
+ * rule for such a slot stays the one for an object.
  */
 const GUARD_NULL_STORE_MESSAGE: string =
-  "This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a " +
-  "`string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the " +
-  "`Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the " +
-  'slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, ' +
-  "and read it back as empty with `.length === 0`"
+  "This stores `null` through a guard into a slot that holds an object, and a guard stores only a number, a " +
+  "`boolean`, an enum or a `string`, and a `null` only into a `string | null` slot, where the store frees the " +
+  "copy the slot held; keep a `boolean` field beside the slot, `g.value.hasNext = false`, and test it before " +
+  "reading the object"
 
 const guardMethodMessage = (name: string, store: string): string =>
   `\`${name}\` is called through a guard, which reads and stores fields and elements and calls no method: ` +
@@ -4233,6 +4232,21 @@ const taskMutexPath = (table: TypeTable, program: CheckedProgram, type: i32, roo
   return path
 }
 
+/**
+ * The type of the slot a store's `target` names: a field's declared type, read
+ * from its class since a member store's target has none in the tables, or an
+ * element's; `-1` when neither is known.
+ */
+const storeTargetType = (program: CheckedProgram, table: TypeTable, target: Node): i32 => {
+  const e = unwrapParens(target)
+  if (e.kind !== N_MEMBER) {
+    return program.nodeTypes[e.id]
+  }
+  const info = classLayoutOf(program, table, program.nodeTypes[unwrapParens(e.children[0]).id])
+  const field: FieldInfo | null = info !== null ? info.field(e.text) : null
+  return field !== null ? field.type : -1
+}
+
 /** Whether `node`, at `at` under the first `depth` of `parents`, is a store's target: `x = v`, `x += v`, `x++`. */
 const isStoreTarget = (at: Node, parents: Node[], depth: i32): boolean => {
   if (depth < 1) {
@@ -4347,7 +4361,10 @@ const walkMutexes = (
       // A store's target has no type of its own in the tables; what is stored is the value's.
       const stored = parent.kind === N_BINARY ? program.nodeTypes[parent.children[1].id] : type
       if (parent.kind === N_BINARY && unwrapParens(parent.children[1]).kind === N_NULL) {
-        out.push(new ScopeFinding(parent, GUARD_NULL_STORE_MESSAGE))
+        const slot = storeTargetType(program, table, at)
+        if (slot < 0 || table.stripNull(slot) !== T_STRING) {
+          out.push(new ScopeFinding(parent, GUARD_NULL_STORE_MESSAGE))
+        }
       } else if (stored >= 0 && !isScalarArgument(table, stored) && stored !== T_STRING) {
         const target = shownSource(program, at, "g.value.x")
         const from: Node | null = parent.kind === N_BINARY ? unwrapParens(parent.children[1]) : null

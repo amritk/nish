@@ -51,6 +51,8 @@ void nish_scope_join(void *scope);
 void nish_channel_send(int64_t *state, int64_t value);
 void nish_channel_count(int64_t *state, int64_t delta);
 int32_t nish_channel_receive(int64_t *state, int64_t *out);
+/* runtime-cross.c: a guard's string store. */
+void *nish_guard_keep(void *old, const void *s);
 nish_str *nish_read_file(const nish_str *);
 void nish_write_file(const nish_str *, const nish_str *);
 void nish_append_file(const nish_str *, const nish_str *);
@@ -1613,6 +1615,25 @@ static void test_security(void) {
   assert(sec_failed == 0);
 }
 
+/* A guard's string store keeps a copy outside the arena and frees the copy it
+ * replaces; a `null` store (`s` null) frees the copy and keeps nothing. A
+ * block the store did not make, such as an arena string, is never freed, and a
+ * freed copy is no longer one the next store would free again. */
+static void test_guard_keep(void) {
+  nish_str *a = nish_guard_keep(NULL, lit("ab"));
+  assert(a != NULL && a->len == 2 && memcmp(a->data, "ab", 2) == 0);
+  nish_str *b = nish_guard_keep(a, lit("cde"));
+  assert(b != NULL && b != a && b->len == 3 && memcmp(b->data, "cde", 3) == 0);
+  assert(nish_guard_keep(b, NULL) == NULL);
+  assert(nish_guard_keep(b, NULL) == NULL); /* `b` was freed and forgotten: no double free */
+  assert(nish_guard_keep(NULL, NULL) == NULL);
+  nish_str *arena = lit("xyz");
+  assert(nish_guard_keep(arena, NULL) == NULL && memcmp(arena->data, "xyz", 3) == 0);
+  nish_str *c = nish_guard_keep(arena, lit("q"));
+  assert(c != NULL && c->len == 1 && c->data[0] == 'q');
+  assert(nish_guard_keep(c, NULL) == NULL);
+}
+
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
   char *a = nish_alloc_struct(12);
@@ -1906,6 +1927,8 @@ int main(void) {
   test_security();
   nish_free_arena();
   test_wipe();
+  nish_free_arena();
+  test_guard_keep();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();

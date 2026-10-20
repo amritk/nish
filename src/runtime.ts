@@ -995,7 +995,7 @@ export class RuntimeTable {
       WRITES_NOTHING,
       new RuntimeFunction(
         "nish_guard_keep",
-        "declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull)",
+        "declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef)",
         attrs1("nounwind"),
         EFFECT_WRITE
       )
