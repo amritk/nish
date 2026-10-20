@@ -74,9 +74,11 @@ PASS  a slot out of range names the first connection
 PASS  a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept
 PASS  with size slots busy the next is shed with H1_POOL_FULL and nothing more is built
 PASS  a closed slot is taken again, its connection kept rather than built anew
+PASS  the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing
+PASS  expiring a pool with one of its three built slots free closes the other two
 PASS  a pool of 16,384 reports its size with no slot built
 PASS  a slot never built holds nothing: no descriptor, H1_ERROR to next, done to the rest
-PASS  closing it, rearming it and expiring the pool change nothing
+PASS  closing it and rearming it change nothing
 PASS  an accept with no listener answers its error and builds nothing
 PASS  a never-built slot's connection is slot 0's, built once and holding nothing
 PASS  a client offering http/1.1 completes the handshake, the server's signature and Finished verified
@@ -169,4 +171,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 171 passed, 0 failed, 0 skipped
+http1 server: 173 passed, 0 failed, 0 skipped

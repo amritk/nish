@@ -273,11 +273,6 @@ class TlsClient {
   }
 }
 
-/**
- * Runs every check and answers the exit code. A function of its own so that
- * `tests/link/net_http1_server_f64` runs the same checks under
- * `--number-mode f64`.
- */
 /** `server`'s next accept, waiting on `loop` up to a second for the connection to arrive; the slot, or what `accept` answered last. */
 const acceptWaiting = (server: Http1Server, loop: i32, ready: i32[]): i32 => {
   let slot: i32 = server.accept();
@@ -299,9 +294,14 @@ const acceptOrder = (t: Suite): void => {
   const server = new Http1Server(testConfig(), listener, toI32(3));
   const clients: i32[] = [];
   const slots: i32[] = [];
+  let firstGrowth: i64 = toI64(0);
   for (let k: i32 = 0; k < 4; k++) {
     clients.push(tcpConnect(addr));
+    const before: i64 = Arena.used();
     slots.push(acceptWaiting(server, loop, ready));
+    if (k === 0) {
+      firstGrowth = Arena.used() - before;
+    }
   }
   t.ok(
     "a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept",
@@ -314,10 +314,18 @@ const acceptOrder = (t: Suite): void => {
   const first: Http1Connection = server.connection(toI32(1));
   server.close(toI32(1));
   clients.push(tcpConnect(addr));
+  const before: i64 = Arena.used();
   const again: i32 = acceptWaiting(server, loop, ready);
+  const againGrowth: i64 = Arena.used() - before;
   t.ok(
     "a closed slot is taken again, its connection kept rather than built anew",
     again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
+  );
+  t.ok("the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing", firstGrowth > toI64(0) && againGrowth === toI64(0));
+  server.close(toI32(2));
+  t.ok(
+    "expiring a pool with one of its three built slots free closes the other two",
+    server.expire(monotonicNanos() + toI64(2000000000) * toI64(2)) === 2 && server.busy() === 0 && toI32(server.free.length) === 3
   );
   for (let k: i32 = 0; k < 3; k++) {
     server.close(k);
@@ -348,8 +356,8 @@ const neverBuilt = (t: Suite): void => {
   );
   server.close(last);
   t.ok(
-    "closing it, rearming it and expiring the pool change nothing",
-    !server.rearm(last, H1_WANT_WRITE) && server.expire(monotonicNanos() + toI64(2000000000) * toI64(2)) === 0 && toI32(server.free.length) === 0 && server.busy() === 0
+    "closing it and rearming it change nothing",
+    !server.rearm(last, H1_WANT_WRITE) && toI32(server.free.length) === 0 && server.busy() === 0
   );
   t.ok("an accept with no listener answers its error and builds nothing", server.accept() < 0 && toI32(server.connections.length) === 0 && toI32(server.fds.length) === 0);
   t.ok(
@@ -358,6 +366,11 @@ const neverBuilt = (t: Suite): void => {
   );
 };
 
+/**
+ * Runs every check and answers the exit code. A function of its own so that
+ * `tests/link/net_http1_server_f64` runs the same checks under
+ * `--number-mode f64`.
+ */
 export const serverChecks = (): i32 => {
   const t = new Suite("http1 server");
   const lb = new H1Loop(testConfig(), tcpConfig([H1_ALPN, "h2"]), 4, ZERO, ZERO);
