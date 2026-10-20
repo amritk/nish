@@ -496,6 +496,14 @@ second turn's refusal is the retired key's, not the strike register's. That
 the retired key is wiped is not read back at run time: a `Secret` cannot be
 read after its wipe, and the turn cannot leave it unwiped, since `previous`
 cannot be assigned again while it holds an unwiped `Secret` (NL2442).
+The rest of `run`'s rotation wiring in `cli.ts` is checked by reading only:
+the `tlsTicketKeyDue` gate, `previous = current` before `rotateTickets`, and
+the order of the keys passed to `step` (current, then previous). The checks
+above call `rotateTickets` directly, and in CI the server never runs long
+enough, or seals enough tickets, for `run` to rotate. The `-O2` wipe-count
+pin on `ticketRotationTurns` (below) covers the rotation turn in
+`tests/link/net_tls_ticket`, written against `std/net/tls/ticket.ts`, not the
+interop server's.
 The interop job's checks against curl and Chromium are in the paragraph
 below.
 
