@@ -104,13 +104,15 @@ decides once the whole command line is read, so `--allow fs.read=/srv/data
 ## 3. The wrapper
 
 `emitEntryWrapper` (`src/emit.ts:756`) builds the native `@main`. With
-`--sandbox` it leaves `@main` as it is and emits, beside it, one internal
-function whose address sits in the executable's `.preinit_array`. The C
+`--sandbox` it emits, beside `@main`, one internal function whose address
+sits in the executable's `.preinit_array`, and gives `@main` one new first
+instruction, a call that refuses to run if that function never ran. The C
 runtime calls that function before any constructor runs, so a constructor in
 a linked C object or a shared library is already confined (below, "What runs
 before the call"). The wrapper is `tests/cases/argv_echo.ll:211-217` as it is
-today (optimized, so the return carries `noundef`, `src/emit.ts:766-769`);
-the lines above it are the proposal:
+today (optimized, so the return carries `noundef`, `src/emit.ts:766-769`),
+apart from its first call; that call and the lines above `@main` are the
+proposal:
 
 ```llvm
 @.sandbox.read = private unnamed_addr constant [11 x i8] c"/srv/data\00\00"
@@ -125,6 +127,7 @@ entry:
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
+  call void @nish_sandbox_check()
   call void @nish_argv_init(i32 %argc, i8** %argv)
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -132,6 +135,7 @@ entry:
 }
 
 declare void @nish_sandbox(i32, i32, i8*, i8*)
+declare void @nish_sandbox_check()
 ```
 
 `@llvm.used` keeps the otherwise unreferenced entry through `opt`, and
@@ -145,6 +149,18 @@ order with the library given in `LD_PRELOAD`, and with `-static`. A
 `.preinit_array` entry is refused in a shared object, so IR built with
 `--sandbox` and linked by hand into a `.so` fails at link time rather than
 running unconfined.
+
+**A C library that skips `.preinit_array` fails closed.** That measurement is
+glibc's. musl's start-up, as its source reads, runs `_init` and
+`.init_array` but not `.preinit_array`, and `docs/INSTALL.md:218-233`
+documents linking emitted IR on a musl host. There the entry would never
+run. `nish_sandbox` therefore sets a flag in the runtime unit as its last
+step, and `nish_sandbox_check` returns when the flag is set and otherwise
+prints `nish: --sandbox: the C library did not run .preinit_array, so the
+program was not confined` and calls `_exit(126)`. A program built with
+`--sandbox` and linked against such a libc refuses to run. Its constructors
+have already run, unconfined, by then, so §7 states such a libc as
+unsupported and §9 names the window.
 
 The operands, in order:
 
@@ -180,7 +196,7 @@ than running unconfined.
 
 **The freestanding `--profile wasm` route never links the unit** (CLAUDE.md's
 rule on wasm32 lowerings). That branch links with `-nostdlib` and without
-`runtime.c` (`scripts/build.sh:391-394`), and `halves` are added only beside
+`runtime.c` (`scripts/build.sh:394-397`), and `halves` are added only beside
 `runtime.c` (`:152-163`), so IR built for the host with `--sandbox` and linked
 there fails closed at link time, on an undefined `nish_sandbox`, and a stub
 using `_exit` could not link under `-nostdlib` anyway. The implementation
@@ -213,9 +229,11 @@ things run earlier, and none of them is confined:
 - an `LD_PRELOAD` library's symbol interposition, which needs no constructor:
   a preloaded `prctl` or `syscall` can make the sandbox a no-op;
 - libc's own start-up before it walks `.preinit_array`;
-- an IFUNC resolver, which runs during relocation. Measured as above: a
+- an IFUNC resolver, which runs during relocation, in a linked C object or
+  in a shared library the binary needs (`DT_NEEDED`). Measured as above: a
   resolver in a linked C object printed before the preinit function, linked
-  dynamically and with `-static`.
+  dynamically and with `-static`; a needed library's resolvers run in the
+  dynamic loader, before it too.
 
 The first three are chosen by whoever launches the binary, whom the threat
 model trusts (§9). The fourth is code in the program, so it is a limit on
@@ -252,7 +270,7 @@ the sandbox's entry is first, and §8 pins that.
 5. Load the seccomp filter (§4) with `seccomp(SECCOMP_SET_MODE_FILTER,
    SECCOMP_FILTER_FLAG_TSYNC, ...)`; no other thread exists yet, so `TSYNC`
    only states the intent.
-6. Return. A strict-mode failure at any step prints `nish: --sandbox: <what>
+6. Set the flag `nish_sandbox_check` reads, and return. A strict-mode failure at any step prints `nish: --sandbox: <what>
    (<errno name>)` on stderr and calls `_exit(126)` (open question 2).
 
 ## 4. The mapping
@@ -296,13 +314,20 @@ best-effort without Landlock. The filesystem: below.
 handles every filesystem right the running ABI knows (§6), then adds a
 `path_beneath` rule granting back exactly what the mask grants: beneath `/` for
 a capability granted whole, beneath each directory for a scoped one.
-From ABI 5, `IOCTL_DEV` is one of the handled rights, so it is granted back
-with the open rights wherever `fs.read` or `fs.write` is: beneath `/`, or
-beneath each directory. Without that, a program granted `fs.read` could open
-`/dev/tty` and have every `ioctl` on it refused, a break its mask never asked
-for. Below ABI 5 the right does not exist and nothing is lost: without the
-open rights no device can be opened after the ruleset applies, and a
-descriptor already open, stdin included, is not checked.
+From ABI 5, `IOCTL_DEV` is one of the handled rights, and it is granted back
+beneath `/` only when `process.spawn` is granted. A device's `ioctl` can act
+like a spawn: `TIOCSTI` on a terminal pushes keystrokes that the user's shell
+runs after the process exits, and an unprivileged process may do that to its
+own controlling terminal wherever `dev.tty.legacy_tiocsti` is 1, still the
+default on Debian- and Ubuntu-style kernels. A program with `fs.read` but
+without `process.spawn` can therefore reopen `/dev/tty` but cannot `ioctl`
+it, beyond the few requests Landlock always allows (`FIOCLEX`, `FIONBIO` and
+their kind); a terminal program that needs more asks for `process.spawn`, and
+the guide page says so. Two routes stay, and §9 names both: a terminal
+already open when the ruleset applies, fd 0 included, is not checked, and
+below ABI 5 the right does not exist, so a reopened `/dev/tty` takes every
+request (open question 12). `dev.tty.legacy_tiocsti=0` (6.2) closes
+`TIOCSTI` on both.
 
 **What Landlock leaves alone.** `stat`, `lstat`, `readlink` and `access` are not
 Landlock rights, so `isDirectorySync` (`runtime/runtime-os.c:204`),
@@ -422,7 +447,7 @@ The wrapper asks the kernel for its Landlock ABI once and acts on the answer.
 |---|---|---|
 | No Landlock (`ENOSYS` or `EOPNOTSUPP`, or `EPERM` from a container runtime's own seccomp profile denying the call) | refuses to run: `nish: --sandbox: this kernel has no Landlock; build with --sandbox=best-effort to run with seccomp alone`, exit 126 | prints `nish: --sandbox: no Landlock, files are not confined` once on stderr and continues with seccomp alone |
 | Older ABI than the rights the mask withholds | refuses to run when a right §4 withholds is unknown to the ABI: below ABI 3, `truncate(2)` on a file the user owns is not a Landlock right, so a program without `fs.write` needs ABI 3, and so does one granted `fs.write=<dir>`, whose files outside the directory `truncate` would reach | handles the rights the ABI knows, and names the ones it could not withhold, once |
-| ABI 1 to 4, no `IOCTL_DEV` | runs: the right is never withheld, so nothing needs granting back (§4) | runs, and names nothing |
+| ABI 1 to 4, no `IOCTL_DEV` | runs, the one exception to the row above: §4 and §9 state what a reopened terminal keeps (open question 12) | runs, and names `IOCTL_DEV` |
 | No seccomp, or no `KILL_PROCESS` | refuses to run | refuses to run |
 
 **Missing seccomp is fatal in both modes.** Best-effort exists for kernels
@@ -431,8 +456,10 @@ older than Landlock; a kernel with no seccomp filter at all, or older than
 `fork` and `socket` stay open would be a sandbox in name only.
 
 **No environment variable or runtime knob weakens the sandbox.** The mode is
-a constant in the IR; `nish_sandbox` reads no environment variable, no file
-and no argument. The only way to a weaker sandbox is to rebuild with a
+a constant in the IR; `nish_sandbox` reads no environment variable, file or
+argument that can widen it. Step 1's `nish_cpu_count` reads
+`NISH_NUM_THREADS` (`runtime/runtime-parallel.c:157`), which only lowers the
+pool's size. The only way to a weaker sandbox is to rebuild with a
 different flag, which changes the binary and its run-cache key. Testing the
 missing-kernel path (§8) uses a compile-time define in a test-only build of
 the runtime unit, never a runtime switch.
@@ -446,6 +473,7 @@ the runtime unit, never a runtime switch.
 | `wasm32-unknown-unknown`, `wasm32-wasi` | accepted, no call emitted: a wasm module can reach only what its host imports into it |
 | an N-API addon (`scripts/build.sh --profile napi`) | has no `main` wrapper, so the flag is refused as for an entry without `main` |
 | a target-neutral `.ll` linked by hand on a non-Linux host | the stub in `runtime-sandbox.c` refuses to run, exit 126 |
+| Linux with a C library that skips `.preinit_array` (musl) | unsupported: `nish_sandbox_check` refuses at `main`, exit 126, after any constructor has run unconfined (§3) |
 
 The seccomp filter checks `seccomp_data.arch` first and kills on a mismatch, so
 a 32-bit entry, `int 0x80` on x86-64 or AArch32 compat on AArch64, cannot step
@@ -471,7 +499,10 @@ on", `tests/run.js:746`), and these checks expect one.
 | `sandbox: process_vm_writev into the parent dies of SIGSYS` | 159, and the same for `ptrace(PTRACE_ATTACH)` on the parent, under both modes |
 | `sandbox: chmod, utimensat and setxattr without fs.write fail EPERM` | `EPERM` printed for each, and the file's mode, times and attributes unchanged after the run |
 | `sandbox: open from ffi without fs.read is refused` | `EACCES` printed by the program, exit 0 |
-| `sandbox: fs.read=<dir> reads inside and not outside` | a temporary directory's file read, `/etc/hostname` refused |
+| `sandbox: fs.read=<dir> reads inside and not outside` | a file in one temporary directory read; a file the check writes in a second temporary directory, outside the scope, refused with `EACCES` |
+| `sandbox: a process.spawn-granted program runs a child` | the child's stdout through `spawnSync`, exit 0 |
+| `sandbox: a device ioctl without process.spawn is refused` | `ioctl(TCGETS)` on `/dev/null` opened after the call answers `EACCES` where unsandboxed it answers `ENOTTY`; below ABI 5, `skip("sandbox: this kernel has no IOCTL_DEV (ABI <5); the ioctl check did not run")` |
+| `sandbox: a libc that skips .preinit_array fails closed` | the golden's IR with the entry's `section` removed, linked: exit 126 and §3's message |
 | `sandbox: a spawn redirect without fs.write fails in the child` | the child's open refused, the parent's `spawnSyncTo` reporting the failure, no file created |
 | `sandbox: a process holding capabilities drops them` | under `unshare -r`, `CapEff`, `CapPrm`, `CapInh` and `CapAmb` in `/proc/self/status` all 0 after the call, and `CapBnd` 0; where unprivileged user namespaces are off, `skip("sandbox: no unprivileged user namespace; the capability drop did not run")` |
 | `sandbox: a constructor in an ffi object runs confined` | an `ffi` object's `__attribute__((constructor))` that opens a file without `fs.read` prints `EACCES` |
@@ -479,6 +510,8 @@ on", `tests/run.js:746`), and these checks expect one.
 | `sandbox: a granted program runs as it does unsandboxed` | byte-identical stdout with and without `--sandbox`, and again with `--threads` |
 | `sandbox: a threaded program without process.spawn still runs its pool` | the pool's answer, exit 0 |
 | `sandbox: strict refuses without Landlock` and `sandbox: best-effort warns without Landlock` | exit 126 and the message; stderr's one line and exit 0 |
+| `sandbox: strict refuses below ABI 3 without fs.write` | against the ABI 1 and ABI 2 builds below: exit 126; best-effort's line names `TRUNCATE` |
+| `sandbox: the wasm profile refuses sandboxed IR` | `scripts/build.sh --profile wasm` on a host `.ll` built with `--sandbox`: exit 2 and §3's message |
 | `sandbox: no golden moves without the flag` | the IR of every `tests/cases/` program unchanged |
 | `sandbox: the wasm targets emit no call` | no `@nish_sandbox` in the `.ll` |
 
@@ -495,9 +528,9 @@ Landlock (ABI 0); the fs checks did not run")`, which `tests/run.js`'s `skip`
 (`:280-283`) prints and counts, so a degraded run is visible in the skip count.
 
 **The missing-kernel path is tested without a runtime knob.** The section
-compiles a second copy of `runtime-sandbox.c` with
-`-DNISH_SANDBOX_SIMULATE_NO_LANDLOCK`, which makes the ABI probe answer 0, and
-links the strict and best-effort fixtures against it. The define is not in
+compiles extra copies of `runtime-sandbox.c` with
+`-DNISH_SANDBOX_SIMULATE_ABI=<n>`, which makes the ABI probe answer `n`, for
+0, 1 and 2, and links the strict and best-effort fixtures against each. The define is not in
 `build.sh`'s flags, so no shipped runtime can carry it, and no binary reads it
 at run time.
 
@@ -568,18 +601,25 @@ namespace, the domain and the filter stay attached, and Landlock refuses
 **What runs before the call.** The dynamic loader, `LD_AUDIT`, `LD_PRELOAD`'s
 interposition and libc's own start-up run first. They are the launcher's
 choice, so they are out of scope by this statement. An IFUNC resolver in an
-`ffi` object also runs first, and it is adversary code: that is a limit on
-what `--sandbox` holds (open question 11).
+`ffi` object or in a `DT_NEEDED` shared library also runs first, and it is
+adversary code: that is a limit on what `--sandbox` holds (open question
+11). On a C library that skips `.preinit_array` every constructor runs
+first as well, and the program then refuses to run (§3, §7).
 
 **What the adversary keeps.** Under the mask it was given, it keeps:
 
 - descriptors open before the call, and any it receives over `SCM_RIGHTS`;
-- `/proc/self`;
+- of `/proc/self`, what needs no open: `stat` and `readlink` on its
+  entries, and descriptors to it already open; opening its files needs
+  `fs.read` (open question 6);
+- a terminal open before the call, fd 0 included, with `TIOCSTI` where
+  `dev.tty.legacy_tiocsti` is 1, and below ABI 5 a terminal it reopens with
+  `fs.read` (§4, open question 12);
 - what argument-level checks would be needed to withhold (§10): `ioctl`'s
   `FS_IOC_SETFLAGS` and `FS_IOC_FSSETXATTR` on a read-only descriptor, and
   `mmap` with `PROT_EXEC`;
-- the metadata reads of §4: `stat`, `statx`, `getxattr`, `listxattr`,
-  `O_PATH`, `inotify` and `fanotify`;
+- the metadata reads of §4: `stat`, `lstat`, `statx`, `readlink`, `access`,
+  `getxattr`, `listxattr`, `O_PATH`, `chdir`, `inotify` and `fanotify`;
 - io_uring, when both `net` and `process.spawn` are granted;
 - signals to its own uid (until ABI 6), the clock, entropy and the
   environment;
@@ -587,7 +627,8 @@ what `--sandbox` holds (open question 11).
   `/proc/<pid>/mem` of another process included;
 - under `process.spawn`, read and execute on every file (open question 5);
 - kernel bugs, which no part of a sandbox in the same kernel holds;
-- the IFUNC resolvers above;
+- the IFUNC resolvers above, and every constructor on a libc that skips
+  `.preinit_array`;
 - everything, on macOS, where `--sandbox` is refused (§7).
 
 **Checked against the mapping.** Each route to a withheld capability lands on
@@ -685,13 +726,21 @@ unstated.
     measured Landlock on every runner. *Recommendation: (c), proposed in its
     own note: a default that refuses to start on older kernels is a break the
     stability rule at the head of LANGUAGE.md would have to allow.*
-11. **IFUNC resolvers in `ffi` objects.** A resolver runs during relocation,
-    before the preinit call (§3), so an `ffi` object can run code
-    unconfined. (a) State it as a limit in the record and the guide page;
+11. **IFUNC resolvers in `ffi` objects and needed libraries.** A resolver
+    runs during relocation, before the preinit call (§3), so an `ffi` object
+    or a `DT_NEEDED` shared library can run code unconfined. (a) State it as a limit in the record and the guide page;
     (b) also refuse, at link time, an `ffi` object carrying an
     `STT_GNU_IFUNC` symbol or an `R_*_IRELATIVE` relocation; (c) nothing.
     *Recommendation: (a) now, (b) in a later stage. The objects a Nish
     program links are the author's own or a dependency's, which the launcher
     already chose to trust, and libc's own IFUNCs are libc start-up. (b)
     needs a pass over each object's symbol table on the link path, and it
-    would refuse libraries that use IFUNC for CPU dispatch, as libgcc does.*
+    would refuse libraries that use IFUNC for CPU dispatch, as libgcc does,
+    and could not reach a shared library's resolvers at all.*
+12. **`IOCTL_DEV` below ABI 5.** On 5.13 to 6.9 a program granted `fs.read`
+    can reopen `/dev/tty` and `ioctl` it, `TIOCSTI` included. (a) State it,
+    as §4 and §9 do; (b) refuse strict below ABI 5 unless `process.spawn` is
+    granted, raising that floor to 6.10. *Recommendation: (a). A terminal
+    already on fd 0 gives the same power on every ABI, so (b) would raise the
+    floor without closing the route; `dev.tty.legacy_tiocsti=0` closes both,
+    and the guide page names it.*
