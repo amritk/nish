@@ -33,7 +33,7 @@ the record that found it. The notes below the table name each such finding.
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 7 / 8 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
 | TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 3 ⁹ | 0 / 0 / 0 / 1 |
-| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 6 ¹¹ | 0 / 0 / 0 / 2 |
+| QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts` | 0 / 0 / 1 / 8 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 2 ⁷ |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
@@ -42,7 +42,7 @@ the record that found it. The notes below the table name each such finding.
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 1 / 1 ¹⁰ |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
-| **Total** ⁸ | | | **3 / 10 / 17 / 91** | **0 / 1 / 3 / 15** |
+| **Total** ⁸ | | | **3 / 10 / 17 / 93** | **0 / 1 / 3 / 13** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -124,6 +124,13 @@ the record that found it. The notes below the table name each such finding.
     the caller passes, leave in the arena only the `HkdfScratch` each makes,
     which wipes its hashers and output blocks before the call returns, and a
     slot the caller owns is the caller's to wipe. It is counted as a fixed Low.
+    QUIC-6 (Low), RFC 9001 §6.6's AEAD limits, and QUIC-7 (Low), an
+    optimistic ACK, were closed by the AEAD-limits stage of #759: a write key
+    starts a key update at three quarters of its confidentiality limit and
+    the connection closes with AEAD_LIMIT_REACHED at it when none can be made
+    or past the integrity limit, and the server skips a 1-RTT packet number
+    every 128 to 1,024 packets and closes with PROTOCOL_VIOLATION on an ACK
+    of one. Each is counted as a fixed Low.
 12. ROUTE-1 to ROUTE-7 are the shapes an attacker's target can take, checked
     and found to hold, and are not findings. ROUTE-8 (Low), dot segments
     matched as bytes, and ROUTE-9 (Low), the path matched before it is
@@ -146,12 +153,10 @@ only.
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
-| QUIC-7 | Low | `std/net/quic-recovery.ts` (`onAck`), `std/net/quic.ts` (`receiveAck`) | An optimistic ACK is not detected: packet numbers are sent in order, so an ACK of one in flight cannot be told from a real one. The Application Data record of 128 packets in flight bounds the effect | — |
 | CLI-7 | Low | `src/compile.ts` (`runProgram`) | A cache hit does not check who owns the cache root. The primitive exists now (RT-9); `src/` may use it from the next release | — |
 | CLI-9 | Low | `src/compile.ts` (`programOnPath`, `packageRootCandidates`) | The package root is trusted without an owner check, and `programOnPath` takes the first readable `nish`, where the shell takes the first executable one. Documented in [`docs/INSTALL.md`](../INSTALL.md); the primitives exist now (RT-9) | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
-| QUIC-6 | Low | `std/net/quic.ts` | RFC 9001 §6.6's AEAD limits are not counted: no key update before 2^23 packets under one AES-GCM key, no AEAD_LIMIT_REACHED after too many failed opens | Q3 and Q4 |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-13 | Medium | `src/emit-json.ts` (`emitJsonDecodeMapBody`), `std/json-typed.ts` (`mapRoom`), `std/collections.ts` and `src/emit-map.ts` (the string hash) | The global `Map` hashes a string with no seed, so a body can give a `Map<string, V>` field keys that all collide. `maxMapKeys` (4,096 by default) bounds the keys of one decoding, and with them its probes; the fix is a seeded hash | — |
