@@ -91,6 +91,7 @@ import {
   N_NULL,
   N_NUMBER,
   N_OBJECT,
+  N_PARAM,
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
@@ -104,6 +105,7 @@ import {
   N_TYPE_NULL,
   N_TYPE_REF,
   N_UNARY,
+  N_VAR,
   N_VAR_DECL,
   N_WHILE,
   Node,
@@ -113,7 +115,7 @@ import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
-import { Local, NARROWED_NONE, STORAGE_LOCAL, STORAGE_PARAM, Scope } from "./symbols"
+import { Local, NARROWED_NONE, STORAGE_LOCAL, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   intBits,
   isForeignBuffer,
@@ -420,7 +422,7 @@ const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean =>
  * which TypeScript types `never` and compares with anything. Not a set any
  * read records, so `memberSetOf` reads it as unknown.
  */
-const MEMBERS_NONE: i32 = -2
+export const MEMBERS_NONE: i32 = -2
 
 /** Whether `set`, as `memberSets` and `Scope.hold` record one, names members. */
 const namesMembers = (set: i32): boolean => set >= 0 || set < MEMBERS_NONE
@@ -2042,9 +2044,9 @@ export const enumVariable = (ctx: CheckContext, node: Node, scope: Scope): Local
  * The key of the property path `node` reads, from the variable it starts at:
  * `@.s.kind` for `h.s.kind`, `@[0].kind` for `xs[0].kind`, `@` for the
  * variable itself. `""` when `node` is no such path: an optional chain, an
- * index other than a number, a call.
+ * index `indexKey` keys nothing, a call.
  */
-const pathKey = (node: Node): string => {
+const pathKey = (ctx: CheckContext, node: Node, scope: Scope): string => {
   const read = unwrapParens(node)
   if (read.kind === N_IDENT || read.kind === N_THIS) {
     return "@"
@@ -2054,14 +2056,103 @@ const pathKey = (node: Node): string => {
   }
   let base = ""
   if (read.kind === N_MEMBER) {
-    base = pathKey(read.children[0])
+    base = pathKey(ctx, read.children[0], scope)
     return base === "" ? "" : `${base}.${read.text}`
   }
-  if (read.kind === N_INDEX && read.children[1].kind === N_NUMBER) {
-    base = pathKey(read.children[0])
-    return base === "" ? "" : `${base}[${read.children[1].text}]`
+  if (read.kind !== N_INDEX) {
+    return ""
   }
-  return ""
+  const index = indexKey(ctx, read.children[1], scope)
+  if (index === "") {
+    return ""
+  }
+  base = pathKey(ctx, read.children[0], scope)
+  return base === "" ? "" : `${base}[${index}]`
+}
+
+/**
+ * What the index `index` of a property path is keyed as, as TypeScript keys
+ * an element access it narrows: a number literal as its value, so `xs[0x1]`
+ * is `xs[1]`, and a name as the variable it denotes when that variable holds
+ * one value while it is in scope (`Local.pathIndex`) — the number a `const`
+ * is initialised with, so `xs[i]` is `xs[0]` after `const i = 0`, and for a
+ * parameter, any other `const` or a `let` its block never assigns, the
+ * variable itself. `""` for anything else: a `let` that is assigned, a name
+ * in parentheses, any other expression.
+ */
+const indexKey = (ctx: CheckContext, index: Node, scope: Scope): string => {
+  if (index.kind === N_NUMBER) {
+    return numberKey(index.text)
+  }
+  if (index.kind !== N_IDENT) {
+    return ""
+  }
+  const local = sourceLocal(scope.lookup(index.text))
+  if (local === null) {
+    return ""
+  }
+  if (local.pathIndex === "" && !local.mutable) {
+    giveIndexKey(ctx, local)
+  }
+  return local.pathIndex
+}
+
+/** A number literal's text as an index key: an integer as its value, so `0x1`, `1` and `1e0` are one key. */
+export const numberKey = (text: string): string =>
+  text.indexOf(".") >= 0 ? text : `${parseIntegerLiteral(text)}`
+
+/** Key every index through `local` by the variable itself (`Local.pathIndex`). */
+export const giveIndexKey = (ctx: CheckContext, local: Local): void => {
+  local.pathIndex = `$${ctx.pathIndexCount}`
+  ctx.pathIndexCount = ctx.pathIndexCount + 1
+}
+
+/**
+ * Whether anything in `node` assigns or steps the variable `name` denotes
+ * where `node` stands, a closure's body included: a block, a `for` head or a
+ * function that declares `name` again holds another variable, and is passed
+ * over.
+ */
+export const assignsVariable = (node: Node, name: string): boolean => {
+  let target: Node | null = null
+  if (node.kind === N_BINARY && writesLeft(node.text)) {
+    target = unwrapParens(node.children[0])
+  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    target = unwrapParens(node.children[0])
+  }
+  if (target !== null && target.kind === N_IDENT && target.text === name) {
+    return true
+  }
+  for (const child of node.children) {
+    if (bindsName(child, name)) {
+      return false
+    }
+  }
+  for (const child of node.children) {
+    if (assignsVariable(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `node` declares `name`: a parameter, a declarator, or a `let`, `const` or parameter list holding one. */
+const bindsName = (node: Node, name: string): boolean => {
+  if (node.kind === N_PARAM || node.kind === N_VAR_DECL) {
+    return node.children[0].kind === N_IDENT && node.children[0].text === name
+  }
+  if (node.kind === N_VAR) {
+    return bindsName(node.children[0], name)
+  }
+  if (node.kind !== N_LIST) {
+    return false
+  }
+  for (const child of node.children) {
+    if ((child.kind === N_PARAM || child.kind === N_VAR_DECL) && bindsName(child, name)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** The variable a property path starts at: a local, a parameter, `this` as `ctx.thisRoot`, or `null`. */
@@ -2085,7 +2176,7 @@ const pathRoot = (ctx: CheckContext, node: Node, scope: Scope): Local | null => 
  * extends or to the variable it starts at drops what it held (`clearPaths`);
  * a call does not, as in TypeScript. `null` for anything else.
  */
-export const pathVariable = (
+const pathVariable = (
   ctx: CheckContext,
   node: Node,
   scope: Scope,
@@ -2096,8 +2187,11 @@ export const pathVariable = (
   if (read.kind !== N_MEMBER && read.kind !== N_INDEX) {
     return null
   }
-  const key = pathKey(read)
-  if (key === "" || !ctx.table.isEnum(type)) {
+  if (!ctx.table.isEnum(type)) {
+    return null
+  }
+  const key = pathKey(ctx, read, scope)
+  if (key === "") {
     return null
   }
   const root = pathRoot(ctx, read, scope)
@@ -2127,7 +2221,7 @@ export const pathVariable = (
  * starts at it no longer holds what a test proved. A target that is no path
  * clears every path from its variable.
  */
-export const clearPaths = (ctx: CheckContext, target: Node, scope: Scope): void => {
+const clearPaths = (ctx: CheckContext, target: Node, scope: Scope): void => {
   const covered: Local[] = []
   pathsCovered(ctx, target, scope, covered)
   for (const path of covered) {
@@ -2137,24 +2231,31 @@ export const clearPaths = (ctx: CheckContext, target: Node, scope: Scope): void 
 
 /**
  * Append to `into` every path a store to `target` overwrites: the path itself,
- * any path through it, and, for a store to the root or through an index that
- * is not a literal, every path from that root.
+ * any path through it, and, for a store to the root, every path from that
+ * root, and for a store to a variable an index is keyed by, every path
+ * through that index. A store through an index `indexKey` keys nothing,
+ * `xs[j] = v`, overwrites no path, as in TypeScript.
  */
 const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local[]): void => {
   const root = pathRoot(ctx, target, scope)
   if (root === null) {
     return
   }
-  let prefix = pathKey(target)
+  const prefix = pathKey(ctx, target, scope)
   if (prefix === "") {
-    prefix = "@"
+    return
+  }
+  let through = ""
+  const named = unwrapParens(target)
+  if (named.kind === N_IDENT && root.pathIndex.startsWith("$")) {
+    through = `[${root.pathIndex}]`
   }
   let i = 0
   while (i < ctx.pathLocals.length) {
     const key = ctx.pathKeys[i]
     const covered =
       prefix === "@" || key === prefix || key.startsWith(`${prefix}.`) || key.startsWith(`${prefix}[`)
-    if (ctx.pathRoots[i] === root && covered) {
+    if ((ctx.pathRoots[i] === root && covered) || (through !== "" && key.indexOf(through) >= 0)) {
       addLocals(into, [ctx.pathLocals[i]])
     }
     i = i + 1
@@ -2358,7 +2459,7 @@ const narrowEither = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
 }
 
 /** Append to `into` each of `locals` it does not already have. */
-const addLocals = (into: Local[], locals: Local[]): void => {
+export const addLocals = (into: Local[], locals: Local[]): void => {
   for (const local of locals) {
     let seen = false
     for (const had of into) {
@@ -3381,7 +3482,7 @@ const collectWritten = (ctx: CheckContext, node: Node, local: Local, scope: Scop
     const covered: Local[] = []
     pathsCovered(ctx, target, scope, covered)
     if (covered.indexOf(local) >= 0) {
-      if (pathKey(target) !== local.name) {
+      if (pathKey(ctx, target, scope) !== local.name) {
         return false
       }
       named = local

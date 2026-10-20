@@ -832,10 +832,22 @@ const area = (s: Shape): i32 => {
   stores a member into holds, after it, what it held before or any member
   stored (`reject_enum_held_if_join`, `reject_enum_held_else_join`,
   `reject_enum_held_ternary`, `reject_enum_held_ternary_assign`,
-  `reject_enum_held_loop_join`, `reject_enum_held_switch_join`). For a loop
-  and a `switch` this is every member the local can hold anywhere in it,
-  which may be more than `tsc` knows at a given point, so a comparison
-  refused against it is one `tsc` refuses too.
+  `reject_enum_held_loop_join`, `reject_enum_held_switch_join`). The join
+  after an `if` covers every local and path either arm assigns, one first
+  assigned in the `else` included (`reject_union_narrow_path_if_join`,
+  `reject_union_narrow_path_if_test`). A `switch` joins what each of its
+  exits leaves: every `break` out of it, the fall off its last clause and,
+  when no `default` covers every member, the case no clause matches; a
+  clause that returns is no exit (`tests/cases/union_narrowing_switch_join`;
+  `reject_union_narrow_path_switch`, `reject_union_narrow_path_switch_late`,
+  `reject_enum_switch_join`, `reject_enum_switch_unmatched`). What held
+  before the `switch` holds again at the start of each clause and in the
+  case no label matches, whatever an earlier clause stored
+  (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). For a loop
+  it is every member the local can hold anywhere in it, which may be more
+  than `tsc` knows at a given point, so a comparison refused against it is
+  one `tsc` refuses too, but not every one `tsc` refuses ("Accepted here,
+  refused by `tsc`", below).
 - A tag compared with an enum variable narrows on the side where they are
   equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
   `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
@@ -851,8 +863,18 @@ const area = (s: Shape): i32 => {
   `tsc` (`tests/cases/union_narrowing_paths`;
   `reject_union_narrow_path_field`, `reject_union_narrow_path_this`,
   `reject_union_narrow_path_nested`, `reject_union_narrow_path_index`,
-  `reject_union_narrow_path_join`, `reject_union_narrow_path_loop`). The
-  union read through the path is not narrowed (below).
+  `reject_union_narrow_path_join`, `reject_union_narrow_path_loop`). An
+  index is part of the path when it names one element, as TypeScript 5.5
+  reads it: a number literal, a parameter, a `const` (`const i = 0` makes
+  `xs[i]` the path `xs[0]`, annotated or not), or a `let` nothing in its
+  block assigns, a closure's body included. A `let` that is assigned or
+  stepped (`i = 1`, `i++`), a module-level `let`, a parenthesised name or any
+  other expression keys no path, so `xs[i]` is not narrowed through it, and a
+  store through such an index (`xs[j] = t`) drops nothing, as in `tsc`
+  (`tests/cases/union_narrowing_index`; `reject_union_narrow_path_ident`,
+  `reject_union_narrow_path_steady`, `reject_union_narrow_path_const_index`,
+  `reject_union_narrow_path_index_store`). The union read through the path is
+  not narrowed (below).
 - A union of two or more variants left still has only its tag
   (`reject_union_narrow_none_if`, `reject_union_narrow_none_ternary`,
   `reject_union_narrow_none_and`, `reject_union_narrow_none_or`,
@@ -981,6 +1003,26 @@ wanted is the existing refusal of its position (`reject_union_into_init`,
 `reject_union_ternary_other`, `reject_union_nullish_other`). A smaller union
 stored where a larger one is declared narrows it in `tsc`, as a variant
 does, and is NL2534 too (`reject_union_narrow_subunion`).
+
+**Accepted here, refused by `tsc`.** One shape, and only one, compiles
+here that `tsc --strict` refuses; it is pinned as it stands, with the
+expected `tsc` error written at each comparison, so the case fails on either
+side once the gap closes (`tests/cases/enum_loop_join_gap`,
+`tests/cases/union_narrowing_loop_gap`):
+
+- **The join after a loop.** After a `while`, `for` or `do` loop, a variable
+  or path holds every member the body wrote anywhere in it, not only the ones
+  that reach the end of an iteration. `let j: Kind = Kind.A; while (i < n) {
+  j = Kind.B; j = Kind.C; i++ } j === Kind.B` is accepted here, where `j` is
+  `Kind.A | Kind.B | Kind.C`, and is TS2367 to `tsc`, where it is `Kind.A |
+  Kind.C`; so is the same through a path, `h.k`, and in a `for` or a `do`
+  loop. A union narrowed by a tag test inside the body is the same: `while (i
+  < n) { u = make(i); if (u.kind !== Kind.A) return false; i++ } u.kind ===
+  Kind.B`, after `u` was narrowed to `Kind.A` before the loop, is accepted
+  here, where the loop drops the narrowing, and is TS2367 to `tsc`, where `u`
+  is still the `Kind.A` variant; so is the `do` form. The gap closes with a
+  fixpoint over the loop body: what each iteration's end and each `break`
+  leave, joined until it no longer changes.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a

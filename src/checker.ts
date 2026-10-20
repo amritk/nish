@@ -829,6 +829,11 @@ export class Checker {
     this.ctx.errored = false
     this.ctx.loopKinds = []
     this.ctx.loopBreaks = []
+    this.ctx.switchFrames = []
+    // A path's variable stands for it within one body only.
+    this.ctx.pathLocals = []
+    this.ctx.pathRoots = []
+    this.ctx.pathKeys = []
     const scope = new Scope(null)
     let i = 0
     while (i < sig.paramNames.length) {

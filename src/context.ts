@@ -31,6 +31,22 @@ export const NUMBER_MODE_F64: i32 = 1
 export const LOOP_ITERATION: i32 = 0
 export const LOOP_SWITCH: i32 = 1
 
+/**
+ * A `switch` being checked: the variables a clause assigns, read before the
+ * clauses are, and what they read as at each way out to the statement after
+ * it — a `break`, the last clause falling out of the bottom, and a value no
+ * label matches — so they are joined over exactly those.
+ */
+export class SwitchFrame {
+  locals: Local[]
+  exits: Scope[]
+
+  constructor(locals: Local[]) {
+    this.locals = locals
+    this.exits = []
+  }
+}
+
 export class CheckContext {
   /** Shared by every module of one compilation, so a type id means one thing. */
   table: TypeTable
@@ -106,6 +122,8 @@ export class CheckContext {
   pathRoots: Local[]
   pathKeys: string[]
   thisRoot: Local
+  /** How many variables have been given a `$n` index key (`Local.pathIndex`). */
+  pathIndexCount: i32
   /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
    * parameter scope, and whether it may read its function's `const` locals:
@@ -159,6 +177,8 @@ export class CheckContext {
    */
   loopKinds: i32[]
   loopBreaks: boolean[]
+  /** The `switch`es enclosing the statement being checked, innermost last. */
+  switchFrames: SwitchFrame[]
   /**
    * The expression of the statement being checked, when it is an expression
    * statement. `console.log` and the other `void` builtins may only appear
@@ -212,6 +232,7 @@ export class CheckContext {
     this.current = null
     this.loopKinds = []
     this.loopBreaks = []
+    this.switchFrames = []
     this.statementExpression = null
     this.forOfWalk = null
     this.errored = false
@@ -223,6 +244,7 @@ export class CheckContext {
     this.pathRoots = []
     this.pathKeys = []
     this.thisRoot = new Local("this", T_ERROR, false, STORAGE_PARAM)
+    this.pathIndexCount = 0
     this.arrowFns = []
     this.arrowScopes = []
     this.arrowCaptures = []

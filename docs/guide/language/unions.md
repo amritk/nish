@@ -226,7 +226,12 @@ A narrowing of the union belongs to a variable or a parameter: a test of
 `a.b.kind` does not narrow `a.b`, so `a.b.r` is an error (NL2557) — copy it
 into a `const` and test that. The tag read through the path does stay
 narrowed, as in TypeScript, so a second `a.b.kind === Kind.Circle` after the
-first ruled it out is an error, until a store to `a.b`, `a.b.kind` or `a`. And where TypeScript would type a value `never`,
+first ruled it out is an error, until a store to `a.b`, `a.b.kind` or `a`.
+An index belongs to the path when it names one element, as in TypeScript: a
+number, a parameter, a `const` (after `const i = 0`, `xs[i]` is `xs[0]`), or a
+`let` that nothing assigns. Through a loop counter, which `i++` assigns,
+`xs[i]` is not narrowed, and a store `xs[j] = t` through it clears nothing.
+And where TypeScript would type a value `never`,
 because every tag has been tested away, reading it is an error (NL2556).
 
 A comparison the tests above it have already ruled out is an error, as in
@@ -263,7 +268,15 @@ where they are equal; where they differ, nothing is known.
 
 A local that an `if`, a ternary, a loop or a `switch` stores members into
 holds, after it, what it held before or any member stored, so a comparison
-with a member it cannot hold is an error there too (NL2531).
+with a member it cannot hold is an error there too (NL2531). After a `switch`,
+that is what each way out of it left: each `break`, the end of its last
+clause, and, with no `default`, the value no `case` matched.
+
+After a loop, the local holds every member the body stores anywhere, not only
+what reaches the end of an iteration, and a union narrowed by a test inside
+the body loses that narrowing. TypeScript tracks the end of each iteration,
+so it refuses a few comparisons after a loop that Nish still accepts; the
+language reference lists the shape under "Accepted here, refused by `tsc`".
 
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case

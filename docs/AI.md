@@ -1694,8 +1694,11 @@ export const main = (): i32 => {
   that returns leaves the variant no test named). A path does not narrow the
   union (`h.s.kind` then `h.s.r` is NL2557): copy it into a local and test
   that. The tag read through a path (`h.k`, `this.k`, `h.s.kind`,
-  `xs[0].kind`) does stay narrowed for later comparisons, until a store to
-  the path, a prefix of it or its root. A read where every variant was excluded is
+  `xs[0].kind`, `xs[i].kind`) does stay narrowed for later comparisons, until a store to
+  the path, a prefix of it or its root. An index `i` is part of the path when
+  it holds one value: a parameter, a `const` (`const i = 0` makes `xs[i]` the
+  path `xs[0]`), or a `let` nothing assigns; through a `let` that is assigned
+  or stepped, `xs[i]` is not narrowed, and `xs[j] = t` drops nothing. A read where every variant was excluded is
   NL2556.
 - The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
   `const k = s.kind` is NL2530. `k` holds only the variants' members. A
@@ -1709,7 +1712,11 @@ export const main = (): i32 => {
   `const j = k` is NL2530 (annotate it `Kind`). `s.kind === k` narrows `s`
   to the variants of `k`'s members where they are equal. An enum local an
   `if`, ternary, loop or `switch` stores into holds, after it, what it held
-  or any member stored.
+  or any member stored; after a `switch`, what its exits left (each `break`,
+  the last clause's end, and the unmatched case when there is no `default`);
+  after a loop, every member the body stored anywhere, which accepts a few
+  comparisons `tsc` refuses (TS2367; LANGUAGE.md, "Accepted here, refused by
+  `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`

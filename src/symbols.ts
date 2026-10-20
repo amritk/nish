@@ -42,6 +42,16 @@ export class Local {
    * in `src/arrays.ts`).
    */
   typedArray: string
+  /**
+   * What an index `xs[i]` through this variable is keyed as among the
+   * property paths a test narrows (`indexKey` in `src/expressions.ts`): the
+   * number a `const` is initialised with, `$n` for any other variable that
+   * holds one value while it is in scope — a `const`, a parameter, a `let`
+   * its block never assigns — and `""` for a variable that is assigned, which
+   * keys nothing, as TypeScript narrows `xs[i]` only through such a variable.
+   * Among the pointers, as `typedArray` is.
+   */
+  pathIndex: string
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
   type: i32
   storage: i32
@@ -73,6 +83,7 @@ export class Local {
     this.typedArray = ""
     this.fresh = false
     this.captureOf = null
+    this.pathIndex = ""
   }
 }
 
