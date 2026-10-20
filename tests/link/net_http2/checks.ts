@@ -30,7 +30,8 @@ import {
   H2_SETTINGS_INITIAL_WINDOW_SIZE,
   H2_SETTINGS_MAX_FRAME_SIZE,
 } from "nish/net/http2-frame";
-import { H2_AGAIN, H2_CLOSED, H2_INVALID, H2_NEED_MORE, Http2Config, Http2Stream } from "nish/net/http2";
+import { H2_AGAIN, H2_CLOSED, H2_INVALID, H2_NEED_MORE, Http2Config, Http2Pools, Http2Stream } from "nish/net/http2";
+import { BufferPool } from "nish/net/buffer-pool";
 import { Suite } from "nish/testing";
 import { httpFieldBytes } from "nish/net/http-fields";
 import { Client, ZERO, filler, getOf, namesOf, postOf, valuesOf } from "./peer";
@@ -40,6 +41,26 @@ const defaults = (): Http2Config => new Http2Config();
 
 /** No fields beyond `:status`, as the alternating list `namesOf` and `valuesOf` read. */
 const none = (): string[] => [];
+
+/** How many bytes are not zero across the buffers `pool` holds unlent. */
+const http2NonZero = (pool: BufferPool): i32 => {
+  let count: i32 = 0;
+  for (const buf of pool.free) {
+    count = count + http2NonZeroFrom(buf, ZERO);
+  }
+  return count;
+};
+
+/** How many bytes of `buf` from `from` on are not zero. */
+const http2NonZeroFrom = (buf: u8[], from: i32): i32 => {
+  let count: i32 = 0;
+  for (let k: i32 = from; k < toI32(buf.length); k++) {
+    if (buf[k] !== 0) {
+      count = count + 1;
+    }
+  }
+  return count;
+};
 
 /** Runs every check and answers the exit code. */
 export const http2Checks = (): i32 => {
@@ -503,6 +524,8 @@ export const http2Checks = (): i32 => {
   r.wire.windowUpdate(ZERO, toI32(1000));
   r.wire.ping("0102030405060708");
   const burst: u8[] = r.wire.take();
+  // A carrier gives the emptied buffers back after each event loop, as Http2TlsServer does.
+  r.conn.rest();
   let moved: i64 = 0;
   let datas: i32 = 0;
   for (let k: i32 = 0; k < 100; k++) {
@@ -518,6 +541,7 @@ export const http2Checks = (): i32 => {
     }
     r.conn.writeData(toI32(1), chunk, ZERO, toI32(100), false);
     r.conn.consume(r.conn.outputEnd - r.conn.outputStart);
+    r.conn.rest();
     moved = moved + (Arena.used() - before);
   }
   t.eqI32("a thousand DATA frames in, with WINDOW_UPDATEs, PINGs and a hundred DATA frames out", datas, toI32(1000));
@@ -607,5 +631,40 @@ export const http2Checks = (): i32 => {
   roomDated.takeFrames();
   t.eqI32("the same head with the date counted against the room: H2_INVALID", roomDated.conn.respond(toI32(1), toI32(200), namesOf(["x-fill", "v"]), roomFill, true), H2_INVALID);
   t.eqStr("and nothing went out for the head the date overfills", roomDated.takeFrames(), "");
+
+  // --- 11. Borrowed buffers --------------------------------------------------------------------------------
+  // Two connections in turn on one set of pools, as two connections on one
+  // server slot: the second borrows the first's buffers, and must read none of
+  // its bytes.
+  const shared = new Http2Pools("checks", defaults(), toI32(1));
+  const first = new Client(defaults());
+  first.conn.pools = shared;
+  t.eqI32("a connection borrows nothing before it is asked to write", shared.made(), ZERO);
+  first.open();
+  first.wire.headers(toI32(1), postOf("/secret", toI32(13)), ZERO);
+  first.wire.data(toI32(1), "first's input", H2_FLAG_END_STREAM);
+  first.send();
+  first.takeEvents();
+  first.conn.respond(toI32(1), toI32(200), namesOf(["x-first", "first's output"]), valuesOf(["x-first", "first's output"]), false);
+  first.conn.writeData(toI32(1), httpFieldBytes("first's body"), ZERO, toI32(12), true);
+  first.takeFrames();
+  t.eqI32("it borrowed one buffer from each pool", shared.made(), toI32(3));
+  first.conn.rest();
+  t.eqI32("and an idle connection, all read and all sent, holds none of them", shared.lent(), ZERO);
+  first.wire.headers(toI32(3), getOf("/unread"), H2_FLAG_END_STREAM);
+  const unread: u8[] = first.wire.take();
+  first.conn.feed(unread, ZERO, toI32(unread.length));
+  first.conn.drop();
+  t.eqI32("a connection that ends with bytes unread gives every buffer back", shared.lent(), ZERO);
+  t.eqI32("zeroed, as far as each was written", http2NonZero(shared.input) + http2NonZero(shared.output) + http2NonZero(shared.block), ZERO);
+  const second = new Client(defaults());
+  second.conn.pools = shared;
+  second.open();
+  second.wire.headers(toI32(1), getOf("/b"), H2_FLAG_END_STREAM);
+  second.send();
+  t.eqStr("the next connection on the same pools serves its own request", second.takeEvents(), "request 1 GET /b end");
+  t.eqI32("from the buffers the first gave back, not new ones", shared.made(), toI32(3));
+  t.eqI32("and reads nothing the first wrote past what it wrote itself", toI32(second.conn.input.length) > 0 ? http2NonZeroFrom(second.conn.input, second.conn.inputUsed) : toI32(-1), ZERO);
+  second.conn.drop();
   return t.done();
 };

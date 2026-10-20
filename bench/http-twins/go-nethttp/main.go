@@ -14,6 +14,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -27,6 +28,8 @@ type message struct {
 func answer(w http.ResponseWriter, r *http.Request) {
 	n := requests.Add(1)
 	h := w.Header()
+	id, isQuery := strings.CutPrefix(r.URL.Path, "/id/")
+	isQuery = isQuery && id != "" && !strings.Contains(id, "/")
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/plaintext":
 		h.Set("Content-Type", "text/plain")
@@ -52,6 +55,33 @@ func answer(w http.ResponseWriter, r *http.Request) {
 		body, _ := json.Marshal(order)
 		h.Set("Content-Type", "application/json")
 		w.Write(body)
+	case r.Method == http.MethodPost && r.URL.Path == "/json":
+		// Any JSON value is re-serialized compactly; encoding/json writes an
+		// object's keys sorted.
+		var value any
+		in, err := io.ReadAll(r.Body)
+		if err == nil {
+			err = json.Unmarshal(in, &value)
+		}
+		if err != nil {
+			h.Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, "bad request")
+			return
+		}
+		body, _ := json.Marshal(value)
+		h.Set("Content-Type", "application/json")
+		w.Write(body)
+	case r.Method == http.MethodGet && r.URL.Path == "/":
+		h.Set("Content-Type", "text/plain")
+		io.WriteString(w, "Hi")
+	case r.Method == http.MethodGet && isQuery:
+		h.Set("Content-Type", "text/plain")
+		h.Set("x-powered-by", "benchmark")
+		io.WriteString(w, id+" "+r.URL.Query().Get("name"))
+	case extra(r.Method, r.URL.Path):
+		h.Set("Content-Type", "text/plain")
+		io.WriteString(w, "ok")
 	default:
 		h.Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusNotFound)

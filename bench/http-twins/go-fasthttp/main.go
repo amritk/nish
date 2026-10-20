@@ -12,6 +12,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/valyala/fasthttp"
@@ -35,6 +36,8 @@ func plain(ctx *fasthttp.RequestCtx, status int, body string) {
 func answer(ctx *fasthttp.RequestCtx) {
 	n := requests.Add(1)
 	path := string(ctx.Path())
+	id, isQuery := strings.CutPrefix(path, "/id/")
+	isQuery = isQuery && id != "" && !strings.Contains(id, "/")
 	switch {
 	case ctx.IsGet() && path == "/plaintext":
 		ctx.SetContentType("text/plain")
@@ -54,6 +57,24 @@ func answer(ctx *fasthttp.RequestCtx) {
 		body, _ := json.Marshal(order)
 		ctx.SetContentType("application/json")
 		ctx.SetBody(body)
+	case ctx.IsPost() && path == "/json":
+		// Any JSON value is re-serialized compactly; encoding/json writes an
+		// object's keys sorted.
+		var value any
+		if err := json.Unmarshal(ctx.PostBody(), &value); err != nil {
+			plain(ctx, fasthttp.StatusBadRequest, "bad request")
+			return
+		}
+		body, _ := json.Marshal(value)
+		ctx.SetContentType("application/json")
+		ctx.SetBody(body)
+	case ctx.IsGet() && path == "/":
+		plain(ctx, fasthttp.StatusOK, "Hi")
+	case ctx.IsGet() && isQuery:
+		ctx.Response.Header.Set("x-powered-by", "benchmark")
+		plain(ctx, fasthttp.StatusOK, id+" "+string(ctx.QueryArgs().Peek("name")))
+	case extra(string(ctx.Method()), path):
+		plain(ctx, fasthttp.StatusOK, "ok")
 	default:
 		plain(ctx, fasthttp.StatusNotFound, "not found")
 	}

@@ -19,6 +19,7 @@ workers=${BENCH_CORES:-1}
 master=off
 [ "$workers" -eq 1 ] || master=on
 sed -e "s/@PORT@/$port/" -e "s/@MASTER@/$master/" -e "s/@WORKERS@/$workers/" "$here/nginx.conf" >"$run/nginx.conf"
+cp "$here/extra.conf" "$run/extra.conf"
 (
   for _ in $(seq 1 1000); do
     if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
