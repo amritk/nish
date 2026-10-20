@@ -119,7 +119,12 @@ const keptUntilAck = (t: Suite): void => {
   const again: i32 = s.putNextChunk(buf, n32(0), n32(1200));
   t.ok("the frame sent again is the frame sent first, byte for byte, read from the kept buffer", again === sent && same(head(buf, again), first));
   t.ok("sent again but not acknowledged, the buffer stays lent", stream.sendBuf.length === 1024);
-  s.chunkAcked(n64(0), n64(0), n32(100), true);
+  // The second half and the FIN acknowledged first: the final size is known
+  // acknowledged, but bytes below it are not, and a loss would send them again.
+  s.chunkAcked(n64(0), n64(50), n32(50), true);
+  s.settle();
+  t.ok("with the FIN acknowledged and its first 50 bytes not, the send buffer stays lent", stream.sendBuf.length === 1024);
+  s.chunkAcked(n64(0), n64(0), n32(50), false);
   s.settle();
   t.ok("acknowledged to the final size, the send buffer goes back to the pool", stream.sendBuf.length === 0 && stream.sendAcked.length === 0);
 };
