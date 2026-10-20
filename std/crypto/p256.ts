@@ -20,6 +20,8 @@
  *
  * Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
  *
+ * Ported from libsecp256k1 (https://github.com/bitcoin-core/secp256k1), src/modinv32_impl.h. Copyright (c) 2020 Peter Dettman. Used under the MIT licence; see std/crypto/LICENSE-libsecp256k1.
+ *
  * **What is ported and what is not.** The `p256Fiat*` functions are
  * fiat-crypto's generated, formally verified Montgomery arithmetic on eight
  * `u32` limbs with `u64` products — `mul`, `square`, `add`, `sub`,
@@ -35,9 +37,11 @@
  * changes no arithmetic; it kept the input's pointer from being spilled in a
  * way the aarch64 disassembly check once misread (#334). The
  * scalar functions use the field's four helpers, which fiat generates
- * identically for both. Everything else in this file — the curve, the encodings, the
- * inversions and ECDSA — is written for this module from the documents it
- * names.
+ * identically for both. The nonce's inverse, `p256ScalarInverse`, is
+ * libsecp256k1's 32-bit safegcd (`modinv32`), function for function; the
+ * section that holds it says what changes. Everything else in this file — the
+ * curve, the encodings, the other inversions and ECDSA — is written for this
+ * module from the documents it names.
  *
  * **The curve** is `y^2 = x^3 - 3x + b` over GF(p), p = 2^256 - 2^224 + 2^192
  * + 2^96 - 1, with the base point G and its order n from SEC 2 §2.4.2 (FIPS
@@ -62,8 +66,14 @@
  * address depends on the scalar. `p256ScalarMult`, a fixed 4-bit window over
  * sixteen multiples of a point, is what verification multiplies G and the
  * received key by, and the reference the comb is held to bit for bit
- * (`tests/link/crypto_p256_agree`). The inversions raise to the public
- * exponents p - 2 and n - 2, so their branches follow a constant. The
+ * (`tests/link/crypto_p256_agree`). The signer inverts the nonce by
+ * Bernstein and Yang's safegcd, `p256ScalarInverse`: twenty batches of thirty
+ * divsteps, each a fixed run of masks and adds, whatever the scalar, so its
+ * loops count constants and no branch or address follows the nonce; Fermat's
+ * `p256ScalarInvert` is the reference it is held to bit for bit
+ * (`tests/link/crypto_p256_inverse`) and what verification still uses. The
+ * other inversions raise to the public exponents p - 2 and n - 2, so their
+ * branches follow a constant. The
  * branches that remain are on public facts: a length, a limb or bit position,
  * whether a received key or signature is in range, and — once in about 2^32
  * signatures — RFC 6979's retry when a candidate nonce is not below n.
@@ -72,17 +82,20 @@
  * `tests/cases/ct_asm_p256` holds copies of fiat's field multiply, square, add
  * and subtract, its scalar multiply and its conditional move, the table read
  * by a secret digit, the complete doubling and addition, one window step of
- * `p256ScalarMult`, and the comb's digit, entry read, mixed addition,
- * conditional keep and one whole comb step to the check of
+ * `p256ScalarMult`, the comb's digit, entry read, mixed addition,
+ * conditional keep and one whole comb step, and safegcd's thirty divsteps and
+ * its two matrix updates, to the check of
  * `tests/ct-asm.js`, which refuses any branch, call it cannot follow or
  * secret-indexed access in them on x86-64 and aarch64, following each call
  * into the field functions. The copies of the point functions take coordinate
  * arrays rather than points, the table reads' loops are written out there and
  * their offsets computed with wrapping arithmetic, as that fixture's header
  * says; its `main` runs RFC 6979 A.2.5 through them, by the window and by the
- * comb. The 64-window and 4-row loops, the table build, the inversions, the
- * encodings and the nonce derivation are constant time by construction rather
- * than by that proof.
+ * comb, and three inverses through the safegcd copies. The 64-window and 4-row
+ * loops, the table build, the inversions (safegcd's twenty-batch loop, its
+ * conversions, normalisation and limb loops among them), the encodings and the
+ * nonce derivation are constant time by construction rather than by that
+ * proof.
  *
  * Verification multiplies only public values, by `p256ScalarMult` alone.
  *
@@ -3746,7 +3759,8 @@ const p256FieldInvert = (out: u32[], a: u32[]): void => {
 /**
  * `out = 1 / a` mod n, as `a^(n - 2)` with the scalar Montgomery multiply;
  * the exponent is public, so the square-and-multiply branches only on a
- * constant.
+ * constant. Verification inverts s with it; the signer's `p256ScalarInverse`
+ * is held to it bit for bit (`tests/link/crypto_p256_inverse`).
  */
 const p256ScalarInvert = (out: u32[], a: u32[]): void => {
   const e: u32[] = p256Order()
