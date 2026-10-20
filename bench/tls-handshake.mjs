@@ -385,16 +385,22 @@ const main = async () => {
       await check(server, www)
       return
     }
-    const head = run("git", ["rev-parse", "--short=7", "HEAD"]).trim()
+    // A working tree with uncommitted changes is not the commit it names.
+    const dirty = run("git", ["status", "--porcelain", "--untracked-files=no"]).trim() !== ""
+    const head = `${run("git", ["rev-parse", "--short=7", "HEAD"]).trim()}${dirty ? "+dirty" : ""}`
     const targets = [
       { name: head, bin: server },
       { name: `${head} copy`, bin: copyOf(server), copyOf: head },
     ]
     for (const rev of opts.baselines) {
       const { sha, dir } = baselineTree(rev)
+      const name = sha.slice(0, 7)
+      // Rounds are pooled by name, so two targets sharing one would be read as one.
+      if (targets.some((t) => t.name === name)) {
+        throw new Error(`--baseline ${rev} names ${name}, a target already measured`)
+      }
       const bin = join(build, `interop-server-${sha.slice(0, 12)}`)
       buildServer(dir, bin)
-      const name = sha.slice(0, 7)
       targets.push({ name, bin }, { name: `${name} copy`, bin: copyOf(bin), copyOf: name })
     }
     for (const t of targets) {

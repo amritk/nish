@@ -702,11 +702,14 @@ time for a whole handshake, because an inversion that is a quarter of the
 signature's instructions is a small part of the handshake's time, and the bar
 should say how small.
 
-**How it was measured.** On `main` at `c8a00d6`, with this branch's bench and
-notes on top: the branch changes no `.ts` and nothing the server or
-`bench/p256.ts` is built from, so the labels `c8d08d0` and `acac648` below,
-its heads at the time, are `main`'s server. `build/nish` was built from it by
-the 0.18.0 seed. `a22a056`, the tree before the comb, was built by the same
+**How it was measured.** On `main` at `c8a00d6`, with `bench/tls-handshake.mjs`
+added as it is merged here: what the script measures is unchanged since it
+was first committed (review only changed how it names targets), and it adds no
+`.ts` and nothing the server or `bench/p256.ts` is built
+from, so the tree measured is `c8a00d6`'s server, called `main` below. The
+bench names a target by the commit it was run on, so its own output for these
+runs carries the short hashes of the two commits that held the script, not
+`c8a00d6`. `build/nish` was built from it by the 0.18.0 seed. `a22a056`, the tree before the comb, was built by the same
 seed in a worktree of its own, as the result above built it, and that tree's
 `node bench/p256.mjs --check` built its `bench/p256.ts` and printed the pinned
 checksum, 1238268086. This machine is not the one the sections above ran on:
@@ -744,11 +747,14 @@ rounds:
 The noise band, each copy against its own build, minimum / median, + slower:
 `main` −1.6% / −0.4% in the first sample and 0.0% / 0.0% in the second;
 `a22a056` +0.7% / +2.4% and −0.7% / −1.7%. The figures are whole clock ticks:
-the fewest in any round was 120, so one tick is 0.83% of a round, and 2,000 and
-2,033 µs are 120 and 122 ticks. `a22a056` took 14.8% / 16.7% more CPU a
-handshake than `main` in the first sample and 14.2% / 16.3% in the second: the
-comb, which cut the handshake's instructions 1.86x, cut its server CPU by about
-an eighth. curl's own connect-to-handshake time, which the bench prints beside
+the fewest in any round was 120, so one tick is 0.83% of a round, two ticks
+1.67%, and 2,000 and 2,033 µs are 120 and 122 ticks. `a22a056` took 14.8% /
+16.7% more CPU a handshake than `main` in the first sample and 14.2% / 16.3% in
+the second. That gap is not the comb's alone: the two trees differ by every
+commit between them, and `main`'s handshake also carries about 0.6M Ir outside
+P-256 that the earlier result's did not (below). The 1.86x by which the comb
+cut the handshake's instructions is the earlier machine's ratio, at `6e11fa6`;
+it was not re-taken here. curl's own connect-to-handshake time, which the bench prints beside
 these, was 3.3–4.0 ms, mostly the client's.
 
 **One real handshake.** The result's method, unchanged: the same server built
@@ -773,9 +779,11 @@ P-256 is still the largest module, 60,138 Ir above X25519, and in the second
 and third handshakes its lines are the result's 3,208,117 to the instruction. The handshake is larger than
 the result's 7,311,699 Ir in what is neither: `runtime/runtime.c`'s own lines
 were 441,944, 441,152 and 441,692 Ir in the three, and glibc's `memset`
-227,562 in the first and about 30,000 in the others. That growth landed on
-`main` between `6e11fa6` and `c8a00d6`, is outside P-256, and was not measured
-further.
+227,562 in the first and about 30,000 in the others. That growth, about 0.6M
+Ir (7,922,694 against 7,311,699), is outside P-256, and where it comes from was
+not measured: a commit between `6e11fa6` and `c8a00d6` is one candidate, and
+the machine is another, since this one is model 207 where the result's was 85,
+and glibc picks `memset`'s implementation by the CPU it runs on.
 
 Inside P-256, the first handshake, inclusive of what each calls:
 
@@ -825,9 +833,8 @@ and 147, 3.8x faster than `a22a056`; and the handshake would shed about 43 µs
 of server CPU, 2.1% of 2,033 and 2,000 µs. Time has not tracked instructions in
 this module, as the result found, so these are a scale, not a forecast. On the
 handshake the scale is tight: the projected 2.1% is about two and a half clock
-ticks, where `main` differed from its copy by 1.6%, two ticks, at the minimum
-in the first sample. **The band is narrower than the projected change, but
-only by about half a tick**, so a real gain the size of the projection can
+ticks, where condition 4's fixed band below is 1.67%, two ticks. **The band is
+narrower than the projected change, but only by about half a tick**, so a real gain the size of the projection can
 land inside the band, and condition 4 below can be missed by an inversion that
 meets condition 1.
 
@@ -851,20 +858,27 @@ samples.
 3. **`p256SignSha256`'s minimum is at least 3x faster than `a22a056`'s,
    outside the noise band at the minimum, in both samples.** In each sample
    the new build's sign minimum must be at or under `a22a056`'s sign minimum
-   / 3 / (1 + b), where b is the larger of the two builds' copy gaps at
-   the sign minimum in that sample. On this baseline's figures that is 583.6 / 3 / 1.042 = 186.7
-   µs in the first sample and 563.7 / 3 / 1.019 = 184.4 µs in the second;
-   `main` is 197.6 and 188.0 µs, and misses both. **Verify is not slower**:
-   in each sample, the new build's verify minimum is not above `c8a00d6`'s
-   by more than the larger of the two copy gaps at the verify minimum in that
-   sample (on these figures, 2.6% and 4.3%).
+   in that sample / 3 / 1.042. The 4.2% is fixed here, from this baseline: the
+   largest absolute copy gap at the sign minimum over both builds and both
+   samples (`a22a056`'s −4.2%, first sample), so a copy that ran faster than
+   its build widens the band as much as one that ran slower, and a later
+   reading's own copy gaps do not move it. On this baseline's figures that is
+   583.6 / 3 / 1.042 = 186.7 µs in the first sample and 563.7 / 3 / 1.042 =
+   180.3 µs in the second; `main` is 197.6 and 188.0 µs, and misses both.
+   **Verify is not slower**: in each sample, the new build's verify minimum
+   is not above `c8a00d6`'s in that sample by more than 4.3%, likewise fixed:
+   the largest absolute copy gap at the verify minimum here (`main`'s +4.3%,
+   second sample).
 4. **Server CPU a handshake is below this baseline's `main`, outside the
    copy's band at the minimum, in both samples.** In each sample the new
-   build's minimum must be under `c8a00d6`'s minimum / (1 + b), where b is
-   the larger of the two copy gaps at the minimum in that sample. With figures
-   in whole ticks of 600 handshakes, that is at least one tick below
-   `c8a00d6`'s minimum when its copy matched it, and more when the copy
-   strayed.
+   build's minimum must be at or under `c8a00d6`'s minimum in that sample /
+   (1 + 2/120), 1.67%. The band is fixed here, from this baseline: the larger of the
+   largest absolute copy gap at the minimum over both builds and both samples
+   (`main`'s −1.6%, first sample) and two ticks of the fewest-tick round
+   (2 / 120, the larger), so it never falls below the figures' own resolution. In whole
+   ticks of 600 handshakes that is two ticks below `c8a00d6`'s minimum: on
+   this baseline's figures, 2,000 µs (120 ticks) in the first sample and
+   1,966.7 µs (118 ticks) in the second.
 
 A missed condition is recorded as missed. Condition 1 is about instructions
 and decides whether the inversion was replaced; 3 and 4 are about time and say

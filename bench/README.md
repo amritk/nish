@@ -842,7 +842,10 @@ node bench/tls-handshake.mjs --json out.json        # every round's figures, for
 
 The targets are the server built by this checkout, a byte-identical copy of
 it, and with `--baseline REV` the server built from REV in a worktree under
-`build/` by that tree's own `build/nish`, and a copy of that. Each round starts
+`build/` by that tree's own `build/nish`, and a copy of that. A target is named
+by its commit's short hash, with `+dirty` when the checkout has uncommitted
+changes, and a `--baseline` that names a target already measured is refused,
+since rounds are pooled by name. Each round starts
 every target fresh, in an order rotated by one each round, pinned to CPU 0.
 After five warm-up handshakes it makes `--handshakes` new connections (600 by
 default), each one `curl --http2 --tlsv1.3 -k` process pinned to CPUs 1–3, so
@@ -855,8 +858,8 @@ is reported beside it but is mostly the client's.
 The report gives each target's minimum and median over the rounds, user and
 system CPU apart, and each copy against its own build: whatever separates a
 server from its copy is the machine, and a difference between builds reads as
-one only outside that band. It also prints each round's fewest clock ticks
-(10 ms each) so their resolution can be read, and the handshake every server
+one only outside that band. It also prints the fewest clock ticks
+in any round (10 ms each) so their resolution can be read, and the handshake every server
 negotiated, which must be the same for all of them or the run stops.
 
 ## Pool memory
