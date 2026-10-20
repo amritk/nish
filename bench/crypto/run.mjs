@@ -82,6 +82,49 @@ const PORTABLE_MIN_RATIO = 1.2
 const TWINS = ["openssl", "go", "rust", "node"]
 const TWIN_LABELS = { openssl: "OpenSSL", go: "Go", rust: "Rust", node: "Node" }
 const PORTABLE_IDS = { openssl: "openssl-portable", go: "go-purego", rust: "rust-soft" }
+
+/**
+ * The /proc/cpuinfo flag each OPENSSL_ia32cap bit stands for, per word. The
+ * first word is CPUID(1) EDX in its low half and ECX in its high half; the
+ * second is CPUID(7) EBX, then ECX.
+ */
+const IA32CAP_FLAGS = [
+  { 33: "pclmulqdq", 41: "ssse3", 44: "fma", 51: "sse4_1", 52: "sse4_2", 54: "movbe", 57: "aes", 60: "avx" },
+  {
+    3: "bmi1",
+    5: "avx2",
+    8: "bmi2",
+    16: "avx512f",
+    19: "adx",
+    29: "sha_ni",
+    30: "avx512bw",
+    31: "avx512vl",
+    41: "vaes",
+    42: "vpclmulqdq",
+  },
+]
+
+/**
+ * The cpuinfo flags an OPENSSL_ia32cap value takes away: a `~x` word clears
+ * x's bits, a bare word keeps only its own, and an absent word clears nothing.
+ */
+const ia32capCleared = (value) => {
+  const cleared = []
+  value.split(":").forEach((word, i) => {
+    const m = /^(~?)(0x[0-9a-f]+|\d+)$/i.exec(word.trim())
+    if (m === null || IA32CAP_FLAGS[i] === undefined) {
+      return
+    }
+    const bits = BigInt(m[2])
+    for (const [bit, flag] of Object.entries(IA32CAP_FLAGS[i])) {
+      const set = ((bits >> BigInt(bit)) & 1n) === 1n
+      if (m[1] === "~" ? set : !set) {
+        cleared.push(flag)
+      }
+    }
+  })
+  return cleared
+}
 const COLUMNS = [
   ["nish", "Nish"],
   ["openssl", "OpenSSL"],
@@ -179,7 +222,16 @@ const loadFamily = (name) => {
   if (!isObject(spec)) {
     fail(`${where}: not an object`)
   }
-  onlyKeys(where, spec, ["title", "kernels", "twins", "portableProof", "portableMinRatio", "needs", "notes"])
+  onlyKeys(where, spec, [
+    "title",
+    "kernels",
+    "twins",
+    "portableProof",
+    "portableMinRatio",
+    "portableProofFlags",
+    "needs",
+    "notes",
+  ])
   if (typeof spec.title !== "string") {
     fail(`${where}: \`title\` must be a string`)
   }
@@ -324,6 +376,22 @@ const loadFamily = (name) => {
   if (spec.portableMinRatio !== undefined && proof === null) {
     fail(`${where}: \`portableMinRatio\` without a \`portableProof\``)
   }
+  // OpenSSL's proof is a time ratio, so it is held only on a CPU with an
+  // extension whose loss slows the proof kernel; the mask may clear others.
+  const mask = twins.openssl.portable?.env?.OPENSSL_ia32cap
+  const proofFlags = spec.portableProofFlags
+  if (proof !== null && mask !== undefined) {
+    const cleared = ia32capCleared(mask)
+    if (
+      !(isStringList(proofFlags) && proofFlags.length > 0 && proofFlags.every((f) => cleared.includes(f)))
+    ) {
+      fail(
+        `${where}: \`portableProofFlags\` lists the /proc/cpuinfo flags whose loss slows ${proof.kernel}, each one OPENSSL_ia32cap clears (${cleared.join(", ")})`
+      )
+    }
+  } else if (proofFlags !== undefined) {
+    fail(`${where}: \`portableProofFlags\` without a \`portableProof\` and an OPENSSL_ia32cap mask`)
+  }
   const needs = spec.needs ?? []
   if (!(isStringList(needs) && needs.every((n) => n === "loopback"))) {
     fail(`${where}: \`needs\` is an array whose only allowed entry is "loopback"`)
@@ -335,7 +403,18 @@ const loadFamily = (name) => {
   if (!isStringList(familyNotes)) {
     fail(`${where}: \`notes\` is an array of strings, each a footnote under the family's table`)
   }
-  return { name, dir, title: spec.title, kernels, twins, proof, minRatio, needs, notes: familyNotes }
+  return {
+    name,
+    dir,
+    title: spec.title,
+    kernels,
+    twins,
+    proof,
+    proofFlags: proofFlags ?? [],
+    minRatio,
+    needs,
+    notes: familyNotes,
+  }
 }
 
 /** `<kernel> <size> <iterations> <checksum>` per line of a family's expected.txt; `#` lines are comments. */
@@ -448,49 +527,6 @@ const cpuinfo = (() => {
 })()
 const cpuFlags = new Set((/^flags\s*:\s*(.+)$/m.exec(cpuinfo)?.[1] ?? "").split(/\s+/).filter(Boolean))
 
-/**
- * The /proc/cpuinfo flag each OPENSSL_ia32cap bit stands for, per word. The
- * first word is CPUID(1) EDX in its low half and ECX in its high half; the
- * second is CPUID(7) EBX, then ECX.
- */
-const IA32CAP_FLAGS = [
-  { 33: "pclmulqdq", 41: "ssse3", 44: "fma", 51: "sse4_1", 52: "sse4_2", 54: "movbe", 57: "aes", 60: "avx" },
-  {
-    3: "bmi1",
-    5: "avx2",
-    8: "bmi2",
-    16: "avx512f",
-    19: "adx",
-    29: "sha_ni",
-    30: "avx512bw",
-    31: "avx512vl",
-    41: "vaes",
-    42: "vpclmulqdq",
-  },
-]
-
-/**
- * The cpuinfo flags an OPENSSL_ia32cap value takes away: a `~x` word clears
- * x's bits, a bare word keeps only its own, and an absent word clears nothing.
- */
-const ia32capCleared = (value) => {
-  const cleared = []
-  value.split(":").forEach((word, i) => {
-    const m = /^(~?)(0x[0-9a-f]+|\d+)$/i.exec(word.trim())
-    if (m === null || IA32CAP_FLAGS[i] === undefined) {
-      return
-    }
-    const bits = BigInt(m[2])
-    for (const [bit, flag] of Object.entries(IA32CAP_FLAGS[i])) {
-      const set = ((bits >> BigInt(bit)) & 1n) === 1n
-      if (m[1] === "~" ? set : !set) {
-        cleared.push(flag)
-      }
-    }
-  })
-  return cleared
-}
-
 /** Where a portable column's assembly exists to be taken away; elsewhere its proof has nothing to measure. */
 const PROOF_ARCHES = { openssl: ["x64"], go: ["x64", "arm64"], rust: ["x64", "arm64"] }
 
@@ -513,8 +549,9 @@ const proofBlocked = (twin, family) => {
   if (cpuFlags.size === 0) {
     return "no /proc/cpuinfo flags to hold the mask against"
   }
-  const hit = ia32capCleared(mask).filter((f) => cpuFlags.has(f))
-  return hit.length > 0 ? null : "this CPU has none of the extensions the OPENSSL_ia32cap mask clears"
+  return family.proofFlags.some((f) => cpuFlags.has(f))
+    ? null
+    : `this CPU has none of ${family.proofFlags.join(", ")}, whose loss the proof measures`
 }
 
 /** Whether this machine lets a program listen on and connect to 127.0.0.1, which a handshake family may need. */
@@ -926,7 +963,9 @@ if (opts.validate) {
     process.exit(1)
   }
   if (!opts.writeExpected) {
-    console.log(`crypto: checksums agree over ${kernelCount} kernel size(s) and ${seen.size} variant(s)`)
+    console.log(
+      `crypto: checksums agree over ${kernelCount} kernel size(s) and ${seen.size} variant(s): ${[...seen].join(", ")}`
+    )
   }
   process.exit(0)
 }

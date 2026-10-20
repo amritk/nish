@@ -501,8 +501,9 @@ when it rewrites the file.
 
 ```bash
 node bench/crypto/run.mjs --validate               # what CI runs: every checksum, and the portable proof
-node bench/crypto/run.mjs --only hash --record     # time a family; rewrite the crypto block
-node bench/run.mjs --only crypto                   # the same, from this runner
+node bench/crypto/run.mjs --record                 # time every family; rewrite the crypto block
+node bench/crypto/run.mjs --only hash --out x.md   # time one family into a file of its own
+node bench/run.mjs --only crypto                   # --record, from this runner (no --no-rust or --no-go)
 ```
 
 The two drivers below time Nish against itself only: they are baselines for

@@ -17,5 +17,6 @@
     }
   },
   "portableProof": "sha512@1048576",
+  "portableProofFlags": ["avx", "avx2", "bmi2"],
   "portableMinRatio": { "rust": null }
 }

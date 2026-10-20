@@ -847,6 +847,12 @@ if (opts.only?.has("crypto")) {
     fail("--out with --only crypto writes the crypto section alone, so name crypto by itself")
   }
   let mode = ["--record"]
+  // --record rewrites the whole crypto section, so every twin it can build must run.
+  if (!opts.validate && !outGiven && !(opts.rust && opts.go)) {
+    fail(
+      "--only crypto records the whole crypto section, so it takes no --no-rust or --no-go; use --validate, or --out for a partial table"
+    )
+  }
   if (opts.validate) {
     mode = ["--validate"]
   } else if (outGiven) {

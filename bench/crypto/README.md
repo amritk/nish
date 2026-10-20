@@ -134,6 +134,7 @@ cannot fall back to a default.
     "node": { "portable": "node:crypto is OpenSSL's libcrypto with its assembly" }
   },
   "portableProof": "sha256@1048576",
+  "portableProofFlags": ["ssse3", "avx", "avx2", "bmi2", "sha_ni"],
   "portableMinRatio": { "rust": null },
   "needs": [],
   "notes": []
@@ -148,6 +149,7 @@ cannot fall back to a default.
 | `kernels` | array, not empty | One entry per kernel; the fields are below. |
 | `twins` | object | All four twins, `openssl`, `go`, `rust` and `node`, each either an object (below) or a string saying why the family has none, which the table's footnotes print. |
 | `portableProof` | `"<kernel>@<size>"`, optional | The case `--validate` times to prove each portable column is portable. |
+| `portableProofFlags` | array of `/proc/cpuinfo` flags; required with `portableProof` and an `OPENSSL_ia32cap` mask | The extensions whose loss slows the proof kernel under OpenSSL, each one the mask clears. OpenSSL's proof is held only on a CPU that has one of them. |
 | `portableMinRatio` | number above 1, or an object, optional | How much slower a portable column must be than its default one at `portableProof`; the default is 1.2. An object sets it per twin (`openssl`, `go` and `rust`; a twin it leaves out keeps 1.2). A twin's value of `null` measures and reports the ratio without gating on it. Only valid with `portableProof`. |
 | `notes` | array of strings, optional | Footnotes printed under the family's table after the generated ones, for anything about its columns a reader needs and no other field says. |
 | `needs` | array, optional | `["loopback"]` when the programs listen on and connect to `127.0.0.1`, as a handshake does. On a machine that refuses a loopback socket, the family is noted and left out, rather than failing; `--validate` prints `<family>: skipped (needs loopback)`. |
@@ -208,10 +210,19 @@ portable build to give up:
 
 - Go and Rust are proved on x86-64 and arm64 only, where the default builds
   carry the assembly the tag or flag takes away.
-- OpenSSL is proved on x86-64 only, and only when `/proc/cpuinfo` lists an
-  extension its `OPENSSL_ia32cap` mask clears. On a CPU with none of them, the
-  masked and the unmasked run take the same path, and a ratio would fail a
-  column that is portable.
+- OpenSSL is proved on x86-64 only, and only when `/proc/cpuinfo` lists one of
+  the family's `portableProofFlags`: the extensions the mask clears that the
+  proof kernel's assembly actually uses. The mask may clear more (the hash
+  family's clears SSSE3, which SHA-256 uses and SHA-512 does not), so a flag it
+  clears is not enough. On a CPU with none of the listed flags the masked and
+  the unmasked run take the same path, and a ratio would fail a column that is
+  portable. The hash family lists `avx`, `avx2` and `bmi2`, the extensions
+  OpenSSL's SHA-512 paths beyond its scalar one need.
+
+On GitHub Actions on x86-64 Linux, `tests/run.js`'s `crypto-bench` check
+requires the OpenSSL and Go proofs of every family with a `portableProof` to
+be proved lines, not `unproved`: the runner has the toolchains and the
+extensions, so an `unproved` there means the gate failed open.
 
 Neither run inherits an `OPENSSL_ia32cap` or `OPENSSL_armcap` from the caller's
 environment: the default column runs unmasked, and the portable one under the
