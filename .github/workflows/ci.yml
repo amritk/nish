@@ -97,10 +97,11 @@ jobs:
   test:
     name: test (${{ matrix.os }}, shard ${{ matrix.shard }}/4)
     runs-on: ${{ matrix.os }}
-    # 25 minutes, up from 15. Shard 1 runs its share of every section plus the
-    # shard-1-only steps (simd, the AES kernels, cpu-level and the rest), and
-    # took 14m49s on main at 6e11fa6b once #663 added about 3 s of clang -O2
-    # to each program that imports p256, so a 15-minute limit cancelled it.
+    # 25 minutes, up from 15: shard 1 took 14m49s on main at 6e11fa6b once
+    # #663 added about 3 s of clang -O2 to each program that imports p256, so
+    # a 15-minute limit cancelled it. The shards are now dealt by cost
+    # (tests/shard-costs.json), so each takes about ten; the limit stays as
+    # headroom while the table drifts.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -180,11 +181,11 @@ jobs:
         # change.
         os: [ubuntu-latest] # , macos-latest -- see the six checks above
         # `npm test` is split four ways by `--shard` (tests/run.js, "Shards"):
-        # shard 1 runs every section, the tests/link programs aside, and the
-        # others share those programs, which are two thirds of the suite's
-        # wall clock. One unsharded run took 25 minutes; each shard is under
-        # ten. The `/4` in the Test step is this list's length, and a check in
-        # tests/run.js holds the two together.
+        # shard 1 runs every section after the tests/link programs but WP14
+        # self-hosting, and the programs and that section are dealt by their
+        # cost in tests/shard-costs.json so that the four finish together.
+        # One unsharded run took 25 minutes. The `/4` in the Test step is this
+        # list's length, and a check in tests/run.js holds the two together.
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -277,10 +278,16 @@ jobs:
         env:
           WASI_SYSROOT: /usr
           SHARD: ${{ matrix.shard }}
-        run: npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard "$SHARD/4"
+        # The log is kept for the steps below that require a line of it.
+        run: |
+          set -o pipefail
+          npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard "$SHARD/4" | tee "$RUNNER_TEMP/test.log"
 
       # The steps from here on run in shard 1 only: each answers once for the
-      # commit, and every shard built the same compiler.
+      # commit, and every shard built the same compiler. Those that require a
+      # line of the suite read it from the Test step's log rather than run its
+      # section again, which built stage1 anew each time: three minutes of
+      # shard 1, the longest of the four.
 
       # WP38 S1: the `simd` section (shard 1) passes when the kernel's paths
       # agree, which they also do when the AVX2 path did not run at all. These
@@ -308,12 +315,8 @@ jobs:
       # says the kernels ran is required here, where they are known to exist.
       - name: The lowered AES program ran the kernels
         if: matrix.shard == 1
-        env:
-          WASI_SYSROOT: /usr
         run: |
-          set -o pipefail
-          node tests/run.js "aes kernel" | tee "$RUNNER_TEMP/aes-kernel.log"
-          grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/aes-kernel.log"
+          grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/test.log"
 
       # #619: `par_map_vector` links its modules with `llvm-link` and runs `opt
       # -O3`, and skips without either tool. The line that says the map's loop
@@ -321,9 +324,7 @@ jobs:
       - name: parallelMapInto's element loop vectorises
         if: matrix.shard == 1
         run: |
-          set -o pipefail
-          node tests/run.js par_map_vector | tee "$RUNNER_TEMP/par-map-vector.log"
-          grep -E "^PASS  par_map_vector: opt -O3 vectorises parallelMapInto's element loop" "$RUNNER_TEMP/par-map-vector.log"
+          grep -E "^PASS  par_map_vector: opt -O3 vectorises parallelMapInto's element loop" "$RUNNER_TEMP/test.log"
 
       # WP38 S2: the `cpu level` section runs a `--cpu x86-64-v3` binary only
       # where /proc/cpuinfo names avx2, and skips elsewhere. A runner that masked
@@ -332,9 +333,7 @@ jobs:
       - name: A --cpu x86-64-v3 binary runs and prints what the baseline prints
         if: matrix.shard == 1
         run: |
-          set -o pipefail
-          node tests/run.js cpu-level | tee "$RUNNER_TEMP/cpu-level.log"
-          grep -E '^PASS  cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints' "$RUNNER_TEMP/cpu-level.log"
+          grep -E '^PASS  cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints' "$RUNNER_TEMP/test.log"
 
       #
       # `build/nish` is what the steps after the suite drive: stage1, one

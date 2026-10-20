@@ -3904,9 +3904,12 @@ answer the same natively and under Node:
   (NL2516). A destination is shared when two scopes' spawns name the same
   array, at the same slot or at different ones
   (`reject_thread_sibling_destination`, `_slots`, `_arrow` for arrow tasks,
-  `_three` for three declarators; a void task that reaches another scope's
-  destination hands it on, which `_void` pins as refused by the destination
-  rule). An atomic or a lock is told apart by the `const` it was made in by
+  `_three` for three declarators). A task that reaches another scope's
+  destination — to read the answer that scope's task returns, or to write it —
+  hands the array on, which the destination rule refuses before this one:
+  `_void` writes it, `_read` reads it through an arrow's capture, `_new`
+  through a constructor reached by `new`, and `_this` through a field of an
+  object whose constructor hands `this` out. An atomic or a lock is told apart by the `const` it was made in by
   `new`: a task handed that binding, as its argument or a capture, reaches that
   object and no other, and two such bindings are two objects. Reached any other
   way — through another binding, a field, an element, a function's answer —
@@ -3915,7 +3918,16 @@ answer the same natively and under Node:
   `reject_atomic_sibling_arrow`, `reject_atomic_sibling_three`,
   `reject_thread_mutex_sibling`, `reject_thread_mutex_sibling_alias` for a
   second name of one lock, `reject_thread_mutex_sibling_field` for one reached
-  through a field). Tasks that take no lock share none, and tasks that call no
+  through a field). Every way a task reaches the object counts: through a
+  field of a field (`reject_atomic_sibling_field_field`,
+  `reject_thread_mutex_sibling_field_field`), through an object whose
+  constructor hands `this` out (`reject_atomic_sibling_this`,
+  `reject_thread_mutex_sibling_this`), in a constructor reached by `new`
+  (`reject_atomic_sibling_new`, `reject_thread_mutex_sibling_new`), in a
+  helper the task calls (`reject_atomic_sibling_helper`,
+  `reject_thread_mutex_sibling_helper`), from an arrow's capture
+  (`reject_thread_mutex_sibling_arrow`), and between any two declarators of
+  the statement (`reject_thread_mutex_sibling_three`). Tasks that take no lock share none, and tasks that call no
   atomic method share no atomic. Sibling scopes whose tasks reach disjoint
   locks or atomics, of one type or of two, run as before
   (`tests/link/thread_sibling_disjoint_mutex`, `_mutex_types`, `_atomics`).
