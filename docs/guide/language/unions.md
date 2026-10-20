@@ -222,6 +222,9 @@ An assignment to the variable drops what a test proved, so a read after it
 needs a new test. Past an `if`, the variable is what the arms that carry on
 left it: after an `else if` chain whose branches all return, `s` is the
 variant no test named, and an arm that assigns `s` leaves what it assigned.
+A test nested inside the arms counts too: when each arm returns if
+`s.kind === Kind.Circle`, `s` is not a `Circle` past the `if`, and the ways out
+of a `switch` join the same way.
 A narrowing of the union belongs to a variable or a parameter: a test of
 `a.b.kind` does not narrow `a.b`, so `a.b.r` is an error (NL2557) — copy it
 into a `const` and test that. The tag read through the path does stay
@@ -272,11 +275,36 @@ with a member it cannot hold is an error there too (NL2531). After a `switch`,
 that is what each way out of it left: each `break`, the end of its last
 clause, and, with no `default`, the value no `case` matched.
 
-After a loop, the local holds every member the body stores anywhere, not only
-what reaches the end of an iteration, and a union narrowed by a test inside
-the body loses that narrowing. TypeScript tracks the end of each iteration,
-so it refuses a few comparisons after a loop that Nish still accepts; the
-language reference lists the shape under "Accepted here, refused by `tsc`".
+After a loop, the local holds what TypeScript says it holds: what the loop's
+head can see, from before the loop, from the end of each iteration and from
+each `continue`, with the condition false, together with what each `break`
+left. A narrowing made inside the body, by a test or a store, carries to the
+comparisons after the loop the same way:
+
+```ts nish:err NL2531
+enum Kind {
+  A,
+  B,
+  C,
+}
+
+const settled = (n: i32): boolean => {
+  let j: Kind = Kind.A;
+  let i = 0;
+  while (i < n) {
+    j = Kind.B;
+    j = Kind.C;
+    i++;
+  }
+  return j === Kind.B; // `j` is `Kind.A | Kind.C` here
+};
+```
+
+A loop that holds a field path such as `h.k`, an assignment written inside
+another expression, or a type of more than 29 members is read more loosely:
+there the local holds every member the body stores anywhere, so a few
+comparisons TypeScript refuses still compile. The language reference lists
+these shapes under "Accepted here, refused by `tsc`".
 
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case

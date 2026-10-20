@@ -442,6 +442,7 @@ const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
       const elseEnd = new Scope(null)
       captureNarrowings(all, elseScope, elseEnd)
       joinArms(ctx, all, scope, thenEnd, elseEnd)
+      joinTested(ctx, testedIn(thenScope, elseScope, all), [thenScope, elseScope], scope)
     }
     return false
   }
@@ -461,8 +462,53 @@ const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     takeArm(all, thenEnd, scope)
   } else if (!thenTerminates && !elseTerminates) {
     joinArms(ctx, all, scope, thenEnd, elseEnd)
+    joinTested(ctx, testedIn(thenScope, elseScope, all), [thenScope, elseScope], scope)
   }
   return thenTerminates && elseTerminates
+}
+
+/**
+ * The variables `first` or `second` narrowed by a test of their own, an arm's
+ * condition or a statement in it, other than those in `assigned`.
+ */
+const testedIn = (first: Scope, second: Scope, assigned: Local[]): Local[] => {
+  const seen: Local[] = []
+  addLocals(seen, first.narrowedVars)
+  addLocals(seen, first.heldVars)
+  addLocals(seen, second.narrowedVars)
+  addLocals(seen, second.heldVars)
+  const tested: Local[] = []
+  for (const local of seen) {
+    if (assigned.indexOf(local) < 0) {
+      tested.push(local)
+    }
+  }
+  return tested
+}
+
+/**
+ * Each of `locals`, which no arm assigns but some arm's test narrowed, is
+ * after the statement what any of the ways out, `ends`, left it, as
+ * TypeScript joins it: `if (c) { if (k === Kind.A) { return; } } else { if
+ * (k === Kind.A) { return; } }` leaves `k` not `Kind.A`. Every end starts from
+ * what held before, so the join is never wider than that; it is taken apart
+ * from `scope`, so what an outer scope proved is not dropped, and kept only
+ * where it narrows.
+ */
+const joinTested = (ctx: CheckContext, locals: Local[], ends: Scope[], scope: Scope): void => {
+  for (const local of locals) {
+    let joined = ends[0]
+    let i = 1
+    while (i < ends.length) {
+      const next = new Scope(null)
+      joinArms(ctx, [local], next, joined, ends[i])
+      joined = next
+      i = i + 1
+    }
+    if (joined.narrowingIndex(local) >= 0 || joined.heldBy(local) >= 0) {
+      captureNarrowings([local], joined, scope)
+    }
+  }
 }
 
 /**
@@ -1058,7 +1104,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // out of it left it (`SwitchFrame`).
   const assigned: Local[] = []
   localsAssignedIn(ctx, stmt.children[1], scope, assigned)
-  ctx.switchFrames.push(new SwitchFrame(assigned))
+  ctx.switchFrames.push(new SwitchFrame(assigned, scope))
   // A clause's store drops the narrowing from the whole chain, so what held
   // before the `switch` is kept aside and put back before each clause and
   // before the case no label matches, as `checkIf` does between its arms.
@@ -1184,7 +1230,14 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (tagged !== null || held !== null) {
     narrowAfterSwitch(ctx, scope, tagged, held, clauses, reaching, hasDefault ? defaultReaches : true)
   }
-  joinExits(ctx, stmt, scope, frame)
+  const steered: Local[] = []
+  if (tagged !== null) {
+    steered.push(tagged)
+  }
+  if (held !== null) {
+    steered.push(held)
+  }
+  joinExits(ctx, stmt, scope, frame, steered)
   // Anything no clause names reaches the statement after the `switch` unless
   // a `default` catches it, or the discriminant is a union's tag and the
   // labels name every tag it can hold; a `break` or a last clause that falls
@@ -1411,19 +1464,39 @@ const snapshotExit = (ctx: CheckContext, scope: Scope): void => {
     return
   }
   const frame = ctx.switchFrames[ctx.switchFrames.length - 1]
+  // The clause's own scopes, up to the `switch`'s, hold what its tests narrowed.
+  let at = scope
+  while (at !== frame.outer) {
+    addLocals(frame.tested, at.narrowedVars)
+    addLocals(frame.tested, at.heldVars)
+    const up = at.parent
+    if (up === null) {
+      break
+    }
+    at = up
+  }
   const exit = new Scope(null)
   captureNarrowings(frame.locals, scope, exit)
   captureNarrowings(ctx.pathLocals, scope, exit)
+  captureNarrowings(frame.tested, scope, exit)
   frame.exits.push(exit)
 }
 
 /**
  * After a `switch`, each variable a clause assigns is what one of the ways
- * out of it left it, joined as an `if`'s arms are. The clauses are read again
+ * out of it left it, joined as an `if`'s arms are, and so is each variable that
+ * only a clause's tests narrowed; the switch's own discriminant is left to the
+ * clause join. The clauses are read again
  * for the paths first named inside one. With no way out, nothing after the
  * `switch` runs.
  */
-const joinExits = (ctx: CheckContext, stmt: Node, scope: Scope, frame: SwitchFrame): void => {
+const joinExits = (
+  ctx: CheckContext,
+  stmt: Node,
+  scope: Scope,
+  frame: SwitchFrame,
+  steered: Local[]
+): void => {
   if (frame.exits.length === 0) {
     return
   }
@@ -1439,6 +1512,23 @@ const joinExits = (ctx: CheckContext, stmt: Node, scope: Scope, frame: SwitchFra
     i = i + 1
   }
   takeArm(after, joined, scope)
+  // A variable only a test narrowed: an exit recorded before a later clause
+  // tested it reads as it did before the `switch`, as that clause left it. The
+  // discriminant's variable, `steered`, is `narrowAfterSwitch`'s.
+  const tested: Local[] = []
+  for (const local of frame.tested) {
+    if (after.indexOf(local) < 0 && steered.indexOf(local) < 0) {
+      tested.push(local)
+    }
+  }
+  for (const exit of frame.exits) {
+    for (const local of tested) {
+      if (exit.narrowingIndex(local) < 0) {
+        captureNarrowings([local], scope, exit)
+      }
+    }
+  }
+  joinTested(ctx, tested, frame.exits, scope)
 }
 
 const checkContinue = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
