@@ -717,6 +717,7 @@ static void test_host_signal_threads(void) {
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <sys/socket.h>
 
 /* WP34 N5, runtime-net.c: what the Node-driven echo in tests/run.js cannot
@@ -755,6 +756,10 @@ static void test_net(void) {
   nish_array buf = {4, 4, bytes};
   expect_i64(nish_net_read(conn, &buf, 0, 4), -11, "a read with nothing waiting");
   assert(write(client, "abc", 3) == 3);
+  // Linux's loopback queues the bytes before write returns; Darwin's may not
+  // yet, so the non-blocking read waits until the socket is readable.
+  struct pollfd readable = {conn, POLLIN, 0};
+  assert(poll(&readable, 1, 5000) == 1);
   expect_i64(nish_net_read(conn, &buf, 1, 3), 3, "the three bytes the client sent");
   assert(memcmp(bytes, "pabc", 4) == 0);
   expect_i64(nish_net_write(conn, &buf, 0, 4), 4, "four bytes back");

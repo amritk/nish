@@ -955,6 +955,7 @@ jobs:
           grep -E '^PASS  runtime\.c -DNISH_THREADS: ' "$RUNNER_TEMP/runtime-test.log"
 
       - name: The net_ sections, natively on Darwin
+        if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           node tests/run.js net_ | tee "$RUNNER_TEMP/net.log"
