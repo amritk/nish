@@ -1,0 +1,149 @@
+PASS  row 1: a full handshake opens
+PASS  row 1: a full handshake signs
+PASS  row 1: a full handshake owes a ticket
+PASS  row 1: the issued ticket reads back
+PASS  row 1: a full handshake's ticket begins its chain now
+PASS  row 1: the issued ticket's PSK and the resumption master secret are zero once issued
+PASS  row 1: once issued, TLS_RECORD_TICKET is down
+PASS  row 1: a second issue answers false and writes nothing
+PASS  row 1: the ticket's lifetime is 7200 seconds
+PASS  row 1: the ticket's nonce is the one byte 0
+PASS  row 1: a full handshake's ServerHello carries the server's own x25519 share
+PASS  row 1: the ticket is asked about
+PASS  row 1: the handshake resumes
+PASS  row 1: no signature
+PASS  row 1: identity 0 is selected
+PASS  row 1: the flight is EncryptedExtensions and Finished
+PASS  row 1: the resumed connection opens
+PASS  row 1: one strike is live
+PASS  row 1: a resumed connection is issued a ticket too
+PASS  row 1: its ticket_age_add is not the first connection's
+PASS  row 1: a resumed ServerHello carries the server's own x25519 share
+PASS  wipe: a resumed handshake leaves the ephemeral key zero once its ServerHello is written
+PASS  wipe: a resumed handshake leaves the PSK, early secret, binder key, salt and opened PSK zero
+PASS  wipe: and the handshake secret and resumption master secret
+PASS  row 1: a crafted ticket resumes
+PASS  row 1: the ticket it is issued keeps the chain's start
+PASS  row 1: a garbage identity, then one that opens: resumes
+PASS  row 1: and identity 1 is selected
+PASS  row 1: a ticket sealed under the previous key resumes
+PASS  row 1: a 256-byte server name opens and is owed no ticket
+PASS  row 1: and issue writes it none
+PASS  wipe: and its resumption master secret is zero
+PASS  row 2: a tampered ticket: full handshake
+PASS  row 2: and its ServerHello carries the server's own x25519 share
+PASS  wipe: row 2, a fallback from a ticket offer, leaves the ephemeral key zero once its ServerHello is written
+PASS  wipe: row 2 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
+PASS  wipe: row 2, issued its ticket, leaves the resumption master secret zero
+PASS  row 2: a truncated ticket: full handshake
+PASS  row 2: a ticket under an unknown key: full handshake
+PASS  row 2: nothing is recorded
+PASS  row 2 negative: the untouched ticket resumes
+PASS  row 3: a ticket past its lifetime: full handshake
+PASS  wipe: row 3 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
+PASS  wipe: row 3, issued its ticket, leaves the resumption master secret zero
+PASS  row 3 negative: at the last nanosecond of its lifetime it resumes
+PASS  row 3: a ticket dated in the future: full handshake
+PASS  row 3: a chain begun over 24 hours ago: full handshake
+PASS  row 3 negative: a chain begun 23 hours ago resumes
+PASS  row 3: a lifetime over the server's: full handshake
+PASS  row 3: a chain start after the issue time: full handshake
+PASS  row 4: a SHA-384 ticket on a SHA-256 suite: full handshake
+PASS  wipe: row 4 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
+PASS  wipe: row 4, issued its ticket, leaves the resumption master secret zero
+PASS  row 4 negative: a ChaCha20 ticket, SHA-256 too, resumes on AES-128
+PASS  row 5: a ticket for another server name: full handshake
+PASS  wipe: row 5 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
+PASS  wipe: row 5, issued its ticket, leaves the resumption master secret zero
+PASS  row 5: a named ticket offered with no name: full handshake
+PASS  row 5: an unnamed ticket offered with a name: full handshake
+PASS  row 5 negative: the same name resumes
+PASS  row 6 negative: a ticket's first use resumes
+PASS  row 6: its second use: full handshake
+PASS  row 6: and that fallback's ServerHello carries the server's own x25519 share
+PASS  wipe: row 6 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
+PASS  wipe: row 6, issued its ticket, leaves the resumption master secret zero
+PASS  row 6: and the replay records no second strike
+PASS  rows 4 and 1: a ticket of the wrong suite, then one that fits: resumes
+PASS  rows 4 and 1: and identity 1 is selected
+PASS  rows 5 and 1: a ticket for another name, then one for this name: resumes
+PASS  rows 5 and 1: and identity 1 is selected
+PASS  rows 6 and 1: a replayed ticket, then a fresh one: resumes
+PASS  rows 6 and 1: and identity 1 is selected
+PASS  rows 6 and 9: a replayed ticket with a binder that does not verify: full handshake, no decrypt_error
+PASS  row 7 negative: a register with room resumes
+PASS  row 7: a full register: full handshake
+PASS  wipe: row 7 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
+PASS  wipe: row 7, issued its ticket, leaves the resumption master secret zero
+PASS  row 7: and it is counted
+PASS  row 7 negative: a second ticket in a register of two resumes
+PASS  row 8: psk_ke alone: full handshake
+PASS  row 8: and no ticket is owed
+PASS  wipe: row 8 leaves the PSK, early secret, binder key, salt, opened PSK and handshake secret zero
+PASS  wipe: and the resumption master secret of a connection no ticket is wanted for
+PASS  row 8 negative: psk_ke and psk_dhe_ke resumes
+PASS  row 9: a binder that does not verify: decrypt_error
+PASS  row 9: and the connection fails
+PASS  row 9: nothing is recorded
+PASS  wipe: row 9 leaves the PSK, early secret, binder key, salt, opened PSK, handshake secret and resumption master secret zero
+PASS  row 9: a binder of the wrong length: decrypt_error
+PASS  row 9: with no signature_algorithms too
+PASS  row 9: and still nothing is recorded
+PASS  row 10: pre_shared_key without psk_key_exchange_modes: missing_extension
+PASS  row 11: pre_shared_key not last: illegal_parameter
+PASS  row 12: a binder more than identities: illegal_parameter
+PASS  row 12: a binder fewer: illegal_parameter
+PASS  row 13: a 31-byte binder: decode_error
+PASS  row 13: no identities: decode_error
+PASS  row 13: an empty identity: decode_error
+PASS  row 13: an empty mode list: decode_error
+PASS  row 13: an empty mode list with no pre_shared_key: decode_error
+PASS  row 13 negative: psk_ke alone with no pre_shared_key: full handshake
+PASS  row 14: no signature_algorithms, a ticket that does not open: missing_extension
+PASS  row 14: not the server's scheme, a ticket that does not open: handshake_failure
+PASS  row 14 negative: no signature_algorithms with a ticket that opens resumes
+PASS  row 15: after a HelloRetryRequest, binders over both hellos and the retry resume
+PASS  row 15: and its ServerHello carries the server's own x25519 share
+PASS  row 15 negative: a binder over the second hello alone: decrypt_error
+PASS  row 16: early_data is ignored and the handshake resumes
+PASS  row 16: a 0-RTT record after it: bad_record_mac
+PASS  row 17: a resumed connection's bad client Finished: decrypt_error
+PASS  row 17: a client Finished that fails after resuming: the connection does not open
+PASS  row 17: a client Finished that fails: the id stays recorded
+PASS  wipe: row 17, a client Finished that fails, leaves the PSK, early secret, binder key, salt, opened PSK, handshake secret and resumption master secret zero
+PASS  row 17: a client Finished that fails: a later offer is a full handshake
+PASS  row 17: a stream cut after resuming: the connection does not open
+PASS  row 17: a stream cut: the id stays recorded
+PASS  wipe: row 17, a stream cut, leaves the PSK, early secret, binder key, salt, opened PSK, handshake secret and resumption master secret zero
+PASS  row 17: a stream cut: a later offer is a full handshake
+PASS  row 17: an abort after resuming: the connection does not open
+PASS  row 17: an abort: the id stays recorded
+PASS  wipe: row 17, an abort, leaves the PSK, early secret, binder key, salt, opened PSK, handshake secret and resumption master secret zero
+PASS  row 17: an abort: a later offer is a full handshake
+PASS  row 17: a slot closed after resuming: the connection does not open
+PASS  row 17: a slot closed: the id stays recorded
+PASS  wipe: row 17, a slot closed, leaves the PSK, early secret, binder key, salt, opened PSK, handshake secret and resumption master secret zero
+PASS  row 17: a slot closed: a later offer is a full handshake
+PASS  row 18: two slots both ask about the ticket
+PASS  row 18: the first resumes
+PASS  row 18: the second goes on to a full handshake
+PASS  a resumed hello with a low-order share fails
+PASS  wipe: and leaves the salt, PSK, early secret, binder key and opened PSK zero
+PASS  QUIC: enableTickets leaves tickets off
+PASS  slot: ninety resumptions through one restarted slot all open
+PASS  slot: and the ten replays fall back to full handshakes that open
+PASS  slot: every round is issued a ticket
+PASS  slot: and after the first fallback, Arena.mark() does not move
+PASS  tcp: a full handshake through the carrier opens and signs
+PASS  tcp: and is owed a ticket
+PASS  tcp: the ticket TlsTcpServer.issue sends reads back
+PASS  tcp: the slot, restarted, asks about the offered ticket
+PASS  tcp: TlsTcpServer.resume resumes it, unsigned, identity 0
+PASS  tcp: the resumed connection opens and is issued a ticket too
+PASS  tcp: a resumed ServerHello carries the server's own x25519 share
+PASS  tcp: one strike is live
+PASS  tcp: the same ticket again falls back to a full handshake
+PASS  tcp: and that fallback's ServerHello carries the server's own x25519 share
+PASS  tcp: resume on a slot it does not hold answers TLS_RECORD_DONE
+PASS  tcp: and so does issue
+tls resume: 148 passed, 0 failed, 0 skipped

@@ -1,15 +1,17 @@
 # The HTTP twins
 
-Eight servers that answer exactly what the Nish HTTP/1.1 server
-(`bench/http1-server.ts`) answers, built on other runtimes so that
-`bench/http.mjs` can time them side by side. Each is held to one core: one
-process, one event loop or one worker, and `bench/http.mjs` pins it to CPU 0
-with `taskset` as it pins the Nish server.
+Ten servers that answer exactly what the Nish HTTP/1.1 server
+(`bench/http1-server.ts`) answers, built on other runtimes and frameworks so
+that `bench/http.mjs` can time them side by side. By default each is held to
+one core: one process, one event loop or one worker, and `bench/http.mjs` pins
+it to CPU 0 with `taskset` as it pins the Nish server. `--cores 1,2,4` runs
+every scenario once per core count N instead (see [Core counts](#core-counts)).
 
 ```bash
 bash bench/http-twins/build.sh      # every twin, into build/http-twins/<name>/
 node bench/http-twins/check.mjs     # every built twin answers the Nish server's bytes
 bash bench/http-twins/run.sh        # nish, nish-copy and every twin, under wrk
+bash bench/http-twins/run.sh --cores 1,2,4   # the same, once per core count
 ```
 
 ## The contract
@@ -18,14 +20,50 @@ Every twin is an executable `build/http-twins/<name>/serve <port> [ignored...]`.
 It binds 127.0.0.1:`<port>`, prints `listening <port>` once bound and exits on
 SIGINT. `serve` is the measured process itself (a binary, or a script that
 `exec`s one), so the pid `bench/http.mjs` reads CPU time and RSS from is the
-server's.
+server's; it sums them over that pid's descendants too, which a multi-process
+twin under `--cores` has. Under `--cores` the twin also reads `BENCH_CORES`
+(see [Core counts](#core-counts)).
 
 | Request | Answer |
 | --- | --- |
+| `GET /` | 200, `text/plain`, `Hi` |
+| `GET /id/:id?name=<name>` | 200, `text/plain`, `<id> <name>`, with the header `x-powered-by: benchmark`; `name` is read wherever it sits in the query |
+| `POST /json` with any JSON object | 200, `application/json`, the body parsed and serialized again compactly; a body that is not JSON is a 400 |
 | `GET /plaintext` | 200, `text/plain`, `Hello, World!` |
 | `GET /json` | 200, `application/json`, `{"message":"Hello, World!","n":<n>}`, where `n` counts the requests this process has answered, this one included |
 | `POST /json-echo` with `bench/http-payload.json` | 200, `application/json`, the payload with `"revision":7` made `"revision":8` |
+| every route in `extra-routes.mjs`: `GET <pattern>`, and `POST <pattern>/submit` | 200, `text/plain`, `ok` |
 | anything else, `/json-echo-doc` included (which the Nish server answers as `/json-echo`) | 404 |
+
+The first three rows are the routes of the bun-http-framework-benchmark
+(SaltyAom/bun-http-framework-benchmark): Ping, Query and Body. The
+repository has no licence, so nothing of it is copied here: the routes are
+re-stated from its description, and every server, route table and script in
+this directory is our own. The Body row re-serializes what it parsed. The
+JavaScript twins and the Nish server keep the key order; the Go and Rust twins
+decode into a map and print the keys sorted, which gives the same bytes for
+`bench/http-body.json`, the one body that is timed.
+
+### The route table
+
+`extra-routes.mjs` holds 112 more GET patterns and a `/submit` POST beside
+each, none of them requested under load. They make each server's route lookup
+and startup those of a small service rather than of a demo with five routes:
+twenty static paths and eight with parameters, under four prefixes (none,
+`/:locale`, `/v2` and `/v2/:locale`). A segment that starts with `:` matches any
+one non-empty segment. `check.mjs` asks each route once, at a sample path
+(`:locale` is `en`, any other parameter `42`).
+
+How a twin registers them follows what a user of its stack would write:
+
+- The router twins (`bun`, `uws`, `bun-elysia`, `bun-hono`, `rust-actix`)
+  register every pattern with their router, before the measured routes.
+- The hand-written twins (the Nish server, `node-http`, both Go twins and
+  `rust-hyper`) test the measured routes first and then scan the table in
+  order, a segment at a time. The Rust twins share `rust-extra.rs`, which
+  `build.sh` copies in as `src/extra.rs`.
+- nginx gets a `map` from `"$request_method $uri"` to a flag, one regex per
+  route, which `nginx/extra-conf.mjs` writes as `extra.conf` at build time.
 
 The echo decodes the body into a typed order (with `notes` a nullable string),
 increments `revision` and encodes it again compactly, keeping the key order
@@ -35,7 +73,8 @@ bytes. The JavaScript twins are the exception to "typed": they decode with
 what a JavaScript server does and gives the same bytes.
 
 nginx is the other exception. It answers from `return` alone, so it has no
-echo: `/json-echo` is a 404 and its cell reads n/a. Its `n` is
+echo and no body route: `/json-echo` and `POST /json` are 404s and their cells
+read n/a. Its `n` is
 `$connection_requests`, which counts per connection, not per process, because
 nginx keeps no counter shared between connections.
 
@@ -43,22 +82,58 @@ nginx keeps no counter shared between connections.
 
 Every version is pinned exactly: `build.sh` refuses a toolchain that is not the
 pinned one, and the dependencies are locked by their own tools (`go.sum`,
-`cargo.lock`). The versions were the latest stable releases on 2026-10-16.
+`cargo.lock`, `bun.lock`). The versions were the latest stable releases on
+2026-10-16, and Elysia's and Hono's on 2026-10-20.
 
 | Twin | What it is | Versions |
 | --- | --- | --- |
 | `node-http` | `node:http` `createServer`, one process, no cluster | Node 26.12.0 |
 | `uws` | uWebSockets.js `App`, one process | uWebSockets.js v20.71.0 (commit `9ec36de7`), Node 26.12.0 |
-| `bun` | `Bun.serve` with `routes`, one process, no `reusePort` | Bun 1.4.3 |
-| `go-nethttp` | `net/http` with `encoding/json`, `GOMAXPROCS=1` | Go 1.27.2 |
-| `go-fasthttp` | fasthttp with `encoding/json`, `GOMAXPROCS=1` | Go 1.27.2, fasthttp v1.75.0 |
-| `rust-hyper` | hyper 1 `http1` on a tokio current-thread runtime, serde_json | Rust 1.99.1, hyper 1.12.0, hyper-util 0.1.21, tokio 1.53.3, serde 1.0.229, serde_json 1.0.154 |
-| `rust-actix` | actix-web 4 with `workers(1)`, serde_json | Rust 1.99.1, actix-web 4.17.0, serde 1.0.229, serde_json 1.0.154 |
-| `nginx` | `return`, `worker_processes 1`, `master_process off`, `daemon off` | nginx 1.30.6 (stable) |
+| `bun` | `Bun.serve` with `routes`, one process per core, `reusePort` above one | Bun 1.4.3 |
+| `bun-elysia` | Elysia on Bun, one process per core, `parse: "json"` on the POST routes | Bun 1.4.3, Elysia 1.4.30 |
+| `bun-hono` | Hono's default router, served by `Bun.serve`, one process per core | Bun 1.4.3, Hono 4.13.13 |
+| `go-nethttp` | `net/http` with `encoding/json`, `GOMAXPROCS` from `BENCH_CORES` | Go 1.27.2 |
+| `go-fasthttp` | fasthttp with `encoding/json`, `GOMAXPROCS` from `BENCH_CORES` | Go 1.27.2, fasthttp v1.75.0 |
+| `rust-hyper` | hyper 1 `http1` on a tokio runtime, current-thread at one core, serde_json | Rust 1.99.1, hyper 1.12.0, hyper-util 0.1.21, tokio 1.53.3, serde 1.0.229, serde_json 1.0.154 |
+| `rust-actix` | actix-web 4 with `workers(BENCH_CORES)`, serde_json | Rust 1.99.1, actix-web 4.17.0, serde 1.0.229, serde_json 1.0.154 |
+| `nginx` | `return`, `worker_processes` from `BENCH_CORES`, `daemon off` | nginx 1.30.6 (stable) |
+
+## Core counts
+
+With `--cores 1,2,4`, `bench/http.mjs` runs each scenario once per core count
+N. The server runs under `taskset -c 0-(N-1)` with `BENCH_CORES=N` in its
+environment; wrk runs on the remaining CPUs with one thread per client core,
+at most four. Where no CPU is left (N equal to the machine's count) wrk shares
+the server's cores, and the table header and every cell's notes say so. CPU
+time and RSS are summed over the server's whole process tree. Without
+`--cores` nothing is set and every twin runs as one core, as above.
+
+| Twin | What `BENCH_CORES=N` sets |
+| --- | --- |
+| `node-http` | nothing: prints `single-core` and exits when N > 1, so its row reads `n/a (single-core)` |
+| `uws` | nothing: prints `single-core` and exits when N > 1, so its row reads `n/a (single-core)` |
+| `bun` | N processes on one port with `reusePort`; the first spawns the rest (`bun-cores.mjs`) |
+| `bun-elysia` | as `bun` |
+| `bun-hono` | as `bun` |
+| `go-nethttp` | `GOMAXPROCS=N` |
+| `go-fasthttp` | `GOMAXPROCS=N` |
+| `rust-hyper` | a multi-thread tokio runtime with N workers (current-thread at N = 1); the accept loop runs on a worker |
+| `rust-actix` | `workers(N)`, plus actix's own accept thread beside them |
+| `nginx` | `worker_processes N`, with `master_process on` when N > 1 |
+
+A twin that cannot use more than one core says so by printing `single-core`
+and exiting before it binds; `bench/http.mjs` records the row as not
+applicable rather than as a failure.
+
+`check.mjs` starts every twin without `BENCH_CORES`, so it checks the
+one-core path only; the N-core paths are not checked against the contract.
+Under N > 1, `n` in `/json` also counts per process where the twin runs
+several (the three Bun twins, and nginx's per-connection count as ever), not across the server.
 
 Where each pin lives:
 
 - Node, Bun, uWebSockets.js and nginx: the variables at the top of `build.sh`.
+- Elysia and Hono: each twin's `package.json`, locked by its `bun.lock`.
 - Go: the `toolchain` line in each `go.mod`.
 - Rust: `rust-toolchain.toml`.
 
@@ -74,6 +149,13 @@ Cargo's names and builds there with `--locked`. To move a Rust pin, edit
 `cargo.toml` and run `TWINS_RELOCK=1 bash bench/http-twins/build.sh rust-hyper
 rust-actix`, which writes `cargo.lock` back with `cargo generate-lockfile`.
 To move a Go pin, run `go get` and `go mod tidy` in the twin's directory.
+
+The Elysia and Hono twins are installed the same way, outside the tree:
+`build.sh` copies `package.json` and `bun.lock` beside `server.mjs` in
+`build/http-twins/<name>/` and runs `bun install --frozen-lockfile
+--production` there. To move one, edit its `package.json` and run
+`TWINS_RELOCK=1 bash bench/http-twins/build.sh bun-elysia bun-hono`, which
+writes `bun.lock` back.
 
 ## Installing the toolchains on Ubuntu
 
@@ -112,12 +194,14 @@ the pinned version.
   `build/http-twins/<name>/`.
 - `check.mjs [--payload file] [name...]` checks the built twins. It starts each
   one, and the Nish server too when `build/bench/h1` exists. Over one
-  keep-alive connection it sends `/plaintext`, `/json`, `/json-echo` and
-  `/json-echo-doc`, and compares status, Content-Type and body byte for byte
-  (`/json-echo-doc` is the echo from the Nish server and a 404 from a twin).
+  keep-alive connection it sends every row of the contract, the extra routes
+  included, and compares status, the media type of Content-Type, the
+  `x-powered-by` header where the contract names it, and the body byte for
+  byte (`/json-echo-doc` is the echo from the Nish server and a 404 from a
+  twin).
   On a mismatch it exits 1 and names the server, the request and the first
   differing byte. Without names, a twin that is not built is a failure too, so
-  `build.sh && check.mjs` checks all eight. Without `--payload` it reads `bench/http-payload.json`.
+  `build.sh && check.mjs` checks all ten. Without `--payload` it reads `bench/http-payload.json`.
 - `run.sh [http.mjs args]` times the servers.
   1. It builds `bench/http1-server.ts` twice, into `build/bench/h1` and
      `build/bench/h1-copy`, and refuses to go on unless the two are
