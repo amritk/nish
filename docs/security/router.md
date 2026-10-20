@@ -8,8 +8,8 @@ the test that pins each property. It is written with the code rather than
 after an audit, so that the audit of the HTTP application layer starts from
 evidence.
 
-Anchors are function names in `std/net/router.ts` as the commit that adds this
-record has it, on base `7611faf`.
+Anchors are function names in `std/net/router.ts` at `ad1dbeb`, the last
+commit to change it on the head that merges this record.
 
 **Result.** Every route a table would hold ambiguously is refused when it is
 added, never resolved by the order routes came in; a refused `add` changes
@@ -84,7 +84,8 @@ twice, and the same shape under another parameter name, are
 no name or a bad name byte, a repeated name, `*` inside a segment, `%`, `?`, a
 space, a control byte, a byte past `~`) is `ROUTER_BAD_PATTERN`; a bad method
 is `ROUTER_BAD_METHOD`; each limit is `ROUTER_TOO_LONG` or `ROUTER_FULL` one
-past its value and taken at it. "none of the refusals added a node" pins that
+past its value and taken at it, and "a third method is refused by maxMethods
+alone" pins the method limit apart from `maxRoutes`. "none of the refusals added a node" pins that
 a refused `add` changes nothing, and "a duplicate is still named a duplicate
 when the table is full" that the codes do not depend on the table's state.
 Each refusal is checked in the other order too, so none hangs on what was
@@ -123,7 +124,9 @@ nothing", "a match on /files/a%2Fb", "decodes its pair in place to a/b".
 **Empty and trailing segments** (ROUTE-8): "an empty segment is a segment",
 "a trailing slash is significant", "/a alone does not answer /a/", "/a/ alone
 does not answer /a", "a pattern with an empty segment is taken", "a parameter
-does not match an empty segment".
+does not match an empty segment"; the dot-segment half, "a dot segment is
+matched as bytes, not removed" (`/static/../admin` reaches `/static/*` with
+`../admin` as its pair).
 
 **Params past storage** (ROUTE-6): "a match with more pairs than params holds
 is refused", "and params is left as it was", "a route with no parameters needs

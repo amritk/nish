@@ -17,6 +17,7 @@ PASS  * takes the rest of the path, slashes and all
 PASS  including none of it
 PASS  but not the slash before it
 PASS  nor the query after it
+PASS  a dot segment is matched as bytes, not removed
 PASS  matching is on raw bytes: %2F does not split
 PASS  an empty segment is a segment
 PASS  a literal added before a parameter wins over it
@@ -80,6 +81,9 @@ PASS  then a pattern over maxPatternBytes
 PASS  more segments than maxSegments
 PASS  and more parameters than maxParams
 PASS  are each refused all the same, adding no node
+PASS  two methods fit under maxMethods, far below maxRoutes
+PASS  a third method is refused by maxMethods alone
+PASS  while a known method still takes routes
 PASS  OPTIONS * is not routed
 PASS  nor CONNECT's authority form
 PASS  nor the absolute form
@@ -121,4 +125,4 @@ PASS  a range inside a target decodes only that range
 PASS  to the bytes of that range
 PASS  a match on /files/a%2Fb
 PASS  decodes its pair in place to a/b
-router: 123 passed, 0 failed, 0 skipped
+router: 127 passed, 0 failed, 0 skipped

@@ -337,9 +337,11 @@ const linearMatchCopy = (t: LinearTable, method: u8[], target: u8[], params: i32
   return -1
 }
 
-/** What a lookup answered, folded: the route and its first two pairs. */
+/** What a lookup answered, folded: the route and all four of its pairs. */
 const fold = (route: i32, params: i32[]): i64 =>
-  toI64(route) * 1000003 + toI64(params[0] + 7 * params[1] + 31 * params[2] + 127 * params[3])
+  toI64(route) * 1000003 +
+  toI64(params[0] + 7 * params[1] + 31 * params[2] + 127 * params[3]) +
+  toI64(509 * params[4] + 2039 * params[5] + 8191 * params[6] + 32749 * params[7])
 
 const routerRun = (router: Router, method: u8[], targets: u8[][], params: i32[]): i64 => {
   let sum: i64 = 0

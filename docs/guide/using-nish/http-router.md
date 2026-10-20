@@ -103,7 +103,7 @@ one of:
 | --- | --- |
 | `users` | exactly the bytes `users` |
 | `:id` | any one segment that is not empty; the name, letters, digits and `_`, is for you to read, and `match` ignores it |
-| `*` | the rest of the path, possibly empty; only as the last segment |
+| `*` | the rest of the path, possibly empty; only as the last segment. `/static/*` answers `/static/` but not `/static`: the slash before `*` is part of the pattern |
 
 A trailing slash is a segment of its own, an empty one, so `/users` and
 `/users/` are different routes, and neither answers the other's target. An

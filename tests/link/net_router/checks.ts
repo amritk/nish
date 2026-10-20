@@ -108,6 +108,7 @@ export const routerChecks = (): i32 => {
   t.eqStr("including none of it", answer(r, "GET", "/static/"), "5 []");
   t.eqStr("but not the slash before it", answer(r, "GET", "/static"), `${ROUTER_NOT_FOUND}`);
   t.eqStr("nor the query after it", answer(r, "GET", "/static/a?v=1"), "5 [a]");
+  t.eqStr("a dot segment is matched as bytes, not removed", answer(r, "GET", "/static/../admin"), "5 [../admin]");
   t.eqStr("matching is on raw bytes: %2F does not split", answer(r, "GET", "/users/a%2Fb"), "2 [a%2Fb]");
   t.eqStr("an empty segment is a segment", answer(r, "GET", "/users//"), `${ROUTER_NOT_FOUND}`);
 
@@ -231,6 +232,12 @@ export const routerChecks = (): i32 => {
   t.eqI32("more segments than maxSegments", s2.add("GET", "/a/b/c/d/e"), ROUTER_TOO_LONG);
   t.eqI32("and more parameters than maxParams", s2.add("GET", "/:a/:b/*"), ROUTER_TOO_LONG);
   t.eqI32("are each refused all the same, adding no node", s2.nodeCount(), fits);
+  const methods = new RouterLimits();
+  methods.maxMethods = 2;
+  const m = new Router(methods);
+  t.ok("two methods fit under maxMethods, far below maxRoutes", m.add("GET", "/x") === 0 && m.add("POST", "/x") === 1);
+  t.eqI32("a third method is refused by maxMethods alone", m.add("PUT", "/x"), ROUTER_FULL);
+  t.ok("while a known method still takes routes", m.add("GET", "/y") === 2);
 
   // --- targets a router does not route -------------------------------------------------
   t.eqStr("OPTIONS * is not routed", answer(r, "OPTIONS", "*"), `${ROUTER_NOT_FOUND}`);
