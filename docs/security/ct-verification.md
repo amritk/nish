@@ -313,23 +313,27 @@ percentiles (89 and 76) with the uncropped test near zero (-0.92 and 0.35):
 the tail of the distribution moved, not its body, which is what an interrupt
 or a frequency change on a shared host does.
 
-**The rule.** A function above 4.5 is timed again, by itself, on a fresh
-seed: the same linked driver run with the function's name as a filter, so the
-layout it was read in is kept, rather than a driver linked for it alone. The
-seed is derived from the run's (`seed × 0x9e3779b97f4a7c15 mod 2^64`, named
-on the table's first line as "re-measured on seed"). The function is a
-finding, exit 1, only when it crosses on both. One that crosses once and not again stays in the
-table with its second |t|, as "crossed once, did not repeat", and is named in
-the summary line; the run passes, and the report job comments on the
-`ct-timing` issue so that a function that crosses once every week is seen.
-The runners' rate rests on one crossing, and a re-measure seconds later on the
-same shared runner is not independent of the first, so the rule's own
-false-positive rate is not claimed; the `aa_runs` dispatch measures it. A real
-leak is not hidden by it: every control and every leak this record has timed
-read |t| in the hundreds or thousands, and crosses on any seed. The controls
-are never re-measured: each must differ on its first measurement, or the run
-fails with exit 2, so a harness that cannot see a leak cannot pass by asking
-twice. A reading like CT-13's, which repeated on every run, still fails it.
+**The rule.** A function above 4.5 is timed again, by itself, on a fresh seed:
+the same linked driver run with the function's name as a filter, so the layout
+it was read in is kept, rather than a driver linked for it alone. The seed is
+derived from the run's (`seed × 0x9e3779b97f4a7c15 mod 2^64`, named on the
+table's first line as "re-measured on seed"). The function is a finding, exit
+1, only when it crosses on both. One that crosses once and not again stays in
+the table with its second |t|, as "crossed once, did not repeat", and is named
+in the summary line; the run passes, and the report job comments on the open
+`ct-timing` issue, or opens one when none is open, so that a function that
+crosses once every week is seen. The runners' rate rests on one crossing, and a
+re-measure seconds later on the same shared runner is not independent of the
+first, so the rule's own false-positive rate is not claimed; the `aa_runs`
+dispatch measures it. A large leak is not hidden by it: every control and every
+leak this record has timed read |t| in the hundreds or thousands, and crosses
+on any seed. That shows the rule's power for large effects only: a weak leak
+near the threshold, |t| about 4 to 6, can cross once and not again by chance,
+which is why a crossed-once row is put in front of a person rather than
+dropped. The controls are never re-measured: each must differ on its first
+measurement, or the run fails with exit 2, so a harness that cannot see a leak
+cannot pass by asking twice. A reading like CT-13's, which repeated on every
+run, still fails it.
 
 Both branches were shown with a scratch copy of the harness whose threshold
 was 1.5, at `--quick`, seed 7: 21 of 46 functions crossed, 9 read "crossed
