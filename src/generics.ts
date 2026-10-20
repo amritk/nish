@@ -876,7 +876,36 @@ const reachForeignSymbols = (ctx: CheckContext, name: string): void => {
   program.reachableStructs.push(index)
 }
 
-/** `reachForeignLayout` over `root` and everything its members reach, in `from`'s registry. */
+/**
+ * `reachForeignLayout` for `info`, queueing it on `pending` when its members
+ * have to be walked: when it is new here, or when a request with `symbols`
+ * meets a layout another module defines, which an earlier request may have
+ * registered layout-only along with every struct its fields reach (#613).
+ * `walked` stops the second walk at a cycle.
+ */
+const reachForeignMember = (
+  ctx: CheckContext,
+  info: StructInfo,
+  symbols: boolean,
+  walked: StringSet,
+  pending: StructInfo[]
+): void => {
+  if (!walked.add(info.name)) {
+    return
+  }
+  if (reachForeignLayout(ctx, info, symbols) || (symbols && info.origin !== ctx.program.source)) {
+    pending.push(info)
+  }
+}
+
+/**
+ * `reachForeignLayout` over `root` and everything its members reach, in `from`'s registry.
+ *
+ * What a module is owed does not depend on which request reached a layout
+ * first: a request with `symbols` reaches the whole closure, so `Wrap$i32`'s
+ * `Box$i32` gains its `declare`s although a type argument registered both
+ * layout-only before.
+ */
 const registerForeignLayouts = (
   ctx: CheckContext,
   root: StructInfo,
@@ -884,9 +913,8 @@ const registerForeignLayouts = (
   symbols: boolean
 ): void => {
   const pending: StructInfo[] = []
-  if (reachForeignLayout(ctx, root, symbols)) {
-    pending.push(root)
-  }
+  const walked = new StringSet()
+  reachForeignMember(ctx, root, symbols, walked, pending)
   // A cursor rather than `pop()`, and stage0's `src/` walks it the same way so the two
   // registries end up in the same order: `pop()` answers `T` in this language
   // and `T | undefined` in `lib.es5`, which is the one divergence
@@ -903,8 +931,8 @@ const registerForeignLayouts = (
     let i = 0
     while (i < names.size()) {
       const next = from.program.struct(names.at(i))
-      if (next !== null && reachForeignLayout(ctx, next, symbols)) {
-        pending.push(next)
+      if (next !== null) {
+        reachForeignMember(ctx, next, symbols, walked, pending)
       }
       i = i + 1
     }

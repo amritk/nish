@@ -6248,7 +6248,9 @@ annotated). The same holds for any generic an imported module declares:
 `const b = box(7)` holds the `Box<i32>` that `box` answers, whose layout comes
 with the call (`tests/link/generic_import_inferred`), with its methods even
 where the module already held `Box<i32>` as a type argument
-(`tests/link/generic_import_inferred_held`).
+(`tests/link/generic_import_inferred_held`), and with those of every struct
+its fields reach, through an array, a nullable, a `Result` or a nested
+instance, in either order (`tests/link/generic_import_inferred_closure`).
 
 **What a `Secret` may hold.** One run of integers, so that `wipe` reaches every
 byte with one store: `` `Secret<string>` is not key material `` (NL2428,
