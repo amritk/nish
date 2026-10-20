@@ -6,7 +6,9 @@
 //      to the body, `Server` present, `Date` an IMF-fixdate.
 //   2. /plaintext: the same rules, `text/plain`, `Hello, World!`.
 //   3. A burst of 16 pipelined /plaintext requests, sent in one write, is
-//      answered in order: 16 whole responses and nothing more.
+//      answered in order: 16 whole responses and nothing more. A burst of 1000,
+//      whose answers are twice what the server's output holds, is answered
+//      whole and in order too: a reply the full output held back resumes.
 //   4. Every /json answer is serialized again: the writer's count moves by one
 //      per request, not by trust in the code.
 //   5. A warmed connection serves 200 requests, /json and /plaintext in turn,
@@ -447,6 +449,29 @@ export const main = (): i32 => {
     }
   }
   t.eqI32("a pipelined mix of /json and /plaintext is answered in the order asked", inOrder, toI32(16));
+  // The parser holds 16386 bytes of input; 528 of these 31-byte requests fill
+  // it, and their answers, some 145 bytes each, overrun the 65280 bytes the
+  // output gives replies.
+  const deep: u8[] = [];
+  for (let k: i32 = 0; k < 1000; k++) {
+    for (const b of ascii(`GET ${k % 4 === 3 ? "/plaintext" : "/json"} HTTP/1.1\r\nHost: t\r\n\r\n`)) {
+      deep.push(b);
+    }
+  }
+  const deepBefore: i32 = lb.tfb.answered;
+  lb.send(c, deep);
+  let deepInOrder: i32 = 0;
+  for (let k: i32 = 0; k < 1000; k++) {
+    const r: Response = lb.response(c);
+    const want: string = k % 4 === 3 ? plain : json;
+    if (r.status === 200 && r.body === want && r.length === toI32(want.length)) {
+      deepInOrder = deepInOrder + 1;
+    }
+  }
+  t.eqI32("1000 pipelined requests, past what the output holds, are answered whole and in order", deepInOrder, toI32(1000));
+  lb.settle();
+  t.eqI32("and nothing more follows the 1000", toI32(lb.peers[c].got.length), toI32(0));
+  t.eqI32("and the handler answered each of them once", lb.tfb.answered - deepBefore, toI32(1000));
 
   // --- 4. /json is serialized per request -------------------------------------------------------
   const before: i32 = lb.tfb.serialized;

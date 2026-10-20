@@ -12,16 +12,21 @@
 // for the pool, rewritten at most once a second) and `Content-Length`. A
 // request the parser refuses is answered by the module, 400 with
 // `Connection: close`. Pipelined requests are answered in order, a burst in one
-// write.
+// write. A burst deeper than the output holds leaves the slot owing a reply:
+// `respond` or `write` answers `H1_AGAIN`, the slot remembers which body it
+// owes and how much of it is written, and `H1_WRITE` resumes it once the
+// socket has drained.
 import { pollAdd, pollModify } from "nish:net"
 import {
   H1_DONE,
+  H1_AGAIN,
   H1_ERROR,
   H1_NEED_MORE,
   H1_POOL_FULL,
   H1_REQUEST,
   H1_WANT_READ,
   H1_WANT_WRITE,
+  H1_WRITE,
   Http1Config,
   Http1Connection,
   Http1Server,
@@ -34,6 +39,13 @@ export const TFB_LISTENER: i32 = -1
 const ZERO: i32 = 0
 /** Room for the JSON answer, which is 27 bytes. */
 const JSON_ROOM: i32 = 64
+/** What a slot owes: nothing, or the reply with one of the bodies below. */
+const OWES_NOTHING: i32 = 0
+const OWES_PLAIN: i32 = 1
+const OWES_JSON: i32 = 2
+const OWES_NOT_FOUND: i32 = 3
+/** The body offset of a reply whose head is not written yet. */
+const HEAD_OWED: i32 = -1
 
 const tfbBytes = (s: string): u8[] => {
   const out: u8[] = new Array<u8>(s.length)
@@ -60,6 +72,12 @@ export class TfbServer {
   serialized: i32 = 0
   /** How many requests have been answered by the handler, 404s included. */
   answered: i32 = 0
+  /** Per slot: the `OWES_` reply it has not finished writing. */
+  owes: i32[]
+  /** Per slot: how much of the owed body is written, or `HEAD_OWED`. */
+  owedAt: i32[]
+  /** Per slot: the owed body's length. */
+  owedLength: i32[]
 
   /** A pool of `slots` serving on `listener`, which this adds to `loop`. */
   constructor(loop: i32, listener: i32, slots: i32) {
@@ -74,16 +92,22 @@ export class TfbServer {
     this.notFound = tfbBytes("not found")
     this.jsonBuf = new Array<u8>(JSON_ROOM)
     this.writer = new JsonWriter(this.jsonBuf, ZERO)
+    this.owes = new Array<i32>(slots)
+    this.owedAt = new Array<i32>(slots)
+    this.owedLength = new Array<i32>(slots)
     pollAdd(loop, listener, H1_WANT_READ, TFB_LISTENER)
   }
 
-  /** Answers one request from its head; a body, if any, is read and ignored. */
-  answer(conn: Http1Connection): void {
+  /** Answers the request whose head `slot` has just read; a body, if any, is read and ignored. */
+  answer(slot: i32, conn: Http1Connection): void {
     this.answered = this.answered + 1
     const p: Http1Parser = conn.parser
     const get: boolean = p.methodIs("GET")
+    let owes: i32 = OWES_NOT_FOUND
+    let length: i32 = toI32(this.notFound.length)
     if (get && p.targetIs("/plaintext")) {
-      this.reply(conn, 200, this.textNames, this.textValues, this.plainBody, toI32(this.plainBody.length))
+      owes = OWES_PLAIN
+      length = toI32(this.plainBody.length)
     } else if (get && p.targetIs("/json")) {
       const w: JsonWriter = this.writer
       w.reset(this.jsonBuf, ZERO)
@@ -92,15 +116,70 @@ export class TfbServer {
       w.string("Hello, World!")
       w.endObject()
       this.serialized = this.serialized + 1
-      this.reply(conn, 200, this.jsonNames, this.jsonValues, this.jsonBuf, w.end)
-    } else {
-      this.reply(conn, 404, this.textNames, this.textValues, this.notFound, toI32(this.notFound.length))
+      owes = OWES_JSON
+      length = w.end
+    }
+    if (this.tracks(slot)) {
+      this.owes[slot] = owes
+      this.owedAt[slot] = HEAD_OWED
+      this.owedLength[slot] = length
+      this.resume(slot, conn)
     }
   }
 
-  reply(conn: Http1Connection, status: i32, names: u8[][], values: u8[][], body: u8[], length: i32): void {
-    conn.respond(status, names, values, length)
-    conn.write(body, ZERO, length)
+  /** Whether `slot` is one the owed-reply arrays have a place for. */
+  tracks(slot: i32): boolean {
+    return (
+      slot >= 0 &&
+      slot < toI32(this.owes.length) &&
+      slot < toI32(this.owedAt.length) &&
+      slot < toI32(this.owedLength.length)
+    )
+  }
+
+  /** The body of an `OWES_` reply. */
+  body(owes: i32): u8[] {
+    if (owes === OWES_JSON) {
+      return this.jsonBuf
+    }
+    return owes === OWES_PLAIN ? this.plainBody : this.notFound
+  }
+
+  /**
+   * Writes what `slot` owes, as far as the output takes it. Every body is the
+   * same bytes on every request, so a reply held back by a full output
+   * resumes from `jsonBuf` even when other slots have rewritten it since.
+   */
+  resume(slot: i32, conn: Http1Connection): void {
+    if (!this.tracks(slot)) {
+      return
+    }
+    const owes: i32 = this.owes[slot]
+    if (owes === OWES_NOTHING) {
+      return
+    }
+    const json: boolean = owes === OWES_JSON
+    const names: u8[][] = json ? this.jsonNames : this.textNames
+    const values: u8[][] = json ? this.jsonValues : this.textValues
+    const body: u8[] = this.body(owes)
+    const length: i32 = this.owedLength[slot]
+    let at: i32 = this.owedAt[slot]
+    if (at === HEAD_OWED) {
+      const r: i32 = conn.respond(owes === OWES_NOT_FOUND ? 404 : 200, names, values, length)
+      if (r === H1_AGAIN) {
+        return
+      }
+      at = r === 0 ? 0 : length
+    }
+    while (at < length) {
+      const n: i32 = conn.write(body, at, length - at)
+      if (n === H1_AGAIN) {
+        this.owedAt[slot] = at
+        return
+      }
+      at = n > 0 ? at + n : length
+    }
+    this.owes[slot] = OWES_NOTHING
     conn.end()
   }
 
@@ -138,16 +217,22 @@ export class TfbServer {
     if (!this.server.holds(slot)) {
       return
     }
-    let wants: i32 = (events & 5) !== 0 ? this.server.readable(slot) : this.server.writable(slot)
+    if ((events & 5) !== 0) {
+      this.server.readable(slot)
+    } else {
+      this.server.writable(slot)
+    }
     const conn: Http1Connection = this.server.connection(slot)
     let event: i32 = this.server.next(slot)
     while (event !== H1_NEED_MORE && event !== H1_ERROR) {
       if (event === H1_REQUEST) {
-        this.answer(conn)
+        this.answer(slot, conn)
+      } else if (event === H1_WRITE) {
+        this.resume(slot, conn)
       }
       event = this.server.next(slot)
     }
-    wants = this.server.flush(slot)
+    const wants: i32 = this.server.flush(slot)
     if ((wants & H1_DONE) !== 0) {
       this.server.close(slot)
       return

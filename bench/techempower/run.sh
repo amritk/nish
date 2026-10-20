@@ -44,7 +44,11 @@ while [ $# -gt 0 ]; do
     --quick) quick=1 ;;
     --rounds) rounds=$2; shift ;;
     --duration) duration=$2; shift ;;
-    --only) only=$2; shift ;;
+    --only)
+      only=$2
+      shift
+      case $only in plaintext | json) ;; *) echo "run.sh: --only takes plaintext or json, not $only" >&2; exit 2 ;; esac
+      ;;
     --nodelay-compare) compare=1 ;;
     -h | --help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "run.sh: unknown argument $1" >&2; exit 2 ;;
@@ -116,10 +120,10 @@ pid=""
 
 stop() {
   if [ -n "$pid" ]; then
-    # A background job of a script starts with SIGINT ignored, which some
-    # runtimes keep, so SIGTERM and then SIGKILL follow it.
-    kill -INT "$pid" 2>/dev/null || true
-    for signal in TERM KILL; do
+    # SIGTERM first: a background job of a script starts with SIGINT ignored,
+    # which some runtimes keep. SIGINT and then SIGKILL follow it.
+    kill -TERM "$pid" 2>/dev/null || true
+    for signal in INT KILL; do
       for _ in $(seq 20); do
         kill -0 "$pid" 2>/dev/null || break 2
         sleep 0.1
@@ -140,7 +144,12 @@ start() {
     cmd=${cmd%% @*}
   fi
   port=$((port + 1))
-  "${serverCpu[@]}" "$cmd" "$port" "${extra[@]}" >"$log" 2>&1 &
+  # Emptied here, not by the child's redirection, so the wait below never
+  # reads the last server's `listening`.
+  : >"$log"
+  # The `${a[@]+...}` forms keep an empty array from tripping `set -u` on
+  # bash before 4.4.
+  ${serverCpu[@]+"${serverCpu[@]}"} "$cmd" "$port" ${extra[@]+"${extra[@]}"} >>"$log" 2>&1 &
   pid=$!
   for _ in $(seq 300); do
     grep -q listening "$log" && return 0
@@ -159,9 +168,9 @@ measure() {
       -H "Host: tfb-server" -H "Connection: keep-alive"
       -H "Accept: text/plain,text/html;q=0.9,application/xhtml+xml;q=0.9,application/xml;q=0.8,*/*;q=0.7")
     if [ "$path" = /plaintext ]; then
-      out=$("${clientCpu[@]}" wrk "${args[@]}" -s "$here/pipeline.lua" "$url" -- 16 2>&1)
+      out=$(${clientCpu[@]+"${clientCpu[@]}"} wrk "${args[@]}" -s "$here/pipeline.lua" "$url" -- 16 2>&1)
     else
-      out=$("${clientCpu[@]}" wrk "${args[@]}" "$url" 2>&1)
+      out=$(${clientCpu[@]+"${clientCpu[@]}"} wrk "${args[@]}" "$url" 2>&1)
     fi
     # A response that is not 2xx, or a socket error, is counted by wrk all the
     # same, so the line goes to stderr beside the figure.
@@ -170,7 +179,7 @@ measure() {
   else
     local depth=1
     [ "$path" = /plaintext ] && depth=16
-    out=$("${clientCpu[@]}" h2load --h1 -t "$threads" -c "$conns" -m "$depth" -D "$secs" "$url" 2>&1)
+    out=$(${clientCpu[@]+"${clientCpu[@]}"} h2load --h1 -t "$threads" -c "$conns" -m "$depth" -D "$secs" "$url" 2>&1)
     echo "$out" | awk '/^finished in/ { gsub(",", "", $4); print $4 }'
   fi
 }
@@ -213,8 +222,11 @@ run() {
   done
 }
 
-[ -z "$only" ] || [ "$only" = plaintext ] && run /plaintext "${plainLevels[@]}"
-[ -z "$only" ] || [ "$only" = json ] && run /json "${jsonLevels[@]}"
+# Whether the run times test $1: every test, or the one `--only` names.
+wants() { [ -z "$only" ] || [ "$only" = "$1" ]; }
+
+if wants plaintext; then run /plaintext "${plainLevels[@]}"; fi
+if wants json; then run /json "${jsonLevels[@]}"; fi
 
 # The tables: one row per contestant, one column per concurrency, each cell
 # the median and, in brackets, the minimum req/s over the rounds.
@@ -264,8 +276,10 @@ report() {
 {
   echo "TechEmpower json and plaintext, $(lscpu | awk -F: '/Model name/ { gsub(/^ +/, "", $2); print $2; exit }'), $cpus CPUs"
   echo "$pinning; client $client"
-  [ -z "$only" ] || [ "$only" = plaintext ] && report /plaintext "${plainLevels[@]}"
-  [ -z "$only" ] || [ "$only" = json ] && report /json "${jsonLevels[@]}" &&
+  if wants plaintext; then report /plaintext "${plainLevels[@]}"; fi
+  if wants json; then
+    report /json "${jsonLevels[@]}"
     echo 'The twins answer /json with {"message":"Hello, World!","n":<n>}: 8 bytes more than the entry, and a counter.'
-  for note in "${notes[@]}"; do echo "note: $note"; done
+  fi
+  for note in ${notes[@]+"${notes[@]}"}; do echo "note: $note"; done
 } | tee build/tfb/results.md

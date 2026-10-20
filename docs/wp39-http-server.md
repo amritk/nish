@@ -43,7 +43,7 @@ names here, and this note says which of them each stage takes.
 | HTTP/2 | Over TLS with ALPN `h2` only (`std/net/http2-tls.ts`); no cleartext h2c | `h2spec`, `curl --http2` |
 | HTTP/3 and WebTransport | `Http3Server` behind a `QuicListener`; WebTransport pinned to the draft Chrome negotiates | the runner's `http3` case, `curl --http3-only`, Chromium |
 | One handler for all three versions | **None.** Each carrier has its own event API, so a program that serves all three versions answers each one separately. `tests/link/net_interop_server` does exactly that (`app.ts`, `h2.ts`, `server.ts`) | — |
-| JSON | A reader (`jsonField`) and a writer into a caller-owned `u8[]` (`JsonWriter`, E3), both in `std/json.ts` | `tests/link/std_json` |
+| JSON | A reader (`jsonField`) and a writer into a caller-owned `u8[]` (`JsonWriter`, E3), both in `std/json.ts` | `tests/link/std_json`, `tests/link/std_json_writer` |
 | TechEmpower `json` and `plaintext` | `bench/techempower/` (E5): one core, one `pollWait` loop on `Http1Server`, with `Server` and a cached `Date` (`HttpDate`, E4) | `tests/link/tfb_entry`; [BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext) |
 | Databases | **None.** No Postgres client; the TLS client role (N13) is unbuilt | — |
 | Crypto speed | ChaCha20-Poly1305 is portable and fast. AES-GCM is bitsliced (K3) and slow, yet it is what Chrome and curl list first on AES-capable machines, and the server takes the client's first suite (`chooseSuite`, `std/net/tls.ts`). No session tickets, so every connection pays a full handshake | WP34 K3, S1 |

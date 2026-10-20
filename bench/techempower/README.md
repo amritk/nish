@@ -32,7 +32,8 @@ serving its other connections.
   and TFB's two routes. `tests/link/tfb_entry` imports it and checks it over
   loopback against the verifier's rules: status, exact body, `Content-Type`,
   `Content-Length`, `Server`, an IMF-fixdate `Date`, a 16-deep pipelined burst,
-  one serialization per `/json`, and an `Arena.used()` that does not move over
+  a 1000-deep one whose answers overrun the output (a reply held back by a
+  full output resumes on `H1_WRITE`), one serialization per `/json`, and an `Arena.used()` that does not move over
   200 warmed requests.
 - `main.ts` is the program: one process, one thread, one `pollWait` loop. It
   takes `main <port> [nodelay] [host] [slots]`, prints `listening <port>`, and

@@ -19,6 +19,9 @@ PASS  16 pipelined requests in one write are answered by 16 whole responses
 PASS  and nothing more follows them
 PASS  and the handler answered each once
 PASS  a pipelined mix of /json and /plaintext is answered in the order asked
+PASS  1000 pipelined requests, past what the output holds, are answered whole and in order
+PASS  and nothing more follows the 1000
+PASS  and the handler answered each of them once
 PASS  five /json requests are five serializations by the writer
 PASS  and a /plaintext request is none
 PASS  a warmed connection answers 200 requests
@@ -35,4 +38,4 @@ PASS  a new connection after the 400: Content-Length is the body's length
 PASS  a new connection after the 400: one Content-Length
 PASS  a new connection after the 400: Server is present
 PASS  a new connection after the 400: Date is an IMF-fixdate
-tfb entry: 37 passed, 0 failed, 0 skipped
+tfb entry: 40 passed, 0 failed, 0 skipped
