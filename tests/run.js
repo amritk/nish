@@ -1482,54 +1482,14 @@ if (!only || "net_tcp".includes(only)) {
 
   // Section GC keeps runtime-net.c out of a program that calls none of it. The
   // link is the speed profile's `--gc-sections` without its LTO, so no call is
-  // inlined away, and the linker itself names every section it drops; the echo,
-  // which calls six of the eight, is the control that shows a kept one is not
-  // named and that the flag reports at all.
-  if (process.platform !== "linux") {
-    skip(`net_tcp section GC: measured with GNU-style --gc-sections, and this host is ${process.platform}`)
-  } else {
+  // inlined away (`-dead_strip`, its Darwin counterpart, there), and `nm` names
+  // the functions the program still defines; the echo, which calls six of the
+  // eight, is the control that shows a kept one is still there and that the
+  // link drops anything at all.
+  {
     // The runtime objects are built once for both links, with the sections split
     // so that each function can be dropped on its own.
     const rt = runtimeObjects(["-ffunction-sections", "-fdata-sections"])
-    const collected = (name, ll) => {
-      const cc =
-        rt.error === null
-          ? spawnSync(
-              "clang",
-              [
-                "-Wno-override-module",
-                "-O2",
-                "-ffunction-sections",
-                "-fdata-sections",
-                "-Wl,--gc-sections",
-                "-Wl,--print-gc-sections",
-                ll,
-                ...rt.objects,
-                "-lm",
-                "-o",
-                path.join(netDir, `${name}.gc`),
-              ],
-              { cwd: root, encoding: "utf8" }
-            )
-          : { status: 1, stderr: rt.error }
-      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll|connect)_\w+)/g)].map(
-        (m) => m[1]
-      )
-      return { ok: cc.status === 0, removed, why: String(cc.stderr) }
-    }
-    const quietLl = path.join(netDir, "net_quiet.ll")
-    const quietTs = path.join(netDir, "net_quiet.ts")
-    fs.writeFileSync(
-      quietTs,
-      'export const main = (): number => {\n  console.log("no sockets");\n  return 0;\n};\n'
-    )
-    const compiled = spawnSync(NISH, [quietTs, "-o", quietLl], { cwd: root, encoding: "utf8" })
-    const none =
-      compiled.status === 0
-        ? collected("net_quiet", quietLl)
-        : { ok: false, removed: [], why: compiled.stderr }
-    // The echo's IR is the one `buildCaseIn` wrote above.
-    const echo = collected("net_tcp_echo", path.join(netDir, "net_tcp_echo.ll"))
     const exported = [
       "nish_net_address",
       "nish_net_local_port",
@@ -1558,6 +1518,52 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_read",
       "nish_net_write",
     ]
+    const collected = (name, ll) => {
+      const cc =
+        rt.error === null
+          ? spawnSync(
+              "clang",
+              [
+                "-Wno-override-module",
+                "-O2",
+                "-ffunction-sections",
+                "-fdata-sections",
+                process.platform === "darwin" ? "-Wl,-dead_strip" : "-Wl,--gc-sections",
+                ll,
+                ...rt.objects,
+                "-lm",
+                "-o",
+                path.join(netDir, `${name}.gc`),
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : { status: 1, stderr: rt.error }
+      // Mach-O prefixes every C symbol with an underscore.
+      const nm =
+        cc.status === 0
+          ? spawnSync("nm", ["-g", path.join(netDir, `${name}.gc`)], { encoding: "utf8" })
+          : null
+      const defined = new Set(
+        [...String(nm?.stdout ?? "").matchAll(/ T _?(nish_(?:net|tcp|udp|poll|connect)_\w+)$/gm)].map(
+          (m) => m[1]
+        )
+      )
+      const removed = exported.filter((f) => !defined.has(f))
+      return { ok: cc.status === 0 && nm?.status === 0, removed, why: `${cc.stderr}${nm?.stderr ?? ""}` }
+    }
+    const quietLl = path.join(netDir, "net_quiet.ll")
+    const quietTs = path.join(netDir, "net_quiet.ts")
+    fs.writeFileSync(
+      quietTs,
+      'export const main = (): number => {\n  console.log("no sockets");\n  return 0;\n};\n'
+    )
+    const compiled = spawnSync(NISH, [quietTs, "-o", quietLl], { cwd: root, encoding: "utf8" })
+    const none =
+      compiled.status === 0
+        ? collected("net_quiet", quietLl)
+        : { ok: false, removed: [], why: compiled.stderr }
+    // The echo's IR is the one `buildCaseIn` wrote above.
+    const echo = collected("net_tcp_echo", path.join(netDir, "net_tcp_echo.ll"))
     check(
       "net_tcp: section GC drops every function of runtime-net.c from a program that calls none, and keeps the ones the echo calls",
       none.ok &&
