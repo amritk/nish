@@ -33,7 +33,7 @@ names here, and this note says which of them each stage takes.
 | | Today | Proof |
 | --- | --- | --- |
 | Cores | **One.** `nish:net` is refused inside a `scope()` task or a parallel body (`reject_net_task`), and `tcpListen` has no `SO_REUSEPORT` flag (`udpBind` has one), so N processes cannot share a TCP port | [#478](https://github.com/amritk/nish/issues/478) |
-| HTTP/1.1 | Keep-alive, chunked bodies both ways and pipelining. A burst of pipelined responses leaves in one write (`Http1Server.next`, `flush`). A warmed slot allocates nothing per request | `tests/link/net_loopback`; no third-party client yet |
+| HTTP/1.1 | Keep-alive, chunked bodies both ways and pipelining. A burst of pipelined responses leaves in one write (`Http1Server.next`, `flush`). A warmed slot allocates nothing per request, and a slot's connection is built on the first accept into it | `tests/link/net_loopback`, `tests/link/net_http1_server`; no third-party client yet |
 | HTTP/2 | Over TLS with ALPN `h2` only (`std/net/http2-tls.ts`); no cleartext h2c | `h2spec`, `curl --http2` |
 | HTTP/3 and WebTransport | `Http3Server` behind a `QuicListener`; WebTransport pinned to the draft Chrome negotiates | the runner's `http3` case, `curl --http3-only`, Chromium |
 | One handler for all three versions | **None.** Each carrier has its own event API, so a program that serves all three versions answers each one separately. `tests/link/net_interop_server` does exactly that (`app.ts`, `h2.ts`, `server.ts`) | — |

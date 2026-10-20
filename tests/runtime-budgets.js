@@ -368,6 +368,22 @@ const RUNTIME_SIMD_TEXT_BUDGET = 768
 const RUNTIME_AES_TEXT_BUDGET = 2560
 
 /**
+ * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
+ * before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http1_server/startup.ts`,
+ * which builds that pool on the default `Http1Config` and prints the bytes.
+ *
+ * Measured **16,688 bytes** on 2026-10-20 with clang 18 on linux-x64: the 16,384-byte
+ * read scratch every server keeps, and the pool's own bookkeeping, with no slot's
+ * connection built. Each connection is built on the first accept into its slot,
+ * 3,976 bytes on the same defaults. Built eagerly, as every slot was before, a
+ * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
+ * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the
+ * next 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+export const HTTP1_SERVER_START_BYTES = 16896
+
+/**
  * Every unit and configuration the gate measures: the source compiled with
  * `clang -Oz <flags> -c`, the ceiling on the sum of its `.text*` sections, and the
  * name of the constant that holds the ceiling, which a failure tells the reader to

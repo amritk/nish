@@ -1,3 +1,5 @@
+PASS  a pool of four builds no slot before its first accept
+PASS  the first accept builds slot 0 alone
 PASS  a GET is answered with its length, byte for byte
 PASS  a chunked POST cut in two at every byte is echoed whole every time
 PASS  and so is one sent a byte at a time
@@ -53,6 +55,7 @@ PASS  a slot that has just moved is not idle
 PASS  past idleTimeout it is closed
 PASS  and its client sees the end
 PASS  four clients fill the pool
+PASS  which has then built its four slots
 PASS  one of them hangs up
 PASS  the slot it freed is the one the next connection takes
 PASS  rearm: a slot's interest as accepted needs no pollModify
@@ -60,6 +63,7 @@ PASS  rearm: a new interest does, once
 PASS  rearm: H1_DONE is not interest
 PASS  rearm: and back to what the loop holds
 PASS  a fifth is accepted and shed
+PASS  and none past the four is built
 PASS  and they all close
 PASS  rearm: a free slot never needs a pollModify
 PASS  fifty connections, one after another, each answered
@@ -67,6 +71,16 @@ PASS  every output buffer is back in the pool, and it made no more than the most
 PASS  and accepting and freeing their slots moved the arena not at all (0 bytes)
 PASS  a free slot answers H1_ERROR to next and done to the rest
 PASS  a slot out of range names the first connection
+PASS  a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept
+PASS  with size slots busy the next is shed with H1_POOL_FULL and nothing more is built
+PASS  a closed slot is taken again, its connection kept rather than built anew
+PASS  the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing
+PASS  expiring a pool with one of its three built slots free closes the other two
+PASS  a pool of 16,384 reports its size with no slot built
+PASS  a slot never built holds nothing: no descriptor, H1_ERROR to next, done to the rest
+PASS  closing it and rearming it change nothing
+PASS  an accept with no listener answers its error and builds nothing
+PASS  a never-built slot's connection is slot 0's, built once and holding nothing
 PASS  a client offering http/1.1 completes the handshake, the server's signature and Finished verified
 PASS  ALPN chose http/1.1
 PASS  a GET over TLS
@@ -157,4 +171,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 159 passed, 0 failed, 0 skipped
+http1 server: 173 passed, 0 failed, 0 skipped
