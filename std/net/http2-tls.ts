@@ -36,9 +36,12 @@
  * configuration offers `h2` (and may offer `http/1.1` beside it, for a
  * program that serves both and calls `alpn(slot)` itself).
  *
- * **Slots, sized at start-up; buffers, borrowed.** The constructor makes
- * every connection and the TLS pool beside them, but no frame buffer: a
- * connection borrows its input, output and header-block buffers from the
+ * **Slots, a cap; buffers, borrowed.** The constructor makes the TLS pool
+ * and slot 0's connection, but no other slot's and no frame buffer: a slot's
+ * connection is made by the first `accept` into it and kept, so a pool sized
+ * for its peak costs at start-up only what does not depend on the size, and
+ * holds at most `size` connections once the peak has come. A connection
+ * borrows its input, output and header-block buffers from the
  * server's `Http2Pools` when it first needs each, and gives each back once it
  * is empty and when the slot closes, so a free or idle slot holds none. A
  * slot whose handshake is not done holds one output buffer, its SETTINGS
@@ -78,6 +81,12 @@ export const H2_ALPN: string = "h2"
  */
 export class Http2TlsServer {
   tls: TlsTcpServer
+  /** The caps every slot's connection is made under. */
+  config: Http2Config
+  /**
+   * The connections made so far, slot `k`'s at `k`: slot 0's, made by the
+   * constructor, and one for each slot accepted into since.
+   */
   connections: Http2Connection[]
   /**
    * The `date` every slot's responses carry, formatted once a second for all
@@ -90,28 +99,40 @@ export class Http2TlsServer {
 
   /**
    * A pool of `size` slots, at least one, serving HTTP/2 under `config` over
-   * TLS under `tlsConfig` on `listener`. Every slot's connection is made
-   * here; its frame buffers are borrowed from `pools` as it needs them.
+   * TLS under `tlsConfig` on `listener`. Only slot 0's connection is made
+   * here, so a config it refuses panics now, with its words; every other
+   * slot's is made by the first `accept` into it and kept. Frame buffers are
+   * borrowed from `pools` as a connection needs them.
    */
   constructor(tlsConfig: TlsServerConfig, config: Http2Config, listener: i32, size: i32) {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
+    this.config = config
     this.connections = []
     this.date = new HttpDate()
     // Formatted once now, so no slot ever sends the bytes before a first format.
-    const date: u8[] = this.date.current()
-    for (let k: i32 = 0; k < this.tls.size(); k++) {
-      const conn: Http2Connection = new Http2Connection(config)
-      conn.date = date
-      this.connections.push(conn)
-    }
-    // After the connections, so a config they refuse panics with their words.
+    const first: Http2Connection = new Http2Connection(config)
+    first.date = this.date.current()
+    this.connections.push(first)
+    // After slot 0's connection, so a config it refuses panics with its words.
     this.pools = new Http2Pools("Http2TlsServer", config, this.tls.size())
-    for (let k: i32 = 0; k < this.tls.size(); k++) {
-      this.connections[k].pools = this.pools
-    }
+    first.pools = this.pools
   }
 
-  /** How many slots the pool has. */
+  /** A new connection on this pool's buffers and `date`, for the next slot made. */
+  build(): Http2Connection {
+    const conn: Http2Connection = new Http2Connection(this.config)
+    conn.date = this.date.current()
+    conn.pools = this.pools
+    this.connections.push(conn)
+    return conn
+  }
+
+  /** Whether `slot` holds a connection and its HTTP/2 side has been made. */
+  live(slot: i32): boolean {
+    return this.tls.holds(slot) && slot < toI32(this.connections.length)
+  }
+
+  /** How many slots the pool has, made or not. */
   size(): i32 {
     return this.tls.size()
   }
@@ -131,7 +152,10 @@ export class Http2TlsServer {
     return this.tls.fd(slot)
   }
 
-  /** The HTTP/2 connection of `slot`, its `date` brought up to now; a slot out of range names the first. */
+  /**
+   * The HTTP/2 connection of `slot`, its `date` brought up to now. A slot
+   * never accepted into, or out of range, names slot 0's, which may be live.
+   */
   connection(slot: i32): Http2Connection {
     this.date.current()
     const at: i32 = slot >= 0 && slot < toI32(this.connections.length) ? slot : H2_TLS_ZERO
@@ -146,14 +170,21 @@ export class Http2TlsServer {
   /**
    * Accepts the next waiting connection into a free slot, as
    * `TlsTcpServer.accept` does, and gives it a fresh HTTP/2 connection whose
-   * SETTINGS go out once the handshake is done. Answers the slot, or what
-   * `TlsTcpServer.accept` answers.
+   * SETTINGS go out once the handshake is done: the slot's own, restarted,
+   * or one made now if this is the first accept into it. Answers the slot,
+   * or what `TlsTcpServer.accept` answers.
    */
   accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32 {
     const slot: i32 = this.tls.accept(serverRandom, ephemeralPrivate)
-    if (slot >= 0 && slot < toI32(this.connections.length)) {
-      this.connections[slot].restart()
+    if (slot < 0 || slot >= this.tls.size()) {
+      return slot
     }
+    // `TlsTcpServer` hands out its lowest slots first, so this makes one
+    // connection, unless a program accepted on `tls` itself.
+    while (toI32(this.connections.length) <= slot) {
+      this.build()
+    }
+    this.connections[slot].restart()
     return slot
   }
 
@@ -192,7 +223,7 @@ export class Http2TlsServer {
    * slot, or one whose ALPN was not `h2`, answers `H2_ERROR`.
    */
   next(slot: i32): i32 {
-    if (!this.holds(slot) || this.refused(slot)) {
+    if (!this.live(slot) || this.refused(slot)) {
       return H2_ERROR
     }
     this.date.current()
@@ -231,7 +262,7 @@ export class Http2TlsServer {
    * with the write bit while the connection still holds bytes.
    */
   flush(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    if (!this.live(slot)) {
       return TLS_RECORD_DONE
     }
     if (this.refused(slot)) {
