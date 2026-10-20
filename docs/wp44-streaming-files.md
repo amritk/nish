@@ -50,13 +50,18 @@ const size = fileSize(video)                        // the Content-Length
 const window = new Array<u8>(65536)                 // the only buffer
 
 // Per connection, the state is one i64: how far into the file it has got.
+// The answer is the new position, or -1 when the response cannot be finished
+// and the connection is to be closed.
 const pump = (c: Http1Connection, at: i64): i64 => {
   let pos = at
   while (pos < size) {
-    const n = fileReadAt(video, window, 0, 65536, pos)
+    const left = size - pos                         // never past Content-Length
+    const want = left < 65536 ? toI32(left) : 65536
+    const n = fileReadAt(video, window, 0, want, pos)
     if (n <= 0) { return -1 }                       // shrank under us, or failed
     const took = c.write(window, 0, n)
-    if (took < 0) { return pos }                    // H1_AGAIN waits for H1_WRITE; the rest end the response
+    if (took === H1_AGAIN) { return pos }           // wait for H1_WRITE, then pump again
+    if (took < 0) { return -1 }                     // H1_CLOSED, H1_INVALID
     pos = pos + toI64(took)
     if (took < n) { return pos }                    // the rest of this window on the next wake
   }
@@ -122,11 +127,14 @@ part of this package.
   that opening a FIFO with no writer cannot hang. It changes nothing for a
   regular file.
 - **What it accepts.** Anything that is not a regular file (`S_ISREG`) is
-  closed again and refused: a directory is `-21` and anything else (FIFO,
-  socket, device) is `-22`. So every descriptor `fileOpen` gives out has a
-  size and can be read positionally. `readFileSyncOrNull` refuses the same
-  directories and pipes (it answers `null`), but it reads a character device
-  such as `/dev/null` as empty, and `fileOpen` refuses one (§9 Q6).
+  closed again and refused: a directory is `-21`, and a FIFO or a device is
+  `-22`. A Unix-domain socket never gets that far, since `open(2)` on one
+  fails with `ENXIO`, `-6`. So every descriptor `fileOpen` gives out has a
+  size and can be read positionally. `readFileSyncOrNull` refuses
+  directories too, but differs in two places. It opens without `O_NONBLOCK`,
+  so it blocks on a FIFO with no writer (which is why `nish_read_file_bytes`
+  is not `willreturn`). And it reads a character device such as `/dev/null`
+  as empty, where `fileOpen` refuses one (§9 Q6).
 - **Errno.** The answer is the negated errno, in Linux's numbering on every
   platform, as `nish:net` answers (`nish_net_err`, `runtime/runtime-net.c`).
   The documented set is:
@@ -134,6 +142,7 @@ part of this package.
   | Value | Meaning |
   | --- | --- |
   | `-2` | not found |
+  | `-6` | a Unix-domain socket, or a device with no driver (`ENXIO`) |
   | `-13` | permission denied |
   | `-20` | a component is not a directory |
   | `-21` | a directory |
@@ -144,7 +153,9 @@ part of this package.
   | `-5` | any other failure, collapsed so both runtimes agree (§5) |
 
   A path holding a NUL is `-2`, as every builtin answers a missing path
-  (`nish_cpath`, RT-3). A static server needs `-2` and `-13` apart, because one
+  (`nish_cpath`, RT-3). Node throws `ERR_INVALID_ARG_VALUE` for one, which is
+  not an errno name, so the shim tests for a NUL before it calls
+  `fs.openSync` and answers `-2` itself (§5). A static server needs `-2` and `-13` apart, because one
   is a 404 and the other a 403. That is the case for an errno over a bare `-1`
   (§9 Q3).
 - **Symbolic links** are followed, as `readFileSync` follows them. The
@@ -164,8 +175,13 @@ part of this package.
   ([LANGUAGE.md](LANGUAGE.md#bounds)). A `readonly u8[]` or any other
   element type is refused, as `reject_net_readonly` and `reject_net_element`
   refuse them.
-- **`pos < 0`** answers `-22` before the kernel is asked. `pos` at or past the
-  end answers `0`. `len` of `0` answers `0` as well, so a loop asks for at least
+- **`pos < 0`, or `pos + len` past 2^63 − 1,** answers `-22` before the
+  kernel is asked, in both runtimes. The second is what Linux answers itself
+  (`EINVAL` from `rw_verify_area`), and checking it first keeps every
+  platform the same. The first matters under Node: there `fs.readSync` takes
+  a position of `-1` to mean "from the current offset", and so would read
+  where this builtin must refuse. Any other `pos` at or past the end answers
+  `0`. `len` of `0` answers `0` as well, so a loop asks for at least
   one byte, as `netRead`'s row says.
 - **Short reads.** The count may be fewer than `len` before the end. POSIX
   promises a full read from a regular file only up to the end, and a signal or
@@ -250,6 +266,11 @@ provides them, as it provides `readFileBytesSync`:
 of it. The bytes match. Only the cost under Node differs, and the native
 memory rule (§6) is not a claim about Node.
 
+**Before Node is asked**, the shims answer what Node would answer differently:
+a path with a NUL is `-2` (`fs` throws `ERR_INVALID_ARG_VALUE`), and a `pos`
+that §3 refuses is `-22` (`fs.readSync` reads from the current offset at
+`-1`). Each check is a few lines, and each is a planned differential case.
+
 **Errors.** Each shim catches what Node throws and maps `err.code` through
 one table onto the numbers of §3. The match is by name (`ENOENT` is `-2`), not
 by `err.errno`, because libuv's numbers are the platform's and Darwin's differ
@@ -309,7 +330,7 @@ integer cannot arise, because `i64` has no fractions.
 `fd_pread`, `fstat` to `fd_filestat_get` and `close` to `fd_close`. The host's
 preopens are therefore the capability boundary on WASI. A path outside every
 preopen fails as `ENOENT` or `ENOTCAPABLE`: the first is `-2`, and the second
-is collapsed to `-5` unless the owner wants it apart (§9 Q7). WASI's errno
+is collapsed to `-5` unless the owner folds it into `-13` (§9 Q7). WASI's errno
 numbering differs from Linux's (its `ENOENT` is 44), so the native mapping of
 §5 is required here, not only on Darwin. `web/wasi.mjs` already implements
 `path_open`, `fd_pread`, `fd_filestat_get` and `fd_close` over its in-memory
@@ -330,9 +351,9 @@ same gap noted beside a new refusal is a separate fix, not this package's.
 ## 8. Not in this package
 
 - **`sendfile`.** A zero-copy path from a file to a socket removes the copy
-  through `buf`. [wp39-http-server.md](wp39-http-server.md) §6 defers it
-  "until a profile shows the syscalls or the copy on top", and nothing here
-  changes that. With an `i32` descriptor it would be one more builtin later,
+  through `buf`. [wp39-http-server.md](wp39-http-server.md) §6 leaves it out on purpose:
+  "a runtime change that makes sense only after a profile shows the syscalls
+  or the copy on top. None is ruled out." Nothing here changes that. With an `i32` descriptor it would be one more builtin later,
   something like `fileSendTo(fd, sock, pos, len): i32` under `fs.read` and
   `net`. It would be useless under TLS without kernel TLS, which WP39 defers in
   the same line.
@@ -362,7 +383,7 @@ made.
 | Q4 | **Positional only**, or a cursor `fileRead` beside it? | positional only (§8) | **Owner decides** |
 | Q5 | **`using`**: once WP40 H1 lands, should `std/` offer a `File` class closed by `using` over these builtins, which needs H1 to accept an `i32` field closed by a builtin? Or does that stay out? | out of this package. Reopen it after H1 ships, with a program that wants it | **Owner decides** |
 | Q6 | **Regular files only**, or FIFOs, devices and stdin too? | regular files only (§3, §8). A pipe has no size and no position | **Owner decides** |
-| Q7 | **Freestanding wasm**: refuse at check time on a `wasm32` target outside the wasi profile, with a `runtime-wasm.c` that defines the four as answering `-38` (`ENOSYS`) for the `--profile wasm` route? Or let that route fail at link time, as the whole-file builtins do today? And on WASI, does `ENOTCAPABLE` get a number of its own (`-76`)? | refuse at check time, and answer `-38` on the freestanding route so the link never fails. `ENOTCAPABLE` stays `-5`. A sandbox refusal is a server bug, not a 403 | **Owner decides** |
+| Q7 | **Freestanding wasm**: refuse at check time on a `wasm32` target outside the wasi profile, with a `runtime-wasm.c` that defines the four as answering `-38` (`ENOSYS`) for the `--profile wasm` route? Or let that route fail at link time, as the whole-file builtins do today? And on WASI, is `ENOTCAPABLE` folded into `-13` (permission denied) or left as `-5`? It has no Linux number of its own (WASI's 76 is Linux's `ENOTUNIQ`) | refuse at check time, and answer `-38` on the freestanding route so the link never fails. `ENOTCAPABLE` stays `-5`: a path outside every preopen is a deployment bug, not a 403 | **Owner decides** |
 | Q8 | **Capability of `fileSize` and `fileClose`**: `fs.read`, or `CAP_NONE`? | `fs.read` (§4) | **Owner decides** |
 | Q9 | **`sendfile`**: confirm it stays deferred to WP39 §6 | deferred (§8) | **Owner decides** |
 
@@ -386,7 +407,8 @@ rolling freeze), and nothing in this package needs it to.
    tests:
    - `file_read_at`: round trip, read to `0`, bytes printed
    - `file_read_at_eof`: at and past the end
-   - `file_open_errors`: missing file, directory, FIFO, a path with a NUL
+   - `file_open_errors`: missing file, directory, FIFO, socket, a path with a NUL
+   - `file_read_at_pos`: a negative `pos` and a `pos + len` past 2^63 − 1, both `-22`
    - `file_size_large`: a sparse file past 2^31 bytes, which `tests/run.js`
      makes with `fs.truncateSync`, sized and read at its end
    - `file_read_at_bounds`, `file_read_at_unchecked`
