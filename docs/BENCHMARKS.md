@@ -529,7 +529,7 @@ Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every
 | | |
 | --- | --- |
 | Date | 2026-10-20 |
-| nish | nish 0.18.0 (commit 753a9ae), `--link --profile speed` |
+| nish | nish 0.18.0 (commit 101fbab), `--link --profile speed` |
 | CPU | Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores |
 | OS | linux 6.18.44-fc-v139 (x64) |
 | Client | wrk 4.1.0, `-t 3`, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
@@ -541,45 +541,46 @@ Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every
 
 | contestant | 256 | 1024 | 4096 | 16384 |
 | --- | ---: | ---: | ---: | ---: |
-| entry | 293029 (269257) | 293834 (292180) | 290545 (288226) | 282426 (247703) |
-| entry-copy | 295430 (275617) | 307194 (303535) | 280104 (274925) | 278579 (272772) |
-| node-http | 28949 (28779) | 27828 (27193) | 29314 (28486) | 26107 (25637) |
-| uws | 386380 (370862) | 348203 (347952) | 370756 (357186) | 356221 (352581) |
-| bun | 53226 (52420) | 52340 (52128) | 51770 (49452) | 46165 (41302) |
-| bun-elysia | 51883 (51093) | 48632 (47412) | 47080 (46874) | 37719 (36435) |
-| bun-hono | 38184 (37078) | 36906 (36631) | 36785 (36350) | 31213 (29777) |
-| go-nethttp | 30123 (29324) | 30081 (29547) | 28476 (27843) | 22368 (20442) |
-| go-fasthttp | 334818 (333676) | 345297 (338569) | 334326 (295650) | 300728 (290852) |
-| rust-hyper | 93361 (89754) | 87402 (86807) | 88190 (83287) | 71947 (71190) |
-| rust-actix | 10027 (9993) | 9398 (8389) | 5019 (3490) | 0 (0) |
-| nginx | 40025 (39591) | 39722 (38347) | 37558 (33843) | 35135 (30260) |
+| entry | 321713 (317656) | 313993 (290984) | 309621 (276399) | 297739 (278590) |
+| entry-copy | 317684 (315275) | 321493 (283463) | 314277 (287312) | 311588 (293986) |
+| node-http | 29008 (29008) | 29889 (29809) | 28775 (28484) | 23020 (20973) |
+| uws | 350351 (345620) | 358478 (358365) | 366722 (347632) | 350933 (322670) |
+| bun | 50915 (49403) | 52263 (51923) | 50750 (50401) | 40998 (38605) |
+| bun-elysia | 51245 (50194) | 48071 (47646) | 47010 (45575) | 38710 (33733) |
+| bun-hono | 38883 (37611) | 37544 (36322) | 35749 (35593) | 31289 (29891) |
+| go-nethttp | 30246 (30125) | 29793 (29423) | 27932 (27718) | 23262 (22821) |
+| go-fasthttp | 362820 (343735) | 339025 (331185) | 338777 (322827) | 274822 (271531) |
+| rust-hyper | 92884 (90728) | 90542 (89286) | 85381 (85301) | 82453 (74893) |
+| rust-actix | 10347 (10295) | 8769 (8299) | 5368 (4284) | 0 (0) |
+| nginx | 41771 (40034) | 38572 (38537) | 39780 (36272) | 38505 (35701) |
 
-Noise band, the entry against its byte-identical copy (medians): 256 connections: 0.8%, 1024 connections: 4.5%, 4096 connections: 3.6%, 16384 connections: 1.4%.
+Noise band, the entry against its byte-identical copy (medians): 256 connections: 1.3%, 1024 connections: 2.4%, 4096 connections: 1.5%, 16384 connections: 4.7%.
 
 ### /json, one request at a time (req/s, median (min) of 3 rounds of 10 s)
 
 | contestant | 16 | 32 | 64 | 128 | 256 | 512 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| entry | 59882 (57620) | 72002 (69511) | 75238 (74366) | 85930 (81415) | 80589 (70369) | 55644 (48729) |
-| entry-copy | 60377 (60294) | 72753 (69866) | 76615 (76443) | 84380 (75165) | 75966 (70861) | 62753 (50954) |
-| node-http | 19969 (19833) | 20595 (20465) | 18845 (17682) | 18410 (16332) | 16590 (16358) | 16130 (16086) |
-| uws | 53925 (52834) | 63173 (61784) | 65798 (62568) | 71951 (70027) | 74895 (73918) | 65477 (54743) |
-| bun | 33162 (32965) | 39950 (38108) | 42807 (42800) | 43276 (42594) | 35676 (32574) | 33432 (32240) |
-| bun-elysia | 32114 (31120) | 39075 (38966) | 40593 (40262) | 39933 (35946) | 36855 (34148) | 35680 (28845) |
-| bun-hono | 28452 (27744) | 29960 (29843) | 30972 (30016) | 31001 (30462) | 26430 (24884) | 25477 (24388) |
-| go-nethttp | 25710 (25417) | 26319 (24555) | 24473 (23842) | 23020 (21467) | 21597 (21490) | 20553 (20530) |
-| go-fasthttp | 43137 (42038) | 47243 (47221) | 46463 (45007) | 45672 (43477) | 39315 (36671) | 36507 (35721) |
-| rust-hyper | 49663 (49046) | 57141 (54954) | 60746 (55261) | 57613 (57329) | 54866 (49386) | 47641 (46333) |
-| rust-actix | 10076 (8356) | 9752 (9745) | 9387 (9254) | 9851 (9078) | 9230 (9124) | 9913 (9595) |
-| nginx | 47084 (46862) | 51884 (51044) | 59109 (58196) | 59798 (58792) | 54208 (51144) | 50328 (48663) |
+| entry | 61524 (59974) | 71683 (68835) | 79203 (77715) | 80859 (79925) | 82600 (81020) | 77127 (74389) |
+| entry-copy | 61232 (59541) | 74494 (73270) | 80182 (78443) | 86816 (85350) | 78944 (73636) | 70120 (56097) |
+| node-http | 21058 (20862) | 21108 (20723) | 19905 (18145) | 17714 (17308) | 17263 (16910) | 16738 (16691) |
+| uws | 53614 (52344) | 62269 (61575) | 73995 (73785) | 75362 (72088) | 78996 (76922) | 60845 (60199) |
+| bun | 34485 (31693) | 38547 (38189) | 42332 (42254) | 43172 (37100) | 40020 (34686) | 38147 (32586) |
+| bun-elysia | 33890 (32016) | 38385 (36475) | 39600 (39189) | 40857 (37305) | 35766 (33396) | 30053 (29371) |
+| bun-hono | 28610 (28382) | 31384 (30452) | 30940 (30399) | 30303 (30239) | 26864 (26806) | 25033 (24630) |
+| go-nethttp | 26026 (25453) | 25472 (25166) | 24837 (24383) | 22568 (20546) | 21925 (21522) | 20937 (20438) |
+| go-fasthttp | 43635 (43108) | 48281 (47506) | 47828 (46332) | 44901 (44033) | 40720 (40577) | 38716 (37077) |
+| rust-hyper | 52523 (49837) | 57076 (56549) | 61797 (61403) | 59761 (54273) | 56828 (52833) | 51053 (48735) |
+| rust-actix | 10492 (10137) | 10141 (9941) | 10397 (9978) | 9820 (9730) | 10158 (9841) | 10386 (10112) |
+| nginx | 48149 (46782) | 53209 (52362) | 60311 (55314) | 60510 (58317) | 56769 (53615) | 54504 (53586) |
 
-Noise band, the entry against its byte-identical copy (medians): 16 connections: 0.8%, 32 connections: 1.0%, 64 connections: 1.8%, 128 connections: 1.8%, 256 connections: 5.7%, 512 connections: 12.8%.
+Noise band, the entry against its byte-identical copy (medians): 16 connections: 0.5%, 32 connections: 3.9%, 64 connections: 1.2%, 128 connections: 7.4%, 256 connections: 4.4%, 512 connections: 9.1%.
 
 What the rows say, read against that band:
 
 - The twins answer `/json` with `{"message":"Hello, World!","n":<n>}`: 8 bytes more than the entry's `{"message":"Hello, World!"}`, and a counter. The entry serializes its body with a `JsonWriter` on every request, as TFB requires; the twins vary in how they build theirs.
-- One core of the entry serves `/plaintext` at medians of 278,579 to 307,194 req/s across both builds and every concurrency: below `uws` and `go-fasthttp`, and above every other twin. On `/json` it leads every twin from 16 to 256 connections by more than the band (85,930 against `uws`'s 71,951 at 128; 80,589 against 74,895 at 256, where the band is 5.7%). At 512 the band widens to 12.8%, and `uws` is outside it, faster: 65,477 against 55,644.
-- At 16384 connections wrk reported read errors (connections reset) in one of the entry's three rounds (9,302) and in two of the copy's (250 and 122), which is why the entry's minimum there is 247,703.
+- One core of the entry serves `/plaintext` at medians of 297,739 to 321,713 req/s across every concurrency: below `uws` everywhere, below `go-fasthttp` from 256 to 4096 connections, and above every other twin. At 16384 `go-fasthttp` falls to 274,822, 7.7% under the entry's 297,739 and outside that level's 4.7% band.
+- On `/json` the entry leads every twin at 16, 32 and 64 connections by more than the band (79,203 against `uws`'s 73,995 at 64, where the band is 1.2%). At 128 and 256 its lead over `uws` (7.3% and 4.6%) is within the band (7.4% and 4.4% wide), so those two levels are no difference. At 512 it leads `uws` by 27%, 77,127 against 60,845, outside the 9.1% band.
+- At 16384 connections wrk reported read errors (connections reset) in one of the copy's three rounds (4,102) and one of the entry's (250), which is why the copy's minimum there is 293,986.
 - `rust-actix` answers about 10,000 req/s throughout and 0 at 16384 connections; it shows 6.4 ms of latency per request when run alone too, so the figure is the twin's own, reported as measured.
 - `TCP_NODELAY` (WP39 E2) is not on `main` yet, so the entry's `nodelay` argument sets nothing. Once it is, `run.sh --nodelay-compare` adds `entry-nodelay0` to the same rounds, and the default is the one outside the band.
 <!-- techempower:end -->
