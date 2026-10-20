@@ -107,6 +107,7 @@ import { caseValue } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
+import { flowBegin, flowDoCondition, flowEnd, flowHead, flowNoteBack, flowNoteBreak } from "./loop-flow"
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const terminatorName = (stmt: Node): string => {
@@ -246,7 +247,7 @@ const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean =>
     case N_BREAK:
       return checkBreak(ctx, stmt, scope)
     case N_CONTINUE:
-      return checkContinue(ctx, stmt)
+      return checkContinue(ctx, stmt, scope)
     case N_THROW:
       checkExpression(ctx, stmt.children[0], scope, -1)
       return true
@@ -499,34 +500,47 @@ const takeArm = (locals: Local[], end: Scope, scope: Scope): void => {
 }
 
 const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const flow = flowBegin(ctx, stmt, scope, "while")
   const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
   scope.adopt(held)
+  flowHead(ctx, flow, scope, scope)
   checkCondition(ctx, stmt.children[0], scope)
   const body = scope.child()
   narrow(ctx, stmt.children[0], body, true)
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[1], body)
+  if (!checkStatement(ctx, stmt.children[1], body)) {
+    flowNoteBack(ctx, body)
+  }
   const broke = ctx.popLoop()
   scope.adopt(held)
+  flowEnd(ctx, flow, scope)
   // `while (true)` that nothing breaks out of never falls through, which is
   // what lets a function end with one and still return on every path.
   return stmt.children[0].kind === N_TRUE && !broke
 }
 
 const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const flow = flowBegin(ctx, stmt, scope, "do")
   const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
   scope.adopt(held)
+  flowHead(ctx, flow, scope, scope)
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[0], scope.child())
+  const inner = scope.child()
+  if (!checkStatement(ctx, stmt.children[0], inner)) {
+    flowNoteBack(ctx, inner)
+  }
   const broke = ctx.popLoop()
   scope.adopt(held)
+  flowDoCondition(ctx, flow, scope)
   checkCondition(ctx, stmt.children[1], scope)
+  flowEnd(ctx, flow, scope)
   return stmt.children[1].kind === N_TRUE && !broke
 }
 
 const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const flow = flowBegin(ctx, stmt, scope, "for")
   const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
   scope.adopt(held)
@@ -540,6 +554,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   } else if (initializer.kind !== N_EMPTY) {
     checkExpression(ctx, initializer, outer, -1)
   }
+  flowHead(ctx, flow, scope, outer)
   const condition = stmt.children[1]
   if (condition.kind !== N_EMPTY) {
     checkCondition(ctx, condition, outer)
@@ -553,15 +568,19 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     narrow(ctx, condition, body, true)
   }
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[3], body)
+  if (!checkStatement(ctx, stmt.children[3], body)) {
+    flowNoteBack(ctx, body)
+  }
   const broke = ctx.popLoop()
   scope.adopt(held)
+  flowEnd(ctx, flow, scope)
   return condition.kind === N_EMPTY && !broke
 }
 
 const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // `for await` and a head that is not a declaration never get here: pass 1
   // refuses them (`refuseUnsupportedForms`), so the head is a VAR.
+  const flow = flowBegin(ctx, stmt, scope, "for-of")
   const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
   scope.adopt(held)
@@ -621,10 +640,15 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     local.typedArray = elementSpelling(typedArraySpelling(ctx, stmt.children[1], scope))
   }
   keySteadyVariables(ctx, list, [stmt.children[2]])
+  flowHead(ctx, flow, scope, outer)
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[2], outer.child())
+  const inner = outer.child()
+  if (!checkStatement(ctx, stmt.children[2], inner)) {
+    flowNoteBack(ctx, inner)
+  }
   ctx.popLoop()
   scope.adopt(held)
+  flowEnd(ctx, flow, scope)
   return false
 }
 
@@ -1349,6 +1373,8 @@ const checkBreak = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   ctx.loopBreaks[ctx.loopBreaks.length - 1] = true
   if (ctx.loopKinds[ctx.loopKinds.length - 1] === LOOP_SWITCH) {
     snapshotExit(ctx, scope)
+  } else if (stmt.text === "") {
+    flowNoteBreak(ctx, scope)
   }
   return true
 }
@@ -1393,7 +1419,7 @@ const joinExits = (ctx: CheckContext, stmt: Node, scope: Scope, frame: SwitchFra
   takeArm(after, joined, scope)
 }
 
-const checkContinue = (ctx: CheckContext, stmt: Node): boolean => {
+const checkContinue = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // A `switch` on the stack is a `break` target only: `continue` inside one
   // belongs to the enclosing loop, as it does in JavaScript.
   let inLoop = false
@@ -1404,6 +1430,8 @@ const checkContinue = (ctx: CheckContext, stmt: Node): boolean => {
   }
   if (!inLoop) {
     ctx.error(stmt, "`continue` outside of a loop")
+  } else if (stmt.text === "") {
+    flowNoteBack(ctx, scope)
   }
   return true
 }

@@ -830,6 +830,7 @@ export class Checker {
     this.ctx.loopKinds = []
     this.ctx.loopBreaks = []
     this.ctx.switchFrames = []
+    this.ctx.flowFrames = []
     // A path's variable stands for it within one body only.
     this.ctx.pathLocals = []
     this.ctx.pathRoots = []

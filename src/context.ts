@@ -47,6 +47,84 @@ export class SwitchFrame {
   }
 }
 
+/**
+ * One loop's dataflow pre-pass (`src/loop-flow.ts`): the union and enum
+ * variables the loop assigns, and what each may hold at the loop's head, at
+ * a `do`'s condition and after the loop, as bit sets — a union's variants in
+ * its order with `FLOW_NULL` for `null`, an enum's members in declaration
+ * order. An empty set list is a point no path reaches. The checker records
+ * what its own walk of the body found at each `break` and `continue`, and
+ * the pre-pass compares the two once the body is checked.
+ */
+export class LoopFlow {
+  stmt: Node
+  /** `while`, `do`, `for` or `for-of`, for the trace. */
+  kind: string
+  /** The scope the loop is checked in, where its names are looked up. */
+  scope: Scope
+  locals: Local[]
+  enums: boolean[]
+  /** Per local, the tag value of each variant, or the value of each member, one per bit. */
+  values: i32[][]
+  /** Per local, the variant or the member type each bit stands for. */
+  members: i32[][]
+  /** Per local, every bit it may hold: its variants or members, and `null` when it is nullable. */
+  full: i32[]
+  /** Per local, its variants without `null`. */
+  allv: i32[]
+  /** The names a declaration in the loop binds, which shadow the variables outside it. */
+  declared: string[]
+  /** The head of a `while`, `for` or `for...of`, and the entry of a `do`'s body, once the pass is done. */
+  entry: i32[]
+  /** A `do`'s body's end and continues, which its condition reads. */
+  join: i32[]
+  after: i32[]
+  breaks: i32[]
+  conts: i32[]
+  /** What the checker's own widening left each local at the head, before the pre-pass narrowed it. */
+  widened: i32[]
+  /** What the head was narrowed to: `entry` within `widened`. */
+  imposed: i32[]
+  /** What the checker found at the end of the body and at each `continue`. */
+  realBack: i32[]
+  /** What the checker found at each `break`. */
+  realBreaks: i32[]
+  status: string
+  /** The diagnostics already reported when the loop began. */
+  errors: i32
+  iterations: i32
+  untracked: i32
+  /** Whether the pre-pass ran to its end over this loop: a loop it gave up on changes nothing. */
+  active: boolean
+
+  constructor(stmt: Node, kind: string, scope: Scope, errors: i32) {
+    this.active = false
+    this.stmt = stmt
+    this.kind = kind
+    this.scope = scope
+    this.locals = []
+    this.enums = []
+    this.values = []
+    this.members = []
+    this.full = []
+    this.allv = []
+    this.declared = []
+    this.entry = []
+    this.join = []
+    this.after = []
+    this.breaks = []
+    this.conts = []
+    this.widened = []
+    this.imposed = []
+    this.realBack = []
+    this.realBreaks = []
+    this.errors = errors
+    this.iterations = 0
+    this.untracked = 0
+    this.status = "none"
+  }
+}
+
 export class CheckContext {
   /** Shared by every module of one compilation, so a type id means one thing. */
   table: TypeTable
@@ -179,6 +257,8 @@ export class CheckContext {
   loopBreaks: boolean[]
   /** The `switch`es enclosing the statement being checked, innermost last. */
   switchFrames: SwitchFrame[]
+  /** The loops enclosing the statement being checked, innermost last, each with its pre-pass. */
+  flowFrames: LoopFlow[]
   /**
    * The expression of the statement being checked, when it is an expression
    * statement. `console.log` and the other `void` builtins may only appear
@@ -233,6 +313,7 @@ export class CheckContext {
     this.loopKinds = []
     this.loopBreaks = []
     this.switchFrames = []
+    this.flowFrames = []
     this.statementExpression = null
     this.forOfWalk = null
     this.errored = false

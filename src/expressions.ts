@@ -1092,7 +1092,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * `isAssignment` over *token kinds*; this one reads the operator text a
  * `N_BINARY` node carries, which is what the checker has.
  */
-const writesLeft = (op: string): boolean =>
+export const writesLeft = (op: string): boolean =>
   op === "=" || (op.length > 1 && op.endsWith("=") && !yieldsBool(op))
 
 /**
@@ -2263,7 +2263,7 @@ const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local
 }
 
 /** Every member of the enum `enumType` as member types, one per value; none when this module cannot name it. */
-const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
+export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
   const members: i32[] = []
   for (const info of ctx.program.enumList) {
     if (info.type === enumType && members.length === 0) {
@@ -2280,7 +2280,7 @@ const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
 }
 
 /** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
-const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
+export const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
   const held = scope.heldBy(local)
   if (held === MEMBERS_NONE) {
     return []
@@ -2321,7 +2321,7 @@ export const narrowHeld = (
 }
 
 /** Record that the enum variable `local` holds one of `kept`, fewer members than it could before. */
-const holdKept = (ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void => {
+export const holdKept = (ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void => {
   if (kept.length === 1) {
     scope.hold(local, kept[0])
     scope.narrow(local, kept[0])
@@ -2408,7 +2408,7 @@ export const narrowToTags = (
 }
 
 /** Narrow the union variable `local` to `kept`, variants of its union in its order, with their tags. */
-const narrowToVariants = (
+export const narrowToVariants = (
   ctx: CheckContext,
   scope: Scope,
   local: Local,
@@ -2506,7 +2506,7 @@ const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, s
  * when it is one, a narrowed union's variants, or none when `type` is not
  * made of them (`union | null`).
  */
-const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
+export const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
   const variants: i32[] = []
   if (ctx.table.isUnion(type)) {
     for (const variant of ctx.table.variantsOf(type)) {
