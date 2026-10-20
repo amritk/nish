@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 676
+export const RULE_COUNT: i32 = 683
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -181,6 +181,8 @@ const diagnosticRules = (): string[] => [
   "NL2368",
   "` is a `CPtr | null` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested",
   "NL2539",
+  "`, and a call to a declared C function that takes a `u8[]` is not lowered yet: the declaration is checked, and the call waits for the release that passes the bytes and checks the count",
+  "NL2554",
   "`, which belongs to the function it is written in: a task reads a captured value and never writes it, because it is handed a copy of the value when it is spawned, as it is its argument",
   "NL2508",
   " and cannot be stored in a field: a value that may be missing is never in memory; store a default with `??`, or bind it to a `const` and store it where `!== undefined` has narrowed it",
@@ -201,6 +203,8 @@ const diagnosticRules = (): string[] => [
   "NL2363",
   " and cannot be held in a `let`: only a `const` is narrowed, because a `let` can be assigned; bind it with `const` and test it with `!== undefined`, or give it a default with `??`",
   "NL2361",
+  ", and a buffer a declared C function takes is never null: it has no length to hold the count to, so a C function that accepts `NULL, 0` is declared with a `CPtr | null` parameter",
+  "NL2552",
   "`scope()` must be the initialiser of a `using` declaration: a scope joins its tasks when the block that declares it ends, so a scope bound any other way would be one nobody joins",
   "NL2388",
   " and cannot be a template literal hole: there is no `undefined` to print; give it a default with `??`, or bind it to a `const` and print it where `!== undefined` has narrowed it",
@@ -267,6 +271,8 @@ const diagnosticRules = (): string[] => [
   "NL2435",
   "`, which is declared outside the block: the block releases what it allocated when it ends, and the local would outlive it pointing into freed memory",
   "NL2418",
+  "`declare function syscall` is refused: `syscall` is variadic in C and bypasses libc, so declare the libc function that wraps the system call instead",
+  "NL2553",
   " cannot be returned: an iterator is not a value in this version, so return the `Map` or `Set` itself and walk it with a `for...of` where it is used",
   "NL2374",
   "`: a sender's arena is freed when its scope joins, and only a string is copied out of it on the way, so anything else would point into freed memory",
@@ -289,6 +295,8 @@ const diagnosticRules = (): string[] => [
   "NL2389",
   "` that this exit leaves neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2440",
+  ", and a declared C function takes scalars, `CPtr`, a `string` it borrows as `const char *` and a `u8[]` buffer followed by its `u64` count",
+  "NL2555",
   "` runs it on threads whose arenas are freed when they exit: a parallel body may not allocate (a string, an array, an object or a `Result`)",
   "NL2346",
   " cannot be stored: an iterator is not a value in this version, so a `Map` or `Set` is walked where it is, as the iterable of a `for...of`",
@@ -323,6 +331,8 @@ const diagnosticRules = (): string[] => [
   "NL2035",
   "` to a key that is not valid UTF-8: the decoder reads every key as UTF-8 and refuses a lone surrogate, so no input could give it",
   "NL2499",
+  ", and the only array a declared C function takes is a `u8[]` or a `readonly u8[]`, whose bytes have one layout on every target",
+  "NL2551",
   "` may panic here, and a module in the no-panic scope (`--deny-panics` or `noPanic`) may keep no panic site but out of memory: ",
   "NL2457",
   "` is assigned again while the `Secret` it holds is neither wiped nor returned, and that secret would be lost unwiped: `wipe(",
@@ -347,6 +357,8 @@ const diagnosticRules = (): string[] => [
   "NL2492",
   "` is a function type, which may only annotate a parameter of a top-level function: a function is never a value in ",
   "NL2337",
+  "` with no count after it: a run of `u8[]` parameters is followed by one `u64`, the byte count C may touch in each",
+  "NL2549",
   "finding, because the arena memory it describes stays allocated after nothing in the program can reach it any more",
   "NL2462",
   "from here on, which this version does not track, so declare it as that type or give it a value of the whole union",
@@ -519,6 +531,8 @@ const diagnosticRules = (): string[] => [
   "NL2231",
   "` cannot be exported: it is a C function this program calls, not one it defines",
   "NL2306",
+  ", and the parameter after a run of `u8[]` buffers is their byte count, a `u64`",
+  "NL2550",
   "`export default` / `export =` are not supported; use a named `export function`",
   "NL2129",
   "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
