@@ -89,7 +89,8 @@
             "filepath": "docs/guide/using-nish/interop.md"
           },
           "/threads": { "type": "page", "title": "Threads", "filepath": "docs/guide/using-nish/threads.md" },
-          "/networking": { "type": "page", "title": "Networking", "filepath": "docs/guide/using-nish/networking.md" }
+          "/networking": { "type": "page", "title": "Networking", "filepath": "docs/guide/using-nish/networking.md" },
+          "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" }
         }
       }
     }
