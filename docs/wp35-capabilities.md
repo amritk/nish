@@ -44,8 +44,8 @@ give up a check the source does not show: they reach only the entry package,
 every site they reach is printed as a deprecation or a performance note, and
 they sit on the same command line that passes `--deny unsafe`, so a policy has
 nothing to learn from the bit that the compile does not already print. They
-are on their way out, and `nish --fix` rewrites each site into a
-`nish:unsafe` call, which does carry it.
+are on their way out, and `nish --fix` rewrites the sites it can into
+`nish:unsafe` calls, which do carry it.
 
 ## 2. The audit
 

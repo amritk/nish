@@ -8255,8 +8255,8 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   `nish:unsafe` gives `unsafe` to its package and to the entry that calls
   it"). The deprecated `--wrapping` and `--unchecked-indexing` carry no
   `unsafe`, so `--deny unsafe` passes them: they reach only the entry package,
-  every site they reach is printed, and `nish --fix` rewrites each into a
-  `nish:unsafe` call that does ("capabilities: `--wrapping` and
+  every site they reach is printed, and `nish --fix` rewrites the sites it
+  can into `nish:unsafe` calls, which do ("capabilities: `--wrapping` and
   `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them").
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
