@@ -6792,7 +6792,9 @@ if (!only || "par_alloc".includes(only)) {
 // And copy-at-join: `thread_task_string`, whose tasks answer strings and
 // scalar arrays; `par_map_string`, whose data-parallel bodies do; and
 // `thread_channel_string` and `thread_mutex_string`, which send strings on
-// channels and store them through guards; and `thread_adopt_lifetime`, whose
+// channels and store them through guards; `thread_mutex_null_store`, whose
+// guards store `null` over those copies and read the empty slots back through
+// `?.`; and `thread_adopt_lifetime`, whose
 // answers the caller adopts and then releases. Each reads what crossed after
 // `churn()`, and prints only what every task order agrees on.
 //
@@ -6870,6 +6872,7 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_mutex_null_store",
   "thread_adopt_lifetime",
   "par_map_reclaim",
   "par_map_reclaim_escapes",
@@ -7658,6 +7661,7 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // lower for wasm32, a module without shared memory, where its tasks run in turn.
 // `thread_task_string`, `par_map_string`, `thread_channel_string` and
 // `thread_mutex_string` are the strings and scalar arrays that cross by copy,
+// `thread_mutex_null_store` frees a guard's copy when `null` is stored over it,
 // whose transfer block carries a tag in its pointer's low bit on a 32-bit
 // pointer as on a 64-bit one; `thread_adopt_lifetime` adopts those blocks, and
 // a 24-byte transfer state, on wasm32 as on a 64-bit target.
@@ -7685,6 +7689,7 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_mutex_null_store",
   "thread_adopt_lifetime",
   "par_map_reclaim",
   "par_map_reclaim_escapes",
@@ -12141,7 +12146,9 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
 // runs of every threads program under `NISH_NUM_THREADS=1` and `=2`:
 //   - the unit test's pool checks (`test_pool`) again at the two sizes a default run
 //     on a big machine never sees: `NISH_NUM_THREADS=1`, no workers, where the
-//     caller runs every task in spawn order, and `=2`, one worker;
+//     caller runs every task in spawn order, and `=2`, one worker; and at `=3`, `=4`
+//     and `=8` too, so a region's pieces are claimed exactly once at each of those counts
+//     the machine has (`test_parallel_pieces`);
 //   - `nish_cpu_count()` itself: the variable lowers the count and never raises it,
 //     a malformed value is ignored, the affinity mask counts (`taskset`), and so does
 //     a cgroup v2 `cpu.max` quota, rounded up, at the process's own cgroup or any
@@ -12152,7 +12159,7 @@ if (!only || "runtime-parallel".includes(only)) {
     skip("runtime-parallel: clang not installed: the worker pool's checks are not run")
   } else {
     const unit = buildRuntimeTestThreads()
-    for (const threads of ["1", "2"]) {
+    for (const threads of ["1", "2", "3", "4", "8"]) {
       const r =
         unit.status === 0 ? spawnSync(unit.exe, [], { encoding: "utf8", env: envWithThreads(threads) }) : unit
       check(
@@ -15996,7 +16003,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
       "--no-rayon",
       "--twin-runs",
       "1",
