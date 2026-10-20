@@ -438,7 +438,7 @@ client handshake secrets and the client's application secret
 
 **The carrier against the world** (the `net_tls_tcp` block of `tests/run.js`):
 openssl s_client completes a handshake under each of the three suites,
-including a KeyUpdate it asks to be answered, and curl GETs a page over
+including a KeyUpdate it asks to be answered, and Node's https GETs a page over
 ALPN `http/1.1`, each with the server's own report of the suite, ALPN and
 SNI it negotiated. Over loopback the pool sheds a third client for two slots,
 closes clients that hang up or reset mid-handshake as a cut stream and as a

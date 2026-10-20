@@ -933,15 +933,6 @@ jobs:
           if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
           echo "$prefix/bin" >> "$GITHUB_PATH"
 
-      # net_tls_tcp's GET pins its suite with `--tls13-ciphers`, which macOS's
-      # own curl, built on LibreSSL, refuses with exit 4; Homebrew's is built on
-      # OpenSSL, as Linux's is.
-      - name: Install curl (OpenSSL)
-        timeout-minutes: 10
-        run: |
-          brew install curl
-          echo "$(brew --prefix curl)/bin" >> "$GITHUB_PATH"
-
       - name: Install dependencies
         timeout-minutes: 5
         run: npm ci

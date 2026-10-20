@@ -16,7 +16,7 @@
 //      pools.
 //   4. A signing key that is not one, and the calls a free slot answers.
 //
-// openssl s_client and curl drive the same server in `serve` mode from the
+// openssl s_client and Node's https drive the same server in `serve` mode from the
 // `net_tls_tcp` block of tests/run.js.
 import { Suite } from "nish/testing";
 import { Secret, secret, wipe } from "nish:secret";

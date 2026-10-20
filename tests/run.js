@@ -34,6 +34,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
+import https from "node:https"
 import dgram from "node:dgram"
 import net from "node:net"
 import os from "node:os"
@@ -1961,18 +1962,20 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
-// ---- `nish/net/tls-tcp`, against openssl s_client and curl (WP34 T2) -------------
+// ---- `nish/net/tls-tcp`, against openssl s_client and Node's TLS (WP34 T2) -------
 //
 // What the Nish client in `tests/link/net_tls_record_tcp` cannot say: that a
 // TLS 1.3 stack somebody else wrote completes a handshake with the carrier and
 // moves data both ways. The same program run as `serve 4` listens, prints its
 // port and serves four connections, one at a time: openssl s_client under each
 // of the three suites — the first sending `K`, a KeyUpdate asking for one
-// back, before its line — each echoed, and curl's GET, answered over the ALPN
-// protocol it negotiates. Every client must exit 0 with what it sent back, and
-// the server must print one line per connection with the suite, ALPN and SNI
-// it negotiated. Both tools are on CI's runners, so a missing one is a failure
-// here rather than a skip.
+// back, before its line — each echoed, and an HTTPS GET from Node, answered over
+// the ALPN protocol it negotiates. Every client must finish with what it sent
+// back, and the server must print one line per connection with the suite, ALPN
+// and SNI it negotiated. The GET is Node's rather than curl's because it pins
+// its suite, and macOS's curl, built on LibreSSL 3.3, has no `--tls13-ciphers`;
+// Node carries its own OpenSSL on every platform. openssl is on CI's runners,
+// so a missing one is a failure here rather than a skip.
 if (!only || "net_tls_tcp".includes(only)) {
   const tlsDir = path.join(buildDir, "net-tls")
   fs.rmSync(tlsDir, { recursive: true, force: true })
@@ -1989,16 +1992,11 @@ if (!only || "net_tls_tcp".includes(only)) {
     ],
     { cwd: root, encoding: "utf8" }
   )
-  // The two third-party clients, by name; `has` asks the PATH for each.
-  const [openssl, curl] = ["openssl", "curl"]
-  const tools = [openssl, curl].filter((tool) => !has(tool))
+  // The third-party client, by name; `has` asks the PATH for it.
+  const openssl = "openssl"
   if (
     check("net_tls_tcp: the server links", built.status === 0, String(built.stderr)) &&
-    check(
-      "net_tls_tcp: openssl and curl are on PATH (CI's runners have both)",
-      tools.length === 0,
-      `missing: ${tools.join(", ")}`
-    )
+    check("net_tls_tcp: openssl is on PATH (CI's runners have it)", has(openssl), "missing: openssl")
   ) {
     const server = spawn(exe, ["serve", "4"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
     let served = ""
@@ -2107,32 +2105,58 @@ if (!only || "net_tls_tcp".includes(only)) {
         `exit ${r.code} signal ${r.signal}, every step reached: ${r.reached}\n${r.all.slice(-1500)}`
       )
     }
-    const curled =
+    // The suite is pinned, not preferred: `ciphers` naming one TLS 1.3 suite is
+    // all the client offers, so a server that picked another would fail the
+    // handshake rather than pass the check. The server's certificate is
+    // self-signed, as it was under curl's `-k`.
+    /** @type {{ error: string, status: number, suite: string, alpn: string | false, body: string }} */
+    const got =
       port > 0
-        ? spawnSync(
-            curl,
-            [
-              "-sk",
-              "--tlsv1.3",
-              "--tls13-ciphers",
-              "TLS_AES_256_GCM_SHA384",
-              "--max-time",
-              "15",
-              "--resolve",
-              `localhost:${port}:127.0.0.1`,
-              `https://localhost:${port}/`,
-            ],
-            { encoding: "utf8" }
-          )
-        : { status: null, stdout: "", stderr: "no port" }
+        ? await new Promise((resolve) => {
+            const out = { error: "", status: 0, suite: "", alpn: false, body: "" }
+            const req = https.get(
+              {
+                host: "127.0.0.1",
+                port,
+                path: "/",
+                servername: "localhost",
+                rejectUnauthorized: false,
+                minVersion: "TLSv1.3",
+                maxVersion: "TLSv1.3",
+                ciphers: "TLS_AES_256_GCM_SHA384",
+                // biome-ignore lint/style/useNamingConvention: Node's own option name
+                ALPNProtocols: ["http/1.1"],
+                agent: false,
+                timeout: 15000,
+              },
+              (res) => {
+                out.status = res.statusCode ?? 0
+                out.suite = res.socket.getCipher().standardName
+                out.alpn = res.socket.alpnProtocol
+                res.setEncoding("utf8")
+                res.on("data", (chunk) => {
+                  out.body += chunk
+                })
+                res.on("end", () => resolve(out))
+                res.on("error", (e) => resolve({ ...out, error: e.message }))
+              }
+            )
+            req.on("timeout", () => req.destroy(new Error("timed out")))
+            req.on("error", (e) => resolve({ ...out, error: e.message }))
+          })
+        : { error: "no port", status: 0, suite: "", alpn: false, body: "" }
     check(
-      "net_tls_tcp: curl --tlsv1.3 GETs the page over the server, and exits 0",
-      curled.status === 0 && curled.stdout === "hello from nish/net/tls-tcp\n",
-      `exit ${curled.status}\nstdout: ${JSON.stringify(curled.stdout)}\nstderr: ${curled.stderr}`
+      "net_tls_tcp: an HTTPS GET pinned to TLS_AES_256_GCM_SHA384 negotiates that suite and http/1.1, and reads the page",
+      got.error === "" &&
+        got.status === 200 &&
+        got.suite === "TLS_AES_256_GCM_SHA384" &&
+        got.alpn === "http/1.1" &&
+        got.body === "hello from nish/net/tls-tcp\n",
+      JSON.stringify(got)
     )
     const ended = await serverDone
     // 4865, 4867 and 4866 are TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256
-    // and TLS_AES_256_GCM_SHA384; each s_client sent close_notify, and curl,
+    // and TLS_AES_256_GCM_SHA384; each s_client sent close_notify, and the GET,
     // which reads to the end of the answer, closed after the server did.
     const want =
       "closed: suite 4865 alpn - sni localhost sent 0 received -1 client-closed true\n" +
