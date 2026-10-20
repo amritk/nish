@@ -3,6 +3,7 @@
 #
 #   bash bench/http-twins/run.sh                       every built twin
 #   bash bench/http-twins/run.sh --rounds 7 --only json   arguments go to http.mjs
+#   bash bench/http-twins/run.sh --cores 1,2,4         one table per core count
 #
 # bench/http1-server.ts is built twice, as `nish` and `nish-copy`; the two are
 # byte-identical, so the spread between them is the noise band every other

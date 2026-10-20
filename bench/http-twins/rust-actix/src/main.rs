@@ -1,5 +1,6 @@
-// The actix-web 4 twin of bench/http1-server.ts: `workers(1)`, one worker
-// thread with its own single-threaded runtime, the one core the Nish server gets.
+// The actix-web 4 twin of bench/http1-server.ts: `workers(N)` for N =
+// BENCH_CORES (1 when it is unset), each worker a thread with its own
+// single-threaded runtime, as many as the Nish server gets cores.
 // Signals are left to the default action, so SIGINT ends it at once rather than
 // after actix's graceful drain.
 //
@@ -46,6 +47,12 @@ async fn not_found() -> HttpResponse {
     HttpResponse::NotFound().content_type("text/plain").body("not found")
 }
 
+/// BENCH_CORES, the cores bench/http.mjs gives the server, or 1 when it is
+/// unset or not a positive count.
+fn bench_cores() -> usize {
+    std::env::var("BENCH_CORES").ok().and_then(|n| n.parse().ok()).filter(|&n| n > 0).unwrap_or(1)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port: u16 = std::env::args().nth(1).map_or(8080, |p| p.parse().unwrap());
@@ -56,7 +63,7 @@ async fn main() -> std::io::Result<()> {
             .service(web::resource("/json-echo").post(echo).default_service(web::to(not_found)))
             .default_service(web::to(not_found))
     })
-    .workers(1)
+    .workers(bench_cores())
     // No timer closes an idle connection, as in the hyper, Go and Node twins:
     // actix's 5 s defaults would drop bench/http.mjs's idle connections early.
     .client_request_timeout(Duration::ZERO)

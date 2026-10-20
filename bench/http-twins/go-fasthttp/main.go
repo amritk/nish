@@ -1,5 +1,6 @@
-// The valyala/fasthttp twin of bench/http1-server.ts. GOMAXPROCS=1 gives the Go
-// scheduler one thread to run goroutines on, the one core the Nish server gets.
+// The valyala/fasthttp twin of bench/http1-server.ts. GOMAXPROCS is BENCH_CORES, the
+// cores bench/http.mjs gives the server (1 when it is unset), so the Go
+// scheduler runs goroutines on as many threads as the Nish server gets cores.
 //
 //	serve <port> [ignored...]
 package main
@@ -10,6 +11,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/valyala/fasthttp"
@@ -57,8 +59,17 @@ func answer(ctx *fasthttp.RequestCtx) {
 	}
 }
 
+// benchCores is BENCH_CORES, or 1 when it is unset or not a positive count.
+func benchCores() int {
+	n, err := strconv.Atoi(os.Getenv("BENCH_CORES"))
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
+}
+
 func main() {
-	runtime.GOMAXPROCS(1)
+	runtime.GOMAXPROCS(benchCores())
 	port := "8080"
 	if len(os.Args) > 1 {
 		port = os.Args[1]

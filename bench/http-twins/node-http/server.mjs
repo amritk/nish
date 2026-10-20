@@ -4,6 +4,13 @@
 //   node server.mjs <port> [ignored...]
 import { createServer } from "node:http"
 
+// One event loop is all this twin uses, so given more cores (BENCH_CORES > 1)
+// it says so and exits, and bench/http.mjs reads its cells as n/a.
+if (Number(process.env.BENCH_CORES ?? 1) > 1) {
+  console.log("single-core")
+  process.exit(0)
+}
+
 const port = Number(process.argv[2] ?? 8080)
 const text = { "Content-Type": "text/plain" }
 const json = { "Content-Type": "application/json" }
