@@ -13,9 +13,10 @@ program the build would have compiled without one.
 under "Capabilities"; where this note disagrees with it, LANGUAGE.md wins.
 **Holding a running process to the same set is WP37's**, proposed in
 [wp37-os-sandbox.md](wp37-os-sandbox.md) and not built: `--sandbox`, where
-the native `main` wrapper confines the process with Landlock and seccomp to the set the compiler computed, and which is where the
-`fs.read=<dir>` scopes this package refuses (§2) would be accepted, because
-there something can enforce them.
+the native `main` wrapper confines the process with Landlock and seccomp to
+the set the compiler computed, and which is where the `fs.read=<dir>` scopes
+this package refuses (§2) would be accepted, because there something can
+enforce them.
 
 ## 1. Semantics
 
@@ -52,8 +53,8 @@ precision — and nothing at run time holds the program to it yet, so a scope
 accepted here would be a promise nobody keeps. WP37, proposed and unbuilt,
 would accept the suffix together with `--sandbox`
 ([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags)). The policy is not
-part of `nish run`'s cache key: a refused program writes no entry, and an accepted one writes the IR it would without
-the policy.
+part of `nish run`'s cache key: a refused program writes no entry, and an
+accepted one writes the IR it would without the policy.
 
 ## 3. The manifest
 
