@@ -134,6 +134,10 @@ export const quicChecks = (t: Suite): void => {
     inBand = inBand && lbHandshakeBand(m.kept);
   }
   t.ok("quic: three more connections through the slot, each closed by the server with code 9, which the client reads", all && q.accepted === 4);
+  t.ok(
+    "quic: after every CONNECTION_CLOSE the client sent nothing, so the listener had no late packet to answer with a stateless reset",
+    q.listener.resetsSent === 0 && q.listener.resetsLimited === 0
+  );
   // The figure is this program's copy of the first Initial and `handle`'s
   // answer, where the HTTP/3 carriers keep nothing, so one bound holds both
   // (`lbHandshakeBand`).

@@ -1,0 +1,128 @@
+PASS  add answers the indices 0, 1, 2, ... in order
+PASS  / matches only /
+PASS  a literal matches
+PASS  a parameter takes one segment
+PASS  a literal wins over a parameter added before it
+PASS  a trailing slash is significant
+PASS  the method picks between routes of one shape
+PASS  a path that only other methods match is 405
+PASS  and so is one whose method the table has never seen at all
+PASS  a path no route matches is 404
+PASS  whatever the method
+PASS  methods are compared exactly, case and all
+PASS  the query is not matched
+PASS  nor is a query on its own
+PASS  nor more than one segment
+PASS  * takes the rest of the path, slashes and all
+PASS  including none of it
+PASS  but not the slash before it
+PASS  nor the query after it
+PASS  a dot segment is matched as bytes, not removed
+PASS  matching is on raw bytes: %2F does not split
+PASS  an empty segment is a segment
+PASS  a literal added before a parameter wins over it
+PASS  and the parameter takes the rest
+PASS  /a alone does not answer /a/
+PASS  /a/ alone does not answer /a
+PASS  a pattern with an empty segment is taken
+PASS  and matches the target spelled the same
+PASS  but not one without the empty segment
+PASS  a parameter does not match an empty segment
+PASS  the literal branch, when it reaches a route
+PASS  the parameter, when the literal dead-ends below
+PASS  then *, whose pair is the rest, the parameter's popped
+PASS  * after a literal it does not match
+PASS  a nine-segment route matches
+PASS  and has four pairs
+PASS  each at its offsets into the target, the slot past them untouched
+PASS  ranges inside a larger buffer give offsets into it
+PASS  the same pattern twice is a duplicate
+PASS  and so is the same shape under another parameter name
+PASS  but another method may share it, under any name
+PASS  and is answered by position
+PASS  a parameter is never empty
+PASS  * in the middle is ambiguous
+PASS  so is * then a trailing slash
+PASS  an empty pattern is malformed
+PASS  so is one not starting with /
+PASS  and * spelled without the slash
+PASS  a : with no name
+PASS  a name with a byte outside [A-Za-z0-9_]
+PASS  a * inside a segment
+PASS  a parameter name twice in one pattern
+PASS  a %, which would make a literal that bytes never match
+PASS  a ?
+PASS  a space
+PASS  a control byte
+PASS  a byte past ~
+PASS  an empty method
+PASS  a method with a space
+PASS  a method of 33 bytes
+PASS  a method of 32 token bytes is taken
+PASS  none of the refusals added a node
+PASS  a literal holding : is a literal
+PASS  a duplicate is refused whichever name came first
+PASS  * in the middle is ambiguous in an empty table
+PASS  and so is * then a trailing slash
+PASS  which added no node
+PASS  so the shapes they share are taken after
+PASS  a pattern over maxPatternBytes is too long
+PASS  one of exactly maxPatternBytes is not
+PASS  more segments than maxSegments
+PASS  more parameters than maxParams, a final * counted
+PASS  maxSegments and maxParams themselves are taken
+PASS  a second method is within maxMethods
+PASS  a third is past it
+PASS  a fourth route is past maxRoutes
+PASS  a duplicate is still named a duplicate when the table is full
+PASS  the method is checked before the pattern
+PASS  the exact fits first, into an empty table
+PASS  then a pattern over maxPatternBytes
+PASS  more segments than maxSegments
+PASS  and more parameters than maxParams
+PASS  are each refused all the same, adding no node
+PASS  two methods fit under maxMethods, far below maxRoutes
+PASS  a third method is refused by maxMethods alone
+PASS  while a known method still takes routes
+PASS  OPTIONS * is not routed
+PASS  nor CONNECT's authority form
+PASS  nor the absolute form
+PASS  nor an empty target
+PASS  a bare ? is not rooted either
+PASS  a target that backtracks twice still matches
+PASS  and visits no node twice (19 of 21)
+PASS  one that fails everywhere
+PASS  visits at most every node (18 of 21)
+PASS  a path of 5000 segments against a table 7 deep is 404
+PASS  after visiting no more than the table (4)
+PASS  and one of 5000 under a * is taken whole: 5 [a/a/.../a]
+PASS  from just past /static/ to the end (8 .. 10007)
+PASS  a match with more pairs than params holds is refused
+PASS  and params is left as it was
+PASS  a route with no parameters needs no room
+PASS  3000 matches move the arena by nothing (0 bytes)
+PASS  and answer what one does
+PASS  an HTTP/1 request line parses
+PASS  and routes from the parser's head, in place
+PASS  an HTTP/2 field section reads
+PASS  and the same table routes its :method and :path
+PASS  plain bytes decode to themselves
+PASS  %2F decodes to / inside the parameter
+PASS  either case of hex
+PASS  + stays +
+PASS  an empty range decodes to nothing
+PASS  a % at the end is refused
+PASS  a % with one digit
+PASS  a % with a non-hex digit
+PASS  a % with a non-hex second digit
+PASS  a decoded length past out
+PASS  an exact fit is not
+PASS  a malformed escape late in the range
+PASS  writes nothing
+PASS  a NUL decodes like any byte
+PASS  into out from 0
+PASS  a range inside a target decodes only that range
+PASS  to the bytes of that range
+PASS  a match on /files/a%2Fb
+PASS  decodes its pair in place to a/b
+router: 127 passed, 0 failed, 0 skipped

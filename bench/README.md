@@ -118,8 +118,9 @@ same program in Rust and in Go:
 Each twin does the same work at the same size (its `bench:n` line follows
 `--n`) and must print the checksum the Nish `par` run prints, or the run fails.
 The map twins cut the array into one contiguous chunk per thread and run the
-first on the calling thread, which is how Nish's partitioner divides these
-kernels; the Rayon twins split as Rayon does. `par-regions`' scope twin starts
+first on the calling thread, as Nish's partitioner did before it cut up to
+eight pieces per thread for the threads to claim as they finish; the Rayon
+twins split as Rayon does. `par-regions`' scope twin starts
 its threads on every call, because a scope cannot outlive it; the Rayon twin
 and the Go twin are the ones with a pool to compare with Nish's workers. The
 histogram takes a lock per value in every language (`Mutex`,
@@ -567,12 +568,25 @@ exact bytes, and to the `x-powered-by` header on `query`.
 round's order, it spawns the server pinned to CPU 0 and asks `GET /` every
 millisecond until one answers; it reports the median time from spawn to that
 first answer, the spread, and the RSS at that moment. It runs with the other
-scenarios when `--only` is not given, and needs no wrk. A Nish server's
-startup includes building its whole pool, so it moves with `--slots`. On the
-commit that adds it, on a shared four-vCPU VM and two rounds (eight starts a
-build), `nish` took 51.7 ms and 65.3 MB at 16,384 slots, with its byte-identical
-copy 3.8% away; at `--slots 1024` it took 7.4 ms and 5.8 MB (the copy 18.7%
-away), and Go's `net/http`, which allocates per connection, 9.6 ms and 7.4 MB.
+scenarios when `--only` is not given, and needs no wrk. On the commit that
+added the scenario, a Nish server built its whole pool before it listened, so
+its startup moved with `--slots`: 51.7 ms and 65.3 MB at 16,384 slots, 7.4 ms
+and 5.8 MB at 1,024, against 9.6 ms and 7.4 MB for Go's `net/http`, which
+allocates per connection. Now an `Http1Server` builds a slot's connection on
+the first accept into it, the way Go does, and its start-up is the read
+scratch and the slot bookkeeping. Five rounds, 20 starts a build, on a shared
+four-vCPU VM, the base being `std/net/http1-server.ts` before that change:
+
+| slots | base | base's copy | lazy slots | its copy |
+| ---: | ---: | ---: | ---: | ---: |
+| 16,384 | 36.2 ms, 65.3 MB | 36.2 ms, 65.3 MB | 4.7 ms, 2.6 MB | 4.6 ms, 2.6 MB |
+| 1,024 | 6.2 ms, 5.8 MB | | 5.3 ms, 1.8 MB | 5.0 ms, 1.8 MB |
+
+Under load, the peak RSS at 500 keep-alive connections fell from 65 MB to
+4 MB on `ping` and `query` and from 67 MB to 7 MB on `body`: the slots the
+connections never reached are never built. Throughput did not move outside the
+noise band. Over seven rounds, the two byte-identical copies differed by up to
+37% in a scenario, and the lazy build's medians fell inside that band.
 
 **Measured on the commit that adds this section.** x86-64, four-core Intel
 Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3, wrk 4.1.0, `-t3`.
@@ -713,8 +727,11 @@ With `Connection: close`, `nish` is above the next twin, uws, by 17.0% and
 20.8% (bands 6.7% and 3.1%). In those rows uws and bun also took the read
 errors of note 4.
 
-`nish`'s 65 MB is the 16,384-slot pool it builds at start-up (the table above
-gives 64 MB). It does not grow with the 8,000 idle connections. Every twin's
+`nish`'s 65 MB was the 16,384-slot pool it built at start-up when this table
+was measured (the table above gives 64 MB). It did not grow with the 8,000 idle
+connections. A pool now builds a slot's connection on the first accept into
+it, so the pool's share follows the connections it has held (see `startup`
+above). Every twin's
 peak grows with them, except nginx, which stays at 14 MB.
 
 **What was measured, header by header.** Every server sends a `Date` field:
@@ -739,6 +756,38 @@ full 10 s, rust-actix among them: it sets `keep_alive(KeepAlive::Os)` and a
 zero `client_request_timeout`. bun kept all 8,000 at 6.5 s, 8 s and 9.5 s, but
 only 755 at 10 s, when its default `idleTimeout` of 10 s closed the rest.
 Every timed round therefore ran with all 8,000 open on every server.
+
+**On `nish/net/router`.** `http1-server.ts` used to compare each request's
+target against its routes by hand. It now registers them on one
+`nish/net/router` `Router`, with the 342-route table of
+[`http-twins/`](http-twins/README.md#the-route-table), and switches on the
+index `match` returns. `old` is the hand-dispatching server at `main` before
+the change (142,960 bytes), and `nish` and `nish-copy` are two builds of the
+router server (158,192 bytes), byte-identical to a build of this file at
+`189685eb`. All are `--profile speed`, timed in the same interleaved rounds
+with `http.mjs --rounds 10 --duration 5` on 2026-10-20. The machine was the
+same kind of shared four-vCPU KVM VM, this time an Intel Xeon @ 2.10 GHz. The
+band is `nish-copy`'s median against `nish`'s:
+
+| scenario | old | nish | nish-copy | band |
+| --- | ---: | ---: | ---: | ---: |
+| plaintext keep-alive c=256 | 152,503<br>129,487–160,160 | 138,960<br>125,688–163,109 | 151,752<br>142,624–160,480 | +9.2% |
+| json keep-alive c=256 | 151,313<br>112,094–161,204 | 151,972<br>127,956–169,453 | 139,871<br>127,577–150,452 | −8.0% |
+| post-json keep-alive c=256 | 50,527<br>41,938–55,854 | 49,527<br>45,653–55,062 | 50,051<br>46,853–56,613 | +1.1% |
+| deep-route keep-alive c=256 | n/a | 140,405<br>110,905–157,388 | 128,958<br>93,781–152,177 | −8.2% |
+
+`nish` against `old` is −8.9% on plaintext and +0.4% on json, both inside
+those rows' bands of 9.2% and 8.0%: this run finds neither faster nor slower.
+On post-json it is −2.0%, outside that row's 1.1% band: by this run's own
+measure, the router server is 2.0% slower than the hand-dispatching one on
+post-json. The CPU columns lean the same way: user time per request is 1.52 µs
+against `old`'s 1.35 on plaintext and 9.86 against 9.50 on post-json, though
+`nish-copy`'s 1.49 and 9.82 show how far a byte-identical build moves. A
+five-round run at `c1507260` gave −2.9%, −5.7% and +4.7% on the same three
+rows, so the sign of a delta this size changes from run to run. The deep
+route, eight segments and three parameters deep in the table, runs at 140,405:
+101% of `nish`'s plaintext rate in the same rounds, with its answer built from
+the three parameters. `old` has no such route, so its cell is n/a.
 
 ## P-256
 

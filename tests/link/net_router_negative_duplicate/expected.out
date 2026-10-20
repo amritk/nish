@@ -1,0 +1,2 @@
+GET /users/:id is route 0
+POST /users/:id is route 1

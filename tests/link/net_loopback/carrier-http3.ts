@@ -96,6 +96,12 @@ export const http3Checks = (t: Suite): void => {
   // must wake the slot when the pacer next allows a flight, which
   // `quicListenerFlightTime` names as a time on the caller's clock.
   const quic = s.quic(n32(0));
+  // Every packet the server sent acknowledged first, so no probe timer is
+  // armed: a slow run could find that timer already due, and the check would
+  // read its wake rather than the pacer's.
+  for (let k: i32 = 0; k < 1000 && quic.recovery.bytesInFlight() > 0 && lp.failure === ""; k++) {
+    lp.step(n32(20));
+  }
   const now: i64 = lbNowMs();
   for (let k: i32 = 0; k < 1000 && quic.recovery.pacerDelay(now, n32(1200)) <= 0; k++) {
     quic.recovery.onPaced(now, n32(1200));
@@ -134,6 +140,10 @@ export const http3Checks = (t: Suite): void => {
     inBand = inBand && lbHandshakeBand(m.kept);
   }
   t.ok("http/3: three more connections, each a GET and the client's CONNECTION_CLOSE with H3_NO_ERROR, which frees the slot", all && s.accepted === 4);
+  t.ok(
+    "http/3: after every CONNECTION_CLOSE the client sent nothing, so the listener had no late packet to answer with a stateless reset",
+    s.listener.resetsSent === 0 && s.listener.resetsLimited === 0
+  );
   t.ok("http/3: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's, the signature's or the listener's (H3-1, H3-3)", inBand);
   t.ok("http/3: the program held nothing it could not place", lp.h3App.table.overflows === 0 && lp.h3App.resets === 0);
   t.eqStr("http/3: with nothing gone wrong in the loop", lp.failure, "");

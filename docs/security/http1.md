@@ -163,7 +163,16 @@ not be sent are refused.
 kept for what the connection writes itself; a pool's slots borrow it from one
 `Http1OutputPool` while they write, below), a WebSocket message
 (`maxMessage`, 1 MiB) and the idle timeout (`idleTimeout`, 60 s, read by
-`expire`). The slots are the pool's size. A cap out of range panics when the
+`expire`). The slots are the pool's size. An `Http1Server` builds a slot's
+connection on the first accept into it and keeps it, so it never holds more
+than `size` connections, each within the caps above, and holds none it has
+not needed: a pool of 16,384 takes 16,688 bytes before its first connection
+(`HTTP1_SERVER_START_BYTES`, "net_http1_server: a 16,384-slot Http1Server
+takes at most HTTP1_SERVER_START_BYTES before its first connection"), and the
+connection past `size` busy slots is shed with `H1_POOL_FULL` without one
+being built. A slot never accepted into answers like a closed one
+(`net_http1_server`). `Http1TlsServer` still builds every slot at start-up.
+A cap out of range panics when the
 connection is made (`net_http1_server_bad_config`). The input the connection
 buffers is the largest of `chunkSize`, a header line and a request line, so
 any head the caps allow can be read.

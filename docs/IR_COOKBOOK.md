@@ -21415,7 +21415,7 @@ declare i8* @nish_cross_keep(i8* noundef, i64 noundef, i64 noundef) #3
 declare void @nish_cross_begin(i8* noundef nonnull, i8** noundef) #3
 declare void @nish_cross_end(i8* noundef nonnull) #3
 declare void @nish_cross_adopt(i8* noundef, i8* noundef nonnull, i64 noundef) #3
-declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #3
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #3
 declare noundef i64 @nish_cpu_count() #2
 declare noundef i64 @nish_cpu_online() #2
 declare noundef i64 @nish_total_memory() #2

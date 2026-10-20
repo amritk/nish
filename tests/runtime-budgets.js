@@ -227,7 +227,17 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * instead cost the bursts it was set for (586-700 ms against 440-466 ms on the 1.2
  * million strings).
  *
- * **Lowered to 2,560 by WP34 N12**, measured **2,325 bytes** on 2026-10-20 with clang
+ * Raised to 3,328 by threads-followups' dynamic pieces, measured **3,097 bytes** on
+ * 2026-10-20 with clang 18.1.3 on linux-x64 (2,900 before them), 197 more: a divided
+ * region is cut into up to eight pieces a thread, which the threads claim one at a
+ * time off an atomic counter (`nish_par_run` 21 → 102 bytes, with `nish_par_piece` 49
+ * and `nish_par_run_lead` 21 new, `nish_parallel_range` 245 → 280), and a worker
+ * rewinds its arena between pieces. On bench/par-heavy.ts at four threads they took the
+ * median from 846 ms to 792 ms (15 interleaved rounds; the copy band 834-846), the
+ * slowest thread no longer holding the join a quarter of each region. The fallback's
+ * row above is unchanged at 610 bytes: none of it is compiled there.
+ *
+ * **Lowered to 2,560 by WP34 N12**, measured **2,522 bytes** on 2026-10-20 with clang
  * 18.1.3 on linux-x64, 575 fewer: the CPU count's reading (the affinity mask, the cgroup
  * v2 quota and `NISH_NUM_THREADS`) moved to runtime-os.c as `nish_cpu_online`, which
  * `availableParallelism` calls in every build, and `nish_cpu_count` here keeps only its
@@ -363,6 +373,22 @@ const RUNTIME_SIMD_TEXT_BUDGET = 768
  * as every ceiling here was set.
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
+
+/**
+ * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
+ * before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http1_server/startup.ts`,
+ * which builds that pool on the default `Http1Config` and prints the bytes.
+ *
+ * Measured **16,688 bytes** on 2026-10-20 with clang 18 on linux-x64: the 16,384-byte
+ * read scratch every server keeps, and the pool's own bookkeeping, with no slot's
+ * connection built. Each connection is built on the first accept into its slot,
+ * 3,976 bytes on the same defaults. Built eagerly, as every slot was before, a
+ * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
+ * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the
+ * next 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+export const HTTP1_SERVER_START_BYTES = 16896
 
 /**
  * Every unit and configuration the gate measures: the source compiled with

@@ -69,10 +69,16 @@
  * `nish/net/quic-listener`.
  *
  * **Nothing allocated per packet** (QUIC-3). A connection is a slot: every
- * buffer it uses — the packet record, the stream buffers, the CRYPTO
- * reassembly, the connection-ID table, the datagram rings — is made by the
- * constructor and reused, and `reset` makes the slot a new connection for
- * the next peer. A packet is opened (`receiveWindow`) and a datagram built
+ * buffer it uses — the packet record, the CRYPTO reassembly, the
+ * connection-ID table, the datagram rings — is made by the constructor and
+ * reused, and `reset` makes the slot a new connection for the next peer. The
+ * stream buffers are borrowed instead (`QuicStreamPools` in
+ * `nish/net/quic-stream`): a receive side takes one on its first byte and a
+ * send side on its first write, each goes back zeroed once the stream is done
+ * with it, and a server's connections share one set of pools, so idle slots
+ * hold none. A standalone connection makes private pools as large as all its
+ * slots at its first packet. The pools are primed before a packet's arena
+ * block and never touched inside it. A packet is opened (`receiveWindow`) and a datagram built
  * and sealed (`takeDatagramInto`) inside a `using a = arena()` block, so the
  * AEAD's and the header protection's temporaries go when the block ends, and
  * the compiler refuses the block if anything in it could store one. The
@@ -174,6 +180,7 @@ import {
   QUIC_PACKET_INITIAL,
   QUIC_PACKET_OK,
   QUIC_PACKET_SHORT,
+  QUIC_PACKET_ZERO_RTT,
   QuicHeader,
   QuicKeys,
   QuicKeysSlot,
@@ -318,10 +325,11 @@ export const QUIC_CONN_MAX_STREAM_DATA: i64 = 1048576
 /** The most streams of one kind a configuration may let the client open at once, or open itself. */
 export const QUIC_CONN_MAX_STREAMS: i64 = 1024
 /**
- * The most bytes of stream buffer a configuration may make each connection
+ * The most bytes of stream buffer a configuration may let each connection
  * hold: every stream slot (`maxStreamsBidi + maxStreamsUni + localStreams`)
- * has `maxStreamData` bytes each way, made when the connection is, so a
- * configuration past 64 MiB of them is refused rather than allocated.
+ * may borrow `maxStreamData` bytes each way, and the pools are sized so all
+ * of them can at once, so a configuration past 64 MiB of them is refused
+ * rather than allowed to allocate it.
  */
 export const QUIC_CONN_MAX_STREAM_BUFFERS: i64 = 67108864
 /** The length of the configuration's static keys: the stateless reset key and the Retry token key. */
@@ -1763,6 +1771,17 @@ export class QuicConnection {
     this.phasePending = -1
     this.resendLevel = -1
     let used: boolean = false
+    // A STREAM frame's first byte borrows a receive buffer, and no pool may
+    // take one inside the scope, so the reserve is primed before it with what
+    // this packet could want. Only 0-RTT and 1-RTT packets carry STREAM
+    // frames (RFC 9000 §12.4); any other still makes a standalone
+    // connection's private pools, so the handshake, not the first 1-RTT
+    // packet, pays for them.
+    if (type === QUIC_PACKET_SHORT || type === QUIC_PACKET_ZERO_RTT) {
+      this.streams.prime(header.end - header.pnOffset)
+    } else {
+      this.streams.ownPools()
+    }
     {
       using _scope = arena()
       used = this.openScoped(buf, header, space, keys)
@@ -3634,10 +3653,13 @@ export class QuicConnection {
    * secrets and expected client Finished, the ephemeral key, the
    * connection-ID seed and the stateless reset tokens (QUIC-2). Call it when
    * the connection is done with (or `reset` the slot, which does the same
-   * first); the connection is closed after it and sends nothing more.
+   * first); the connection is closed after it and sends nothing more. Every
+   * stream buffer it borrowed goes back to its pool, zeroed: nothing is sent
+   * again from a closed connection.
    */
   release(): void {
     this.wipeAll()
+    this.streams.giveBack()
     if (!this.closed()) {
       this.state = QUIC_STATE_CLOSING
       this.error = QUIC_ERROR_NO_ERROR

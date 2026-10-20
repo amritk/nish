@@ -2777,8 +2777,9 @@ export const main = (): i32 => {
   runs under Node and what `npm run check` type-checks. The compiler recognises
   the two templates by module and name and lowers one call in each instance —
   the loop over the whole range — onto `nish_parallel_range`
-  (`runtime/runtime-parallel.c`), which hands each thread a contiguous chunk
-  and joins them all before it returns. Everything else in the instance is
+  (`runtime/runtime-parallel.c`), which cuts the range into contiguous pieces,
+  up to eight per thread, that the threads claim one at a time as they finish
+  the last, and joins them all before it returns. Everything else in the instance is
   emitted as written (`tests/link/par_map`, whose `threads.ll` is the whole
   lowering).
 - **`parallelMapInto(src, dst, f)`** writes `f(src[i])` into `dst[i]` for every
@@ -2804,9 +2805,9 @@ export const main = (): i32 => {
   `f` costs: 2^21 over the estimate, which counts one per operation, 32 per
   allocation, 4 per call, and a loop's body as many times as its literal
   bound says or 64 times when the bound is not a literal. A map longer than
-  the grain is divided into `ceil(length / grain)` chunks, at most one per
-  core, so the first division is two chunks of half the grain: 2^20 units
-  each. That is where a measured body, `(x) => x + 1` at an estimate of 3,
+  the grain is divided into `ceil(length / grain)` chunks, at most eight per
+  thread with one thread per core, so the first division is two chunks of
+  half the grain: 2^20 units each. That is where a measured body, `(x) => x + 1` at an estimate of 3,
   beat its loop by 1.31x on the minimum and 1.19x on the median, more than
   any difference between the loop and a byte-identical copy of it (at most
   3.3% and 9.1%); at two chunks of 2^19 units the minimum won by 1.16x and
@@ -3014,6 +3015,18 @@ from the whole-program facts, and each rule is reported there:
   (main against a byte-identical copy of itself: about 2%). One call over
   2^25 elements is unchanged, 251.3 against 252.5 ms, inside that band
   (`tests/link/par_map_reclaim`).
+  A string map's result handed to a function whose `string[]` parameter keeps
+  none of it, reading it or handing it on only to another such parameter, is
+  still freed with the frame: 72 string maps over 2^17 whose frames each pass
+  the array to such a callee peak at 20 MB on 1 thread and 22 MB on 8, where
+  they peaked at 237 MB. The parameter keeps it, and the frame keeps the
+  strings, when the callee stores the array or one of its strings into a
+  field, an outer array or a `Map`, returns either, passes it to `new` or to a
+  constructor that hands `this` out, stores it through any declarator of a
+  statement or through a local alias, or hands it to a callee that keeps it,
+  and whenever the callee holds an arrow, such as a map's body; the proof
+  covers a parameter typed `string[]` exactly, so one typed `string[][]` keeps
+  the strings it reaches (`tests/link/par_map_reclaim_strings`).
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
@@ -3680,17 +3693,20 @@ breaks one is refused with that rule's own code:
   field or an element of an array that already exists:
   `` This stores `string[]` through a guard, which stores only a number, a `boolean`, an enum or a `string`, which the store copies, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined; build the value into the one the `Mutex` is made with, or store what it holds one at a time into slots that already exist, `g.value.names[i] = v[i]` ``
   (NL2468, `reject_mutex_guard_store`; `reject_mutex_guard_store_class` for a
-  class). A `null` is not stored through a guard, into a `string | null` field,
-  element or `Mutex<string | null>` alike:
-  `` This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a `string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the `Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0` ``
-  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`, `_paren`
-  for `g.value.last = (null)`, and `_class` for a `Link | null` field, which
-  holds a pointer a guard stores in no form). The store's
-  exchange, `nish_guard_keep`, reads the length of the string it is given, so
-  a `null` handed to it would be dereferenced; written past it, the `null`
-  would leave the slot's copy allocated, one block per store. Admitting the
-  store would mean an exchange that frees the slot's copy and keeps nothing,
-  which the runtime does not have in this version. A string stored through a guard is copied into memory the mutex
+  class). A `null` is stored through a guard only into a `string | null` slot —
+  a field, an element or a `Mutex<string | null>` — where the store frees the
+  copy the slot held and keeps nothing, so a later read through `?.` answers
+  `null` (`tests/link/thread_mutex_null_store`, natively and under Node, read
+  back after `churn()`). Into any other nullable slot, a `Link | null` field,
+  element or `Mutex<Link | null>`, it is refused, since such a slot holds a
+  pointer, which a guard stores in no form:
+  `` This stores `null` through a guard into a slot that holds an object, and a guard stores only a number, a `boolean`, an enum or a `string`, and a `null` only into a `string | null` slot, where the store frees the copy the slot held; keep a `boolean` field beside the slot, `g.value.hasNext = false`, and test it before reading the object ``
+  (NL2537, `reject_mutex_guard_null_class`, `_link_element`, `_link_value`,
+  `_link_nested` for `g.value.inner.next = null`, and `_link_paren` for
+  `g.value.next = (null)`). Only the literal `null` is stored: a
+  `string | null` *value*, a variable or a `??`, is refused as NL2468 above,
+  since the store copies what it is given and a value that may be `null` would
+  need a test the store does not make. A string stored through a guard is copied into memory the mutex
   owns: `nish_guard_keep` `malloc`s the copy, records it, and frees the copy
   the slot held before, if that one was its own; a string read through a guard
   is copied out into the reader's arena (`.length` excepted, which keeps

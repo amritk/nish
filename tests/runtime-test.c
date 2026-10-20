@@ -54,6 +54,8 @@ void nish_scope_join(void *scope);
 void nish_channel_send(int64_t *state, int64_t value);
 void nish_channel_count(int64_t *state, int64_t delta);
 int32_t nish_channel_receive(int64_t *state, int64_t *out);
+/* runtime-cross.c: a guard's string store. */
+void *nish_guard_keep(void *old, const void *s);
 nish_str *nish_read_file(const nish_str *);
 void nish_write_file(const nish_str *, const nish_str *);
 void nish_append_file(const nish_str *, const nish_str *);
@@ -129,7 +131,9 @@ static void expect_parse(const char *input, int32_t mode, const char *want) {
    it from several chunks at once well defined. Declared before the tests and
    defined for both configurations so the sequential build compiles the same
    assertions rather than a second copy of them. */
-#define NISH_PAR_TEST_MAX 64
+/* runtime-parallel.c's NISH_PAR_PIECES: the chunks a region makes per thread. */
+#define NISH_PAR_TEST_PIECES 8
+#define NISH_PAR_TEST_MAX (64 * NISH_PAR_TEST_PIECES)
 #ifdef NISH_THREADS
 #include <pthread.h>
 static pthread_mutex_t par_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -229,6 +233,28 @@ static void test_parallel_common(void) {
   assert(nish_cpu_count() >= 1);
 }
 
+/* The pieces a divided region is claimed in: every element written exactly
+ * once, at every length from 1 -- fewer elements than threads, where some
+ * thread claims nothing -- to well past `cpus * NISH_PAR_TEST_PIECES`, so most
+ * lengths do not divide by the piece count and the remainder lands on the first
+ * pieces; and at grains that leave fewer chunks than `cpus * 8` pieces, where
+ * the chunk count is the piece count. tests/run.js runs this binary under
+ * `NISH_NUM_THREADS` 1, 2, 3, 4 and 8, so the claim is checked at each of those
+ * thread counts the machine has. */
+static void test_parallel_pieces(void) {
+  int64_t most = 3 * nish_cpu_count() * NISH_PAR_TEST_PIECES + 7;
+  if (most > PAR_N) most = PAR_N;
+  for (int64_t grain = 1; grain <= 3; grain++)
+    for (int64_t len = 1; len <= most; len++) {
+      memset(par_seen, 0, (size_t)len * sizeof par_seen[0]);
+      par_chunks = 0;
+      nish_parallel_range(par_count_body, NULL, len, grain);
+      for (int64_t i = 0; i < len; i++) assert(par_seen[i] == 1);
+      int64_t chunks = len / grain + (len % grain != 0);
+      assert(par_chunks >= 1 && par_chunks <= chunks);
+    }
+}
+
 #ifdef NISH_THREADS
 #include <pthread.h>
 #include <sched.h>
@@ -321,7 +347,7 @@ static void test_parallel_threads(void) {
   par_chunks = 0;
   nish_parallel_range(par_thread_body, NULL, PAR_N, 1);
   int64_t n = par_chunks;
-  assert(n >= 1 && n <= nish_cpu_count());
+  assert(n >= 1 && n <= nish_cpu_count() * NISH_PAR_TEST_PIECES);
   /* On a machine with more than one core the range is actually divided, which
      is the whole point and the one thing a sequential build cannot assert. */
   if (nish_cpu_count() > 1) assert(n > 1);
@@ -404,10 +430,13 @@ static void test_threads(void) {
  * `NISH_NUM_THREADS=1` (no workers: the caller runs everything) and `=2` (one
  * worker), so every assertion holds at those sizes too. */
 
-/* How many jobs this thread has run: a worker created for one job sees 1 and
-   then exits, while a pooled worker sees its count climb from region to
-   region. */
+/* How many regions this thread has run chunks of: a worker created for one
+   job sees 1 and then exits, while a pooled worker sees its count climb from
+   region to region. A thread takes several chunks of one region, so it counts
+   a region once, when `pool_region` first differs from the last it saw. */
 static _Thread_local int64_t pool_jobs_here;
+static _Thread_local int64_t pool_region_here;
+static int64_t pool_region; /* bumped by pool_region_partitions, before the region */
 static int64_t pool_most_jobs; /* the highest count any worker reached */
 
 static int pool_worker_ran; /* set by a worker's chunk; chunk 0 waits on it */
@@ -425,6 +454,9 @@ static void pool_count_body(int64_t lo, int64_t hi, void *ctx) {
     return;
   }
   __atomic_store_n(&pool_worker_ran, 1, __ATOMIC_RELEASE);
+  int64_t region = __atomic_load_n(&pool_region, __ATOMIC_RELAXED);
+  if (region == pool_region_here) return;
+  pool_region_here = region;
   int64_t mine = ++pool_jobs_here;
   PAR_LOCK();
   if (mine > pool_most_jobs) pool_most_jobs = mine;
@@ -559,6 +591,7 @@ static int pool_run_tasks(int64_t count) {
 static int pool_region_partitions(pthread_t self) {
   memset(par_seen, 0, sizeof par_seen);
   pool_worker_ran = 0;
+  __atomic_fetch_add(&pool_region, 1, __ATOMIC_RELAXED);
   nish_parallel_range(pool_count_body, &self, PAR_N, 1);
   int ok = 1;
   for (int i = 0; i < PAR_N; i++) ok = ok && par_seen[i] == 1;
@@ -1676,7 +1709,8 @@ static void test_security(void) {
   /* RT-8: a range within `grain` of 2^63 is still divided, rather than
      overflowing the chunk count into a negative and running on one thread. */
   int64_t cpus = nish_cpu_count();
-  int64_t want = cpus > NISH_PAR_TEST_MAX ? NISH_PAR_TEST_MAX : cpus;
+  int64_t pieces = cpus <= 1 ? 1 : cpus * NISH_PAR_TEST_PIECES; /* one thread runs it whole */
+  int64_t want = pieces > NISH_PAR_TEST_MAX ? NISH_PAR_TEST_MAX : pieces;
   sec_par_calls = 0;
   nish_parallel_range(sec_par_body, NULL, INT64_MAX, 2);
   sec_check(sec_par_calls == want, "RT-8", "a range near 2^63 was not divided across the threads");
@@ -1686,6 +1720,25 @@ static void test_security(void) {
     fprintf(stderr, "runtime_test: %d security check(s) failed\n", sec_failed);
   }
   assert(sec_failed == 0);
+}
+
+/* A guard's string store keeps a copy outside the arena and frees the copy it
+ * replaces; a `null` store (`s` null) frees the copy and keeps nothing. A
+ * block the store did not make, such as an arena string, is never freed, and a
+ * freed copy is no longer one the next store would free again. */
+static void test_guard_keep(void) {
+  nish_str *a = nish_guard_keep(NULL, lit("ab"));
+  assert(a != NULL && a->len == 2 && memcmp(a->data, "ab", 2) == 0);
+  nish_str *b = nish_guard_keep(a, lit("cde"));
+  assert(b != NULL && b != a && b->len == 3 && memcmp(b->data, "cde", 3) == 0);
+  assert(nish_guard_keep(b, NULL) == NULL);
+  assert(nish_guard_keep(b, NULL) == NULL); /* `b` was freed and forgotten: no double free */
+  assert(nish_guard_keep(NULL, NULL) == NULL);
+  nish_str *arena = lit("xyz");
+  assert(nish_guard_keep(arena, NULL) == NULL && memcmp(arena->data, "xyz", 3) == 0);
+  nish_str *c = nish_guard_keep(arena, lit("q"));
+  assert(c != NULL && c->len == 1 && c->data[0] == 'q');
+  assert(nish_guard_keep(c, NULL) == NULL);
 }
 
 int main(void) {
@@ -1973,6 +2026,7 @@ int main(void) {
   /* The partition's contract holds in both configurations, so it is asserted in
      both; only the threaded build can check that it actually divided. */
   test_parallel_common();
+  test_parallel_pieces();
   nish_free_arena();
   test_net();
   test_tcp_reuseport();
@@ -1984,6 +2038,7 @@ int main(void) {
   test_wipe();
   nish_free_arena();
   test_process();
+  test_guard_keep();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();
