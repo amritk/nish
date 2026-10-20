@@ -76,9 +76,13 @@ Two jobs took longer than 15 minutes unsplit, so each runs as four:
   Regenerate the table when a shard drifts more than about a fifth from the
   others: the costs are the gaps between consecutive programs' last lines in a
   CI shard's log, and `shardOne` and `selfHosting` the spans of those
-  sections. The shard-1 steps after the suite that require a `PASS` line
-  (`simd`, the AES kernels, `cpu-level`) grep the Test step's log for it
-  rather than running their section again.
+  sections. Runners differ in speed by nearly a factor of two (one built
+  stage1 in 34 s where its siblings took 57-61 s), so read a span only from a
+  shard whose stage1 build and pre-link sections took as long as the other
+  shards': a shard on a fast runner finishes early on any table. The shard-1
+  steps after the suite that require a `PASS` line (`simd`, the AES kernels,
+  `cpu-level`) grep the Test step's log for it rather than running their
+  section again.
 - **`runner`.** `build/nish-runner --shard <i>/<n>` deals the cases and link
   programs the runner selects round-robin.
 
