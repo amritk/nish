@@ -42,7 +42,7 @@ declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapt
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 declare extern_weak void @nish_panic_overflow(i32 noundef) #4
 declare void @nish_scope_join(i8* noundef nonnull) #0
-declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #0
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #5
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {

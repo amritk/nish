@@ -2984,8 +2984,9 @@ export const main = (): i32 => {
   runs under Node and what `npm run check` type-checks. The compiler recognises
   the two templates by module and name and lowers one call in each instance —
   the loop over the whole range — onto `nish_parallel_range`
-  (`runtime/runtime-parallel.c`), which hands each thread a contiguous chunk
-  and joins them all before it returns. Everything else in the instance is
+  (`runtime/runtime-parallel.c`), which cuts the range into contiguous pieces,
+  up to eight per thread, that the threads claim one at a time as they finish
+  the last, and joins them all before it returns. Everything else in the instance is
   emitted as written (`tests/link/par_map`, whose `threads.ll` is the whole
   lowering).
 - **`parallelMapInto(src, dst, f)`** writes `f(src[i])` into `dst[i]` for every
@@ -3011,9 +3012,9 @@ export const main = (): i32 => {
   `f` costs: 2^21 over the estimate, which counts one per operation, 32 per
   allocation, 4 per call, and a loop's body as many times as its literal
   bound says or 64 times when the bound is not a literal. A map longer than
-  the grain is divided into `ceil(length / grain)` chunks, at most one per
-  core, so the first division is two chunks of half the grain: 2^20 units
-  each. That is where a measured body, `(x) => x + 1` at an estimate of 3,
+  the grain is divided into `ceil(length / grain)` chunks, at most eight per
+  thread with one thread per core, so the first division is two chunks of
+  half the grain: 2^20 units each. That is where a measured body, `(x) => x + 1` at an estimate of 3,
   beat its loop by 1.31x on the minimum and 1.19x on the median, more than
   any difference between the loop and a byte-identical copy of it (at most
   3.3% and 9.1%); at two chunks of 2^19 units the minimum won by 1.16x and
@@ -3221,6 +3222,18 @@ from the whole-program facts, and each rule is reported there:
   (main against a byte-identical copy of itself: about 2%). One call over
   2^25 elements is unchanged, 251.3 against 252.5 ms, inside that band
   (`tests/link/par_map_reclaim`).
+  A string map's result handed to a function whose `string[]` parameter keeps
+  none of it, reading it or handing it on only to another such parameter, is
+  still freed with the frame: 72 string maps over 2^17 whose frames each pass
+  the array to such a callee peak at 20 MB on 1 thread and 22 MB on 8, where
+  they peaked at 237 MB. The parameter keeps it, and the frame keeps the
+  strings, when the callee stores the array or one of its strings into a
+  field, an outer array or a `Map`, returns either, passes it to `new` or to a
+  constructor that hands `this` out, stores it through any declarator of a
+  statement or through a local alias, or hands it to a callee that keeps it,
+  and whenever the callee holds an arrow, such as a map's body; the proof
+  covers a parameter typed `string[]` exactly, so one typed `string[][]` keeps
+  the strings it reaches (`tests/link/par_map_reclaim_strings`).
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over
@@ -3887,17 +3900,20 @@ breaks one is refused with that rule's own code:
   field or an element of an array that already exists:
   `` This stores `string[]` through a guard, which stores only a number, a `boolean`, an enum or a `string`, which the store copies, into a field or an element that already exists: anything else is a pointer, which may point into a task's arena, freed when the task is joined; build the value into the one the `Mutex` is made with, or store what it holds one at a time into slots that already exist, `g.value.names[i] = v[i]` ``
   (NL2468, `reject_mutex_guard_store`; `reject_mutex_guard_store_class` for a
-  class). A `null` is not stored through a guard, into a `string | null` field,
-  element or `Mutex<string | null>` alike:
-  `` This stores `null` through a guard, which stores only a number, a `boolean`, an enum or a `string`: into a `string | null` slot of a `Mutex`'s data the store is an exchange that copies the string into memory the `Mutex` owns and frees the copy it replaces, and it has no `null` to copy; keep a `boolean` field beside the slot, `g.value.hasLast = false`, or, in a `string | null` slot, store an empty string, `g.value.last = ""`, and read it back as empty with `.length === 0` ``
-  (NL2537, `reject_mutex_guard_null_field`, `_element`, `_value`, `_paren`
-  for `g.value.last = (null)`, and `_class` for a `Link | null` field, which
-  holds a pointer a guard stores in no form). The store's
-  exchange, `nish_guard_keep`, reads the length of the string it is given, so
-  a `null` handed to it would be dereferenced; written past it, the `null`
-  would leave the slot's copy allocated, one block per store. Admitting the
-  store would mean an exchange that frees the slot's copy and keeps nothing,
-  which the runtime does not have in this version. A string stored through a guard is copied into memory the mutex
+  class). A `null` is stored through a guard only into a `string | null` slot —
+  a field, an element or a `Mutex<string | null>` — where the store frees the
+  copy the slot held and keeps nothing, so a later read through `?.` answers
+  `null` (`tests/link/thread_mutex_null_store`, natively and under Node, read
+  back after `churn()`). Into any other nullable slot, a `Link | null` field,
+  element or `Mutex<Link | null>`, it is refused, since such a slot holds a
+  pointer, which a guard stores in no form:
+  `` This stores `null` through a guard into a slot that holds an object, and a guard stores only a number, a `boolean`, an enum or a `string`, and a `null` only into a `string | null` slot, where the store frees the copy the slot held; keep a `boolean` field beside the slot, `g.value.hasNext = false`, and test it before reading the object ``
+  (NL2537, `reject_mutex_guard_null_class`, `_link_element`, `_link_value`,
+  `_link_nested` for `g.value.inner.next = null`, and `_link_paren` for
+  `g.value.next = (null)`). Only the literal `null` is stored: a
+  `string | null` *value*, a variable or a `??`, is refused as NL2468 above,
+  since the store copies what it is given and a value that may be `null` would
+  need a test the store does not make. A string stored through a guard is copied into memory the mutex
   owns: `nish_guard_keep` `malloc`s the copy, records it, and frees the copy
   the slot held before, if that one was its own; a string read through a guard
   is copied out into the reader's arena (`.length` excepted, which keeps
@@ -5858,7 +5874,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
@@ -6909,7 +6925,7 @@ would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All eighteen functions
+so a child that `spawnSync` starts inherits none of them. All nineteen functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -6922,11 +6938,20 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
+| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener that did not ask for it, or asked by one that does not, is `-98` | write | `net_tcp_reuseport`, `link/net_tcp_reuseport_spread`; `reject_net_reuseport_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
+
+What `tcpListenFlags`'s flag `1` does on each platform:
+
+| Platform | Flag `1` |
+| --- | --- |
+| Linux | Listeners that share the port each get new connections, spread by a hash of the connection's 4-tuple; only listeners of the same user may share |
+| Darwin | Listeners share the port, but one of them takes the connections: the flag buys a restart without a gap rather than a spread |
+| `wasm32`, `--profile wasi` | Refused at compile time with NL2404, as every `nish:net` call is |
 
 **Errors are numbers.** Every call answers an `i32`: `>= 0` is success (a
 descriptor, a count, `0`), and a negative number is the failure's errno,
@@ -7148,7 +7173,10 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   to reach, and `runtime-net.c` is empty there, so every call is refused by the
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
-  `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`).
+  `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`,
+  `reject_net_reuseport_wasm`). The freestanding `--profile wasm` link, which
+  takes IR compiled for the host, has no `runtime-net.c` either, so a program
+  that calls one fails there at the link, on the undefined `nish_` symbol.
 - **Not yet.** There is no name resolution (`reject_net_unknown_export`), no
   `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
   but `pollWait`'s timeout. A program that does not want a loop can still wait

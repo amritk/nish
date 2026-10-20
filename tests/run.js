@@ -42,7 +42,7 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -1532,6 +1532,7 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_address",
       "nish_net_local_port",
       "nish_tcp_listen",
+      "nish_tcp_listen_flags",
       "nish_tcp_accept",
       "nish_net_read",
       "nish_net_write",
@@ -1602,6 +1603,19 @@ if (!only || "net_tcp_connect".includes(only)) {
     "net_tcp_connect: under the prelude tcpConnect fails loudly rather than answering",
     loud.status !== 0 && loud.stderr.includes("`tcpConnect` has no synchronous reading under Node"),
     shown(loud)
+  )
+
+  // `net_tcp_reuseport` imports from `nish:net`, a scheme Node's loader refuses
+  // before any call runs, so the prelude is asked of the global instead.
+  const flagsDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(flagsDir, { recursive: true })
+  const flagsEntry = path.join(flagsDir, "listen-flags.ts")
+  fs.writeFileSync(flagsEntry, 'export const main = (): number => tcpListenFlags("127.0.0.1", 0, 4, 1);\n')
+  const loudFlags = runUnderPrelude(flagsEntry, [])
+  check(
+    "net_tcp_reuseport: under the prelude tcpListenFlags fails loudly rather than answering",
+    loudFlags.status !== 0 && loudFlags.stderr.includes("`tcpListenFlags` has no synchronous reading under Node"),
+    shown(loudFlags)
   )
 }
 
@@ -6129,6 +6143,7 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // `fd_write` fast call crashes its frame walk. On Node 22.22.0, 16 of 20 runs
 // crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
 // used to pass, and none of 50 with the host turning the calls off.
+// #732 tracks the Node bug and when the host can drop the flag.
 if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
   const agreeDir = path.join(buildDir, "p256-agree")
   const programDir = path.join(agreeDir, "crypto_p256_agree")
@@ -6275,6 +6290,33 @@ if (!only || "thread_channel_string_many".includes(only)) {
   )
 }
 
+// `Http1Server` builds a slot's connection on the first accept into it, so a
+// pool sized for a busy day costs little before its first connection.
+// `tests/link/net_http1_server/startup.ts` builds a pool of 16,384 slots on no
+// socket and prints the arena bytes it took, which the ceiling
+// `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, and whether
+// they fit in one chunk, without which `Arena.used()` measures nothing.
+if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only)) {
+  const dir = path.join(buildDir, "link", "net_http1_server.startup")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "net_http1_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    check(
+      "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
+      `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
 // A task's temporaries are released on the thread that ran it once it has
 // answered, whatever it answers. `thread_task_release` spawns three scopes of
 // 8,000 tasks of some 60 KB each, answering a string, an `i32` and nothing;
@@ -6366,14 +6408,16 @@ if (!only || "par_map_release".includes(only)) {
 // A function that runs a map and answers a scalar frees the map's result, and
 // the blocks a string map adopts from its workers, when it returns, as its
 // sequential twin does; `using a = arena()` frees a map run in main's own frame.
-// `par_map_reclaim` runs five loops of maps in frames that give them back:
+// `par_map_reclaim` runs six loops of maps in frames that give them back:
 // 24 int maps over 2^21 elements, 72 string maps over 2^17 (blocks linked in),
-// 8000 string maps over 512 (blocks copied in), 64 int maps over 2^19 (below
-// the grain, on the calling thread), and 24 int maps over 2^21 in a
-// `using a = arena()` block in main. It peaks at 21 to 23 MB on 1, 2 and 8
-// threads. Each of the first four loops alone, built by main at efbbd8c8,
-// peaked at 206, 232, 112 and 143 MB on 1 and 8 threads, and main refused the
-// block, so each would pass the 64 MB bound on its own.
+// 72 more whose frames hand the array to a `string[]` callee that keeps none
+// of it, 8000 string maps over 512 (blocks copied in), 64 int maps over 2^19
+// (below the grain, on the calling thread), and 24 int maps over 2^21 in a
+// `using a = arena()` block in main. It peaks at 21 to 23 MB on 1 and 8
+// threads. Each of the first loops alone, built by main at efbbd8c8, peaked at
+// 206, 232, 112 and 143 MB on 1 and 8 threads, and main refused the block, so
+// each would pass the 64 MB bound on its own; the handed loop, built by main
+// before its callees were proved to keep nothing, peaked at 237 MB.
 if (!only || "par_map_reclaim".includes(only)) {
   const fixture = linkTests.includes("par_map_reclaim")
   const dir = path.join(buildDir, "link", "par_map_reclaim")
@@ -6392,7 +6436,7 @@ if (!only || "par_map_reclaim".includes(only)) {
       ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
       : "no such fixture"
     check(
-      `link/par_map_reclaim: 8184 maps in returning frames, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
+      `link/par_map_reclaim: 8256 maps in returning frames, handed to a callee, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
       kb > 0 && kb < 64 * 1024,
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
     )
@@ -6737,7 +6781,9 @@ if (!only || "par_alloc".includes(only)) {
 // And copy-at-join: `thread_task_string`, whose tasks answer strings and
 // scalar arrays; `par_map_string`, whose data-parallel bodies do; and
 // `thread_channel_string` and `thread_mutex_string`, which send strings on
-// channels and store them through guards; and `thread_adopt_lifetime`, whose
+// channels and store them through guards; `thread_mutex_null_store`, whose
+// guards store `null` over those copies and read the empty slots back through
+// `?.`; and `thread_adopt_lifetime`, whose
 // answers the caller adopts and then releases. Each reads what crossed after
 // `churn()`, and prints only what every task order agrees on.
 //
@@ -6750,7 +6796,10 @@ if (!only || "par_alloc".includes(only)) {
 // as `string[][]`, chosen by a ternary, pushed, put in a `Map` or a `Set`,
 // sent on a channel, stored through a mutex guard, handed to a callee that
 // keeps them, aliased, and carried into the next iteration, each read after
-// `churn()`.
+// `churn()`; and `par_map_reclaim_strings`, whose frames hand a string map's
+// result to a `string[]` callee that keeps it by a field, a return, a map's
+// body, a push, a `Map`, `new`, a constructor's `this`, a second declarator,
+// an alias, a relay or a `string[][]`, each read after `churn()`.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -6805,9 +6854,11 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_mutex_null_store",
   "thread_adopt_lifetime",
   "par_map_reclaim",
   "par_map_reclaim_escapes",
+  "par_map_reclaim_strings",
   "mem_using_arena_map",
   "std_random",
 ]) {
@@ -7590,17 +7641,20 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // lower for wasm32, a module without shared memory, where its tasks run in turn.
 // `thread_task_string`, `par_map_string`, `thread_channel_string` and
 // `thread_mutex_string` are the strings and scalar arrays that cross by copy,
+// `thread_mutex_null_store` frees a guard's copy when `null` is stored over it,
 // whose transfer block carries a tag in its pointer's low bit on a 32-bit
 // pointer as on a 64-bit one; `thread_adopt_lifetime` adopts those blocks, and
 // a 24-byte transfer state, on wasm32 as on a 64-bit target.
-// `par_map_reclaim` and `par_map_reclaim_escapes` free a map's result, and
-// the blocks it adopted, with the frame or block that ran it, and keep every
-// result that escapes it, on a 32-bit target as on a 64-bit one.
+// `par_map_reclaim`, `par_map_reclaim_escapes` and `par_map_reclaim_strings`
+// free a map's result, and the blocks it adopted, with the frame or block that
+// ran it, and keep every result that escapes it, on a 32-bit target as on a
+// 64-bit one.
 // The escapes fixture grows its memory to some 120 MB, and Node 22 then
 // collects garbage inside the fast call of WASI's `fd_write`, whose frame walk
 // segfaults (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24
 // (three of three crashed with fast API calls on, none of six with them off).
 // examples/wasi-host.mjs turns them off itself, so the slow call is what runs.
+// #732 tracks the Node bug and when the host can drop the flag.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -7614,9 +7668,11 @@ for (const name of [
   "par_map_string",
   "thread_channel_string",
   "thread_mutex_string",
+  "thread_mutex_null_store",
   "thread_adopt_lifetime",
   "par_map_reclaim",
   "par_map_reclaim_escapes",
+  "par_map_reclaim_strings",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
@@ -12067,7 +12123,9 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
 // runs of every threads program under `NISH_NUM_THREADS=1` and `=2`:
 //   - the unit test's pool checks (`test_pool`) again at the two sizes a default run
 //     on a big machine never sees: `NISH_NUM_THREADS=1`, no workers, where the
-//     caller runs every task in spawn order, and `=2`, one worker;
+//     caller runs every task in spawn order, and `=2`, one worker; and at `=3`, `=4`
+//     and `=8` too, so a region's pieces are claimed exactly once at each of those counts
+//     the machine has (`test_parallel_pieces`);
 //   - `nish_cpu_count()` itself: the variable lowers the count and never raises it,
 //     a malformed value is ignored, the affinity mask counts (`taskset`), and so does
 //     a cgroup v2 `cpu.max` quota, rounded up, at the process's own cgroup or any
@@ -12078,7 +12136,7 @@ if (!only || "runtime-parallel".includes(only)) {
     skip("runtime-parallel: clang not installed: the worker pool's checks are not run")
   } else {
     const unit = buildRuntimeTestThreads()
-    for (const threads of ["1", "2"]) {
+    for (const threads of ["1", "2", "3", "4", "8"]) {
       const r =
         unit.status === 0 ? spawnSync(unit.exe, [], { encoding: "utf8", env: envWithThreads(threads) }) : unit
       check(
@@ -15922,7 +15980,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
       "--no-rayon",
       "--twin-runs",
       "1",

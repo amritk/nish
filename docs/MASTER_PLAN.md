@@ -89,7 +89,7 @@ Design rules that every WP must respect:
   | --- | ---: | ---: |
   | `runtime.c` | 3,684 (3,885 with `-DNISH_THREADS=1`) (2026-10-16) | 3,684 (3,885) |
   | `runtime-os.c` | 1,530 | 1,536 |
-  | `runtime-parallel.c` | 610 (2,900 threaded) (2026-10-17) | 768 (2,944) |
+  | `runtime-parallel.c` | 610 (3,097 threaded) (2026-10-20) | 768 (3,328) |
   | `runtime-cross.c` | 1,427 (1,508 threaded) (2026-10-17) | 1,536 (1,536) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
@@ -258,6 +258,7 @@ is its plan. [README.md](README.md) indexes them.
 | 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S3a and S2's flag planned | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
+| 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; stage 1, the router, built | [wp43](wp43-http-app-layer.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each

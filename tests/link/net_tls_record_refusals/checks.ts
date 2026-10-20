@@ -512,6 +512,12 @@ export const refusalChecks = (): i32 => {
   const spam = traceOpen();
   const spamWriter = clientWriter();
   let spamSecret: u8[] = rfc8448ClientApplicationTraffic();
+  // The slot borrows its record buffers on first use, so one record each
+  // way, read and sent, makes them before anything is measured.
+  feed(spam, sealOne(spamWriter, TLS_CONTENT_APPLICATION_DATA, ascii("w"), ZERO));
+  spam.read(new Array<u8>(8), ZERO, toI32(8));
+  spam.write(ascii("w"), ZERO, toI32(1));
+  spam.consume(spam.outputEnd - spam.outputStart);
   const updates: u8[][] = [];
   for (let k: i32 = 0; k <= TLS_RECORD_MAX_KEY_UPDATES; k++) {
     const update: u8[] = sealOne(spamWriter, TLS_CONTENT_HANDSHAKE, keyUpdateMessage(1), ZERO);

@@ -58,6 +58,15 @@
  * the very thing being made per-thread. */
 #define NISH_PAR_MAX 64
 
+/* How many pieces a divided region is cut into per thread, grain permitting
+ * (`nish_parallel_range`). Eight, measured on bench/par-heavy.ts at four
+ * threads, nine interleaved rounds: 2 pieces was slower and noisier (868 ms
+ * median, 766-1121), 4 to 32 were flat within the copy band (805-822 ms), and
+ * so was bench/par-scale.ts's memory-bound map (262-270 ms). Among the flat
+ * counts, 8 bounds the tail a preempted core leaves idle at an eighth of one
+ * thread's share while keeping the claims per region at 8n. */
+#define NISH_PAR_PIECES 8
+
 /* Cached, because the answer is not a cheap read: `sysconf` alone was 3.7 us
  * measured here (glibc parses /sys/devices/system/cpu/online), and the affinity
  * mask and the cgroup quota below are more system calls on top -- which
@@ -166,6 +175,9 @@ int64_t nish_cpu_count(void) {
  * scheduler: work stealing is what a library would do here and it is not what
  * this file is for. */
 static NISH_TLS int nish_par_depth = 0;
+/* Non-zero on a pool worker or an unpooled job's thread, whose arena holds
+ * nothing of the caller's. */
+static NISH_TLS int nish_pool_thread = 0;
 
 /* ---- The worker pool (docs/wp20-threads.md, section 8e) ----
  *
@@ -322,6 +334,7 @@ static void nish_pool_drain(int64_t *pending, pthread_cond_t *cv, int worker) {
 static void *nish_pool_worker(void *unused) {
   (void)unused;
   nish_par_depth = 1;
+  nish_pool_thread = 1;
   int64_t never = 1;
   nish_pool_drain(&never, &nish_pool.work, 1);
   return 0;
@@ -393,6 +406,7 @@ static int nish_pool_ready(void) {
 static void *nish_job_thread(void *p) {
   nish_job *j = (nish_job *)p;
   nish_par_depth = 1;
+  nish_pool_thread = 1;
   j->run(j);
   nish_free_arena();
   return 0;
@@ -452,19 +466,51 @@ static void nish_jobs_run(nish_job *lead, nish_job *rest) {
   nish_par_depth--;
 }
 
-/* One chunk of the range, and where to run it. It lives in the caller's frame
- * until every chunk has run. */
+/* A divided region: `pieces` contiguous pieces of `[0, len)`, at most one
+ * element apart in size, which the threads running it claim one at a time off
+ * `next`. It lives in the caller's frame until every piece has run. */
 typedef struct {
-  nish_job job;
   nish_par_body body;
   void *ctx;
-  int64_t lo;
-  int64_t hi;
+  int64_t base; /* the shortest piece's length */
+  int64_t rem;  /* the first `rem` pieces are one longer */
+  int64_t pieces;
+  int64_t next; /* the next piece to claim; atomic */
+} nish_par_region;
+
+/* One thread's share of a region: the pieces it claims, however many. */
+typedef struct {
+  nish_job job;
+  nish_par_region *region;
 } nish_par_job;
 
+static void nish_par_piece(nish_par_region *r, int64_t i) {
+  int64_t lo = i * r->base + (i < r->rem ? i : r->rem);
+  r->body(lo, lo + r->base + (i < r->rem ? 1 : 0), r->ctx);
+}
+
+/* Claims pieces until none is left. A worker rewinds its arena between them,
+ * and frees it when the chunk it kept is larger than an ordinary one, so each
+ * piece it runs finds the arena a whole job finds (`nish_pool_drain`). The
+ * claim is relaxed: the pieces are fixed before the jobs are queued, under the
+ * lock, and the join orders every piece's writes before the caller goes on. */
 static void nish_par_run(nish_job *j) {
-  nish_par_job *p = (nish_par_job *)j;
-  p->body(p->lo, p->hi, p->ctx);
+  nish_par_region *r = ((nish_par_job *)j)->region;
+  int64_t i;
+  while ((i = __atomic_fetch_add(&r->next, 1, __ATOMIC_RELAXED)) < r->pieces) {
+    nish_par_piece(r, i);
+    if (nish_pool_thread) {
+      nish_reset_arena();
+      if (nish_arena.cap > 65536) nish_free_arena();
+    }
+  }
+}
+
+/* The caller's share: piece 0 first, which `next` starts past, then whatever
+ * is left when it is done. */
+static void nish_par_run_lead(nish_job *j) {
+  nish_par_piece(((nish_par_job *)j)->region, 0);
+  nish_par_run(j);
 }
 #endif
 
@@ -499,30 +545,31 @@ void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t gra
     return;
   }
 
-  nish_par_job jobs[NISH_PAR_MAX];
-  /* Contiguous chunks, the remainder spread one element at a time over the
-   * first `len % n` of them, so the longest chunk is never more than one
+  /* More pieces than threads, so a thread that runs slow -- a core shared
+   * with another process, a worker that woke late -- takes fewer of them
+   * rather than holding up the join: with one piece a thread, the join on the
+   * four-core Xeon of docs/BENCHMARKS.md waited a quarter of each region for
+   * the slowest. Never finer than the grain, which is what a piece must be
+   * worth; a claim is one atomic add. */
+  int64_t pieces = n * NISH_PAR_PIECES;
+  if (chunks < pieces) pieces = chunks;
+  /* Contiguous pieces, the remainder spread one element at a time over the
+   * first `len % pieces` of them, so the longest is never more than one
    * element longer than the shortest. Contiguous rather than strided because
-   * two workers then never write the same cache line except at one boundary. */
-  int64_t base = len / n;
-  int64_t rem = len % n;
-  int64_t at = 0;
+   * two threads then never write the same cache line except at a boundary. */
+  nish_par_region region = {body, ctx, len / pieces, len % pieces, pieces, 1};
+  nish_par_job jobs[NISH_PAR_MAX];
   for (int64_t i = 0; i < n; i++) {
-    int64_t take = base + (i < rem ? 1 : 0);
     jobs[i].job.next = &jobs[i + 1].job;
-    jobs[i].job.run = nish_par_run;
-    jobs[i].body = body;
-    jobs[i].ctx = ctx;
-    jobs[i].lo = at;
-    jobs[i].hi = at + take;
-    at += take;
+    jobs[i].job.run = i == 0 ? nish_par_run_lead : nish_par_run;
+    jobs[i].region = &region;
   }
 
-  /* The caller runs chunk 0 itself, in its own arena, which means chunk 0
+  /* The caller runs piece 0 itself, in its own arena, which means piece 0
    * behaves exactly as a sequential call would -- the asymmetry is deliberate
    * and is why what a body's result may hold is the surface's question rather
    * than this file's: a string or an array of scalars is copied out of the
-   * chunk's arena, whichever it ran in, by the trampoline the compiler emits
+   * piece's arena, whichever it ran in, by the trampoline the compiler emits
    * (runtime-cross.c), and the surface refuses every other allocated result. */
   jobs[n - 1].job.next = 0;
   nish_jobs_run(&jobs[0].job, jobs[0].job.next);

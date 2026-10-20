@@ -465,6 +465,8 @@ bool nish_is_executable(const nish_str *path);
  * `nish_net_local_port(fd)`: the port a socket is bound to.
  * `nish_tcp_listen(host, port, backlog)`: `SO_REUSEADDR`, and `::` hears
  * both families, or IPv4 alone on a kernel without IPv6.
+ * `nish_tcp_listen_flags(host, port, backlog, flags)`: the same listener,
+ * with `SO_REUSEPORT` for flag 1 (any other bit is -22).
  * `nish_tcp_accept(fd, peer)`: a new descriptor and the peer's address.
  * `nish_net_read` / `nish_net_write(fd, buf, off, len)`: bytes `[off, off +
  * len)` of `buf`, which the compiled call has range-checked; a write to a
@@ -498,6 +500,7 @@ bool nish_is_executable(const nish_str *path);
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
+int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags);
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
 int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
@@ -535,9 +538,11 @@ void nish_panic_overflow(uint32_t op);
  *
  * One region of work, divided. `nish_parallel_range` calls `body(lo, hi, ctx)`
  * once per chunk of a partition of `[0, len)`: contiguous chunks, at most one
- * element apart in size, at most `nish_cpu_count()` of them and never more than
- * `len / grain` rounded up, with chunk 0 running on the calling thread. It
- * returns when every chunk has run.
+ * element apart in size, at most `NISH_PAR_PIECES` per thread over at most
+ * `nish_cpu_count()` threads and never more than `len / grain` rounded up, with
+ * chunk 0 running on the calling thread. Each thread takes the next chunk not
+ * yet started when it finishes one, so a thread that runs slower takes fewer.
+ * It returns when every chunk has run.
  *
  * Under `-DNISH_THREADS` the other chunks run on the worker pool: threads
  * started on the first region or join that divides, one per CPU but the
@@ -674,10 +679,10 @@ int32_t nish_channel_receive(int64_t *state, int64_t *out);
  * `nish_guard_keep(old, s)` is a guard's string store (`g.value = s`): it
  * answers a copy of `s` that the `Mutex` owns, outside every arena, and frees
  * `old`, the string the slot held, when it is such a copy. `old` is null for a
- * `string | null` slot that held none; `s` is never null, since the checker
- * stores only a `string` through a guard. A copy still held
- * when its `Mutex` is dropped stays until the process ends: one block per
- * string slot, not one per store. */
+ * `string | null` slot that held none, and `s` is null for a `null` stored into
+ * one: the slot's copy is freed, nothing is kept, and the store answers null.
+ * A copy still held when its `Mutex` is dropped stays until the process ends:
+ * one block per string slot, not one per store. */
 void *nish_cross_out(void *v, uint64_t esize, uint64_t mark);
 void *nish_cross_send(void *s);
 void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark);

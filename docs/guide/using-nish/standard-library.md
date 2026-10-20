@@ -35,7 +35,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509, base64url |
-| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket |
+| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router |
 
 ## `nish/testing`
 
@@ -952,15 +952,21 @@ The protocol stack written on `nish/crypto`: TLS 1.3 (`nish/net/tls`), QUIC
 HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`) and WebTransport.
 Most of these modules are *sans-IO*: they take bytes and answer bytes, and
 never read a socket or a clock themselves, so you drive them from your own
-loop over [`nish:net`](../../LANGUAGE.md#builtin-modules-nish). The ones
+loop over [`nish:net`](networking.md). The ones
 that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 `Http1Server` and `Http1TlsServer` pools), `nish/net/http2-tls` and
 `nish/net/http3-server`; like `nish:net` itself, they are native only. Your
 loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
 its interest changed, so a keep-alive request costs one `recv` and one `send`
 and no `pollModify`. A slot borrows its output buffer only while it writes, so
-an idle connection costs a few KiB, not `outputSize`; `bench/http.mjs`
-load-tests that loop on one core.
+an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
+a slot's connection on the first accept into it and keeps it for the next, so
+a pool sized for 16,384 connections costs some 16 KiB until they come;
+`bench/http.mjs` load-tests that loop on one core.
+
+`nish/net/router` maps a request's method and path to a route you added, on
+any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
+shows it.
 
 Every final response an `Http1Connection` sends carries a `Date` field, and so
 does every final response an `Http2TlsServer` or `Http3Server` slot sends, as

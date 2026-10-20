@@ -5,6 +5,7 @@
 //   node bench/http.mjs --rounds 7 --duration 5 build/bench/h1-a
 //   node bench/http.mjs --syscalls build/bench/h1-a            # strace -c per request
 //   node bench/http.mjs --only post-json new=build/bench/h1 old=build/bench/h1-old
+//   node bench/http.mjs --cores 1,2,4 build/bench/h1             # one table set per core count
 //   node bench/http.mjs --only startup build/bench/h1 build/http-twins/bun/serve
 //
 // A server is `<path>`, labelled by its basename, or `<name>=<path>`, labelled
@@ -14,8 +15,9 @@
 // pattern, and /json-echo's and /json-echo-doc's exactly — the payload with
 // its revision one higher. / must answer `Hi`, /id/1?name=bun `1 bun` with an
 // `x-powered-by: benchmark` header, and POST /json bench/http-body.json
-// re-serialized. A server that answers 404 is `n/a` in that scenario; any
-// other wrong answer exits 1, naming the first differing byte.
+// re-serialized, and the deep route `acme api 97`. A server that answers 404
+// is `n/a` in that scenario; any other wrong answer exits 1, naming the first
+// differing byte.
 //
 // The post-json scenarios POST bench/http-payload.json (or the file
 // NISH_HTTP_PAYLOAD names) through the wrk script bench/http-post-json.lua, and
@@ -28,13 +30,20 @@
 // shell script that writes its configuration. --syscalls skips it.
 //
 // The server is pinned to CPU 0 and wrk to the others, so the server has one
-// core to itself, as the box in "max out a $12 server" did. Rounds interleave
+// core to itself, as the box in "max out a $12 server" did. `--cores 1,2,4`
+// runs every scenario once per core count N instead: the server on CPUs
+// 0..N-1 with BENCH_CORES=N in its environment (a server that reads it sizes
+// itself to N; one that cannot use more than one core prints `single-core`
+// and exits, and its cells read n/a), and wrk on the CPUs left. When none are
+// left, wrk shares the server's cores and the header and every cell say so.
+// The CPU, user and RSS figures sum over the server's whole process tree, so
+// a pre-forked server's workers count. Rounds interleave
 // the builds (a b a b ...) so that drift on a shared machine lands on all of
 // them alike; each scenario reports the median of its rounds and the spread
 // (min to max). Read a difference against the spread of two byte-identical
 // builds (pass the same binary twice, or a copy of it): that is the noise band.
 import { spawn, spawnSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { request } from "node:http"
 import { connect } from "node:net"
 import { availableParallelism } from "node:os"
@@ -47,7 +56,10 @@ let duration = 5
 let syscalls = false
 let only = null
 let slots = "16384"
+let coreCounts = null
 const bins = []
+const usage =
+  "usage: node bench/http.mjs [--rounds n] [--duration s] [--only a,b] [--cores 1,2,4] [--syscalls] [name=]<server>..."
 for (let k = 0; k < args.length; k++) {
   const a = args[k]
   if (a === "--rounds") {
@@ -60,14 +72,17 @@ for (let k = 0; k < args.length; k++) {
     only = args[++k].split(",")
   } else if (a === "--slots") {
     slots = args[++k]
+  } else if (a === "--cores") {
+    coreCounts = args[++k].split(",").map(Number)
+  } else if (a === "--help" || a === "-h") {
+    console.log(usage)
+    process.exit(0)
   } else {
     bins.push(a)
   }
 }
 if (bins.length === 0) {
-  console.error(
-    "usage: node bench/http.mjs [--rounds n] [--duration s] [--only a,b] [--syscalls] [name=]<server>..."
-  )
+  console.error(usage)
   process.exit(2)
 }
 
@@ -97,11 +112,44 @@ if (echoed === payload) {
 }
 
 const cpus = availableParallelism()
-const clientCpus = cpus > 1 ? `1-${cpus - 1}` : "0"
-const threads = String(Math.max(1, Math.min(cpus - 1, 4)))
+if (coreCounts !== null) {
+  const bad = coreCounts.find((n) => !Number.isInteger(n) || n < 1 || n > cpus)
+  if (bad !== undefined) {
+    console.error(`--cores: ${bad} is not a core count from 1 to ${cpus}`)
+    process.exit(2)
+  }
+  if (syscalls) {
+    console.error("--cores does not apply to --syscalls")
+    process.exit(2)
+  }
+}
+
+/**
+ * Where the server and wrk run with the server on `n` cores: the server on
+ * CPUs 0..n-1, wrk on the rest with as many threads (at most 4), or on the
+ * server's own cores when none are left. `n` null is the layout without
+ * `--cores`: the server on CPU 0 and no BENCH_CORES.
+ */
+const layout = (n) => {
+  const serverCores = n ?? 1
+  const free = cpus - serverCores
+  let clientCpus = `${serverCores}-${cpus - 1}`
+  if (free < 1) {
+    clientCpus = cpus > 1 ? `0-${cpus - 1}` : "0"
+  }
+  return {
+    cores: n,
+    serverCpus: serverCores === 1 ? "0" : `0-${serverCores - 1}`,
+    clientCpus,
+    threads: String(Math.max(1, Math.min(free > 0 ? free : cpus, 4))),
+    // Without --cores a one-CPU box overlaps as it always has, unannounced.
+    shared: n !== null && free < 1,
+  }
+}
 
 // Each scenario is one wrk invocation. `close` sends `Connection: close`, so
 // every request is a fresh TCP connection and the accept path is what is timed.
+const DEEP_PATH = "/v1/orgs/acme/projects/api/builds/97/artifacts"
 const scenarios = [
   // The three routes of the Bun HTTP framework benchmark: a constant, a path
   // parameter and a query parameter with a response header, and a small JSON
@@ -121,6 +169,10 @@ const scenarios = [
     post: true,
     file: payloadFile,
   },
+  // A route eight segments and three parameters deep in the Nish server's
+  // 342-route table, its answer built from the three. The twins register no
+  // such table and answer 404, so their cells read n/a.
+  { name: "deep-route keep-alive c=256", path: DEEP_PATH, conns: 256 },
   { name: "plaintext keep-alive c=4096", path: "/plaintext", conns: 4096 },
   { name: "plaintext close c=64", path: "/plaintext", conns: 64, close: true },
   // The same churn while 8,000 idle connections hold the pool's first slots:
@@ -137,13 +189,25 @@ let nextPort = 20000 + (process.pid % 20000)
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Starts `bin` on a fresh port, pinned to CPU 0; resolves once it prints `listening`. */
-const start = (bin) =>
+/**
+ * Starts `bin` on a fresh port, pinned to the layout's server CPUs; resolves
+ * once it prints `listening`, or with `singleCore` once it exits having
+ * printed `single-core` (it cannot use the BENCH_CORES it was given).
+ */
+const start = (bin, lay) =>
   new Promise((resolve, reject) => {
     nextPort += 1
     const port = nextPort
-    const argv = ["-c", "0", bin, String(port), slots]
-    const child = spawn("taskset", argv, { stdio: ["ignore", "pipe", "inherit"] })
+    const argv = ["-c", lay.serverCpus, bin, String(port), slots]
+    // Without --cores an exported BENCH_CORES is dropped, so no server goes
+    // multi-core on the one pinned CPU unannounced.
+    const env = { ...process.env }
+    if (lay.cores === null) {
+      delete env.BENCH_CORES
+    } else {
+      env.BENCH_CORES = String(lay.cores)
+    }
+    const child = spawn("taskset", argv, { stdio: ["ignore", "pipe", "inherit"], env })
     let seen = ""
     child.stdout.on("data", (d) => {
       seen += d
@@ -151,11 +215,18 @@ const start = (bin) =>
         resolve({ child, port })
       }
     })
-    child.on("exit", (code) => reject(new Error(`${bin} exited ${code} before listening: ${seen}`)))
+    // `close`, not `exit`: it comes once stdout is drained, so `seen` is whole.
+    child.on("close", (code) => {
+      if (seen.includes("single-core")) {
+        resolve({ child, port, singleCore: true })
+      } else {
+        reject(new Error(`${bin} exited ${code} before listening: ${seen}`))
+      }
+    })
   })
 
 const stop = async (child) => {
-  child.removeAllListeners("exit")
+  child.removeAllListeners("close")
   if (child.exitCode !== null || child.signalCode !== null) {
     return
   }
@@ -164,18 +235,68 @@ const stop = async (child) => {
   await done
 }
 
-/** The server's user and system CPU time so far, in microseconds (from /proc, at the kernel's tick). */
-const cpuTimes = (pid) => {
-  const stat = readFileSync(`/proc/${pid}/stat`, "utf8")
-  const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ")
-  const tick = 1e6 / 100
-  return { user: Number(fields[11]) * tick, sys: Number(fields[12]) * tick }
+/** The fields of /proc/<pid>/stat after the command name, or null once the process is gone. */
+const statFields = (pid) => {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8")
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")
+  } catch {
+    return null
+  }
 }
 
-/** The server's peak resident set, in MB. */
+/** `pid` and every process descended from it. */
+const processTree = (pid) => {
+  const children = new Map()
+  for (const entry of readdirSync("/proc")) {
+    const fields = /^\d+$/.test(entry) ? statFields(entry) : null
+    if (fields !== null) {
+      const parent = Number(fields[1])
+      children.set(parent, [...(children.get(parent) ?? []), Number(entry)])
+    }
+  }
+  const tree = [pid]
+  for (let k = 0; k < tree.length; k++) {
+    tree.push(...(children.get(tree[k]) ?? []))
+  }
+  return tree
+}
+
+/**
+ * The server's user and system CPU time so far, in microseconds (from /proc,
+ * at the kernel's tick), summed over its process tree: the live processes'
+ * own time, and the time of the children they have reaped.
+ */
+const cpuTimes = (pid) => {
+  const tick = 1e6 / 100
+  let user = 0
+  let sys = 0
+  for (const p of processTree(pid)) {
+    const fields = statFields(p)
+    if (fields !== null) {
+      user += (Number(fields[11]) + Number(fields[13])) * tick
+      sys += (Number(fields[12]) + Number(fields[14])) * tick
+    }
+  }
+  return { user, sys }
+}
+
+/** The server's peak resident set in MB, summed over its process tree. */
 const peakRss = (pid) => {
-  const m = readFileSync(`/proc/${pid}/status`, "utf8").match(/VmHWM:\s+(\d+) kB/)
-  return m ? Number(m[1]) / 1024 : Number.NaN
+  let kb = 0
+  for (const p of processTree(pid)) {
+    try {
+      const m = readFileSync(`/proc/${p}/status`, "utf8").match(/VmHWM:\s+(\d+) kB/)
+      if (m) {
+        kb += Number(m[1])
+      } else if (p === pid) {
+        kb = Number.NaN
+      }
+    } catch {
+      // Gone since the tree was read.
+    }
+  }
+  return kb / 1024
 }
 
 /** The server's resident set now, in MB. */
@@ -207,14 +328,14 @@ const parseLatency = (text) => {
 }
 
 /** One wrk run against `port`: requests per second, p99 in ms, and socket errors. */
-const wrk = (scenario, port, seconds) => {
+const wrk = (scenario, port, seconds, lay) => {
   const argv = [
     "-c",
-    clientCpus,
+    lay.clientCpus,
     "wrk",
     "--latency",
     "-t",
-    threads,
+    lay.threads,
     "-c",
     String(scenario.conns),
     "-d",
@@ -301,6 +422,9 @@ const contract = (scenario) => {
   if (scenario.path.startsWith("/id/")) {
     return { exact: "1 bun", headers: { "x-powered-by": "benchmark" } }
   }
+  if (scenario.path === DEEP_PATH) {
+    return { exact: "acme api 97" }
+  }
   if (scenario.path === "/plaintext") {
     return { exact: "Hello, World!" }
   }
@@ -366,7 +490,7 @@ if (syscalls) {
       const file = `/tmp/nish-http-strace-${process.pid}-${k}.txt`
       // Attach once the pool is built: its start-up is thousands of brk calls
       // that are not per-request work and that strace makes slow.
-      const { child, port: p } = await start(server.path)
+      const { child, port: p } = await start(server.path, layout(null))
       if (!(await verify(k, scenario, p, child))) {
         await stop(child)
         console.log(`${scenario.name} | ${label(k)} | n/a`)
@@ -374,7 +498,7 @@ if (syscalls) {
       }
       const tracer = spawn("strace", ["-c", "-f", "-o", file, "-p", String(child.pid)], { stdio: "ignore" })
       await sleep(500)
-      const r = wrk(scenario, p, 2)
+      const r = wrk(scenario, p, 2, layout(null))
       const traced = new Promise((resolve) => tracer.on("exit", resolve))
       tracer.kill("SIGINT")
       await traced
@@ -412,8 +536,12 @@ const startup = async (bin) => {
   nextPort += 1
   const port = nextPort
   const began = performance.now()
+  // One core, as without --cores: an exported BENCH_CORES is dropped here too.
+  const env = { ...process.env }
+  delete env.BENCH_CORES
   const child = spawn("taskset", ["-c", "0", bin, String(port), slots], {
     stdio: ["ignore", "ignore", "inherit"],
+    env,
   })
   let exited = null
   child.on("exit", (code) => {
@@ -449,71 +577,99 @@ const startup = async (bin) => {
 /** Each round starts every server this many times, in the round's order. */
 const STARTS_PER_ROUND = 4
 
-console.log(
-  `# ${new Date().toISOString()}  server on CPU 0, wrk -t${threads} on CPUs ${clientCpus}, ${rounds} rounds x ${duration}s`
-)
-for (const scenario of scenarios) {
-  const results = servers.map(() => ({
-    rps: [],
-    p99: [],
-    user: [],
-    sys: [],
-    rss: [],
-    errors: new Set(),
-    na: false,
-  }))
-  for (let round = 0; round < rounds; round++) {
-    // Alternate the order each round so neither build always runs first.
-    const order = servers.map((_, k) => k).filter((k) => !results[k].na)
-    if (round % 2 === 1) {
-      order.reverse()
-    }
-    for (const k of order) {
-      const { child, port: p } = await start(servers[k].path)
-      if (round === 0 && !(await verify(k, scenario, p, child))) {
-        results[k].na = true
+/** Times every scenario with the server and wrk placed as `lay` says, and prints a table per scenario. */
+const runLayout = async (lay) => {
+  const cores = lay.cores === null ? "" : `${lay.cores} ${lay.cores === 1 ? "core" : "cores"}`
+  const cpu = lay.serverCpus.includes("-") ? "CPUs" : "CPU"
+  const where = `server on ${cores ? `${cores}, ` : ""}${cpu} ${lay.serverCpus}, wrk -t${lay.threads} on CPUs ${lay.clientCpus}`
+  console.log(
+    `# ${new Date().toISOString()}  ${where}${lay.shared ? " (client shares server cores)" : ""}, ${rounds} rounds x ${duration}s`
+  )
+  for (const scenario of scenarios) {
+    const results = servers.map(() => ({
+      rps: [],
+      p99: [],
+      user: [],
+      sys: [],
+      rss: [],
+      errors: new Set(),
+      na: null,
+    }))
+    for (let round = 0; round < rounds; round++) {
+      // Alternate the order each round so neither build always runs first.
+      const order = servers.map((_, k) => k).filter((k) => results[k].na === null)
+      if (round % 2 === 1) {
+        order.reverse()
+      }
+      for (const k of order) {
+        const { child, port: p, singleCore } = await start(servers[k].path, lay)
+        if (singleCore) {
+          results[k].na = "single-core"
+          continue
+        }
+        if (round === 0 && !(await verify(k, scenario, p, child))) {
+          results[k].na = "no route (404)"
+          await stop(child)
+          continue
+        }
+        const idle = scenario.idle ? await holdIdle(scenario.idle, p) : []
+        await sleep(200)
+        wrk(scenario, p, 1, lay) // warm-up: fills the slots, faults in the pages
+        const before = cpuTimes(child.pid)
+        const r = wrk(scenario, p, duration, lay)
+        const after = cpuTimes(child.pid)
+        results[k].rss.push(peakRss(child.pid))
+        for (const socket of idle) {
+          socket.destroy()
+        }
         await stop(child)
+        results[k].rps.push(r.rps)
+        results[k].p99.push(r.p99)
+        results[k].user.push((after.user - before.user) / r.total)
+        results[k].sys.push((after.sys - before.sys) / r.total)
+        if (r.errors) {
+          results[k].errors.add(r.errors)
+        }
+      }
+    }
+    console.log(`\n## ${scenario.name}${cores ? `, ${cores}` : ""}`)
+    console.log(
+      "| build | req/s (median) | spread | p99 ms | user µs/req | sys µs/req | peak RSS MB | notes |"
+    )
+    console.log("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+    const baseIndex = results.findIndex((r) => r.na === null)
+    const base = baseIndex < 0 ? Number.NaN : median(results[baseIndex].rps)
+    for (const k of servers.keys()) {
+      const r = results[k]
+      if (r.na === "single-core") {
+        console.log(`| ${label(k)} | n/a (single-core) | n/a | n/a | n/a | n/a | n/a | uses one core only |`)
         continue
       }
-      const idle = scenario.idle ? await holdIdle(scenario.idle, p) : []
-      await sleep(200)
-      wrk(scenario, p, 1) // warm-up: fills the slots, faults in the pages
-      const before = cpuTimes(child.pid)
-      const r = wrk(scenario, p, duration)
-      const after = cpuTimes(child.pid)
-      results[k].rss.push(peakRss(child.pid))
-      for (const socket of idle) {
-        socket.destroy()
+      if (r.na !== null) {
+        console.log(`| ${label(k)} | n/a | n/a | n/a | n/a | n/a | n/a | ${r.na} |`)
+        continue
       }
-      await stop(child)
-      results[k].rps.push(r.rps)
-      results[k].p99.push(r.p99)
-      results[k].user.push((after.user - before.user) / r.total)
-      results[k].sys.push((after.sys - before.sys) / r.total)
-      if (r.errors) {
-        results[k].errors.add(r.errors)
-      }
+      const m = median(r.rps)
+      const lo = Math.min(...r.rps)
+      const hi = Math.max(...r.rps)
+      const delta =
+        k === baseIndex ? "" : ` (${m >= base ? "+" : ""}${(((m - base) / base) * 100).toFixed(1)}%)`
+      const notes = [...(lay.shared ? ["client shares server cores"] : []), ...r.errors].join(" ")
+      console.log(
+        `| ${label(k)} | ${Math.round(m).toLocaleString("en-US")}${delta} | ${Math.round(lo).toLocaleString("en-US")}–${Math.round(hi).toLocaleString("en-US")} | ${median(r.p99).toFixed(2)} | ${median(r.user).toFixed(2)} | ${median(r.sys).toFixed(2)} | ${Math.round(median(r.rss))} | ${notes} |`
+      )
     }
   }
-  console.log(`\n## ${scenario.name}`)
-  console.log("| build | req/s (median) | spread | p99 ms | user µs/req | sys µs/req | peak RSS MB | notes |")
-  console.log("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
-  const baseIndex = results.findIndex((r) => !r.na)
-  const base = baseIndex < 0 ? Number.NaN : median(results[baseIndex].rps)
-  for (const k of servers.keys()) {
-    const r = results[k]
-    if (r.na) {
-      console.log(`| ${label(k)} | n/a | n/a | n/a | n/a | n/a | n/a | no route (404) |`)
-      continue
+}
+
+if (coreCounts === null) {
+  await runLayout(layout(null))
+} else {
+  for (const [j, n] of coreCounts.entries()) {
+    if (j > 0) {
+      console.log("")
     }
-    const m = median(r.rps)
-    const lo = Math.min(...r.rps)
-    const hi = Math.max(...r.rps)
-    const delta =
-      k === baseIndex ? "" : ` (${m >= base ? "+" : ""}${(((m - base) / base) * 100).toFixed(1)}%)`
-    console.log(
-      `| ${label(k)} | ${Math.round(m).toLocaleString("en-US")}${delta} | ${Math.round(lo).toLocaleString("en-US")}–${Math.round(hi).toLocaleString("en-US")} | ${median(r.p99).toFixed(2)} | ${median(r.user).toFixed(2)} | ${median(r.sys).toFixed(2)} | ${Math.round(median(r.rss))} | ${[...r.errors].join(" ")} |`
-    )
+    await runLayout(layout(n))
   }
 }
 

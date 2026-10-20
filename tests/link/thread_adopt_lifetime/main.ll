@@ -72,7 +72,7 @@ declare void @nish_scope_join(i8* noundef nonnull) #0
 declare void @nish_channel_count(i64* noundef nonnull, i64 noundef) #0
 declare noundef i32 @nish_channel_receive(i64* noundef nonnull, i64* noundef nonnull) #0
 declare i8* @nish_cross_in(i8* noundef, i64 noundef) #0
-declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #0
+declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #0
 declare i64 @llvm.smin.i64(i64, i64) #2
 declare i64 @llvm.smax.i64(i64, i64) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
@@ -2448,34 +2448,44 @@ bounds.ok.1:
 define noundef i32 @nish_main() #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = call i8* @reclaimable(i32 500)
-  call void @nish_print(i8* %0)
-  %1 = call i8* @reclaimable(i32 80000)
-  call void @nish_print(i8* %1)
-  %2 = call i8* @nested()
+  %0 = call i64 @nish_arena_mark()
+  %1 = call i8* @reclaimable(i32 500)
+  %2 = call i8* @nish_arena_keep(i64 %0, i8* %1)
   call void @nish_print(i8* %2)
   %3 = call i64 @nish_arena_mark()
-  %4 = call i8* @bigRows()
+  %4 = call i8* @reclaimable(i32 80000)
   %5 = call i8* @nish_arena_keep(i64 %3, i8* %4)
   call void @nish_print(i8* %5)
-  %6 = call i8* @twice()
-  call void @nish_print(i8* %6)
-  %7 = call i8* @reclaimAfter()
-  call void @nish_print(i8* %7)
-  %8 = call i8* @channel()
+  %6 = call i64 @nish_arena_mark()
+  %7 = call i8* @nested()
+  %8 = call i8* @nish_arena_keep(i64 %6, i8* %7)
   call void @nish_print(i8* %8)
-  %9 = call i8* @guard()
-  call void @nish_print(i8* %9)
-  %10 = call i8* @shapes(i32 500)
-  call void @nish_print(i8* %10)
-  %11 = call i8* @shapes(i32 80000)
+  %9 = call i64 @nish_arena_mark()
+  %10 = call i8* @bigRows()
+  %11 = call i8* @nish_arena_keep(i64 %9, i8* %10)
   call void @nish_print(i8* %11)
-  %12 = call i8* @inArena()
+  %12 = call i8* @twice()
   call void @nish_print(i8* %12)
-  %13 = call i8* @into(i32 80000)
+  %13 = call i8* @reclaimAfter()
   call void @nish_print(i8* %13)
-  %14 = call i8* @picked(i32 80000)
+  %14 = call i8* @channel()
   call void @nish_print(i8* %14)
+  %15 = call i8* @guard()
+  call void @nish_print(i8* %15)
+  %16 = call i64 @nish_arena_mark()
+  %17 = call i8* @shapes(i32 500)
+  %18 = call i8* @nish_arena_keep(i64 %16, i8* %17)
+  call void @nish_print(i8* %18)
+  %19 = call i64 @nish_arena_mark()
+  %20 = call i8* @shapes(i32 80000)
+  %21 = call i8* @nish_arena_keep(i64 %19, i8* %20)
+  call void @nish_print(i8* %21)
+  %22 = call i8* @inArena()
+  call void @nish_print(i8* %22)
+  %23 = call i8* @into(i32 80000)
+  call void @nish_print(i8* %23)
+  %24 = call i8* @picked(i32 80000)
+  call void @nish_print(i8* %24)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
