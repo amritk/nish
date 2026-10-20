@@ -41,10 +41,12 @@
  *
  * A function is timed 102 ways at once (uncropped, 100 cropped percentiles and
  * a second-order test), and the largest |t| of 102 correlated tests on a
- * shared machine crosses 4.5 now and then with no leak behind it: the A/A run
- * measured that rate (docs/security/ct-verification.md, "The re-measure
- * rule"). So a function above 4.5 is timed again, alone, on a fresh seed
- * derived from the run's, and is a finding only when it crosses on both. One
+ * shared machine crosses 4.5 now and then with no leak behind it: the CI
+ * runners have done it once in some 260 function-runs, and the A/A run
+ * (`--null`) measures the rate on a machine (docs/security/ct-verification.md,
+ * "The re-measure rule"). So a function above 4.5 is timed again, by itself in
+ * the same linked driver, on a fresh seed derived from the run's, and is a
+ * finding only when it crosses on both. One
  * that crossed once and not again stays in the table, as "crossed once, did not
  * repeat". A control is never re-measured: it must differ on its first
  * measurement.
@@ -464,8 +466,8 @@ for (const file of fixtures) {
     const domainControl = domainControlNames.has(reading.fn)
     // Under --null no class differs, so a control is read like any other function.
     const control = !nullRun && (controls.has(reading.fn) || domainControl)
-    // A function over the threshold is timed again, alone, on a fresh seed, and is a finding only if it
-    // crosses again. A control is never re-measured: it must differ the first time.
+    // A function over the threshold is timed again, by itself in the same driver, on a fresh seed, and is
+    // a finding only if it crosses again. A control is never re-measured: it must differ the first time.
     const again =
       !control && reading.max > THRESHOLD ? measure(name, exe, freshSeed, [reading.fn])[0].max : null
     rows.push({ fixture: name, ...reading, again, control, domainControl })

@@ -49,9 +49,11 @@ the record that found it. The notes below the table name each such finding.
    by the runtime stage. The one source left, `join`, was closed with CG-3
    (#427, for #382) and is counted under it.
 2. CT-13, High *if real*, is closed as an artefact and is not counted: it did
-   not reproduce in 54 runs on the VM that read it or on the CI runners, and
-   `ladderStep`'s code on both targets is made of instructions whose time
-   does not follow their operands. CT-19 (Low), the weekly run failed by one
+   not reproduce in 54 later runs on a VM of the same class or in three
+   weekly runs on the CI runners, and `ladderStep`'s code on both targets is
+   made of instructions whose time does not follow their operands. The host
+   and the driver layout that read the 35–42 were never re-measured, so its
+   cause is not known. CT-19 (Low), the weekly run failed by one
    reading of `macEqual` that did not repeat, is fixed by the harness's
    re-measure rule and counted as a fixed Low.
 3. CG-9 (Low) was fixed by the runtime stage as RT-7; the codegen record
