@@ -1,5 +1,6 @@
-// The net/http twin of bench/http1-server.ts. GOMAXPROCS=1 gives the Go
-// scheduler one thread to run goroutines on, the one core the Nish server gets.
+// The net/http twin of bench/http1-server.ts. GOMAXPROCS is BENCH_CORES, the
+// cores bench/http.mjs gives the server (1 when it is unset), so the Go
+// scheduler runs goroutines on as many threads as the Nish server gets cores.
 //
 //	serve <port> [ignored...]
 package main
@@ -12,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -25,6 +28,8 @@ type message struct {
 func answer(w http.ResponseWriter, r *http.Request) {
 	n := requests.Add(1)
 	h := w.Header()
+	id, isQuery := strings.CutPrefix(r.URL.Path, "/id/")
+	isQuery = isQuery && id != "" && !strings.Contains(id, "/")
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/plaintext":
 		h.Set("Content-Type", "text/plain")
@@ -50,6 +55,33 @@ func answer(w http.ResponseWriter, r *http.Request) {
 		body, _ := json.Marshal(order)
 		h.Set("Content-Type", "application/json")
 		w.Write(body)
+	case r.Method == http.MethodPost && r.URL.Path == "/json":
+		// Any JSON value is re-serialized compactly; encoding/json writes an
+		// object's keys sorted.
+		var value any
+		in, err := io.ReadAll(r.Body)
+		if err == nil {
+			err = json.Unmarshal(in, &value)
+		}
+		if err != nil {
+			h.Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, "bad request")
+			return
+		}
+		body, _ := json.Marshal(value)
+		h.Set("Content-Type", "application/json")
+		w.Write(body)
+	case r.Method == http.MethodGet && r.URL.Path == "/":
+		h.Set("Content-Type", "text/plain")
+		io.WriteString(w, "Hi")
+	case r.Method == http.MethodGet && isQuery:
+		h.Set("Content-Type", "text/plain")
+		h.Set("x-powered-by", "benchmark")
+		io.WriteString(w, id+" "+r.URL.Query().Get("name"))
+	case extra(r.Method, r.URL.Path):
+		h.Set("Content-Type", "text/plain")
+		io.WriteString(w, "ok")
 	default:
 		h.Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusNotFound)
@@ -57,8 +89,17 @@ func answer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// benchCores is BENCH_CORES, or 1 when it is unset or not a positive count.
+func benchCores() int {
+	n, err := strconv.Atoi(os.Getenv("BENCH_CORES"))
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
+}
+
 func main() {
-	runtime.GOMAXPROCS(1)
+	runtime.GOMAXPROCS(benchCores())
 	port := "8080"
 	if len(os.Args) > 1 {
 		port = os.Args[1]

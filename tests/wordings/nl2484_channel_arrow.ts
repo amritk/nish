@@ -15,8 +15,7 @@ const apply = <T>(x: T, f: (x: T) => i32): i32 => f(x);
 
 const relay = (p: Pipe): i32 =>
   apply(p, (q: Pipe): i32 => {
-    const c = q.ch;
-    c.send(1);
+    q.ch.send(1);
     return 1;
   });
 

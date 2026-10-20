@@ -14,6 +14,17 @@
 //                        It is laxer than /json-echo: any object with an
 //                        integer `revision` is echoed, where /json-echo
 //                        answers 400 to anything that is not a whole order
+//   GET /           `Hi`, the ping route
+//   GET /id/<id>?name=<name>  `<id> <name>` and an `x-powered-by: benchmark`
+//                   field: one path segment and one query parameter, both
+//                   taken as they are written, with no percent-decoding
+//   POST /json      any JSON document (bench/http-body.json), parsed into the
+//                   reused `JsonDocument` and written back compact
+//   the extra routes  the 112 patterns of bench/http-twins/extra-routes.mjs,
+//                   kept equal to it below, `ok` to a GET of one and to a POST
+//                   of one with `/submit` after it. They are tried last, one
+//                   by one, and never under load: they are there because
+//                   every router twin registers them
 //
 // A request body is gathered from `H1_BODY` events into a buffer its slot
 // keeps, and answered at `H1_END`: 400 when it is not an order. A body past
@@ -56,6 +67,12 @@ const MAX_BODY: i32 = 4096
 const ROUTE_NONE: i32 = 0
 const ROUTE_ECHO: i32 = 1
 const ROUTE_ECHO_DOC: i32 = 2
+const ROUTE_BODY: i32 = 3
+const SLASH: i32 = 47
+const COLON: i32 = 58
+const QUESTION: i32 = 63
+const AMPERSAND: i32 = 38
+const EQUALS: i32 = 61
 /** The highest revision an echo raises; past it, an `i32` would overflow, which aborts. */
 const LAST_REVISION: i32 = 2147483646
 
@@ -114,6 +131,89 @@ const bytesOf = (s: string): u8[] => {
   return out
 }
 
+/**
+ * The extra routes' patterns, kept equal to bench/http-twins/extra-routes.mjs,
+ * which check.mjs asks every server, this one included.
+ */
+const extraRoutes = (): string[] => {
+  const statics: string[] = [
+    "/catalog/products",
+    "/catalog/categories",
+    "/catalog/brands",
+    "/cart/items",
+    "/cart/totals",
+    "/checkout/shipping",
+    "/checkout/payment",
+    "/checkout/review",
+    "/orders/recent",
+    "/orders/archived",
+    "/account/addresses",
+    "/account/cards",
+    "/account/security",
+    "/support/tickets",
+    "/support/faq",
+    "/stores/nearby",
+    "/stores/hours",
+    "/promotions/active",
+    "/reviews/latest",
+    "/wishlist/shared",
+  ]
+  const params: string[] = [
+    "/orders/:orderId",
+    "/orders/:orderId/items",
+    "/orders/:orderId/items/:itemId",
+    "/orders/:orderId/items/:itemId/returns",
+    "/products/:productId",
+    "/products/:productId/reviews",
+    "/products/:productId/reviews/:reviewId",
+    "/customers/:customerId/orders",
+  ]
+  const prefixes: string[] = ["", "/:locale", "/v2", "/v2/:locale"]
+  const out: string[] = []
+  for (const prefix of prefixes) {
+    for (const route of statics) {
+      out.push(prefix + route)
+    }
+    for (const route of params) {
+      out.push(prefix + route)
+    }
+  }
+  return out
+}
+
+/** Where `head[start .. end)` first holds `b`, or `end`. */
+const indexOf = (head: u8[], start: i32, end: i32, b: i32): i32 => {
+  let i: i32 = start
+  while (i >= 0 && i < end && i < head.length && toI32(head[i]) !== b) {
+    i = i + 1
+  }
+  return i
+}
+
+/** Whether the path `head[start .. end)` is one `pattern` names; a `:name` segment matches any one non-empty segment. */
+const pathMatches = (head: u8[], start: i32, end: i32, pattern: u8[]): boolean => {
+  const n: i32 = toI32(pattern.length)
+  let i: i32 = start
+  let k: i32 = 0
+  while (k >= 0 && k < n && k < pattern.length) {
+    if (toI32(pattern[k]) === COLON) {
+      const from: i32 = i
+      i = indexOf(head, i, end, SLASH)
+      if (i === from) {
+        return false
+      }
+      k = indexOf(pattern, k, n, SLASH)
+    } else {
+      if (i < 0 || i >= end || i >= head.length || head[i] !== pattern[k]) {
+        return false
+      }
+      i = i + 1
+      k = k + 1
+    }
+  }
+  return i === end
+}
+
 class Bench {
   server: Http1Server
   loop: i32 = -1
@@ -138,6 +238,14 @@ class Bench {
   doc: JsonDocument
   badRequest: u8[]
   tooLarge: u8[]
+  hi: u8[]
+  ok: u8[]
+  queryNames: u8[][]
+  queryValues: u8[][]
+  space: u8[]
+  /** The extra routes' GET patterns, and the same with `/submit` after each for a POST. */
+  extraGets: u8[][]
+  extraPosts: u8[][]
   requests: i32 = 0
   /** Return from `run` once this many requests are answered; 0 serves forever. */
   limit: i32 = 0
@@ -168,6 +276,17 @@ class Bench {
     this.doc = new JsonDocument(new JsonLimits())
     this.badRequest = bytesOf("bad request")
     this.tooLarge = bytesOf("payload too large")
+    this.hi = bytesOf("Hi")
+    this.ok = bytesOf("ok")
+    this.queryNames = [bytesOf("Server"), bytesOf("Content-Type"), bytesOf("x-powered-by")]
+    this.queryValues = [bytesOf("nish"), bytesOf("text/plain"), bytesOf("benchmark")]
+    this.space = bytesOf(" ")
+    this.extraGets = []
+    this.extraPosts = []
+    for (const pattern of extraRoutes()) {
+      this.extraGets.push(bytesOf(pattern))
+      this.extraPosts.push(bytesOf(`${pattern}/submit`))
+    }
   }
 
   /** Starts an echo at its head, or answers any other request from the head alone. */
@@ -178,6 +297,8 @@ class Bench {
         route = ROUTE_ECHO
       } else if (conn.parser.targetIs("/json-echo-doc")) {
         route = ROUTE_ECHO_DOC
+      } else if (conn.parser.targetIs("/json")) {
+        route = ROUTE_BODY
       }
     }
     this.route[slot] = route
@@ -223,10 +344,14 @@ class Bench {
     }
     const w: JsonWriter = this.writer
     w.reset(this.jsonBuf, ZERO)
-    const ok: boolean =
-      route === ROUTE_ECHO
-        ? this.echo(this.bodies[slot], length, w)
-        : this.echoDoc(this.bodies[slot], length, w)
+    let ok: boolean = false
+    if (route === ROUTE_ECHO) {
+      ok = this.echo(this.bodies[slot], length, w)
+    } else if (route === ROUTE_ECHO_DOC) {
+      ok = this.echoDoc(this.bodies[slot], length, w)
+    } else {
+      ok = this.rewrite(this.bodies[slot], length, w)
+    }
     if (!ok || w.failed !== 0) {
       this.reply(conn, 400, this.badRequest)
       return
@@ -273,6 +398,17 @@ class Bench {
     return true
   }
 
+  /** `POST /json`: parses any JSON document into `this.doc` and writes it back onto `w`, compact. */
+  rewrite(body: u8[], length: i32, w: JsonWriter): boolean {
+    const doc: JsonDocument = this.doc
+    const root: i32 = doc.parse(body, ZERO, length)
+    if (root < 0) {
+      return false
+    }
+    doc.write(root, w)
+    return true
+  }
+
   reply(conn: Http1Connection, status: i32, body: u8[]): void {
     conn.respond(status, this.textNames, this.textValues, toI32(body.length))
     conn.write(body, ZERO, toI32(body.length))
@@ -298,11 +434,84 @@ class Bench {
       conn.respond(200, this.textNames, this.textValues, toI32(this.plainBody.length))
       conn.write(this.plainBody, ZERO, toI32(this.plainBody.length))
       conn.end()
+    } else if (conn.parser.methodIs("GET") && conn.parser.targetIs("/")) {
+      this.reply(conn, 200, this.hi)
+    } else if (conn.parser.methodIs("GET") && this.query(conn)) {
+      // `query` answered it.
+    } else if (this.extra(conn)) {
+      this.reply(conn, 200, this.ok)
     } else {
-      conn.respond(404, this.textNames, this.textValues, toI32(this.notFound.length))
-      conn.write(this.notFound, ZERO, toI32(this.notFound.length))
-      conn.end()
+      this.reply(conn, 404, this.notFound)
     }
+  }
+
+  /** `GET /id/<id>?name=<name>`: answers `<id> <name>`, or says the target is not that route. */
+  query(conn: Http1Connection): boolean {
+    const head: u8[] = conn.parser.head
+    const start: i32 = conn.parser.targetStart
+    const end: i32 = conn.parser.targetEnd
+    if (
+      end - start < 5 ||
+      toI32(head[start]) !== SLASH ||
+      head[start + 1] !== 105 ||
+      head[start + 2] !== 100 ||
+      toI32(head[start + 3]) !== SLASH
+    ) {
+      return false
+    }
+    const path: i32 = indexOf(head, start, end, QUESTION)
+    const id: i32 = start + 4
+    if (path === id || indexOf(head, id, path, SLASH) !== path) {
+      return false
+    }
+    // The first `name` parameter's value; empty when there is none.
+    let nameStart: i32 = path
+    let nameEnd: i32 = path
+    let at: i32 = path + 1
+    while (at < end) {
+      const next: i32 = indexOf(head, at, end, AMPERSAND)
+      const equals: i32 = indexOf(head, at, next, EQUALS)
+      if (
+        equals - at === 4 &&
+        at >= 0 &&
+        at + 3 < head.length &&
+        head[at] === 110 &&
+        head[at + 1] === 97 &&
+        head[at + 2] === 109 &&
+        head[at + 3] === 101
+      ) {
+        nameStart = equals < next ? equals + 1 : next
+        nameEnd = next
+        at = end
+      } else {
+        at = next + 1
+      }
+    }
+    conn.respond(200, this.queryNames, this.queryValues, path - id + 1 + nameEnd - nameStart)
+    conn.write(head, id, path - id)
+    conn.write(this.space, ZERO, 1)
+    conn.write(head, nameStart, nameEnd - nameStart)
+    conn.end()
+    return true
+  }
+
+  /** Whether the request is a GET of an extra route, or a POST of one with `/submit` after it. */
+  extra(conn: Http1Connection): boolean {
+    const head: u8[] = conn.parser.head
+    const start: i32 = conn.parser.targetStart
+    const path: i32 = indexOf(head, start, conn.parser.targetEnd, QUESTION)
+    let patterns: u8[][] = []
+    if (conn.parser.methodIs("GET")) {
+      patterns = this.extraGets
+    } else if (conn.parser.methodIs("POST")) {
+      patterns = this.extraPosts
+    }
+    for (const pattern of patterns) {
+      if (pathMatches(head, start, path, pattern)) {
+        return true
+      }
+    }
+    return false
   }
 
   acceptAll(): void {
