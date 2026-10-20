@@ -34,16 +34,19 @@
  *
  * **Borrowed buffers.** The record being read, the record being opened, the
  * bytes to send and the application data waiting for the caller each live in
- * an array borrowed from a `TlsRecordPools` only while it holds bytes, and
- * given back zeroed with `BufferPool.giveSecret` once it is empty, so an idle
- * connection holds none of them, a connection that has finished its
- * handshake allocates nothing that outlives a record, and a slot can be
- * handed the next connection with `start`. The handshake's messages are sealed straight
- * out of `TlsServer`'s own buffers, and the application secrets are copied
- * into this slot's fields, so a slot that hands its `TlsServer` the next
- * connection with `restart` runs every handshake after the first without
- * moving the arena, whichever suite it negotiates; a KeyUpdate's key
- * install leaves nothing either (TLS-3 in `docs/security/tls.md`). When the caller leaves application data unread
+ * an array borrowed from a `TlsRecordPools` when the connection first needs
+ * it, kept while the connection lasts, and given back zeroed with
+ * `BufferPool.giveSecret` when it ends (`start`, `wipe`, `release`), so a
+ * slot with no connection holds none of them, a connection that has finished
+ * its handshake allocates nothing that outlives a record, and a slot can be
+ * handed the next connection with `start`. Each give-back zeroes the whole
+ * buffer, so it happens once a connection rather than once a record. The handshake's messages are
+ * sealed straight out of `TlsServer`'s own buffers, and the application
+ * secrets are copied into this slot's fields, so a slot that hands its
+ * `TlsServer` the next connection with `restart` runs every handshake after
+ * the first without moving the arena, whichever suite it negotiates; a
+ * KeyUpdate's key install leaves nothing either (TLS-3 in
+ * `docs/security/tls.md`). When the caller leaves application data unread
  * for long enough to fill its buffer, records stay in the reader and
  * `interest` stops asking for reads, which is how the peer is made to wait.
  *
@@ -279,11 +282,11 @@ export class TlsRecordServer {
   reader: TlsRecordReader
   readProtection: TlsRecordProtection
   writeProtection: TlsRecordProtection
-  /** Bytes to send are `output[outputStart .. outputEnd)`; `empty` while none are waiting. */
+  /** Bytes to send are `output[outputStart .. outputEnd)`; `empty` until a record is sealed. */
   output: u8[]
-  /** Application data the caller has not read is `plain[plainStart .. plainEnd)`; `empty` while there is none. */
+  /** Application data the caller has not read is `plain[plainStart .. plainEnd)`; `empty` until a record brings some. */
   plain: u8[]
-  /** Where a record is opened to, held only while `process` handles one; `empty` otherwise. */
+  /** Where a record is opened to; `empty` until the first protected record. */
   scratch: u8[]
   /** The zero-length array a buffer field is while it holds no borrowed buffer. */
   empty: u8[]
@@ -388,6 +391,7 @@ export class TlsRecordServer {
     this.writeLevel = TLS_LEVEL_INITIAL
     this.dropOutput()
     this.dropPlain()
+    this.giveBackIdle()
     this.firstMessageSeen = false
     this.started = false
     this.postHandshakeLength = 0
@@ -425,11 +429,12 @@ export class TlsRecordServer {
   }
 
   /**
-   * Gives back each record buffer that holds nothing still needed: `output`
-   * once everything in it is sent, `plain` once the caller has read it all,
-   * and `scratch` between records. The reader gives its own back as it
-   * empties. Zeroed with `giveSecret`: every one held plaintext or handshake
-   * bytes, and the next connection to borrow it reads zeros.
+   * Gives back each record buffer that holds nothing still needed, as a
+   * connection ends: `output` once everything in it is sent, `plain` once the
+   * caller has read it all, and `scratch`. Zeroed with `giveSecret`: every one
+   * held plaintext or handshake bytes, and the next connection to borrow it
+   * reads zeros. Not called between records, since `giveSecret` zeroes the
+   * whole buffer however little of it a record used.
    */
   giveBackIdle(): void {
     if (this.output.length > 0 && this.outputStart === this.outputEnd) {
@@ -629,7 +634,6 @@ export class TlsRecordServer {
     this.outputStart = 0
     this.outputEnd = 0
     this.dropPending()
-    this.giveBackIdle()
   }
 
   /** Forgets what is owed but not yet sealed: the handshake queues, the compatibility record, a KeyUpdate and a close. */
@@ -676,7 +680,6 @@ export class TlsRecordServer {
     }
     this.checkTruncation()
     this.pump()
-    this.giveBackIdle()
   }
 
   /**
@@ -1235,7 +1238,6 @@ export class TlsRecordServer {
       this.outputEnd = 0
     }
     this.pump()
-    this.giveBackIdle()
   }
 
   /**
@@ -1285,8 +1287,6 @@ export class TlsRecordServer {
       }
       done = done + chunk
     }
-    // A borrowing that sealed nothing goes straight back.
-    this.giveBackIdle()
     if (done === 0 && len > 0) {
       return this.state === TLS_RECORD_STATE_FAILED ? TLS_RECORD_RESET : TLS_RECORD_AGAIN
     }

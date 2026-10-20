@@ -332,8 +332,8 @@ the limit brought forward from 2^24 to 2).
 
 **Bounded memory after the handshake.** The reader, the output, the
 application-data buffer and the open scratch are borrowed from pools the
-carrier owns and given back, zeroed, as each empties (What moves between
-connections, below); a caller that reads
+carrier owns and given back, zeroed, when the connection ends (What moves
+between connections, below); a caller that reads
 slowly makes the connection stop asking to be read rather than buffer more;
 two hundred echoes over a socket move the arena by 0 bytes, and so does each
 of the 64 KeyUpdates a connection takes, answered (`net_tls_record_refusals`).
@@ -455,26 +455,30 @@ times 1,024 of them whether or not a client ever connected. They are now
 borrowed from four `BufferPool`s the carrier owns (`TlsRecordPools`, made in
 `TlsTcpServer`'s constructor and handed to each slot by
 `TlsRecordServer.borrowFrom`), taken on the first byte a connection needs
-them for and given back as soon as they hold nothing still needed. A buffer
+them for, kept while it lasts, and given back when it ends. A buffer
 another connection held is the one thing that moves between connections, so
 every one goes back through `BufferPool.giveSecret`, whose volatile stores no
 optimisation removes, never through `give`:
 
 | Buffer | Pool's size | What it held | Given back, zeroed |
 |---|---|---|---|
-| `output` | 2 · `TLS_MAX_RECORD` | Records sealed to send: the ServerHello and any alert before the handshake keys in the clear, every later handshake message and the application data as ciphertext | `giveSecret(output, outputUsed)` in `TlsRecordServer.giveBackIdle`, once every byte is sent (`outputStart === outputEnd`) |
-| `plain` | 2 · `TLS_MAX_PLAINTEXT` | Decrypted application data waiting for the caller | `giveSecret(plain, plainUsed)` in `giveBackIdle`, once the caller has read it all |
-| `scratch` | `TLS_MAX_PLAINTEXT` | The record being opened, its plaintext once the tag verifies | `giveSecret(scratch, TLS_RECORD_SCRATCH_SIZE)` in `giveBackIdle`, between records: `open` may write as far as the ciphertext, so all of it |
-| reader | `TLS_MAX_RECORD` | Ciphertext records, and the ClientHello, as read off the socket | `giveSecret(buffer, TLS_MAX_RECORD)` in `TlsRecordReader.giveBack`, as soon as it holds no byte |
+| `output` | 2 · `TLS_MAX_RECORD` | Records sealed to send: the ServerHello and any alert before the handshake keys in the clear, every later handshake message and the application data as ciphertext | `giveSecret(output, outputUsed)` in `TlsRecordServer.giveBackIdle`, when the connection ends with every byte sent (`outputStart === outputEnd`), else in `release` |
+| `plain` | 2 · `TLS_MAX_PLAINTEXT` | Decrypted application data waiting for the caller | `giveSecret(plain, plainUsed)` in `giveBackIdle`, when the connection ends with the caller having read it all, else in `release` |
+| `scratch` | `TLS_MAX_PLAINTEXT` | The record being opened, its plaintext once the tag verifies | `giveSecret(scratch, TLS_RECORD_SCRATCH_SIZE)` in `giveBackIdle`, when the connection ends: `open` may write as far as the ciphertext, so all of it |
+| reader | `TLS_MAX_RECORD` | Ciphertext records, and the ClientHello, as read off the socket | `giveSecret(buffer, TLS_MAX_RECORD)` in `TlsRecordReader.giveBack`, from `reset`, when the connection ends |
 
-`giveBackIdle` runs after every `process`, `consume`, `write` and `read`
-(which drains `plain` and then processes), and in `wipe`; `release`, which
-`TlsTcpServer.close` calls after the last flush and `wipeKeys`, drops what is
-left unsent or unread and gives all four back, so a free slot holds none
-when `start` hands it its next connection. `used` is how far the borrower
-wrote, and the pool promises zeros only that far, so
-`outputUsed` and `plainUsed` are the furthest end each buffer reached since
-it was taken; the scratch and the reader are zeroed whole.
+`giveBackIdle` runs in `wipe`, which every failure and close reaches
+through `wipeKeys`, and in `start`, which also resets the reader;
+`release`, which `TlsTcpServer.close` calls after the last flush and
+`wipeKeys`, drops what is left unsent or unread and gives all four back, so
+a free slot holds none when `start` hands it its next connection. `used` is
+how far the borrower wrote, so `outputUsed` and `plainUsed` are the furthest
+end each buffer reached since it was taken; the scratch and the reader are
+given back with all of their size. `giveSecret` zeroes the whole buffer
+whenever `used` is above 0, so a buffer goes back once a connection, not
+once a record: giving all four back after every record, as this stage first
+did, zeroed some 96 KB a request and cut HTTPS/1.1 throughput to 0.37 of
+what it was.
 
 The key-bearing arrays do not move: the traffic secrets, both directions'
 keys, IVs and AES schedules, and `TlsServer` with its secret arrays stay in

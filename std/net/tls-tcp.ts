@@ -31,12 +31,12 @@
  * the next connection a free slot and reuses it once the program `close`s it
  * (WP34 N9). The record buffers — the bytes to send, the plaintext waiting
  * for the program, the record being opened and the record being read — are
- * borrowed from pools this server owns only while they hold bytes, and given
- * back zeroed (`BufferPool.giveSecret`), so an idle or free slot holds none
- * of them ("What moves between connections" in `docs/security/tls.md`). When every slot is busy
- * a new connection is accepted and closed at once, so the listener does not
- * stay readable; the program sees `TLS_TCP_POOL_FULL`. Each slot keeps its
- * own `TlsServer`, which `accept` restarts for the connection, so neither the
+ * borrowed from pools this server owns while a connection uses the slot, and
+ * given back zeroed (`BufferPool.giveSecret`) when it ends, so a free slot
+ * holds none of them ("What moves between connections" in
+ * `docs/security/tls.md`). When every slot is busy a new connection is
+ * accepted and closed at once, so the listener does not stay readable; the
+ * program sees `TLS_TCP_POOL_FULL`. Each slot keeps its own `TlsServer`, which `accept` restarts for the connection, so neither the
  * handshake nor application data allocates anything that outlives a call:
  * a thousand connections through one slot leave `Arena.mark()` where the
  * first left it, under every suite (TLS-3 in `docs/security/tls.md`,
@@ -122,7 +122,7 @@ export class TlsTcpServer {
   /**
    * The pools every slot borrows its record buffers from, each with a
    * ceiling of one per slot: `lent()` is 0 once every connection has ended,
-   * and `made()` is the most slots that were ever moving bytes at once.
+   * and `made()` is the most connections that were ever open at once.
    */
   pools: TlsRecordPools
   /** The listening socket, which the program made with `tcpListen` and still owns. */

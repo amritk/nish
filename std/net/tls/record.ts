@@ -197,8 +197,9 @@ export const tlsRecordLength = (buf: u8[], off: i32, avail: i32): i32 => {
 /**
  * The bytes of a stream that are not yet a whole record. The buffer is
  * `TLS_MAX_RECORD` bytes, borrowed from `pool` by the first `push` that brings
- * a byte and given back, zeroed with `giveSecret`, as soon as the reader holds
- * none: an idle reader holds no buffer at all. `push` takes what fits, and the
+ * a byte, kept between records, and given back, zeroed with `giveSecret`, by
+ * `reset`, as its connection ends: a reader that has not been pushed to since
+ * holds no buffer at all. `push` takes what fits, and the
  * bytes of a record stay until `consume` lets them go. The caller reads
  * `buffer[start .. start + next())` for the record, while `next()` is above 0.
  *
@@ -300,7 +301,8 @@ export class TlsRecordReader {
 
   /**
    * Lets the first `n` held bytes go: the record `next` answered, once it is
-   * handled. When none are left the buffer goes back, zeroed.
+   * handled. When none are left the next record starts at the front; the
+   * buffer stays until `reset`.
    */
   consume(n: i32): void {
     const held: i32 = this.end - this.start
@@ -310,7 +312,8 @@ export class TlsRecordReader {
     }
     this.start = this.start + take
     if (this.start === this.end) {
-      this.reset()
+      this.start = 0
+      this.end = 0
     }
   }
 }

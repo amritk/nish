@@ -595,7 +595,7 @@ const reuse = (t: Suite): void => {
   a.conn.write(pattern, ZERO, toI32(pattern.length));
   t.ok(
     "connection A holds the pattern it was sent and the record it seals, borrowed from the pools",
-    a.connected && bytesHeld(a.conn.plain) >= toI32(4000) && a.conn.outputEnd > toI32(4000) && pools.lent() === toI32(2) && pools.made() === toI32(4)
+    a.connected && bytesHeld(a.conn.plain) >= toI32(4000) && a.conn.outputEnd > toI32(4000) && pools.lent() === toI32(4) && pools.made() === toI32(4)
   );
   a.conn.wipeKeys();
   a.conn.release();
