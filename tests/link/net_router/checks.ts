@@ -267,7 +267,7 @@ export const routerChecks = (): i32 => {
     r.match(getBytes, toI32(0), toI32(3), staticLong, toI32(0), toI32(staticLong.length), wholeRest),
     files,
   );
-  t.ok(`from just past /static/ to the end (${wholeRest[0]} .. ${wholeRest[1]})`, wholeRest[0] === 8 && wholeRest[1] === toI32(staticLong.length) && wholeRest[1] === 8 + 9999);
+  t.ok(`from just past /static/ to the end (${wholeRest[0]} .. ${wholeRest[1]})`, wholeRest[0] === toI32(8) && wholeRest[1] === toI32(staticLong.length) && wholeRest[1] === toI32(8 + 9999));
 
   const tight: i32[] = [7, 7, 7];
   const tm: u8[] = httpFieldBytes("GET");

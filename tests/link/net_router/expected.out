@@ -19,6 +19,14 @@ PASS  but not the slash before it
 PASS  nor the query after it
 PASS  matching is on raw bytes: %2F does not split
 PASS  an empty segment is a segment
+PASS  a literal added before a parameter wins over it
+PASS  and the parameter takes the rest
+PASS  /a alone does not answer /a/
+PASS  /a/ alone does not answer /a
+PASS  a pattern with an empty segment is taken
+PASS  and matches the target spelled the same
+PASS  but not one without the empty segment
+PASS  a parameter does not match an empty segment
 PASS  the literal branch, when it reaches a route
 PASS  the parameter, when the literal dead-ends below
 PASS  then *, whose pair is the rest, the parameter's popped
@@ -52,6 +60,11 @@ PASS  a method of 33 bytes
 PASS  a method of 32 token bytes is taken
 PASS  none of the refusals added a node
 PASS  a literal holding : is a literal
+PASS  a duplicate is refused whichever name came first
+PASS  * in the middle is ambiguous in an empty table
+PASS  and so is * then a trailing slash
+PASS  which added no node
+PASS  so the shapes they share are taken after
 PASS  a pattern over maxPatternBytes is too long
 PASS  one of exactly maxPatternBytes is not
 PASS  more segments than maxSegments
@@ -62,6 +75,11 @@ PASS  a third is past it
 PASS  a fourth route is past maxRoutes
 PASS  a duplicate is still named a duplicate when the table is full
 PASS  the method is checked before the pattern
+PASS  the exact fits first, into an empty table
+PASS  then a pattern over maxPatternBytes
+PASS  more segments than maxSegments
+PASS  and more parameters than maxParams
+PASS  are each refused all the same, adding no node
 PASS  OPTIONS * is not routed
 PASS  nor CONNECT's authority form
 PASS  nor the absolute form
@@ -74,6 +92,7 @@ PASS  visits at most every node (18 of 21)
 PASS  a path of 5000 segments against a table 7 deep is 404
 PASS  after visiting no more than the table (4)
 PASS  and one of 5000 under a * is taken whole: 5 [a/a/.../a]
+PASS  from just past /static/ to the end (8 .. 10007)
 PASS  a match with more pairs than params holds is refused
 PASS  and params is left as it was
 PASS  a route with no parameters needs no room
@@ -100,4 +119,6 @@ PASS  a NUL decodes like any byte
 PASS  into out from 0
 PASS  a range inside a target decodes only that range
 PASS  to the bytes of that range
-router: 102 passed, 0 failed, 0 skipped
+PASS  a match on /files/a%2Fb
+PASS  decodes its pair in place to a/b
+router: 123 passed, 0 failed, 0 skipped
