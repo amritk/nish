@@ -70,10 +70,11 @@ const pairs = (label: string, query: string, limits: UrlQueryLimits): void => {
   console.log(line + " end " + `${k}` + " again " + `${q.next()}` + " failed " + `${q.failed}`)
 }
 
-const segments = (label: string, path: string): void => {
+/** The segments of `path[off, off + len)`, each decoded, from an array that holds the bytes around the window too. */
+const segmentsIn = (label: string, path: string, off: i32, len: i32): void => {
   const src: u8[] = bytesOf(path)
   const it: UrlPathSegments = new UrlPathSegments()
-  it.reset(src, 0, toI32(src.length))
+  it.reset(src, off, len)
   const out: u8[] = new Array<u8>(toI32(src.length))
   let line: string = label + " " + path + " ->"
   let count: i32 = 0
@@ -83,6 +84,10 @@ const segments = (label: string, path: string): void => {
     count += 1
   }
   console.log(line + " count " + `${count}` + " again " + (it.next() ? "true" : "false"))
+}
+
+const segments = (label: string, path: string): void => {
+  segmentsIn(label, path, 0, toI32(path.length))
 }
 
 const shownOrNull = (s: string | null): string => {
@@ -235,6 +240,12 @@ export const main = (): i32 => {
   decode("lenient", "%%41", URL_DECODE_LENIENT)
   decode("lenient", "%00", URL_DECODE_LENIENT)
   decode("all", "a+%zz%00%41", URL_DECODE_FORM | URL_DECODE_LENIENT | URL_DECODE_ALLOW_NUL)
+  // The bytes on either side of each hex digit range: `:` and `@`, `` ` `` and `G`.
+  decode("strict", "%:1", 0)
+  decode("strict", "%@1", 0)
+  decode("strict", "%`1", 0)
+  decode("strict", "%G1", 0)
+  decode("lenient", "%:1%@1%`1%G1", URL_DECODE_LENIENT)
   decode("empty", "", 0)
   decode("utf8", "%E2%82%AC%C3", 0)
 
@@ -290,6 +301,10 @@ export const main = (): i32 => {
   segments("path", "/a//b/")
   segments("path", "a+b/c%20d")
   segments("path", "/x%zz/y")
+  // A window inside a larger array: the bytes around it would change the answer.
+  segmentsIn("path window 2 8", "XX/a%2Fb/cYY", 2, 8)
+  segmentsIn("path window 1 5", "/ab/cd", 1, 5)
+  segmentsIn("path window 2 3", "x/a/b/y", 2, 3)
 
   // Strings.
   console.log("urlDecode " + shownOrNull(urlDecode("caf%41+x%21", 0)))
@@ -326,6 +341,37 @@ export const main = (): i32 => {
   utf8("%F4%8F%BF%BF")
   utf8("%F4%90%80%80")
   utf8("%F5%80%80%80")
+  // Every unrestricted lead: a well-formed sequence, and one with a byte past the continuation range.
+  utf8("%E1%80%BF")
+  utf8("%E1%80%C0")
+  utf8("%E3%80%BF")
+  utf8("%E3%80%C0")
+  utf8("%E4%80%BF")
+  utf8("%E4%80%C0")
+  utf8("%E5%80%BF")
+  utf8("%E5%80%C0")
+  utf8("%E6%80%BF")
+  utf8("%E6%80%C0")
+  utf8("%E7%80%BF")
+  utf8("%E7%80%C0")
+  utf8("%E8%80%BF")
+  utf8("%E8%80%C0")
+  utf8("%E9%80%BF")
+  utf8("%E9%80%C0")
+  utf8("%EA%80%BF")
+  utf8("%EA%80%C0")
+  utf8("%EB%80%BF")
+  utf8("%EB%80%C0")
+  utf8("%EC%80%BF")
+  utf8("%EC%80%C0")
+  utf8("%EE%80%BF")
+  utf8("%EE%80%C0")
+  utf8("%F1%80%BF%80")
+  utf8("%F1%80%C0%80")
+  utf8("%F2%80%BF%80")
+  utf8("%F2%80%C0%80")
+  utf8("%F3%80%BF%80")
+  utf8("%F3%80%C0%80")
   // A continuation byte missing in the middle, and a sequence cut short at the end.
   utf8("%E2%41%AC")
   utf8("%E2%82%41")

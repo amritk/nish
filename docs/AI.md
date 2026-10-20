@@ -2422,8 +2422,9 @@ window of a `u8[]` and allocates nothing. Decoding is strict by default — a
 malformed escape or `%00` is refused, `+` is kept — and `URL_DECODE_FORM`,
 `URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL` add `URLSearchParams`'s
 repairs, short of its U+FFFD for invalid UTF-8. `percentDecode` answers the
-length or a negative `URL_DECODE_ERR_*` code, and `percentDecodeErrorAt` the
-offset an error is at; a query yields at most 100 pairs. (No block, as for `nish/text`;
+length or a negative `URL_DECODE_ERR_*` code — test it before reading `out`,
+since a peer's `%zz` makes it negative and `urlQueryStart` answers -1 for no
+`?` — and `percentDecodeErrorAt` the offset an error is at; a query yields at most 100 pairs. (No block, as for `nish/text`;
 `tests/link/std_url` is its program, and the user guide's
 [standard-library page](guide/using-nish/standard-library.md#nishneturl) its
 walk-through.)

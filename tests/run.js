@@ -6175,7 +6175,7 @@ if (!only || "std_json_tokenizer".includes(only)) {
 // programs run under `runtime/nish.mjs` and print the same bytes, `alloc.ts`
 // reads a target 10,000 times without moving the arena, and `fuzz.ts`'s 3,000
 // seeded inputs are held to `decodeURIComponent`, `URLSearchParams` and the
-// strict rule's regex, natively and under Node. Four programs beside them pass
+// strict rule's regex, natively and under Node. Six programs beside them pass
 // a window or an `at` outside its array, and each panics with its message on
 // both sides.
 if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
@@ -6215,6 +6215,8 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
     ["panic-decode-at", "percentDecode: at is outside out"],
     ["panic-start-window", "urlQueryStart: the window is outside the array"],
     ["panic-segments-window", "UrlPathSegments: the window is outside the array"],
+    ["panic-decode-negative-len", "percentDecode: the window is outside the array"],
+    ["panic-decode-negative-at", "percentDecode: at is outside out"],
   ]) {
     const entry = path.join(urlDir, `${file}.ts`)
     const fromNode = runUnderPrelude(entry, [])

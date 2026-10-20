@@ -14,8 +14,10 @@
  *       query.reset(target, q + 1, len - q - 1)
  *       if (urlQueryFind(query, "name") === URL_QUERY_PAIR) {
  *         const n: i32 = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM)
- *         // n >= 0: out[0, n) is the value; n < 0: a URL_DECODE_ERR_* code
- *       }
+ *         if (n >= 0) {
+ *           // out[0, n) is the value
+ *         } // else n is a URL_DECODE_ERR_* code: a peer's `%zz`, never read out
+ *       }   // else no such key, or URL_QUERY_ERR_PAIRS past the cap
  *     }
  *
  * **The byte API allocates nothing.** `urlQueryStart`, `percentDecode`,
@@ -293,7 +295,7 @@ export class UrlPathSegments {
 
 /**
  * What a `UrlQuery` refuses to yield. The iterator copies the number when it
- * is made; a negative cap is read as zero, so every non-empty query fails.
+ * is made; a negative cap is read as zero, so every query with a pair fails.
  */
 export class UrlQueryLimits {
   /** The most pairs one query yields, `URL_DEFAULT_MAX_PAIRS` (a field starts at a literal); past it `next()` answers `URL_QUERY_ERR_PAIRS` and stays spent. */

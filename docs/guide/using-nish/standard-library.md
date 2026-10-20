@@ -1103,6 +1103,10 @@ const route = (text: string, path: UrlPathSegments, query: UrlQuery): void => {
   path.reset(target, 0, q < 0 ? len : q);
   while (path.next()) {
     const n = percentDecodePathSegment(target, path.start, path.length, out, 0, 0);
+    if (n < 0) {
+      console.log(`bad segment (${n})`); // a URL_DECODE_ERR_* code: answer 400
+      return;
+    }
     console.log(`segment of ${n} bytes`); // files, a/b (one segment), c
   }
   if (q < 0) {
@@ -1110,10 +1114,17 @@ const route = (text: string, path: UrlPathSegments, query: UrlQuery): void => {
     return;
   }
   query.reset(target, q + 1, len - q - 1);
-  if (urlQueryFind(query, "name") === URL_QUERY_PAIR) {
-    const n = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM);
-    console.log(`name is ${String.fromBytes(out, 0, n)}`); // name is J Doe
+  const found = urlQueryFind(query, "name"); // URL_QUERY_PAIR, URL_QUERY_END, or an error code
+  if (found !== URL_QUERY_PAIR) {
+    console.log(`no name (${found})`);
+    return;
   }
+  const n = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM);
+  if (n < 0) {
+    console.log(`bad name (${n})`); // `%zz`: never read out past a negative answer
+    return;
+  }
+  console.log(`name is ${String.fromBytes(out, 0, n)}`); // name is J Doe
 };
 
 export const main = (): i32 => {
@@ -1129,6 +1140,8 @@ export const main = (): i32 => {
   const query = new UrlQuery(new UrlQueryLimits()); // at most 100 pairs
   route("/files/a%2Fb/c?name=J%20Doe&flag", path, query);
   route("/files/readme", path, query);
+  route("/files/x?name=%zz", path, query);
+  route("/files/%zz", path, query);
   return 0;
 };
 ```
@@ -1144,6 +1157,11 @@ name is J Doe
 segment of 5 bytes
 segment of 6 bytes
 no query
+segment of 5 bytes
+segment of 1 bytes
+bad name (-1)
+segment of 5 bytes
+bad segment (-1)
 ```
 
 **Decoding is strict by default.** With flags 0, `percentDecode` answers
@@ -1155,7 +1173,9 @@ decodes `%00` to a 0 byte. All three together decode as `URLSearchParams`
 does for valid UTF-8; where it replaces an invalid sequence with U+FFFD,
 `percentDecode` keeps the bytes. A buffer as long as the input is always big
 enough; one shorter than the decoded result answers `URL_DECODE_ERR_SPACE`,
-with the bytes before it written. `percentDecodeErrorAt`, called with the same
+with the bytes before it written. Test every answer before you read `out`:
+a peer's `%zz` makes it negative, and `String.fromBytes(out, 0, n)` with a
+negative `n` panics. `percentDecodeErrorAt`, called with the same
 arguments, answers the offset of the byte an error is at, or -1.
 
 **A path is split before it is decoded**, so `%2F` stays inside its segment:

@@ -25,16 +25,18 @@ import {
   urlQueryGet,
 } from "nish/net/url"
 
-const ALPHABET: string = "%%%%0123456789aAbBcCdDeEfFgz+&&==/x"
+const ALPHABET: string = "%%%%0123456789aAbBcCdDeEfFgGz:@`+&&==/x"
 /**
  * UTF-8 sequences in hex, space-separated: valid two-, three- and four-byte
  * ones, each at the edge of its lead's range, then overlong forms (`C0`, `C1`,
  * `E0 80..9F`, `F0 80..8F`), a surrogate, code points past U+10FFFF, a lone
  * continuation, truncated two-, three- and four-byte leads, a lead with an
- * ASCII byte after it, and 0xFF.
+ * ASCII byte after it, and 0xFF; then each unrestricted lead (`E1`,
+ * `E3..EC`, `EE`, `F1..F3`) well-formed and with a byte past the continuation
+ * range.
  */
 const SEQUENCES: string =
-  "c3a9 c280 dfbf e0a080 e282ac ed9fbf efbfbd f0908080 f09f9880 f48fbfbf c0af c1bf e080af e09fbf f08fbfbf eda080 f4908080 f5808080 80 c3 e282 f09f98 c341 e2c3a9 ff"
+  "c3a9 c280 dfbf e0a080 e282ac ed9fbf efbfbd f0908080 f09f9880 f48fbfbf c0af c1bf e080af e09fbf f08fbfbf eda080 f4908080 f5808080 80 c3 e282 f09f98 c341 e2c3a9 ff e180bf e180c0 e380bf e380c0 e480bf e480c0 e580bf e580c0 e680bf e680c0 e780bf e780c0 e880bf e880c0 e980bf e980c0 ea80bf ea80c0 eb80bf eb80c0 ec80bf ec80c0 ee80bf ee80c0 f180bf80 f180c080 f280bf80 f280c080 f380bf80 f380c080"
 /** The most bytes one input step writes: a four-byte sequence, escaped. */
 const STEP_MAX: i32 = 12
 const STEPS: i32 = 16

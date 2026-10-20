@@ -59,10 +59,14 @@ seeded differential `tests/link/std_url/fuzz.ts`). With no flags
 copies `+` as it stands. `URL_DECODE_LENIENT` copies a malformed escape
 unchanged, as the WHATWG percent-decode does; `URL_DECODE_FORM` reads `+` as a
 space; `URL_DECODE_ALLOW_NUL` is the only way `%00` decodes, so lenient alone
-still refuses it. On 3,000 seeded inputs over an alphabet heavy in `%`, hex
-digits, `+`, `&` and `=`, mixed with UTF-8 sequences valid and invalid
+still refuses it. The bytes either side of each hex range are not digits:
+`%:1`, `%@1`, `` %`1 `` and `%G1` are each refused at 0 (`strict %:1 -> -1 at 0 -`)
+and copied leniently (`` lenient %:1%@1%`1%G1 -> 12 at -1 253a31254031256031254731 ``).
+On 3,000 seeded inputs over an alphabet heavy in `%`, hex
+digits, `+`, `&` and `=`, with `:`, `@`, `` ` `` and `G` beside the hex ranges, mixed with UTF-8 sequences valid and invalid
 (2-, 3- and 4-byte, overlong, a surrogate, past U+10FFFF, a lone continuation,
-truncated, `0xFF`), each escaped in either case or written as raw bytes, the
+truncated, `0xFF`, and each unrestricted lead — `E1`, `E3`..`EC`, `EE`,
+`F1`..`F3` — well formed and with a byte past the continuation range), each escaped in either case or written as raw bytes, the
 strict answer's code agrees with a regex of the rule, and its bytes with a
 model decoder and with `decodeURIComponent`: that throws exactly where the
 bytes are not UTF-8, and elsewhere its answer, multi-byte included, is the
@@ -87,7 +91,11 @@ continuation byte and a sequence cut short. Each edge is a line of
 byte past it is refused (`utf8 %E0%9F%BF -> null`, `utf8 %ED%A0%80 -> null`,
 `utf8 %F0%8F%BF%BF -> null`, `utf8 %F4%90%80%80 -> null`,
 `utf8 %F5%80%80%80 -> null`, `utf8 %C1%BF -> null`); a bad continuation in
-the second, third or fourth byte is refused (`utf8 %F0%9F%41%80 -> null`), and
+the second, third or fourth byte is refused (`utf8 %F0%9F%41%80 -> null`);
+each unrestricted lead, `E1`, `E3`..`EC`, `EE`, `F1`, `F2` and `F3`, takes
+`80`..`BF` and refuses `C0` (`utf8 %E1%80%BF -> e180bf`,
+`utf8 %E1%80%C0 -> null`, `utf8 %F1%80%BF%80 -> f180bf80`,
+`utf8 %F1%80%C0%80 -> null`, and the same line for each other lead), and
 so is a 2-, 3- or 4-byte sequence cut at the end, escaped (`utf8 %F0%9F%98 ->
 null`) and as raw bytes, where only the length check stops a read past the
 string (`raw f09f98 -> null`). `urlQueryGet` refuses the same
@@ -99,7 +107,14 @@ check or a continuation check, or refusing every 3- and 4-byte lead, fails
 on the raw `/` only, so `/a%2Fb/c` is the two segments `a/b` and `c`, and
 `percentDecodePathSegment` keeps `+` literal. Empty segments (`/a//b/`) are
 yielded, not merged; a malformed escape in one segment refuses that segment
-and the next is still read.
+and the next is still read. A window at a non-zero offset is split on its own
+bytes: `XX/a%2Fb/cYY` from 2 for 8 is `a/b` and `c`
+(`path window 2 8 XX/a%2Fb/cYY -> [a/b] [c] count 2 again false`), a window
+that does not start with `/` is read as it stands (`path window 1 5 /ab/cd ->
+[ab] [cd] count 2 again false`: its first segment runs from the window's
+start, and the `/` before it is not read), and the `/` and `y` just outside
+`x/a/b/y` from 2 for 3 add no segment (`path window 2 3 x/a/b/y -> [a] [b]
+count 2 again false`).
 
 **Bounded work per query** (`std_url`, `tests/link/std_url_pairs`): a query
 yields at most `UrlQueryLimits.maxPairs` pairs (100 by default,
@@ -124,8 +139,8 @@ and a key cut before its escape's last digit matches nothing
 is `URL_DECODE_ERR_SPACE` at the byte with no room, and nothing is written
 past `out`'s end. A window outside its array panics with
 `…: the window is outside the array`, once, at 2 and at 8 threads; so does
-each of `percentDecode`, `urlQueryStart` and `UrlPathSegments.reset`, and an
-`at` outside `out` panics with `percentDecode: at is outside out`, natively
+each of `percentDecode`, `urlQueryStart` and `UrlPathSegments.reset`, a
+negative `len` among them, and an `at` outside `out`, a negative one included, panics with `percentDecode: at is outside out`, natively
 and under Node (`tests/link/std_url/panic-*.ts`).
 
 **The byte API allocates nothing** (`tests/link/std_url/alloc.ts`): one
@@ -135,7 +150,7 @@ look up a key with `Arena.used()` where it was; a control push the same meter
 sees proves the meter is not blind. `urlDecode` and `urlQueryGet` allocate
 their answer and are the convenience forms.
 
-**Under Node the same bytes** (`std_url` and its four refusals under
+**Under Node the same bytes** (`std_url` and its six refusals under
 `runtime/nish.mjs`): every program exits as it does natively and prints the
 same stdout, and `std_url_window` the same stderr.
 
@@ -157,8 +172,10 @@ exits ${wantCode}`;
 `link/std_url: panic-decode-window.ts under the Node prelude exits 1 with "percentDecode: the window is outside the array"`,
 `link/std_url: panic-decode-at.ts under the Node prelude exits 1 with "percentDecode: at is outside out"`,
 `link/std_url: panic-start-window.ts under the Node prelude exits 1 with "urlQueryStart: the window is outside the array"`,
-`link/std_url: panic-segments-window.ts under the Node prelude exits 1 with "UrlPathSegments: the window is outside the array"`
-and the same four `… built natively exits 1 with …` — the templates
+`link/std_url: panic-segments-window.ts under the Node prelude exits 1 with "UrlPathSegments: the window is outside the array"`,
+`link/std_url: panic-decode-negative-len.ts under the Node prelude exits 1 with "percentDecode: the window is outside the array"`,
+`link/std_url: panic-decode-negative-at.ts under the Node prelude exits 1 with "percentDecode: at is outside out"`
+and the same six `… built natively exits 1 with …` — the templates
 `link/std_url: ${file}.ts under the Node prelude exits 1 with "${message}"` and
 `link/std_url: ${file}.ts built natively exits 1 with "${message}"`;
 and, for each of the five programs, the template `link/${name}: under the
