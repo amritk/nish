@@ -4109,7 +4109,7 @@ sends and receives:
   one it declares itself it uses as any function does. And a channel is used
   only in a top-level function's own body, never inside an arrow, which is
   lifted into a function of its own that these rules do not follow:
-  `` A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body; write the arrow as a module function, `const sendAll = (ch: Channel<i32>): void => { ch.send(1) }`, and pass `sendAll` where the arrow was ``
+  `` A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body; write the arrow as a module function, `const relayBody = (q: Pipe): i32 => { const c = q.ch; c.send(1); return 1; }`, and pass `relayBody` where the arrow was ``
   (NL2484, `reject_channel_arrow`, and `reject_channel_arrow_nullable` for a
   channel type an arrow writes but never uses).
 - **C3: a channel is unbounded**, so `send` never waits, because under Node a
