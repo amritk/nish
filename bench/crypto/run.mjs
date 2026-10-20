@@ -909,7 +909,7 @@ const lines = [
   "",
   "Written by `node bench/crypto/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The programs, the inputs and the measurement rules are in [bench/crypto/README.md](../bench/crypto/README.md).",
   "",
-  "Each cell is the median of the column's own timed loop over the rounds, every column at one iteration count per row, the order rotated each round. The last two columns divide Nish's median time by the fastest portable twin's (no assembly: OpenSSL under an `OPENSSL_ia32cap` mask, Go `-tags purego`, RustCrypto's soft backend) and by the fastest default twin's (assembly and CPU extensions allowed); above 1.000x Nish is slower. A quotient within the noise band, the gap between Nish and a byte-identical copy of its binary, is no difference.",
+  "Each cell is the median of the column's own timed loop over the rounds, every column at one iteration count per row, the order rotated each round and reversed on every other block. The last two columns divide Nish's median time by the fastest portable twin's (no assembly: OpenSSL under an `OPENSSL_ia32cap` mask, Go `-tags purego`, RustCrypto's soft backend) and by the fastest default twin's (assembly and CPU extensions allowed); above 1.000x Nish is slower. A quotient within the noise band, the gap between Nish and a byte-identical copy of its binary, is no difference.",
   "",
   `Machine: ${machine()}.`,
   "",
