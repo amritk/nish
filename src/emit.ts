@@ -128,6 +128,7 @@ import {
 import {
   addStringConstant,
   copyString,
+  emitForeignBuffers,
   emitForeignString,
   emitForeignStringResult,
   emitIndexOfAnyKernel,
@@ -199,7 +200,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { resolveTarget, targetHeader } from "./target"
-import { T_STRING, T_VOID, TypeTable } from "./types"
+import { isForeignBuffer, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -894,7 +895,10 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      params.push(this.llvmAbi(sig.paramTypes[i], false))
+      // WP40 B1.2: C takes a buffer's bytes, not its header (`emitForeignBuffers`).
+      params.push(
+        isForeignBuffer(this.table, sig.paramTypes[i]) ? "i8*" : this.llvmAbi(sig.paramTypes[i], false)
+      )
       i = i + 1
     }
     return `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`
@@ -1587,6 +1591,9 @@ export class Emitter {
     const reclaim = keepSize >= 0 ? "" : this.beginReclaim(sig)
     const mark = keepSize >= 0 ? keepMark : reclaim
     const marker = tail ? "tail " : ""
+    if (sig.foreign()) {
+      emitForeignBuffers(this, expr, sig, operands, operandValues)
+    }
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
       this.fn.emit(call)

@@ -1,8 +1,8 @@
 %struct.nish_array = type { i64, i64, i8* }
 
-declare i8* @memcpy(%struct.nish_array*, %struct.nish_array*, i64)
-declare i32 @getentropy(%struct.nish_array*, i64)
-declare i32 @compare(%struct.nish_array*, i64, %struct.nish_array*, i64)
+declare i8* @memcpy(i8*, i8*, i64)
+declare i32 @getentropy(i8*, i64)
+declare i32 @compare(i8*, i64, i8*, i64)
 declare i32 @abs(i32)
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
