@@ -3599,6 +3599,21 @@ const collectFacts = (
     collector.findPrivateArrays(body)
     collector.visit(body)
   }
+  // A constructor's prologue stores the field initializers into `this` before
+  // the body runs (`emitConstructorPrologue`), and the source body does not
+  // show them: `constructor() {}` on a class with `n: i32 = 7` read as
+  // `readnone` with a `readonly` `this`, and -O dropped the stores, a union
+  // variant's tag among them (#740). So they count as the body's own
+  // `this.f = v` does: a write through `this`, which initialises the fresh
+  // object and is no shared write.
+  const owner = sig.owner
+  if (facts.freshThis && owner !== null && hasFieldInitializer(owner)) {
+    facts.effect = EFFECT_WRITE
+    const self = facts.pointerParam("this")
+    if (self !== null) {
+      self.writesThrough = true
+    }
+  }
   // WP31 §9: the prologue that checks a host's arguments may take the panic
   // tail (`emitParamRangeChecks`). Its callers keep the tail they recorded for
   // the entry they no longer check, which is sound and costs nothing: they call
@@ -5416,6 +5431,16 @@ const bodyMayExtend = (
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const method = arrayMethodName(program, table, node)
   return method === "push" || method === "pop"
+}
+
+/** True when a constructor of `info` stores a field initializer in its prologue. */
+const hasFieldInitializer = (info: StructInfo): boolean => {
+  for (const field of info.fields) {
+    if (field.initializer !== null) {
+      return true
+    }
+  }
+  return false
 }
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */
