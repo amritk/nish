@@ -53,6 +53,18 @@ export const main = (): i32 => {
 - **A short array is just a loop.** The work is split only when every thread's
   share is big enough to pay for handing it to another thread, judged from
   what `f` costs, so there is no reason to guard a call by size.
+- **A slow thread does not hold the others up.** A long array is cut into up
+  to eight pieces per thread, and a thread that finishes one takes the next,
+  so a core shared with another program, or elements that cost more than
+  their neighbours, end up spread over the threads that have time.
+- **The speedup is capped by what runs outside the map.** Only the call is
+  divided; the loop that fills `src` and the loop that reads the answers run
+  on one thread. In the repository's `bench/par-heavy.ts` those two loops, an
+  order-sensitive checksum among them, are about an eighth of the one-thread
+  time, which caps four cores near 2.9x; the program measures about 2.7x.
+  With a checksum the compiler vectorises, or four times the work per
+  element, the same map is above 3x. The figures are in
+  [BENCHMARKS.md](../../BENCHMARKS.md#scheduling-a-divided-region).
 - **`dst` must be at least as long as `src`**, or the call panics before it
   writes anything. `src` and `dst` may be the same array.
 - **`f` writes nothing its caller can see** — no store through its argument,
@@ -186,9 +198,10 @@ the caller takes the blocks whole at the join rather than copying each string
 again, so the copy runs on every thread at once. A map of a million
 `` `s${x % 100000}` `` strings took a median of 24 ms on 4 threads (22 to 32 ms
 over nine runs), against 40 ms for the sequential loop. On one thread the same
-map takes 65 ms, since every element still pays the move, so measure your own
-case. Reach for the threads when each element does some work, or when there is
-more than one core to run it.
+map takes as long as the loop, so a program that runs with
+`NISH_NUM_THREADS=1`, or on a single core, loses nothing by using it. Still,
+measure your own case: the threads pay off when each element does some work,
+or when there is more than one core to run it.
 
 **What is refused, and why.** The rules for `f` above, and an answer that is
 an array of strings, an array of arrays, an object, a `Map` or a `Set`

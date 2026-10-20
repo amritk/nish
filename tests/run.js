@@ -42,7 +42,7 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -6293,6 +6293,33 @@ if (!only || "thread_channel_string_many".includes(only)) {
   )
 }
 
+// `Http1Server` builds a slot's connection on the first accept into it, so a
+// pool sized for a busy day costs little before its first connection.
+// `tests/link/net_http1_server/startup.ts` builds a pool of 16,384 slots on no
+// socket and prints the arena bytes it took, which the ceiling
+// `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, and whether
+// they fit in one chunk, without which `Arena.used()` measures nothing.
+if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only)) {
+  const dir = path.join(buildDir, "link", "net_http1_server.startup")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "net_http1_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    check(
+      "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
+      `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
 // A task's temporaries are released on the thread that ran it once it has
 // answered, whatever it answers. `thread_task_release` spawns three scopes of
 // 8,000 tasks of some 60 KB each, answering a string, an `i32` and nothing;
@@ -11559,7 +11586,9 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
 // runs of every threads program under `NISH_NUM_THREADS=1` and `=2`:
 //   - the unit test's pool checks (`test_pool`) again at the two sizes a default run
 //     on a big machine never sees: `NISH_NUM_THREADS=1`, no workers, where the
-//     caller runs every task in spawn order, and `=2`, one worker;
+//     caller runs every task in spawn order, and `=2`, one worker; and at `=3`, `=4`
+//     and `=8` too, so a region's pieces are claimed exactly once at each of those counts
+//     the machine has (`test_parallel_pieces`);
 //   - `nish_cpu_count()` itself: the variable lowers the count and never raises it,
 //     a malformed value is ignored, the affinity mask counts (`taskset`), and so does
 //     a cgroup v2 `cpu.max` quota, rounded up, at the process's own cgroup or any
@@ -11570,7 +11599,7 @@ if (!only || "runtime-parallel".includes(only)) {
     skip("runtime-parallel: clang not installed: the worker pool's checks are not run")
   } else {
     const unit = buildRuntimeTestThreads()
-    for (const threads of ["1", "2"]) {
+    for (const threads of ["1", "2", "3", "4", "8"]) {
       const r =
         unit.status === 0 ? spawnSync(unit.exe, [], { encoding: "utf8", env: envWithThreads(threads) }) : unit
       check(
@@ -15414,7 +15443,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
       "--no-rayon",
       "--twin-runs",
       "1",

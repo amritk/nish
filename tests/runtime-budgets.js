@@ -214,8 +214,18 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * file had nothing to give: the bytes are the pool's, and dropping the 64 MB threshold
  * instead cost the bursts it was set for (586-700 ms against 440-466 ms on the 1.2
  * million strings).
+ *
+ * Raised to 3,328 by threads-followups' dynamic pieces, measured **3,097 bytes** on
+ * 2026-10-20 with clang 18.1.3 on linux-x64 (2,900 before them), 197 more: a divided
+ * region is cut into up to eight pieces a thread, which the threads claim one at a
+ * time off an atomic counter (`nish_par_run` 21 → 102 bytes, with `nish_par_piece` 49
+ * and `nish_par_run_lead` 21 new, `nish_parallel_range` 245 → 280), and a worker
+ * rewinds its arena between pieces. On bench/par-heavy.ts at four threads they took the
+ * median from 846 ms to 792 ms (15 interleaved rounds; the copy band 834-846), the
+ * slowest thread no longer holding the join a quarter of each region. The fallback's
+ * row above is unchanged at 610 bytes: none of it is compiled there.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2944
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 3328
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
@@ -253,8 +263,16 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2944
  * start at 4 KB and double to 64 KB, each records what it used when its chunk ends, and
  * a join that kept under 64 KB in all copies its elements into the caller's arena and
  * frees the blocks rather than adopting them.
+ *
+ * The one-thread rewind measured **1,552 bytes** on 2026-10-20 with clang 18.1.3 on
+ * linux-x64, 108 more than the 1,444 it sat at, and the ceiling moves to 1,664.
+ * `nish_cross_keep` rewinds through `nish_rewind`, inlined (262 → 370): when an
+ * element's body grew a 64 KB chunk past a mark at the end of a full one, the chunk is
+ * kept, emptied, rather than freed, so a map at one thread stops doing a `malloc` and a
+ * `free` per element. 1M short strings at `NISH_NUM_THREADS=1` went from 72.8 ms to
+ * 54.9 ms, inside the loop's 56.4–57.6 ms band.
  */
-const RUNTIME_CROSS_TEXT_BUDGET = 1536
+const RUNTIME_CROSS_TEXT_BUDGET = 1664
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,235 bytes** on
  * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
@@ -268,8 +286,12 @@ const RUNTIME_CROSS_TEXT_BUDGET = 1536
  *
  * The copy-back join measured **1,508 bytes** on 2026-10-17 with clang 18.1.3 on
  * linux-x64, 231 more, and the ceiling moves to 1,536: the row above's change.
+ *
+ * The one-thread rewind measured **1,631 bytes** on 2026-10-20 with clang 18.1.3 on
+ * linux-x64, 118 more than the 1,513 it sat at, and the ceiling moves to 1,664: the row
+ * above's change (`nish_cross_keep` 264 → 382).
  */
-const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1536
+const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor
@@ -344,6 +366,22 @@ const RUNTIME_SIMD_TEXT_BUDGET = 768
  * as every ceiling here was set.
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
+
+/**
+ * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
+ * before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http1_server/startup.ts`,
+ * which builds that pool on the default `Http1Config` and prints the bytes.
+ *
+ * Measured **16,688 bytes** on 2026-10-20 with clang 18 on linux-x64: the 16,384-byte
+ * read scratch every server keeps, and the pool's own bookkeeping, with no slot's
+ * connection built. Each connection is built on the first accept into its slot,
+ * 3,976 bytes on the same defaults. Built eagerly, as every slot was before, a
+ * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
+ * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the
+ * next 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+export const HTTP1_SERVER_START_BYTES = 16896
 
 /**
  * Every unit and configuration the gate measures: the source compiled with

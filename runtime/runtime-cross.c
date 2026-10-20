@@ -167,6 +167,31 @@ void nish_cross_end(void *state) {
   nish_xfer_top = x->prev;
 }
 
+/* `nish_arena_release(mark)` for an element's rewind, but keeping the newest
+ * chunk when the body grew it past `mark`'s: a mark at the end of a full chunk
+ * would otherwise have every element's body malloc a fresh chunk and its
+ * release free it again. Only a 64 KB one is kept, emptied, in front of
+ * `mark`'s chunk, with those between freed; an older mark still finds its own
+ * chunk below it, and what `mark`'s chunk had left is given up once. A mark
+ * in no chunk below the newest leaves the arena as it was, as the release
+ * does. */
+static void nish_rewind(uint64_t mark) {
+  struct nish_arena *a = &nish_arena;
+  nish_xchunk *top = a->chunks;
+  char *buf = (char *)(top + 1);
+  if (mark && top && top->cap == 65536 && mark - (uintptr_t)buf > 65536) {
+    a->chunks = top->next;
+    nish_arena_release(mark);
+    if (a->buf != buf) {
+      top->next = a->chunks;
+      *a = (struct nish_arena){ buf, 0, 65536, top };
+    } else
+      a->chunks = top;
+    return;
+  }
+  nish_arena_release(mark);
+}
+
 /* A map's or a `parallelFrom`'s element, kept as its chunk loop rewinds the
  * arena to `mark`, the bump position before the body was called: everything
  * else the body bumped is dead once it has answered, so a chunk holds one
@@ -197,7 +222,7 @@ void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark) {
       v = at;
     }
   }
-  nish_arena_release(mark);
+  nish_rewind(mark);
   return nish_cross_in(v, esize);
 }
 

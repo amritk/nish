@@ -11,13 +11,25 @@
 //   3. A warmed slot serves two hundred requests with the arena flat.
 //   4. Every refusal of a request, each answered with its status and a close.
 //   5. The end of the stream mid-request, a client gone mid-response, the
-//      idle timeout, the pool, a free slot.
+//      idle timeout, the pool, a free slot; a pool of three on a listener of
+//      its own, built as it accepts; a pool of 16,384 with no slot built.
 //   6. TLS: ALPN http/1.1, no ALPN, ALPN h2 shut down, the arena flat.
 //   7. The connection alone: every refusal of `respond`, `write`, `end`,
 //      `acceptWebSocket`, `sendFrame` and `closeWebSocket`.
 //
 // A third-party client drives the same servers in `serve` mode (`main.ts`).
-import { netShutdown, pollModify } from "nish:net";
+import {
+  netAddress,
+  netClose,
+  netLocalPort,
+  netShutdown,
+  pollAdd,
+  pollCreate,
+  pollModify,
+  pollWait,
+  tcpConnect,
+  tcpListen,
+} from "nish:net";
 import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1";
 import {
   H1_AGAIN,
@@ -29,6 +41,7 @@ import {
   H1_ERROR,
   H1_INVALID,
   H1_NEED_MORE,
+  H1_POOL_FULL,
   H1_REQUEST,
   H1_WANT_READ,
   H1_WANT_WRITE,
@@ -37,6 +50,7 @@ import {
   H1_WS_MESSAGE,
   Http1Config,
   Http1Connection,
+  Http1Server,
 } from "nish/net/http1-server";
 import {
   WS_CLOSE,
@@ -259,6 +273,99 @@ class TlsClient {
   }
 }
 
+/** `server`'s next accept, waiting on `loop` up to a second for the connection to arrive; the slot, or what `accept` answered last. */
+const acceptWaiting = (server: Http1Server, loop: i32, ready: i32[]): i32 => {
+  let slot: i32 = server.accept();
+  for (let k: i32 = 0; k < 10 && slot === H1_AGAIN; k++) {
+    pollWait(loop, ready, toI32(100));
+    slot = server.accept();
+  }
+  return slot;
+};
+
+/** A pool of three on a listener of its own: the slots its accepts take and build, the pool full at three, a closed slot taken again. */
+const acceptOrder = (t: Suite): void => {
+  const listener: i32 = tcpListen("127.0.0.1", ZERO, toI32(16));
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", netLocalPort(listener));
+  const loop: i32 = pollCreate();
+  pollAdd(loop, listener, toI32(1), ZERO);
+  const ready: i32[] = new Array<i32>(8);
+  const server = new Http1Server(testConfig(), listener, toI32(3));
+  const clients: i32[] = [];
+  const slots: i32[] = [];
+  let firstGrowth: i64 = toI64(0);
+  for (let k: i32 = 0; k < 4; k++) {
+    clients.push(tcpConnect(addr));
+    const before: i64 = Arena.used();
+    slots.push(acceptWaiting(server, loop, ready));
+    if (k === 0) {
+      firstGrowth = Arena.used() - before;
+    }
+  }
+  t.ok(
+    "a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept",
+    slots[0] === 0 && slots[1] === 1 && slots[2] === 2 && toI32(server.connections.length) === 3
+  );
+  t.ok(
+    "with size slots busy the next is shed with H1_POOL_FULL and nothing more is built",
+    slots[3] === H1_POOL_FULL && server.busy() === 3 && toI32(server.connections.length) === 3 && toI32(server.fds.length) === 3
+  );
+  const first: Http1Connection = server.connection(toI32(1));
+  server.close(toI32(1));
+  clients.push(tcpConnect(addr));
+  const before: i64 = Arena.used();
+  const again: i32 = acceptWaiting(server, loop, ready);
+  const againGrowth: i64 = Arena.used() - before;
+  t.ok(
+    "a closed slot is taken again, its connection kept rather than built anew",
+    again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
+  );
+  t.ok("the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing", firstGrowth > toI64(0) && againGrowth === toI64(0));
+  server.close(toI32(2));
+  t.ok(
+    "expiring a pool with one of its three built slots free closes the other two",
+    server.expire(monotonicNanos() + toI64(2000000000) * toI64(2)) === 2 && server.busy() === 0 && toI32(server.free.length) === 3
+  );
+  for (let k: i32 = 0; k < 3; k++) {
+    server.close(k);
+  }
+  for (const fd of clients) {
+    netClose(fd);
+  }
+  netClose(loop);
+  netClose(listener);
+};
+
+/** A pool of 16,384 on no socket: a slot never built answers every reader as a free slot does, and only `connection` builds one. */
+const neverBuilt = (t: Suite): void => {
+  const server = new Http1Server(testConfig(), toI32(-1), toI32(16384));
+  const last: i32 = toI32(16383);
+  t.ok(
+    "a pool of 16,384 reports its size with no slot built",
+    server.size() === 16384 && server.busy() === 0 && toI32(server.connections.length) === 0 && toI32(server.fds.length) === 0
+  );
+  t.ok(
+    "a slot never built holds nothing: no descriptor, H1_ERROR to next, done to the rest",
+    !server.holds(last) &&
+      server.fd(last) === -1 &&
+      server.next(last) === H1_ERROR &&
+      (server.flush(last) & H1_DONE) !== 0 &&
+      (server.readable(last) & H1_DONE) !== 0 &&
+      (server.writable(last) & H1_DONE) !== 0
+  );
+  server.close(last);
+  t.ok(
+    "closing it and rearming it change nothing",
+    !server.rearm(last, H1_WANT_WRITE) && toI32(server.free.length) === 0 && server.busy() === 0
+  );
+  t.ok("an accept with no listener answers its error and builds nothing", server.accept() < 0 && toI32(server.connections.length) === 0 && toI32(server.fds.length) === 0);
+  t.ok(
+    "a never-built slot's connection is slot 0's, built once and holding nothing",
+    server.connection(last) === server.connection(ZERO) && toI32(server.connections.length) === 1 && toI32(server.fds.length) === 0 && server.busy() === 0
+  );
+};
+
 /**
  * Runs every check and answers the exit code. A function of its own so that
  * `tests/link/net_http1_server_f64` runs the same checks under
@@ -272,7 +379,9 @@ export const serverChecks = (): i32 => {
   const get: string = "GET /hello HTTP/1.1\r\nHost: a\r\n\r\n";
 
   // --- 1. Plain TCP ----------------------------------------------------------------------------
+  t.ok("a pool of four builds no slot before its first accept", lb.plain.size() === 4 && toI32(lb.plain.connections.length) === 0 && lb.plain.busy() === 0);
   const a: i32 = lb.connect(false);
+  t.ok("the first accept builds slot 0 alone", lb.plain.holds(ZERO) && toI32(lb.plain.connections.length) === 1);
   lb.send(a, ascii(get));
   const hello = lb.response(a, false);
   t.eqStr(
@@ -556,6 +665,7 @@ export const serverChecks = (): i32 => {
   }
   lb.settle();
   t.eqI32("four clients fill the pool", lb.plain.busy(), toI32(4));
+  t.eqI32("which has then built its four slots", toI32(lb.plain.connections.length), toI32(4));
   lb.hangUp(pool[1]);
   t.ok("one of them hangs up", lb.awaitClosed(lb.closed + 1) && lb.plain.busy() === 3);
   let freed: i32 = -1;
@@ -574,6 +684,7 @@ export const serverChecks = (): i32 => {
   const refusedBefore: i32 = lb.refused;
   const shed: i32 = lb.connect(false);
   t.ok("a fifth is accepted and shed", lb.awaitEnd(shed) && lb.refused === refusedBefore + 1);
+  t.ok("and none past the four is built", toI32(lb.plain.connections.length) === 4 && toI32(lb.plain.fds.length) === 4);
   for (const k of pool) {
     lb.send(k, ascii("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n"));
     lb.response(k, false);
@@ -605,6 +716,8 @@ export const serverChecks = (): i32 => {
     lb.plain.next(ZERO) === H1_ERROR && (lb.plain.flush(ZERO) & H1_DONE) !== 0 && (lb.plain.readable(ZERO) & H1_DONE) !== 0 && lb.plain.fd(ZERO) === -1 && !lb.plain.holds(toI32(9))
   );
   t.ok("a slot out of range names the first connection", lb.plain.connection(toI32(9)) === lb.plain.connection(ZERO) && lb.plain.size() === 4);
+  acceptOrder(t);
+  neverBuilt(t);
 
   // --- 6. TLS -------------------------------------------------------------------------------------
   const s = new TlsClient(lb);
