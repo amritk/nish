@@ -2545,7 +2545,7 @@ const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, s
  * when it is one, a narrowed union's variants, or none when `type` is not
  * made of them (`union | null`).
  */
-export const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
+const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
   const variants: i32[] = []
   if (ctx.table.isUnion(type)) {
     for (const variant of ctx.table.variantsOf(type)) {
