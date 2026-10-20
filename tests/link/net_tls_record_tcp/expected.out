@@ -19,6 +19,7 @@ PASS  and data under the client's next keys is echoed under the server's
 PASS  the program asks for a KeyUpdate of its own, wanting one back
 PASS  it arrives asking
 PASS  both sides move on, and the echo follows
+PASS  while slot 0 is open, the slot never built reads as a free one, not as slot 0's connection
 PASS  the last record the key may protect
 PASS  the next is preceded by the writer's own KeyUpdate
 PASS  and comes under the next key
@@ -51,11 +52,12 @@ PASS  a pool of three builds no slot before its first accept
 PASS  a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept
 PASS  with size slots busy the next is shed with TLS_TCP_POOL_FULL and nothing more is built
 PASS  a closed slot is taken again, its TLS state kept rather than built anew
-PASS  the first accept into a slot moves Arena.mark(); closing it and accepting into it again leaves it where it was
+PASS  the first accept into each slot moves Arena.mark(); closing one and accepting into it again leaves it where it was
 PASS  and every slot is free once closed
 PASS  a pool of 16,384 reports its size with no slot built
 PASS  a slot never built holds nothing: no descriptor, done to every call, -22 to reads and writes
 PASS  closing it and enabling tickets build nothing
 PASS  an accept with no listener answers tcpAccept's -9 and builds nothing
-PASS  a never-built slot's connection is slot 0's, built once, failed, with tickets on as the pool's are
-tls over tcp: 60 passed, 0 failed, 0 skipped
+PASS  a never-built slot's connection is one no slot holds, made once, failed, with no ALPN, and building no slot
+PASS  a slot built after enableTickets has tickets on as the pool's are, and is not the vacant connection
+tls over tcp: 62 passed, 0 failed, 0 skipped

@@ -178,7 +178,11 @@ random are built on the first accept into it, so a pool of 16,384 takes
 templated "`${unit}: a 16,384-slot ${name} takes at most ${ceilingName}
 before its first connection`" run for `Http1TlsServer`), and the
 handshake is restarted with real randomness and the key on every accept, as
-it was (TLS record, "Slots built on the first accept"). A cap out of range
+it was (TLS record, "Slots built on the first accept"). A slot never built
+reads as a free one there too: its `connection`, `alpn` and `refused` answer a
+connection no slot holds, with no ALPN and not refused, never slot 0's
+("TLS: while slot 0 is open, a slot never built reads as a free one: no ALPN,
+not refused, not slot 0's connection"). A cap out of range
 panics when the connection is made (`net_http1_server_bad_config`). The input the connection
 buffers is the largest of `chunkSize`, a header line and a request line, so
 any head the caps allow can be read.

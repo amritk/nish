@@ -392,9 +392,15 @@ const tlsAcceptOrder = (t: Suite): void => {
   t.ok("TLS: a pool of three builds no slot before its first accept", toI32(server.connections.length) === 0 && toI32(server.tls.connections.length) === 0);
   const clients: i32[] = [];
   const slots: i32[] = [];
+  // `Arena.mark()`, as `net_tls_record_tcp` reads it: a slot's TLS state may start a chunk.
+  let firstMoved: boolean = true;
   for (let k: i32 = 0; k < 4; k++) {
     clients.push(tcpConnect(addr));
+    const before: i64 = Arena.mark();
     slots.push(tlsAcceptWaiting(server, loop, ready));
+    if (k < 3) {
+      firstMoved = firstMoved && Arena.mark() !== before;
+    }
   }
   t.ok(
     "TLS: a pool built as it accepts takes slots 0, 1, 2 in order, building each slot's connection and TLS state on its first accept",
@@ -407,10 +413,16 @@ const tlsAcceptOrder = (t: Suite): void => {
   const first: Http1Connection = server.connection(toI32(1));
   server.close(toI32(1));
   clients.push(tcpConnect(addr));
+  const before: i64 = Arena.mark();
   const again: i32 = tlsAcceptWaiting(server, loop, ready);
+  const againMoved: boolean = Arena.mark() !== before;
   t.ok(
     "TLS: a closed slot is taken again, its connection kept rather than built anew",
     again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
+  );
+  t.ok(
+    "TLS: the first accept into each slot moves Arena.mark(); closing one and accepting into it again leaves it where it was",
+    firstMoved && !againMoved
   );
   for (let k: i32 = 0; k < 3; k++) {
     server.close(k);
@@ -446,9 +458,16 @@ const tlsNeverBuilt = (t: Suite): void => {
     "TLS: closing it, expiring the pool and an accept with no listener build nothing",
     server.expire(monotonicNanos()) === 0 && server.accept(zeros, zeros) < 0 && toI32(server.connections.length) === 0 && toI32(server.tls.connections.length) === 0
   );
+  const vacant: Http1Connection = server.connection(last);
   t.ok(
-    "TLS: a never-built slot's connection is slot 0's, built once and holding nothing",
-    server.connection(last) === server.connection(ZERO) && toI32(server.connections.length) === 1 && server.busy() === 0
+    "TLS: a never-built slot's connection is one no slot holds, made once, with no ALPN and building no slot",
+    vacant === server.connection(ZERO) &&
+      vacant === server.connection(toI32(16384)) &&
+      server.alpn(last) === "" &&
+      !server.refused(last) &&
+      toI32(server.connections.length) === 0 &&
+      toI32(server.tls.connections.length) === 0 &&
+      server.busy() === 0
   );
 };
 
@@ -811,6 +830,14 @@ export const serverChecks = (): i32 => {
   const s = new TlsClient(lb);
   t.ok("a client offering http/1.1 completes the handshake, the server's signature and Finished verified", s.handshake([H1_ALPN]) && s.verified);
   t.eqStr("ALPN chose http/1.1", lb.secure.alpn(ZERO), "http/1.1");
+  t.ok(
+    "TLS: while slot 0 is open, a slot never built reads as a free one: no ALPN, not refused, not slot 0's connection",
+    toI32(lb.secure.connections.length) === 1 &&
+      lb.secure.alpn(toI32(3)) === "" &&
+      !lb.secure.refused(toI32(3)) &&
+      lb.secure.connection(toI32(3)) !== lb.secure.connection(ZERO) &&
+      lb.secure.tls.connection(toI32(3)) !== lb.secure.tls.connection(ZERO)
+  );
   s.send(get);
   t.eqStr("a GET over TLS", s.response(new ClientReader(false)).text(), "hello from nish/net/http1\n");
   const tlsExchange: string = `${get}POST /echo HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nwarm\r\n0\r\n\r\n`;

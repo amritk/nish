@@ -150,6 +150,12 @@ export class TlsTcpServer {
   /** Whether `enableTickets` has run, so a slot built after it resumes too. */
   tickets: boolean = false
   /**
+   * What `connection` answers for a slot never built: a failed connection no
+   * slot holds, made on the first such read, so the slot reads as a free one
+   * does (no ALPN, not open) and never as another slot's live session.
+   */
+  vacant: TlsRecordServer | null = null
+  /**
    * The pools every slot borrows its record buffers from, each with a
    * ceiling of one per slot: `lent()` is 0 once every connection has ended,
    * and `made()` is the most connections that were ever open at once.
@@ -182,24 +188,33 @@ export class TlsTcpServer {
 
   /**
    * The next slot's connection and server random, for the slot built next.
-   * Its handshake is never given a ClientHello: `accept` restarts it for a
-   * connection with real randomness, and every later connection reuses its
-   * state. It is marked failed without sealing an alert, so a stray call on
-   * a free slot fails closed and the slot borrows no buffer until a
-   * connection moves bytes through it.
+   * Called by `accept` alone, as the pool's high-water mark rises: slot `k`'s
+   * entry must sit at index `k` of `connections` and `randoms`. Its handshake
+   * is never given a ClientHello: `accept` restarts it for a connection with
+   * real randomness, and every later connection reuses its state.
    */
   build(): TlsRecordServer {
-    // A placeholder key for the slot's first handshake, which never runs.
-    const zeros: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
     const random: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
     this.randoms.push(random)
-    const conn: TlsRecordServer = new TlsRecordServer(new TlsServer(this.config, random, zeros))
-    conn.borrowFrom(this.pools)
-    conn.state = TLS_RECORD_STATE_FAILED
+    const conn: TlsRecordServer = this.make(random)
     if (this.tickets) {
       conn.tls.enableTickets()
     }
     this.connections.push(conn)
+    return conn
+  }
+
+  /**
+   * A connection over `random` that is marked failed without sealing an
+   * alert, so a stray call on it fails closed, and that borrows no buffer
+   * until a connection moves bytes through it.
+   */
+  make(random: u8[]): TlsRecordServer {
+    // A placeholder key for a first handshake, which never runs.
+    const zeros: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
+    const conn: TlsRecordServer = new TlsRecordServer(new TlsServer(this.config, random, zeros))
+    conn.borrowFrom(this.pools)
+    conn.state = TLS_RECORD_STATE_FAILED
     return conn
   }
 
@@ -232,15 +247,22 @@ export class TlsTcpServer {
   /**
    * The connection in `slot`: its state, its handshake (`tls`: suite, ALPN,
    * server name) and the alerts sent and received. A free slot answers the
-   * last connection it held. A slot never accepted into, or out of range,
-   * names slot 0's connection, which this builds, failed, when no slot has
-   * been yet (the first `accept` then takes it, restarted).
+   * last connection it held. A slot never accepted into answers `vacant`,
+   * failed, as a free slot does, and builds no slot; a slot out of range
+   * names slot 0's.
    */
   connection(slot: i32): TlsRecordServer {
-    if (slot >= 0 && slot < toI32(this.connections.length)) {
-      return this.connections[slot]
+    const index: i32 = slot >= 0 && slot < this.slots ? slot : 0
+    if (index >= 0 && index < toI32(this.connections.length)) {
+      return this.connections[index]
     }
-    return this.connections.length > 0 ? this.connections[0] : this.build()
+    const vacant: TlsRecordServer | null = this.vacant
+    if (vacant !== null) {
+      return vacant
+    }
+    const made: TlsRecordServer = this.make(new Array<u8>(TLS_TCP_KEY_SIZE))
+    this.vacant = made
+    return made
   }
 
   /**

@@ -32,7 +32,7 @@ import {
   TLS_CONTENT_HANDSHAKE,
   TlsRecordProtection,
 } from "nish/net/tls/record";
-import { TLS_RECORD_DONE, TLS_RECORD_INVALID, TLS_RECORD_STATE_FAILED } from "nish/net/tls/record-server";
+import { TLS_RECORD_DONE, TLS_RECORD_INVALID, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN } from "nish/net/tls/record-server";
 import { TLS_TCP_POOL_FULL, TlsTcpServer } from "nish/net/tls-tcp";
 import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, tcpConnect, tcpListen } from "nish:net";
 import { toHex } from "../crypto_x509/hex";
@@ -83,13 +83,13 @@ const acceptOrder = (t: Suite): void => {
   const clients: i32[] = [];
   const slots: i32[] = [];
   // `Arena.mark()`, not `Arena.used()`: a slot's state may start a chunk.
-  let firstMoved: boolean = false;
+  let firstMoved: boolean = true;
   for (let k: i32 = 0; k < 4; k++) {
     clients.push(tcpConnect(addr));
     const before: i64 = Arena.mark();
     const slot: i32 = acceptWaiting(server, loop, ready, random, key);
-    if (k === 0) {
-      firstMoved = Arena.mark() !== before;
+    if (k < 3) {
+      firstMoved = firstMoved && Arena.mark() !== before;
     }
     slots.push(slot);
   }
@@ -112,7 +112,7 @@ const acceptOrder = (t: Suite): void => {
     again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
   );
   t.ok(
-    "the first accept into a slot moves Arena.mark(); closing it and accepting into it again leaves it where it was",
+    "the first accept into each slot moves Arena.mark(); closing one and accepting into it again leaves it where it was",
     firstMoved && !againMoved
   );
   for (let k: i32 = 0; k < 3; k++) {
@@ -154,15 +154,22 @@ const neverBuilt = (t: Suite): void => {
     "an accept with no listener answers tcpAccept's -9 and builds nothing",
     server.accept(filled(32, 1), filled(32, 2)) === -9 && toI32(server.connections.length) === 0 && toI32(server.fds.length) === 0
   );
-  const zero = server.connection(last);
+  const vacant = server.connection(last);
   t.ok(
-    "a never-built slot's connection is slot 0's, built once, failed, with tickets on as the pool's are",
-    zero === server.connection(ZERO) &&
-      toI32(server.connections.length) === 1 &&
+    "a never-built slot's connection is one no slot holds, made once, failed, with no ALPN, and building no slot",
+    vacant === server.connection(ZERO) &&
+      vacant === server.connection(toI32(16384)) &&
+      toI32(server.connections.length) === 0 &&
+      toI32(server.randoms.length) === 0 &&
       toI32(server.fds.length) === 0 &&
-      zero.state === TLS_RECORD_STATE_FAILED &&
-      zero.tls.tickets &&
+      vacant.state === TLS_RECORD_STATE_FAILED &&
+      vacant.tls.alpn === "" &&
       server.busy() === 0
+  );
+  const built = server.build();
+  t.ok(
+    "a slot built after enableTickets has tickets on as the pool's are, and is not the vacant connection",
+    built.tls.tickets && built !== vacant && server.connection(ZERO) === built && toI32(server.connections.length) === 1 && toI32(server.randoms.length) === 1
   );
 };
 
@@ -269,6 +276,15 @@ export const tcpChecks = (): i32 => {
   lb.send(b, sealOne(write, TLS_CONTENT_APPLICATION_DATA, ascii("again"), ZERO));
   t.eqStr("both sides move on, and the echo follows", shown(openOne(read, nextRecord(lb, b))), `23 ${toHex(ascii("again"))}`);
 
+  const unbuilt = lb.server.connection(toI32(1));
+  t.ok(
+    "while slot 0 is open, the slot never built reads as a free one, not as slot 0's connection",
+    toI32(lb.server.connections.length) === 1 &&
+      lb.server.connection(ZERO).state === TLS_RECORD_STATE_OPEN &&
+      unbuilt !== lb.server.connection(ZERO) &&
+      unbuilt.state === TLS_RECORD_STATE_FAILED &&
+      unbuilt.tls.alpn === ""
+  );
   const writer: TlsRecordProtection = lb.server.connection(ZERO).writeProtection;
   writer.recordLimit = writer.sequence + toI64(1);
   lb.send(b, sealOne(write, TLS_CONTENT_APPLICATION_DATA, ascii("x1"), ZERO));

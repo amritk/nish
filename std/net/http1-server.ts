@@ -1501,6 +1501,12 @@ export class Http1TlsServer {
    * accepted into, and slot 0's once `connection` has asked for it.
    */
   connections: Http1Connection[]
+  /**
+   * What `connection` answers for a slot never built: a connection no slot
+   * holds, made on the first such read, so the slot never reads as another
+   * slot's live request.
+   */
+  vacant: Http1Connection | null = null
   /** The `Date` every slot's responses carry, as `Http1Server.date` is. */
   date: HttpDate
   /** Where TLS decrypts into before the connection takes the bytes. */
@@ -1524,12 +1530,22 @@ export class Http1TlsServer {
     this.scratch = new Array<u8>(config.chunkSize)
   }
 
-  /** A new connection on this pool's outputs and `Date`, for the next slot built. */
+  /**
+   * A new connection on this pool's outputs and `Date`, for the next slot
+   * built. Called by `accept` alone, as `tls` builds slots: slot `k`'s
+   * connection must sit at index `k` of `connections`.
+   */
   build(): Http1Connection {
+    const conn: Http1Connection = this.make()
+    this.connections.push(conn)
+    return conn
+  }
+
+  /** A connection on this pool's outputs and `Date` that no slot holds yet. */
+  make(): Http1Connection {
     const conn: Http1Connection = new Http1Connection(this.config)
     conn.pool = this.outputs
     conn.date = this.date
-    this.connections.push(conn)
     return conn
   }
 
@@ -1554,15 +1570,22 @@ export class Http1TlsServer {
   }
 
   /**
-   * The HTTP/1.1 connection of `slot`. A slot never accepted into, or out of
-   * range, names slot 0's connection, which this builds when no slot has
-   * been yet (the first `accept` then takes it, restarted).
+   * The HTTP/1.1 connection of `slot`. A slot never accepted into answers
+   * `vacant`, as a free slot answers a connection that holds nothing, and
+   * builds no slot; a slot out of range names slot 0's.
    */
   connection(slot: i32): Http1Connection {
-    if (slot >= 0 && slot < toI32(this.connections.length)) {
-      return this.connections[slot]
+    const index: i32 = slot >= 0 && slot < this.tls.size() ? slot : 0
+    if (index >= 0 && index < toI32(this.connections.length)) {
+      return this.connections[index]
     }
-    return this.connections.length > 0 ? this.connections[0] : this.build()
+    const vacant: Http1Connection | null = this.vacant
+    if (vacant !== null) {
+      return vacant
+    }
+    const made: Http1Connection = this.make()
+    this.vacant = made
+    return made
   }
 
   /** The ALPN protocol `slot`'s handshake chose, or empty. */

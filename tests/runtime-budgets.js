@@ -396,7 +396,8 @@ export const HTTP1_SERVER_START_BYTES = 16896
  * HTTP/2 pool on 1,024 slots was 78.2 MB resident at listening against 27.8 MB now
  * (`bench/pool-rss.mjs --per-pool`, three runs each, base and head each against a
  * byte-identical copy of itself within 0.1 MB). The budget is the next 256-byte
- * boundary above the measurement.
+ * boundary above the measurement: the 88 bytes of headroom are intended, and a slot
+ * built eagerly again costs far more than they hold.
  */
 export const TLS_TCP_START_BYTES = 41728
 
@@ -410,7 +411,8 @@ export const TLS_TCP_START_BYTES = 41728
  * pool, with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
  * resident at listening against 4.6 MB now, and 18.1 MB against 4.6 MB at 256 slots
  * (measured as `TLS_TCP_START_BYTES` says). The budget is the next 256-byte boundary
- * above the measurement.
+ * above the measurement: the 72 bytes of headroom are intended, and one slot's
+ * connection built eagerly again costs far more than they hold.
  */
 export const HTTP1_TLS_SERVER_START_BYTES = 58368
 

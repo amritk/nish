@@ -653,8 +653,8 @@ end each buffer reached since it was taken; the scratch and the reader are
 given back with all of their size. `sealRecord` counts a record's room in
 `outputUsed` before it seals, so a seal that refuses part-way still has what
 it wrote zeroed. A free slot is marked failed when it is built
-(`TlsTcpServer.build`, then in the constructor), as it was when its first
-handshake was refused for empty randomness, but without sealing an alert, so a stray call on it fails closed
+(`TlsTcpServer.make`, which `build` calls on the first accept into it), as
+it was when its first handshake was refused for empty randomness, but without sealing an alert, so a stray call on it fails closed
 and borrows nothing. `giveSecret` zeroes the whole buffer
 whenever `used` is above 0, so a buffer goes back once a connection, not
 once a record: giving all four back after every record, as this stage first
@@ -739,8 +739,13 @@ prebuilt slot, so the handshake's randomness and key are what they were and
 a slot built this way is in the state a prebuilt one was in when its first
 connection came. What a stray call can reach is unchanged too: a slot never
 built holds no descriptor, so `holds` refuses it and `flush` answers
-`TLS_RECORD_DONE`, and `connection` of one names slot 0's connection,
-building that one failed if no slot has been yet.
+`TLS_RECORD_DONE`, and `connection` of one answers `vacant`: a failed
+connection no slot holds, made on the first such read, with no ALPN and
+never open, as a free slot's own connection reads. It is never slot 0's,
+which may be another client's live session, and reading it builds no slot.
+`Http1TlsServer.connection`, `alpn` and `refused` read the same way. A
+slot out of range still names slot 0's connection, or `vacant` while slot
+0 is not built.
 
 Evidence:
 
