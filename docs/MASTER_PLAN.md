@@ -257,6 +257,7 @@ is its plan. [README.md](README.md) indexes them.
 | 37 | The OS sandbox | proposed; no note yet | — |
 | 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S3a and S2's flag planned | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
+| 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -435,6 +436,14 @@ major. Whether it happens at all is still wp22 §10's open question.
    path MTU work, QUIC on more than one core, one handler for HTTP/1.1, 2 and
    3 with `Alt-Svc` and h2c, and `h2load` numbers. Submitting to TechEmpower
    is the owner's call (§4 there).
+5. **WP42, a multi-core server** ([wp42-multicore-server.md](wp42-multicore-server.md)):
+   all of [#478](https://github.com/amritk/nish/issues/478), WP39 E1 and the
+   supervisor WP34 N12 needs. Processes rather than
+   threads, because no `nish:net` call may run in a `scope()` task and a panic
+   ends the whole process: `tcpListenFlags` with `SO_REUSEPORT`, WP34 N12's
+   `spawn`, `kill`, `waitPid` and `availableParallelism`, a `std/net/prefork`
+   supervisor that restarts a dead worker and forwards `SIGTERM`, and the
+   bench at 1, 2 and 4 cores.
 
 #### Additive and unscheduled
 
