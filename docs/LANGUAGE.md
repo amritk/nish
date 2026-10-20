@@ -858,13 +858,25 @@ const area = (s: Shape): i32 => {
   `for` comes the head with its condition false, joined with every `break`,
   after a `do` the end of the body and its `continue`s with the condition
   false, and after a `for...of` the head and the `break`s. A loop inside the
-  body and a `switch` inside it are followed the same way
-  (`tests/cases/union_narrowing_loop_flow`; `reject_union_loop_while_join`,
+  body and a `switch` inside it are followed the same way, an `if` or a
+  `switch` narrowing its arms and clauses inside the loop as it does outside
+  one (`tests/cases/union_narrowing_loop_flow`,
+  `tests/cases/union_narrowing_loop_reads`; `reject_union_loop_while_join`,
   `reject_union_loop_do_join`, `reject_union_loop_condition_reassigned`,
   `reject_enum_loop_for_join`, `reject_enum_loop_do_join`,
   `reject_enum_loop_top_of_body`, `reject_enum_loop_do_continue`,
   `reject_enum_loop_break`, `reject_enum_loop_for_of`,
-  `reject_enum_loop_nested`, `reject_enum_loop_switch`). Where the loop
+  `reject_enum_loop_nested`, `reject_enum_loop_switch`,
+  `reject_enum_loop_switch_store`, `reject_enum_loop_switch_while`,
+  `reject_union_loop_switch`). A variable the loop only tests, never
+  writes, is followed too (`reject_enum_loop_tested_while`,
+  `reject_enum_loop_tested_do`, `reject_enum_loop_tested_break`,
+  `reject_enum_loop_tested_inner`, `reject_enum_loop_switch_tested`,
+  `reject_union_loop_tested_while`, `reject_union_loop_null_tested`). A
+  store of a member, of a ternary of members, of another enum variable or of
+  a union's tag holds what that value holds; a store of anything else, a call
+  for one, holds the whole declared type (`reject_enum_loop_ternary_store`,
+  `reject_enum_loop_copy_store`, `reject_union_loop_tag_copy`). Where the loop
   holds a shape the fixpoint does not follow, a local or path holds, after
   it and throughout it, every member stored anywhere in it, which may be
   more than `tsc` knows ("Accepted here, refused by `tsc`", below).
@@ -1045,8 +1057,9 @@ closes (`tests/cases/enum_loop_join_gap`):
 - **A path.** A tag or enum held by a field, `h.k`, is joined over the whole
   loop, not followed through it.
 - **A store inside an expression.** An assignment that is an argument,
-  `keep((j = Kind.C))`, or an initializer, `const t = (j = Kind.C)`, rather
-  than a statement of its own.
+  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, the inner
+  store of a chain, `k = j = Kind.C`, or a `for` header's update,
+  `for (; i < n; j = Kind.C)`, rather than a statement of its own.
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 

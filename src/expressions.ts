@@ -527,6 +527,17 @@ export const holdMembers = (ctx: CheckContext, scope: Scope, local: Local, value
 }
 
 /**
+ * The `=` expression `expr` holds what its value does, as TypeScript types
+ * it: `k = j = Kind.B` stores `Kind.B` in `k` as in `j`.
+ */
+const carryMembers = (ctx: CheckContext, expr: Node): void => {
+  const set = memberSetId(ctx, expr.children[1])
+  if (namesMembers(set)) {
+    ctx.program.memberSets[expr.id] = set
+  }
+}
+
+/**
  * Whether two member sets are both known and share no value, which
  * TypeScript refuses in a comparison (TS2367) and a `case` label (TS2678).
  */
@@ -2985,6 +2996,9 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     if (path !== null && expr.text === "=") {
       holdMembers(ctx, scope, path, expr.children[1])
     }
+    if (expr.text === "=") {
+      carryMembers(ctx, expr)
+    }
     return stored
   }
   if (target.kind !== N_IDENT) {
@@ -3031,6 +3045,7 @@ export const assignInto = (
       clearPaths(ctx, expr.children[0], scope)
       holdMembers(ctx, scope, local, value)
     }
+    carryMembers(ctx, expr)
     if (rhs !== T_ERROR && slot !== T_ERROR && !ctx.table.assignable(rhs, slot)) {
       const got = ctx.table.typeName(rhs)
       return ctx.errorType(value, `Cannot assign ${got} to ${ctx.table.typeName(slot)} ${what} \`${name}\``)

@@ -1722,9 +1722,11 @@ export const main = (): i32 => {
   or any member stored; after a `switch`, what its exits left (each `break`,
   the last clause's end, and the unmatched case when there is no `default`);
   after a loop, what its condition leaves false at the head, joined until it
-  no longer changes, and each `break`, as `tsc` reads it. A loop holding a
-  path (`h.k`), a store inside an expression or a type of more than 29
-  members falls back to every member the body stored anywhere, which accepts
+  no longer changes, and each `break`, as `tsc` reads it — a variable the
+  loop only tests included, and an `if` or `switch` inside the loop narrowing
+  as it does outside. A loop holding a path (`h.k`), a store inside an
+  expression (an argument, an initializer, a chain's inner `=`, a `for`
+  update) or a type of more than 29 members falls back to every member the body stored anywhere, which accepts
   a few comparisons `tsc` refuses (TS2367; LANGUAGE.md, "Accepted here,
   refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,

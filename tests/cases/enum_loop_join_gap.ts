@@ -88,6 +88,30 @@ const initializerStore = (n: i32): boolean => {
   return j === Kind.B;
 };
 
+const chainStore = (n: i32): boolean => {
+  let j: Kind = Kind.A;
+  let k: Kind = Kind.A;
+  let i = 0;
+  while (i < n) {
+    j = Kind.B;
+    k = j = Kind.C;
+    i++;
+  }
+  keep(k);
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.C`, the inner store of a chain is not followed
+  return j === Kind.B;
+};
+
+const forUpdateStore = (n: i32): boolean => {
+  let j: Kind = Kind.A;
+  for (let i = 0; i < n; j = Kind.C) {
+    j = Kind.B;
+    i++;
+  }
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.C`, a `for` header's update is not followed
+  return j === Kind.B;
+};
+
 const wideLoop = (n: i32): boolean => {
   let w: Wide = Wide.M0;
   let i = 0;
@@ -105,5 +129,7 @@ export const main = (): void => {
   console.log(pathLoop(h, 2));
   console.log(argumentStore(2));
   console.log(initializerStore(2));
+  console.log(chainStore(2));
+  console.log(forUpdateStore(2));
   console.log(wideLoop(2));
 };

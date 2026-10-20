@@ -419,6 +419,7 @@ cases/union_narrowing_index added after R6: no rewriter to freeze it with
 cases/union_narrowing_index_const added after R6: no rewriter to freeze it with
 cases/union_narrowing_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_loop_flow added after R6: no rewriter to freeze it with
+cases/union_narrowing_loop_reads added after R6: no rewriter to freeze it with
 cases/union_narrowing_paths added after R6: no rewriter to freeze it with
 cases/union_narrowing_switch_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_tested_join added after R6: no rewriter to freeze it with

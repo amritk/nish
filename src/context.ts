@@ -98,8 +98,6 @@ export class LoopFlow {
   status: string
   /** The diagnostics already reported when the loop began. */
   errors: i32
-  iterations: i32
-  untracked: i32
   /** Whether the pre-pass ran to its end over this loop: a loop it gave up on changes nothing. */
   active: boolean
 
@@ -125,8 +123,6 @@ export class LoopFlow {
     this.realBack = []
     this.realBreaks = []
     this.errors = errors
-    this.iterations = 0
-    this.untracked = 0
     this.status = "none"
   }
 }

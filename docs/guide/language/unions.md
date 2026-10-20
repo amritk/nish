@@ -281,7 +281,8 @@ After a loop, the local holds what TypeScript says it holds: what the loop's
 head can see, from before the loop, from the end of each iteration and from
 each `continue`, with the condition false, together with what each `break`
 left. A narrowing made inside the body, by a test or a store, carries to the
-comparisons after the loop the same way:
+comparisons after the loop the same way, for a local the loop only tests as
+much as for one it stores into:
 
 ```ts nish:err NL2531
 enum Kind {
@@ -303,7 +304,9 @@ const settled = (n: i32): boolean => {
 ```
 
 A loop that holds a field path such as `h.k`, an assignment written inside
-another expression, or a type of more than 29 members is read more loosely:
+another expression (an argument, an initializer, the inner `=` of
+`k = j = Kind.C`, a `for` header's update), or a type of more than 29 members
+is read more loosely:
 there the local holds every member the body stores anywhere, so a few
 comparisons TypeScript refuses still compile. The language reference lists
 these shapes under "Accepted here, refused by `tsc`".
