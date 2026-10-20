@@ -28,8 +28,8 @@ carrier.
 | --- | --- |
 | `std/net/http-fields.ts` | `httpFieldNameValid`, `httpFieldValueValid`, `httpFieldConnectionSpecific`, `httpFieldSensitive`, `httpFieldsCheckOutgoing`, `HttpFields` (`readSection`, `takePseudo`, `readRequest`, `readResponse`, `readTrailers`) |
 | `std/net/http2-frame.ts` | `http2ReadHeader`, `http2ParseFrame` and its helpers (`http2FrameUnpad`, `http2FramePriority`), `http2SettingError`, the eleven writers |
-| `std/net/http2.ts` | `Http2Connection`: `feed`, `next`, `handleFrame` and the handler of each type, `gather`, `endBlock`, `trailers`, `tooLarge`, `credit`, `streamError`, `resetStream`, `fail`, `sendHead`, `respond`, `writeData`, `writeTrailers`, `reset`, `goaway`, `restart` |
-| `std/net/http2-tls.ts` | `Http2TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `refused`, `close` |
+| `std/net/http2.ts` | `Http2Connection`: `feed`, `next`, `handleFrame` and the handler of each type, `gather`, `endBlock`, `trailers`, `tooLarge`, `credit`, `streamError`, `resetStream`, `fail`, `sendHead`, `respond`, `writeData`, `writeTrailers`, `reset`, `goaway`, `restart`, and the borrowed buffers: `lender`, `holdInput`, `holdOutput`, `holdBlock`, `giveInput`, `giveOutput`, `giveBlock`, `rest`, `drop`, `inputTail`, `received`, `consume`, `wantsWrite`; `Http2Pools` |
+| `std/net/http2-tls.ts` | `Http2TlsServer`: `accept`, `readable`, `writable`, `signP256`, `next`, `flush`, `refused`, `close`, `rest` |
 
 Out of scope: HPACK's decoder and encoder (`nish/net/hpack`), TLS
 (`docs/security/tls.md`, whose TLS-3 and TLS-4 this carrier inherits), and
@@ -227,8 +227,11 @@ ceiling the slot count, and calls `rest(slot)` after `readable`, `writable`,
 own makes a private pool of one buffer each. The zeroing is `give`'s plain
 fill, not `giveSecret`'s `secureZero`: the bytes are application data, not
 keys, and the buffer stays reachable on the free list, so the fill is not a
-dead store. What is not zeroed: a buffer still lent to an idle connection that
-holds unread bytes, the stream slots' and HPACK tables' per-slot state, and
+dead store. A slot whose TLS handshake is not done holds one output buffer,
+its SETTINGS written and waiting, until the handshake ends or the slot closes:
+a client that stalls its handshake keeps that one buffer, where it kept the
+slot's three before (TLS-4). What is not zeroed: a buffer still lent to an
+idle connection that holds unread bytes, the stream slots' and HPACK tables' per-slot state, and
 the program's own copies. Tests: `link/net_http2: exits with 0 and stdout
 matches expected.out` (section 11, "zeroed, as far as each was written" and
 "and reads nothing the first wrote past what it wrote itself", both failing

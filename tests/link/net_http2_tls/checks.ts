@@ -13,7 +13,8 @@
 //   4. The pool: a client past it is shed, and a client that hangs up is
 //      closed; a free slot answers H2_ERROR and done. Two slots send one
 //      date, formatted once between them. Every buffer a slot borrowed is
-//      back in its pool once the clients are gone.
+//      back in its pool once the clients are gone, the one a client left
+//      mid-frame included.
 //   5. A server of 1,024 slots and no connection has made no frame buffer.
 //
 // A third-party client drives the same server in `serve` mode (`main.ts`).
@@ -269,15 +270,21 @@ export const tlsChecks = (): i32 => {
   );
   // Three bytes of a frame header and no more: the slot holds them unread when the client goes.
   c.lb.send(c.index, sealOne(c.write, TLS_CONTENT_APPLICATION_DATA, [toU8(0), toU8(0), toU8(4)], ZERO));
+  const pools: Http2Pools = lb.server.pools;
+  let waits: i32 = 0;
+  while (pools.input.lent() === 0 && waits < 100 && lb.failure === "") {
+    lb.step(toI32(-1));
+    waits = waits + 1;
+  }
+  t.ok(`the slot sent three bytes of a frame header holds its input over them (${pools.input.lent()} lent)`, pools.input.lent() === 1);
   lb.hangUp(c.index);
   lb.hangUp(d.index);
   t.ok("two clients that hang up are closed", lb.awaitClosed(toI32(5)) && lb.server.busy() === 0);
-  const pools: Http2Pools = lb.server.pools;
   t.ok(
     `once every connection has ended, one of them mid-frame, every pool has all its buffers back (${pools.input.lent()}, ${pools.output.lent()}, ${pools.block.lent()} lent)`,
     pools.input.lent() === 0 && pools.output.lent() === 0 && pools.block.lent() === 0
   );
-  t.ok(`and none made more than the slots (${pools.input.made}, ${pools.output.made}, ${pools.block.made})`, pools.input.made <= 2 && pools.output.made <= 2 && pools.block.made <= 2);
+  t.ok(`and each pool made one buffer, which the two slots took in turn (${pools.input.made}, ${pools.output.made}, ${pools.block.made})`, pools.input.made === 1 && pools.output.made === 1 && pools.block.made === 1);
   t.ok(
     "a free slot answers H2_ERROR to next and done to the rest",
     lb.server.next(ZERO) === H2_ERROR && (lb.server.flush(ZERO) & TLS_RECORD_DONE) !== 0 && lb.server.fd(ZERO) === -1 && !lb.server.holds(toI32(9))

@@ -20,11 +20,12 @@ PASS  two clients fill the pool
 PASS  a third is accepted and shed
 PASS  each slot's response carries the one date
 PASS  which the two slots share: formatted once between them (1)
+PASS  the slot sent three bytes of a frame header holds its input over them (1 lent)
 PASS  two clients that hang up are closed
 PASS  once every connection has ended, one of them mid-frame, every pool has all its buffers back (0, 0, 0 lent)
-PASS  and none made more than the slots (1, 1, 1)
+PASS  and each pool made one buffer, which the two slots took in turn (1, 1, 1)
 PASS  a free slot answers H2_ERROR to next and done to the rest
 PASS  a slot out of range names the first connection
 PASS  with nothing gone wrong in the loop
 PASS  a server of 1024 slots and no connection has made no frame buffer (0)
-http2 over tls: 29 passed, 0 failed, 0 skipped
+http2 over tls: 30 passed, 0 failed, 0 skipped

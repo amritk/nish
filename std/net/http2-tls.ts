@@ -40,8 +40,12 @@
  * every connection and the TLS pool beside them, but no frame buffer: a
  * connection borrows its input, output and header-block buffers from the
  * server's `Http2Pools` when it first needs each, and gives each back once it
- * is empty and when the slot closes, so a free or idle slot holds none. Each
- * pool's ceiling is the slot count, so a borrow never fails. `accept` resets
+ * is empty and when the slot closes, so a free or idle slot holds none. A
+ * slot whose handshake is not done holds one output buffer, its SETTINGS
+ * written and waiting on TLS, until the handshake ends or the slot closes:
+ * one client that stalls its handshake keeps one buffer, as it kept a whole
+ * slot before (`docs/security/tls.md`, TLS-4). Each pool's ceiling is the
+ * slot count, so a borrow never fails. `accept` resets
  * the slot's connection, and once the pools are warm nothing a connection
  * does allocates but a header block's HPACK decoding (`docs/security/http2.md`,
  * H2-1). The caps are the `Http2Config`'s, one for every slot, so a program
@@ -82,7 +86,7 @@ export class Http2TlsServer {
    */
   date: HttpDate
   /** The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. */
-  pools: Http2Pools
+  readonly pools: Http2Pools
 
   /**
    * A pool of `size` slots, at least one, serving HTTP/2 under `config` over

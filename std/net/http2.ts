@@ -483,7 +483,7 @@ export class Http2Connection {
   endStream: boolean = false
   /** Whether H2_RESET came from the peer's RST_STREAM rather than a rule its stream broke. */
   resetByPeer: boolean = false
-  /** The server's SETTINGS are not written yet: the first `room` writes them. */
+  /** The server's SETTINGS are not written yet: the first `holdOutput` writes them. */
   prefaceOwed: boolean = false
 
   /**
@@ -491,7 +491,9 @@ export class Http2Connection {
    * that raises the connection's window, when `connectionWindowSize` asks
    * for one — since a server's preface is its SETTINGS (§3.4): the first
    * `wantsWrite`, `next` or response writes them into `output`. It holds no
-   * buffer until then. A cap outside what RFC 9113 allows panics.
+   * buffer until then, so `output` is empty after the constructor and after
+   * `restart`: a caller that reads `output` itself calls `wantsWrite` first.
+   * A cap outside what RFC 9113 allows panics.
    */
   constructor(config: Http2Config) {
     http2CheckCap("maxStreams", config.maxStreams, 1, 65536)
