@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1077 programs, 140432 dump lines.
+# 1079 programs, 140475 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -5724,6 +5724,21 @@ function main(): i32 -> @nish_main [exported entry]
   callee 25:3 Stats.add -> @Stats.add
   callee 26:3 Stats.add -> @Stats.add
   callee 28:3 halve -> @halve
+program tests/cases/cls_ctor_field_init.ts
+module tests/cases/cls_ctor_field_init.ts (entry)
+struct Dn (class) size=4 align=4
+  field n: i32 index=0 offset=0 initialized
+  constructor -> @Dn.constructor
+function Dn.constructor(this: Dn): void -> @Dn.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Dn.constructor nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=1 stackLocals=0
+  callee 10:15 new Dn -> @Dn.constructor
 program tests/cases/cls_field_bitwise_assign.ts
 module tests/cases/cls_field_bitwise_assign.ts (entry)
 struct Flags (class) size=12 align=4
@@ -17907,8 +17922,8 @@ function count(xs: integer<0, 9>[]): i32 -> @count [exported]
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Slot.constructor(this: Slot): void -> @Slot.constructor [exported constructor]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function slotDay(s: Slot): i32 -> @slotDay [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -17947,8 +17962,8 @@ function twice(d: integer<0, 9>): i32 -> @twice
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function Clock.constructor(this: Clock): void -> @Clock.constructor [exported constructor]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Clock.set(this: Clock, h: integer<0, 23>): i32 -> @Clock.set [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
@@ -56004,6 +56019,36 @@ function main(): void -> @nish_main [exported entry]
   callee 109:37 rest -> @rest
   callee 109:56 rest -> @rest
   callee 110:18 total -> @total
+program tests/cases/union_switch_ctor_init.ts
+module tests/cases/union_switch_ctor_init.ts (entry)
+struct A (class) size=8 align=4
+  field kind: Kind.A index=0 offset=0 readonly initialized
+  field a: i32 index=1 offset=4 initialized
+  constructor -> @A.constructor
+struct B (class) size=8 align=4
+  field kind: Kind.B index=0 offset=0 readonly initialized
+  field b: i32 index=1 offset=4 initialized
+function A.constructor(this: A): void -> @A.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function pick(n: i32): A | B -> @pick
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: A.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+  callee 25:12 new A -> @A.constructor
+function f(u: A | B): i32 -> @f
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: f nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 pick
+  stackSites=0 stackLocals=0
+  local 40:7 s: i32 (let)
+  local 41:12 i: i32 (let)
+  callee 42:10 f -> @f
+  callee 42:12 pick -> @pick
 program tests/cases/union_switch_generic.ts
 module tests/cases/union_switch_generic.ts (entry)
 struct Circle (class) size=8 align=4
