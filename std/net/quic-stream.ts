@@ -221,24 +221,30 @@ const quicStreamMin = (a: i64, b: i64): i64 => (a < b ? a : b)
  * every buffer at once costs, so a `take` never fails.
  *
  * Frames are handled inside the arena scope a packet is opened in, where
- * nothing may allocate or grow a list, so a receive side borrows from the
- * `ready` reserve instead: `prime` takes from the pools, before the scope,
- * as many buffers as the packet could start receive sides, `lend` hands one
- * out inside it, `keep` takes one back zeroed into the same reserve, and
- * `prime(0)` returns the rest to the pools once the scope is closed. The
- * reserve holds three buffers per stream of one connection: as many as a
- * packet can start, and every buffer that connection could give back in it.
+ * nothing may allocate, grow a list or push onto one. So the frames lend and
+ * take back receive buffers through a reserve the pools keep beside their
+ * free lists, by index alone: `lend` hands one out, `keep` takes one back
+ * zeroed. Before each scope `prime` trims the reserve to `hold` buffers,
+ * giving the rest to the pools, and tops it up to as many as the packet
+ * could start receive sides, taking them. `hold` is one connection's stream
+ * count, and the reserve three times that long, so a packet that lends
+ * nothing and takes back every buffer its connection held still fits. Once
+ * warm, the reserve mostly circulates on its own and `prime` costs two
+ * comparisons; between packets it holds at most `hold` buffers, the pools'
+ * lent count leaves out, for the whole server rather than each connection.
  */
 export class QuicStreamPools {
   data: BufferPool
   bits: BufferPool
-  /** The reserve: `ready` buffers and their bitmaps, taken from the pools and not yet lent; the rest of each list is `none`. */
+  /** The reserve: `ready` buffers and their bitmaps, taken from the pools and not lent to a stream; the rest of each list is `none`. */
   readyData: u8[][]
   readyBits: u8[][]
   /** The empty array a free reserve entry holds. */
   none: u8[]
   /** How many buffers the reserve holds. */
   ready: i32 = 0
+  /** The most the reserve keeps from one packet to the next: one connection's stream count. */
+  hold: i32 = 0
   /** How many buffers each pool's free list has been grown to hold, by `fit`. */
   room: i32 = 0
 
@@ -247,6 +253,7 @@ export class QuicStreamPools {
     this.data = new BufferPool("QuicStreams.data", bufferSize, streams * 2 * connections)
     this.bits = new BufferPool("QuicStreams.bits", (bufferSize + 7) >> 3, streams * 2 * connections)
     this.none = []
+    this.hold = streams
     this.readyData = []
     this.readyBits = []
     for (let k: i32 = 0; k < streams * 3; k += 1) {
@@ -256,24 +263,29 @@ export class QuicStreamPools {
   }
 
   /**
-   * Fills or drains the reserve to exactly `need` buffers: takes what is
-   * missing from the pools, gives what is over back (each already zeroed by
-   * `keep`). Never inside an arena scope.
+   * Readies the reserve for a packet that could start `need` receive sides:
+   * trims it to `hold` buffers, then tops it up to `need`. Takes and gives
+   * only when it is outside that window. Never inside an arena scope.
    */
   prime(need: i32): void {
-    while (this.ready > need) {
-      this.ready = this.ready - 1
-      this.data.give(this.readyData[this.ready], QUIC_STREAM_NO_BYTES)
-      this.bits.give(this.readyBits[this.ready], QUIC_STREAM_NO_BYTES)
-      this.readyData[this.ready] = this.none
-      this.readyBits[this.ready] = this.none
-    }
+    this.drain(this.hold)
     while (this.ready < need && this.ready < toI32(this.readyData.length)) {
       this.readyData[this.ready] = this.data.take()
       this.readyBits[this.ready] = this.bits.take()
       this.ready = this.ready + 1
     }
     this.fit()
+  }
+
+  /** Gives the reserve's buffers past the first `most` back to the pools, each already zeroed by `keep`. Never inside an arena scope. */
+  drain(most: i32): void {
+    while (this.ready > most) {
+      this.ready = this.ready - 1
+      this.data.give(this.readyData[this.ready], QUIC_STREAM_NO_BYTES)
+      this.bits.give(this.readyBits[this.ready], QUIC_STREAM_NO_BYTES)
+      this.readyData[this.ready] = this.none
+      this.readyBits[this.ready] = this.none
+    }
   }
 
   /**
@@ -301,10 +313,23 @@ export class QuicStreamPools {
     this.room = target
   }
 
+  /** Lends the reserve's last buffer, into `stream`'s receive side. Panics when the reserve is empty: a packet handled without `prime`. */
+  lend(stream: QuicStream): void {
+    if (this.ready <= 0) {
+      panic("QuicStreams: a receive buffer was wanted with none primed")
+    }
+    this.ready = this.ready - 1
+    stream.recvBuf = this.readyData[this.ready]
+    stream.recvHave = this.readyBits[this.ready]
+    this.readyData[this.ready] = this.none
+    this.readyBits[this.ready] = this.none
+  }
+
   /**
    * Takes `buf` and its bitmap `have` back into the reserve, zeroing the
-   * first `used` bytes of the buffer and the bits of them. Panics when the
-   * reserve is full: more given back than a packet can, a table's bug.
+   * first `used` bytes of the buffer and the bits of them. Safe inside an
+   * arena scope. Panics when the reserve is full: more given back between
+   * two `drain`s than one connection holds, a table's bug.
    */
   keep(buf: u8[], have: u8[], used: i32): void {
     if (this.ready >= toI32(this.readyData.length)) {
@@ -317,9 +342,9 @@ export class QuicStreamPools {
     this.ready = this.ready + 1
   }
 
-  /** How many buffers and bitmaps are lent now, the reserve's among them: 0 once every stream that borrowed has given back. */
+  /** How many buffers and bitmaps are lent to streams now, the reserve's left out: 0 once every stream that borrowed has given back. */
   lent(): i32 {
-    return this.data.lent() + this.bits.lent()
+    return this.data.lent() + this.bits.lent() - this.ready - this.ready
   }
 }
 
@@ -683,13 +708,13 @@ export class QuicStreams {
     }
     const made: QuicStreamPools = new QuicStreamPools(this.bufferSize, count, 1)
     made.prime(made.data.ceiling)
-    made.prime(QUIC_STREAM_NO_BYTES)
+    made.drain(QUIC_STREAM_NO_BYTES)
     this.pools = made
     return made
   }
 
   /**
-   * Readies the reserve for a packet of `bytes` bytes, before the arena
+   * Readies the pools for a packet of `bytes` bytes, before the arena
    * scope its frames are handled in: one buffer for every receive side it
    * could start, which is no more than the sides holding none, nor than one
    * per three bytes (the smallest STREAM frame carrying a byte, but for a
@@ -704,46 +729,41 @@ export class QuicStreams {
     }
   }
 
-  /** Gives the reserve back to the pools once a packet's scope is closed, or after a call that gave a buffer back. */
-  settle(): void {
-    const pools: QuicStreamPools | null = this.pools
-    if (pools !== null) {
-      pools.prime(QUIC_STREAM_NO_BYTES)
-    }
-  }
-
   /** Gives every slot's borrowed buffers back, each with its used extent zeroed. */
   giveBack(): void {
+    const pools: QuicStreamPools | null = this.pools
+    if (pools !== null) {
+      pools.drain(pools.hold)
+    }
     for (const stream of this.slots) {
       this.giveRecv(stream)
       this.giveSend(stream)
     }
-    this.settle()
+    if (pools !== null) {
+      pools.drain(QUIC_STREAM_NO_BYTES)
+    }
   }
 
   /**
    * Lends `stream` a receive buffer and bitmap from the reserve `prime`
    * filled, unless it holds them already or the streams have none. Panics
-   * when the reserve is empty: a packet handled without `prime`.
+   * when the reserve is empty: a packet handled without `prime`, where a
+   * take would allocate inside the scope.
    */
   borrowRecv(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.pools
     if (stream.recvBuf.length > 0 || this.bufferSize <= 0) {
       return
     }
-    if (pools === null || pools.ready <= 0) {
+    if (pools === null) {
       panic("QuicStreams: a receive buffer was wanted with none primed")
     }
-    pools.ready = pools.ready - 1
-    stream.recvBuf = pools.readyData[pools.ready]
-    stream.recvHave = pools.readyBits[pools.ready]
-    pools.readyData[pools.ready] = this.none
-    pools.readyBits[pools.ready] = this.none
+    pools.lend(stream)
     this.recvLent = this.recvLent + 1
   }
 
   /**
-   * Gives `stream`'s receive buffer and bitmap back to the reserve, zeroing
+   * Gives `stream`'s receive buffer and bitmap back to the pools, zeroing
    * every byte a frame reached: below `recvHighest`, which past a whole
    * buffer is all of it. Nothing when it holds none.
    */
@@ -772,7 +792,7 @@ export class QuicStreams {
   }
 
   /**
-   * Gives `stream`'s send buffer and bitmap back to the reserve, zeroing
+   * Gives `stream`'s send buffer and bitmap back to the pools, zeroing
    * every byte a write reached: below `sendEnd`, which past a whole buffer is
    * all of it. Called only once nothing can be sent again from it — every
    * byte acknowledged, or the side reset — and before a reset moves
@@ -1414,6 +1434,8 @@ export class QuicStreams {
    * reset it; or another `QUIC_STREAM_ERR_*`. Reading half a buffer gives the
    * peer more credit. A stream's receiving side is done when a read answers
    * `QUIC_STREAM_END` or `QUIC_STREAM_ERR_RESET`, so read until one does.
+   * After `QuicConnection.release`, a stream that still owed bytes answers
+   * `QUIC_STREAM_END` and copies nothing: its buffer went back to the pool.
    */
   read(id: i64, buf: u8[], at: i32, length: i32): i32 {
     const k: i32 = this.slotOf(id)
@@ -1427,10 +1449,14 @@ export class QuicStreams {
     if (stream.recvState >= QUIC_RECV_RESET_RECVD) {
       stream.recvState = QUIC_RECV_RESET_READ
       this.release(k)
-      this.settle()
       return QUIC_STREAM_ERR_RESET
     }
     const available: i64 = stream.readable()
+    // Bytes owed with no buffer left to hold them: the table was released
+    // under the reader, and nothing more will arrive, so the side is over.
+    if (available > 0 && stream.recvBuf.length === 0) {
+      return QUIC_STREAM_END
+    }
     const n: i32 = toI64(length) < available ? length : toI32(available)
     const size: i32 = toI32(stream.recvBuf.length)
     for (let j: i32 = 0; j < n; j += 1) {
@@ -1459,9 +1485,14 @@ export class QuicStreams {
     // reader that has not seen the end yet.
     if (n === 0 && stream.recvState === QUIC_RECV_DATA_RECVD && stream.recvRead === stream.recvFinal) {
       stream.recvState = QUIC_RECV_DATA_READ
+      // Outside any packet's scope, so the reserve is trimmed first and the
+      // buffer always has room in it.
+      const pools: QuicStreamPools | null = this.pools
+      if (pools !== null) {
+        pools.drain(pools.hold)
+      }
       this.giveRecv(stream)
       this.release(k)
-      this.settle()
       return QUIC_STREAM_END
     }
     return n
@@ -1506,7 +1537,6 @@ export class QuicStreams {
       return QUIC_STREAM_ERR_FINISHED
     }
     this.resetSlot(k, code)
-    this.settle()
     return QUIC_STREAM_OK
   }
 

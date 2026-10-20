@@ -174,6 +174,7 @@ import {
   QUIC_PACKET_INITIAL,
   QUIC_PACKET_OK,
   QUIC_PACKET_SHORT,
+  QUIC_PACKET_ZERO_RTT,
   QuicHeader,
   QuicKeys,
   QuicKeysSlot,
@@ -1763,15 +1764,17 @@ export class QuicConnection {
     this.phasePending = -1
     this.resendLevel = -1
     let used: boolean = false
-    // A STREAM frame's first byte borrows a receive buffer, and nothing may
-    // be taken from a pool inside the scope, so the buffers this packet
-    // could want are readied before it and the rest given back after.
-    this.streams.prime(header.end - header.pnOffset)
+    // A STREAM frame's first byte borrows a receive buffer, and no pool may
+    // make one inside the scope, so the free lists are lengthened before it
+    // to what this packet could want. Only 0-RTT and 1-RTT packets carry
+    // STREAM frames (RFC 9000 §12.4).
+    if (type === QUIC_PACKET_SHORT || type === QUIC_PACKET_ZERO_RTT) {
+      this.streams.prime(header.end - header.pnOffset)
+    }
     {
       using _scope = arena()
       used = this.openScoped(buf, header, space, keys)
     }
-    this.streams.settle()
     if (!used) {
       return false
     }

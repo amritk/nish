@@ -152,6 +152,28 @@ PASS  reset, the second table gives both back: nothing lent from the shared pool
 PASS  a table that has moved no byte has no pools
 PASS  its pools make every buffer at once, and lend two buffers and two bitmaps
 PASS  reset, it holds none
+PASS  bytes 600 to 700 held past a contiguous end of 5
+PASS  reset by the peer, the receive buffer and bitmap go back, every byte to the highest zeroed
+PASS  the next borrower finds the buffer and bitmap clean past its own byte
+PASS  a reset after sending, the send buffer goes back at once, zeroed
+PASS  lost after a reset, nothing is sent again from it
+PASS  acknowledged late after a reset, the free buffers stay zero and none is lent again
+PASS  a probe after a reset sends no stream byte either
+PASS  a stop-sending after sending, the send buffer goes back at once, zeroed
+PASS  lost after a stop-sending, nothing is sent again from it
+PASS  acknowledged late after a stop-sending, the free buffers stay zero and none is lent again
+PASS  a probe after a stop-sending sends no stream byte either
+PASS  1,500 bytes received through a 1,024-byte buffer, read to the end
+PASS  1,500 bytes sent through a 1,024-byte buffer, each acknowledged
+PASS  both sides done, both buffers go back with every byte of them zeroed
+PASS  the next borrower finds the wrapped buffer clean
+PASS  the sending side acknowledged to its final size, its buffer back
+PASS  a reset after completion is refused and gives nothing back
+PASS  the receiving side reset, its buffer back
+PASS  the reset read, the slot released: nothing given back a second time
+PASS  a table reset and a second give-back after it give nothing back again
+PASS  a stop-sending answered after the stream is gone gives nothing back
+PASS  ten bytes owed after the give-back: the read answers the end, copying nothing
 PASS  connected
 PASS  300 packets in and their echoes out, with ACKs and credit updates, keep no arena memory
 PASS  and the echo is all there: 32,000 bytes sent back
@@ -159,4 +181,4 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, a handshake through the slot keeps nothing either (QUIC-3)
-quic streams: 161 passed, 0 failed, 0 skipped
+quic streams: 183 passed, 0 failed, 0 skipped
