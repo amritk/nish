@@ -751,11 +751,14 @@ class EscapeAnalysis {
       ) {
         return new Outcome(FLOW_LOCAL, true, false)
       }
-      // WP27 S3.1: a `string` handed to a `declare function` is borrowed for
-      // the length of the call, and the C function may not keep its address
-      // (`docs/wp27-ffi.md` §8b). Nothing about a C body can be proved, so
-      // this is the decision read as a fact: a read, as `console.log`'s is,
-      // and the arena scope may release once the call has returned.
+      // WP27 S3.1 and WP40 B1.2: a `string` or a `u8[]` handed to a `declare
+      // function` is borrowed for the length of the call, and the C function
+      // may not keep its address (`docs/wp27-ffi.md` §8b,
+      // `docs/wp40-ffi-buffers-handles.md` §5). Nothing about a C body can be
+      // proved, so this is the decision read as a fact: the argument does not
+      // escape, and the arena scope may release once the call has returned.
+      // What C writes through a `u8[]` is recorded as a write by the foreign
+      // facts, not here.
       if (callee !== null && callee.foreign()) {
         return new Outcome(FLOW_LOCAL, true, false)
       }
@@ -1629,9 +1632,12 @@ export const isScalarArgument = (table: TypeTable, type: i32): boolean =>
  *    reach no more than it is handed, and what it is handed is either one of
  *    these parameters, something reached through them, or memory allocated
  *    during the call. C holds none of them past a call either: the only
- *    pointer this compiler allocated that crosses the C boundary is a
- *    `string` lent to a `declare function` for the length of that call, and
- *    the C function may not keep it (WP27 S3.1, `docs/wp27-ffi.md` §8b).
+ *    pointers this compiler allocated that cross the C boundary are a
+ *    `string`'s bytes and a `u8[]`'s data block, each lent to a `declare
+ *    function` for the length of that call, and the C function may keep
+ *    neither (WP27 S3.1, `docs/wp27-ffi.md` §8b; WP40 B1.2,
+ *    `docs/wp40-ffi-buffers-handles.md` §3a). A `u8[]` C writes through is
+ *    written by the call, and holds bytes, not pointers.
  *  - **None of that memory has a slot a pointer fits in.** A pointer outlives
  *    a call only by being stored, and a scalar field has no room for one. A
  *    string is immutable. An array is refused even of numbers, because a
