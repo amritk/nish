@@ -2837,7 +2837,10 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
 const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const target = expr.children[0]
   if (target.kind === N_MEMBER || target.kind === N_INDEX) {
-    const stored = target.kind === N_MEMBER ? checkMemberAssignment(ctx, expr, scope) : checkIndexAssignment(ctx, expr, scope)
+    const stored =
+      target.kind === N_MEMBER
+        ? checkMemberAssignment(ctx, expr, scope)
+        : checkIndexAssignment(ctx, expr, scope)
     clearPaths(ctx, target, scope)
     const path = pathVariable(ctx, target, scope, stored, expr.text === "=")
     if (path !== null && expr.text === "=") {
@@ -3302,7 +3305,13 @@ export const captureNarrowings = (locals: Local[], from: Scope, into: Scope): vo
  * them: `first` and `second` are what the arms ended with
  * (`captureNarrowings`), and `scope` has dropped what it held before.
  */
-export const joinArms = (ctx: CheckContext, locals: Local[], scope: Scope, first: Scope, second: Scope): void => {
+export const joinArms = (
+  ctx: CheckContext,
+  locals: Local[],
+  scope: Scope,
+  first: Scope,
+  second: Scope
+): void => {
   for (const local of locals) {
     scope.clearNarrowing(local)
     if (ctx.table.isEnum(local.type)) {
