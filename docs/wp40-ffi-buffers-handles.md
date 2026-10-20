@@ -8,8 +8,10 @@ retired in the same change that records the foreign call's write through a
 `u8[]` argument (`writesThrough = true` for the parameter it came from, §5),
 so no foreign write goes unrecorded. A task a scope spawns is refused a
 foreign call by the existing shared-write rule, whose message (`` writes
-memory its caller can see ``) stands in for the one §5 sketches. B1.3 and H1
-are unbuilt. It widens [WP27](wp27-ffi.md) in two places.
+memory its caller can see ``) stands in for the one §5 sketches. B1.3 is
+built: a foreign callee's `resizesArray` is `false` (§3c, Q3), which moves the
+three emitter effects §10 lists and leaves the checker's index proof as it was
+(Q15), pinned by `tests/cases/ffi_buffer_no_resize`. H1 is unbuilt. It widens [WP27](wp27-ffi.md) in two places.
 The first is B, a `u8[]` parameter on a `declare function`: plan stage 5 of
 the ffi-reach run, built as B1. The second is H, a class that owns one `CPtr`
 and is closed by `using`: plan stage 6, built as H1. The stage names are B and

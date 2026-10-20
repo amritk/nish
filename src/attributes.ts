@@ -3614,11 +3614,18 @@ const collectFacts = (
     facts.worldVia = `the C function \`${sig.sourceName}\`` // `nish:secret`: nothing about C is proved
     facts.willReturn = false
     facts.readsMemory = true
-    // S1's boundary is scalars only, so a C body cannot reach an array header
-    // at all; this says otherwise for the same reason the three lines above
-    // do. S2 widening the type check must revisit the block rather than
-    // inherit a `false` nobody re-derived.
-    facts.resizesArray = true
+    // WP40 B1.3: no array header crosses to C. A `u8[]` argument is lent as
+    // `buf->data` for the call and a `string` as `s->data`; `len`, `cap` and
+    // the header's own address never leave Nish, and a `CPtr` only ever comes
+    // from C. So a C body can write bytes but cannot move a length or the
+    // block (docs/wp40-ffi-buffers-handles.md §3c), unlike the worst cases
+    // above, which stay. Nor can C re-enter Nish to do it: an exported function
+    // it calls back reaches no array the caller holds, because a module has no
+    // `let`, no array `const` and no `static` field to keep one in. It holds
+    // only while no header crosses: a stage that hands C a `nish_array *` sets
+    // it back to `true` here. The checker's index proof does not read it, and
+    // still forgets every length at a foreign call (§10, Q15).
+    facts.resizesArray = false
     // WP27 S3.2: a `string` result is a fresh arena copy at every call
     // (`emitForeignStringResult`), so the call allocates and answers what it
     // allocated, as a body that returns `s.substring(...)` does. Every caller

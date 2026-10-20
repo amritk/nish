@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1076 programs, 140029 dump lines.
+# 1077 programs, 140123 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -16221,6 +16221,101 @@ function main(): i32 -> @nish_main [exported entry]
   local 9:9 src: u8[] (const)
   callee 10:3 memcpy -> @memcpy
   callee 11:3 write -> @write
+program tests/cases/ffi_buffer_no_resize.ts
+module tests/cases/ffi_buffer_no_resize.ts (entry)
+struct Refill (class) size=8 align=8
+  field n: i64 index=0 offset=0
+  constructor -> @Refill.constructor
+function read(fd: i32, buf: u8[], n: u64): i64 -> @read
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function drain(fd: i32, buf: u8[]): i64 -> @drain
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 16:13
+  escaping: fd
+  calls: nish_panic nish_panic_index read
+  pointer buf: size=0 writesThrough=true captured=false passedTo=read#1
+  stackSites=0 stackLocals=0
+  local 16:9 n: i64 (const)
+  callee 16:13 read -> @read
+function Refill.constructor(this: Refill, fd: i32, buf: u8[]): void -> @Refill.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 24:14
+  escaping: fd
+  calls: nish_panic read
+  pointer this: size=8 writesThrough=true captured=false
+  pointer buf: size=0 writesThrough=true captured=false passedTo=read#1
+  stackSites=0 stackLocals=0
+  callee 24:14 read -> @read
+function addCount(fd: i32, i: i32): i32 -> @addCount [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via read
+  escaping: fd i
+  calls: nish_panic_index read
+  stackSites=1 stackLocals=1
+  local 29:9 buf: u8[] (const)
+  callee 33:18 read -> @read
+function sumCounted(fd: i32): i32 -> @sumCounted [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via read
+  escaping: fd
+  calls: nish_panic nish_panic_index nish_panic_overflow read
+  stackSites=1 stackLocals=1
+  local 38:9 buf: u8[] (const)
+  local 39:7 s: i32 (let)
+  local 40:12 i: i32 (let)
+  callee 41:5 read -> @read
+function sumEach(fd: i32): i32 -> @sumEach [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via read
+  escaping: fd
+  calls: nish_panic nish_panic_overflow read
+  stackSites=1 stackLocals=1
+  local 48:9 buf: u8[] (const)
+  local 49:7 s: i32 (let)
+  local 50:14 b: u8 (const)
+  callee 51:5 read -> @read
+function sumRefilled(fd: i32): i32 -> @sumRefilled [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Refill.constructor
+  escaping: fd
+  calls: Refill.constructor nish_panic_index nish_panic_overflow
+  stackSites=2 stackLocals=2
+  local 58:9 buf: u8[] (const)
+  local 59:7 s: i32 (let)
+  local 60:12 i: i32 (let)
+  local 61:11 r: Refill (const)
+  callee 61:15 new Refill -> @Refill.constructor
+function addDrained(fd: i32): i32 -> @addDrained [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via drain
+  escaping: fd
+  calls: drain nish_panic_index nish_panic_overflow
+  stackSites=1 stackLocals=1
+  local 68:9 buf: u8[] (const)
+  callee 69:18 drain -> @drain
+function sumDrained(fd: i32): i32 -> @sumDrained [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via drain
+  escaping: fd
+  calls: drain nish_panic_index nish_panic_overflow
+  stackSites=1 stackLocals=1
+  local 74:9 buf: u8[] (const)
+  local 75:7 s: i32 (let)
+  local 76:12 i: i32 (let)
+  callee 77:5 drain -> @drain
+function sumEachDrained(fd: i32): i32 -> @sumEachDrained [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via drain
+  escaping: fd
+  calls: drain nish_panic_overflow
+  stackSites=1 stackLocals=1
+  local 84:9 buf: u8[] (const)
+  local 85:7 s: i32 (let)
+  local 86:14 b: u8 (const)
+  callee 87:5 drain -> @drain
 program tests/cases/ffi_buffer_read.ts
 module tests/cases/ffi_buffer_read.ts (entry)
 function read(fd: i32, buf: u8[], n: u64): i64 -> @read
@@ -16386,7 +16481,7 @@ function findDo(n: i32): string -> @findDo
   callee 141:7 free -> @free
   callee 145:7 free -> @free
 function findOf(xs: i32[]): string -> @findOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
   calls: free nish_panic nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_new strdup
   pointer xs: size=0 writesThrough=false captured=false
@@ -16577,7 +16672,7 @@ function does(n: i32): string -> @does
   local 50:7 i: i32 (let)
   callee 52:9 strerror -> @strerror
 function ofs(xs: i32[]): string -> @ofs
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strerror
   calls: nish_panic nish_str_new strerror
   pointer xs: size=0 writesThrough=false captured=false
