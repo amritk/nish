@@ -121,6 +121,24 @@ if [ -n "$cpu" ]; then
     wasm|wasi) echo "error: --cpu x86-64-v3 is an x86-64 level, so the $profile profile does not take it" >&2; exit 2 ;;
   esac
 fi
+# wasm-ld exports a wasm module's linear memory as `memory`, so a function of
+# that name makes a module Node refuses to compile ("Duplicate export name
+# 'memory'", #643). The compiler refuses one (NL3038) when it knows the build is
+# wasm, but IR compiled for the host with `-o` alone reaches these profiles
+# without telling it, so the IR is read here too.
+case "$profile" in
+  wasm|wasi)
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        *.ll)
+          # An `internal` or `private` definition is not exported, so it is left alone.
+          if grep -E '^define [^@]*@memory\(' "$i" | grep -Evq '^define (internal|private) '; then
+            echo "error: $i defines a function named \`memory\`, the name the $profile profile's module exports its linear memory under; rename the function" >&2
+            exit 2
+          fi ;;
+      esac
+    done ;;
+esac
 if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
   # A cached runtime is the profile's ordinary compile, so it exists only for
   # the profiles that compile the runtime with nothing but these flags.

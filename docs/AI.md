@@ -1763,6 +1763,10 @@ export const main = (): i32 => {
   build alike. `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
   (NL3037). Name it `writeLine`, or leave it private: a private function with
   such a name gets a symbol ending in `$`.
+- **Nor, in a wasm build, `memory`**: a wasm `--target`, `--profile wasi` or
+  `--emit-dts` refuses it, because the module exports its linear memory under
+  that name. `` `memory` is the name a wasm module exports its linear memory under: an exported function of the program's own package keeps its name as its symbol, so the module would export two things named `memory` and no host could load it; rename it ``
+  (NL3038). A native build keeps it.
 
 ## Statements
 

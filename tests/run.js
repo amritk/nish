@@ -11350,6 +11350,64 @@ if (!only) {
   }
 }
 
+// ---- #643: a function named `memory` in a wasm module -----------------------------
+// wasm-ld exports a wasm module's linear memory as `memory`, so a function of that
+// name makes a module Node refuses to compile. The compiler refuses one (NL3038) when
+// it knows the build is wasm (`reject_export_wasm_memory*`), but IR compiled for the
+// host with `-o` alone reaches build.sh's wasm and wasi profiles without telling it,
+// so build.sh reads the IR and refuses an exported `@memory` with exit 2. An
+// `internal` one is no export, and still links.
+if (!only || "wasm-memory".includes(only)) {
+  const memDir = path.join(buildDir, "wasm-memory")
+  fs.rmSync(memDir, { recursive: true, force: true })
+  fs.mkdirSync(memDir, { recursive: true })
+  const exportedLl = path.join(memDir, "exported.ll")
+  const exported = spawnSync(NISH, [path.join(casesDir, "export_memory_native.ts"), "-o", exportedLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check("wasm memory: a native -o compile keeps an exported `memory`", exported.status === 0, exported.stderr)
+  for (const profile of ["wasm", "wasi"]) {
+    const r = spawnSync(
+      "bash",
+      ["scripts/build.sh", exportedLl, "-o", path.join(memDir, `refused-${profile}`), "--profile", profile],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `wasm memory: build.sh --profile ${profile} refuses host IR defining an exported @memory with exit 2`,
+      r.status === 2 &&
+        r.stderr.includes("defines a function named `memory`") &&
+        r.stderr.includes(`the ${profile} profile's module exports its linear memory under`),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+  if (has("wasm-ld")) {
+    const privateTs = path.join(memDir, "private.ts")
+    fs.writeFileSync(
+      privateTs,
+      "const memory = (n: i32): i32 => n + 1\nexport const bump = (n: i32): i32 => memory(n)\n"
+    )
+    const privateLl = path.join(memDir, "private.ll")
+    const c = spawnSync(NISH, [privateTs, "-o", privateLl], { cwd: root, encoding: "utf8" })
+    const l =
+      c.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", privateLl, "-o", path.join(memDir, "private.wasm"), "--profile", "wasm"],
+            {
+              cwd: root,
+              encoding: "utf8",
+            }
+          )
+        : c
+    check(
+      "wasm memory: build.sh --profile wasm links host IR whose @memory is internal",
+      l.status === 0,
+      `${l.status}: ${l.stderr}`
+    )
+  }
+}
+
 // ---- WP7: the wasi profile ----------------------------------------------------------
 // The wasi profile links runtime.c against wasi-libc, so string programs run under any
 // WASI host; Node's own implementation runs it here. Needs a WASI sysroot
