@@ -1,7 +1,7 @@
-// `s.kind === k` with `k` narrowed to `Kind.Circle | Kind.Square` narrows `s`
-// to `Circle | Square` in tsc, so after ruling out `Circle` it reads
-// `s.side`. This version narrows `s` only on a test against one member, so
-// the union still has `Tri` and only its tag: stricter than TypeScript.
+// `s.kind === k` with `k` holding `Kind.Circle | Kind.Square` narrows `s`
+// to `Circle | Square` where they are equal, but where they differ `s` may
+// still be any variant: `k` may be `Square` and `s` a `Circle`. So the false
+// side reads `s.r` on the whole union, which TypeScript refuses as well.
 enum Kind {
   Circle,
   Square,
@@ -27,18 +27,14 @@ type Shape = Circle | Square | Tri;
 
 const pick = (n: i32): Shape => (n === 0 ? new Circle() : n === 1 ? new Square() : new Tri());
 
-
 const side = (s: Shape, k: Kind): i32 => {
   if (k === Kind.Tri) {
     return 0;
   }
   if (s.kind === k) {
-    if (s.kind === Kind.Circle) {
-      return s.r;
-    }
-    return s.side;
+    return 1;
   }
-  return 1;
+  return s.r;
 };
 
 export const main = (): void => {

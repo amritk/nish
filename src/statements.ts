@@ -15,10 +15,14 @@
 import { LANGUAGE } from "./branding"
 import {
   checkCondition,
+  captureNarrowings,
   checkExpression,
   clearNarrowingsAssignedIn,
   enumVariable,
+  heldAcross,
   holdMembers,
+  joinArms,
+  localsAssignedIn,
   memberSetName,
   memberSetOf,
   membersDisjoint,
@@ -121,8 +125,17 @@ const terminatorName = (stmt: Node): string => {
 }
 
 /** A statement list in its own scope; true when the list terminates the path. */
-const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean =>
-  checkStatements(ctx, block.children, scope.child())
+/**
+ * A block's end is the only way past it, so what its statements proved and
+ * stored about the variables outside it holds after it: an arm of an `if`
+ * ends where its block does.
+ */
+const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean => {
+  const inner = scope.child()
+  const terminates = checkStatements(ctx, block.children, inner)
+  scope.adopt(inner)
+  return terminates
+}
 
 /** A statement list in `scope`; the caller decides whether that is a new one. */
 export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope): boolean => {
@@ -363,58 +376,94 @@ const declareLocal = (
 
 const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   checkCondition(ctx, stmt.children[0], scope)
+  const otherwise = stmt.children[2]
+  // What the arms assign reads, after the `if`, as what the arms that fall
+  // through left it: an arm's store drops the narrowing from the whole chain,
+  // so what held before is kept aside and put back once the arms are checked.
+  const assigned: Local[] = []
+  localsAssignedIn(stmt.children[1], scope, assigned)
+  localsAssignedIn(otherwise, scope, assigned)
+  const before = new Scope(null)
+  captureNarrowings(assigned, scope, before)
   const thenScope = scope.child()
   narrow(ctx, stmt.children[0], thenScope, true)
   const thenTerminates = checkStatement(ctx, stmt.children[1], thenScope)
   recordGuardFusion(ctx, stmt) // WP32 S5: `if (!s.has(x)) { s.add(x); ... }` is one probe
-  const otherwise = stmt.children[2]
+  const thenEnd = new Scope(null)
+  captureNarrowings(assigned, thenScope, thenEnd)
+  captureNarrowings(assigned, before, scope)
+  const elseScope = scope.child()
+  narrow(ctx, stmt.children[0], elseScope, false)
   if (otherwise.kind === N_EMPTY) {
     // `if (p === null) return;` leaves `p` narrowed for everything after it.
     if (thenTerminates) {
       narrow(ctx, stmt.children[0], scope, false)
+    } else {
+      const elseEnd = new Scope(null)
+      captureNarrowings(assigned, elseScope, elseEnd)
+      joinArms(ctx, assigned, scope, thenEnd, elseEnd)
     }
     return false
   }
-  const elseScope = scope.child()
-  narrow(ctx, stmt.children[0], elseScope, false)
   const elseTerminates = checkStatement(ctx, otherwise, elseScope)
-  // The arm that falls through may assign a variable the test proved
-  // something about, and then what it proved holds of the old value only:
-  // `if (p === null) { return; } else { p = q; }` leaves `p` nullable.
+  const elseEnd = new Scope(null)
+  captureNarrowings(assigned, elseScope, elseEnd)
+  // Only one arm falls through, so what holds after the `if` is what holds at
+  // the end of that arm: the test's side of it, less what the arm assigned —
+  // `if (p === null) { return; } else { p = q; }` leaves `p` nullable — and
+  // plus what it proved, as an `else if` whose own branch leaves does.
   if (thenTerminates && !elseTerminates) {
-    narrow(ctx, stmt.children[0], scope, false)
-    clearNarrowingsAssignedIn(ctx, otherwise, scope)
+    scope.adopt(elseScope)
+    takeArm(assigned, elseEnd, scope)
   } else if (elseTerminates && !thenTerminates) {
-    narrow(ctx, stmt.children[0], scope, true)
-    clearNarrowingsAssignedIn(ctx, stmt.children[1], scope)
+    scope.adopt(thenScope)
+    takeArm(assigned, thenEnd, scope)
+  } else if (!thenTerminates && !elseTerminates) {
+    joinArms(ctx, assigned, scope, thenEnd, elseEnd)
   }
   return thenTerminates && elseTerminates
 }
 
+/** What each of `locals` reads as in `scope` is what the one arm that falls through, `end`, left it. */
+const takeArm = (locals: Local[], end: Scope, scope: Scope): void => {
+  for (const local of locals) {
+    scope.clearNarrowing(local)
+  }
+  captureNarrowings(locals, end, scope)
+}
+
 const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
   checkCondition(ctx, stmt.children[0], scope)
   const body = scope.child()
   narrow(ctx, stmt.children[0], body, true)
   ctx.pushLoop(LOOP_ITERATION)
   checkStatement(ctx, stmt.children[1], body)
   const broke = ctx.popLoop()
+  scope.adopt(held)
   // `while (true)` that nothing breaks out of never falls through, which is
   // what lets a function end with one and still return on every path.
   return stmt.children[0].kind === N_TRUE && !broke
 }
 
 const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
   ctx.pushLoop(LOOP_ITERATION)
   checkStatement(ctx, stmt.children[0], scope.child())
   const broke = ctx.popLoop()
+  scope.adopt(held)
   checkCondition(ctx, stmt.children[1], scope)
   return stmt.children[1].kind === N_TRUE && !broke
 }
 
 const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
   // The initializer's variables live in a scope of their own, so `i` is not
   // visible after the loop and two `for` loops may both declare one.
   const outer = scope.child()
@@ -439,13 +488,16 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   ctx.pushLoop(LOOP_ITERATION)
   checkStatement(ctx, stmt.children[3], body)
   const broke = ctx.popLoop()
+  scope.adopt(held)
   return condition.kind === N_EMPTY && !broke
 }
 
 const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // `for await` and a head that is not a declaration never get here: pass 1
   // refuses them (`refuseUnsupportedForms`), so the head is a VAR.
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
   // The head, before the iterable, in stage0's order (stage0's `src/checker/arrays.ts`).
   // The parser reads `for (const x = 0, y = 1 of a)` and `for (const x: i32 of
   // a)` without complaint, because the grammar it uses for the head is the
@@ -504,6 +556,7 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   ctx.pushLoop(LOOP_ITERATION)
   checkStatement(ctx, stmt.children[2], outer.child())
   ctx.popLoop()
+  scope.adopt(held)
   return false
 }
 
@@ -908,6 +961,8 @@ const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): bool
  */
 const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const discriminant = checkExpression(ctx, stmt.children[0], scope, -1)
+  // What a clause assigns may hold, after the `switch`, what it held before or any value a clause stores.
+  const assignedHeld = heldAcross(ctx, stmt.children[1], scope)
   // WP23: an enum is an `i32` in the jump table and a type of its own to the
   // checker, so it switches exactly as an integer does — and a `case` label of
   // any other type is caught below, which is what stops `case 1:` standing in
@@ -1004,6 +1059,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     // A clause that assigns the variable leaves nothing a label proved true.
     clearNarrowingsAssignedIn(ctx, stmt.children[1], scope)
   }
+  scope.adopt(assignedHeld)
   // Anything no clause names reaches the statement after the `switch` unless
   // a `default` catches it, and so does a `break` or a last clause that falls
   // out of the bottom.

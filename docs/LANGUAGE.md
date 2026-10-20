@@ -810,8 +810,8 @@ const area = (s: Shape): i32 => {
   `reject_enum_narrow_and_false`).
 - The test may read the variable through an assignment, which answers the
   value it stored: `(t = next()).kind === Kind.Square` narrows `t`, as
-  `(k = next()) === Kind.A` narrows an enum `k`, and so does `&&=`, `||=` or
-  `??=` (`reject_union_narrow_test_assign`, `reject_union_narrow_or_assign`,
+  `(k = next()) === Kind.A` narrows an enum `k`
+  (`reject_union_narrow_test_assign`, `reject_union_narrow_or_assign`,
   `reject_enum_narrow_assign`).
 - The variable is a parameter or a `let` or `const` local; a narrowed `const`
   stays narrowed in a data-parallel arrow that reads it

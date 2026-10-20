@@ -1,7 +1,4 @@
 // A loop that assigns a narrowed variable drops the narrowing before its body.
-// and `else`, a ternary, `&&`, `||`, an early return, `!==`, the operands
-// reversed, a `switch`, and composed with a null test. A narrowed variable reads
-// its variant's fields and calls its methods; an assignment drops the narrowing.
 enum Kind {
   Circle,
   Square,

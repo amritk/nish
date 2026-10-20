@@ -288,6 +288,24 @@ export class Scope {
   }
 
   /**
+   * Take on every narrowing and every held set `arm` recorded itself: `arm`
+   * is a child of this scope whose region is the only way past it, so what
+   * it proved holds for the rest of this one.
+   */
+  adopt(arm: Scope): void {
+    let i = 0
+    while (i < arm.narrowedVars.length) {
+      this.narrow(arm.narrowedVars[i], arm.narrowedTypes[i])
+      i = i + 1
+    }
+    i = 0
+    while (i < arm.heldVars.length) {
+      this.hold(arm.heldVars[i], arm.heldSets[i])
+      i = i + 1
+    }
+  }
+
+  /**
    * Drop every narrowing of `variable` in the chain: it was assigned, so
    * nothing proved about its old value holds any more.
    */
