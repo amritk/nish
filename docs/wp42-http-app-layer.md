@@ -134,8 +134,8 @@ On this head, each a median over the 15 rounds on one x86-64 core:
 
 | Run | Router | Linear scan | Linear copy | Noise band | Linear / router |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `nish run` | 388.7 ns | 3,386.2 ns | 3,144.9 ns | 71‰ | 8.7x |
-| `nish run --profile speed` | 151.7 ns | 1,118.8 ns | 1,092.5 ns | 23‰ | 7.4x |
+| `nish run` | 426.3 ns | 3,386.2 ns | 3,290.7 ns | 28‰ | 7.9x |
+| `nish run --profile speed` | 150.3 ns | 1,065.9 ns | 1,095.2 ns | 27‰ | 7.1x |
 
 The router's lead is far outside the band: it reads each segment once and
 visits at most the table's 77 nodes, where the scan compares every one of 112

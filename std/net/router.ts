@@ -364,7 +364,8 @@ export class Router {
     this.firstEndpoint.push(ROUTER_NONE)
     this.labelStart.push(at)
     if (kind === ROUTER_LITERAL) {
-      for (let i: i32 = this.patStart[k]; i < this.patEnd[k]; i++) {
+      const n: i32 = toI32(pattern.length)
+      for (let i: i32 = this.patStart[k]; i >= 0 && i < this.patEnd[k] && i < n; i++) {
         this.labels.push(toU8(toI32(pattern.charCodeAt(i))))
       }
       this.nextSibling[child] = this.firstChild[node]
@@ -418,7 +419,7 @@ export class Router {
     let segments: i32 = 0
     let start: i32 = tStart + 1
     for (let i: i32 = tStart + 1; i <= end; i++) {
-      if (i < end && toI32(target[i]) !== 47) {
+      if (i >= 0 && i < end && i < toI32(target.length) && toI32(target[i]) !== 47) {
         continue
       }
       if (segments < keep) {
@@ -451,7 +452,7 @@ export class Router {
     if (2 * pairs > toI32(params.length)) {
       return ROUTER_TOO_MANY_PARAMS
     }
-    for (let k: i32 = 0; k < 2 * pairs; k++) {
+    for (let k: i32 = 0; k < 2 * pairs && k < toI32(params.length); k++) {
       params[k] = this.found[k]
     }
     return route
@@ -552,9 +553,11 @@ export const routerDecode = (target: u8[], start: i32, end: i32, out: u8[]): i32
   }
   let at: i32 = 0
   i = start
-  while (i < end) {
+  const room: i32 = toI32(out.length)
+  const n: i32 = toI32(target.length)
+  while (i >= 0 && i < end && i < n && at >= 0 && at < room) {
     const c: i32 = toI32(target[i])
-    if (c === 37) {
+    if (c === 37 && i + 2 < n) {
       out[at] = toU8(routerHex(toI32(target[i + 1])) * 16 + routerHex(toI32(target[i + 2])))
       i += 3
     } else {
@@ -610,7 +613,8 @@ const routerSegmentKind = (pattern: string, start: i32, end: i32): i32 => {
   if (param && end - start === 1) {
     return ROUTER_BAD_PATTERN
   }
-  for (let i: i32 = start; i < end; i++) {
+  const n: i32 = toI32(pattern.length)
+  for (let i: i32 = start; i >= 0 && i < end && i < n; i++) {
     const c: i32 = toI32(pattern.charCodeAt(i))
     if (c === 42) {
       return ROUTER_BAD_PATTERN
