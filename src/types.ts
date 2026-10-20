@@ -90,6 +90,17 @@ const T_FIRST_DERIVED: i32 = 13
 export const isForeignType = (table: TypeTable, t: i32): boolean =>
   isForeignScalar(t) || table.stripNull(t) === T_CPTR
 
+/**
+ * A buffer a `declare function` takes (WP40 B1.1): a `u8[]` or a `readonly
+ * u8[]`, which C sees as a pointer to its bytes and whose length is held to
+ * the `u64` after it (`docs/wp40-ffi-buffers-handles.md` §3a). It is kept out
+ * of `isForeignType` because it is not one value with nothing to be wrong
+ * about: it is valid only in a run that a count closes, which is a rule about
+ * the parameter list rather than about one type.
+ */
+export const isForeignBuffer = (table: TypeTable, t: i32): boolean =>
+  t >= 0 && table.kindOf(t) === K_ARRAY && table.refOf(t) === T_U8
+
 const isForeignScalar = (t: i32): boolean =>
   t === T_ERROR ||
   t === T_I32 ||

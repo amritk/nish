@@ -28,21 +28,21 @@ import { WtLimits, wtClientParams, wtClientSettingIds, wtClientSettingValues, wt
 import { H2TlsClient, QuicClient, h3Answer } from "./client";
 import { parseServe, serve } from "./cli";
 import { certificateHash, loadChain, loadKey, mintCertificate, mintKey } from "./identity";
-import { InteropOptions, InteropServer, supportedTestcase } from "./server";
+import { InteropOptions, InteropServer, poolSlots, supportedTestcase } from "./server";
 
 /** The file the checks ask for, and what it holds. */
-const FILE: string = "/hello.txt";
-const CONTENT: string = "a file from www\n";
+export const FILE: string = "/hello.txt";
+export const CONTENT: string = "a file from www\n";
 
 /** A client's three unidirectional HTTP/3 streams, with `settings` on the control stream. */
-const openH3 = (q: QuicClient, settings: u8[]): void => {
+export const openH3 = (q: QuicClient, settings: u8[]): void => {
   q.send(CLIENT_CONTROL, h3Cat([h3Varint(H3_STREAM_CONTROL), settings]), false);
   q.send(CLIENT_ENCODER, h3Varint(H3_STREAM_QPACK_ENCODER), false);
   q.send(CLIENT_DECODER, h3Varint(H3_STREAM_QPACK_DECODER), false);
 };
 
 /** The HEADERS frame of a request with these pseudo-headers, then `names`/`values`. */
-const request = (method: string, path: string, names: string[], values: string[]): u8[] => {
+export const request = (method: string, path: string, names: string[], values: string[]): u8[] => {
   const allNames: string[] = [":method", ":scheme", ":authority", ":path"];
   const allValues: string[] = [method, "https", "localhost", path];
   for (let k: i32 = 0; k < toI32(names.length) && k < toI32(values.length); k++) {
@@ -81,6 +81,22 @@ const identityChecks = (t: Suite): void => {
   t.eqStr("an unknown flag is refused", parseServe(["main", "serve", "--nope", "1"]).error, "unknown flag --nope");
   t.eqStr("a flag with no value is refused", parseServe(["main", "serve", "--www"]).error, "--www wants a value");
   t.eqStr("a port past 65535 is refused", parseServe(["main", "serve", "--port", "65536"]).error, "a port outside 0 to 65535");
+  const sized = parseServe(["main", "serve", "--slots", "4096", "--only", "h3"]);
+  t.ok("--slots and --only are read", sized.error === "" && sized.options.slots === n32(4096) && sized.options.only === "h3");
+  t.eqStr("--slots 0 is refused", parseServe(["main", "serve", "--slots", "0"]).error, "--slots wants a count from 1 to 4096");
+  t.eqStr("--slots past 4096 is refused", parseServe(["main", "serve", "--slots", "4097"]).error, "--slots wants a count from 1 to 4096");
+  t.eqStr("--slots x is refused", parseServe(["main", "serve", "--slots", "x"]).error, "--slots wants a count from 1 to 4096");
+  t.eqStr("an --only that names no pool is refused", parseServe(["main", "serve", "--only", "h4"]).error, "--only wants h1, h1s, h2 or h3");
+  const one = new InteropOptions();
+  one.slots = n32(600);
+  one.only = "h1s";
+  const all = new InteropOptions();
+  all.slots = n32(600);
+  t.ok(
+    "--slots 600 --only h1s: HTTPS/1.1 stops at 500 and the other pools take one slot",
+    poolSlots(one, "h1s") === n32(500) && poolSlots(one, "h1") === n32(1) && poolSlots(one, "h2") === n32(1) && poolSlots(one, "h3") === n32(1)
+  );
+  t.ok("--slots 600: QUIC and HTTP/2 take 600, both HTTP/1.1 pools 500", poolSlots(all, "h3") === n32(600) && poolSlots(all, "h2") === n32(600) && poolSlots(all, "h1") === n32(500) && poolSlots(all, "h1s") === n32(500));
   t.eqI32("serve exits 2 for a command line it cannot read", serve(["main", "serve", "--h2-port", "x"]), n32(2));
   t.eqI32("127 for a test case it does not take, the runner's unsupported", serve(["main", "serve", "--testcase", "zerortt"]), n32(127));
   t.eqI32("3 for a certificate directory with nothing in it", serve(["main", "serve", "--certs", "tests/link/net_interop_server/www"]), n32(3));

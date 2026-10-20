@@ -227,16 +227,39 @@ site:
 A string C allocated for the caller to free (`strdup`) is a `CPtr`, not a
 `string`: the copy would leave C's allocation with no one to free it.
 
-An array, a class or an interface is refused, in either direction, because
-nothing else the Nish compiler allocated may reach code it cannot see:
+A class, an interface or an array other than the byte buffer below is
+refused, in either direction, because nothing else the Nish compiler allocated
+may reach code it cannot see:
 
-```ts nish:err NL2322
+```ts nish:err NL2551
 declare function execvp(file: string, argv: string[]): i32;
 
 export const main = (): i32 => {
   return 0;
 };
 ```
+
+A `u8[]` parameter is a byte buffer C writes into, and a `readonly u8[]` one
+C only reads, as C's `const`. A run of one or more buffers is followed by one
+`u64`, the number of bytes C may touch in each of them:
+
+```ts nish:ok
+declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
+declare function getentropy(buf: u8[], n: u64): i32;
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
+The count is paired by position, so it is your word, not the compiler's proof.
+`fwrite(ptr, size, nmemb, stream)` touches `size * nmemb` bytes: declare it
+`fwrite(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and call it with `1`
+as the third argument, so the one count is the whole size. A buffer with no
+`u64` after it, a count of another type, an `i32[]`, a `u8[] | null` and a
+`u8[]` result are each refused. For now a *call* to a function that takes a
+buffer is refused too, with NL2554: the declaration is checked, and the call
+waits for the release that passes the bytes and checks the count against them.
 
 The one exception is `CPtr`, an address that C owns. A declared function can
 take or return one, a local can hold one, and nothing else can: no field, no

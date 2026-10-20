@@ -1,0 +1,1 @@
+`declare function getbuf` returns u8[], and a declared C function returns a scalar, a `CPtr` or a `string` it copies from a `const char *`

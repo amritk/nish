@@ -1,0 +1,1 @@
+Parameter `b` of `declare function compare` is readonly u8[] | null, and a buffer a declared C function takes is never null

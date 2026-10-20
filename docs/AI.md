@@ -1315,9 +1315,26 @@ export const main = (): i32 => {
 };
 ```
 
-- **A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
-  scalar, a `CPtr` or a copied `string`.** The scalars are the integer and float widths, `boolean`
-  and `void`. An array, class or interface is rejected, in either position.
+- **A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
+  with its count; a return is a scalar, a `CPtr` or a copied `string`.** The
+  scalars are the integer and float widths, `boolean` and `void`. Any other
+  array, a class or an interface is rejected, in either position.
+- **A run of `u8[]` / `readonly u8[]` parameters is followed by exactly one
+  `u64`**, the byte count C may touch in each (`memcpy(dst: u8[], src:
+  readonly u8[], n: u64)`). `readonly` is C's `const`. A run without its count
+  is NL2549, a count that is not `u64` NL2550, `i32[]` NL2551, `u8[] | null`
+  NL2552. Declare `fwrite` as `(buf: readonly u8[], n: u64, one: u64, f: CPtr)`
+  and pass `1` for `one`. A call to a buffer-taking declaration is refused for
+  now (NL2554): the call is not lowered yet.
+
+```ts nish:err NL2549
+declare function SHA256(d: readonly u8[], n: u64, md: u8[]): CPtr;
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
 - **A `string` parameter is lent for the call.** C gets a NUL-terminated
   `const char *` that it may read until it returns, and may neither keep nor
   write; a C function that does either is declared to take a `CPtr` instead.

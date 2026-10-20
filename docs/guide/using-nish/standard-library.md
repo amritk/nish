@@ -30,6 +30,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
+| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -687,6 +688,49 @@ makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
 in the reference.
 
+## `nish/bytes`
+
+A file header, a network packet or a hash's input is a `u8[]` with numbers
+laid out in it. `nish/bytes` reads one from, or writes one into, the array at
+an offset, in either byte order: `LE` (little-endian) puts the least
+significant byte at the offset, `BE` (big-endian, network order) the most
+significant.
+
+| Width | Read | Write |
+| --- | --- | --- |
+| `u16` | `getU16LE`, `getU16BE` | `setU16LE`, `setU16BE` |
+| `u32` | `getU32LE`, `getU32BE` | `setU32LE`, `setU32BE` |
+| `u64` | `getU64LE`, `getU64BE` | `setU64LE`, `setU64BE` |
+| `i32` | `getI32LE`, `getI32BE` | `setI32LE`, `setI32BE` |
+| `i64` | `getI64LE`, `getI64BE` | `setI64LE`, `setI64BE` |
+| `f64` | `getF64LE`, `getF64BE` | `setF64LE`, `setF64BE` |
+
+A signed width is the same bytes read as two's complement, and an `f64` is
+its IEEE 754 bits. There is no `f32`.
+
+```ts nish:ok
+import { getU16LE, getU32BE, setU32LE } from "nish/bytes";
+
+export const main = (): i32 => {
+  const b: u8[] = [0, 0, 1, 0, 0, 0, 0, 0];
+  console.log(`${getU32BE(b, 0)}`); // 256
+  setU32LE(b, 4, toU32(513));
+  console.log(`${b[4]} ${b[5]}`); // 1 2
+  console.log(`${getU16LE(b, 4)}`); // 513
+  return 0;
+};
+```
+
+Every access is an ordinary index. An offset whose bytes do not all lie in the
+array panics with `index out of range`, naming the first byte that is not
+there. A guard in your own loop, such as `off + 3 < b.length`, does not yet
+remove these checks, so a hot loop that needs them gone indexes the bytes
+itself.
+
+Natively every function answers for every value. Under Node the `u16` and
+`u32` functions are expected to answer the same, but the 64-bit ones, the
+`i32` ones and `f64` do not yet: the Node prelude's conversions saturate where native ones wrap.
+
 ## `nish/threads`
 
 Running work on several threads: `parallelMapInto`, `parallelMap`,
@@ -971,10 +1015,42 @@ keys in locals — draw both with `tlsTicketKeyDraw` at start-up, each into its
 own `TlsTicketKeyInfo` — and runs the rotation itself when `tlsTicketKeyDue` says so —
 `wipe(previous)`, `previous = current`, `previousInfo.copyFrom(currentInfo)`,
 `current = tlsTicketKeyDraw(currentInfo, now)`. Every time it takes is
-`monotonicNanos()`, read by you and passed in. Strike each opened ticket's
-`id` in a `TlsTicketStrikes` before you resume from it: `take` answers false
-for a replay, and for every ticket once the register is full, so make it as
-large as the tickets you issue in two hours.
+`monotonicNanos()`, read by you and passed in. The servers strike each
+ticket they resume in a `TlsTicketStrikes` you make and lend them: its `take`
+answers false for a replay, and for every ticket once the register is full,
+so make it as large as the tickets you issue in two hours.
+
+Resumption is off until you turn it on. Call `enableTickets()` on the
+`TlsServer` (`conn.tls` of a `TlsRecordServer`) or on the `TlsTcpServer`,
+once; it is kept across `restart`. From then on a connection's interest says
+`TLS_RECORD_TICKET` (from `nish/net/tls/record-server`) twice. In the
+handshake, when the ClientHello offers a ticket, call
+`resume(current, currentInfo, previous, previousInfo, strikes, now)`, with
+the current key as both if you have only one: the server opens the ticket,
+checks its binder, strikes it and answers the hello, resumed with
+`psk_dhe_ke` (no certificate, no signature, so no `TLS_RECORD_SIGN`) or as a
+full handshake when the ticket is refused. Once the connection is open, call
+`issue(current, currentInfo, now)` to send it one ticket, whether or not it
+resumed. On a `TlsRecordServer`, `resume` answers 0 or the alert it failed
+with, and `issue` whether it sent a ticket; on a `TlsTcpServer` both take the
+`slot` first and answer the slot's new interest bits. A ticket the server
+cannot use (an unknown or retired key, an expired or replayed ticket, another
+suite's hash or another server name, a full register) falls back to a full
+handshake; a selected ticket whose binder does not verify fails the
+connection with `decrypt_error`. QUIC
+never resumes: `enableTickets` on a QUIC connection's `TlsServer` leaves
+tickets off. A resumed handshake costs the server about 0.6x a full one
+(`tests/link/net_tls_resume_bench`).
+
+```ts
+// In the loop, for a slot `poll` says is readable:
+let wants: i32 = tcp.readable(slot);
+if ((wants & TLS_RECORD_TICKET) !== 0) {
+  wants = tcp.connection(slot).state === TLS_RECORD_STATE_OPEN
+    ? tcp.issue(slot, current, currentInfo, monotonicNanos())
+    : tcp.resume(slot, current, currentInfo, previous, previousInfo, strikes, monotonicNanos());
+}
+```
 
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";
