@@ -26,9 +26,12 @@
  * stops asking to be written. An event with the hang-up bit (4) goes to
  * `readable`, which is where a closed or failed socket is noticed.
  *
- * **Slots, sized at start-up; record buffers, borrowed.** The constructor
- * builds every slot's handshake state and keys (TLS-3), and `accept` hands
- * the next connection a free slot and reuses it once the program `close`s it
+ * **Slots, built on first use; record buffers, borrowed.** The pool's size
+ * is a cap: the constructor builds no slot, and the first `accept` into a
+ * slot builds its handshake state and keys (TLS-3) and keeps them, so a pool
+ * sized for its peak costs at start-up only what does not depend on the
+ * size. `accept` hands the next connection the slot closed last, or failing
+ * that the next never used, and reuses it once the program `close`s it
  * (WP34 N9). The record buffers — the bytes to send, the plaintext waiting
  * for the program, the record being opened and the record being read — are
  * borrowed from pools this server owns while a connection uses the slot, and
@@ -110,10 +113,23 @@ const TLS_TCP_ADDRESS_SIZE: i32 = 18
  */
 export class TlsTcpServer {
   config: TlsServerConfig
-  /** The connections, one per slot, made once. */
+  /**
+   * The connections built so far, slot `k`'s at `k`: one per slot ever
+   * accepted into, and slot 0's once `connection` has asked for it.
+   */
   connections: TlsRecordServer[]
-  /** Each slot's descriptor, or -1 while the slot is free. */
+  /**
+   * Each slot's descriptor, or -1 while the slot is free, for the slots
+   * accepted into so far: its length is the high-water mark, and a slot past
+   * it has never been used.
+   */
   fds: i32[]
+  /**
+   * The slots closed since they were used, a stack whose top `accept` takes
+   * before it builds a slot past the high-water mark, so finding one costs
+   * the same with every slot free as with all but one busy.
+   */
+  free: i32[]
   /** Where the socket is read into before a connection takes the bytes: the largest record. */
   scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
@@ -129,6 +145,10 @@ export class TlsTcpServer {
    * handed.
    */
   randoms: u8[][]
+  /** How many slots the pool may hold, which `size` answers. */
+  slots: i32 = 1
+  /** Whether `enableTickets` has run, so a slot built after it resumes too. */
+  tickets: boolean = false
   /**
    * The pools every slot borrows its record buffers from, each with a
    * ceiling of one per slot: `lent()` is 0 once every connection has ended,
@@ -140,40 +160,52 @@ export class TlsTcpServer {
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`, a
-   * socket `tcpListen` made. Every slot's handshake state is allocated here;
-   * its record buffers are borrowed from `pools` while a connection uses them.
+   * socket `tcpListen` made. No slot is built here: a slot's handshake state
+   * and its server random are allocated by the first `accept` into it and
+   * kept, and its record buffers are borrowed from `pools` while a
+   * connection uses them, so a pool sized for a peak costs at start-up only
+   * the read scratch, the signer and the empty pools.
    */
   constructor(config: TlsServerConfig, listener: i32, size: i32) {
     this.config = config
     this.listener = listener
     this.connections = []
     this.fds = []
+    this.free = []
     this.randoms = []
-    const slots: i32 = size < 1 ? 1 : size
-    this.pools = new TlsRecordPools(slots)
-    // A placeholder key for the slots' first handshakes, which never run.
-    const zeros: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
-    for (let k: i32 = 0; k < slots; k++) {
-      // Each slot's own handshake, never given a ClientHello: `accept`
-      // restarts it for a connection with real randomness, and every later
-      // connection reuses its state. It is marked failed without sealing an
-      // alert, so a stray call on a free slot fails closed and the slot
-      // borrows no buffer until a connection moves bytes through it.
-      this.randoms.push(new Array<u8>(TLS_TCP_KEY_SIZE))
-      const conn: TlsRecordServer = new TlsRecordServer(new TlsServer(config, this.randoms[k], zeros))
-      conn.borrowFrom(this.pools)
-      conn.state = TLS_RECORD_STATE_FAILED
-      this.connections.push(conn)
-      this.fds.push(TLS_TCP_FREE)
-    }
+    this.slots = size < 1 ? 1 : size
+    this.pools = new TlsRecordPools(this.slots)
     this.scratch = new Array<u8>(TLS_MAX_RECORD)
     this.peer = new Array<u8>(TLS_TCP_ADDRESS_SIZE)
     this.signer = new TlsP256Signer()
   }
 
-  /** How many slots the pool has. */
+  /**
+   * The next slot's connection and server random, for the slot built next.
+   * Its handshake is never given a ClientHello: `accept` restarts it for a
+   * connection with real randomness, and every later connection reuses its
+   * state. It is marked failed without sealing an alert, so a stray call on
+   * a free slot fails closed and the slot borrows no buffer until a
+   * connection moves bytes through it.
+   */
+  build(): TlsRecordServer {
+    // A placeholder key for the slot's first handshake, which never runs.
+    const zeros: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
+    const random: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
+    this.randoms.push(random)
+    const conn: TlsRecordServer = new TlsRecordServer(new TlsServer(this.config, random, zeros))
+    conn.borrowFrom(this.pools)
+    conn.state = TLS_RECORD_STATE_FAILED
+    if (this.tickets) {
+      conn.tls.enableTickets()
+    }
+    this.connections.push(conn)
+    return conn
+  }
+
+  /** How many slots the pool has, built or not. */
   size(): i32 {
-    return toI32(this.fds.length)
+    return this.slots
   }
 
   /** How many slots hold a connection. */
@@ -200,11 +232,15 @@ export class TlsTcpServer {
   /**
    * The connection in `slot`: its state, its handshake (`tls`: suite, ALPN,
    * server name) and the alerts sent and received. A free slot answers the
-   * last connection it held.
+   * last connection it held. A slot never accepted into, or out of range,
+   * names slot 0's connection, which this builds, failed, when no slot has
+   * been yet (the first `accept` then takes it, restarted).
    */
   connection(slot: i32): TlsRecordServer {
-    const at: i32 = slot >= 0 && slot < toI32(this.connections.length) ? slot : 0
-    return this.connections[at]
+    if (slot >= 0 && slot < toI32(this.connections.length)) {
+      return this.connections[slot]
+    }
+    return this.connections.length > 0 ? this.connections[0] : this.build()
   }
 
   /**
@@ -230,17 +266,23 @@ export class TlsTcpServer {
     if (fd < 0) {
       return fd
     }
-    let slot: i32 = -1
-    for (let k: i32 = 0; k < toI32(this.fds.length); k++) {
-      if (this.fds[k] < 0) {
-        slot = k
-        break
-      }
+    // A slot closed before is taken first, then the next never used, so the
+    // first accepts take slots 0, 1, 2 ... and a pool that never fills never
+    // builds its last slots.
+    let slot: i32 = TLS_TCP_POOL_FULL
+    if (this.free.length > 0) {
+      slot = this.free[this.free.length - 1]
+      this.free.pop()
+    } else if (toI32(this.fds.length) < this.slots) {
+      slot = toI32(this.fds.length)
+      this.fds.push(TLS_TCP_FREE)
     }
-    if (slot < 0) {
+    if (slot < 0 || slot >= toI32(this.fds.length)) {
       netClose(fd)
       return TLS_TCP_POOL_FULL
     }
+    const conn: TlsRecordServer =
+      slot < toI32(this.connections.length) ? this.connections[slot] : this.build()
     this.fds[slot] = fd
     const random: u8[] = this.randoms[slot]
     for (
@@ -250,7 +292,6 @@ export class TlsTcpServer {
     ) {
       random[k] = serverRandom[k]
     }
-    const conn: TlsRecordServer = this.connections[slot]
     // `restart` copies the key into the server's own `Secret` and wipes this array.
     conn.tls.restart(random, ephemeralPrivate)
     conn.start(conn.tls)
@@ -297,8 +338,15 @@ export class TlsTcpServer {
     return this.flush(slot)
   }
 
-  /** Writes the connection's output until the socket would block or it is all sent, and answers its `interest`. */
+  /**
+   * Writes the connection's output until the socket would block or it is all
+   * sent, and answers its `interest`; a slot never built answers
+   * `TLS_RECORD_DONE`.
+   */
   flush(slot: i32): i32 {
+    if (slot < 0 || slot >= toI32(this.fds.length) || slot >= toI32(this.connections.length)) {
+      return TLS_RECORD_DONE
+    }
     const fd: i32 = this.fds[slot]
     const conn: TlsRecordServer = this.connections[slot]
     while (conn.outputEnd > conn.outputStart) {
@@ -356,9 +404,11 @@ export class TlsTcpServer {
   /**
    * Turns session resumption on for every slot (`TlsServer.enableTickets`):
    * from the next `accept`, a connection offering a ticket, or one that may
-   * be issued one, says `TLS_RECORD_TICKET` in its interest.
+   * be issued one, says `TLS_RECORD_TICKET` in its interest. A slot built
+   * later is built with them on.
    */
   enableTickets(): void {
+    this.tickets = true
     for (let k: i32 = 0; k < toI32(this.connections.length); k++) {
       this.connections[k].tls.enableTickets()
     }
@@ -474,6 +524,7 @@ export class TlsTcpServer {
     this.flush(slot)
     netClose(this.fds[slot])
     this.fds[slot] = TLS_TCP_FREE
+    this.free.push(slot)
     conn.wipeKeys()
     // Whatever the last flush could not send is dropped with its buffer.
     conn.release()

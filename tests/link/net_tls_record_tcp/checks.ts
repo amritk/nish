@@ -15,6 +15,10 @@
 //      and every slot free afterwards, its record buffers given back to the
 //      pools.
 //   4. A signing key that is not one, and the calls a free slot answers.
+//   5. Slots built as they are accepted into: a pool of three on a listener
+//      of its own, slots 0, 1, 2 in order, the fourth shed with nothing more
+//      built, a closed slot taken again with its state kept; a pool of
+//      16,384 with no slot built.
 //
 // openssl s_client and curl drive the same server in `serve` mode from the
 // `net_tls_tcp` block of tests/run.js.
@@ -29,7 +33,8 @@ import {
   TlsRecordProtection,
 } from "nish/net/tls/record";
 import { TLS_RECORD_DONE, TLS_RECORD_INVALID, TLS_RECORD_STATE_FAILED } from "nish/net/tls/record-server";
-import { TlsTcpServer } from "nish/net/tls-tcp";
+import { TLS_TCP_POOL_FULL, TlsTcpServer } from "nish/net/tls-tcp";
+import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, tcpConnect, tcpListen } from "nish:net";
 import { toHex } from "../crypto_x509/hex";
 import { rfc8448Config } from "../net_tls_rfc8448/checks";
 import { rfc8448ServerApplicationTraffic, rfc8448ServerPrivate, rfc8448ServerRandom } from "../net_tls_rfc8448/trace";
@@ -48,6 +53,110 @@ import { Opened, ZERO, ascii, filled, join, keyUpdateMessage, openOne, protectio
 import { clearRecord, clientKeysFor, recordHello } from "../net_tls_record_common/client";
 import { Loopback, SIGN_BROKEN, SIGN_LEAF, SIGN_TRACE } from "./harness";
 import { nextTrafficCopy } from "../net_tls_common/secrets";
+
+/** `server.accept`, retried while the connection a client just made has not reached the listener. */
+const acceptWaiting = (server: TlsTcpServer, loop: i32, ready: i32[]): i32 => {
+  let slot: i32 = server.accept(filled(32, 1), filled(32, 2));
+  for (let k: i32 = 0; k < 10 && slot === -11; k++) {
+    pollWait(loop, ready, toI32(100));
+    slot = server.accept(filled(32, 1), filled(32, 2));
+  }
+  return slot;
+};
+
+/** A pool of three on a listener of its own: the slots its accepts take and build, the pool full at three, a closed slot taken again. */
+const acceptOrder = (t: Suite): void => {
+  const listener: i32 = tcpListen("127.0.0.1", ZERO, toI32(16));
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", netLocalPort(listener));
+  const loop: i32 = pollCreate();
+  pollAdd(loop, listener, toI32(1), ZERO);
+  const ready: i32[] = new Array<i32>(8);
+  const server = new TlsTcpServer(tcpConfig([]), listener, toI32(3));
+  t.ok("a pool of three builds no slot before its first accept", server.size() === 3 && toI32(server.connections.length) === 0 && toI32(server.randoms.length) === 0);
+  const clients: i32[] = [];
+  const slots: i32[] = [];
+  let firstGrowth: i64 = toI64(0);
+  for (let k: i32 = 0; k < 4; k++) {
+    clients.push(tcpConnect(addr));
+    const before: i64 = Arena.used();
+    slots.push(acceptWaiting(server, loop, ready));
+    if (k === 0) {
+      firstGrowth = Arena.used() - before;
+    }
+  }
+  t.ok(
+    "a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept",
+    slots[0] === 0 && slots[1] === 1 && slots[2] === 2 && toI32(server.connections.length) === 3 && toI32(server.randoms.length) === 3
+  );
+  t.ok(
+    "with size slots busy the next is shed with TLS_TCP_POOL_FULL and nothing more is built",
+    slots[3] === TLS_TCP_POOL_FULL && server.busy() === 3 && toI32(server.connections.length) === 3 && toI32(server.fds.length) === 3
+  );
+  const first = server.connection(toI32(1));
+  server.close(toI32(1));
+  clients.push(tcpConnect(addr));
+  const before: i64 = Arena.used();
+  const again: i32 = acceptWaiting(server, loop, ready);
+  const againGrowth: i64 = Arena.used() - before;
+  t.ok(
+    "a closed slot is taken again, its TLS state kept rather than built anew",
+    again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
+  );
+  t.ok(
+    "the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing",
+    firstGrowth > toI64(0) && againGrowth === toI64(0)
+  );
+  for (let k: i32 = 0; k < 3; k++) {
+    server.close(k);
+  }
+  t.ok("and every slot is free once closed", server.busy() === 0 && toI32(server.free.length) === 3);
+  for (const fd of clients) {
+    netClose(fd);
+  }
+  netClose(loop);
+  netClose(listener);
+};
+
+/** A pool of 16,384 on no socket: a slot never built answers every call as a free slot does, and only `connection` builds one. */
+const neverBuilt = (t: Suite): void => {
+  const server = new TlsTcpServer(tcpConfig([]), toI32(-1), toI32(16384));
+  const last: i32 = toI32(16383);
+  t.ok(
+    "a pool of 16,384 reports its size with no slot built",
+    server.size() === 16384 && server.busy() === 0 && toI32(server.connections.length) === 0 && toI32(server.fds.length) === 0
+  );
+  t.ok(
+    "a slot never built holds nothing: no descriptor, done to every call, -22 to reads and writes",
+    !server.holds(last) &&
+      server.fd(last) === -1 &&
+      server.readable(last) === TLS_RECORD_DONE &&
+      server.writable(last) === TLS_RECORD_DONE &&
+      server.flush(last) === TLS_RECORD_DONE &&
+      server.interest(last) === TLS_RECORD_DONE &&
+      server.shutdown(last) === TLS_RECORD_DONE &&
+      server.signatureInput(last) === null &&
+      server.read(last, ascii("buf"), ZERO, toI32(3)) === TLS_RECORD_INVALID &&
+      server.write(last, ascii("buf"), ZERO, toI32(3)) === TLS_RECORD_INVALID
+  );
+  server.close(last);
+  server.enableTickets();
+  t.ok("closing it and enabling tickets build nothing", toI32(server.free.length) === 0 && toI32(server.connections.length) === 0);
+  t.ok(
+    "an accept with no listener answers tcpAccept's -9 and builds nothing",
+    server.accept(filled(32, 1), filled(32, 2)) === -9 && toI32(server.connections.length) === 0 && toI32(server.fds.length) === 0
+  );
+  const zero = server.connection(last);
+  t.ok(
+    "a never-built slot's connection is slot 0's, built once, failed, with tickets on as the pool's are",
+    zero === server.connection(ZERO) &&
+      toI32(server.connections.length) === 1 &&
+      toI32(server.fds.length) === 0 &&
+      zero.state === TLS_RECORD_STATE_FAILED &&
+      zero.tls.tickets &&
+      server.busy() === 0
+  );
+};
 
 /** The next whole record client `index` receives, header and all; empty on a timeout or the end of its stream. */
 const nextRecord = (lb: Loopback, index: i32): u8[] => {
@@ -180,13 +289,14 @@ export const tcpChecks = (): i32 => {
   lb.send(f, clearRecord(recordHello([suite], false, false)));
   lb.mute(f);
   let rounds: i32 = 0;
-  while (lb.server.connection(ZERO).writeLevel !== TLS_LEVEL_APPLICATION && rounds < 50 && lb.failure === "") {
+  // Both slots are free, so `f` took whichever closed last.
+  while (lb.server.connection(lb.latest).writeLevel !== TLS_LEVEL_APPLICATION && rounds < 50 && lb.failure === "") {
     lb.step(toI32(-1));
     rounds = rounds + 1;
   }
   lb.hangUp(f);
   t.ok("a client that resets the connection mid-handshake is closed", lb.awaitClosed(toI32(4)) && lb.server.busy() === 0);
-  const reset = lb.server.connection(ZERO);
+  const reset = lb.server.connection(lb.latest);
   t.ok("as a socket failure, not as a cut stream, and with nothing sent", reset.state === TLS_RECORD_STATE_FAILED && !reset.ended && reset.alert === 0);
   t.eqI32("every connection was accepted into a slot but the one shed", lb.accepted, toI32(4));
   t.eqI32("each accept copied the key into its slot and wiped the one buffer the program refills", lb.keysWiped, toI32(4));
@@ -271,6 +381,10 @@ export const tcpChecks = (): i32 => {
   t.ok("and the connection is closed", broken.awaitEnd(g) && broken.awaitClosed(toI32(1)));
   t.eqStr("with nothing gone wrong in the loop", broken.failure, "");
   broken.shutdown();
+
+  // --- 5. Slots built as they are accepted into ------------------------------------------
+  acceptOrder(t);
+  neverBuilt(t);
 
   return t.done();
 };

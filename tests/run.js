@@ -42,7 +42,13 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import {
+  budgetLabel,
+  HTTP1_SERVER_START_BYTES,
+  HTTP1_TLS_SERVER_START_BYTES,
+  RUNTIME_BUDGETS,
+  TLS_TCP_START_BYTES,
+} from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -6317,6 +6323,49 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
       "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
       `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
+// `TlsTcpServer` and `Http1TlsServer` build a slot's TLS state, and the
+// latter its connection, on the first accept into it too.
+// `tests/link/net_tls_record_tcp/startup.ts` and
+// `tests/link/net_http1_server/tls-startup.ts` build pools of 16,384 slots on
+// no socket and print the bytes they took and whether they fit one chunk,
+// which the ceilings `TLS_TCP_START_BYTES` and `HTTP1_TLS_SERVER_START_BYTES`
+// hold.
+for (const [unit, program, name, ceiling, ceilingName] of [
+  ["net_tls_record_tcp", "startup.ts", "TlsTcpServer", TLS_TCP_START_BYTES, "TLS_TCP_START_BYTES"],
+  [
+    "net_http1_server",
+    "tls-startup.ts",
+    "Http1TlsServer",
+    HTTP1_TLS_SERVER_START_BYTES,
+    "HTTP1_TLS_SERVER_START_BYTES",
+  ],
+]) {
+  if (only && !unit.includes(only) && !"runtime-budget".includes(only)) {
+    continue
+  }
+  const dir = path.join(buildDir, "link", `${unit}.${program.replace(".ts", "")}`)
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", unit, program), "-o", dir + path.sep, "--link", exe],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  if (check(`${unit}: ${program} links`, built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, chunk] = String(run.stdout).trim().split(" ")
+    check(
+      `${unit}: a 16,384-slot ${name} takes at most ${ceilingName} before its first connection`,
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= ceiling,
+      `ceiling ${ceiling}\n${shown(run)}`
     )
   }
 }

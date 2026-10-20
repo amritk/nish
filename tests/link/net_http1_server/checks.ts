@@ -12,7 +12,8 @@
 //   4. Every refusal of a request, each answered with its status and a close.
 //   5. The end of the stream mid-request, a client gone mid-response, the
 //      idle timeout, the pool, a free slot; a pool of three on a listener of
-//      its own, built as it accepts; a pool of 16,384 with no slot built.
+//      its own, built as it accepts; a pool of 16,384 with no slot built;
+//      the same two for `Http1TlsServer`.
 //   6. TLS: ALPN http/1.1, no ALPN, ALPN h2 shut down, the arena flat.
 //   7. The connection alone: every refusal of `respond`, `write`, `end`,
 //      `acceptWebSocket`, `sendFrame` and `closeWebSocket`.
@@ -51,7 +52,9 @@ import {
   Http1Config,
   Http1Connection,
   Http1Server,
+  Http1TlsServer,
 } from "nish/net/http1-server";
+import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp";
 import {
   WS_CLOSE,
   WS_CLOSE_NO_STATUS,
@@ -363,6 +366,89 @@ const neverBuilt = (t: Suite): void => {
   t.ok(
     "a never-built slot's connection is slot 0's, built once and holding nothing",
     server.connection(last) === server.connection(ZERO) && toI32(server.connections.length) === 1 && toI32(server.fds.length) === 0 && server.busy() === 0
+  );
+};
+
+/** `server`'s next accept, as `acceptWaiting` waits for `Http1Server`'s, with an all-zero random and key: no handshake is run. */
+const tlsAcceptWaiting = (server: Http1TlsServer, loop: i32, ready: i32[]): i32 => {
+  const zeros: u8[] = new Array<u8>(32);
+  let slot: i32 = server.accept(zeros, zeros);
+  for (let k: i32 = 0; k < 10 && slot === -11; k++) {
+    pollWait(loop, ready, toI32(100));
+    slot = server.accept(zeros, zeros);
+  }
+  return slot;
+};
+
+/** `acceptOrder` for `Http1TlsServer`: a slot's connection and TLS state built on its first accept, in order, and kept. */
+const tlsAcceptOrder = (t: Suite): void => {
+  const listener: i32 = tcpListen("127.0.0.1", ZERO, toI32(16));
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", netLocalPort(listener));
+  const loop: i32 = pollCreate();
+  pollAdd(loop, listener, toI32(1), ZERO);
+  const ready: i32[] = new Array<i32>(8);
+  const server = new Http1TlsServer(tcpConfig([H1_ALPN]), testConfig(), listener, toI32(3));
+  t.ok("TLS: a pool of three builds no slot before its first accept", toI32(server.connections.length) === 0 && toI32(server.tls.connections.length) === 0);
+  const clients: i32[] = [];
+  const slots: i32[] = [];
+  for (let k: i32 = 0; k < 4; k++) {
+    clients.push(tcpConnect(addr));
+    slots.push(tlsAcceptWaiting(server, loop, ready));
+  }
+  t.ok(
+    "TLS: a pool built as it accepts takes slots 0, 1, 2 in order, building each slot's connection and TLS state on its first accept",
+    slots[0] === 0 && slots[1] === 1 && slots[2] === 2 && toI32(server.connections.length) === 3 && toI32(server.tls.connections.length) === 3
+  );
+  t.ok(
+    "TLS: with size slots busy the next is shed with TLS_TCP_POOL_FULL and nothing more is built",
+    slots[3] === TLS_TCP_POOL_FULL && server.busy() === 3 && toI32(server.connections.length) === 3 && toI32(server.tls.connections.length) === 3
+  );
+  const first: Http1Connection = server.connection(toI32(1));
+  server.close(toI32(1));
+  clients.push(tcpConnect(addr));
+  const again: i32 = tlsAcceptWaiting(server, loop, ready);
+  t.ok(
+    "TLS: a closed slot is taken again, its connection kept rather than built anew",
+    again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
+  );
+  for (let k: i32 = 0; k < 3; k++) {
+    server.close(k);
+  }
+  t.ok("TLS: and every slot is free once closed", server.busy() === 0);
+  for (const fd of clients) {
+    netClose(fd);
+  }
+  netClose(loop);
+  netClose(listener);
+};
+
+/** `neverBuilt` for `Http1TlsServer`: a pool of 16,384 on no socket, a slot never built answering every reader as a free one does. */
+const tlsNeverBuilt = (t: Suite): void => {
+  const server = new Http1TlsServer(tcpConfig([H1_ALPN]), testConfig(), toI32(-1), toI32(16384));
+  const last: i32 = toI32(16383);
+  t.ok(
+    "TLS: a pool of 16,384 reports its size with no slot built",
+    server.size() === 16384 && server.busy() === 0 && toI32(server.connections.length) === 0 && toI32(server.tls.connections.length) === 0
+  );
+  t.ok(
+    "TLS: a slot never built holds nothing: no descriptor, H1_ERROR to next, done to the rest",
+    !server.holds(last) &&
+      server.fd(last) === -1 &&
+      server.next(last) === H1_ERROR &&
+      (server.flush(last) & H1_DONE) !== 0 &&
+      (server.readable(last) & H1_DONE) !== 0 &&
+      (server.writable(last) & H1_DONE) !== 0
+  );
+  server.close(last);
+  const zeros: u8[] = new Array<u8>(32);
+  t.ok(
+    "TLS: closing it, expiring the pool and an accept with no listener build nothing",
+    server.expire(monotonicNanos()) === 0 && server.accept(zeros, zeros) < 0 && toI32(server.connections.length) === 0 && toI32(server.tls.connections.length) === 0
+  );
+  t.ok(
+    "TLS: a never-built slot's connection is slot 0's, built once and holding nothing",
+    server.connection(last) === server.connection(ZERO) && toI32(server.connections.length) === 1 && server.busy() === 0
   );
 };
 
@@ -718,6 +804,8 @@ export const serverChecks = (): i32 => {
   t.ok("a slot out of range names the first connection", lb.plain.connection(toI32(9)) === lb.plain.connection(ZERO) && lb.plain.size() === 4);
   acceptOrder(t);
   neverBuilt(t);
+  tlsAcceptOrder(t);
+  tlsNeverBuilt(t);
 
   // --- 6. TLS -------------------------------------------------------------------------------------
   const s = new TlsClient(lb);
