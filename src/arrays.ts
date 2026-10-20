@@ -34,6 +34,7 @@ import {
   N_DEFAULT,
   N_DO,
   N_EMPTY,
+  N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
   N_IDENT,
@@ -65,7 +66,6 @@ import {
   PAR_FROM,
   PAR_MAP_NEW,
   PAR_SPAWN,
-  StructInfo,
 } from "./program"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
@@ -962,6 +962,20 @@ class RefWalk {
   table: TypeTable
   ctx: CheckContext | null
   live: ElementRef[]
+  /**
+   * Every local declared in the blocks still open, innermost last. A block that
+   * ends keeps a reference it bound by assignment to a local declared outside
+   * it (`if (c) { q = p }`), because `q` outlives the block.
+   */
+  declared: Local[]
+  /**
+   * The assignment that is the statement being walked, directly inside a
+   * block, and the length of `live` when that block opened. Only such an
+   * assignment surely runs after what the block bound before it, so only it
+   * replaces what its local held.
+   */
+  statement: Node | null
+  statementBlock: i32
   /** One report per body: `ctx.error` suppresses the rest anyway, and stage0 stops here too. */
   reported: boolean
   /** What an observing walk has found; `null` in the checker's, which skips that work. */
@@ -994,6 +1008,9 @@ class RefWalk {
     this.table = table
     this.ctx = ctx
     this.live = []
+    this.declared = []
+    this.statement = null
+    this.statementBlock = 0
     this.reported = false
     this.overwrites = overwrites
     this.aliased = aliased
@@ -1061,11 +1078,46 @@ class RefWalk {
     this.reported = true
   }
 
-  /** Forget every reference declared since `depth`: its block has ended. */
-  dropTo(depth: i32): void {
+  /**
+   * A block has ended: forget every reference bound since `depth` to a local
+   * declared since `declaredDepth`. One bound to a local declared outside the
+   * block, by an assignment inside it, stays live.
+   */
+  dropTo(depth: i32, declaredDepth: i32): void {
+    const kept: ElementRef[] = []
+    let i = depth
+    while (i < this.live.length) {
+      if (!this.declaredSince(this.live[i].local, declaredDepth)) {
+        kept.push(this.live[i])
+      }
+      i = i + 1
+    }
+    this.keepFrom(depth, kept)
+    while (this.declared.length > declaredDepth) {
+      this.declared.pop()
+    }
+  }
+
+  /** Replace every reference from `depth` on with `kept`. */
+  keepFrom(depth: i32, kept: ElementRef[]): void {
     while (this.live.length > depth) {
       this.live.pop()
     }
+    for (const ref of kept) {
+      this.live.push(ref)
+    }
+  }
+
+  /** Whether `local` was declared in a block opened at `declaredDepth` or inside it. */
+  declaredSince(local: Local, declaredDepth: i32): boolean {
+    let i = declaredDepth
+    while (i < this.declared.length) {
+      if (this.declared[i] === local) {
+        return true
+      }
+      i = i + 1
+    }
+    return false
   }
 
   /** Mark every live reference the mutation may have invalidated. */
@@ -1127,11 +1179,18 @@ class RefWalk {
     }
     if (node.kind === N_BLOCK || node.kind === N_CASE || node.kind === N_DEFAULT) {
       const depth = this.live.length
-      this.visitChildren(node)
+      const declaredDepth = this.declared.length
+      for (const child of node.children) {
+        const expression = child.kind === N_EXPR_STMT ? unwrapParens(child.children[0]) : child
+        this.statement = expression.kind === N_BINARY && expression.text === "=" ? expression : null
+        this.statementBlock = depth
+        this.visit(child)
+      }
+      this.statement = null
       if (this.held.length > 0) {
         this.readHeld(node)
       }
-      this.dropTo(depth)
+      this.dropTo(depth, declaredDepth)
       return
     }
     if (node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO) {
@@ -1201,6 +1260,7 @@ class RefWalk {
       this.invalidate(m)
     }
     const depth = this.live.length
+    const declaredDepth = this.declared.length
     // `for (const p of ps)` binds an element reference too. It is re-derived
     // from the header at the top of every pass, so it starts each iteration
     // valid and is only invalidated by a mutation inside the body.
@@ -1209,6 +1269,9 @@ class RefWalk {
       const elem = inlineArrayElement(this.program, this.table, iterable)
       const decl = node.children[0].children[0].children[0]
       const local = this.program.nodeLocals[decl.id]
+      if (local !== null) {
+        this.declared.push(local)
+      }
       if (elem !== "" && local !== null) {
         this.live.push(
           new ElementRef(local, referenceRoot(iterable), elem, rootText(this.program, this.table, iterable))
@@ -1216,7 +1279,7 @@ class RefWalk {
       }
     }
     this.visitChildren(node)
-    this.dropTo(depth)
+    this.dropTo(depth, declaredDepth)
   }
 
   visitCall(node: Node): void {
@@ -1245,37 +1308,59 @@ class RefWalk {
   visitDeclaration(node: Node): void {
     this.visitChildren(node)
     const local = this.program.nodeLocals[node.id]
-    const initializer = node.children[2]
-    if (local === null || initializer.kind === N_EMPTY) {
+    if (local === null) {
       return
     }
-    this.bind(local, initializer)
+    this.declared.push(local)
+    const initializer = node.children[2]
+    if (initializer.kind !== N_EMPTY) {
+      this.bind(local, initializer, this.live.length)
+    }
   }
 
-  /** `q = p`: the local now holds whatever element `p` refers to, as a declaration would. */
+  /**
+   * `q = p`: the local now holds whatever element `p` refers to, as a
+   * declaration would, and no longer what it held before if that was bound in
+   * this same block. One bound in an enclosing block stays, since the block
+   * holding the assignment may not have run.
+   */
   visitAssignment(node: Node): void {
     const target = unwrapParens(node.children[0])
     const local: Local | null = target.kind === N_IDENT ? this.program.nodeLocals[target.id] : null
     if (local !== null) {
-      this.bind(local, node.children[1])
+      const statement = this.statement
+      const replaceFrom = statement !== null && statement === node ? this.statementBlock : this.live.length
+      this.bind(local, node.children[1], replaceFrom)
     }
   }
 
-  /** Make `local` a live reference to every element `value` may evaluate to. */
-  bind(local: Local, value: Node): void {
+  /**
+   * Make `local` a live reference to every element `value` may evaluate to,
+   * in place of the references it was bound to since `replaceFrom`.
+   */
+  bind(local: Local, value: Node, replaceFrom: i32): void {
     const found: ElementRef[] = []
     this.referencesOf(local, value, found)
-    for (const ref of found) {
-      this.live.push(ref)
+    const kept: ElementRef[] = []
+    let i = replaceFrom
+    while (i < this.live.length) {
+      if (this.live[i].local !== local) {
+        kept.push(this.live[i])
+      }
+      i = i + 1
     }
+    for (const ref of found) {
+      kept.push(ref)
+    }
+    this.keepFrom(replaceFrom, kept)
   }
 
   /**
    * Every element reference `value` may evaluate to, bound to `local`: an
    * element read (`ps[0]`, `ps.pop()`), and the references it carries on from
-   * another local (#646) — a `const q = p` alias and so a chain of them, either
-   * side of a `c ? p : p2` or a `m ?? p`, and a call that returns a record of
-   * the element's class, which may hand back the reference it was given.
+   * another local (#646): a `const q = p` alias and so a chain of them, and
+   * either side of a `c ? p : p2` or a `m ?? p`. A call's result is not one: a
+   * helper given the reference may as well return a copy (`clone(ps[0])`).
    */
   referencesOf(local: Local, value: Node, out: ElementRef[]): void {
     const inner = unwrapParens(value)
@@ -1303,33 +1388,15 @@ class RefWalk {
       this.referencesOf(local, inner.children[2], out)
       return
     }
-    if (inner.kind === N_BINARY && (inner.text === "??" || inner.text === "||" || inner.text === "&&")) {
+    if (inner.kind === N_BINARY && inner.text === "??") {
       this.referencesOf(local, inner.children[0], out)
       this.referencesOf(local, inner.children[1], out)
-      return
-    }
-    if (inner.kind === N_CALL && this.program.nodeCallees[inner.id] !== null) {
-      const type = this.program.nodeTypes[inner.id]
-      const info: StructInfo | null =
-        type < 0 ? null : inlineElementStruct(this.program, this.table, this.table.stripNull(type))
-      if (info === null) {
-        return
-      }
-      const passed: ElementRef[] = []
-      for (const arg of inner.children[1].children) {
-        this.referencesOf(local, arg, passed)
-      }
-      for (const ref of passed) {
-        if (ref.elem === info.name) {
-          out.push(ref)
-        }
-      }
     }
   }
 
   /** A copy, bound to `local`, of every live reference `from` holds, invalidation and all. */
   aliasesOf(local: Local, from: Local | null, out: ElementRef[]): void {
-    if (from === null || from === local) {
+    if (from === null) {
       return
     }
     for (const ref of this.live) {
