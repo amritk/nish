@@ -10,7 +10,10 @@
 # it crosses on both: the largest of 102 correlated tests on a shared runner
 # crosses once now and then with no leak behind it (the A/A rate in
 # docs/security/ct-verification.md, "The re-measure rule"). The controls must
-# differ on their first measurement.
+# differ on their first measurement. A dispatch with `aa_runs` set runs the A/A
+# test that many times on each runner instead (tests/ct-timing.js --null): both
+# classes prepared alike, so whatever crosses is that runner's false-positive
+# rate, the number the re-measure rule rests on.
 #
 # It is not a check on pull requests and must not become one. Timing on a
 # shared runner is noisy, so a finding goes to one open issue labelled
@@ -25,6 +28,11 @@ on:
     # Mondays, 04:37 UTC: off the hour, where most scheduled jobs queue.
     - cron: "37 4 * * 1"
   workflow_dispatch:
+    inputs:
+      aa_runs:
+        description: "A/A runs instead of the timing run (tests/ct-timing.js --null): the false-positive rate the re-measure rule rests on"
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -93,11 +101,22 @@ jobs:
       - name: Time the constant-time fixtures
         env:
           MATRIX_OS: ${{ matrix.os }}
+          AA_RUNS: ${{ inputs.aa_runs || 0 }}
         run: |
           mkdir -p build/ct-timing-report
           set +e
-          node tests/ct-timing.js > build/ct-timing-report/table.md 2> build/ct-timing-report/stderr.txt
-          code=$?
+          if [ "$AA_RUNS" -gt 0 ]; then
+            # The A/A runs, each on its own seed; the worst exit code is kept.
+            code=0
+            for _ in $(seq "$AA_RUNS"); do
+              node tests/ct-timing.js --null >> build/ct-timing-report/table.md 2>> build/ct-timing-report/stderr.txt
+              run=$?
+              [ "$run" -gt "$code" ] && code=$run
+            done
+          else
+            node tests/ct-timing.js > build/ct-timing-report/table.md 2> build/ct-timing-report/stderr.txt
+            code=$?
+          fi
           set -e
           echo "$code" > build/ct-timing-report/code
           cat build/ct-timing-report/table.md build/ct-timing-report/stderr.txt
