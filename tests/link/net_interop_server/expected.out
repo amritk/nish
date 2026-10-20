@@ -7,6 +7,13 @@ PASS  serve's flags are read
 PASS  an unknown flag is refused
 PASS  a flag with no value is refused
 PASS  a port past 65535 is refused
+PASS  --slots and --only are read
+PASS  --slots 0 is refused
+PASS  --slots past 4096 is refused
+PASS  --slots x is refused
+PASS  an --only that names no pool is refused
+PASS  --slots 600 --only h1s: HTTPS/1.1 stops at 500 and the other pools take one slot
+PASS  --slots 600: QUIC and HTTP/2 take 600, both HTTP/1.1 pools 500
 usage: a port outside 0 to 65535
 PASS  serve exits 2 for a command line it cannot read
 unsupported test case zerortt
@@ -36,4 +43,4 @@ PASS  byte for byte
 PASS  the application counted each: two hq requests, two HTTP/3, one session, one datagram, one stream
 bind failed: -98
 PASS  one QUIC port taken already: serve exits 1
-interop server: 34 passed, 0 failed, 0 skipped
+interop server: 41 passed, 0 failed, 0 skipped
