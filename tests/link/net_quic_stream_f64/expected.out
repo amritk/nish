@@ -137,6 +137,21 @@ PASS  a finished stream of the server's arrives
 PASS  and once acknowledged leaves its slot: the next opens, 11
 PASS  a stream's first 100 bytes go out in one frame
 PASS  with every byte it would send again acknowledged, the next packet carries its 50 new bytes, not nothing
+PASS  a stream's 100 bytes and its FIN go out in one frame
+PASS  lost, with every byte written sent, the send buffer is still lent
+PASS  the frame sent again is the frame sent first, byte for byte, read from the kept buffer
+PASS  sent again but not acknowledged, the buffer stays lent
+PASS  with the FIN acknowledged and its first 50 bytes not, the send buffer stays lent
+PASS  acknowledged to the final size, the send buffer goes back to the pool
+PASS  the first table's stream done both ways, it holds no buffer
+PASS  every buffer back in the pools is zeroed, the bitmaps too
+PASS  the second table borrows what the first gave back, making none
+PASS  past the byte it was given, its receive buffer and bitmap are all zero
+PASS  past the byte it wrote, its send buffer is all zero
+PASS  reset, the second table gives both back: nothing lent from the shared pools
+PASS  a table that has moved no byte has no pools
+PASS  its pools make every buffer at once, and lend two buffers and two bitmaps
+PASS  reset, it holds none
 PASS  connected
 PASS  300 packets in and their echoes out, with ACKs and credit updates, keep no arena memory
 PASS  and the echo is all there: 32,000 bytes sent back
@@ -144,4 +159,4 @@ PASS  six connections, one after another, through one slot
 PASS  resetting the slot for the next keeps no arena memory
 PASS  after its handshake a connection keeps none: ten echoes, a close
 PASS  and from the second on, a handshake through the slot keeps nothing either (QUIC-3)
-quic streams: 146 passed, 0 failed, 0 skipped
+quic streams: 161 passed, 0 failed, 0 skipped
