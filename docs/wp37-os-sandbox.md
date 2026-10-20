@@ -34,7 +34,7 @@ enforces them.
 
 The compiler already knows, for every function, the capabilities it can reach:
 `propagateCapabilities` (`src/attributes.ts`) fills each function's
-`FunctionFacts.caps`, an eleven-bit mask over the bits `src/capabilities.ts:34-50`
+`FunctionFacts.caps`, an eleven-bit mask over the bits `src/capabilities.ts:34-51`
 defines (`clock` 0, `entropy` 1, `env` 2, `exit` 3, `ffi` 4, `fs.read` 5,
 `fs.write` 6, `net` 7, `process.spawn` 8, `signal` 9, `unsafe` 10). That
 answer is a proof about the Nish code. It is not a proof about what an `ffi`
@@ -76,8 +76,8 @@ Any other `--sandbox=` value is a usage error, exit 2, naming the two.
 |---|---|
 | `nish --link app.ts` | accepted |
 | `nish run app.ts` | accepted, before the file; it joins the run cache's key (§3) |
-| `nish app.ts` (IR only), `--emit-*`, `--capabilities` | accepted: the `.ll` carries the call, and a user who links it with their own `clang` gets the confinement |
-| `--fix`, `--emit-ast` | refused: neither emits a main wrapper to put the call in |
+| `nish app.ts` (IR only), alone or with a flag that writes its file beside the IR (`--emit-header`, `--emit-dts`, `--emit-napi`, `--emit-panics`, `--emit-arena`, `--emit-capabilities`), and `--capabilities` | accepted: the `.ll` carries the call, and a user who links it with their own `clang` gets the confinement |
+| `--fix`, `--emit-ast`, `--emit-checked` | refused, exit 2: none emits a main wrapper to put the call in; `--emit-checked` writes its dump and returns before any IR is emitted (`src/compile.ts:998-1001`) |
 | an entry with no `main` | refused by the existing check (`src/compile.ts:958`): `--link` and `nish run` already need `main`; on the IR-only route it is a usage error, exit 2, because there is no wrapper to put the call in |
 | `--target x86_64-apple-darwin`, `aarch64-apple-darwin`, or a darwin host without `--target` | refused with the next free NL3xxx (NL3038 at `c8a00d6`; the number is taken when the implementation lands) |
 | `--target wasm32-unknown-unknown`, `wasm32-wasi` | accepted, and no call is emitted: the host already holds a wasm module to its imports (§7) |
@@ -86,7 +86,7 @@ Any other `--sandbox=` value is a usage error, exit 2, naming the two.
 open question 1).
 Today `capabilityListMask` (`src/compile.ts:390-430`) refuses any scope with
 "scopes a capability to a directory, which the compiler cannot prove and
-nothing enforces" (`src/compile.ts:413`). With `--sandbox` on the same command
+nothing enforces" (`src/compile.ts:414`). With `--sandbox` on the same command
 line, `--allow fs.read=/srv/data` is accepted: the compiler still sees the
 capability whole (the policy check is unchanged, `fs.read` is granted), and the
 directory is handed to the wrapper as a Landlock rule. Without `--sandbox` the
@@ -104,18 +104,27 @@ decides once the whole command line is read, so `--allow fs.read=/srv/data
 ## 3. The wrapper
 
 `emitEntryWrapper` (`src/emit.ts:756`) builds the native `@main`. With
-`--sandbox` its first instruction becomes one call, before the optional
-`nish_argv_init` (`src/emit.ts:780-782`). Below is the wrapper exactly as
-`tests/cases/argv_echo.ll:211-217` has it today (optimized, so the return
-carries `noundef`, `src/emit.ts:766-769`), with the proposed call and its
-constant added:
+`--sandbox` it leaves `@main` as it is and emits, beside it, one internal
+function whose address sits in the executable's `.preinit_array`. The C
+runtime calls that function before any constructor runs, so a constructor in
+a linked C object or a shared library is already confined (below, "What runs
+before the call"). The wrapper is `tests/cases/argv_echo.ll:211-217` as it is
+today (optimized, so the return carries `noundef`, `src/emit.ts:766-769`);
+the lines above it are the proposal:
 
 ```llvm
 @.sandbox.read = private unnamed_addr constant [11 x i8] c"/srv/data\00\00"
+@.sandbox.preinit = internal constant void ()* @.sandbox.apply, section ".preinit_array", align 8
+@llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"
+
+define internal void @.sandbox.apply() {
+entry:
+  call void @nish_sandbox(i32 33, i32 1, i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.sandbox.read, i64 0, i64 0), i8* null)
+  ret void
+}
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
-  call void @nish_sandbox(i32 33, i32 1, i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.sandbox.read, i64 0, i64 0), i8* null)
   call void @nish_argv_init(i32 %argc, i8** %argv)
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -124,6 +133,18 @@ entry:
 
 declare void @nish_sandbox(i32, i32, i8*, i8*)
 ```
+
+`@llvm.used` keeps the otherwise unreferenced entry through `opt`, and
+`.preinit_array` is kept by the linker's default script, so it survives
+`--gc-sections`. Measured at `c8a00d6` with Ubuntu clang 18.1.3, glibc,
+x86-64: these three globals, `llvm-as`-clean, linked with `-O2
+-Wl,--gc-sections` beside a C object holding a `constructor(101)` and against
+a shared library with a constructor, ran the preinit function first, then
+the library's constructor, the object's, and `main`. They ran in the same
+order with the library given in `LD_PRELOAD`, and with `-static`. A
+`.preinit_array` entry is refused in a shared object, so IR built with
+`--sandbox` and linked by hand into a `.so` fails at link time rather than
+running unconfined.
 
 The operands, in order:
 
@@ -139,9 +160,10 @@ The runtime symbol, the operand order and the constant's name
 adds pins whatever lands. `@nish_main` is the user's `main`, renamed as
 `src/declarations.ts:300` renames it today.
 
-**No `tests/cases/*.ll` golden moves without the flag.** The call is emitted
-only when `--sandbox` is given, the declaration enters the module through
-`useRuntime` only then, and no existing test passes `--sandbox`. The
+**No `tests/cases/*.ll` golden moves without the flag.** The preinit entry,
+its `@llvm.used` slot and the function holding the call are emitted only when
+`--sandbox` is given, the declaration enters the module through `useRuntime`
+only then, and no existing test passes `--sandbox`. The
 implementation PR shows this with a full `node tests/run.js` run whose `.ll`
 goldens are byte-identical. The generated goldens are another matter: the
 implementation edits `src/compile.ts`, `src/emit.ts`, `src/runtime.ts` and
@@ -173,7 +195,7 @@ A binary that does not call it loses the unit's `.text` to `--gc-sections`
 **The cache keys need nothing new.** `runCacheKey` hashes every module's IR
 (`src/run-cache.ts:300-303`), and the call, its mask and its directory
 constants sit in that IR, so `nish run --sandbox` and `nish run` hit different
-entries already. `runtimeCacheKey` (`src/run-cache.ts:333`) is unchanged,
+entries already. `runtimeCacheKey` (`src/run-cache.ts:319`) is unchanged,
 because the runtime is built the same way with or without the flag. The
 alternative, a `-DNISH_SANDBOX` define as #451's draft had, is open question 9.
 
@@ -181,19 +203,56 @@ The declaration goes into `src/runtime.ts`'s table and its prototype into
 `runtime/nish.h`, which moves `docs/IR_COOKBOOK.md`'s runtime prelude;
 `docs/cookbook/regen.sh` regenerates it in the same commit.
 
-**What `nish_sandbox` does**, in this order, all before any user code:
+**What runs before the call.** The preinit function runs after the dynamic
+loader has mapped and relocated every object, and before any `.init_array`
+entry, `DT_INIT` function or C++ static initialiser, in the executable, in a
+linked `ffi` object, or in a shared library, `LD_PRELOAD`'s included. Four
+things run earlier, and none of them is confined:
+
+- the dynamic loader itself, and an `LD_AUDIT` library's hooks;
+- an `LD_PRELOAD` library's symbol interposition, which needs no constructor:
+  a preloaded `prctl` or `syscall` can make the sandbox a no-op;
+- libc's own start-up before it walks `.preinit_array`;
+- an IFUNC resolver, which runs during relocation. Measured as above: a
+  resolver in a linked C object printed before the preinit function, linked
+  dynamically and with `-static`.
+
+The first three are chosen by whoever launches the binary, whom the threat
+model trusts (§9). The fourth is code in the program, so it is a limit on
+what `--sandbox` holds, named in §9 and open question 11. A second
+`.preinit_array` entry in an `ffi` object would run in link order. The
+implementation passes the main module's object first on the link line, so
+the sandbox's entry is first, and §8 pins that.
+
+**What `nish_sandbox` does**, in this order, before any constructor:
 
 1. Prime what confinement would break: `nish_cpu_count()` when the runtime has
    threads (§4, `--threads`).
 2. `prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)`. Both Landlock and seccomp need it
-   for an unprivileged process.
-3. Build a Landlock ruleset from the mask and the directory lists, masked down
+   for an unprivileged process, and after it no `execve` gains a capability
+   or an identity: the kernel caps a new program's permitted set at the
+   caller's.
+3. Drop every capability the process holds. With `CAP_SETPCAP` effective,
+   `PR_CAPBSET_DROP` empties the bounding set first.
+   `PR_CAP_AMBIENT_CLEAR_ALL` empties the ambient set, and `capset` empties
+   the effective, permitted and inheritable sets, which needs no privilege.
+   `capget` then reads them back. Any set left non-empty is a failure in
+   both modes, exit 126. A process started as root, with file capabilities,
+   or with a container's default set therefore runs confined and
+   unprivileged. After step 2, a program it `exec`s gains nothing either.
+   Without this step, an `ffi` callee holding `CAP_SYS_MODULE`,
+   `CAP_DAC_READ_SEARCH` or `CAP_SYS_ADMIN` could call `finit_module`,
+   `open_by_handle_at` (a way past Landlock's path rules) or `bpf`, none of
+   which §4's rows name. With the sets empty, the kernel refuses each of
+   them `EPERM`. The uid is not changed: §9 says what a uid-0 process
+   keeps.
+4. Build a Landlock ruleset from the mask and the directory lists, masked down
    to the ABI the kernel reports (§6), and apply it with
    `landlock_restrict_self`.
-4. Load the seccomp filter (§4) with `seccomp(SECCOMP_SET_MODE_FILTER,
+5. Load the seccomp filter (§4) with `seccomp(SECCOMP_SET_MODE_FILTER,
    SECCOMP_FILTER_FLAG_TSYNC, ...)`; no other thread exists yet, so `TSYNC`
    only states the intent.
-5. Return. A strict-mode failure at any step prints `nish: --sandbox: <what>
+6. Return. A strict-mode failure at any step prints `nish: --sandbox: <what>
    (<errno name>)` on stderr and calls `_exit(126)` (open question 2).
 
 ## 4. The mapping
@@ -227,16 +286,23 @@ Three rules hold under `--sandbox` whatever the mask says:
 checked for its siblings. `net`: `socketcall(2)` multiplexes the socket calls,
 but only on the 32-bit entries, which the arch check kills; io_uring is the
 row above; a socket inherited or received over `SCM_RIGHTS` is an open
-descriptor, in §9's does-not-cover list. `process.spawn`: `execveat` with
+descriptor, which §9's threat model leaves the adversary. `process.spawn`: `execveat` with
 `AT_EMPTY_PATH` is in the row; `clone3` answers `ENOSYS`; io_uring is above;
 `/proc/<pid>/mem` writes go through the same ptrace access check Landlock
-hooks, so they are covered where `ptrace` is and named in the does-not-cover
-list for best-effort without Landlock. The filesystem: below.
+hooks, so they are covered where `ptrace` is, and §9 names them for
+best-effort without Landlock. The filesystem: below.
 
 **Rights are withheld, never handled-and-denied piecemeal.** The ruleset
 handles every filesystem right the running ABI knows (§6), then adds a
 `path_beneath` rule granting back exactly what the mask grants: beneath `/` for
 a capability granted whole, beneath each directory for a scoped one.
+From ABI 5, `IOCTL_DEV` is one of the handled rights, so it is granted back
+with the open rights wherever `fs.read` or `fs.write` is: beneath `/`, or
+beneath each directory. Without that, a program granted `fs.read` could open
+`/dev/tty` and have every `ioctl` on it refused, a break its mask never asked
+for. Below ABI 5 the right does not exist and nothing is lost: without the
+open rights no device can be opened after the ruleset applies, and a
+descriptor already open, stdin included, is not checked.
 
 **What Landlock leaves alone.** `stat`, `lstat`, `readlink` and `access` are not
 Landlock rights, so `isDirectorySync` (`runtime/runtime-os.c:204`),
@@ -246,8 +312,8 @@ working without `fs.read`. All of them but `statMtimeSync` (`clock`) are
 `fs.read` in WP35's table, so a program that uses them has the bit anyway; the
 point is only that the sandbox does not break them. A descriptor already open when the ruleset
 applies, stdin, stdout and stderr included, keeps working. The other reads
-Landlock has no right for leave the same way and are named in the
-does-not-cover list: `statx`, `getxattr` and `listxattr` with their `l` and
+Landlock has no right for leave the same way, and §9 names them among
+what the adversary keeps: `statx`, `getxattr` and `listxattr` with their `l` and
 `f` forms, an `O_PATH` open, `chdir`, and `inotify_add_watch` and
 `fanotify_mark` on a path. They reveal a file's metadata or its changes, not
 its contents.
@@ -274,8 +340,8 @@ refused everywhere, inside the directory too, because seccomp cannot tell
 where the path points (open question 1). `ioctl` with `FS_IOC_SETFLAGS` or
 `FS_IOC_FSSETXATTR` on a descriptor opened read-only can set a file's
 append-only or immutable flag where the user may; filtering `ioctl` by
-request number is argument-level checking §10 leaves out, so it is in the
-does-not-cover list. The runtime makes none of these calls (`grep -rn
+request number is argument-level checking §10 leaves out, so §9 names it
+among what the adversary keeps. The runtime makes none of these calls (`grep -rn
 'chmod\|chown\|utime\|xattr' runtime/` at `c8a00d6`).
 
 **`process.spawn` widens Landlock.** A spawned program needs to execute and
@@ -335,7 +401,8 @@ error path runs: `readFileSync` prints `nish: cannot read <path>` and exits 1
 | Landlock ABI 7: audit logging flags | 6.15 |
 
 **The floor for strict `--sandbox` is 6.2 (ABI 3) for a program without
-`fs.write`, and 5.13 (ABI 1) for one with it**, with Landlock enabled; 4.14 for
+`fs.write` or with `fs.write=<dir>`, and 5.13 (ABI 1) for one granted
+`fs.write` whole**, with Landlock enabled; 4.14 for
 the seccomp half alone. Below ABI 2 `REFER` does not exist and the kernel
 refuses every rename or link across directories, which is stricter, not
 weaker, and Nish has no builtin that renames. A kernel with Landlock built but not in its `lsm=`
@@ -354,7 +421,8 @@ The wrapper asks the kernel for its Landlock ABI once and acts on the answer.
 | Situation | `--sandbox` | `--sandbox=best-effort` |
 |---|---|---|
 | No Landlock (`ENOSYS` or `EOPNOTSUPP`, or `EPERM` from a container runtime's own seccomp profile denying the call) | refuses to run: `nish: --sandbox: this kernel has no Landlock; build with --sandbox=best-effort to run with seccomp alone`, exit 126 | prints `nish: --sandbox: no Landlock, files are not confined` once on stderr and continues with seccomp alone |
-| Older ABI than the rights the mask withholds | refuses to run when a right §4 withholds is unknown to the ABI: below ABI 3, `truncate(2)` on a file the user owns is not a Landlock right, so a program without `fs.write` needs ABI 3 | handles the rights the ABI knows, and names the ones it could not withhold, once |
+| Older ABI than the rights the mask withholds | refuses to run when a right §4 withholds is unknown to the ABI: below ABI 3, `truncate(2)` on a file the user owns is not a Landlock right, so a program without `fs.write` needs ABI 3, and so does one granted `fs.write=<dir>`, whose files outside the directory `truncate` would reach | handles the rights the ABI knows, and names the ones it could not withhold, once |
+| ABI 1 to 4, no `IOCTL_DEV` | runs: the right is never withheld, so nothing needs granting back (§4) | runs, and names nothing |
 | No seccomp, or no `KILL_PROCESS` | refuses to run | refuses to run |
 
 **Missing seccomp is fatal in both modes.** Best-effort exists for kernels
@@ -396,6 +464,7 @@ on", `tests/run.js:746`), and these checks expect one.
 | Check | Expects |
 |---|---|
 | `sandbox: fork from ffi without process.spawn dies of SIGSYS` | exit status 159 through `nish run --sandbox` |
+| `sandbox: execve from ffi without process.spawn dies of SIGSYS` | 159 |
 | `sandbox: socket from ffi without net dies of SIGSYS` | 159 |
 | `sandbox: an x32 socket from ffi dies of SIGSYS` | 159 on x86-64; on AArch64 the check calls `skip("sandbox: x32 is an x86-64 ABI; the bit-30 check did not run")` |
 | `sandbox: io_uring_setup from ffi without net dies of SIGSYS` | 159 |
@@ -403,15 +472,21 @@ on", `tests/run.js:746`), and these checks expect one.
 | `sandbox: chmod, utimensat and setxattr without fs.write fail EPERM` | `EPERM` printed for each, and the file's mode, times and attributes unchanged after the run |
 | `sandbox: open from ffi without fs.read is refused` | `EACCES` printed by the program, exit 0 |
 | `sandbox: fs.read=<dir> reads inside and not outside` | a temporary directory's file read, `/etc/hostname` refused |
+| `sandbox: a spawn redirect without fs.write fails in the child` | the child's open refused, the parent's `spawnSyncTo` reporting the failure, no file created |
+| `sandbox: a process holding capabilities drops them` | under `unshare -r`, `CapEff`, `CapPrm`, `CapInh` and `CapAmb` in `/proc/self/status` all 0 after the call, and `CapBnd` 0; where unprivileged user namespaces are off, `skip("sandbox: no unprivileged user namespace; the capability drop did not run")` |
+| `sandbox: a constructor in an ffi object runs confined` | an `ffi` object's `__attribute__((constructor))` that opens a file without `fs.read` prints `EACCES` |
+| `sandbox: the sandbox's preinit entry runs first` | an `ffi` object carrying its own `.preinit_array` entry that opens a file is refused in the same way |
 | `sandbox: a granted program runs as it does unsandboxed` | byte-identical stdout with and without `--sandbox`, and again with `--threads` |
 | `sandbox: a threaded program without process.spawn still runs its pool` | the pool's answer, exit 0 |
 | `sandbox: strict refuses without Landlock` and `sandbox: best-effort warns without Landlock` | exit 126 and the message; stderr's one line and exit 0 |
 | `sandbox: no golden moves without the flag` | the IR of every `tests/cases/` program unchanged |
 | `sandbox: the wasm targets emit no call` | no `@nish_sandbox` in the `.ll` |
 
-The darwin refusal and the scope wording go in `tests/wordings/`, the IR shape
-in a golden `.ll` with an `llvm-as` pass, and a negative case for each
-refusal of §2.
+The darwin refusal, a checker diagnostic, goes in `tests/wordings/`. The
+`--sandbox=<bad>` and scope usage errors are CLI errors, so they go in
+`tests/nish/cli.ts` beside the check "scopes a capability to a directory".
+The IR shape goes in a golden `.ll` with an `llvm-as` pass, and each refusal
+of §2 gets a negative case.
 
 **A Landlock-gated check skips with a named reason.** The section probes the
 host once with the same `landlock_create_ruleset` call the wrapper makes. Below
@@ -452,16 +527,8 @@ measured on that runner.
 - `docs/guide/`: a page on `--sandbox`, routed in `scalar.config.json`, with
   the exit status 159 and the fallback messages.
 - `docs/IR_COOKBOOK.md`: the wrapper call, and the regenerated runtime prelude.
-- `docs/security/sandbox.md`: the area's record, whose "does not cover" list
-  names open descriptors, `/proc/self`, syscalls outside the filter
-  (`ioctl`, including `FS_IOC_SETFLAGS` and `FS_IOC_FSSETXATTR` on a
-  read-only descriptor, and `mmap` with `PROT_EXEC`), the metadata reads of
-  §4 (`stat`, `statx`, `getxattr`, `listxattr`, `O_PATH`, `inotify`,
-  `fanotify`), the metadata writes inside an `fs.write=<dir>` directory,
-  io_uring when both `net` and `process.spawn` are granted, signals, the
-  clock, entropy and the environment, best-effort without Landlock
-  (`/proc/<pid>/mem` of another process included), the `process.spawn`
-  widening, macOS, and trust in the compiler's mask.
+- `docs/security/sandbox.md`: the area's record, opening with the threat
+  model below and the mapping check after it.
 - `tests/self/goldens/checked.txt` and `checked-self.txt`: regenerated with
   `node tests/self/goldens.js --update`, since the stage edits `src/`; and
   `node tests/differential/goldens.js --update` in the commit that adds a
@@ -469,6 +536,77 @@ measured on that runner.
 - `THIRD_PARTY_NOTICES.md`: nothing, unless the filter is adapted from
   elsewhere; the BPF program is written for this unit.
 - One `feat(cli)` commit per stage, its body the changelog entry.
+
+### The threat model
+
+The record states it in these words, and every row of §4 is checked against
+it.
+
+**Who is trusted.** The person who launches the binary, and everything that
+person controls: the environment (`LD_PRELOAD` and `LD_AUDIT` among it), the
+arguments, the working directory, the link line and the toolchain. Also
+trusted are the compiler and the mask it computes, which `--sandbox`
+enforces rather than checks, and the kernel.
+
+**Who is the adversary.** All code in the process that runs after the
+preinit call of §3: the program's Nish code, `std`, every dependency, every
+`ffi` callee, and every constructor, in the executable, in an `ffi` object
+or in a shared library. Its aim is to do what the mask withholds.
+
+**With what privilege.** Whatever the launch gave, as uid 0, with file
+capabilities or with a container's default set, step 3 of §3 drops every
+capability before the adversary runs, and `NO_NEW_PRIVS` keeps an `exec`
+from gaining one back. The identity stays. A uid-0 process still owns
+root's files, so Landlock and the metadata-write rule are what hold it to
+the mask, not file modes. It can also signal other uid-0 processes, which
+open question 8's scoping limits from ABI 6. A user namespace the adversary
+creates gives it capabilities only over the namespace's own objects:
+`init_module`, `kexec_load`, `open_by_handle_at` and `bpf` check the initial
+namespace, the domain and the filter stay attached, and Landlock refuses
+`mount` in a confined process.
+
+**What runs before the call.** The dynamic loader, `LD_AUDIT`, `LD_PRELOAD`'s
+interposition and libc's own start-up run first. They are the launcher's
+choice, so they are out of scope by this statement. An IFUNC resolver in an
+`ffi` object also runs first, and it is adversary code: that is a limit on
+what `--sandbox` holds (open question 11).
+
+**What the adversary keeps.** Under the mask it was given, it keeps:
+
+- descriptors open before the call, and any it receives over `SCM_RIGHTS`;
+- `/proc/self`;
+- what argument-level checks would be needed to withhold (§10): `ioctl`'s
+  `FS_IOC_SETFLAGS` and `FS_IOC_FSSETXATTR` on a read-only descriptor, and
+  `mmap` with `PROT_EXEC`;
+- the metadata reads of §4: `stat`, `statx`, `getxattr`, `listxattr`,
+  `O_PATH`, `inotify` and `fanotify`;
+- io_uring, when both `net` and `process.spawn` are granted;
+- signals to its own uid (until ABI 6), the clock, entropy and the
+  environment;
+- under best-effort without Landlock, every file the user can reach,
+  `/proc/<pid>/mem` of another process included;
+- under `process.spawn`, read and execute on every file (open question 5);
+- kernel bugs, which no part of a sandbox in the same kernel holds;
+- the IFUNC resolvers above;
+- everything, on macOS, where `--sandbox` is refused (§7).
+
+**Checked against the mapping.** Each route to a withheld capability lands on
+one of these:
+
+- **Files:** Landlock's rights (§4), with the metadata writes in seccomp. On a
+  uid-0 process, Landlock holds where file modes would not.
+  `open_by_handle_at` walks past path rules, but it needs
+  `CAP_DAC_READ_SEARCH`, which step 3 drops.
+- **Processes:** the `process.spawn` row, `clone3`'s `ENOSYS` and the
+  io_uring kill. A module that loads one (`finit_module`) and `bpf` are
+  refused `EPERM` after step 3.
+- **The network:** the `net` row, the io_uring kill and the x32 kill.
+- **Another process:** the always-on `ptrace`, `process_vm_*` and
+  `pidfd_getfd` kills.
+
+What lands on none of these is in the list above, by name. A route found
+later is either added to §4's rows or added to that list, never left
+unstated.
 
 ## 10. Out of scope
 
@@ -480,6 +618,8 @@ measured on that runner.
   (§4 says why each).
 - Network scoping by port with Landlock ABI 4 (open question 7).
 - Making `nish run` sandbox by default (open question 10).
+- Changing the identity of a privileged launch: capabilities are dropped, the
+  uid is kept (§9).
 
 ## 11. Open questions
 
@@ -494,7 +634,9 @@ measured on that runner.
    program granted `fs.write=<dir>` cannot `chmod` or `utimensat` there.
    Granting them whenever any `fs.write` is present would let such a
    program `chmod` every file the user owns; the implementation keeps them
-   refused and the guide page says so.
+   refused and the guide page says so. A scoped `fs.write` needs ABI 3,
+   since below it `truncate` on a file outside the directory cannot be
+   withheld, so only `fs.write` granted whole runs on 5.13 (§6).
 2. **The exit status of a refused start.** (a) 126, the shell's "found but
    cannot run"; (b) 1, a panic's; (c) 159, as if killed. *Recommendation:
    (a): it tells a script the program never started, apart from both its own
@@ -543,3 +685,13 @@ measured on that runner.
     measured Landlock on every runner. *Recommendation: (c), proposed in its
     own note: a default that refuses to start on older kernels is a break the
     stability rule at the head of LANGUAGE.md would have to allow.*
+11. **IFUNC resolvers in `ffi` objects.** A resolver runs during relocation,
+    before the preinit call (§3), so an `ffi` object can run code
+    unconfined. (a) State it as a limit in the record and the guide page;
+    (b) also refuse, at link time, an `ffi` object carrying an
+    `STT_GNU_IFUNC` symbol or an `R_*_IRELATIVE` relocation; (c) nothing.
+    *Recommendation: (a) now, (b) in a later stage. The objects a Nish
+    program links are the author's own or a dependency's, which the launcher
+    already chose to trust, and libc's own IFUNCs are libc start-up. (b)
+    needs a pass over each object's symbol table on the link path, and it
+    would refuse libraries that use IFUNC for CPU dispatch, as libgcc does.*
