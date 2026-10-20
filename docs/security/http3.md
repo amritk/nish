@@ -293,7 +293,9 @@ may carry credentials (`cookie`, `authorization`). `data` and `section` are
 fixed-size buffers lent from pools an `Http3Server` shares across its slots
 (a standalone `Http3Connection` makes a private pool of one each): `section`
 for the one read and decode of a HEADERS frame, `data` for the window an
-`H3_DATA` event hands the program, given back by the next `next()` call. Each
+`H3_DATA` event hands the program, kept across the `H3_DATA` events of a
+body read chunk by chunk and given back by the first `next()` call that
+answers any other event. Each
 is zeroed over the extent it was written as it goes back (`BufferPool.give`,
 a plain fill the next borrower's reads keep), so the next connection, or the
 next request of this one, borrows no byte of the last; the QUIC stream

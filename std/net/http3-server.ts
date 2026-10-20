@@ -89,7 +89,7 @@ import {
   QuicServerConfig,
 } from "nish/net/quic"
 import { QUIC_MAX_CID_LENGTH } from "nish/net/quic-packet"
-import { QuicStreamPools } from "nish/net/quic-stream"
+import { QuicStreamPools, quicStreamGrowFree } from "nish/net/quic-stream"
 import {
   QUIC_LISTEN_ACCEPT,
   QUIC_LISTENER_ANSWER_SIZE,
@@ -408,20 +408,6 @@ export class Http3Wheel {
 }
 
 /**
- * Grows `pool`'s free list to hold `count` buffers and empties it again, so
- * that giving back every buffer the pool can lend never grows the arena.
- */
-const http3ServerRoom = (pool: BufferPool, count: i32): void => {
-  const none: u8[] = []
-  for (let k: i32 = 0; k < count; k++) {
-    pool.free.push(none)
-  }
-  for (let k: i32 = 0; k < count; k++) {
-    pool.free.pop()
-  }
-}
-
-/**
  * The pool. `slot`s are indices from 0 to `size() - 1`; `connection(slot)`
  * is the HTTP/3 side of each and `quic(slot)` the QUIC side.
  */
@@ -517,8 +503,10 @@ export class Http3Server {
     this.entropy = new Array<u8>(QUIC_CONN_ENTROPY_SIZE)
     this.dataPool = new BufferPool("Http3Server.data", config.bodyChunk, size)
     this.sectionPool = new BufferPool("Http3Server.section", config.maxFieldSectionSize, size)
-    http3ServerRoom(this.dataPool, size)
-    http3ServerRoom(this.sectionPool, size)
+    // Room for every buffer each pool can lend, so that giving one back never grows the arena.
+    const none: u8[] = []
+    quicStreamGrowFree(this.dataPool.free, size, none)
+    quicStreamGrowFree(this.sectionPool.free, size, none)
     for (let k: i32 = 0; k < size; k++) {
       crypto.getRandomValues(this.entropy)
       const quic = new QuicConnection(quicConfig, this.entropy)
@@ -949,8 +937,7 @@ export class Http3Server {
   release(slot: i32): void {
     this.unindex(slot)
     this.wheel.unfile(slot)
-    this.quics[slot].release()
-    this.conns[slot].giveBack()
+    this.conns[slot].release()
     this.state[slot] = H3_SERVER_FREE
     if (this.freeCount < toI32(this.free.length)) {
       this.free[this.freeCount] = slot
@@ -978,8 +965,7 @@ export class Http3Server {
       if (this.holds(slot)) {
         this.release(slot)
       } else {
-        this.quics[slot].release()
-        this.conns[slot].giveBack()
+        this.conns[slot].release()
       }
     }
     this.listener.release()

@@ -323,8 +323,12 @@ export class QuicStreamPools {
   }
 }
 
-/** Pushes `none` onto `free` until it is `target` long, then pops each one off again: the capacity stays. */
-const quicStreamGrowFree = (free: u8[][], target: i32, none: u8[]): void => {
+/**
+ * Pushes `none` onto `free` until it is `target` long, then pops each one off
+ * again: the capacity stays, so giving back that many buffers to the pool the
+ * list belongs to never grows the arena.
+ */
+export const quicStreamGrowFree = (free: u8[][], target: i32, none: u8[]): void => {
   const length: i32 = toI32(free.length)
   while (toI32(free.length) < target) {
     free.push(none)

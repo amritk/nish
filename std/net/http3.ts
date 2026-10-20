@@ -198,7 +198,7 @@ import {
   h3VarintLength,
 } from "nish/net/http3-frame"
 import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic"
-import { QUIC_STREAM_END, QUIC_STREAM_ERR_RESET, QuicStream } from "nish/net/quic-stream"
+import { QUIC_STREAM_END, QUIC_STREAM_ERR_RESET, QuicStream, quicStreamGrowFree } from "nish/net/quic-stream"
 import { quicVarintPut } from "nish/net/quic-packet"
 import { BufferPool } from "nish/net/buffer-pool"
 
@@ -572,11 +572,8 @@ export class Http3Connection {
     this.section = this.none
     this.dataPool = new BufferPool("Http3Connection.data", config.bodyChunk, 1)
     this.sectionPool = new BufferPool("Http3Connection.section", config.maxFieldSectionSize, 1)
-    // Room for the one give-back each pool takes, so that it never grows the arena.
-    this.dataPool.free.push(this.none)
-    this.dataPool.free.pop()
-    this.sectionPool.free.push(this.none)
-    this.sectionPool.free.pop()
+    quicStreamGrowFree(this.dataPool.free, 1, this.none)
+    quicStreamGrowFree(this.sectionPool.free, 1, this.none)
     this.control = new Array<u8>(H3_CONTROL_FRAME_MAX)
     this.scratch = new Array<u8>(64)
     this.zeros = new Array<u8>(256)
@@ -769,8 +766,8 @@ export class Http3Connection {
    * connection takes, until it answers H3_NEED_MORE or H3_ERROR.
    */
   next(): i32 {
-    // The last H3_DATA window ends here; any other event holds no buffer.
-    this.giveData()
+    // The last H3_DATA window ends here. A body read chunk by chunk keeps the
+    // one buffer; any other event, H3_NEED_MORE among them, gives it back.
     const event: i32 = this.nextEvent()
     if (event !== H3_DATA) {
       this.giveData()
@@ -793,6 +790,12 @@ export class Http3Connection {
     this.giveBack()
     this.dataPool = data
     this.sectionPool = section
+  }
+
+  /** Releases the QUIC connection (`QuicConnection.release`) and gives back every pooled buffer this connection holds. */
+  release(): void {
+    this.quic.release()
+    this.giveBack()
   }
 
   /** Gives back `data` and `section` if either is borrowed: the connection holds no pooled buffer after it. */
@@ -1161,13 +1164,11 @@ export class Http3Connection {
       }
       if (this.frameLeft[k] > 0) {
         const skip: boolean = this.frameType[k] === H3_SKIP_TYPE
-        const into: u8[] = skip ? this.borrowData() : this.control
-        const at: i32 = skip ? H3_ZERO : this.controlFill
-        const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(toI32(into.length) - at)))
-        const n: i32 = this.quic.streamRead(id, into, at, want)
-        if (skip && n > this.dataUsed) {
-          this.dataUsed = n
-        }
+        const room: i32 = skip ? this.config.bodyChunk : toI32(this.control.length) - this.controlFill
+        const want: i32 = toI32(http3Min(this.frameLeft[k], toI64(room)))
+        const n: i32 = skip
+          ? this.readData(id, want)
+          : this.quic.streamRead(id, this.control, this.controlFill, want)
         if (n === 0) {
           return H3_NEED_MORE
         }
