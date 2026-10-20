@@ -2,6 +2,7 @@
 // the identity it serves with, and the exit codes the interop job and the
 // quic-interop-runner read.
 import { Secret, wipe } from "nish:secret";
+import { tlsTicketKeyDraw, tlsTicketKeyDue } from "nish/net/tls/ticket";
 import { InteropOptions, InteropServer, supportedTestcase } from "./server";
 import { certificateHash, loadChain, loadKey, mintCertificate, mintKey } from "./identity";
 
@@ -91,7 +92,13 @@ export const parseServe = (argv: string[]): ServeArgs => {
   return out;
 };
 
-/** Runs the server with `key` for `chain` until a signal stops it. */
+/**
+ * Runs the server with `key` for `chain` until a signal stops it. The HTTP/2
+ * port issues and resumes session tickets under two keys held here, never in
+ * a field: the current one seals, both open, and when the current one is due
+ * the previous is wiped, the current takes its place and a new one is drawn
+ * (docs/security/tls.md, "Ticket keys").
+ */
 const run = (args: ServeArgs, chain: u8[][], key: Secret<u8[]>): i32 => {
   const server = new InteropServer(args.options, chain);
   if (server.udp < 0) {
@@ -107,9 +114,21 @@ const run = (args: ServeArgs, chain: u8[][], key: Secret<u8[]>): i32 => {
   }
   console.log(server.ports());
   console.log(`sha256 ${hash}`);
+  server.h2.enableTickets();
+  let current: Secret<u8[]> = tlsTicketKeyDraw(server.h2.currentInfo, monotonicNanos());
+  let previous: Secret<u8[]> = tlsTicketKeyDraw(server.h2.previousInfo, monotonicNanos());
   while (!server.stopped) {
-    server.step(toI32(1000), key);
+    const now: i64 = monotonicNanos();
+    if (tlsTicketKeyDue(server.h2.currentInfo, now)) {
+      wipe(previous);
+      previous = current;
+      server.h2.previousInfo.copyFrom(server.h2.currentInfo);
+      current = tlsTicketKeyDraw(server.h2.currentInfo, now);
+    }
+    server.step(toI32(1000), key, current, previous);
   }
+  wipe(current);
+  wipe(previous);
   console.log("stopped");
   return 0;
 };

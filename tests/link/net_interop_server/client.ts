@@ -202,7 +202,7 @@ export class QuicClient {
     let quiet: i32 = 0;
     const had: i32 = toI32(this.datagrams.length);
     for (let turn: i32 = 0; turn < TURNS; turn++) {
-      this.server.step(n32(5), key);
+      this.server.step(n32(5), key, null, null);
       let read: i32 = 0;
       let n: i32 = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
       while (n >= 0) {
@@ -298,7 +298,7 @@ export class H2TlsClient {
       if (w > 0) {
         sent = sent + w;
       } else {
-        this.server.step(n32(5), key);
+        this.server.step(n32(5), key, null, null);
       }
     }
   }
@@ -314,7 +314,7 @@ export class H2TlsClient {
           return record;
         }
       }
-      this.server.step(n32(5), key);
+      this.server.step(n32(5), key, null, null);
       let n: i32 = netRead(this.fd, this.buf, ZERO, toI32(this.buf.length));
       while (n > 0) {
         for (let k: i32 = 0; k < n; k++) {

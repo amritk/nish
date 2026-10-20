@@ -445,7 +445,7 @@ refuse the same ticket a third time as a replay, and answer `resume` and
 
 ## Properties verified: resumption
 
-What the psk-wire (#673), ticket-seal (#680) and server-resume stages pin, and
+What the psk-wire (#673), ticket-seal (#680), server-resume and interop-resume stages pin, and
 where the code departs from the design under "Resumption" below, which is
 kept as written.
 
@@ -508,6 +508,33 @@ its root drop, but one: without `resume`'s arm of `zero` for the early
 secret, `opt` turns a `zero` it inlined elsewhere into a `nish_wipe` call and
 `resume` still reads 72, so `net_tls_resume` reads that secret back as zero
 after every row instead.
+
+**Against curl and Chromium** (interop-resume, `.github/workflows/interop.yml`).
+The interop server (`tests/link/net_interop_server`) turns tickets on for its
+HTTP/2 port: `run` in `cli.ts` holds the current and the previous key in
+locals, rotates them as Ticket keys says, and lends both to each `step`; the
+slot's turn calls `TlsTcpServer.resume` on a ticket offer and
+`TlsTcpServer.issue` once the connection is open, and logs `tls: full` or
+`tls: resumed` once per connection. A GET of `/close` answers `closing` and
+sends GOAWAY, so the next request has to open a new connection. The curl
+job's step `curl --http2 resumes a TLS 1.3 session` runs the pinned curl
+(BoringSSL, without `--ssl-sessions`) once over two `/close` URLs, so it keeps
+the first connection's ticket for the second, and checks `curl --http2 opens
+a new connection for the second /close` (`num_connects` reads `1 1`; two URLs
+on one connection read `1 0`) and `the server resumed curl's second
+connection` (the log's new handshake lines are exactly `tls: full` then
+`tls: resumed`). The chrome job's step `Chromium resumes a TLS 1.3 session on
+a second connection`, under both its certificates, runs
+`tests/interop/chrome-resume.py`: it reads the certificate from the HTTP/2
+port, checks its SHA-256 against the server's `--hash-file`, launches
+Playwright's Chromium with `--ignore-certificate-errors-spki-list` set to the
+base64 SHA-256 of its SubjectPublicKeyInfo, and navigates to `/close` twice;
+it passes only if the server logged `tls: full` for the first navigation,
+then closed that connection, and logged `tls: resumed` for the second. The
+verdict is the server's log in both jobs, not the client's. **Outcome:**
+Chromium 141.0.7390.37 (Playwright 1.56.0) resumes under the SPKI pin, with
+the minted certificate and with one openssl makes; so does curl 8.17 with
+BoringSSL, and curl 8.5 with OpenSSL run by hand.
 
 **As built.** Where the code departs from the design below:
 
