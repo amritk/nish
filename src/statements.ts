@@ -24,6 +24,7 @@ import {
   heldAcross,
   holdMembers,
   joinArms,
+  literalIndexName,
   localsAssignedIn,
   MEMBERS_NONE,
   memberSetName,
@@ -32,7 +33,6 @@ import {
   narrow,
   narrowHeld,
   narrowToTags,
-  numberKey,
   refuseExpressionForm,
   refuseNarrowingStore,
   resolveMaybeAnnotation,
@@ -92,7 +92,6 @@ import {
   N_INTERFACE,
   N_METHOD,
   N_MODULE_CONST,
-  N_NUMBER,
   N_PARAM,
   N_RETURN,
   N_SWITCH,
@@ -360,9 +359,13 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     const local = ctx.program.nodeLocals[decl.id]
     if (local !== null) {
       local.typedArray = typedArray
-      // `xs[i]` is `xs[0]` after `const i = 0`, annotated or not, as it is to TypeScript.
-      if (!mutable && initializer.kind === N_NUMBER) {
-        local.pathIndex = numberKey(initializer.text)
+      // `xs[i]` is `xs[0]` after `const i = 0`, annotated or not, as it is to
+      // TypeScript; only an unannotated one has the literal type that keys
+      // `xs[j]` the same after `const j = i`.
+      const literal = mutable ? "" : literalIndexName(initializer, scope)
+      if (literal !== "") {
+        local.pathIndex = literal
+        local.literalKey = annotation.kind === N_EMPTY ? literal : ""
       }
       if (initializer.kind !== N_EMPTY) {
         holdMembers(ctx, scope, local, initializer)

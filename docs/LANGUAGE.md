@@ -886,9 +886,12 @@ const area = (s: Shape): i32 => {
   `reject_union_narrow_path_join`, `reject_union_narrow_path_loop`). An
   index is part of the path when it names one element, as TypeScript 5.5
   reads it: a number literal, a parameter, a `const` (`const i = 0` makes
-  `xs[i]` the path `xs[0]`, annotated or not), or a `let` nothing in its
-  block assigns, a closure's body included. A `let` that is assigned or
-  stepped (`i = 1`, `i++`), a module-level `let`, a parenthesised name or any
+  `xs[i]` the path `xs[0]`, annotated or not, and so does `const j = i`
+  after an unannotated `const i = 0`, whose type is the literal `0`), a module
+  constant (`const IDX: i32 = 0` makes `xs[IDX]` the path `xs[0]` too, and
+  `const A: i32 = -1` and `const B: i32 = -1` make `xs[A]` and `xs[B]` one
+  path), or a `let` nothing in its block assigns, a closure's body included. A
+  `let` that is assigned or stepped (`i = 1`, `i++`), a parenthesised name or any
   other expression keys no path, so `xs[i]` is not narrowed through it, and a
   store through such an index (`xs[j] = t`) drops nothing, as in `tsc`
   (`tests/cases/union_narrowing_index`; `reject_union_narrow_path_ident`,

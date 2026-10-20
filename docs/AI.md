@@ -1699,7 +1699,9 @@ export const main = (): i32 => {
   `xs[0].kind`, `xs[i].kind`) does stay narrowed for later comparisons, until a store to
   the path, a prefix of it or its root. An index `i` is part of the path when
   it holds one value: a parameter, a `const` (`const i = 0` makes `xs[i]` the
-  path `xs[0]`), or a `let` nothing assigns; through a `let` that is assigned
+  path `xs[0]`, and so does `const j = i` after it), a module constant
+  (`const IDX: i32 = 0` makes `xs[IDX]` the path `xs[0]`), or a `let` nothing
+  assigns; through a `let` that is assigned
   or stepped, `xs[i]` is not narrowed, and `xs[j] = t` drops nothing. A read where every variant was excluded is
   NL2556.
 - The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
