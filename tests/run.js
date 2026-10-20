@@ -8489,6 +8489,19 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       held.ok && heldPlain.ok && volatileSet.test(held.text) && !volatileSet.test(heldPlain.text),
       `held:\n${held.text}\n--- plain:\n${heldPlain.text}`
     )
+    // A `Secret` bound with no annotation (#613) is one whose struct the module
+    // defines through `secret`'s inferred result alone: its wipe is the same
+    // volatile memset, where the twin's `fill(0)` of the same bytes is deleted.
+    const inferred = optimisedMain("secret_wipe_o2_inferred")
+    const inferredPlain = optimisedMain("secret_wipe_o2_inferred_plain")
+    const inferredPlainStores = inferredPlain.ok
+      ? (inferredPlain.text.match(/\bstore\b|@llvm\.memset/g) || []).length
+      : -1
+    check(
+      "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
+      inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
+      `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
   }
 }
 

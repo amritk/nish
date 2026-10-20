@@ -6223,10 +6223,10 @@ export const main = (): i32 => {
 | Export | Meaning | Test |
 | --- | --- | --- |
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
-| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*` |
+| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`, `secret_inferred`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*`, `reject_secret_inferred_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
 | `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
-| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
+| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`, `secret_wipe_o2_inferred`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
 
 `nish:secret` is the one builtin module with source behind it: `std/secret.ts`,
 loaded like a standard-library module, imported only by the builtin name
@@ -6236,6 +6236,17 @@ module that uses it, so it writes no `.ll` of its own. `runtime/nish.d.ts`
 declares it for `tsc`, with a private constructor and field so that `tsc`
 refuses `new Secret` and `s.value` too. Under Node (`runtime/nish.mjs`) a
 `Secret` is a plain wrapper and `wipe` zero-fills it.
+
+**A `Secret` local needs no annotation.** `const k = secret(v)` gives `k` the
+type `secret` answers, `Secret<T>` for the `T` that `v` is, and every rule
+below holds for it as for `const k: Secret<T> = secret(v)`: the payload's
+shape, the move and the second reference, each judged where `v` is written
+(`secret_inferred` binds an array literal, `new Array`, a call, a moved local,
+a ternary, a record and a class unannotated; `reject_secret_inferred_literal`,
+`_alias`, `_call`, `_field` and `_moved_class` are refused unannotated as
+annotated). The same holds for any generic an imported module declares:
+`const b = box(7)` holds the `Box<i32>` that `box` answers, whose layout comes
+with the call (`tests/link/generic_import_inferred`).
 
 **What a `Secret` may hold.** One run of integers, so that `wipe` reaches every
 byte with one store: `` `Secret<string>` is not key material `` (NL2428,
@@ -6298,7 +6309,8 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
 - `secret(v)` takes a value nothing else holds, and moves it, because a
   second name for the bytes would read the key outside the `Secret`, and
   zeros once `wipe` has run. A local handed in is not read again (NL2445,
-  `reject_secret_moved`), and neither is the local in either arm of
+  `reject_secret_moved`, and `reject_secret_inferred_moved_class`, where the
+  message names the class the plain value is), and neither is the local in either arm of
   `secret(c ? a : b)`. A parameter, a field or an element, whose owner keeps
   the plain bytes, is refused (NL2447, `reject_secret_unmovable`). Everything
   else is judged where it is written:
@@ -6519,6 +6531,9 @@ volatile memory intrinsic, so the store survives every optimisation, inlining
 included: `tests/run.js` compiles `secret_wipe_o2`, whose wiped bytes nothing
 reads again, beside a twin that zeroes them with `fill(0)`, and after
 `opt -O2` the twin holds no store and the wipe holds one volatile zero per byte.
+`secret_wipe_o2_inferred` does the same for a `Secret` bound with no
+annotation, beside `secret_wipe_o2_inferred_plain` ("nish:secret: an inferred
+`Secret`'s wipe survives opt -O2").
 Two things it does not reach, and says so: a buffer a `push` outgrew, which is
 no longer the array's, and a string, which is immutable and is not key material.
 

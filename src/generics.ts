@@ -1165,7 +1165,36 @@ const instantiate = (
   ) {
     useExternalInstance(ctx, sig)
   }
+  if (sig !== null && home !== ctx) {
+    adoptInstanceLayouts(ctx, home, sig)
+  }
   return sig
+}
+
+/**
+ * Register every layout `sig`'s instantiated signature names here (#613).
+ *
+ * `const b = box(7)` names `Box<i32>` nowhere in this module, so no annotation
+ * reaches `instantiateStruct`: the `Box$i32` the declaring module minted for
+ * `box`'s result arrives through the call alone, and this module holds a value
+ * of it all the same. It comes back with its constructor and methods, as an
+ * annotation's would (`symbols`), which a library copy's emitter skips
+ * declaring because it defines them (`Emitter.declareAll`).
+ */
+const adoptInstanceLayouts = (ctx: CheckContext, home: CheckContext, sig: FunctionSig): void => {
+  const names = new StringSet()
+  noteStructNames(ctx.table, sig.returnType, names)
+  for (const type of sig.paramTypes) {
+    noteStructNames(ctx.table, type, names)
+  }
+  let i = 0
+  while (i < names.size()) {
+    const info = home.program.struct(names.at(i))
+    if (info !== null) {
+      registerForeignLayouts(ctx, info, home, true)
+    }
+    i = i + 1
+  }
 }
 
 /**
