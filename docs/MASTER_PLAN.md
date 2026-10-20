@@ -254,7 +254,7 @@ is its plan. [README.md](README.md) indexes them.
 | 34 | Hosting cs: the network stack | in progress | [wp34](wp34-hosting-cs.md) |
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
-| 37 | The OS sandbox | proposed; no note yet | — |
+| 37 | The OS sandbox | proposed; note written, not built | [wp37](wp37-os-sandbox.md) |
 | 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S3a and S2's flag planned | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
