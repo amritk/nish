@@ -320,6 +320,53 @@ const readAfterRelease = (t: Suite): void => {
   t.ok("ten bytes owed after the give-back: the read answers the end, copying nothing", s.read(n64(0), into, n32(0), n32(16)) === QUIC_STREAM_END && into[0] === toU8(0x77));
 };
 
+/** Opens the peer's four bidirectional streams on `s` with 10 bytes each, no FIN, and writes 100 bytes on each: every slot holds both buffers. */
+const saturate = (s: QuicStreams): void => {
+  s.prime(n32(1200));
+  for (let k: i32 = 0; k < 4; k++) {
+    const id: i64 = toI64(k * 4);
+    s.onStream(id, n64(0), bytesOf(nqText(n32(10))), n32(0), n32(10), false);
+    s.write(id, bytesOf(nqText(n32(100))), n32(0), n32(100), false);
+  }
+};
+
+/** Finishes stream `id` of `s` both ways, its send side acknowledged and its receive side read to the end: both buffers go to the reserve. */
+const finish = (s: QuicStreams, id: i64): void => {
+  const none: u8[] = [];
+  s.write(id, none, n32(0), n32(0), true);
+  drain(s);
+  s.prime(n32(1200));
+  s.onStream(id, n64(10), none, n32(0), n32(0), true);
+  readAll(s, id);
+};
+
+/**
+ * A send side borrowing once the pools have made and lent every buffer, the
+ * last ones idle in the reserve: it takes the reserve's last rather than
+ * asking the pools for one more than their ceiling.
+ */
+const reserveAtCeiling = (t: Suite, shared: boolean, what: string): void => {
+  const pools = new QuicStreamPools(n32(1024), n32(4), n32(2));
+  const tables: QuicStreams[] = pair(pools);
+  const s: QuicStreams = shared ? tables[0] : table();
+  if (shared) {
+    saturate(tables[1]);
+  }
+  saturate(s);
+  // Two of four finished raise the peer's limit (§4.6), so stream 16 may open.
+  finish(s, n64(0));
+  finish(s, n64(4));
+  const own: QuicStreamPools | null = s.pools;
+  const p: QuicStreamPools = own === null ? pools : own;
+  t.ok(`${what}: every buffer made, the finished streams' four in the reserve`, p.data.made === p.data.ceiling && toI32(p.data.free.length) === n32(0) && p.ready === n32(4));
+  s.prime(n32(1200));
+  s.onStream(n64(16), n64(0), bytesOf(nqText(n32(10))), n32(0), n32(10), false);
+  s.write(n64(16), bytesOf(nqText(n32(100))), n32(0), n32(100), false);
+  const stream: QuicStream = streamOf(s, n64(16));
+  t.ok(`${what}: a new stream's send side borrows the reserve's last, making none past the ceiling`, stream.sendBuf.length === 1024 && stream.sendAcked.length === 128 && p.data.made === p.data.ceiling && p.ready === n32(2));
+  t.ok(`${what}: its bytes go out from the buffer it borrowed`, drain(s) === n32(100));
+};
+
 /** Every check of this file. */
 export const poolChecks = (t: Suite): void => {
   keptUntilAck(t);
@@ -331,4 +378,6 @@ export const poolChecks = (t: Suite): void => {
   longerThanBuffer(t);
   givenOnce(t);
   readAfterRelease(t);
+  reserveAtCeiling(t, false, "a table of its own");
+  reserveAtCeiling(t, true, "two tables sharing pools");
 };

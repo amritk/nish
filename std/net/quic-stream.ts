@@ -36,7 +36,8 @@
  * application has read to the final size or the stream is reset, the send
  * side once every byte up to the final size is acknowledged or the stream
  * is reset, never before, since a lost byte is resent from the send buffer.
- * The pools hold two buffers per slot at most, so a borrow never fails, and
+ * The pools hold two buffers per slot at most, the reserve's included, so a
+ * borrow never fails, and
  * a server shares one pool across all its connections (`share`), so what it
  * holds follows the streams moving bytes, not the slots it was sized for.
  * Once the pools are warm, nothing a peer sends and nothing the application
@@ -218,7 +219,10 @@ const quicStreamMin = (a: i64, b: i64): i64 => (a < b ? a : b)
  * `QuicStreams.share`, so the memory follows the streams moving bytes rather
  * than the slots the server was sized for. Each pool's ceiling is two
  * buffers for every stream it serves, one a side, which is what holding
- * every buffer at once costs, so a `take` never fails.
+ * every buffer at once costs. The reserve below counts against it too, so a
+ * send side that finds the pools out takes the reserve's last buffer
+ * (`lendSend`): with that side holding none, not every buffer is lent, and
+ * the one left over is in the reserve.
  *
  * Frames are handled inside the arena scope a packet is opened in, where
  * nothing may allocate, grow a list or push onto one. So the frames lend and
@@ -229,8 +233,8 @@ const quicStreamMin = (a: i64, b: i64): i64 => (a < b ? a : b)
  * could start receive sides, taking them. `hold` is one connection's stream
  * count, and the reserve three times that long, so a packet that lends
  * nothing and takes back every buffer its connection held still fits. Once
- * warm, the reserve mostly circulates on its own and `prime` costs two
- * comparisons; between packets it holds at most `hold` buffers, the pools'
+ * warm, the reserve mostly circulates on its own and `prime` costs a handful
+ * of comparisons, with no take or give; between packets it holds at most `hold` buffers, the pools'
  * lent count leaves out, for the whole server rather than each connection.
  */
 export class QuicStreamPools {
@@ -323,6 +327,27 @@ export class QuicStreamPools {
     stream.recvHave = this.readyBits[this.ready]
     this.readyData[this.ready] = this.none
     this.readyBits[this.ready] = this.none
+  }
+
+  /**
+   * Lends `stream` a send buffer and bitmap: taken from the pools while they
+   * have one to give, else the reserve's last. The reserve counts against
+   * the same ceiling, so once the pools have made every buffer and lent them
+   * all, a send side wanting one means the reserve holds it. Never inside an
+   * arena scope, where a take would allocate.
+   */
+  lendSend(stream: QuicStream): void {
+    if (this.data.free.length === 0 && this.data.made >= this.data.ceiling && this.ready > 0) {
+      this.ready = this.ready - 1
+      stream.sendBuf = this.readyData[this.ready]
+      stream.sendAcked = this.readyBits[this.ready]
+      this.readyData[this.ready] = this.none
+      this.readyBits[this.ready] = this.none
+      return
+    }
+    stream.sendBuf = this.data.take()
+    stream.sendAcked = this.bits.take()
+    this.fit()
   }
 
   /**
@@ -725,7 +750,8 @@ export class QuicStreams {
    * limit before a later STREAM frame opens past the old one. A bound that
    * allows for every such release is one buffer per side holding none, which
    * `idle` already is. Once warm the reserve keeps up to `hold` buffers from
-   * one packet to the next, so this costs two comparisons, not a take per side.
+   * one packet to the next, so this costs a handful of comparisons, not a take
+   * per side.
    */
   prime(bytes: i32): void {
     const pools: QuicStreamPools | null = this.ownPools()
@@ -792,9 +818,7 @@ export class QuicStreams {
   borrowSend(stream: QuicStream): void {
     const pools: QuicStreamPools | null = this.ownPools()
     if (pools !== null && stream.sendBuf.length === 0) {
-      stream.sendBuf = pools.data.take()
-      stream.sendAcked = pools.bits.take()
-      pools.fit()
+      pools.lendSend(stream)
     }
   }
 
