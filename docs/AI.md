@@ -1689,8 +1689,13 @@ export const main = (): i32 => {
   more variants left still give only the tag; an assignment drops the
   narrowing. Where `a || b` held (or `a && b` failed), the variable is what
   either side proved, `Circle | Square` after two tag tests. A test reads
-  through an assignment: `(t = next()).kind === Kind.Square` narrows `t`. A path does not narrow (`h.s.kind` then `h.s.r` is NL2557): copy
-  it into a local and test that. A read where every variant was excluded is
+  through an assignment: `(t = next()).kind === Kind.Square` narrows `t`. Past an `if`, the
+  variable is what the arms that fall through left it (an `else if` chain
+  that returns leaves the variant no test named). A path does not narrow the
+  union (`h.s.kind` then `h.s.r` is NL2557): copy it into a local and test
+  that. The tag read through a path (`h.k`, `this.k`, `h.s.kind`,
+  `xs[0].kind`) does stay narrowed for later comparisons, until a store to
+  the path, a prefix of it or its root. A read where every variant was excluded is
   NL2556.
 - The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
   `const k = s.kind` is NL2530. `k` holds only the variants' members. A
@@ -1702,7 +1707,9 @@ export const main = (): i32 => {
   included: after `if (k === Kind.A) return`, `k === Kind.A` is NL2531.
   Narrowed to one member, `let j = k` is a `Kind.A`; to several,
   `const j = k` is NL2530 (annotate it `Kind`). `s.kind === k` narrows `s`
-  only when `k` is one member: test the members, or `switch (s.kind)`.
+  to the variants of `k`'s members where they are equal. An enum local an
+  `if`, ternary, loop or `switch` stores into holds, after it, what it held
+  or any member stored.
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`

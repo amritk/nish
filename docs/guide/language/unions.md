@@ -219,9 +219,14 @@ also read the variable through an assignment, as in
 `if ((t = next()).kind === Kind.Square)`, which narrows the `t` just stored.
 
 An assignment to the variable drops what a test proved, so a read after it
-needs a new test. A narrowing belongs to a variable or a parameter: a test of
-`a.b.kind` does not narrow `a.b`, which is an error (NL2557) — copy it into a
-`const` and test that. And where TypeScript would type a value `never`,
+needs a new test. Past an `if`, the variable is what the arms that carry on
+left it: after an `else if` chain whose branches all return, `s` is the
+variant no test named, and an arm that assigns `s` leaves what it assigned.
+A narrowing of the union belongs to a variable or a parameter: a test of
+`a.b.kind` does not narrow `a.b`, so `a.b.r` is an error (NL2557) — copy it
+into a `const` and test that. The tag read through the path does stay
+narrowed, as in TypeScript, so a second `a.b.kind === Kind.Circle` after the
+first ruled it out is an error, until a store to `a.b`, `a.b.kind` or `a`. And where TypeScript would type a value `never`,
 because every tag has been tested away, reading it is an error (NL2556).
 
 A comparison the tests above it have already ruled out is an error, as in
@@ -252,9 +257,13 @@ const sides = (k: Kind): i32 => {
 
 Narrowed to one member, the variable has that member's type, so `let j = k`
 is a `Kind.Square`. Narrowed to several, `const j = k` needs its annotation,
-`const j: Kind = k`, for the reason the tag does (NL2530). And `s.kind === k`
-narrows `s` only when `k` holds one member; to pick out several variants, test
-the members themselves or `switch (s.kind)`.
+`const j: Kind = k`, for the reason the tag does (NL2530). And `s.kind === k`,
+with `k` holding `Kind.Circle | Kind.Square`, makes `s` a `Circle | Square`
+where they are equal; where they differ, nothing is known.
+
+A local that an `if`, a ternary, a loop or a `switch` stores members into
+holds, after it, what it held before or any member stored, so a comparison
+with a member it cannot hold is an error there too (NL2531).
 
 A comparison that can never be true is an error, as in TypeScript:
 `s.kind === Kind.Tri` when no variant has the tag `Kind.Tri`, or a `case
