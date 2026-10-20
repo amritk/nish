@@ -11,7 +11,7 @@ import { Http2Config, Http2Connection } from "nish/net/http2";
 
 export const main = (): i32 => {
   const config = new Http2Config();
-  console.log(`the defaults make a connection: ${new Http2Connection(config).outputEnd > 0}`);
+  console.log(`the defaults make a connection: ${new Http2Connection(config).wantsWrite()}`);
   config.maxFrameSize = 1024;
   console.log(`unreachable: ${new Http2Connection(config).outputEnd}`);
   return 0;

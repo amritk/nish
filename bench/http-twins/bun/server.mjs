@@ -1,10 +1,13 @@
-// The `Bun.serve` twin of bench/http1-server.ts: one process, no `reusePort`
-// workers, so it gets the one core the Nish server gets.
+// The `Bun.serve` twin of bench/http1-server.ts. With BENCH_CORES unset or 1,
+// one process, no `reusePort` workers, so it gets the one core the Nish server
+// gets; with BENCH_CORES=N, N processes on the one port (bun-cores.mjs). It
+// prints `listening` once all N are bound.
 //
 //   bun server.mjs <port> [ignored...]
 //
 // The extra routes go into `routes` first, as a small service would register
 // them, and the measured routes after.
+import { reusePort, spawnWorkers } from "../bun-cores.mjs"
 import { extraRoutes } from "../extra-routes.mjs"
 
 const port = Number(process.argv[2] ?? 8080)
@@ -51,6 +54,7 @@ const echo = async (req) => {
 Bun.serve({
   hostname: "127.0.0.1",
   port,
+  reusePort,
   routes: {
     ...extras,
     "/": {
@@ -94,4 +98,5 @@ Bun.serve({
     return new Response("not found", { status: 404, headers: text })
   },
 })
+await spawnWorkers(import.meta.path, port)
 console.log(`listening ${port}`)

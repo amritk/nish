@@ -2,15 +2,23 @@
 # Starts the nginx twin: `serve <port> [ignored...]`. build.sh copies this file
 # beside the nginx it builds, into build/http-twins/nginx/.
 #
+# BENCH_CORES=N (1 when unset) is the number of workers, with a master process
+# to run them when N > 1, so nginx gets as many cores as the Nish server.
+#
 # nginx prints nothing once it is bound, so a background poller prints
 # `listening <port>` when the port accepts, and the shell then becomes nginx
-# with `exec`: the pid bench/http.mjs measures and sends SIGINT to is nginx's own.
+# with `exec`: the pid bench/http.mjs measures and sends SIGINT to is nginx's own
+# (the master's, when there is one; SIGINT is its fast shutdown).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 port=${1:-8080}
 run="$here/run/$port"
 mkdir -p "$run"
-sed "s/@PORT@/$port/" "$here/nginx.conf" >"$run/nginx.conf"
+workers=${BENCH_CORES:-1}
+[[ $workers =~ ^[1-9][0-9]*$ ]] || workers=1
+master=off
+[ "$workers" -eq 1 ] || master=on
+sed -e "s/@PORT@/$port/" -e "s/@MASTER@/$master/" -e "s/@WORKERS@/$workers/" "$here/nginx.conf" >"$run/nginx.conf"
 cp "$here/extra.conf" "$run/extra.conf"
 (
   for _ in $(seq 1 1000); do

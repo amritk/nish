@@ -429,6 +429,8 @@ export class Client {
   /** Takes everything the server has to send and renders each whole frame. */
   drain(): void {
     const c: Http2Connection = this.conn;
+    // Asked first, as a carrier asks: the SETTINGS a connection owes are written then.
+    c.wantsWrite();
     this.log.push(c.output, c.outputStart, c.outputEnd - c.outputStart);
     c.consume(c.outputEnd - c.outputStart);
   }
