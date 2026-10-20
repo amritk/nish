@@ -54,8 +54,11 @@ void nish_scope_join(void *scope);
 void nish_channel_send(int64_t *state, int64_t value);
 void nish_channel_count(int64_t *state, int64_t delta);
 int32_t nish_channel_receive(int64_t *state, int64_t *out);
-/* runtime-cross.c: a guard's string store. */
+/* runtime-cross.c: a guard's string store, and a map element's keep. */
 void *nish_guard_keep(void *old, const void *s);
+void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark);
+void nish_cross_begin(void *state, void **list);
+void nish_cross_end(void *state);
 nish_str *nish_read_file(const nish_str *);
 void nish_write_file(const nish_str *, const nish_str *);
 void nish_append_file(const nish_str *, const nish_str *);
@@ -1741,6 +1744,45 @@ static void test_guard_keep(void) {
   assert(nish_guard_keep(c, NULL) == NULL);
 }
 
+/* A map element's keep in a chunk of a divided region, from a mark at the end
+ * of a full chunk (a region's exactly sized `dst` leaves one): the 64 KB chunk
+ * the first element's body grows stays, emptied, for every later element. A
+ * plain release to the mark would free it, and the next body malloc it again:
+ * a million-element map at one thread made a million of each. A body that
+ * grows a chunk larger than 64 KB has it freed as before. */
+static void test_cross_keep_rewind(void) {
+  struct { void *list, *block; uint64_t off; void *prev; } state;
+  void *list = NULL;
+  nish_free_arena();
+  nish_alloc_struct(1 << 20);
+  void *full = nish_arena.chunks;
+  nish_cross_begin(&state, &list);
+  void *grown = NULL;
+  for (int32_t i = 0; i < 1000; i++) {
+    uint64_t m = nish_arena_mark();
+    nish_alloc_struct(24); /* a temporary of the body's */
+    nish_str *v = nish_cross_keep(nish_str_from_i32(i), 0, m);
+    if (!grown) grown = nish_arena.chunks;
+    assert(grown != full && nish_arena.chunks == grown && *(void **)grown == full);
+    assert(nish_arena.buf == (char *)grown + 16 && nish_arena_used() == 0);
+    char want[16];
+    int n = snprintf(want, sizeof want, "%d", i);
+    assert(v->len == (uint64_t)n && memcmp(v->data, want, (size_t)n) == 0);
+  }
+  uint64_t m = nish_arena_mark();
+  nish_str *seven = nish_str_from_i32(7);
+  nish_alloc_struct(1 << 17); /* a chunk of its own, larger than 64 KB */
+  nish_cross_keep(seven, 0, m);
+  assert(nish_arena.chunks == grown && nish_arena_used() == 0);
+  nish_cross_end(&state);
+  while (list) {
+    void *next = *(void **)list;
+    free(list);
+    list = next;
+  }
+  nish_free_arena();
+}
+
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
   char *a = nish_alloc_struct(12);
@@ -2039,6 +2081,7 @@ int main(void) {
   nish_free_arena();
   test_process();
   test_guard_keep();
+  test_cross_keep_rewind();
   nish_free_arena();
 #ifdef NISH_THREADS
   test_threads();
