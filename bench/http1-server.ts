@@ -93,7 +93,6 @@ const ROUTE_TABLE: i32 = 231
 const ROUTE_DEEP: i32 = 332
 const ROUTE_COUNT: i32 = 342
 const DEEP_PATTERN: string = "/v1/orgs/:org/projects/:project/builds/:build/artifacts"
-const QUESTION: i32 = 63
 const AMPERSAND: i32 = 38
 const EQUALS: i32 = 61
 /** The highest revision an echo raises; past it, an `i32` would overflow, which aborts. */

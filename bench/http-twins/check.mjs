@@ -50,6 +50,8 @@ const twins = [
   "nginx",
 ]
 const noEcho = new Set(["nginx"])
+// The servers that also register bench/router.ts's route table and its deep route.
+const hasRouteTable = new Set(["nish"])
 const body = readFileSync(join(root, "bench", "http-body.json"))
 const rewritten = Buffer.from('{"hello":"world"}')
 const powered = { "x-powered-by": "benchmark" }
@@ -191,9 +193,7 @@ const check = async (server) => {
       ["GET", sampleOf(pattern), null, 200, "text/plain", Buffer.from("ok")],
       ["POST", `${sampleOf(pattern)}/submit`, null, 200, "text/plain", Buffer.from("ok")],
     ]),
-    // The route table is the Nish server's alone (bench/http-twins/README.md,
-    // "The route table"): a twin has no such route and must answer 404.
-    server.name === "nish"
+    hasRouteTable.has(server.name)
       ? ["GET", DEEP_PATH, null, 200, "text/plain", Buffer.from("acme api 97")]
       : ["GET", DEEP_PATH, null, 404],
     ["GET", "/orders/", null, 404],
