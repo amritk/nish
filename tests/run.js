@@ -1532,6 +1532,7 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_address",
       "nish_net_local_port",
       "nish_tcp_listen",
+      "nish_tcp_listen_flags",
       "nish_tcp_accept",
       "nish_net_read",
       "nish_net_write",
@@ -1602,6 +1603,19 @@ if (!only || "net_tcp_connect".includes(only)) {
     "net_tcp_connect: under the prelude tcpConnect fails loudly rather than answering",
     loud.status !== 0 && loud.stderr.includes("`tcpConnect` has no synchronous reading under Node"),
     shown(loud)
+  )
+
+  // `net_tcp_reuseport` imports from `nish:net`, a scheme Node's loader refuses
+  // before any call runs, so the prelude is asked of the global instead.
+  const flagsDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(flagsDir, { recursive: true })
+  const flagsEntry = path.join(flagsDir, "listen-flags.ts")
+  fs.writeFileSync(flagsEntry, 'export const main = (): number => tcpListenFlags("127.0.0.1", 0, 4, 1);\n')
+  const loudFlags = runUnderPrelude(flagsEntry, [])
+  check(
+    "net_tcp_reuseport: under the prelude tcpListenFlags fails loudly rather than answering",
+    loudFlags.status !== 0 && loudFlags.stderr.includes("`tcpListenFlags` has no synchronous reading under Node"),
+    shown(loudFlags)
   )
 }
 
@@ -6129,6 +6143,7 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // `fd_write` fast call crashes its frame walk. On Node 22.22.0, 16 of 20 runs
 // crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
 // used to pass, and none of 50 with the host turning the calls off.
+// #732 tracks the Node bug and when the host can drop the flag.
 if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
   const agreeDir = path.join(buildDir, "p256-agree")
   const programDir = path.join(agreeDir, "crypto_p256_agree")
@@ -7608,6 +7623,7 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // segfaults (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24
 // (three of three crashed with fast API calls on, none of six with them off).
 // examples/wasi-host.mjs turns them off itself, so the slow call is what runs.
+// #732 tracks the Node bug and when the host can drop the flag.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",

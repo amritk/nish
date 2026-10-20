@@ -1,13 +1,15 @@
 // The Hono twin of bench/http1-server.ts, on Bun: one `Hono` app with its
-// default router, served by `Bun.serve` in one process with no `reusePort`
-// workers. build.sh installs the pinned Hono from bun.lock beside this file in
-// build/http-twins/bun-hono/node_modules.
+// default router, served by `Bun.serve`. With BENCH_CORES unset or 1, one
+// process, no `reusePort` workers; with BENCH_CORES=N, N processes on the one
+// port (bun-cores.mjs). build.sh installs the pinned Hono from bun.lock beside
+// this file in build/http-twins/bun-hono/node_modules.
 //
 //   bun server.mjs <port> [ignored...]
 //
 // The extra routes are registered first, as a small service would register
 // them, and the measured routes after.
 import { Hono } from "hono"
+import { reusePort, spawnWorkers } from "../bun-cores.mjs"
 import { extraRoutes } from "../extra-routes.mjs"
 
 const port = Number(process.argv[2] ?? 8080)
@@ -75,5 +77,6 @@ app
     return c.body("not found", 404, text)
   })
 
-Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch })
+Bun.serve({ hostname: "127.0.0.1", port, reusePort, fetch: app.fetch })
+await spawnWorkers(import.meta.path, port)
 console.log(`listening ${port}`)

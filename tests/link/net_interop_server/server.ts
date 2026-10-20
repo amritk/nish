@@ -231,9 +231,11 @@ export class InteropServer {
    * One turn of the loop: waits up to `wait` milliseconds (or less, for
    * QUIC's next timer), steps whichever TCP loop is ready, and runs QUIC —
    * every datagram waiting, signed with `key` where a handshake asks, the
-   * timers due, every slot with news, and what each has to send.
+   * timers due, every slot with news, and what each has to send. The
+   * HTTP/2 port resumes under the ticket keys `current` and `previous`, lent
+   * for the turn, or `null` while its tickets are off.
    */
-  step(wait: i32, key: Secret<u8[]>): void {
+  step(wait: i32, key: Secret<u8[]>, current: Secret<u8[]> | null, previous: Secret<u8[]> | null): void {
     let timeout: i32 = this.h3.timeout(nowMs());
     if (timeout < 0 || timeout > wait) {
       timeout = wait;
@@ -247,7 +249,7 @@ export class InteropServer {
       } else if (who === H2_LISTEN_TOKEN) {
         this.h2.acceptAll();
       } else if (who >= H2_SLOT_TOKEN) {
-        this.h2.serve(who - H2_SLOT_TOKEN, this.ready[2 * i + 1], key);
+        this.h2.serve(who - H2_SLOT_TOKEN, this.ready[2 * i + 1], key, current, previous);
       } else if (who === TOKEN_SIGNAL) {
         this.stopped = true;
       }

@@ -952,7 +952,7 @@ The protocol stack written on `nish/crypto`: TLS 1.3 (`nish/net/tls`), QUIC
 HTTP/3 (`nish/net/http3`), WebSocket (`nish/net/websocket`) and WebTransport.
 Most of these modules are *sans-IO*: they take bytes and answer bytes, and
 never read a socket or a clock themselves, so you drive them from your own
-loop over [`nish:net`](../../LANGUAGE.md#builtin-modules-nish). The ones
+loop over [`nish:net`](networking.md). The ones
 that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 `Http1Server` and `Http1TlsServer` pools), `nish/net/http2-tls` and
 `nish/net/http3-server`; like `nish:net` itself, they are native only. Your
