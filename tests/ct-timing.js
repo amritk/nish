@@ -34,10 +34,24 @@
  *   node tests/ct-timing.js            the full run, SAMPLES measurements a function
  *   node tests/ct-timing.js --quick    a smoke run, QUICK_SAMPLES a function
  *   node tests/ct-timing.js --samples <n> [--seed <n>] [--nish <compiler>] [<fixture substring>]
+ *   ... --function <name>              time that one function alone, with the controls
+ *   ... --out-of-domain                time a `DOMAINS` fixture on its types' whole range
+ *   ... --null                         the A/A run: both classes prepared alike, so every
+ *                                      |t| is noise, and the table is the false-positive rate
  *
- * It prints a Markdown table and exits 1 when any function's largest |t| is
- * above 4.5, 2 when it could not run or a control did not differ, and 0
- * otherwise. It
+ * A function is timed 102 ways at once (uncropped, 100 cropped percentiles and
+ * a second-order test), and the largest |t| of 102 correlated tests on a
+ * shared machine crosses 4.5 now and then with no leak behind it: the A/A run
+ * measured that rate (docs/security/ct-verification.md, "The re-measure
+ * rule"). So a function above 4.5 is timed again, alone, on a fresh seed
+ * derived from the run's, and is a finding only when it crosses on both. One
+ * that crossed once and not again stays in the table, as "crossed once, did not
+ * repeat". A control is never re-measured: it must differ on its first
+ * measurement.
+ *
+ * It prints a Markdown table and exits 1 when a function's largest |t| is above
+ * 4.5 on both measurements, 2 when it could not run or a control did not
+ * differ, and 0 otherwise (an A/A run exits 0 or 2). It
  * is not part of `npm test`: the numbers are about the machine it runs on, and
  * a shared runner is noisy, so `.github/workflows/ct-timing.yml` runs it weekly
  * and files what it finds as an issue rather than as a red pull request.

@@ -5,7 +5,12 @@
 # access (tests/ct-asm.js). What it cannot see is what the processor does with
 # the instructions it passes. tests/ct-timing.js measures that instead: a
 # dudect-style Welch's t-test between a fixed and a random secret, over every
-# one of those functions, on an x86-64 and an aarch64 runner.
+# one of those functions, on an x86-64 and an aarch64 runner. A function above
+# |t| = 4.5 is timed again, alone, on a fresh seed, and is a finding only when
+# it crosses on both: the largest of 102 correlated tests on a shared runner
+# crosses once now and then with no leak behind it (the A/A rate in
+# docs/security/ct-verification.md, "The re-measure rule"). The controls must
+# differ on their first measurement.
 #
 # It is not a check on pull requests and must not become one. Timing on a
 # shared runner is noisy, so a finding goes to one open issue labelled
@@ -81,8 +86,9 @@ jobs:
         run: build/seed/bin/nish src/compile.ts --link build/nish
 
       # The exit code is kept rather than acted on here, so that the table is
-      # uploaded whatever it says: 0 none above the threshold, 1 a function
-      # above it, 2 the harness could not run. The `report` job reads it. The
+      # uploaded whatever it says: 0 nothing above the threshold twice, 1 a
+      # function above it on both seeds, 2 the harness could not run or a
+      # control did not differ. The `report` job reads it. The
       # step still fails on anything but 0, so the run itself is red.
       - name: Time the constant-time fixtures
         env:
@@ -138,8 +144,9 @@ jobs:
             echo
             echo "Each row below says whether it found a difference or could not run at all."
             echo "A |t| above 4.5 means the fixed and the random secret took measurably different"
-            echo "time. On a shared runner that can be noise, so re-run the workflow before reading"
-            echo "it as a leak; one that repeats, on the same function, is a finding."
+            echo "time. A function above it was timed again on a fresh seed, and only one that"
+            echo "crossed on both is a finding; one that crossed once and not again is in the table"
+            echo "and passes. Re-run the workflow before reading a finding as a leak."
             for os in ubuntu-latest ubuntu-24.04-arm; do
               dir="reports/ct-timing-$os"
               echo
@@ -153,9 +160,9 @@ jobs:
               code="$(cat "$dir/code")"
               [ "$code" = 0 ] || failed=1
               case "$code" in
-                0) echo "Ran; nothing above the threshold." ;;
-                1) echo "**A function was above the threshold.**" ;;
-                *) echo "The harness could not run (exit $code): a build or link failure, not a timing result." ;;
+                0) echo "Ran; nothing above the threshold on two seeds." ;;
+                1) echo "**A function was above the threshold on two seeds.**" ;;
+                *) echo "The harness could not run, or a control did not differ (exit $code): not a reading of the code." ;;
               esac
               echo
               cat "$dir/table.md"
