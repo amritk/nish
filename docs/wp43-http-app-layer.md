@@ -1,4 +1,4 @@
-# WP42: The HTTP application layer — the router first
+# WP43: The HTTP application layer — the router first
 
 **Status: in progress.** Stage 1, the router (`std/net/router.ts`), is built.
 The handler interface, static files and compression are planned and unbuilt.

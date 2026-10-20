@@ -1,7 +1,7 @@
 # Security record: the HTTP router
 
-The record of WP42's first stage: `nish/net/router`, the method and path
-router ([wp42-http-app-layer.md](../wp42-http-app-layer.md)). It says what the
+The record of WP43's first stage: `nish/net/router`, the method and path
+router ([wp43-http-app-layer.md](../wp43-http-app-layer.md)). It says what the
 router refuses when a table is built and with what code, what it answers for a
 target no route reaches, what a lookup costs, what it writes and where, and
 the test that pins each property. It is written with the code rather than
@@ -63,7 +63,7 @@ in the index.
 | ROUTE-5 | Medium if it failed | `match`, `routerDecode` | `%2F` must not add a segment, and a malformed escape must not be read past. | **Holds.** `match` splits on raw bytes and decodes nothing, so `%2F` stays inside one parameter. `routerDecode` checks every escape before it writes: a `%` at the end, with one digit or a non-hex digit answers `ROUTER_BAD_ESCAPE`, and a decoded length past `out` `ROUTER_NO_ROOM`, each writing nothing. |
 | ROUTE-6 | High if it failed | `match` | A route with more parameter pairs than `params` holds must not write past it. | **Holds.** `match` collects the pairs in its own scratch, sized `2 * maxParams` at construction, and copies them out only when all fit; otherwise it answers `ROUTER_TOO_MANY_PARAMS` and `params` is left as it was. |
 | ROUTE-7 | Low if it failed | `match` | The query must not be matched, nor parsed. | **Holds.** The path ends at the first `?`; neither the query nor a `*`'s pair reaches past it. The query is left to the program. |
-| ROUTE-8 | Low | `match` | Dot segments (`.` and `..`) and empty segments are matched as bytes, not removed as RFC 3986 §5.2.4 removes them, so `/public/../admin` reaches a `/public/*` route with `../admin` as its pair, not an `/admin` route. A program that guards a prefix by its route, and serves files from a parameter, must refuse such a parameter itself. | **Accepted.** Normalising would make the route a target reaches differ from the bytes it spells. Refusing dot segments in a parameter is the caller's job today; the static-file stage that will normalise the path it serves (`docs/wp42-http-app-layer.md`) is planned, not built. The guide says so: a decoded parameter can hold `/`, `..` and NUL. |
+| ROUTE-8 | Low | `match` | Dot segments (`.` and `..`) and empty segments are matched as bytes, not removed as RFC 3986 §5.2.4 removes them, so `/public/../admin` reaches a `/public/*` route with `../admin` as its pair, not an `/admin` route. A program that guards a prefix by its route, and serves files from a parameter, must refuse such a parameter itself. | **Accepted.** Normalising would make the route a target reaches differ from the bytes it spells. Refusing dot segments in a parameter is the caller's job today; the static-file stage that will normalise the path it serves (`docs/wp43-http-app-layer.md`) is planned, not built. The guide says so: a decoded parameter can hold `/`, `..` and NUL. |
 | ROUTE-9 | Low | `match`, `routerDecode` | The path is matched before it is decoded, so `/%61dmin` does not reach an `/admin` route, while a proxy that decodes first would send it there. | **Accepted.** Decoding first would let `%2F` split a segment, which is the worse confusion; a pattern refuses `%`, so no route can be spelled encoded. RFC 3986 §6.2.2.2 makes `%61` and `a` equivalent, so a server behind a decoding proxy routes on what it receives. |
 
 `add`'s refusals are the program's, not the attacker's, and are listed under
