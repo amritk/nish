@@ -118,13 +118,12 @@ export class Http2TlsServer {
     first.pools = this.pools
   }
 
-  /** A new connection on this pool's buffers and `date`, for the next slot made. */
-  build(): Http2Connection {
+  /** Makes the next slot's connection, on this pool's buffers and `date`. */
+  build(): void {
     const conn: Http2Connection = new Http2Connection(this.config)
     conn.date = this.date.current()
     conn.pools = this.pools
     this.connections.push(conn)
-    return conn
   }
 
   /** Whether `slot` holds a connection and its HTTP/2 side has been made. */
