@@ -21676,7 +21676,11 @@ if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
     ctor
   )
   const method = thisOf("Dn.scaled")
-  check("#740: a method that only reads `this` keeps it readonly", method !== null && method.includes("readonly"), method)
+  check(
+    "#740: a method that only reads `this` keeps it readonly",
+    method !== null && method.includes("readonly"),
+    method
+  )
   const bare = thisOf("Bare.constructor")
   check(
     "#740: an empty constructor with no initialiser keeps `this` readonly",
