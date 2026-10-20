@@ -33,7 +33,7 @@ twin under `--cores` has. Under `--cores` the twin also reads `BENCH_CORES`
 | `GET /json` | 200, `application/json`, `{"message":"Hello, World!","n":<n>}`, where `n` counts the requests this process has answered, this one included |
 | `POST /json-echo` with `bench/http-payload.json` | 200, `application/json`, the payload with `"revision":7` made `"revision":8` |
 | every route in `extra-routes.mjs`: `GET <pattern>`, and `POST <pattern>/submit` | 200, `text/plain`, `ok` |
-| anything else, `/json-echo-doc` included (which the Nish server answers as `/json-echo`) | 404 |
+| anything else, `/json-echo-doc` included (which the Nish server answers as `/json-echo`), and the routes of [the route table](#the-route-table), which only the Nish server registers | 404 |
 
 The first three rows are the routes of the bun-http-framework-benchmark
 (SaltyAom/bun-http-framework-benchmark): Ping, Query and Body. The
@@ -44,7 +44,7 @@ JavaScript twins and the Nish server keep the key order; the Go and Rust twins
 decode into a map and print the keys sorted, which gives the same bytes for
 `bench/http-body.json`, the one body that is timed.
 
-### The route table
+### The extra routes
 
 `extra-routes.mjs` holds 112 more GET patterns and a `/submit` POST beside
 each, none of them requested under load. They make each server's route lookup
@@ -57,13 +57,35 @@ one non-empty segment. `check.mjs` asks each route once, at a sample path
 How a twin registers them follows what a user of its stack would write:
 
 - The router twins (`bun`, `uws`, `bun-elysia`, `bun-hono`, `rust-actix`)
-  register every pattern with their router, before the measured routes.
-- The hand-written twins (the Nish server, `node-http`, both Go twins and
-  `rust-hyper`) test the measured routes first and then scan the table in
+  register every pattern with their router, before the measured routes. The
+  Nish server is one of them: it registers its seven measured routes on one
+  `nish/net/router` `Router`, then every pattern, then the route table below,
+  and switches on the index `match` returns.
+- The hand-written twins (`node-http`, both Go twins and `rust-hyper`) test the measured routes first and then scan the table in
   order, a segment at a time. The Rust twins share `rust-extra.rs`, which
   `build.sh` copies in as `src/extra.rs`.
 - nginx gets a `map` from `"$request_method $uri"` to a flag, one regex per
   route, which `nginx/extra-conf.mjs` writes as `extra.conf` at build time.
+
+### The route table
+
+The Nish server also registers the 112-route table of `bench/router.ts`, the
+router's own benchmark, after the extra routes, so that every route it
+answers is looked up among 342: the 7 measured routes, the 224 extra ones and
+111 of the table (its `GET /` is the ping route already). It is a service's
+API: `/v1/...` resources, static assets, a `*` catch-all, and nested routes up to nine segments deep with one
+to three parameters. Each table route answers `ok`, but one:
+
+| Request | Answer |
+| --- | --- |
+| `GET /v1/orgs/:org/projects/:project/builds/:build/artifacts` | 200, `text/plain`, `<org> <project> <build>`: `acme api 97` for the timed path `/v1/orgs/acme/projects/api/builds/97/artifacts` |
+
+`http.mjs` times that path as the `deep-route` scenario, where the router walks
+eight segments and writes three parameters, and the answer is built from all
+three. No twin registers the table: the table is there to measure
+`nish/net/router` under the server, not to compare routers, which
+`bench/router.ts` does on its own. A twin answers the deep route with 404, its
+cell reads n/a, and `check.mjs` asks for the 404.
 
 The echo decodes the body into a typed order (with `notes` a nullable string),
 increments `revision` and encodes it again compactly, keeping the key order

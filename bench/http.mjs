@@ -168,8 +168,8 @@ const scenarios = [
     post: true,
     file: payloadFile,
   },
-  // A route four parameters deep in the Nish server's 342-route table, its
-  // answer built from three of them. The twins register no such table and
+  // A route eight segments and three parameters deep in the Nish server's
+  // 342-route table, its answer built from the three. The twins register no such table and
   // answer 404, so their cells read n/a.
   { name: "deep-route keep-alive c=256", path: DEEP_PATH, conns: 256 },
   { name: "plaintext keep-alive c=4096", path: "/plaintext", conns: 4096 },
