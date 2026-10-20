@@ -104,34 +104,63 @@ class Cache {
   regions: Map<i64, Region<Session>>
   order: i64[]
   head: i32 = 0
+  held: i32 = 0
   constructor(live: i32) {
     this.regions = new Map<i64, Region<Session>>()
     this.order = new Array<i64>(live)
   }
   get(id: i64, out: u8[]): i32 {
-    if (!this.regions.has(id)) {
+    const hit = this.regions.get(id)
+    if (hit !== undefined) {
+      return enterWith(hit, out, serve)
+    }
+    if (this.held === this.order.length) {
+      // full: the oldest goes; `order` holds ids only once `held` says so,
+      // so a fresh table's zeroes never name a session
       const old: i64 = this.order[this.head]
-      if (this.regions.has(old)) {
-        free(this.regions.get(old))
+      const gone = this.regions.get(old)
+      if (gone !== undefined) {
+        free(gone)
         this.regions.delete(old)
       }
-      this.regions.set(id, regionWith(id, open))
-      this.order[this.head] = id
-      this.head = (this.head + 1) % this.order.length
+    } else {
+      this.held = this.held + 1
     }
-    return enterWith(this.regions.get(id), out, serve)
+    const r = regionWith(id, open)
+    this.regions.set(id, r)
+    this.order[this.head] = id
+    this.head = (this.head + 1) % this.order.length
+    return enterWith(r, out, serve)
   }
 }
 ```
 
-The relay keeps a region per slot for what a game would hang off a session
-(`examples/relay/relay.ts`, `hello` at :701 and `close` at :584):
+`Map.get` answers `Region<Session> | undefined`, and the `!== undefined`
+narrows it before `enterWith` and `free` take it.
+
+The relay would keep a region per slot for what a game hangs off a session
+(`examples/relay/relay.ts`, `hello` at :701 and `release` at :551, which
+`close` at :584 reaches only past its `FREE`/`CLOSING` guard). The relay has
+no such field today: the sketch adds two, a handle and a flag, because a slot
+that never got past `hello` has no region to free:
 
 ```ts
-// hello(), once the grant verifies
-this.state[slot] = regionWith(g, sessionFromGrant)   // the host, the player, what the game keeps
-// close()
-free(this.state[slot])
+// new fields, sized like the relay's other per-slot arrays
+games: Region<Game>[]
+hasGame: boolean[]
+
+// hello(), once the grant verifies; `g` is the relay's one reused
+// RelayGrant, outer memory, so `gameFromGrant` keeps its numbers and copies
+// the host byte by byte into a u8[] it allocates (keeping `g.host` or
+// `g.reason` itself is NL2557)
+this.games[slot] = regionWith(g, gameFromGrant)
+this.hasGame[slot] = true
+
+// release()
+if (this.hasGame[slot]) {
+  free(this.games[slot])
+  this.hasGame[slot] = false
+}
 ```
 
 **The handle is a number.** `Region<T>` lowers to an `i64`: a 24-bit slot and
@@ -146,6 +175,12 @@ generation and an entered flag. `enter` panics unless all three agree:
 - the slot is not already entered, so `enter(r, …)` inside `r`'s own `f`,
   directly or through a nested `enter` of another region, panics rather than
   swapping the region's arena with itself.
+
+Generations start at 1, so the handle 0, the value a fresh `Region<T>[]`
+holds, is never issued. `enter`, `enterWith` and `free` all panic on a zero
+handle, a stale one, or one from another thread, and `free` of an entered
+region panics as well, so freeing twice is a panic and never a double free of
+the chunks.
 
 A slot whose generation would wrap is retired rather than reused. Taking or
 giving back a slot takes the table's lock, once per `region` and once per
@@ -340,13 +375,33 @@ reaches a slot whose recorded thread is not the caller's, and `enter` panics.
 A parallel body or a task's function may not call `region`, `regionWith`,
 `enter`, `enterWith` or `free` (NL2351).
 
-**wasm32 and wasi.** `malloc` and `free` are wasi-libc's, so a freed region's
-chunks are reused by the next one. Linear memory never shrinks, so the peak
-stays resident. That is enough for N9's other half, the client core's
-per-match state: one region a match, freed when the match ends, so each
-match reuses the last one's memory rather than adding to it. The freestanding `--profile wasm` route links host-compiled
-IR, so `runtime-region.c` goes into its link as `runtime.c` does (CLAUDE.md,
-#598).
+The five calls are panic sites: `enter`, `enterWith` and `free` for the checks
+above, `region` and `regionWith` for a full slot table or a `malloc` that
+refuses. Stage 2 adds them to `docs/LANGUAGE.md`'s panic-site table as a kind
+of their own, `region`, so under `--deny-panics` a call to one in a module of
+the scope is NL2457, and a call from the scope into a function outside it that
+reaches one is NL2458, as for every other kind ("The no-panic scope"). Its
+negative is `tests/cases/reject_deny_panics_region`.
+
+**wasm32 and wasi.** The `--profile wasi` route links `runtime.c` and the
+units `scripts/build.sh`'s `halves` pairs with it (build.sh:152), so
+`runtime-region.c`, paired there in stage 1, reaches wasi with no change of
+its own. `malloc` and `free` are wasi-libc's, so a freed region's chunks are
+reused by the next one. Linear memory never shrinks, so the peak stays
+resident. That is enough for N9's other half, the client core's per-match
+state: one region a match, freed when the match ends, so each match reuses
+the last one's memory rather than adding to it.
+
+The freestanding `--profile wasm` route is another matter. It links
+`runtime-wasm.c` rather than `runtime.c`, with `-nostdlib`: one arena grown
+by `memory.grow`, no chunk list, no `malloc` and no `free`, so a region's
+chunks have nowhere to come from and nowhere to go back to. Regions are
+refused there. The wasm route already greps the user's IR for
+`@nish_aes_hw(` to add `runtime-aes.c` (build.sh:~394); stage 1 adds a grep
+for `@nish_region_` beside it that exits 2 with a message naming `--profile
+wasi`, rather than leaving the link to fail on an undefined symbol. A wasm32
+guard in the compiler would not see this route, because it links IR compiled
+for the host (CLAUDE.md, #598).
 
 ## 4. The options, measured
 
@@ -480,8 +535,9 @@ inlined path.
 
 **Regions, as in §2.1.** They bound memory to the live set (27.6 MB for
 100,000 sessions where today grows without bound, at 1.07x today's time per
-request), cost nothing for a program
-that does not use them, reuse the arena block's rule and its codes, and leave
+request), leave the `.ll` of a program that does not use them unchanged and
+add no time to any of its paths (its runtime's `.text` grows by the region
+unit and the chunk-size read, §5, stage 1), reuse the arena block's rule and its codes, and leave
 the arena's ABI as it is.
 
 **Rejected:**
@@ -507,8 +563,8 @@ the arena's ABI as it is.
 
 | Stage | What | Files | Negative tests | `src/` may use it from |
 | --- | --- | --- | --- | --- |
-| 1 | The runtime. The region table, `nish_region_new`/`_enter`/`_leave`/`_free`, the thread, generation and entered checks, the region chunk size. A C test that frees a hundred thousand regions and reads RSS flat. | `runtime/runtime-region.c` (new; paired in `scripts/build.sh`'s `halves` and `src/run-cache.ts`'s `runtimeUnits()` in one commit), `runtime/runtime.c` (`nish_arena_grow`), `scripts/build.sh --profile wasm`'s link, `tests/runtime-budgets.js`: a ceiling row for the new unit, and `RUNTIME_TEXT_BUDGET` (3,684 B) and `RUNTIME_THREADS_TEXT_BUDGET` (3,885 B) raised by what the chunk-size read adds to `nish_arena_grow`, since both measure exactly at their ceilings today | a stale handle panics; `free` of an entered region panics; `enter` and `enterWith` of a region already entered panic, directly and through a nested `enter`; a handle from another thread panics | — (no construct) |
-| 2 | The language. `nish:region` with NL2556–NL2561 and NL2351's wider message, its lowering, the guide page, `docs/LANGUAGE.md`'s section, and the cookbook entry. | `src/` (the builtin module, the checker rule beside `src/escape.ts`'s arena rule, `src/parallel.ts`'s `arenaMessage`, codegen), `src/runtime.ts` and the cookbook's runtime prelude (`docs/cookbook/regen.sh`), `runtime/nish.d.ts`, `runtime/nish.mjs`, `std/region.ts` if it carries source like `nish:secret`, `tests/cases/` with the differential goldens (`node tests/differential/goldens.js --update`), `tests/self/goldens/checked.txt` and `checked-self.txt` (`node tests/self/goldens.js --update`), `docs/LANGUAGE.md`, `docs/guide/` | one per code, plus the three shapes: a constructor reached by `new` that stores `this` into module state; `using` of `region()` as each declarator; `h.l = this` with `h` the `arg`; NL2561's `region(() => moduleValue)` and `regionWith(g, (a) => a)`; NL2560's handle in a field of a task's argument, in a task's answer, in a `Map` sent on a channel and in a parallel body's capture; NL2351's `enter` in a spawned function and through a callee of a parallel body; then a negative golden after `churn()` for each element type the rule leaves out (CLAUDE.md, #520) | the first release cut after stage 2 merges (0.19.0 at the earliest, against today's 0.18.0 seed) |
+| 1 | The runtime. The region table, `nish_region_new`/`_enter`/`_leave`/`_free`, the thread, generation and entered checks, the region chunk size. A C test that frees a hundred thousand regions and reads RSS flat. | `runtime/runtime-region.c` (new; paired in `scripts/build.sh`'s `halves` and `src/run-cache.ts`'s `runtimeUnits()` in one commit), `runtime/runtime.c` (`nish_arena_grow`), `scripts/build.sh --profile wasm`'s refusal of IR that names `@nish_region_`, `tests/runtime-budgets.js`: a ceiling row for the new unit, and `RUNTIME_TEXT_BUDGET` (3,684 B) and `RUNTIME_THREADS_TEXT_BUDGET` (3,885 B) raised by what the chunk-size read adds to `nish_arena_grow`, since both measure exactly at their ceilings today | a zero handle panics in `enter`, `enterWith` and `free`; a stale handle panics, `free` twice included; `free` of an entered region panics; `enter` and `enterWith` of a region already entered panic, directly and through a nested `enter`; a handle from another thread panics; `--profile wasm` of IR that calls `nish_region_new` exits 2 with its message | — (no construct) |
+| 2 | The language. `nish:region` with NL2556–NL2561 and NL2351's wider message, its lowering, the guide page, `docs/LANGUAGE.md`'s section, and the cookbook entry. | `src/` (the builtin module, the checker rule beside `src/escape.ts`'s arena rule, `src/parallel.ts`'s `arenaMessage`, codegen), `src/runtime.ts` and the cookbook's runtime prelude (`docs/cookbook/regen.sh`), `runtime/nish.d.ts`, `runtime/nish.mjs`, `std/region.ts` if it carries source like `nish:secret`, `tests/cases/` with the differential goldens (`node tests/differential/goldens.js --update`), `tests/self/goldens/checked.txt` and `checked-self.txt` (`node tests/self/goldens.js --update`), `docs/LANGUAGE.md`, `docs/guide/` | one per code, plus the three shapes: a constructor reached by `new` that stores `this` into module state; `using` of `region()` as each declarator; `h.l = this` with `h` the `arg`; NL2561's `region(() => moduleValue)` and `regionWith(g, (a) => a)`; NL2560's handle in a field of a task's argument, in a task's answer, in a `Map` sent on a channel and in a parallel body's capture; NL2351's `enter` in a spawned function and through a callee of a parallel body; `reject_deny_panics_region`; then a negative golden after `churn()` for each element type the rule leaves out (CLAUDE.md, #520) | the first release cut after stage 2 merges (0.19.0 at the earliest, against today's 0.18.0 seed) |
 | 3 | The proof. The §1 server rewritten with regions, as a `tests/link` soak that reads `Arena.mark()` and anonymous resident memory flat across 2,000,000 requests, and WP34 N9's game-server note closed. | `bench/wp46-memory/`, `tests/link/`, `docs/wp34-hosting-cs.md` | — | — |
 
 The compiler itself has no long-lived state and does not need regions; the
