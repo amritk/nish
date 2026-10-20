@@ -8849,6 +8849,28 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
         .filter((line) => line.length > 0)
         .join("\n")
     )
+
+    // ct_asm_p256's `p256Divsteps30` is the module's thirty-step loop written out, as a
+    // rolled loop is a back-edge the reading refuses. Each of its blocks must be the
+    // module's loop body, line for line, or the check reads a function the signer no
+    // longer runs. (The matrix updates are written out at literal indices, so their
+    // text differs; the fixture's `.out` holds them to the module's inverses.)
+    const moduleSource = fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8")
+    const fixtureSource = fs.readFileSync(path.join(casesDir, "ct_asm_p256.ts"), "utf8")
+    const loopBody = moduleSource.match(
+      /\nconst p256Divsteps30 = [^\n]*\n[\s\S]*?\n {2}for \(let i: i32 = 0; i < 30; i\+\+\) \{\n([\s\S]*?)\n {2}\}\n/
+    )?.[1]
+    const unrolled =
+      fixtureSource.match(/\nexport const p256Divsteps30 = [^\n]*\n([\s\S]*?)\n\}\n/)?.[1] ?? ""
+    const blocks = [...unrolled.matchAll(/\n {2}\{\n([\s\S]*?)\n {2}\}(?=\n)/g)].map((m) => m[1])
+    const stray = blocks.filter((b) => b !== loopBody)
+    check(
+      "ct_asm: ct_asm_p256's p256Divsteps30 is thirty copies of std/crypto/p256.ts's divstep loop body",
+      loopBody !== undefined && blocks.length === 30 && stray.length === 0,
+      loopBody === undefined
+        ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
+        : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
+    )
   }
 }
 
