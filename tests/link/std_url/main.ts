@@ -213,6 +213,37 @@ export const main = (): i32 => {
   // A window inside the array.
   const mid: u8[] = new Array<u8>(1)
   console.log("window -> " + `${percentDecode(src, 2, 3, mid, 0, 0)}` + " " + hexOf(mid, 0, 1))
+  // A `%` or `%4` at the window's end, with the hex digits it lacks just past it in the array.
+  const cut: u8[] = new Array<u8>(2)
+  let wl: i32 = 1
+  while (wl <= 2) {
+    const strict: i32 = percentDecode(src, 2, wl, cut, 0, 0)
+    const strictAt: i32 = percentDecodeErrorAt(src, 2, wl, cut, 0, 0)
+    const loose: i32 = percentDecode(src, 2, wl, cut, 0, URL_DECODE_LENIENT)
+    const looseHex: string = loose >= 0 ? hexOf(cut, 0, loose) : "-"
+    const seg: i32 = percentDecodePathSegment(src, 2, wl, cut, 0, URL_DECODE_LENIENT)
+    const segHex: string = seg >= 0 ? hexOf(cut, 0, seg) : "-"
+    console.log(
+      "window cut " + `${wl}` + " -> " + `${strict}` + " at " + `${strictAt}` + " lenient " + `${loose}` + " " + looseHex +
+        " segment " + `${percentDecodePathSegment(src, 2, wl, cut, 0, 0)}` + " lenient " + `${seg}` + " " + segHex
+    )
+    wl += 1
+  }
+  // The same cut through a query: the value's window, and a key `urlQueryFind` must not read past.
+  const kv: u8[] = bytesOf("k%41=%41")
+  const cq: UrlQuery = new UrlQuery(new UrlQueryLimits())
+  cq.reset(kv, 0, 7)
+  const ck: i32 = cq.next()
+  const cv: i32 = percentDecode(kv, cq.valueStart, cq.valueLength, cut, 0, URL_DECODE_FORM)
+  const cvLoose: i32 = percentDecode(kv, cq.valueStart, cq.valueLength, cut, 0, URL_DECODE_FORM | URL_DECODE_LENIENT)
+  console.log(
+    "window query -> " + `${ck}` + " value " + `${cq.valueLength}` + " " + `${cv}` + " lenient " + `${cvLoose}` + " " +
+      (cvLoose >= 0 ? hexOf(cut, 0, cvLoose) : "-")
+  )
+  cq.reset(kv, 0, 3)
+  console.log("window find kA -> " + `${urlQueryFind(cq, "kA")}`)
+  cq.reset(kv, 0, 4)
+  console.log("window find kA whole -> " + `${urlQueryFind(cq, "kA")}`)
 
   // Paths: split on the raw `/` before decoding.
   segments("path", "/a%2Fb/c")
@@ -227,6 +258,11 @@ export const main = (): i32 => {
   // Non-ASCII: the length is the byte count natively and the latin1 code-unit count under Node.
   const cafe: string | null = urlDecode("caf%C3%A9", 0)
   console.log("urlDecode cafe " + (cafe === null ? "null" : `${cafe.length}`))
+  // A valid multi-byte value, as bytes: two-, three- and four-byte sequences.
+  const mb: u8[] = bytesOf("caf%C3%A9+%E2%82%AC%F0%9F%98%80")
+  const mbOut: u8[] = new Array<u8>(toI32(mb.length))
+  const mbN: i32 = percentDecode(mb, 0, toI32(mb.length), mbOut, 0, URL_DECODE_FORM)
+  console.log("multibyte -> " + `${mbN}` + " " + hexOf(mbOut, 0, mbN))
   console.log("urlDecode " + shownOrNull(urlDecode("a+b", URL_DECODE_FORM)))
   console.log("urlDecode " + shownOrNull(urlDecode("%zz", 0)))
   console.log("urlDecode " + shownOrNull(urlDecode("%zz", URL_DECODE_LENIENT)))

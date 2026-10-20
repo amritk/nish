@@ -429,6 +429,8 @@ const urlKeyEquals = (bytes: u8[], off: i32, len: i32, name: string): boolean =>
  * or `URL_QUERY_END`, or the error `next()` answered. Nothing is allocated.
  * `?na%6De=x` holds the key `name`; a key with a malformed escape or `%00`
  * matches nothing. Call it again for the next pair with the same key.
+ * `name` is ASCII: natively it is compared with the key's bytes, under Node
+ * with its UTF-16 code units, so a non-ASCII name answers differently.
  */
 export const urlQueryFind = (q: UrlQuery, name: string): i32 => {
   let k: i32 = q.next()

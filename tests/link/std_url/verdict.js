@@ -8,7 +8,16 @@ export const urlFuzzVerdict = (text) => {
   const bad = []
   let cases = 0
   let pending = null
-  const utf8 = (h) => Buffer.from(h, "hex").toString("utf8")
+  // URLSearchParams decodes as the WHATWG decoder does (BOM kept), replacement characters and all.
+  const utf8 = (h) => new TextDecoder("utf-8", { ignoreBOM: true }).decode(Buffer.from(h, "hex"))
+  const isUtf8 = (h) => {
+    try {
+      new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(h, "hex"))
+      return true
+    } catch {
+      return false
+    }
+  }
   const finish = () => {
     if (pending === null) {
       return
@@ -16,6 +25,9 @@ export const urlFuzzVerdict = (text) => {
     const c = pending
     const s = Buffer.from(c.input, "hex").toString("latin1")
     const where = `${c.input} (${JSON.stringify(s)})`
+    // Node's decoders read a string, and a raw byte past 0x7F would reach them as
+    // a Latin-1 character they re-encode as UTF-8; escaped, it is the byte itself.
+    const escaped = s.replace(/[\x80-\xff]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`)
     // The strict rule: a `%` without two hex digits after it, or `%00`, whichever comes first.
     const first = /%(?![0-9A-Fa-f]{2})|%00/.exec(s)
     let strictWant = null
@@ -43,22 +55,24 @@ export const urlFuzzVerdict = (text) => {
       }
       let dec = null
       try {
-        dec = decodeURIComponent(s)
+        dec = decodeURIComponent(escaped)
       } catch {
         dec = null
       }
       if (dec !== null && Buffer.from(dec, "utf8").toString("hex") !== c.strictHex) {
         bad.push(`${where}: strict wrote ${c.strictHex}, decodeURIComponent ${JSON.stringify(dec)}`)
       }
-      if (dec === null && !utf8(c.strictHex).includes("�")) {
-        bad.push(`${where}: decodeURIComponent threw where strict wrote valid UTF-8`)
+      if ((dec === null) === isUtf8(c.strictHex)) {
+        bad.push(
+          `${where}: decodeURIComponent ${dec === null ? "threw" : "decoded"} where strict wrote ${c.strictHex}`
+        )
       }
     }
     if (c.loose !== decoded(true)) {
       bad.push(`${where}: lenient wrote ${c.loose}, want ${decoded(true)}`)
     }
     const got = c.pairs.map(([k, v]) => [utf8(k), v === "!" ? "" : utf8(v)])
-    const want = [...new URLSearchParams(s)]
+    const want = [...new URLSearchParams(escaped)]
     if (JSON.stringify(got) !== JSON.stringify(want)) {
       bad.push(`${where}: pairs ${JSON.stringify(got)}, URLSearchParams ${JSON.stringify(want)}`)
     }

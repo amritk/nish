@@ -1140,8 +1140,9 @@ name is J Doe
 want: `URL_DECODE_FORM` reads `+` as a space, as a form or a query does;
 `URL_DECODE_LENIENT` copies a malformed escape as it is; `URL_DECODE_ALLOW_NUL`
 decodes `%00` to a 0 byte. All three together decode as `URLSearchParams`
-does. A buffer as long as the input is always big enough; a smaller one
-answers `URL_DECODE_ERR_SPACE`, with the bytes before it written.
+does. A buffer as long as the input is always big enough; one shorter than
+the decoded result answers `URL_DECODE_ERR_SPACE`, with the bytes before it
+written.
 
 **A path is split before it is decoded**, so `%2F` stays inside its segment:
 `/a%2Fb/c` is the two segments `a/b` and `c`, never three. `+` is literal in a
@@ -1154,7 +1155,10 @@ pairs (`a&&b`) are skipped and not counted. `urlQueryGet` uses the default cap,
 and answers null for a key past it.
 
 The byte API does not check that what it decodes is UTF-8: a value may be
-binary. Nothing here looks for a `#`, which is never part of a request target.
+binary. The `name` you give `urlQueryFind` or `urlQueryGet` is ASCII: the
+native build compares it with the key's bytes and Node with its UTF-16 code
+units, so a non-ASCII name answers differently on the two. Nothing here looks
+for a `#`, which is never part of a request target.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports

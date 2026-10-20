@@ -60,9 +60,14 @@ copies `+` as it stands. `URL_DECODE_LENIENT` copies a malformed escape
 unchanged, as the WHATWG percent-decode does; `URL_DECODE_FORM` reads `+` as a
 space; `URL_DECODE_ALLOW_NUL` is the only way `%00` decodes, so lenient alone
 still refuses it. On 3,000 seeded inputs over an alphabet heavy in `%`, hex
-digits, `+`, `&` and `=`, the strict answer's code agrees with a regex of the
-rule, and its bytes with a model decoder and with `decodeURIComponent`
-wherever that does not throw (and where it throws, the bytes are not UTF-8);
+digits, `+`, `&` and `=`, mixed with UTF-8 sequences valid and invalid
+(2-, 3- and 4-byte, overlong, a surrogate, past U+10FFFF, a lone continuation,
+truncated, `0xFF`), each escaped in either case or written as raw bytes, the
+strict answer's code agrees with a regex of the rule, and its bytes with a
+model decoder and with `decodeURIComponent`: that throws exactly where the
+bytes are not UTF-8, and elsewhere its answer, multi-byte included, is the
+same bytes (one such value is pinned in `std_url`:
+`multibyte -> 13 636166c3a920e282acf09f9880`);
 the three flags together agree with the model decoder reading `+` as a space,
 and the pairs, each decoded so, with `URLSearchParams`'s entries — run under
 Node and, built natively, printing the same lines byte for byte. The refusal as a handler
@@ -86,7 +91,14 @@ answers null for it. Every scan is linear in the window.
 **No byte outside the window, no write outside `out`** (`std_url`,
 `tests/link/std_url_space`, `tests/link/std_url_window`): every function
 reads `bytes[off, off + len)` only, and a `?` or `%` just past the window is
-not seen (`split window -> -1 3`, `window -> 1 41`). Output that does not fit
+not seen (`split window -> -1 3`, `window -> 1 41`), even where the bytes
+past it would complete an escape: `ab%41` cut after `%` or `%4` is refused at
+2 by `percentDecode` and `percentDecodePathSegment` and copied as `%` or `%4`
+leniently (`window cut 1 -> -1 at 2 lenient 1 25 segment -1 lenient 1 25`,
+`window cut 2 -> -1 at 2 lenient 2 2534 segment -1 lenient 2 2534`), a query
+value so cut decodes the same (`window query -> 1 value 2 -1 lenient 2 2534`),
+and a key cut before its escape's last digit matches nothing
+(`window find kA -> 0`, `window find kA whole -> 1`). Output that does not fit
 is `URL_DECODE_ERR_SPACE` at the byte with no room, and nothing is written
 past `out`'s end. A window outside its array panics with
 `…: the window is outside the array`, once, at 2 and at 8 threads.
@@ -130,6 +142,8 @@ Each is deliberate and pinned above.
   `URL_DECODE_FORM | URL_DECODE_LENIENT | URL_DECODE_ALLOW_NUL` is
   `URLSearchParams`'s reading.
 - The byte API does not check UTF-8 (URL-1); the string forms do.
+- `urlQueryFind` and `urlQueryGet` expect an ASCII `name`: natively it is
+  compared with the key's bytes, under Node with its UTF-16 code units.
 - `urlDecode` and `urlQueryGet` expect an ASCII string, as a URL on the wire
   is; under Node a non-ASCII decoded byte comes back as Latin-1 where the
   native build gives UTF-8, as `String.fromBytes` does everywhere.

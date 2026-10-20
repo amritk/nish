@@ -1,6 +1,7 @@
 // `nish/net/url` against Node's own decoders: seeded inputs over an alphabet
-// heavy in `%`, hex digits, `+`, `&` and `=`, each printed with what the
-// module made of it. tests/run.js parses the lines and holds them to
+// heavy in `%`, hex digits, `+`, `&` and `=`, mixed with UTF-8 sequences —
+// valid and broken, escaped and raw — each printed with what the module made
+// of it. tests/run.js parses the lines and holds them to
 // decodeURIComponent, URLSearchParams and the strict rule's regex, natively
 // and under Node.
 //
@@ -20,7 +21,17 @@ import {
   percentDecode,
 } from "nish/net/url"
 
-const ALPHABET: string = "%%%%0123456789aAfFgz+&&==/x"
+const ALPHABET: string = "%%%%0123456789aAbBcCdDeEfFgz+&&==/x"
+/**
+ * UTF-8 sequences in hex, space-separated: valid two-, three- and four-byte
+ * ones, then an overlong `/`, a surrogate, a code point past U+10FFFF, a lone
+ * continuation, a truncated three-byte lead, a lead with an ASCII byte after
+ * it, and 0xFF.
+ */
+const SEQUENCES: string = "c3a9 c280 e282ac efbfbd f09f9880 f48fbfbf c0af e080af eda080 f4908080 80 e282 c341 ff"
+/** The most bytes one input step writes: a four-byte sequence, escaped. */
+const STEP_MAX: i32 = 12
+const STEPS: i32 = 16
 const CASES: i32 = 3000
 /** Lenient, form and allow-NUL: a constant may not be an `|`, so main checks the sum. */
 const LOOSE: i32 = 7
@@ -38,6 +49,14 @@ const hexOf = (bytes: u8[], off: i32, len: i32): string => {
   return parts.join("")
 }
 
+/** The ASCII code of hex digit `v`, upper case when `upper` is 1. */
+const hexDigit = (v: i32, upper: i32): i32 => {
+  if (v < 10) {
+    return 48 + v
+  }
+  return (upper === 1 ? 55 : 87) + v
+}
+
 /** The window decoded as `LOOSE`, as hex. */
 const looseHex = (src: u8[], off: i32, len: i32, out: u8[]): string => {
   const n: i32 = percentDecode(src, off, len, out, 0, LOOSE)
@@ -48,17 +67,67 @@ export const main = (): i32 => {
   if (LOOSE !== (URL_DECODE_LENIENT | URL_DECODE_FORM | URL_DECODE_ALLOW_NUL)) {
     panic("fuzz: LOOSE is not the three flags")
   }
+  // `SEQUENCES` as bytes, each sequence led by its length, and where each starts.
+  const seq: u8[] = []
+  const starts: i32[] = []
+  const total: i32 = toI32(SEQUENCES.length)
+  let p: i32 = 0
+  while (p < total) {
+    starts.push(toI32(seq.length))
+    seq.push(toU8(0))
+    const lead: i32 = toI32(seq.length) - 1
+    while (p + 1 < total && SEQUENCES.charCodeAt(p) !== 32) {
+      const hi: i32 = DIGITS.indexOf(SEQUENCES.substring(p, p + 1))
+      const lo: i32 = DIGITS.indexOf(SEQUENCES.substring(p + 1, p + 2))
+      seq.push(toU8(hi * 16 + lo))
+      seq[lead] = toU8(toI32(seq[lead]) + 1)
+      p += 2
+    }
+    p += 1
+  }
   const r: Rng = new Rng(717)
   const q: UrlQuery = new UrlQuery(new UrlQueryLimits())
   const lines: string[] = []
   let c: i32 = 0
   while (c < CASES) {
-    const len: i32 = (r.nextI32() >>> 1) % 25
+    const steps: i32 = (r.nextI32() >>> 1) % STEPS
+    const buf: u8[] = new Array<u8>(STEPS * STEP_MAX)
+    let len: i32 = 0
+    let s: i32 = 0
+    while (s < steps && len >= 0 && len + STEP_MAX <= toI32(buf.length)) {
+      const pick: i32 = (r.nextI32() >>> 1) % 8
+      if (pick < 5) {
+        const k: i32 = (r.nextI32() >>> 1) % toI32(ALPHABET.length)
+        buf[len] = toU8(ALPHABET.charCodeAt(k))
+        len += 1
+      } else {
+        // A sequence, escaped (upper or lower case hex) or written raw.
+        const which: i32 = (r.nextI32() >>> 1) % toI32(starts.length)
+        const at: i32 = starts[which]
+        const n: i32 = toI32(seq[at])
+        const raw: boolean = pick === 7
+        const upper: i32 = (r.nextI32() >>> 1) % 2
+        let j: i32 = 0
+        while (j < n && at + 1 + j < toI32(seq.length) && len + 3 <= toI32(buf.length)) {
+          const b: i32 = toI32(seq[at + 1 + j])
+          if (raw) {
+            buf[len] = toU8(b)
+            len += 1
+          } else {
+            buf[len] = toU8(37)
+            buf[len + 1] = toU8(hexDigit(b >> 4, upper))
+            buf[len + 2] = toU8(hexDigit(b & 15, upper))
+            len += 3
+          }
+          j += 1
+        }
+      }
+      s += 1
+    }
     const src: u8[] = new Array<u8>(len)
     let i: i32 = 0
     while (i < len) {
-      const k: i32 = (r.nextI32() >>> 1) % toI32(ALPHABET.length)
-      src[i] = toU8(ALPHABET.charCodeAt(k))
+      src[i] = buf[i]
       i += 1
     }
     const out: u8[] = new Array<u8>(len)
