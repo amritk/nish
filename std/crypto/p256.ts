@@ -3762,6 +3762,279 @@ const p256ScalarInvert = (out: u32[], a: u32[]): void => {
   p256Copy(out, acc)
 }
 
+// ---- The nonce's inverse by safegcd -------------------------------------------
+//
+// Bernstein and Yang's constant-time inversion ("Fast constant-time gcd
+// computation and modular inversion", 2019), as libsecp256k1's modinv32 writes
+// it for 32-bit targets (MIT, std/crypto/LICENSE-libsecp256k1): the functions
+// below are its secp256k1_modinv32_divsteps_30, _update_de_30, _update_fg_30,
+// _normalize_30 and secp256k1_modinv32, with its scalar_8x32 conversions to and
+// from signed-30, ported to Nish for the one modulus n. A value is nine limbs
+// of 30 bits each, limb 8 carrying the sign, held as the u32 bit patterns of
+// the C's int32_t: `u32` arithmetic wraps where the C's never overflows, so the
+// low bits agree, and the arithmetic shifts go through `i32` and `i64`.
+
+/** The 32-bit pattern `a` read as an `int32_t`, widened to 64 bits with its sign. */
+const p256Wide = (a: u32): u64 => toU64(toI64(toI32(a)))
+
+/** `c >> 30` on `c` read as an `int64_t`: the carry into the next limb. */
+const p256Carry30 = (c: u64): u64 => toU64(toI64(c) >> 30)
+
+/** `a >> 30` on `a` read as an `int32_t`. */
+const p256Shift30 = (a: u32): u32 => toU32(toI32(a) >> 30)
+
+/** All ones when `a`, read as an `int32_t`, is negative; zero otherwise. */
+const p256SignMask = (a: u32): u32 => toU32(toI32(a) >> 31)
+
+/** n in nine signed-30 limbs, limb 0 the least significant. */
+const p256Order30 = (): u32[] => {
+  const out: u32[] = new Array<u32>(9)
+  out[0] = 0x3c632551
+  out[1] = 0x0ee72b0b
+  out[2] = 0x3179e84f
+  out[3] = 0x39beab69
+  out[4] = 0x3fffffbc
+  out[5] = 0x3fffffff
+  out[6] = 0x00000fff
+  out[7] = 0x3fffc000
+  out[8] = 0x0000ffff
+  return out
+}
+
+/**
+ * R^3 mod n. A Montgomery multiply by it takes `(a R)^-1`, what safegcd
+ * answers for an input in the Montgomery domain, to `a^-1 R`.
+ */
+const p256ScalarR3 = (): u32[] => {
+  const out: u32[] = p256Limbs()
+  p256SetLimbs(
+    out,
+    0x0b65a624,
+    0xac8ebec9,
+    0x0c0555c9,
+    0x111f28ae,
+    0x6ba5e93f,
+    0x2543b924,
+    0x6407be65,
+    0x503a54e7
+  )
+  return out
+}
+
+/** The eight 32-bit limbs `a`, below 2^256, as nine signed-30 limbs (`secp256k1_scalar_to_signed30`). */
+const p256ToSigned30 = (out: u32[], a: u32[]): void => {
+  if (toI32(out.length) < 9 || toI32(a.length) < 8) {
+    return
+  }
+  out[0] = a[0] & 0x3fffffff
+  out[1] = ((a[0] >> 30) | (a[1] << 2)) & 0x3fffffff
+  out[2] = ((a[1] >> 28) | (a[2] << 4)) & 0x3fffffff
+  out[3] = ((a[2] >> 26) | (a[3] << 6)) & 0x3fffffff
+  out[4] = ((a[3] >> 24) | (a[4] << 8)) & 0x3fffffff
+  out[5] = ((a[4] >> 22) | (a[5] << 10)) & 0x3fffffff
+  out[6] = ((a[5] >> 20) | (a[6] << 12)) & 0x3fffffff
+  out[7] = ((a[6] >> 18) | (a[7] << 14)) & 0x3fffffff
+  out[8] = a[7] >> 16
+}
+
+/** Nine normalised signed-30 limbs, in [0, n), as eight 32-bit limbs (`secp256k1_scalar_from_signed30`). */
+const p256FromSigned30 = (out: u32[], a: u32[]): void => {
+  if (toI32(out.length) < 8 || toI32(a.length) < 9) {
+    return
+  }
+  out[0] = a[0] | (a[1] << 30)
+  out[1] = (a[1] >> 2) | (a[2] << 28)
+  out[2] = (a[2] >> 4) | (a[3] << 26)
+  out[3] = (a[3] >> 6) | (a[4] << 24)
+  out[4] = (a[4] >> 8) | (a[5] << 22)
+  out[5] = (a[5] >> 10) | (a[6] << 20)
+  out[6] = (a[6] >> 12) | (a[7] << 18)
+  out[7] = (a[7] >> 14) | (a[8] << 16)
+}
+
+/**
+ * Thirty divsteps on the low limbs `f0` (odd) and `g0`, from `zeta` =
+ * -(delta + 1/2): the steps' product as a 2x2 matrix `[u, v; q, r]` in `t`,
+ * each entry in [-2^30, 2^30] as a 32-bit pattern, and the new zeta returned.
+ * Every step does the same operations: whether g is odd and whether zeta is
+ * negative become masks, never a branch (`secp256k1_modinv32_divsteps_30`).
+ */
+const p256Divsteps30 = (zeta: u32, f0: u32, g0: u32, t: u32[]): u32 => {
+  if (toI32(t.length) < 4) {
+    return zeta
+  }
+  const zero: u32 = 0
+  let z: u32 = zeta
+  let f: u32 = f0
+  let g: u32 = g0
+  let u: u32 = 1
+  let v: u32 = 0
+  let q: u32 = 0
+  let r: u32 = 1
+  for (let i: i32 = 0; i < 30; i++) {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  t[0] = u
+  t[1] = v
+  t[2] = q
+  t[3] = r
+  return z
+}
+
+/**
+ * `[d, e] = (t [d, e] + n [md, me]) / 2^30`, with `md` and `me` chosen so
+ * that the division is exact: d and e stay in (-2n, n) and keep tracking f
+ * and g modulo n (`secp256k1_modinv32_update_de_30`). The products are 32 by
+ * 32 bits into 64.
+ */
+const p256UpdateDe30 = (d: u32[], e: u32[], t: u32[], n: u32[]): void => {
+  if (toI32(d.length) < 9 || toI32(e.length) < 9 || toI32(t.length) < 4 || toI32(n.length) < 9) {
+    return
+  }
+  const u: u64 = p256Wide(t[0])
+  const v: u64 = p256Wide(t[1])
+  const q: u64 = p256Wide(t[2])
+  const r: u64 = p256Wide(t[3])
+  // n^-1 mod 2^30, which makes the sum's bottom 30 bits zero below.
+  const inverse30: u32 = 0x11ff43b1
+  // [md, me] start as [u, q] if d is negative plus [v, r] if e is.
+  const sd: u32 = p256SignMask(d[8])
+  const se: u32 = p256SignMask(e[8])
+  let md: u32 = (t[0] & sd) + (t[1] & se)
+  let me: u32 = (t[2] & sd) + (t[3] & se)
+  const d0: u64 = p256Wide(d[0])
+  const e0: u64 = p256Wide(e[0])
+  let cd: u64 = u * d0 + v * e0
+  let ce: u64 = q * d0 + r * e0
+  // Correct md and me so that the bottom 30 bits of the sum are zero.
+  md = md - ((inverse30 * toU32(cd) + md) & 0x3fffffff)
+  me = me - ((inverse30 * toU32(ce) + me) & 0x3fffffff)
+  const mdWide: u64 = p256Wide(md)
+  const meWide: u64 = p256Wide(me)
+  cd = p256Carry30(cd + p256Wide(n[0]) * mdWide)
+  ce = p256Carry30(ce + p256Wide(n[0]) * meWide)
+  for (let i: i32 = 1; i < 9; i++) {
+    const di: u64 = p256Wide(d[i])
+    const ei: u64 = p256Wide(e[i])
+    const ni: u64 = p256Wide(n[i])
+    cd = cd + u * di + v * ei + ni * mdWide
+    ce = ce + q * di + r * ei + ni * meWide
+    d[i - 1] = toU32(cd) & 0x3fffffff
+    e[i - 1] = toU32(ce) & 0x3fffffff
+    cd = p256Carry30(cd)
+    ce = p256Carry30(ce)
+  }
+  d[8] = toU32(cd)
+  e[8] = toU32(ce)
+}
+
+/** `[f, g] = t [f, g] / 2^30`, which the divsteps made exact (`secp256k1_modinv32_update_fg_30`). */
+const p256UpdateFg30 = (f: u32[], g: u32[], t: u32[]): void => {
+  if (toI32(f.length) < 9 || toI32(g.length) < 9 || toI32(t.length) < 4) {
+    return
+  }
+  const u: u64 = p256Wide(t[0])
+  const v: u64 = p256Wide(t[1])
+  const q: u64 = p256Wide(t[2])
+  const r: u64 = p256Wide(t[3])
+  const f0: u64 = p256Wide(f[0])
+  const g0: u64 = p256Wide(g[0])
+  let cf: u64 = p256Carry30(u * f0 + v * g0)
+  let cg: u64 = p256Carry30(q * f0 + r * g0)
+  for (let i: i32 = 1; i < 9; i++) {
+    const fi: u64 = p256Wide(f[i])
+    const gi: u64 = p256Wide(g[i])
+    cf = cf + u * fi + v * gi
+    cg = cg + q * fi + r * gi
+    f[i - 1] = toU32(cf) & 0x3fffffff
+    g[i - 1] = toU32(cg) & 0x3fffffff
+    cf = p256Carry30(cf)
+    cg = p256Carry30(cg)
+  }
+  f[8] = toU32(cf)
+  g[8] = toU32(cg)
+}
+
+/** Add n to the signed-30 `a` when `mask` is all ones, then carry so every limb but the last is in [0, 2^30). */
+const p256AddOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
+  if (toI32(a.length) < 9 || toI32(n.length) < 9) {
+    return
+  }
+  for (let i: i32 = 0; i < 9; i++) {
+    a[i] = (((a[i] + (n[i] & mask)) ^ negate) - negate)
+  }
+  for (let i: i32 = 0; i < 8; i++) {
+    a[i + 1] = a[i + 1] + p256Shift30(a[i])
+    a[i] = a[i] & 0x3fffffff
+  }
+}
+
+/**
+ * `d` in (-2n, n) to [0, n), negated first when `sign`'s top bit is set: f
+ * ended as -1 rather than 1 (`secp256k1_modinv32_normalize_30`).
+ */
+const p256Normalize30 = (d: u32[], sign: u32, n: u32[]): void => {
+  if (toI32(d.length) < 9) {
+    return
+  }
+  const zero: u32 = 0
+  p256AddOrder30(d, n, p256SignMask(d[8]), p256SignMask(sign))
+  p256AddOrder30(d, n, p256SignMask(d[8]), zero)
+}
+
+/**
+ * `out = 1 / a` mod n for `a` in the Montgomery domain, zero for a zero `a`:
+ * the signing paths' inversion of the nonce. Twenty batches of thirty divsteps
+ * each: 600, past the 590 that bound any 256-bit input, so the count never
+ * depends on `a`, and every step and update runs the same instructions on any
+ * value. The divsteps invert `a R` as a plain number; one Montgomery multiply
+ * by R^3 takes `(a R)^-1` to `a^-1 R`. f, g, d, e and the matrix are wiped
+ * before it returns (ECC-2).
+ */
+const p256ScalarInverse = (out: u32[], a: u32[]): void => {
+  const n: u32[] = p256Order30()
+  const d: u32[] = new Array<u32>(9)
+  const e: u32[] = new Array<u32>(9)
+  const f: u32[] = p256Order30()
+  const g: u32[] = new Array<u32>(9)
+  const t: u32[] = new Array<u32>(4)
+  e[0] = 1
+  p256ToSigned30(g, a)
+  // zeta = -(delta + 1/2), delta starting at 1/2.
+  let zeta: u32 = 0xffffffff
+  for (let i: i32 = 0; i < 20; i++) {
+    zeta = p256Divsteps30(zeta, f[0], g[0], t)
+    p256UpdateDe30(d, e, t, n)
+    p256UpdateFg30(f, g, t)
+  }
+  // g is now 0 and f is 1 or -1, with d the inverse up to that sign; for a
+  // zero `a`, f is n and d stays 0.
+  p256Normalize30(d, f[8], n)
+  p256FromSigned30(out, d)
+  p256FiatScalarMul(out, out, p256ScalarR3())
+  wipe(d)
+  wipe(e)
+  wipe(f)
+  wipe(g)
+  wipe(t)
+}
+
 /**
  * A point in projective coordinates (X : Y : Z), each coordinate a field
  * element in the Montgomery domain. It stands for the affine (X/Z, Y/Z), and
@@ -4928,7 +5201,7 @@ const p256SignScalar = (priv: u8[], z: u32[]): u8[] => {
       // k^-1 are converted: r d and then (z + r d) k^-1 come out plain.
       p256LimbsFromBytes(kM, v, 0)
       p256FiatScalarMul(kM, kM, r2)
-      p256ScalarInvert(kM, kM)
+      p256ScalarInverse(kM, kM)
       p256FiatScalarMul(s, r, dM)
       p256FiatScalarAdd(s, s, z)
       p256FiatScalarMul(s, s, kM)
@@ -5493,7 +5766,7 @@ export const p256SignSha256Into = (
       p256ReduceOnce(sc.r, sc.x, sc.n)
       p256LimbsFromBytes(sc.kM, sc.v, 0)
       p256FiatScalarMul(sc.kM, sc.kM, sc.r2)
-      p256ScalarInvert(sc.kM, sc.kM)
+      p256ScalarInverse(sc.kM, sc.kM)
       const s: u32[] = exposeWith(priv, sc, p256SignSExposed)
       if (p256FiatNonzero(sc.r) !== 0 && p256FiatNonzero(s) !== 0) {
         p256LimbsToBytes(out, at, sc.r)
