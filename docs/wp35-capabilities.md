@@ -73,8 +73,10 @@ Four rows deserve their reason:
 - **`availableParallelism` and `totalMemory` are none**, although each asks
   the host: how many cores and bytes the machine has is a fact about it, as
   `process.platform` is, which a program reads to size itself and not to reach
-  anything. `kill` and `waitPid` are `process.spawn`, because the children they
-  act on are the ones `spawn` starts.
+  anything. `kill` and `waitPid` are `process.spawn`: `kill` reaches any process
+  of the program's user, as kill(1) does, not only the children `spawn`
+  starts, and `waitPid` reaps those children, so both reach other processes
+  the way starting one does.
 
 **Unlabelled is a bug, and it is executable.** `builtinCapability` answers a
 capability's index, `CAP_NONE` (-1, the deliberate none) or `CAP_UNLABELLED`

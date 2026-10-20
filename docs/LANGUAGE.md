@@ -6722,18 +6722,32 @@ exported by `nish:process` as well as being a global.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `spawn(argv: string[]): i32` | start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does — the same vector, environment, streams and working directory — and answer the child's **pid** at once, **without waiting**. A failure is a **negative errno**: -22 (EINVAL) for an empty vector or an argument holding a NUL, and `posix_spawnp`'s own error otherwise, so a program that is not there is -2 (ENOENT). The child is this process's until `waitPid` reaps it; one never reaped stays a zombie until the program exits, as it would in C | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
+| `spawn(argv: string[]): i32` | start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does — the same vector, environment, streams and working directory — and answer the child's **pid** at once, **without waiting**. A failure is a **negative errno**: -22 (EINVAL) for an empty vector or an argument holding a NUL, and `posix_spawnp`'s own error otherwise, so a program that is not there is -2 (ENOENT). **Test `pid > 0` before handing the answer on**: a failure such as -1 (EPERM) passed to `waitPid` reads as "any child". The child is this process's until `waitPid` reaps it; one never reaped stays a zombie until the program exits, as it would in C | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
 | `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, so a number means the same signal on every host. A `pid` of 0 or below is -22 too, because `kill(2)` reads those as a process group or every process, which is not one process. -3 (ESRCH) when no process has the pid — a child already reaped included — and -1 (EPERM) when it is another user's. A positive pid may be any process of this user, not only a child ([RT-18](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
-| `waitPid(pid: i32, flags: i32): i32[]` | reap a child and answer a fresh two-element **`[pid, status]`**. `pid` is a child's, or **-1 for any child**; flag **1 is WNOHANG**. The status is `spawnSync`'s: the exit code, or **128 + n** when signal `n` ended it. `[0, 0]` is a WNOHANG wait with a child left and none exited. A failure puts the negative errno first: `[-10, 0]` (ECHILD) when there is no child to wait for, `[-4, 0]` (EINTR) when a signal interrupted the wait, and `[-22, 0]` for any other flag bit or a pid that is neither -1 nor positive. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
+| `waitPid(pid: i32, flags: i32): i32[]` | reap a child and answer a fresh two-element **`[pid, status]`**. `pid` is a child's, or **-1 for any child**; flag **1 is WNOHANG**. The status is `spawnSync`'s: the exit code, or **128 + n** when signal `n` ended it. `[0, 0]` is a WNOHANG wait with a child left and none exited. A failure puts the negative errno first: `[-10, 0]` (ECHILD) when there is no child to wait for, `[-4, 0]` (EINTR) when a signal interrupted the wait — though after `signalFd()` a blocking wait never sees it, because that handler is installed with `SA_RESTART` and the wait restarts, and `[-22, 0]` for any other flag bit or a pid that is neither -1 nor positive. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
 | `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number — which can lower the count and never raise it. It needs no `--threads`: a program asks it to decide how many workers to start | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
 | `totalMemory(): i64` | bytes of **physical memory** — `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on Darwin — or **-1** where the host does not say. The machine's, not a cgroup's limit | none | `os_memory`; `reject_os_memory_wasm` |
 
 **Capabilities.** `spawn`, `kill` and `waitPid` carry `process.spawn`, the
-label `spawnSync` carries: each acts on processes, and while `spawn` is the one
-way to have a child, none is worth a label of its own (`caps_process_wait`).
+label `spawnSync` carries: each reaches other processes — `kill` any process of
+this user, as kill(1) does, not only a child `spawn` started — so none takes a
+label of its own (`caps_process_wait`).
 `availableParallelism` and `totalMemory` carry **none**: how many cores and
 bytes the machine has is a fact about the host, as `process.platform` is, read
 to size a program rather than to reach anything (`caps_host`).
+
+**A supervisor polls.** A blocking `waitPid(pid, 0)` cannot be woken by
+SIGTERM once `signalFd()` is installed (the restart above), so a supervisor
+that must answer a signal while its children run reaps with flag 1 (WNOHANG)
+on each tick of a `pollWait` loop that also watches the signal descriptor,
+and stops its children with `kill` when `readSignal` answers.
+
+**In a task.** `spawn`, `kill` and `waitPid` write state outside the program,
+so a scope's task or a parallel body that calls one — under any import alias —
+is refused as any shared write is (`reject_os_spawn_task`,
+`reject_os_kill_task`, `reject_os_wait_task`, `reject_os_kill_task_alias`,
+`reject_os_kill_parallel`). `availableParallelism` and `totalMemory` write
+nothing and may be called there (`tests/link/thread_host_facts_task`).
 
 **On wasm.** A `wasm32` target has no processes and no host to ask, so all five
 are refused by the checker with the N3 rule's words: `` `spawn` reaches the

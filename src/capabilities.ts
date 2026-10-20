@@ -244,9 +244,9 @@ export const builtinCapability = (name: string): i32 => {
   if (name === "spawnSync" || name === "spawnSyncTo") {
     return CAP_PROCESS_SPAWN
   }
-  // WP34 N12: `kill` signals a process and `waitPid` reaps a child, so both
-  // act on processes the way starting one does; neither is worth a capability
-  // of its own while `spawn` is the only way to have a child to act on.
+  // WP34 N12: `kill` signals any process this user owns, as kill(1) does,
+  // and `waitPid` reaps a child; both reach other processes the way starting
+  // one does, so they share `spawn`'s capability rather than taking their own.
   if (name === "spawn" || name === "kill" || name === "waitPid") {
     return CAP_PROCESS_SPAWN
   }

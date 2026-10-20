@@ -1,0 +1,1 @@
+`stop` writes memory its caller can see in the runtime's `nish_kill`, and `parallelMapInto` runs it on several threads at once

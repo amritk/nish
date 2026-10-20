@@ -10,7 +10,7 @@ declare void @nish_free_arena() #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #2
-declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #0
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 
