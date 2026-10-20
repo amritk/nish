@@ -1,6 +1,6 @@
 You are implementing one stage of an accepted plan. Work only this stage.
 
-Repo: amritk/nish          Base: main at {BASE} (B1.1 merged as #709)
+Repo: amritk/nish          Base: main at 7611fafbb3bb9302929114ab9c40a0a833d7e6b8 (B1.1 merged as #709)
 Branch: feature/ffi-reach/s5-b12-buffer-lowering   (already assigned — commit and push here, nothing else)
 Tracking issue (the run's ledger): #678
 
@@ -39,6 +39,7 @@ and may be working in parallel right now.
 - Siblings of every rule you add: the scope-race refusals cover a buffer reached through a field and through an element (the three `reject_ffi_buffer_scope_*race` cases), and probe a constructor reached by `new`, every declarator of a `using`, and `this` leaving a constructor. A reviewer will probe each one.
 - Security: docs/security/runtime.md gets rows for the new checks. Its Tests list names each check by its exact `check(...)` string; grep each against tests/run.js before pushing.
 - `Measured:` in the commit body: the cost of the per-buffer `n <= len` check on a `write`-or-`read`-shaped loop, proved against unproved, with the noise band as CLAUDE.md describes. If no honest figure exists, leave the trailer out rather than invent one.
+- The design's `file:line` anchors are at 7a58764 and B1.1 has moved some of them: find each by its content (e.g. the escape comment is the "C holds none of them past a call either" bullet in src/escape.ts), not by line number.
 - Rolling freeze: src/ must not use the feature in its own source.
 
 ## First, in this order
