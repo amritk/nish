@@ -198,9 +198,10 @@ the caller takes the blocks whole at the join rather than copying each string
 again, so the copy runs on every thread at once. A map of a million
 `` `s${x % 100000}` `` strings took a median of 24 ms on 4 threads (22 to 32 ms
 over nine runs), against 40 ms for the sequential loop. On one thread the same
-map takes 65 ms, since every element still pays the move, so measure your own
-case. Reach for the threads when each element does some work, or when there is
-more than one core to run it.
+map takes as long as the loop, so a program that runs with
+`NISH_NUM_THREADS=1`, or on a single core, loses nothing by using it. Still,
+measure your own case: the threads pay off when each element does some work,
+or when there is more than one core to run it.
 
 **What is refused, and why.** The rules for `f` above, and an answer that is
 an array of strings, an array of arrays, an object, a `Map` or a `Set`
@@ -366,6 +367,16 @@ export const main = (): i32 => {
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.
+- **Spawning costs no memory.** Every task has run before the function, the
+  loop pass or the
+  [`using a = arena()`](../language/memory.md#freeing-a-batch-yourself-using-a--arena)
+  block around the scope gives back what it made, so an array you build and
+  hand to a task is freed with the rest, unless the task answers it or you
+  keep it. Inside an arena block, declare the scope after the arena —
+  `using a = arena(), s = scope()`, or a `using s = scope()` of its own
+  further in — so it joins before the release; a scope declared before the
+  arena, or before a second `arena()` of the same statement, joins after a
+  release and may not be handed what the block made.
 
 ### Tasks without a destination, and arrow tasks
 

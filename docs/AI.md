@@ -1324,8 +1324,11 @@ export const main = (): i32 => {
   readonly u8[], n: u64)`). `readonly` is C's `const`. A run without its count
   is NL2549, a count that is not `u64` NL2550, `i32[]` NL2551, `u8[] | null`
   NL2552. Declare `fwrite` as `(buf: readonly u8[], n: u64, one: u64, f: CPtr)`
-  and pass `1` for `one`. A call to a buffer-taking declaration is refused for
-  now (NL2554): the call is not lowered yet.
+  and pass `1` for `one`. A call passes the data pointer and first checks the
+  count against every buffer of the run: a larger count is an `ffi-length`
+  panic, and only `toU64(buf.length)` of the buffer itself is proved. C
+  borrows the bytes for the call and may write a `u8[]`; a spawned task may
+  not make the call.
 
 ```ts nish:err NL2549
 declare function SHA256(d: readonly u8[], n: u64, md: u8[]): CPtr;
@@ -1727,9 +1730,11 @@ export const main = (): i32 => {
   or any member stored; after a `switch`, what its exits left (each `break`,
   the last clause's end, and the unmatched case when there is no `default`);
   after a loop, what its condition leaves false at the head, joined until it
-  no longer changes, and each `break`, as `tsc` reads it. A loop holding a
-  path (`h.k`), a store inside an expression or a type of more than 29
-  members falls back to every member the body stored anywhere, which accepts
+  no longer changes, and each `break`, as `tsc` reads it — a variable the
+  loop only tests included, and an `if` or `switch` inside the loop narrowing
+  as it does outside. A loop holding a path (`h.k`), a store inside an
+  expression (an argument, an initializer, a chain's inner `=`, a `for`
+  update) or a type of more than 29 members falls back to every member the body stored anywhere, which accepts
   a few comparisons `tsc` refuses (TS2367; LANGUAGE.md, "Accepted here,
   refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,

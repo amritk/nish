@@ -1242,7 +1242,7 @@ const isBuiltinToI32 = (program: CheckedProgram, call: Node): boolean =>
   isBuiltinConversion(program, call, "toI32")
 
 /** `isBuiltinToI32`'s question about any one-argument builtin conversion. */
-const isBuiltinConversion = (program: CheckedProgram, call: Node, name: string): boolean => {
+export const isBuiltinConversion = (program: CheckedProgram, call: Node, name: string): boolean => {
   const callee = call.children[0]
   return (
     callee.kind === N_IDENT &&

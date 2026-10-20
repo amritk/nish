@@ -263,8 +263,16 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 3328
  * start at 4 KB and double to 64 KB, each records what it used when its chunk ends, and
  * a join that kept under 64 KB in all copies its elements into the caller's arena and
  * frees the blocks rather than adopting them.
+ *
+ * The one-thread rewind measured **1,552 bytes** on 2026-10-20 with clang 18.1.3 on
+ * linux-x64, 108 more than the 1,444 it sat at, and the ceiling moves to 1,664.
+ * `nish_cross_keep` rewinds through `nish_rewind`, inlined (262 → 370): when an
+ * element's body grew a 64 KB chunk past a mark at the end of a full one, the chunk is
+ * kept, emptied, rather than freed, so a map at one thread stops doing a `malloc` and a
+ * `free` per element. 1M short strings at `NISH_NUM_THREADS=1` went from 72.8 ms to
+ * 54.9 ms, inside the loop's 56.4–57.6 ms band.
  */
-const RUNTIME_CROSS_TEXT_BUDGET = 1536
+const RUNTIME_CROSS_TEXT_BUDGET = 1664
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,235 bytes** on
  * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
@@ -278,8 +286,12 @@ const RUNTIME_CROSS_TEXT_BUDGET = 1536
  *
  * The copy-back join measured **1,508 bytes** on 2026-10-17 with clang 18.1.3 on
  * linux-x64, 231 more, and the ceiling moves to 1,536: the row above's change.
+ *
+ * The one-thread rewind measured **1,631 bytes** on 2026-10-20 with clang 18.1.3 on
+ * linux-x64, 118 more than the 1,513 it sat at, and the ceiling moves to 1,664: the row
+ * above's change (`nish_cross_keep` 264 → 382).
  */
-const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1536
+const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor

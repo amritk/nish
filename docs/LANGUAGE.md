@@ -858,13 +858,25 @@ const area = (s: Shape): i32 => {
   `for` comes the head with its condition false, joined with every `break`,
   after a `do` the end of the body and its `continue`s with the condition
   false, and after a `for...of` the head and the `break`s. A loop inside the
-  body and a `switch` inside it are followed the same way
-  (`tests/cases/union_narrowing_loop_flow`; `reject_union_loop_while_join`,
+  body and a `switch` inside it are followed the same way, an `if` or a
+  `switch` narrowing its arms and clauses inside the loop as it does outside
+  one (`tests/cases/union_narrowing_loop_flow`,
+  `tests/cases/union_narrowing_loop_reads`; `reject_union_loop_while_join`,
   `reject_union_loop_do_join`, `reject_union_loop_condition_reassigned`,
   `reject_enum_loop_for_join`, `reject_enum_loop_do_join`,
   `reject_enum_loop_top_of_body`, `reject_enum_loop_do_continue`,
   `reject_enum_loop_break`, `reject_enum_loop_for_of`,
-  `reject_enum_loop_nested`, `reject_enum_loop_switch`). Where the loop
+  `reject_enum_loop_nested`, `reject_enum_loop_switch`,
+  `reject_enum_loop_switch_store`, `reject_enum_loop_switch_while`,
+  `reject_union_loop_switch`). A variable the loop only tests, never
+  writes, is followed too (`reject_enum_loop_tested_while`,
+  `reject_enum_loop_tested_do`, `reject_enum_loop_tested_break`,
+  `reject_enum_loop_tested_inner`, `reject_enum_loop_switch_tested`,
+  `reject_union_loop_tested_while`, `reject_union_loop_null_tested`). A
+  store of a member, of a ternary of members, of another enum variable or of
+  a union's tag holds what that value holds; a store of anything else, a call
+  for one, holds the whole declared type (`reject_enum_loop_ternary_store`,
+  `reject_enum_loop_copy_store`, `reject_union_loop_tag_copy`). Where the loop
   holds a shape the fixpoint does not follow, a local or path holds, after
   it and throughout it, every member stored anywhere in it, which may be
   more than `tsc` knows ("Accepted here, refused by `tsc`", below).
@@ -1071,8 +1083,9 @@ closes (`tests/cases/enum_loop_join_gap`):
 - **A path.** A tag or enum held by a field, `h.k`, is joined over the whole
   loop, not followed through it.
 - **A store inside an expression.** An assignment that is an argument,
-  `keep((j = Kind.C))`, or an initializer, `const t = (j = Kind.C)`, rather
-  than a statement of its own.
+  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, the inner
+  store of a chain, `k = j = Kind.C`, or a `for` header's update,
+  `for (; i < n; j = Kind.C)`, rather than a statement of its own.
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
@@ -3219,8 +3232,13 @@ from the whole-program facts, and each rule is reported there:
   (`reject_par_map_new_result_class`, `reject_par_from_result_type`).
   A map of 1M short strings, `` `s${x % 100000}` ``, took a median of 23 ms
   on 4 threads and 24 ms on 8, against 38 ms for the same loop written
-  sequentially, and peaked at 32 MB against the loop's 55 MB; on 1 thread it
-  took 54 ms, the cost of keeping each answer. Before adoption, when the
+  sequentially, and peaked at 32 MB against the loop's 55 MB. On 1 thread it
+  is the loop's time: 54.9 ms against the loop's 57.6 ms and its copy's
+  56.4 ms, minima of 9 interleaved rounds on one machine. It used to take
+  72.8 ms there, because the mark sat at the end of the full chunk the result
+  had filled, so every element's body allocated a fresh 64 KB chunk and the
+  rewind freed it; the rewind now keeps that chunk, emptied
+  (`tests/runtime-test.c`'s `test_cross_keep_rewind`). Before adoption, when the
   caller copied every string into its arena one at a time, the map took
   56 ms on 4 threads and peaked at 67 MB; two byte-identical copies of that
   binary differed by 5 ms in the same 7 interleaved rounds. What
@@ -3627,7 +3645,15 @@ export const main = (): i32 => {
   around it, which releases only after the join, and an argument a task is
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
-  another). A panic ends the process and joins nothing (`throw` is refused by
+  another). Since the join comes first, spawning gives up no memory: a
+  function, a loop's pass or a `using a = arena()` block that hands a task an
+  array it made still gives that array back when it ends, after the join,
+  unless the task keeps it — answers it, or stores it where it outlives the
+  task — or the frame keeps it past its end by any other route
+  (`tests/link/thread_scope_reclaim`, whose peak resident memory
+  `tests/run.js` bounds at every thread count, and
+  `thread_scope_reclaim_escapes`, which reads each route after the memory is
+  reused). A panic ends the process and joins nothing (`throw` is refused by
   Phase 0, `reject_throw`).
 - **A scope is introduced by `using`, and `using` takes only a scope, a
   [`Mutex`'s lock](#a-lock-that-owns-its-data-mutext) or an
@@ -4939,15 +4965,54 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   inside a run): it has no length to hold the count to, so the
   `NULL, 0` call C allows is declared with a `CPtr | null` parameter. A `u8[]`
   result is refused by the return rule above (`reject_ffi_buffer_return`).
-- **A call to such a declaration is refused until the release that lowers it**:
-  `` a call to a declared C function that takes a `u8[]` is not lowered yet ``
-  (`reject_ffi_buffer_call`), whether the call names the function, goes
-  through a function parameter bound to it (`reject_ffi_buffer_call_param`),
-  or sits in a constructor (`reject_ffi_buffer_call_constructor`), a method
-  (`reject_ffi_buffer_call_method`) or a spawned arrow
-  (`reject_ffi_buffer_call_spawn`). That lowering passes the array's bytes and
-  panics when the count is larger than any buffer of its run
-  ([`docs/wp40-ffi-buffers-handles.md`](wp40-ffi-buffers-handles.md) §3a).
+- **A call passes the array's data block, and checks the count against every
+  buffer of its run first.** Each buffer is lowered to its data pointer, a
+  `uint8_t *` (`i8*` in the IR), and the count is compared, unsigned, with the
+  buffer's length before C runs. A count larger than one of them stops the
+  program with an `ffi-length` panic, `` `write`: argument 3 (n) counts more
+  bytes than argument 2 (buf) holds ``, exit 1 (`tests/cases/panics_ffi_length`,
+  and `panics_ffi_length_memcpy` for the shorter buffer of a run). The count is
+  a `u64`, so `toU64(0) - toU64(1)` is the largest count there is, and fails
+  (`panics_ffi_length_wrapped`). `--unchecked-indexing` does not remove the
+  check: C cannot check a count, so the boundary keeps it
+  (`panics_ffi_length_unchecked`).
+- **The pointer and the length are read after the last argument is
+  evaluated**, so C sees the array as it is at the call: an argument that
+  pushes or pops before it is seen (`tests/cases/ffi_buffer_late_load`,
+  `panics_ffi_length_shrink`, `panics_ffi_length_inline_pop`).
+- **One count is proved: `toU64(b.length)` of the buffer itself**, where `b`
+  is a `const` local or a parameter named alone and no later argument may
+  resize an array. Such a call carries no check and is not a panic site, so
+  `read(fd, buf, toU64(buf.length))` compiles under `--deny-panics`. A field
+  path, an alias of the buffer, another array's length and a literal are
+  checked (`tests/cases/ffi_buffer_count_proved`). `--deny-panics` refuses
+  any other count and names the one it accepts: `` pass `toU64(buf.length)`
+  of the buffer itself, which needs no check ``.
+- **C borrows the bytes for the call, and writes through a `u8[]`.** As with
+  a `string`, the pointer is lent for the length of the call and C may not
+  keep it, so a buffer made in the call's arena scope is released after it
+  (`tests/cases/ffi_buffer_read`). A `u8[]` argument is written by the call
+  and a `readonly u8[]` one is not, and the compiler records it as it records
+  a store. An exported function that hands its own `u8[]` parameter to such a
+  call writes that parameter: its header drops the `const`, the wasm glue
+  copies the bytes back, and its `define` loses `readonly`
+  (`tests/cases/ffi_buffer_export_written`). A task a scope spawns may not
+  reach such a call: C's body is unseen, so the call may write memory the
+  parent can see, and the task is refused with `` writes memory its caller
+  can see `` (`reject_ffi_buffer_call_spawn`, and
+  `reject_ffi_buffer_scope_race`, `reject_ffi_buffer_scope_field_race` and
+  `reject_ffi_buffer_scope_element_race` for a call reached through a
+  function).
+- **Every kind of call site lowers the same way**: a call by name, through a
+  function parameter bound to the declaration, in a constructor reached by
+  `new` and in a method (`tests/cases/ffi_buffer_call_sites`), and a call that
+  passes a buffer is refused by `--deny ffi` like any other foreign call.
+- **On wasm32 a `u64` count is wider than C's `size_t`.** The data pointer is
+  32 bits there and the length check is the same 64-bit compare, but a C
+  function whose count is a `size_t` takes 32 bits: declare its count `u64`
+  only on a target where `size_t` is 64 bits, until a later release gives the
+  count a target-width type. The freestanding `--profile wasm` link resolves
+  the declaration against the C the link is given.
 
 #### What a declaration cannot say
 
@@ -7609,6 +7674,8 @@ const tally = (rows: string[]): i32 => {
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
   | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
+  | `s.spawn(...)` on a scope the same `using` declares ahead of `arena()`, `using s = scope(), a = arena()` | an argument is not older than the block: `s` is disposed after the arena, so it joins after the release | NL2427 | `reject_using_arena_spawn_declarator` |
+  | the same, ahead of the statement's last `arena()`, `using a = arena(), s = scope(), b = arena()` | an argument is not older than the block: `b` releases before `s` joins | NL2427 | `reject_using_arena_spawn_last` |
 
   A number, a `boolean` or an `enum` leaves the block freely, and so does a
   value older than it. The rule is the escape analysis's, so it is
@@ -7629,6 +7696,17 @@ const tally = (rows: string[]): i32 => {
   stops following, as it does for a loop that pushes arrays into an array, so
   the block refuses it as NL2424 and says what to write instead: run that map
   outside the block (`tests/cases/reject_using_arena_map_arrays`).
+- **A task filed on a scope the block declares may read what it allocated.**
+  That scope joins before the block releases, inner `using s = scope()` or
+  `using a = arena(), s = scope()` alike, so the block may hand its task an
+  array or an object it made (`tests/link/thread_scope_reclaim`). A scope
+  declared ahead of the statement's last `arena()` is not one: that arena
+  releases first (`reject_using_arena_spawn_last`). The task
+  is followed as any callee is: one that answers its argument into an older
+  destination stores it (NL2424, `tests/cases/reject_using_arena_spawn_relay`,
+  as `reject_using_arena_spawn_stores` for any array answer), and a
+  constructor that makes the argument and hands `this` out stores it too
+  (`reject_using_arena_spawn_constructor`).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
   theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
@@ -9459,6 +9537,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
 | `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
+| `ffi-length` | a call to a [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). `--unchecked-indexing` leaves the check in (`panics_ffi_length_unchecked`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
 | `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |

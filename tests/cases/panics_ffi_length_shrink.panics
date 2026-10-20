@@ -1,0 +1,6 @@
+{"functions":[
+{"name":"shrink","symbol":"shrink","module":"tests/cases/panics_ffi_length_shrink.ts","line":8,"panics":[{"kind":"pop","line":9,"column":3,"proven":false}]},
+{"name":"Popper.constructor","symbol":"Popper.constructor","module":"tests/cases/panics_ffi_length_shrink.ts","line":15,"panics":[{"kind":"pop","line":16,"column":5,"proven":false}]},
+{"name":"viaCall","symbol":"viaCall","module":"tests/cases/panics_ffi_length_shrink.ts","line":21,"panics":[{"kind":"ffi-length","line":23,"column":27,"proven":false},{"kind":"call","line":23,"column":51,"callee":"shrink","via":"pop"}]},
+{"name":"viaNew","symbol":"viaNew","module":"tests/cases/panics_ffi_length_shrink.ts","line":26,"panics":[{"kind":"ffi-length","line":28,"column":27,"proven":false},{"kind":"call","line":28,"column":51,"callee":"Popper.constructor","via":"pop"}]}
+]}

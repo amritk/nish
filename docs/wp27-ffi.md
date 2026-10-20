@@ -507,8 +507,8 @@ Still refused, each by name, each with a `reject_*` case:
   and is not a string, because it carries a length and may be written, so it
   was designed separately rather than folded in:
   [wp40-ffi-buffers-handles.md](wp40-ffi-buffers-handles.md). Its B1.1 stage
-  accepts the parameter with its `u64` count in a declaration and still
-  refuses a call to one (NL2554) until B1.2 lowers it.
+  accepts the parameter with its `u64` count in a declaration, and B1.2
+  lowers a call to one, checking the count (`ffi-length`).
 - A Nish function passed as a C callback: a function pointer, and with it a
   call *into* the program from a frame it did not set up.
 - Variadic C functions (`printf`): the C variadic convention is a different

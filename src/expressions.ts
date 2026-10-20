@@ -118,7 +118,6 @@ import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
 import { Local, NARROWED_NONE, STORAGE_LOCAL, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   intBits,
-  isForeignBuffer,
   isFloat,
   isInteger,
   isNumeric,
@@ -524,6 +523,17 @@ export const holdMembers = (ctx: CheckContext, scope: Scope, local: Local, value
   const set = memberSetId(ctx, value)
   if (namesMembers(set)) {
     scope.hold(local, set)
+  }
+}
+
+/**
+ * The `=` expression `expr` holds what its value does, as TypeScript types
+ * it: `k = j = Kind.B` stores `Kind.B` in `k` as in `j`.
+ */
+const carryMembers = (ctx: CheckContext, expr: Node): void => {
+  const set = memberSetId(ctx, expr.children[1])
+  if (namesMembers(set)) {
+    ctx.program.memberSets[expr.id] = set
   }
 }
 
@@ -2986,6 +2996,9 @@ const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     if (path !== null && expr.text === "=") {
       holdMembers(ctx, scope, path, expr.children[1])
     }
+    if (expr.text === "=") {
+      carryMembers(ctx, expr)
+    }
     return stored
   }
   if (target.kind !== N_IDENT) {
@@ -3032,6 +3045,7 @@ export const assignInto = (
       clearPaths(ctx, expr.children[0], scope)
       holdMembers(ctx, scope, local, value)
     }
+    carryMembers(ctx, expr)
     if (rhs !== T_ERROR && slot !== T_ERROR && !ctx.table.assignable(rhs, slot)) {
       const got = ctx.table.typeName(rhs)
       return ctx.errorType(value, `Cannot assign ${got} to ${ctx.table.typeName(slot)} ${what} \`${name}\``)
@@ -3264,33 +3278,8 @@ const checkCall = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
     }
     i = i + 1
   }
-  refuseForeignBufferCall(ctx, expr, sig, sig.name)
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
-}
-
-/**
- * A call to a `declare function` that takes a `u8[]` buffer (WP40 B1.1). The
- * declaration is checked now, but the call's lowering, which passes the
- * array's data pointer and holds the count to its length (`ffi-length`,
- * `docs/wp40-ffi-buffers-handles.md` §3a), lands with B1.2. Until then the
- * call is refused, so no build can pass C the array's header for its bytes.
- */
-const refuseForeignBufferCall = (ctx: CheckContext, expr: Node, sig: FunctionSig, shown: string): void => {
-  if (!sig.foreign()) {
-    return
-  }
-  let i = 0
-  while (i < sig.paramTypes.length) {
-    if (isForeignBuffer(ctx.table, sig.paramTypes[i])) {
-      ctx.error(
-        expr,
-        `\`${shown}\` takes the buffer \`${sig.paramNames[i]}\`, and a call to a declared C function that takes a \`u8[]\` is not lowered yet: the declaration is checked, and the call waits for the release that passes the bytes and checks the count`
-      )
-      return
-    }
-    i = i + 1
-  }
 }
 
 /**
@@ -3370,7 +3359,6 @@ const checkDirectCall = (
       `Argument ${bad + 1} of \`${shown}\`: expected ${want}, got ${ctx.table.typeName(badType)}`
     )
   }
-  refuseForeignBufferCall(ctx, expr, sig, shown)
   ctx.program.nodeCallees[expr.id] = sig
   return sig.returnType
 }
