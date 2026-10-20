@@ -300,8 +300,15 @@ is zeroed over the extent it was written as it goes back (`BufferPool.give`,
 a plain fill the next borrower's reads keep), so the next connection, or the
 next request of this one, borrows no byte of the last; the QUIC stream
 buffers under them are lent and zeroed the same way (QUIC-3 in
-[quic.md](quic.md)). Anchors at `9914d6e4`: `std/net/http3.ts:768-776`
-(`next`), `:817-823` (`giveData`), `:843-848` (`giveSection`),
+[quic.md](quic.md)). The fill is `give`'s and not `giveSecret`'s
+`secureZero`: a later borrower reads the buffer, so the fill is no dead store
+`-O2` may drop, and `secureZero` clears all 16,384 bytes where the fill costs
+the bytes the request wrote; before pooling, neither buffer was wiped at all.
+`WebTransportSession.data` is `h3.data` itself during a `WT_STREAM_DATA`
+event, not a copy, so it is lent and given back with it and is valid only
+until the next `next()`. Anchors at `af03b81a`: `std/net/http3.ts:770-778`
+(`next`), `:819-825` (`giveData`), `:845-850` (`giveSection`),
+`std/net/webtransport.ts:690` (the alias),
 `std/net/http3-server.ts:523-526` (`share`), `:940` and `:968`
 (`Http3Connection.release`, the slot's give-back on release and stop). Not wiped: the decoder's buffer and the field
 copies, which are the slot's own and overwritten by the next section, and a
