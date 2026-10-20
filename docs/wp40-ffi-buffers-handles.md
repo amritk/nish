@@ -972,8 +972,9 @@ design, decided on a program that needs them.
     foreign callee keeps the argument, and that entry's pointer parameter
     answers `captured = false`. Without the entry, `calleeCaptures` answers
     `true` (src/escape.ts:672), the array escapes, and it loses its private
-    placement. `ffi_buffer_read`'s golden `.ll` shows the private array still
-    in the released scope;
+    placement. `ffi_buffer_read`'s golden `.ll` shows the array allocated
+    after `echo`'s `nish_arena_mark` and released by its
+    `nish_arena_release`, after both calls;
   - an argument with no path (a call's result) is a past write, the
     conservative arm.
 
