@@ -818,7 +818,7 @@ The noise band, each copy against its own build, minimum / median, + slower:
 
 | Workload | `main`, first | `main`, second | `a22a056`, first | `a22a056`, second |
 | --- | ---: | ---: | ---: | ---: |
-| `p256PublicKey` | +0.7% / −1.3% | +0.3% / +1.3% | −1.0% / −5.3% | +0.9% / +2.9% |
+| `p256PublicKey` | +0.7% / −1.2% | +0.3% / +1.3% | −1.0% / −5.3% | +0.9% / +2.9% |
 | `p256SignSha256` | +0.4% / +2.3% | −0.6% / +5.4% | −4.2% / −7.7% | +1.9% / −1.2% |
 | `p256VerifySha256` | −2.6% / +1.4% | +4.3% / +0.4% | −1.4% / −1.2% | +1.8% / +0.2% |
 
@@ -843,7 +843,10 @@ later. Each later reading re-runs, on its own head and on one machine, the two
 commands above twice (`bench/tls-handshake.mjs --runs 16` with `--baseline
 c8a00d6`, and `bench/p256.mjs --self --runs 16` with `--binary` for
 `a22a056`, for `c8a00d6` and for a byte-identical copy of each) and the
-callgrind profile, by this section's method. A sample is one run of each, and
+callgrind profile, by this section's method. `--self` copies only the head's
+own build; each `--binary` copy is made with `cp` beside its build and checked
+with `cmp` before the run. A sample is
+one run of each, and
 **a condition that asks for both samples is met only when each sample meets it
 on its own figures**; no sample is set aside and no figure is pooled across
 samples.
@@ -852,33 +855,34 @@ samples.
    profile: `p256ScalarInvert`, or whatever computes `k^-1` mod n, inclusive
    of what it calls, in the second or third handshake. That is a tenth of
    776,344.
-2. **P-256 is under X25519, and is not the largest module**, in the same
-   profile: `std/crypto/p256.ts`'s self Ir below `std/crypto/x25519.ts`'s
-   (3,147,968 here), and no module above both.
+2. **P-256 is under X25519** in the same profile: `std/crypto/p256.ts`'s
+   self Ir below `std/crypto/x25519.ts`'s (3,147,968 here).
 3. **`p256SignSha256`'s minimum is at least 3x faster than `a22a056`'s,
    outside the noise band at the minimum, in both samples.** In each sample
    the new build's sign minimum must be at or under `a22a056`'s sign minimum
-   in that sample / 3 / 1.042. The 4.2% is fixed here, from this baseline: the
+   in that sample / 3 / 1.042, where `a22a056`'s minimum is the one the later
+   run re-measures in the same rounds, not this baseline's. The 4.2% is fixed here, from this baseline: the
    largest absolute copy gap at the sign minimum over both builds and both
    samples (`a22a056`'s −4.2%, first sample), so a copy that ran faster than
    its build widens the band as much as one that ran slower, and a later
-   reading's own copy gaps do not move it. On this baseline's figures that is
+   reading's own copy gaps do not move it. As a worked example, on this
+   baseline's figures that is
    583.6 / 3 / 1.042 = 186.7 µs in the first sample and 563.7 / 3 / 1.042 =
    180.3 µs in the second; `main` is 197.6 and 188.0 µs, and misses both.
    **Verify is not slower**: in each sample, the new build's verify minimum
-   is not above `c8a00d6`'s in that sample by more than 4.3%, likewise fixed:
+   is not above `c8a00d6`'s, re-measured in the same rounds, by more than 4.3%, likewise fixed:
    the largest absolute copy gap at the verify minimum here (`main`'s +4.3%,
    second sample).
 4. **Server CPU a handshake is below this baseline's `main`, outside the
    copy's band at the minimum, in both samples.** In each sample the new
    build's minimum must be at or under `c8a00d6`'s minimum in that sample /
-   (1 + 2/120), 1.67%. The band is fixed here, from this baseline: the larger of the
+   (1 + 2/120), 1.67%, where `c8a00d6`'s minimum is the one the later run
+   re-measures in the same rounds, not this baseline's. The band is fixed here, from this baseline: the larger of the
    largest absolute copy gap at the minimum over both builds and both samples
    (`main`'s −1.6%, first sample) and two ticks of the fewest-tick round
-   (2 / 120, the larger), so it never falls below the figures' own resolution. In whole
-   ticks of 600 handshakes that is two ticks below `c8a00d6`'s minimum: on
-   this baseline's figures, 2,000 µs (120 ticks) in the first sample and
-   1,966.7 µs (118 ticks) in the second.
+   (2 / 120, the larger), so it never falls below the figures' own resolution. The formula
+   governs; as a worked example, on this baseline's figures it is 2,000 µs
+   (120 ticks) in the first sample and 1,966.7 µs (118 ticks) in the second.
 
 A missed condition is recorded as missed. Condition 1 is about instructions
 and decides whether the inversion was replaced; 3 and 4 are about time and say

@@ -21,7 +21,7 @@
 //
 // The clock tick is 10 ms on Linux, and a handshake about 2 ms of server CPU,
 // so the default 600 a round puts one tick near 1% of a round's figure; the
-// report prints each round's fewest ticks so that can be read, not assumed.
+// report prints the fewest ticks in any round so that can be read, not assumed.
 import { spawn, spawnSync } from "node:child_process"
 import {
   copyFileSync,
@@ -71,7 +71,7 @@ const parseArgs = (argv) => {
       process.stdout.write(
         `${readFileSync(import.meta.filename, "utf8")
           .split("\n")
-          .slice(1, 25)
+          .slice(1, 24)
           .join("\n")}\n`
       )
       process.exit(0)
