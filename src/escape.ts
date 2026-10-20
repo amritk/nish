@@ -2361,7 +2361,7 @@ const decideArenaBlock = (
     d = d + 1
   }
   d = 0
-  while (d < last) {
+  while (d < last && d < decls.length) {
     const local = unit.program.nodeLocals[decls[d].id]
     if (local !== null) {
       walk.outer.push(local)
