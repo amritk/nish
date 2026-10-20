@@ -21322,17 +21322,27 @@ if (!only || "differential".includes(only)) {
 if (linkSpecimens.size > 0) {
   for (const [key, spec] of linkSpecimens) {
     const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`
+    // The two binaries share a file name and differ in their directory: Darwin's
+    // linker signs every arm64 binary ad hoc, and the signature carries the
+    // output's file name, so two links named `specimen.src` and `specimen.obj`
+    // differ in those bytes however equal the code is (#358).
     const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`)
-    const bySource = spawnSync("clang", [...spec.fromSource, "-o", `${stem}.src`], { cwd: root })
-    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", `${stem}.obj`], { cwd: root })
+    const [src, obj] = ["src", "obj"].map((side) => {
+      fs.mkdirSync(`${stem}-${side}`, { recursive: true })
+      return path.join(`${stem}-${side}`, "specimen")
+    })
+    const bySource = spawnSync("clang", [...spec.fromSource, "-o", src], { cwd: root })
+    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", obj], { cwd: root })
     const linked = bySource.status === 0 && byObjects.status === 0
-    const same = linked && fs.readFileSync(`${stem}.src`).equals(fs.readFileSync(`${stem}.obj`))
+    const [a, b] = linked ? [fs.readFileSync(src), fs.readFileSync(obj)] : []
+    const same = linked && a.equals(b)
+    const firstDiff = linked && !same ? a.findIndex((byte, i) => byte !== b[i]) : -1
     check(
       `runtime objects: linking ${path.basename(spec.ll)} against ${label} gives the bytes the sources do`,
       same,
       linked
-        ? `${fs.statSync(`${stem}.src`).size} bytes from the sources, ` +
-            `${fs.statSync(`${stem}.obj`).size} from the objects; the two links were\n` +
+        ? `${a.length} bytes from the sources, ${b.length} from the objects, ` +
+            `first differing at offset ${firstDiff}; the two links were\n` +
             `  clang ${spec.fromSource.join(" ")}\n  clang ${spec.fromObjects.join(" ")}`
         : String(bySource.stderr) + String(byObjects.stderr)
     )

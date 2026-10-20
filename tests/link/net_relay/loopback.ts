@@ -264,7 +264,9 @@ const caps = (t: Suite): void => {
   config.maxSessions = 2;
   config.maxPerPeer = 2;
   const rig = new Rig(config, false);
-  // Three addresses, so that the third meets the global cap alone.
+  // Three addresses, so that the third meets the global cap alone. Linux routes
+  // all of 127.0.0.0/8 to lo; on a mac, `sudo ifconfig lo0 alias 127.0.0.2 up`
+  // and the same for .3 first, as CI's runtime-net job does.
   const a: RigClient = rig.session(n32(1), "127.0.0.1");
   const b: RigClient = rig.session(n32(2), "127.0.0.2");
   const over: RigClient = rig.session(n32(3), "127.0.0.3");
