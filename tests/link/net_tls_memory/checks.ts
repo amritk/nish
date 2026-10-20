@@ -398,12 +398,14 @@ export const memoryChecks = (): i32 => {
   let traceExact: i32 = 0;
   let traceMark: i64 = 0;
   for (let round: i32 = 0; round < ROUNDS; round++) {
-    if (round === 1) {
-      traceMark = Arena.mark();
-    }
     refill(slotKey, traceKey);
     traceTls.restart(traceRandom, slotKey);
     traceConn.start(traceTls);
+    // The second `start` is the first give-back, which grows each pool's free
+    // list once: the mark is taken after it.
+    if (round === 1) {
+      traceMark = Arena.mark();
+    }
     feed(traceConn, traceHello);
     const hello: boolean = sends(traceConn, traceServerHello);
     traceConn.sign(traceSignature);
@@ -440,12 +442,12 @@ export const memoryChecks = (): i32 => {
   let slotExact: i32 = 0;
   let slotMark: i64 = 0;
   for (let round: i32 = 0; round < ROUNDS; round++) {
-    if (round === 1) {
-      slotMark = Arena.mark();
-    }
     refill(slotKey, padded.key);
     slotTls.restart(padded.random, slotKey);
     slot.start(slotTls);
+    if (round === 1) {
+      slotMark = Arena.mark();
+    }
     feed(slot, padded.hello);
     const signing: boolean = (slot.interest() & TLS_RECORD_SIGN) !== 0;
     slot.sign(padded.signature);
