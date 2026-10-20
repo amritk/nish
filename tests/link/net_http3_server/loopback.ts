@@ -7,7 +7,9 @@
 // held back; a client whose handshake chose another
 // ALPN; a client that finds no slot free; and connection after connection
 // through one slot with the arena measured, the date pinned a second on for
-// each; and two slots answered in one second, the date formatted once.
+// each, the pooled buffers made once and all given back; two slots answered
+// in one second, the date formatted once; and 1,024 idle slots that have
+// made no pooled buffer.
 import { netAddress, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
@@ -15,6 +17,7 @@ import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
 import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
 import { QUIC_LISTENER_ENTROPY_SIZE, quicListenerFlightTime, quicListenerPaceTime } from "nish/net/quic-listener";
 import { QuicServerConfig } from "nish/net/quic";
+import { QuicStreamPools } from "nish/net/quic-stream";
 import { H3_FRAME_DATA, H3_NO_ERROR, H3_STREAM_CONTROL, H3_STREAM_QPACK_DECODER, H3_STREAM_QPACK_ENCODER } from "nish/net/http3-frame";
 import { H3_ALPN, H3_END, H3_ERROR, H3_NEED_MORE, Http3Connection } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
@@ -511,6 +514,7 @@ const reused = (t: Suite): void => {
   let after: i64 = 0;
   let closed: i32 = 0;
   let answered: i32 = 0;
+  let warm: i32 = 0;
   for (let k: i32 = 0; k < 5; k++) {
     const l = new Lean(loop);
     l.c.now = toI64(k) * n64(100000);
@@ -552,6 +556,9 @@ const reused = (t: Suite): void => {
     if (k > 0) {
       after = after + rest.kept;
     }
+    if (k === 0) {
+      warm = poolsMade(loop.server);
+    }
   }
   t.ok("five connections through one slot, each closed after its GOAWAY", closed === n32(5) && loop.server.accepted === n32(5));
   t.eqI32("each served its five requests", answered, n32(25));
@@ -569,6 +576,35 @@ const reused = (t: Suite): void => {
     kept = kept + handshakes[k];
   }
   t.eqI64("and from the second on, each handshake through the listener into the slot keeps 0 bytes: from the first Initial to the close, nothing", kept, n64(0));
+  t.ok("the first connection made the buffers the slot borrows", warm > n32(0));
+  t.eqI32("and from the second on, no pool made another: each connection borrowed what the last gave back", poolsMade(loop.server), warm);
+  t.eqI32("every connection ended, nothing is lent from any pool", poolsLent(loop.server), n32(0));
+};
+
+/** How many buffers `server`'s pools have made, all four together. */
+const poolsMade = (server: Http3Server): i32 => {
+  const streams: QuicStreamPools | null = server.streamPools;
+  const made: i32 = server.dataPool.made + server.sectionPool.made;
+  return streams === null ? made : made + streams.data.made + streams.bits.made;
+};
+
+/** How many buffers `server`'s pools have lent, all four together. */
+const poolsLent = (server: Http3Server): i32 => {
+  const streams: QuicStreamPools | null = server.streamPools;
+  const lent: i32 = server.dataPool.lent() + server.sectionPool.lent();
+  return streams === null ? lent : lent + streams.lent();
+};
+
+/** A server of 1,024 slots that has served nothing has made no pooled buffer: every slot borrows on first use. */
+const idle = (t: Suite): void => {
+  const loop = new LoopServer(h3QuicConfig(new H3Limits()), n32(1024), n32(0));
+  const streams: QuicStreamPools | null = loop.server.streamPools;
+  t.ok("a server of 1,024 slots shares one set of stream pools across them", streams !== null);
+  if (streams !== null) {
+    t.ok("and with no connection, the stream pools have made no buffer nor bitmap", streams.data.made === n32(0) && streams.bits.made === n32(0));
+  }
+  t.ok("nor the data and section pools of its HTTP/3 connections", loop.server.dataPool.made === n32(0) && loop.server.sectionPool.made === n32(0));
+  loop.server.stop();
 };
 
 /** Every check of this file. */
@@ -582,4 +618,5 @@ export const loopbackChecks = (t: Suite): void => {
   alpn(t);
   full(t);
   reused(t);
+  idle(t);
 };
