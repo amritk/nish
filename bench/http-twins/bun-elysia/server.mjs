@@ -8,7 +8,7 @@
 // them, and the measured routes after. Elysia parses the JSON bodies itself
 // (`parse: "json"`), so a body that is not JSON reaches onError as PARSE.
 import { Elysia } from "elysia"
-import { extraRoutes } from "./extra-routes.mjs"
+import { extraRoutes } from "../extra-routes.mjs"
 
 const port = Number(process.argv[2] ?? 8080)
 const text = { "Content-Type": "text/plain" }

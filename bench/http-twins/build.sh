@@ -48,14 +48,15 @@ pinned() {
   echo "$bin"
 }
 
-# A serve script that runs server.mjs, copied with extra-routes.mjs beside it,
-# under the interpreter $2.
+# A serve script that runs server.mjs under the interpreter $2. extra-routes.mjs
+# goes one level up, where server.mjs imports it from in the tree too.
 # It drops NODE_OPTIONS and BUN_OPTIONS, so a flag in the caller's environment
 # (such as Bun's --smol) cannot change the runtime being measured.
 script_twin() {
   local name=$1 interpreter=$2
   mkdir -p "$out/$name"
-  cp "$here/$name/server.mjs" "$here/extra-routes.mjs" "$out/$name/"
+  cp "$here/$name/server.mjs" "$out/$name/"
+  cp "$here/extra-routes.mjs" "$out/"
   printf '#!/bin/sh\nunset NODE_OPTIONS BUN_OPTIONS\nexec %s %s "$@"\n' "$interpreter" "$out/$name/server.mjs" >"$out/$name/serve"
   chmod +x "$out/$name/serve"
 }

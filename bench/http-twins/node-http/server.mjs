@@ -3,7 +3,7 @@
 //
 //   node server.mjs <port> [ignored...]
 import { createServer } from "node:http"
-import { extraRoutes, matchesRoute } from "./extra-routes.mjs"
+import { extraRoutes, matchesRoute } from "../extra-routes.mjs"
 
 const port = Number(process.argv[2] ?? 8080)
 const text = { "Content-Type": "text/plain" }

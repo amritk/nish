@@ -7,7 +7,7 @@
 // The extra routes are registered first, as a small service would register
 // them, and the measured routes after.
 import { createRequire } from "node:module"
-import { extraRoutes } from "./extra-routes.mjs"
+import { extraRoutes } from "../extra-routes.mjs"
 
 // The package is fetched by build.sh from its GitHub tag, not from npm, so it is
 // no dependency of this repository's package.json; a computed name keeps the

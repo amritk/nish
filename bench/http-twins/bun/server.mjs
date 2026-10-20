@@ -5,7 +5,7 @@
 //
 // The extra routes go into `routes` first, as a small service would register
 // them, and the measured routes after.
-import { extraRoutes } from "./extra-routes.mjs"
+import { extraRoutes } from "../extra-routes.mjs"
 
 const port = Number(process.argv[2] ?? 8080)
 const text = { "Content-Type": "text/plain" }
