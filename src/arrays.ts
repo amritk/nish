@@ -65,6 +65,7 @@ import {
   PAR_FROM,
   PAR_MAP_NEW,
   PAR_SPAWN,
+  StructInfo,
 } from "./program"
 import { Local, Scope, sourceLocal } from "./symbols"
 import { isNumeric, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
@@ -1149,6 +1150,9 @@ class RefWalk {
     // The store happens after both sides are evaluated, so a reference read
     // on its right-hand side is read before it is overwritten.
     this.overwrite(node)
+    if (node.kind === N_BINARY && node.text === "=") {
+      this.visitAssignment(node)
+    }
   }
 
   visitChildren(node: Node): void {
@@ -1245,20 +1249,96 @@ class RefWalk {
     if (local === null || initializer.kind === N_EMPTY) {
       return
     }
-    const source = elementSource(this.program, this.table, initializer)
-    if (source === null) {
+    this.bind(local, initializer)
+  }
+
+  /** `q = p`: the local now holds whatever element `p` refers to, as a declaration would. */
+  visitAssignment(node: Node): void {
+    const target = unwrapParens(node.children[0])
+    const local: Local | null = target.kind === N_IDENT ? this.program.nodeLocals[target.id] : null
+    if (local !== null) {
+      this.bind(local, node.children[1])
+    }
+  }
+
+  /** Make `local` a live reference to every element `value` may evaluate to. */
+  bind(local: Local, value: Node): void {
+    const found: ElementRef[] = []
+    this.referencesOf(local, value, found)
+    for (const ref of found) {
+      this.live.push(ref)
+    }
+  }
+
+  /**
+   * Every element reference `value` may evaluate to, bound to `local`: an
+   * element read (`ps[0]`, `ps.pop()`), and the references it carries on from
+   * another local (#646) — a `const q = p` alias and so a chain of them, either
+   * side of a `c ? p : p2` or a `m ?? p`, and a call that returns a record of
+   * the element's class, which may hand back the reference it was given.
+   */
+  referencesOf(local: Local, value: Node, out: ElementRef[]): void {
+    const inner = unwrapParens(value)
+    const source = elementSource(this.program, this.table, inner)
+    if (source !== null) {
+      const elem = inlineArrayElement(this.program, this.table, source)
+      if (elem !== "") {
+        const ref = new ElementRef(
+          local,
+          referenceRoot(source),
+          elem,
+          rootText(this.program, this.table, source)
+        )
+        ref.inBounds = inner.kind === N_INDEX
+        out.push(ref)
+      }
       return
     }
-    const elem = inlineArrayElement(this.program, this.table, source)
-    if (elem !== "") {
-      const ref = new ElementRef(
-        local,
-        referenceRoot(source),
-        elem,
-        rootText(this.program, this.table, source)
-      )
-      ref.inBounds = unwrapParens(initializer).kind === N_INDEX
-      this.live.push(ref)
+    if (inner.kind === N_IDENT) {
+      this.aliasesOf(local, sourceLocal(this.program.nodeLocals[inner.id]), out)
+      return
+    }
+    if (inner.kind === N_CONDITIONAL) {
+      this.referencesOf(local, inner.children[1], out)
+      this.referencesOf(local, inner.children[2], out)
+      return
+    }
+    if (inner.kind === N_BINARY && (inner.text === "??" || inner.text === "||" || inner.text === "&&")) {
+      this.referencesOf(local, inner.children[0], out)
+      this.referencesOf(local, inner.children[1], out)
+      return
+    }
+    if (inner.kind === N_CALL && this.program.nodeCallees[inner.id] !== null) {
+      const type = this.program.nodeTypes[inner.id]
+      const info: StructInfo | null =
+        type < 0 ? null : inlineElementStruct(this.program, this.table, this.table.stripNull(type))
+      if (info === null) {
+        return
+      }
+      const passed: ElementRef[] = []
+      for (const arg of inner.children[1].children) {
+        this.referencesOf(local, arg, passed)
+      }
+      for (const ref of passed) {
+        if (ref.elem === info.name) {
+          out.push(ref)
+        }
+      }
+    }
+  }
+
+  /** A copy, bound to `local`, of every live reference `from` holds, invalidation and all. */
+  aliasesOf(local: Local, from: Local | null, out: ElementRef[]): void {
+    if (from === null || from === local) {
+      return
+    }
+    for (const ref of this.live) {
+      if (ref.local === from) {
+        const alias = new ElementRef(local, ref.array, ref.elem, ref.arrayText)
+        alias.invalidatedBy = ref.invalidatedBy
+        alias.inBounds = ref.inBounds
+        out.push(alias)
+      }
     }
   }
 }
