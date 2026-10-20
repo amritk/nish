@@ -97,15 +97,17 @@ every core the machine has, the ratio and the peak memory of both.
 | `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
 | `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
 | `par-histogram` | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds |
+| `par-histogram-atomic` | the same four streams into an `AtomicI32` per bin, one `add` per value: the same contention on sixteen bins, no lock | 16 rounds |
 
 ```bash
-node bench/run.mjs --only par            # the six and their twins; `--only par-nbody` names one
+node bench/run.mjs --only par            # all of them and their twins; `--only par-nbody` names one
 node bench/run.mjs --validate --only par # both runs of each and every twin, checksums only
 ```
 
 ### Against Rust and Go
 
-`par-compute`, `par-nbody`, `par-regions` and `par-histogram` have twins, so
+`par-compute`, `par-nbody`, `par-regions`, `par-histogram` and
+`par-histogram-atomic` have twins, so
 the second table in `docs/BENCHMARKS.md` compares the Nish `par` run with the
 same program in Rust and in Go:
 
@@ -124,8 +126,9 @@ twins split as Rayon does. `par-regions`' scope twin starts
 its threads on every call, because a scope cannot outlive it; the Rayon twin
 and the Go twin are the ones with a pool to compare with Nish's workers. The
 histogram takes a lock per value in every language (`Mutex`,
-`std::sync::Mutex`, `sync.Mutex`): Nish has no atomic counter yet, and a lock in
-one language against an atomic in another would not be the same program.
+`std::sync::Mutex`, `sync.Mutex`), and `par-histogram-atomic` an atomic add per
+value in every language (`AtomicI32.add`, `AtomicI32::fetch_add` with
+`SeqCst`, `atomic.Int32.Add`), so a lock is never timed against an atomic.
 
 **The same work is not the same checks or the same build**, and the table
 says so. Nish keeps its default overflow and bounds checks
@@ -178,18 +181,28 @@ because a squash merge does not keep the branch's own commits.
   the minimum in every run, and on the median in two runs of three, within the
   band in the third. `tests/run.js` pins the vector loop ("par_map_vector").
 - `par-histogram`: a contended lock, and the most machine- and load-sensitive
-  of the four; read its spread before its reading. What is measured: past 64
+  of the five; read its spread before its reading. What is measured: past 64
   spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
   and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
   System time is not the whole story, though: Rust's futex lock spends about
   as much (0.46 s), and in those runs it came out about level with Nish, so
   parking on a futex is not shown to be the cure. Those figures are from an
   earlier session, in which Nish's `par` run took about 274 ms; in the table's
-  latest runs it took 96.7 ms and Rust's 259 ms, with no change to either
+  latest runs it took 116 ms and Rust's 308 ms, with no change to either
   program, so par-histogram moves by 2x and more between sessions on this
   machine. Even the sign is not stable: the latest runs put Nish ahead of Go
-  on the median in two runs and behind in one, where the runs before them put
-  it behind Go on every median.
+  on every median, outside the band in two of the three, where earlier runs
+  put it behind Go on every median.
+- `par-histogram-atomic`: 1.59x to 1.95x behind Rust on the minimum and 1.81x
+  to 1.96x on the median, past 1.10x in all three runs, and level with Go
+  (101 / 129 ms against Rust's 61.3 / 69.2 and Go's 93.3 / 106). Swapping the
+  lock for atomics takes Rust from 308 ms to 61 and Go from 194 to 93, but Nish
+  only from 116 to 101. Why is not measured yet. The differences in the
+  program are the checks above (an overflow check on `v * 75 + 74` and a
+  bounds check on `j.bins[bin]` per value, neither of which Rust makes), and
+  the bins: Nish's are an array of `AtomicI32` objects reached through the
+  task's class, where Rust's and Go's are sixteen counters inline in one array:
+  one more load per value in Nish, and a different layout in the cache.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
@@ -201,7 +214,7 @@ else: every other section, the header and json-compare's marked section
 included, stays byte for byte, and each table says the date, the CPU and the
 commit it was measured at, since those may differ from the header's. A report
 with no twins' table gets one under the data-parallel table. It writes only
-when all six kernels ran and nothing else was timed. A subset
+when every parallel kernel ran and nothing else was timed. A subset
 (`--only par-nbody`), a report with no data-parallel table, and the map half of
 `--only maps,par` leave the file as it was, and the run says so; any run that
 times the benchmark tables rewrites the whole report, as a full run does.
