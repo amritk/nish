@@ -465,6 +465,8 @@ bool nish_is_executable(const nish_str *path);
  * `nish_net_local_port(fd)`: the port a socket is bound to.
  * `nish_tcp_listen(host, port, backlog)`: `SO_REUSEADDR`, and `::` hears
  * both families, or IPv4 alone on a kernel without IPv6.
+ * `nish_tcp_listen_flags(host, port, backlog, flags)`: the same listener,
+ * with `SO_REUSEPORT` for flag 1 (any other bit is -22).
  * `nish_tcp_accept(fd, peer)`: a new descriptor and the peer's address.
  * `nish_net_read` / `nish_net_write(fd, buf, off, len)`: bytes `[off, off +
  * len)` of `buf`, which the compiled call has range-checked; a write to a
@@ -498,6 +500,7 @@ bool nish_is_executable(const nish_str *path);
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
+int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags);
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
 int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);

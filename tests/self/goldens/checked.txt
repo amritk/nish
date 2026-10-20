@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1054 programs, 137034 dump lines.
+# 1056 programs, 137062 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -47771,6 +47771,20 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=1 stackLocals=1
   local 7:9 out: u8[] (const)
   local 10:9 fd: i32 (const)
+program tests/cases/net_tcp_reuseport.ts
+module tests/cases/net_tcp_reuseport.ts (entry)
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import tcpListen from "nish:net" -> builtin tcpListen
+import tcpListenFlags from "nish:net" -> builtin tcpListenFlags
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen_flags
+  calls: nish_arena_mark nish_arena_release nish_net_close nish_net_local_port nish_print nish_str_from_i32 nish_tcp_listen nish_tcp_listen_flags
+  stackSites=0 stackLocals=0
+  local 8:9 a: i32 (const)
+  local 9:9 port: i32 (const)
+  local 10:9 b: i32 (const)
 program tests/cases/net_tcp_unchecked.ts
 module tests/cases/net_tcp_unchecked.ts (entry)
 function echoOnce(fd: i32, buf: u8[]): i32 -> @echoOnce [exported]
@@ -86223,6 +86237,22 @@ function firstReady(loop: i32, ready: i32[]): i32 -> @firstReady [exported]
   calls: nish_panic_index nish_poll_wait
   pointer ready: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+program docs/cookbook/builtin-net-reuseport.ts
+module docs/cookbook/builtin-net-reuseport.ts (entry)
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import tcpListenFlags from "nish:net" -> builtin tcpListenFlags
+function shared(port: i32, backlog: i32): i32 -> @shared [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen_flags
+  calls: nish_tcp_listen_flags
+  stackSites=0 stackLocals=0
+function beside(fd: i32, backlog: i32): i32 -> @beside [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via shared
+  escaping: backlog
+  calls: nish_net_local_port shared
+  stackSites=0 stackLocals=0
+  callee 10:55 shared -> @shared
 program docs/cookbook/builtin-net-udp.ts
 module docs/cookbook/builtin-net-udp.ts (entry)
 import udpBind from "nish:net" -> builtin udpBind
