@@ -339,7 +339,7 @@ jobs:
         run: docker logs nish
 
   chrome:
-    name: chrome WebTransport and resumption (${{ matrix.certificate }} certificate)
+    name: chrome WebTransport (${{ matrix.certificate }} certificate)
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -400,6 +400,12 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/log"
           docker logs -f nish > "$RUNNER_TEMP/log/server.log" 2>&1 &
+          follow=$!
+          trap 'kill "$follow"' EXIT
+          # The script's baseline is the file's length when it starts, so the stream must hold the log so far.
+          lines="$(docker logs nish 2>&1 | wc -l)"
+          for _ in $(seq 1 100); do [ "$(wc -l < "$RUNNER_TEMP/log/server.log")" -ge "$lines" ] && break; sleep 0.1; done
+          [ "$(wc -l < "$RUNNER_TEMP/log/server.log")" -ge "$lines" ] || { echo "the streamed log never reached the server's $lines lines"; exit 1; }
           docker run --rm --network host --ipc host \
             -v "$GITHUB_WORKSPACE/tests/interop:/interop:ro" -v "$RUNNER_TEMP/out:/out:ro" -v "$RUNNER_TEMP/log:/log:ro" \
             "$PLAYWRIGHT" sh -c "set -e

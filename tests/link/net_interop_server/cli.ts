@@ -97,7 +97,8 @@ export const parseServe = (argv: string[]): ServeArgs => {
  * port issues and resumes session tickets under two keys held here, never in
  * a field: the current one seals, both open, and when the current one is due
  * the previous is wiped, the current takes its place and a new one is drawn
- * (docs/security/tls.md, "Ticket keys").
+ * (docs/security/tls.md, "Ticket keys"). Until the first rotation there is no
+ * previous key, and the current one is lent as both.
  */
 const run = (args: ServeArgs, chain: u8[][], key: Secret<u8[]>): i32 => {
   const server = new InteropServer(args.options, chain);
@@ -116,19 +117,28 @@ const run = (args: ServeArgs, chain: u8[][], key: Secret<u8[]>): i32 => {
   console.log(`sha256 ${hash}`);
   server.h2.enableTickets();
   let current: Secret<u8[]> = tlsTicketKeyDraw(server.h2.currentInfo, monotonicNanos());
-  let previous: Secret<u8[]> = tlsTicketKeyDraw(server.h2.previousInfo, monotonicNanos());
+  server.h2.previousInfo.copyFrom(server.h2.currentInfo);
+  let previous: Secret<u8[]> | null = null;
   while (!server.stopped) {
     const now: i64 = monotonicNanos();
     if (tlsTicketKeyDue(server.h2.currentInfo, now)) {
-      wipe(previous);
+      if (previous !== null) {
+        wipe(previous);
+      }
       previous = current;
       server.h2.previousInfo.copyFrom(server.h2.currentInfo);
       current = tlsTicketKeyDraw(server.h2.currentInfo, now);
     }
-    server.step(toI32(1000), key, current, previous);
+    if (previous === null) {
+      server.step(toI32(1000), key, current, current);
+    } else {
+      server.step(toI32(1000), key, current, previous);
+    }
   }
   wipe(current);
-  wipe(previous);
+  if (previous !== null) {
+    wipe(previous);
+  }
   console.log("stopped");
   return 0;
 };

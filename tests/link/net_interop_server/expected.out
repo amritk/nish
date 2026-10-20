@@ -43,4 +43,10 @@ PASS  byte for byte
 PASS  the application counted each: two hq requests, two HTTP/3, one session, one datagram, one stream
 bind failed: -98
 PASS  one QUIC port taken already: serve exits 1
-interop server: 41 passed, 0 failed, 0 skipped
+PASS  tickets: a first connection is a full handshake, its Finished verified, and issued a ticket
+PASS  its ticket resumes the next connection, the server's Finished verified, and a new ticket issued
+PASS  the same ticket replayed falls back to a full handshake
+PASS  /close on the resumed connection: 200, its body, then GOAWAY
+PASS  and the server closes the connection
+PASS  after a rotation, a ticket sealed under the old key resumes under the previous one
+interop server: 47 passed, 0 failed, 0 skipped

@@ -8,6 +8,7 @@
 // Then the refusals of the command line, each with its exit code.
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
+import { tlsTicketKeyDraw } from "nish/net/tls/ticket";
 import { x509ParseCertificate } from "nish/crypto/x509";
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame";
 import {
@@ -130,15 +131,15 @@ const carrierChecks = (t: Suite): void => {
   h2.wire.settings(none, noValues);
   h2.wire.settingsAck();
   h2.wire.headers(n32(1), getOf(FILE), H2_FLAG_END_STREAM);
-  h2.flush(key);
-  const frames: string = h2.awaitFrames(n32(5), key);
+  h2.flush(key, null, null);
+  const frames: string = h2.awaitFrames(n32(5), key, null, null);
   t.ok(
     "a GET of the file: 200 and its bytes",
     frames.indexOf("HEADERS 1 :status=200 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=application/octet-stream server=nish") >= 0 && frames.indexOf(`DATA 1 16 "a file from www\n" end`) >= 0
   );
   h2.wire.headers(n32(3), getOf("/missing"), H2_FLAG_END_STREAM);
-  h2.flush(key);
-  t.eqStr("a GET of a file that is not there: 404", h2.awaitFrames(n32(2), key), 'HEADERS 3 :status=404 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain server=nish; DATA 3 10 "not found\n" end');
+  h2.flush(key, null, null);
+  t.eqStr("a GET of a file that is not there: 404", h2.awaitFrames(n32(2), key, null, null), 'HEADERS 3 :status=404 date=Fri, 16 Oct 2026 08:11:54 GMT content-type=text/plain server=nish; DATA 3 10 "not found\n" end');
 
   // hq-interop, the runner's HTTP/0.9.
   const hqLimits = new H3Limits();
@@ -192,10 +193,60 @@ const carrierChecks = (t: Suite): void => {
   wipe(key);
 };
 
+/**
+ * Session tickets on the HTTP/2 port, as the interop job's curl and Chromium
+ * lanes drive them: a full handshake and its ticket, a resumption with it, the
+ * same ticket replayed, `/close`, and a ticket sealed before a rotation.
+ */
+const resumptionChecks = (t: Suite): void => {
+  const options = new InteropOptions();
+  options.host = "127.0.0.1";
+  options.www = "tests/link/net_interop_server/www";
+  options.slots = n32(4);
+  const key: Secret<u8[]> = secret(leafPrivate());
+  const server = new InteropServer(options, [leafCertificate()]);
+  server.h2.enableTickets();
+  const old: Secret<u8[]> = tlsTicketKeyDraw(server.h2.currentInfo, monotonicNanos());
+  server.h2.previousInfo.copyFrom(server.h2.currentInfo);
+  const port: i32 = server.h2.port;
+
+  const first = new H2TlsClient(server);
+  t.ok("tickets: a first connection is a full handshake, its Finished verified, and issued a ticket", first.resume(port, key, null, old, old) && !first.resumed && first.verified && first.ticket.ok);
+  const second = new H2TlsClient(server);
+  t.ok("its ticket resumes the next connection, the server's Finished verified, and a new ticket issued", second.resume(port, key, first.ticket, old, old) && second.resumed && second.verified && second.ticket.ok);
+  const replay = new H2TlsClient(server);
+  t.ok("the same ticket replayed falls back to a full handshake", replay.resume(port, key, first.ticket, old, old) && !replay.resumed && replay.verified);
+
+  const none: i32[] = [];
+  const noValues: i64[] = [];
+  second.wire.preface();
+  second.wire.settings(none, noValues);
+  second.wire.settingsAck();
+  second.wire.headers(n32(1), getOf("/close"), H2_FLAG_END_STREAM);
+  second.flush(key, old, old);
+  const frames: string = second.awaitFrames(n32(16), key, old, old);
+  t.ok(
+    "/close on the resumed connection: 200, its body, then GOAWAY",
+    frames.indexOf("HEADERS 1 :status=200") >= 0 && frames.indexOf(`DATA 1 8 "closing
+" end`) >= 0 && frames.indexOf("GOAWAY 1 0") >= 0
+  );
+  t.ok("and the server closes the connection", second.closed);
+
+  // One rotation turn, as `run` makes it: the current key's info becomes the previous one's, and a new key is drawn.
+  server.h2.previousInfo.copyFrom(server.h2.currentInfo);
+  const fresh: Secret<u8[]> = tlsTicketKeyDraw(server.h2.currentInfo, monotonicNanos());
+  const rotated = new H2TlsClient(server);
+  t.ok("after a rotation, a ticket sealed under the old key resumes under the previous one", rotated.resume(port, key, replay.ticket, fresh, old) && rotated.resumed && rotated.verified);
+  wipe(fresh);
+  wipe(old);
+  wipe(key);
+};
+
 /** Every check, in one suite. */
 export const interopChecks = (): i32 => {
   const t = new Suite("interop server");
   identityChecks(t);
   carrierChecks(t);
+  resumptionChecks(t);
   return t.done();
 };

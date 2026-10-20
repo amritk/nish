@@ -83,8 +83,8 @@ export class InteropH2 {
   /** What the loop's current and previous ticket keys are; the keys themselves are its locals. */
   currentInfo: TlsTicketKeyInfo;
   previousInfo: TlsTicketKeyInfo;
-  /** The tickets already resumed, so a replay falls back to a full handshake. */
-  strikes: TlsTicketStrikes;
+  /** The tickets already resumed, so a replay falls back to a full handshake; `null` until `enableTickets`. */
+  strikes: TlsTicketStrikes | null = null;
   tickets: boolean = false;
   /** Whether each slot's handshake was logged as `tls: full` or `tls: resumed`. */
   told: boolean[];
@@ -110,7 +110,6 @@ export class InteropH2 {
     this.keyBuffer = new Array<u8>(32);
     this.currentInfo = new TlsTicketKeyInfo();
     this.previousInfo = new TlsTicketKeyInfo();
-    this.strikes = new TlsTicketStrikes(TLS_TICKET_STRIKES_DEFAULT);
     this.told = [];
     for (let k: i32 = 0; k < size; k++) {
       this.told.push(false);
@@ -123,9 +122,11 @@ export class InteropH2 {
   /**
    * Turns session tickets on from the next accept: each connection is issued a
    * ticket once open, and one that offers a ticket resumes under the keys
-   * `serve` is lent. A handshake is then logged as `tls: full` or `tls: resumed`.
+   * `serve` is lent, its strike register allocated here. A handshake is then
+   * logged as `tls: full` or `tls: resumed`.
    */
   enableTickets(): void {
+    this.strikes = new TlsTicketStrikes(TLS_TICKET_STRIKES_DEFAULT);
     this.server.tls.enableTickets();
     this.tickets = true;
   }
@@ -158,16 +159,17 @@ export class InteropH2 {
       return;
     }
     let wants: i32 = (events & 5) !== 0 ? this.server.readable(slot) : this.server.writable(slot);
+    const strikes: TlsTicketStrikes | null = this.strikes;
     // A ClientHello with tickets on asks to `resume`, which may go on in full
     // and ask to sign; an open connection asks to be `issue`d its ticket.
     for (let turn: i32 = 0; turn < 4 && this.server.holds(slot); turn++) {
       if ((wants & TLS_RECORD_SIGN) !== 0) {
         wants = this.server.signP256(slot, key);
-      } else if ((wants & TLS_RECORD_TICKET) !== 0 && current !== null && previous !== null) {
+      } else if ((wants & TLS_RECORD_TICKET) !== 0 && current !== null && previous !== null && strikes !== null) {
         const now: i64 = monotonicNanos();
         wants = this.server.tls.connection(slot).state === TLS_RECORD_STATE_OPEN
           ? this.server.tls.issue(slot, current, this.currentInfo, now)
-          : this.server.tls.resume(slot, current, this.currentInfo, previous, this.previousInfo, this.strikes, now);
+          : this.server.tls.resume(slot, current, this.currentInfo, previous, this.previousInfo, strikes, now);
       } else {
         turn = 4;
       }
@@ -179,7 +181,13 @@ export class InteropH2 {
     const conn: Http2Connection = this.server.connection(slot);
     let event: i32 = this.server.next(slot);
     while (event !== H2_NEED_MORE && event !== H2_ERROR) {
-      this.answer(slot, conn, event);
+      if (!this.answer(slot, conn, event)) {
+        if (this.logging) {
+          console.log("h2 GOAWAY not written: connection closed");
+        }
+        this.server.close(slot);
+        return;
+      }
       event = this.server.next(slot);
     }
     // A body held back by a full output goes on once `flush` has drained it,
@@ -238,16 +246,16 @@ export class InteropH2 {
     return null;
   }
 
-  /** The program's answer to one event. */
-  answer(slot: i32, conn: Http2Connection, event: i32): void {
+  /** The program's answer to one event; false when `/close`'s GOAWAY could not be written, so the connection must go. */
+  answer(slot: i32, conn: Http2Connection, event: i32): boolean {
     if (event === H2_REQUEST) {
       const p: H2Pending | null = this.take(slot, conn.stream);
       if (p === null) {
-        return;
+        return true;
       }
       if (httpFieldIs(conn.fields.method, "GET") && httpFieldIs(conn.fields.path, "/close")) {
         this.start(conn, p, STATUS_OK, this.textValues, httpFieldBytes("closing\n"));
-        conn.sendGoaway(toI32(0));
+        return conn.sendGoaway(toI32(0));
       } else if (httpFieldIs(conn.fields.method, "GET")) {
         const body: u8[] | null = this.files.get(conn.fields.path);
         if (body === null) {
@@ -272,6 +280,7 @@ export class InteropH2 {
     } else if (event === H2_WINDOW) {
       this.pushAll(slot, conn);
     }
+    return true;
   }
 
   /** Sends the head of `p`'s response with the field `values`, and as much of `body` as the windows take. */

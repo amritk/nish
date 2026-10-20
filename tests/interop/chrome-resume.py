@@ -6,7 +6,8 @@ certificate by `--ignore-certificate-errors-spki-list`: the script reads the
 certificate from the HTTP/2 port, checks that its SHA-256 is the one the
 server wrote to `--hash-file`, the hash the WebTransport lane pins, and pins
 the base64 SHA-256 of its SubjectPublicKeyInfo. That read is a handshake of
-its own, so the script waits for the server to log it before it counts.
+its own, so the script waits for the server to log it and its close before
+it counts.
 
 Then two navigations to `/close`, which the server answers and follows with
 GOAWAY, so the first connection is gone before the second navigation and
@@ -14,7 +15,8 @@ Chrome must open a new one. The verdict comes from the server's log, which
 the job streams to `<log file>`, not from Chrome: the first navigation's
 handshake must be `tls: full`, its connection must be closed before the
 second navigation, and the second navigation's handshake must be
-`tls: resumed`. The script exits 0 only then.
+`tls: resumed`. The script exits 0 only then, and a wait on the log that
+runs out fails naming what never came.
 
     python3 chrome-resume.py <h2 port> <hash file> <log file>
 """
@@ -74,24 +76,35 @@ def log_lines(path: str) -> list[str]:
         return [line.strip() for line in f]
 
 
-def handshakes_since(path: str, seen: int, want_closed: bool) -> tuple[list[str], int]:
+class Timeout(Exception):
+    """A wait on the server's log that ran out; its message names what never came."""
+
+
+def handshakes_since(path: str, seen: int, want_closed: bool, what: str) -> tuple[list[str], int]:
     """
     The `tls:` lines the log gained after its first `seen` lines, once at
     least one has come (and, with `want_closed`, a connection-closed line
-    after it), waiting up to ten seconds; and the log's new length.
+    after the first of them, so the close is that connection's and not an
+    earlier one's), and the log's length at that close, or after the last
+    `tls:` line. Raises `Timeout`, naming `what`, after ten seconds.
     """
     deadline = time.monotonic() + 10
-    while True:
-        lines = log_lines(path)
-        new = lines[seen:]
-        tls = [line for line in new if line.startswith("tls: ")]
-        closed = any(line.startswith(CLOSED) for line in new)
-        if (tls and (closed or not want_closed)) or time.monotonic() > deadline:
-            # A moment more, so a handshake Chrome opens on the side shows up too.
-            time.sleep(0.5)
-            lines = log_lines(path)
-            return [line for line in lines[seen:] if line.startswith("tls: ")], len(lines)
+    while time.monotonic() <= deadline:
+        new = log_lines(path)[seen:]
+        at = next((k for k, line in enumerate(new) if line.startswith("tls: ")), -1)
+        if at >= 0:
+            if not want_closed:
+                # A moment more, so a handshake Chrome opens on the side shows up too.
+                time.sleep(0.5)
+                new = log_lines(path)[seen:]
+                tls = [k for k, line in enumerate(new) if line.startswith("tls: ")]
+                return [new[k] for k in tls], seen + tls[-1] + 1
+            close = next((k for k in range(at + 1, len(new)) if new[k].startswith(CLOSED)), -1)
+            if close >= 0:
+                return [line for line in new[: close + 1] if line.startswith("tls: ")], seen + close + 1
         time.sleep(0.1)
+    wanted = "handshake and its connection's close" if want_closed else "handshake"
+    raise Timeout(f"{what}: the server's log showed no {wanted} within ten seconds")
 
 
 def main() -> int:
@@ -100,7 +113,8 @@ def main() -> int:
         pinned = f.read().strip()
     seen = len(log_lines(log_file))
     certificate = certificate_of(h2_port)
-    _, seen = handshakes_since(log_file, seen, False)
+    # The read closes its connection before Chrome starts, so the baseline is after that close.
+    _, seen = handshakes_since(log_file, seen, True, "the certificate read")
     if hashlib.sha256(certificate).hexdigest() != pinned:
         print(f"FAIL  the certificate on port {h2_port} is not the one in {hash_file}")
         return 1
@@ -117,12 +131,12 @@ def main() -> int:
         body = first.text() if first is not None else ""
         protocol = page.evaluate("performance.getEntriesByType('navigation')[0].nextHopProtocol")
         print(f"chrome {browser.version}: first navigation {first.status if first else 'none'} {protocol} {body.strip()!r}")
-        full, seen = handshakes_since(log_file, seen, True)
+        full, seen = handshakes_since(log_file, seen, True, "the first navigation")
         second = page.goto(url)
         body = second.text() if second is not None else ""
         protocol = page.evaluate("performance.getEntriesByType('navigation')[0].nextHopProtocol")
         print(f"chrome {browser.version}: second navigation {second.status if second else 'none'} {protocol} {body.strip()!r}")
-        resumed, seen = handshakes_since(log_file, seen, False)
+        resumed, seen = handshakes_since(log_file, seen, False, "the second navigation")
         browser.close()
     print(f"server, first navigation: {full}")
     print(f"server, second navigation: {resumed}")
@@ -132,4 +146,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Timeout as timeout:
+        print(f"FAIL  {timeout}")
+        sys.exit(1)
