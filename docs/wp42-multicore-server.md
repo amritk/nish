@@ -87,8 +87,11 @@ any other bit answers -22, as `udpBind`'s flags do (`runtime/runtime-net.c:347`,
 `(uint32_t)flags > 3`). `tcpListen(host, port, backlog)` keeps its signature
 (`src/nish-modules.ts:152`; `runtime/runtime-net.c:235`), so no program that
 calls it changes. UDP already has the flag: `udpBind`'s bit 1 sets
-`SO_REUSEPORT` (`runtime/runtime-net.c:216`), next to the `SO_REUSEADDR` every
-bound socket gets (`:214`).
+`SO_REUSEPORT` (`runtime/runtime-net.c:216`) in the datagram branch of the
+bind. The stream branch above it sets `SO_REUSEADDR` instead (`:213-214`), so a
+TCP socket has `SO_REUSEADDR` and no `SO_REUSEPORT` today, and a UDP socket
+the reverse; `tcpListenFlags`' bit 1 adds `SO_REUSEPORT` to the stream branch
+beside the `SO_REUSEADDR` it keeps.
 
 The parent never opens the socket. It cannot hand one down anyway: every
 socket is created close-on-exec (`runtime/runtime-net.c:158`, `SOCK_NONBLOCK |
@@ -104,7 +107,7 @@ Four builtins join `nish:process` (whose exports today are listed at
 | Builtin | Answers |
 | --- | --- |
 | `spawn(argv: string[]): i32` | the child's pid, or a negative errno. It does not wait. |
-| `waitPid(pid: i32, flags: i32): i32[]` | `[pid, status]`, with `status` in `spawnSync`'s convention (the exit code, or 128 + the signal); `pid` -1 waits for any child, flag 1 is `WNOHANG`, and `[0, 0]` means no child has exited yet. |
+| `waitPid(pid: i32, flags: i32): i32[]` | `[pid, status]`, with `status` in `spawnSync`'s convention (the exit code, or 128 + the signal); `pid` -1 waits for any child, flag 1 is `WNOHANG`, and `[0, 0]` means a child remains but none has exited yet. A failure puts the negative errno in the first element: `[-10, 0]` (`-ECHILD`) means no child remains, so every worker is reaped, and `[-4, 0]` (`-EINTR`) means a signal cut the wait short and the call is repeated. |
 | `kill(pid: i32, sig: i32): i32` | 0 or a negative errno; `sig` is 0, 2, 9 or 15, and anything else is -22. |
 | `availableParallelism(): i32` | the cores this process may use. |
 
@@ -130,7 +133,8 @@ ships them.
 ### 2.3 The supervisor
 
 ```ts
-import { preforkWorkers } from "std/net/prefork"
+import { tcpListenFlags } from "nish:net"
+import { preforkWorkers } from "nish/net/prefork"
 
 // In the parent, preforkWorkers spawns the workers and supervises them, and
 // returns only when they have all exited. In a worker it returns that
@@ -141,13 +145,13 @@ const listener = tcpListenFlags("0.0.0.0", 8080, 1024, 1)
 ```
 
 `preforkWorkers()` decides which process it is in from its argv: the
-supervisor spawns each worker as `argv()[0]` with the worker's index appended
+supervisor spawns each worker as `argv[0]` with the worker's index appended
 as a flag. N12's `spawn` takes an argv only, and the child inherits the
 parent's whole environment (`posix_spawnp` is passed `environ`,
 `runtime/runtime-os.c:258`), so argv is where the index goes; an environment
 variable would need a knob `spawn` does not have.
 
-`argv()[0]` is the path the program was started by. `posix_spawnp` searches
+`argv[0]` is the path the program was started by. `posix_spawnp` searches
 `PATH` for a bare name, and a relative path resolves against the working
 directory, so the supervisor does not `chdir` before it has spawned. Linux has
 `/proc/self/exe` as a firmer answer; the stage may use it there.
@@ -160,7 +164,8 @@ The supervisor:
    start-up is heard;
 3. spawns N workers;
 4. loops on `pollWait` over the signal descriptor with a timeout, and on each
-   tick reaps with `waitPid(-1, 1)` until it answers no child;
+   tick reaps with `waitPid(-1, 1)` until it answers `[0, 0]` (none ready
+   yet) or `-ECHILD` (none left), repeating it on `-EINTR`;
 5. restarts a worker that exited, at the same index, with a backoff when it
    crash-loops: a worker that dies within a second of its start waits twice
    as long as the last one before its restart, up to a cap, and a worker that
@@ -196,7 +201,12 @@ only, the supervisor's forwarding is what reaches them.
 **Linux** (3.9 and later) hashes each new connection across every socket
 bound to the port with `SO_REUSEPORT`, so the kernel spreads the load. Every
 socket in the group must belong to the same effective uid, which the workers
-of one supervisor do.
+of one supervisor do. The spread is a hash of the connection's 4-tuple, not a
+round robin, so a handful of connections can land lopsided: the link test
+asserts that at least two workers answered, never an even split. Connections
+already queued on a worker's listener when that worker dies are reset, not
+handed to its siblings; moving them needs `net.ipv4.tcp_migrate_req`
+(Linux 5.14 and later), which the supervisor does not set.
 
 **Darwin** accepts `SO_REUSEPORT` and lets several sockets bind the port, but
 does not spread connections between them: one socket takes them all. Prefork
