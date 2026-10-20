@@ -4903,7 +4903,9 @@ const hoistedArrow = (
     if (i > 0) {
       params.add(", ")
     }
-    params.add(`${lifted.paramNames[i]}: ${table.typeName(lifted.paramTypes[i])}`)
+    params.add(lifted.paramNames[i])
+    params.add(": ")
+    params.add(table.typeName(lifted.paramTypes[i]))
   }
   const head = `const ${name} = (${params.toText()}): ${table.typeName(lifted.returnType)} =>`
   const body = arrow.children[3]
