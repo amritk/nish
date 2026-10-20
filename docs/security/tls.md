@@ -446,8 +446,9 @@ pool.
 
 ## What moves between connections
 
-*Written with the stage that pools the record buffers; it names functions
-rather than lines, at that stage's commit on `60f9cb2`.*
+*Written with the stage that pools the record buffers (#713); it names
+functions rather than lines, as they stand in #713's squash commit on
+`main`.*
 
 A `TlsTcpServer` slot used to make its four record buffers in the
 constructor and keep them for its life, so a pool of 1,024 slots held four
@@ -474,7 +475,12 @@ through `wipeKeys`, and in `start`, which also resets the reader;
 a free slot holds none when `start` hands it its next connection. `used` is
 how far the borrower wrote, so `outputUsed` and `plainUsed` are the furthest
 end each buffer reached since it was taken; the scratch and the reader are
-given back with all of their size. `giveSecret` zeroes the whole buffer
+given back with all of their size. `sealRecord` counts a record's room in
+`outputUsed` before it seals, so a seal that refuses part-way still has what
+it wrote zeroed. A free slot is marked failed in `TlsTcpServer`'s
+constructor, as it was when its first handshake was refused for empty
+randomness, but without sealing an alert, so a stray call on it fails closed
+and borrows nothing. `giveSecret` zeroes the whole buffer
 whenever `used` is above 0, so a buffer goes back once a connection, not
 once a record: giving all four back after every record, as this stage first
 did, zeroed some 96 KB a request and cut HTTPS/1.1 throughput to 0.37 of
@@ -502,8 +508,10 @@ Evidence:
   reader"). With the four give-backs changed to `give(buf, 0)`, which zeroes
   nothing, that check fails with `4007 4000 4000 4004` bytes held.
 - **Nothing lent once connections end**: `net_tls_record_tcp` ("with every
-  connection ended the record pools have lent nothing: lent() is 0", "and
-  two slots made no more than two buffers of any pool") and `net_tls_memory`
+  connection ended the record pools have lent nothing: lent() is 0", and
+  "over every connection of the run, two slots made two output, scratch and
+  reader buffers and one plain one: the pools only grow to what is borrowed
+  at once", which pins `2 1 2 2`) and `net_tls_memory`
   ("and with every connection ended the record pools have lent nothing:
   lent() is 0", after its thousand over loopback).
 - **Flat after warm-up**: `net_tls_memory`'s thousand connections over
