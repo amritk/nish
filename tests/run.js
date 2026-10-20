@@ -42,7 +42,12 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, HTTP1_SERVER_START_BYTES, HTTP3_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import {
+  budgetLabel,
+  HTTP1_SERVER_START_BYTES,
+  HTTP3_SERVER_START_BYTES,
+  RUNTIME_BUDGETS,
+} from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"

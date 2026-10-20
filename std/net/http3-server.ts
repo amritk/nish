@@ -468,6 +468,8 @@ export class Http3Server {
   slots: i32 = 1
   /** The slots ever accepted into, 0 up: one past it has never held a connection, so is free without being on `free`. */
   used: i32 = 0
+  /** Set by `stop`: a slot built after it is released as it is made, so it holds no keys. */
+  stopped: boolean = false
   /** What is left of the answer budget (see `answerRefilled`). */
   answerBudget: i32 = 0
   /** Counters for a log or a test, saturating: connections accepted, Initials dropped for want of a slot, datagrams past the answer budget, sends that failed. */
@@ -577,6 +579,9 @@ export class Http3Server {
     conn.date = this.date.current()
     this.conns.push(conn)
     this.addresses.push(new Array<u8>(H3_SERVER_ADDRESS))
+    if (this.stopped) {
+      conn.release()
+    }
   }
 
   /** `slot` when it is one of the pool's, built with every slot before it if it was not; 0 when it is out of range. */
@@ -1006,7 +1011,7 @@ export class Http3Server {
   /**
    * Stops the server for good and wipes the keys it holds: every built slot's
    * connection is released (`QuicConnection.release`, which sends nothing),
-   * the listener is released, and the configuration's `statelessResetKey`
+   * as is one built after, by `connection` or `quic`, the listener is released, and the configuration's `statelessResetKey`
    * and `retryTokenKey`, the index's salt, the connections' entropy scratch
    * and the listener's last answer (a Retry's or a reset's token) are
    * zeroed. From then on every datagram is dropped and no connection is
@@ -1019,6 +1024,7 @@ export class Http3Server {
    * anyone can forge.
    */
   stop(): void {
+    this.stopped = true
     for (let slot: i32 = 0; slot < toI32(this.quics.length); slot++) {
       if (this.holds(slot)) {
         this.release(slot)
