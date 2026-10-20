@@ -484,7 +484,9 @@ export class RuntimeTable {
     // One `kill(2)`. A signal is external state, so the call writes, and two
     // of them never fold into one; a program that signals itself with 9 or 15
     // never sees the call return, so no `willreturn`.
-    this.add(mayNotReturn("nish_kill", "declare noundef i32 @nish_kill(i32 noundef, i32 noundef)", EFFECT_WRITE))
+    this.add(
+      mayNotReturn("nish_kill", "declare noundef i32 @nish_kill(i32 noundef, i32 noundef)", EFFECT_WRITE)
+    )
     // A fresh two-element `i32[]` per call, so `noalias` and `nonnull`. Without
     // `WNOHANG` the call waits for a child that may never exit, so no
     // `willreturn`; it reaps the child, which no later call can undo.

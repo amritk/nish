@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1070 programs, 139688 dump lines.
+# 1071 programs, 139705 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -48785,10 +48785,10 @@ module tests/cases/os_spawn.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn_child
-  calls: nish_panic_index nish_print nish_spawn_child nish_str_from_i32 nish_wait_pid
+  calls: nish_kill nish_panic_index nish_print nish_spawn_child nish_str_from_i32 nish_wait_pid
   stackSites=0 stackLocals=0
-  local 6:9 pid: i32 (const)
-  local 9:9 done: i32[] (const)
+  local 8:9 pid: i32 (const)
+  local 12:9 done: i32[] (const)
 program tests/cases/os_wait.ts
 module tests/cases/os_wait.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -86515,6 +86515,24 @@ function runs(program: string): boolean -> @runs [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_is_executable
   calls: nish_is_executable
+  stackSites=0 stackLocals=0
+program docs/cookbook/builtin-process-children.ts
+module docs/cookbook/builtin-process-children.ts (entry)
+function supervise(argv: string[]): i32 -> @supervise [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_spawn_child
+  escaping: argv
+  calls: nish_arena_mark nish_arena_release nish_kill nish_panic_index nish_spawn_child nish_wait_pid
+  pointer argv: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local 7:9 pid: i32 (const)
+function workers(): i32 -> @workers [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_cpu_online
+  stackSites=0 stackLocals=0
+function budget(): i64 -> @budget [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_total_memory
   stackSites=0 stackLocals=0
 program docs/cookbook/builtin-process.ts
 module docs/cookbook/builtin-process.ts (entry)
