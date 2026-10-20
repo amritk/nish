@@ -905,12 +905,6 @@ export class TlsServer {
   /** The secrets under each hash (`TlsSecretPool`); `secrets()` answers the negotiated hash's. */
   secrets256: TlsSecretPool
   secrets384: TlsSecretPool
-  /**
-   * Which of the negotiated pool's secrets the handshake has derived: bit
-   * `1 << TLS_SECRET_*` for each. A secret wiped by `wipeSecret` keeps its
-   * bit, since its place is still the one it was derived into.
-   */
-  held: i32 = 0
   /** The ClientHello last read, as windows into `input`. */
   hello: TlsClientHelloView
   /** Where every HKDF and HMAC of the schedule runs. */
@@ -921,31 +915,6 @@ export class TlsServer {
   serverPublic: u8[]
   /** A transcript hash on its way into the schedule: HashLen bytes of it. */
   hashes: u8[]
-  state: i32 = 0
-  /** The alert the server failed with, or 0. */
-  alert: i32 = 0
-  /** The negotiated cipher suite, or 0 before the first ClientHello is read. */
-  suite: i32 = 0
-  hashLength: i32 = 0
-  inputLength: i32 = 0
-  outputInitialLength: i32 = 0
-  outputHandshakeLength: i32 = 0
-  /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
-  retried: boolean = false
-  /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
-  configFits: boolean = false
-  /** Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. */
-  tickets: boolean = false
-  /**
-   * Whether this connection may be issued a ticket: tickets are on, the
-   * client listed `psk_dhe_ke`, the only mode this server resumes in, and its
-   * server name, if any, fits a ticket.
-   */
-  ticketWanted: boolean = false
-  /** Whether `issue` has run for this connection. */
-  issued: boolean = false
-  /** Whether this connection resumed a ticket (row 1 of the record's table). */
-  resumed: boolean = false
   /**
    * The salt the handshake secret is extracted under, HashLen bytes of it:
    * the `TLS_DERIVED_SALT_*` constant on a full handshake, derived from the
@@ -963,11 +932,42 @@ export class TlsServer {
   ticketScratch: u8[]
   /** What the server has written at the Application level and not handed on: one NewSessionTicket. */
   outputApplication: u8[]
-  outputApplicationLength: i32 = 0
   /** The ticket nonce: one ticket a connection, so one byte, the same each time, keeps each PSK distinct (§4.6.1). */
   ticketNonce: u8[]
   /** The ticket's `ticket_age_add`, drawn fresh for each ticket (§4.6.1). */
   ageAddBytes: u8[]
+  /**
+   * Which of the negotiated pool's secrets the handshake has derived: bit
+   * `1 << TLS_SECRET_*` for each. A secret wiped by `wipeSecret` keeps its
+   * bit, since its place is still the one it was derived into.
+   */
+  held: i32 = 0
+  state: i32 = 0
+  /** The alert the server failed with, or 0. */
+  alert: i32 = 0
+  /** The negotiated cipher suite, or 0 before the first ClientHello is read. */
+  suite: i32 = 0
+  hashLength: i32 = 0
+  inputLength: i32 = 0
+  outputInitialLength: i32 = 0
+  outputHandshakeLength: i32 = 0
+  outputApplicationLength: i32 = 0
+  /** Whether a HelloRetryRequest was sent, so a second miss is fatal. */
+  retried: boolean = false
+  /** Whether `config` passed `tlsConfigFits`, decided once by the constructor. */
+  configFits: boolean = false
+  /** Whether the carrier turned resumption on with `enableTickets`; kept across `restart`. */
+  tickets: boolean = false
+  /**
+   * Whether this connection may be issued a ticket: tickets are on, the
+   * client listed `psk_dhe_ke`, the only mode this server resumes in, and its
+   * server name, if any, fits a ticket.
+   */
+  ticketWanted: boolean = false
+  /** Whether `issue` has run for this connection. */
+  issued: boolean = false
+  /** Whether this connection resumed a ticket (row 1 of the record's table). */
+  resumed: boolean = false
 
   /**
    * A server for one connection under `config`, with the 32-byte server

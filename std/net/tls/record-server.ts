@@ -285,13 +285,13 @@ export class TlsRecordServer {
   pendingHandshakeAt: i32 = 0
   /** How much of `TlsServer`'s Application-level output, a NewSessionTicket, is already in records. */
   pendingApplicationAt: i32 = 0
-  /** The server's flight is signed and finished, so its Handshake-level output may be sealed. */
-  flightReady: boolean = false
   postHandshakeLength: i32 = 0
   /** Records in a row that carried nothing for the caller, against `TLS_RECORD_IDLE_LIMIT`. */
   idleRecords: i32 = 0
   /** KeyUpdates taken from the client, against `TLS_RECORD_MAX_KEY_UPDATES`. */
   keyUpdates: i32 = 0
+  /** The server's flight is signed and finished, so its Handshake-level output may be sealed. */
+  flightReady: boolean = false
   peerClosed: boolean = false
   /** The client's TCP stream ended. Without a `close_notify` before it, that is truncation and the connection failed. */
   ended: boolean = false
