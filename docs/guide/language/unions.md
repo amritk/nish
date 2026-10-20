@@ -61,7 +61,7 @@ type Thing = Point | Line;
 ```
 
 The tag's type is the one member, `readonly kind: Kind.Circle = Kind.Circle`,
-not the whole enum: `readonly kind: Kind = Kind.Circle` is an error (NL2551),
+not the whole enum: `readonly kind: Kind = Kind.Circle` is an error (NL2558),
 because every variant would then share that type and a test of it could not
 tell them apart.
 
@@ -220,9 +220,9 @@ also read the variable through an assignment, as in
 
 An assignment to the variable drops what a test proved, so a read after it
 needs a new test. A narrowing belongs to a variable or a parameter: a test of
-`a.b.kind` does not narrow `a.b`, which is an error (NL2550) — copy it into a
+`a.b.kind` does not narrow `a.b`, which is an error (NL2557) — copy it into a
 `const` and test that. And where TypeScript would type a value `never`,
-because every tag has been tested away, reading it is an error (NL2549).
+because every tag has been tested away, reading it is an error (NL2556).
 
 A comparison the tests above it have already ruled out is an error, as in
 TypeScript: after `if (s.kind === Kind.Circle) { return 1; }`, a second

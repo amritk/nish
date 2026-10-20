@@ -1315,9 +1315,26 @@ export const main = (): i32 => {
 };
 ```
 
-- **A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
-  scalar, a `CPtr` or a copied `string`.** The scalars are the integer and float widths, `boolean`
-  and `void`. An array, class or interface is rejected, in either position.
+- **A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
+  with its count; a return is a scalar, a `CPtr` or a copied `string`.** The
+  scalars are the integer and float widths, `boolean` and `void`. Any other
+  array, a class or an interface is rejected, in either position.
+- **A run of `u8[]` / `readonly u8[]` parameters is followed by exactly one
+  `u64`**, the byte count C may touch in each (`memcpy(dst: u8[], src:
+  readonly u8[], n: u64)`). `readonly` is C's `const`. A run without its count
+  is NL2549, a count that is not `u64` NL2550, `i32[]` NL2551, `u8[] | null`
+  NL2552. Declare `fwrite` as `(buf: readonly u8[], n: u64, one: u64, f: CPtr)`
+  and pass `1` for `one`. A call to a buffer-taking declaration is refused for
+  now (NL2554): the call is not lowered yet.
+
+```ts nish:err NL2549
+declare function SHA256(d: readonly u8[], n: u64, md: u8[]): CPtr;
+
+export const main = (): i32 => {
+  return 0;
+};
+```
+
 - **A `string` parameter is lent for the call.** C gets a NUL-terminated
   `const char *` that it may read until it returns, and may neither keep nor
   write; a C function that does either is declared to take a `CPtr` instead.
@@ -1655,7 +1672,7 @@ export const main = (): i32 => {
   Kind.Circle`. All variants of a union take their tags from one enum, under
   one field name, with different members; a union names at least two. Each
   broken rule has its code (NL2522–NL2527); a tag that is not `readonly` is
-  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2551. Any
+  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2558. Any
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
   (`Shape | null`). An alias may name another union, which is flattened. A
@@ -1672,9 +1689,9 @@ export const main = (): i32 => {
   more variants left still give only the tag; an assignment drops the
   narrowing. Where `a || b` held (or `a && b` failed), the variable is what
   either side proved, `Circle | Square` after two tag tests. A test reads
-  through an assignment: `(t = next()).kind === Kind.Square` narrows `t`. A path does not narrow (`h.s.kind` then `h.s.r` is NL2550): copy
+  through an assignment: `(t = next()).kind === Kind.Square` narrows `t`. A path does not narrow (`h.s.kind` then `h.s.r` is NL2557): copy
   it into a local and test that. A read where every variant was excluded is
-  NL2549.
+  NL2556.
 - The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
   `const k = s.kind` is NL2530. `k` holds only the variants' members. A
   union is read-only, even for a field every variant has (NL2529). Comparing
