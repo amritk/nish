@@ -411,6 +411,12 @@ static int64_t nish_cgroup_cpus(int64_t n) {
 }
 #endif
 
+#ifdef __APPLE__
+/* <sys/sysctl.h> does not compile at the strict feature level this file
+   selects, so the one function is declared by hand, as Darwin's libc has it. */
+int sysctlbyname(const char *, void *, size_t *, void *, size_t);
+#endif
+
 /* The CPUs this program may use: the smallest of the CPUs online, the ones
    this thread may run on (`taskset`, a container's cpuset), the cgroup quota,
    and `NISH_NUM_THREADS` when it is a positive number. The variable can lower
@@ -427,7 +433,14 @@ int64_t nish_cpu_online(void) {
 #ifdef __wasi__
   return 1;
 #else
+#ifdef __APPLE__
+  /* `_SC_NPROCESSORS_ONLN` is hidden on Darwin at this file's feature level. */
+  int got = 0;
+  size_t size = sizeof got;
+  if (sysctlbyname("hw.activecpu", &got, &size, 0, 0) != 0) got = 0;
+#else
   long got = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
   int64_t n = got > 0 ? (int64_t)got : 1;
 #ifdef __linux__
   cpu_set_t set;
@@ -446,12 +459,6 @@ int64_t nish_cpu_online(void) {
   return n;
 #endif
 }
-
-#ifdef __APPLE__
-/* <sys/sysctl.h> does not compile at the strict feature level this file
-   selects, so the one function is declared by hand, as Darwin's libc has it. */
-int sysctlbyname(const char *, void *, size_t *, void *, size_t);
-#endif
 
 /* `totalMemory()`: bytes of physical memory, or -1 when the host does not say.
    The machine's, not a cgroup's limit: what a container may use is a policy
