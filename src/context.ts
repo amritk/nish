@@ -21,7 +21,7 @@ import {
   StructInstantiation,
   TemplateInfo,
 } from "./program"
-import { Scope } from "./symbols"
+import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import { T_ERROR, T_F64, T_I32, TypeTable } from "./types"
 
 /** `number` is `i32` by default and `f64` under `--number-mode f64`. */
@@ -95,6 +95,17 @@ export class CheckContext {
    */
   arrowOuterScopes: Scope[]
   arrowOuterFunctions: FunctionBindings[]
+  /**
+   * A property path an enum test reads — `h.k`, `this.k`, `xs[0].kind` — and
+   * the variable each stands for, so a test narrows what the path holds as it
+   * would a local's (`pathVariable` in `src/expressions.ts`): `pathLocals[i]`
+   * is the path `pathKeys[i]` written from the variable `pathRoots[i]`, and
+   * `thisRoot` stands for `this`.
+   */
+  pathLocals: Local[]
+  pathRoots: Local[]
+  pathKeys: string[]
+  thisRoot: Local
   /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
    * parameter scope, and whether it may read its function's `const` locals:
@@ -208,6 +219,10 @@ export class CheckContext {
     this.functionBindings = new FunctionBindings()
     this.arrowOuterScopes = []
     this.arrowOuterFunctions = []
+    this.pathLocals = []
+    this.pathRoots = []
+    this.pathKeys = []
+    this.thisRoot = new Local("this", T_ERROR, false, STORAGE_PARAM)
     this.arrowFns = []
     this.arrowScopes = []
     this.arrowCaptures = []

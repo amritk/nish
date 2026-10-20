@@ -381,8 +381,8 @@ const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // through left it: an arm's store drops the narrowing from the whole chain,
   // so what held before is kept aside and put back once the arms are checked.
   const assigned: Local[] = []
-  localsAssignedIn(stmt.children[1], scope, assigned)
-  localsAssignedIn(otherwise, scope, assigned)
+  localsAssignedIn(ctx, stmt.children[1], scope, assigned)
+  localsAssignedIn(ctx, otherwise, scope, assigned)
   const before = new Scope(null)
   captureNarrowings(assigned, scope, before)
   const thenScope = scope.child()

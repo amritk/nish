@@ -113,7 +113,7 @@ import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
-import { Local, NARROWED_NONE, STORAGE_PARAM, Scope } from "./symbols"
+import { Local, NARROWED_NONE, STORAGE_LOCAL, STORAGE_PARAM, Scope } from "./symbols"
 import {
   intBits,
   isForeignBuffer,
@@ -241,6 +241,13 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   }
   ctx.program.memberSets[expr.id] = -1
   const computed = computeType(ctx, expr, scope, inner)
+  if (expr.kind === N_MEMBER || expr.kind === N_INDEX) {
+    const path = pathVariable(ctx, expr, scope, computed, false)
+    const held = path === null ? -1 : scope.heldBy(path)
+    if (namesMembers(held)) {
+      ctx.program.memberSets[expr.id] = held
+    }
+  }
   if (refuseInferredTag(ctx, expr, want)) {
     return T_ERROR
   }
@@ -1073,6 +1080,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return ctx.errorType(target, `Cannot assign to \`${local.name}\` because it is a ${what}`)
     }
     scope.clearNarrowing(local)
+    clearPaths(ctx, target, scope)
   }
   return type
 }
@@ -2017,10 +2025,140 @@ const testedRead = (node: Node): Node => {
 export const enumVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
   const read = testedRead(node)
   if (read.kind !== N_IDENT) {
-    return null
+    // A path stands for a variable of its own, which starts out holding what
+    // the read does: a union's tag, the tags of the union's variants.
+    const path = pathVariable(ctx, read, scope, ctx.program.nodeTypes[read.id], true)
+    const set = ctx.program.memberSets[read.id]
+    if (path !== null && scope.heldBy(path) === -1 && namesMembers(set)) {
+      scope.hold(path, set)
+    }
+    return path
   }
   const local = scope.lookup(read.text)
   return local !== null && ctx.table.isEnum(local.type) ? local : null
+}
+
+/**
+ * The key of the property path `node` reads, from the variable it starts at:
+ * `@.s.kind` for `h.s.kind`, `@[0].kind` for `xs[0].kind`, `@` for the
+ * variable itself. `""` when `node` is no such path: an optional chain, an
+ * index other than a number, a call.
+ */
+const pathKey = (node: Node): string => {
+  const read = unwrapParens(node)
+  if (read.kind === N_IDENT || read.kind === N_THIS) {
+    return "@"
+  }
+  if ((read.flags & FLAG_OPTIONAL) !== 0) {
+    return ""
+  }
+  let base = ""
+  if (read.kind === N_MEMBER) {
+    base = pathKey(read.children[0])
+    return base === "" ? "" : `${base}.${read.text}`
+  }
+  if (read.kind === N_INDEX && read.children[1].kind === N_NUMBER) {
+    base = pathKey(read.children[0])
+    return base === "" ? "" : `${base}[${read.children[1].text}]`
+  }
+  return ""
+}
+
+/** The variable a property path starts at: a local, a parameter, `this` as `ctx.thisRoot`, or `null`. */
+const pathRoot = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
+  let read = unwrapParens(node)
+  while (read.kind === N_MEMBER || read.kind === N_INDEX) {
+    read = unwrapParens(read.children[0])
+  }
+  if (read.kind === N_THIS) {
+    return ctx.thisRoot
+  }
+  return read.kind === N_IDENT ? scope.lookup(read.text) : null
+}
+
+/**
+ * The variable the property path `node` stands for when it reads an enum —
+ * `h.k`, `this.k`, `h.s.kind`, `xs[0].kind` — made on its first test
+ * (`create`), so that a test narrows the members the path holds as it does a
+ * local's, and a later comparison the first one decided is refused, as
+ * TypeScript refuses it (TS2367). An assignment to the path, to a path it
+ * extends or to the variable it starts at drops what it held (`clearPaths`);
+ * a call does not, as in TypeScript. `null` for anything else.
+ */
+export const pathVariable = (
+  ctx: CheckContext,
+  node: Node,
+  scope: Scope,
+  type: i32,
+  create: boolean
+): Local | null => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_MEMBER && read.kind !== N_INDEX) {
+    return null
+  }
+  const key = pathKey(read)
+  if (key === "" || !ctx.table.isEnum(type)) {
+    return null
+  }
+  const root = pathRoot(ctx, read, scope)
+  if (root === null) {
+    return null
+  }
+  let i = 0
+  while (i < ctx.pathLocals.length) {
+    if (ctx.pathRoots[i] === root && ctx.pathKeys[i] === key && ctx.pathLocals[i].type === type) {
+      return ctx.pathLocals[i]
+    }
+    i = i + 1
+  }
+  if (!create) {
+    return null
+  }
+  const local = new Local(key, type, true, STORAGE_LOCAL)
+  ctx.pathLocals.push(local)
+  ctx.pathRoots.push(root)
+  ctx.pathKeys.push(key)
+  return local
+}
+
+/**
+ * Drop what every path through `target` held: `target` was assigned, so a
+ * path it is, a path that extends it, and — for a variable — every path that
+ * starts at it no longer holds what a test proved. A target that is no path
+ * clears every path from its variable.
+ */
+export const clearPaths = (ctx: CheckContext, target: Node, scope: Scope): void => {
+  const covered: Local[] = []
+  pathsCovered(ctx, target, scope, covered)
+  for (const path of covered) {
+    scope.clearNarrowing(path)
+  }
+}
+
+/**
+ * Append to `into` every path a store to `target` overwrites: the path itself,
+ * any path through it, and, for a store to the root or through an index that
+ * is not a literal, every path from that root.
+ */
+const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local[]): void => {
+  const root = pathRoot(ctx, target, scope)
+  if (root === null) {
+    return
+  }
+  let prefix = pathKey(target)
+  if (prefix === "") {
+    prefix = "@"
+  }
+  let i = 0
+  while (i < ctx.pathLocals.length) {
+    const key = ctx.pathKeys[i]
+    const covered =
+      prefix === "@" || key === prefix || key.startsWith(`${prefix}.`) || key.startsWith(`${prefix}[`)
+    if (ctx.pathRoots[i] === root && covered) {
+      addLocals(into, [ctx.pathLocals[i]])
+    }
+    i = i + 1
+  }
 }
 
 /** Every member of the enum `enumType` as member types, one per value; none when this module cannot name it. */
@@ -2698,11 +2836,14 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
 
 const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const target = expr.children[0]
-  if (target.kind === N_MEMBER) {
-    return checkMemberAssignment(ctx, expr, scope)
-  }
-  if (target.kind === N_INDEX) {
-    return checkIndexAssignment(ctx, expr, scope)
+  if (target.kind === N_MEMBER || target.kind === N_INDEX) {
+    const stored = target.kind === N_MEMBER ? checkMemberAssignment(ctx, expr, scope) : checkIndexAssignment(ctx, expr, scope)
+    clearPaths(ctx, target, scope)
+    const path = pathVariable(ctx, target, scope, stored, expr.text === "=")
+    if (path !== null && expr.text === "=") {
+      holdMembers(ctx, scope, path, expr.children[1])
+    }
+    return stored
   }
   if (target.kind !== N_IDENT) {
     return ctx.errorType(target, "Only simple variables can be assigned")
@@ -2745,6 +2886,7 @@ export const assignInto = (
     const rhs = checkExpression(ctx, value, scope, slot)
     if (local !== null) {
       scope.clearNarrowing(local)
+      clearPaths(ctx, expr.children[0], scope)
       holdMembers(ctx, scope, local, value)
     }
     if (rhs !== T_ERROR && slot !== T_ERROR && !ctx.table.assignable(rhs, slot)) {
@@ -2768,6 +2910,7 @@ export const assignInto = (
     const bits = checkExpression(ctx, value, scope, operand)
     if (local !== null) {
       scope.clearNarrowing(local)
+      clearPaths(ctx, expr.children[0], scope)
     }
     // The target is read and written without being checked as an expression,
     // so its range is recorded on it here for `rangedStoreOf` to find.
@@ -2800,6 +2943,7 @@ export const assignInto = (
   )
   if (local !== null) {
     scope.clearNarrowing(local)
+    clearPaths(ctx, expr.children[0], scope)
   }
   if (target === T_ERROR || rhs === T_ERROR || slot === T_ERROR) {
     return slot
@@ -3097,16 +3241,17 @@ const checkDirectCall = (
  */
 export const clearNarrowingsAssignedIn = (ctx: CheckContext, node: Node, scope: Scope): void => {
   if (node.kind === N_BINARY && writesLeft(node.text)) {
-    clearTarget(node.children[0], scope)
+    clearTarget(ctx, node.children[0], scope)
   } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
-    clearTarget(node.children[0], scope)
+    clearTarget(ctx, node.children[0], scope)
   }
   for (const child of node.children) {
     clearNarrowingsAssignedIn(ctx, child, scope)
   }
 }
 
-const clearTarget = (target: Node, scope: Scope): void => {
+const clearTarget = (ctx: CheckContext, target: Node, scope: Scope): void => {
+  clearPaths(ctx, target, scope)
   if (target.kind !== N_IDENT) {
     return
   }
@@ -3117,7 +3262,7 @@ const clearTarget = (target: Node, scope: Scope): void => {
 }
 
 /** Append to `into` every local `node` assigns, as `clearNarrowingsAssignedIn` finds them. */
-export const localsAssignedIn = (node: Node, scope: Scope, into: Local[]): void => {
+export const localsAssignedIn = (ctx: CheckContext, node: Node, scope: Scope, into: Local[]): void => {
   let target: Node | null = null
   if (node.kind === N_BINARY && writesLeft(node.text)) {
     target = node.children[0]
@@ -3130,8 +3275,11 @@ export const localsAssignedIn = (node: Node, scope: Scope, into: Local[]): void 
       addLocals(into, [local])
     }
   }
+  if (target !== null) {
+    pathsCovered(ctx, target, scope, into)
+  }
   for (const child of node.children) {
-    localsAssignedIn(child, scope, into)
+    localsAssignedIn(ctx, child, scope, into)
   }
 }
 
@@ -3218,6 +3366,18 @@ const collectWritten = (ctx: CheckContext, node: Node, local: Local, scope: Scop
   if (target !== null && target.kind === N_IDENT) {
     named = scope.lookup(target.text)
   }
+  if (target !== null && !(named !== null && named === local)) {
+    // A store through a path names it only when it is that path: one to a
+    // prefix or the root writes a value this cannot read.
+    const covered: Local[] = []
+    pathsCovered(ctx, target, scope, covered)
+    if (covered.indexOf(local) >= 0) {
+      if (pathKey(target) !== local.name) {
+        return false
+      }
+      named = local
+    }
+  }
   if (named !== null && named === local) {
     let members: i32[] = []
     if (stored !== null) {
@@ -3250,7 +3410,7 @@ const collectWritten = (ctx: CheckContext, node: Node, local: Local, scope: Scop
 export const heldAcross = (ctx: CheckContext, node: Node, scope: Scope): Scope => {
   const held = new Scope(null)
   const assigned: Local[] = []
-  localsAssignedIn(node, scope, assigned)
+  localsAssignedIn(ctx, node, scope, assigned)
   for (const local of assigned) {
     const written: i32[] = []
     if (ctx.table.isEnum(local.type) && collectWritten(ctx, node, local, scope, written)) {
