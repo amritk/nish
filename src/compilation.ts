@@ -171,7 +171,7 @@ import { splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { buildModeOf, hostVisible, isWasmBuild } from "./visibility"
+import { buildModeOf, buildsWasmModule, hostVisible, isWasmBuild } from "./visibility"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
 const SLASH: i32 = 47
@@ -2223,8 +2223,16 @@ export class Compilation {
    * renamed, as an internal or a hidden function is. A `declare function` is
    * the C function itself, a method or an instantiation has a `.` or a `$` in
    * its symbol, and another package's function has its package's prefix.
+   *
+   * In a build whose output becomes a wasm module, the same functions may not
+   * be called `memory` either (#643): `wasm-ld` exports the module's linear
+   * memory under that name, and a module that exports two things named
+   * `memory` is one Node refuses to compile. The linker's other names
+   * (`_start`, `__heap_base`, ...) begin with `_` and are refused above on
+   * every target.
    */
   rejectCLibrarySymbols(): void {
+    const wasmModule = buildsWasmModule(this.opts)
     for (const unit of this.modules) {
       if (unit.packageName !== ROOT_PACKAGE) {
         continue
@@ -2239,16 +2247,25 @@ export class Compilation {
         if (sig.name !== sig.sourceName || (!sig.exported && this.opts.strictExports)) {
           continue
         }
+        const why = sig.exported
+          ? "an exported function of the program's own package keeps its name as its symbol"
+          : "`--no-strict-exports` keeps every function's name as its symbol"
+        const at = nameNode(sig)
+        if (wasmModule && sig.name === "memory") {
+          this.sink.report(
+            unit.source,
+            at.start,
+            at.end,
+            `\`memory\` is the name a wasm module exports its linear memory under: ${why}, so the module would export two things named \`memory\` and no host could load it; rename it`
+          )
+          continue
+        }
         if (!isCReservedSymbol(sig.name)) {
           continue
         }
         const what = isCLibrarySymbol(sig.name)
           ? `is the C library's \`${sig.name}\``
           : reservedPrefixText(sig.name)
-        const why = sig.exported
-          ? "an exported function of the program's own package keeps its name as its symbol"
-          : "`--no-strict-exports` keeps every function's name as its symbol"
-        const at = nameNode(sig)
         this.sink.report(
           unit.source,
           at.start,

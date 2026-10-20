@@ -384,6 +384,24 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
 export const HTTP1_SERVER_START_BYTES = 16896
 
 /**
+ * Ceiling on what `new Http3Server(quicConfig, config, fd, 65536, entropy)` takes from
+ * the arena before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http3_server/startup.ts`,
+ * which builds that pool, the most slots a server takes, on the test configuration
+ * and prints the bytes.
+ *
+ * Measured **17,501,520 bytes** on 2026-10-20 with clang 18 on linux-x64, about 267
+ * bytes a slot: the fixed per-slot tables, some 232 bytes a slot (the connection ID
+ * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
+ * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
+ * bookkeeping, with no slot's connections built. Each slot's QUIC and HTTP/3
+ * connections and address are built on the first Initial accepted into it, 111,424
+ * arena bytes on the same configuration. The budget is the next 256-byte boundary
+ * above the measurement, as every ceiling here was set.
+ */
+export const HTTP3_SERVER_START_BYTES = 17501696
+
+/**
  * Every unit and configuration the gate measures: the source compiled with
  * `clang -Oz <flags> -c`, the ceiling on the sum of its `.text*` sections, and the
  * name of the constant that holds the ceiling, which a failure tells the reader to

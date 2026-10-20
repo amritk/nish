@@ -78,6 +78,15 @@ export class BuildMode {
 export const isWasmBuild = (opts: Options): boolean =>
   opts.profile === "wasi" || opts.target.startsWith("wasm")
 
+/**
+ * Whether the build's output becomes a wasm module, whose linear memory
+ * `wasm-ld` exports as `memory` (#643). A wasm build is one, and so is an
+ * `--emit-dts` compile: its IR is for the host, but the loader it writes is
+ * for the module `scripts/build.sh --profile wasm` links that IR into, and
+ * `isWasmBuild` never hears of that link.
+ */
+export const buildsWasmModule = (opts: Options): boolean => isWasmBuild(opts) || opts.emitDts.length > 0
+
 /** Whether any module of the program declares a C function. */
 const declaresForeign = (programs: CheckedProgram[]): boolean => {
   for (const program of programs) {
