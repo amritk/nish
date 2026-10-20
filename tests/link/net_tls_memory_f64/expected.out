@@ -13,6 +13,9 @@ PASS  an AES-256-GCM-SHA384 handshake works out for the loopback run
 PASS  a thousand connections accepted, handshaken and closed over loopback under AES-256-GCM, every byte the recorded one
 PASS  and after the first Arena.mark() did not move: accept, handshake, signP256's ECDSA signature (9,312 bytes a connection before TlsP256Signer) and close reuse the slot
 PASS  every slot is free again
+PASS  and with every connection ended the record pools have lent nothing: lent() is 0
+PASS  the first connection made one buffer of each of the four pools and the other 999 made none: flat after warm-up
+PASS  a TlsTcpServer with 1,024 slots and no connections has made no buffer in any pool
 PASS  TlsP256Signer: three hundred signatures, each tlsSignEcdsaP256's DER byte for byte
 PASS  across 3 DER lengths
 PASS  and not one sign moved Arena.mark(): a signature keeps 0 bytes
@@ -27,4 +30,4 @@ PASS  tlsTrafficKeysInto refuses a suite it does not negotiate
 PASS  a secret that is not the suite's hash length
 PASS  and a key array of the wrong length
 PASS  a cleartext protection has no next secret to advance to
-tls memory: 29 passed, 0 failed, 0 skipped
+tls memory: 32 passed, 0 failed, 0 skipped
