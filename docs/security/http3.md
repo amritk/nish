@@ -268,10 +268,14 @@ connection — HEADERS and 1,000 bytes of DATA in, a 200 with two fields and
 slot keep 0 bytes for the reset and 0 for everything after each handshake
 (the client's streams, SETTINGS, ten requests, the close), from the second
 on; through the carrier, five connections in one slot keep 0 bytes for each
-handshake and 0 after it, from the second on (`net_http3_server`). The slot itself, made once: HTTP/3 adds 34,112
-bytes of buffers at the defaults (the body chunk, the section, the control
-frame, scratch) and 108 bytes per QUIC stream slot to the QUIC slot's own
-(QUIC-3), plus the decoder's and the field copies' growth to the largest
+handshake and 0 after it, from the second on (`net_http3_server`). The slot itself, made once: HTTP/3 adds 1,344
+bytes of buffers at the defaults (the control frame, scratch) and 108 bytes
+per QUIC stream slot to the QUIC slot's own (QUIC-3); the body chunk and the
+field section, 16,384 bytes each at the defaults, are lent per event from
+pools the carrier shares across its slots (see below), so an idle slot holds
+neither. On the interop server (80 stream slots, 64 KiB of stream credit),
+the resident memory an HTTP/3 slot adds went from 12,462 kB to 254 kB. Add
+the decoder's and the field copies' growth to the largest
 section seen (H3-2).
 
 ## What is and is not wiped
