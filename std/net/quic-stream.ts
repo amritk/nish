@@ -234,8 +234,11 @@ const quicStreamMin = (a: i64, b: i64): i64 => (a < b ? a : b)
  * count, and the reserve three times that long, so a packet that lends
  * nothing and takes back every buffer its connection held still fits. Once
  * warm, the reserve mostly circulates on its own and `prime` costs a handful
- * of comparisons, with no take or give; between packets it holds at most `hold` buffers, the pools'
- * lent count leaves out, for the whole server rather than each connection.
+ * of comparisons, with no take or give. The pools count the reserve's
+ * buffers as lent. `prime` and the `drain` before each give-back outside a
+ * packet trim it to `hold` for the whole server, not each connection, but
+ * `keep` inside a packet can raise it to three times `hold`, and it stays
+ * there until the next `prime` or `drain`.
  */
 export class QuicStreamPools {
   data: BufferPool
@@ -749,9 +752,9 @@ export class QuicStreams {
    * in the same packet can finish a stream, and `release` then raises the
    * limit before a later STREAM frame opens past the old one. A bound that
    * allows for every such release is one buffer per side holding none, which
-   * `idle` already is. Once warm the reserve keeps up to `hold` buffers from
-   * one packet to the next, so this costs a handful of comparisons, not a take
-   * per side.
+   * `idle` already is. Once warm the buffers a packet gives back refill the
+   * reserve for the next one, so this costs a handful of comparisons, not a
+   * take per side.
    */
   prime(bytes: i32): void {
     const pools: QuicStreamPools | null = this.ownPools()
