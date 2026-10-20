@@ -56,14 +56,14 @@
 
 /* Cached, because the answer is not a cheap read: `sysconf` alone was 3.7 us
  * measured here (glibc parses /sys/devices/system/cpu/online), and the affinity
- * mask and the cgroup quota below are more system calls on top -- which
- * `nish_parallel_range` would otherwise pay on every region, including the ones
- * too small to divide, where it was the entire cost. The race between two
- * threads filling it is benign (both compute the same number) but it is still a
- * race, so the word is read and written with relaxed atomic builtins (a plain
- * `int64_t`, since `__atomic_*` does not take an `_Atomic`-qualified pointer):
- * on x86-64 that is a plain load and store and costs nothing, and it is
- * defined behaviour.
+ * mask and the cgroup quota `nish_cpu_online` reads are more system calls on
+ * top -- which `nish_parallel_range` would otherwise pay on every region,
+ * including the ones too small to divide, where it was the entire cost. The
+ * race between two threads filling it is benign (both compute the same number)
+ * but it is still a race, so the word is read and written with relaxed atomic
+ * builtins (a plain `int64_t`, since `__atomic_*` does not take an
+ * `_Atomic`-qualified pointer): on x86-64 that is a plain load and store and
+ * costs nothing, and it is defined behaviour.
  *
  * A machine whose CPU count changes under a running process therefore keeps
  * the count it started with, which is the right trade for a number that
