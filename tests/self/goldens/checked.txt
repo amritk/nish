@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1077 programs, 140065 dump lines.
+# 1078 programs, 140076 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -15837,6 +15837,18 @@ function next(n: i32): i32 -> @next [exported]
   stackSites=0 stackLocals=0
   callee 10:10 helper -> @helper
   callee 10:17 double -> @double
+program tests/cases/export_memory_native.ts
+module tests/cases/export_memory_native.ts (entry)
+function memory(n: i32): i32 -> @memory [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: memory nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 6:18 memory -> @memory
 program tests/cases/export_no_strict.ts
 module tests/cases/export_no_strict.ts (entry)
 function double(n: i32): i32 -> @double [exported]

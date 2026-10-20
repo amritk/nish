@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 684
+export const RULE_COUNT: i32 = 685
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -457,6 +457,8 @@ const diagnosticRules = (): string[] => [
   "NL2167",
   " (it enumerates property names, and object layout is fixed at compile time); use `for...of`",
   "NL1056",
+  ", so the module would export two things named `memory` and no host could load it; rename it",
+  "NL3038",
   "` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ",
   "NL2042",
   "` ends a `?.` chain in `get`: give the map a default first, then default what `get` answers",

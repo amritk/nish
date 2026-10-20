@@ -39,6 +39,9 @@ export class H2Loop {
   /** The first thing that went wrong, or empty. */
   failure: string = "";
   accepted: i32 = 0;
+  /** How far the last `accept` moved the arena, and the slot it took. */
+  acceptGrowth: i64 = 0;
+  acceptSlot: i32 = -1;
   refused: i32 = 0;
   closed: i32 = 0;
   requests: i32 = 0;
@@ -158,8 +161,11 @@ export class H2Loop {
         crypto.getRandomValues(this.randomBuffer);
         crypto.getRandomValues(this.keyBuffer);
       }
+      const before: i64 = Arena.used();
       const slot: i32 = this.server.accept(this.randomBuffer, this.keyBuffer);
       if (slot >= 0) {
+        this.acceptGrowth = Arena.used() - before;
+        this.acceptSlot = slot;
         this.accepted = this.accepted + 1;
         pollAdd(this.loop, this.server.fd(slot), 1, slot);
       } else if (slot === TLS_TCP_POOL_FULL) {
