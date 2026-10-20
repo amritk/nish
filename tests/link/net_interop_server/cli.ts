@@ -96,9 +96,10 @@ export const parseServe = (argv: string[]): ServeArgs => {
  * Runs the server with `key` for `chain` until a signal stops it. The HTTP/2
  * port issues and resumes session tickets under two keys held here, never in
  * a field: the current one seals, both open, and when the current one is due
- * the previous is wiped, the current takes its place and a new one is drawn
- * (docs/security/tls.md, "Ticket keys"). Until the first rotation there is no
- * previous key, and the current one is lent as both.
+ * the previous is wiped, the current takes its place and `rotateTickets`
+ * draws a new one (docs/security/tls.md, "Ticket keys"). Until
+ * the first rotation there is no previous key, and the current one is lent as
+ * both.
  */
 const run = (args: ServeArgs, chain: u8[][], key: Secret<u8[]>): i32 => {
   const server = new InteropServer(args.options, chain);
@@ -126,8 +127,7 @@ const run = (args: ServeArgs, chain: u8[][], key: Secret<u8[]>): i32 => {
         wipe(previous);
       }
       previous = current;
-      server.h2.previousInfo.copyFrom(server.h2.currentInfo);
-      current = tlsTicketKeyDraw(server.h2.currentInfo, now);
+      current = server.h2.rotateTickets(now);
     }
     if (previous === null) {
       server.step(toI32(1000), key, current, current);

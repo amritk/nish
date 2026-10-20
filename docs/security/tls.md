@@ -483,8 +483,19 @@ in-process checks, the HTTP/2 port's tickets among them, over loopback:
 `its ticket resumes the next connection, the server's Finished verified, and a new ticket issued`,
 `the same ticket replayed falls back to a full handshake`,
 `/close on the resumed connection: 200, its body, then GOAWAY`,
-`and the server closes the connection`, and
-`after a rotation, a ticket sealed under the old key resumes under the previous one`.
+`and the server closes the connection`.
+Then two rotation turns, each made by `rotateTickets` in `h2.ts`, the
+function `run`'s own turn calls, after the caller's `wipe` of its previous key:
+`a second full handshake under the first key is issued a ticket`,
+`after one rotation turn, a ticket sealed under the first key resumes under the previous one`,
+`and a full handshake after it is issued a ticket sealed under the second key`,
+`after the second turn, a ticket sealed under the first key falls back to a full handshake`,
+`and one sealed under the second key resumes under the previous one`.
+Every ticket in them comes from a full handshake and is offered once, so the
+second turn's refusal is the retired key's, not the strike register's. That
+the retired key is wiped is not read back at run time: a `Secret` cannot be
+read after its wipe, and the turn cannot leave it unwiped, since `previous`
+cannot be assigned again while it holds an unwiped `Secret` (NL2442).
 The interop job's checks against curl and Chromium are in the paragraph
 below.
 
@@ -522,7 +533,8 @@ after every row instead.
 **Against curl and Chromium** (interop-resume, `.github/workflows/interop.yml`).
 The interop server (`tests/link/net_interop_server`) turns tickets on for its
 HTTP/2 port: `run` in `cli.ts` holds the current and the previous key in
-locals, rotates them as Ticket keys says, and lends both to each `step` (the
+locals, rotates them as Ticket keys says (it wipes the previous key, the
+current one takes its place and `rotateTickets` draws the next), and lends both to each `step` (the
 current one as both until the first rotation); the
 slot's turn calls `TlsTcpServer.resume` on a ticket offer and
 `TlsTcpServer.issue` once the connection is open, and logs `tls: full` or

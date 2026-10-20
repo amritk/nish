@@ -196,13 +196,15 @@ const carrierChecks = (t: Suite): void => {
 /**
  * Session tickets on the HTTP/2 port, as the interop job's curl and Chromium
  * lanes drive them: a full handshake and its ticket, a resumption with it, the
- * same ticket replayed, `/close`, and a ticket sealed before a rotation.
+ * same ticket replayed, `/close`, and tickets sealed under a key across two
+ * rotation turns.
  */
 const resumptionChecks = (t: Suite): void => {
   const options = new InteropOptions();
   options.host = "127.0.0.1";
   options.www = "tests/link/net_interop_server/www";
-  options.slots = n32(4);
+  // One slot for each client below: none closes its connection.
+  options.slots = n32(8);
   const key: Secret<u8[]> = secret(leafPrivate());
   const server = new InteropServer(options, [leafCertificate()]);
   server.h2.enableTickets();
@@ -232,13 +234,25 @@ const resumptionChecks = (t: Suite): void => {
   );
   t.ok("and the server closes the connection", second.closed);
 
-  // One rotation turn, as `run` makes it: the current key's info becomes the previous one's, and a new key is drawn.
-  server.h2.previousInfo.copyFrom(server.h2.currentInfo);
-  const fresh: Secret<u8[]> = tlsTicketKeyDraw(server.h2.currentInfo, monotonicNanos());
-  const rotated = new H2TlsClient(server);
-  t.ok("after a rotation, a ticket sealed under the old key resumes under the previous one", rotated.resume(port, key, replay.ticket, fresh, old) && rotated.resumed && rotated.verified);
-  wipe(fresh);
+  // Two rotation turns, as `run` makes them: wipe the previous key, if any,
+  // then `rotateTickets`. Each ticket below comes from a full handshake and is
+  // offered once, so a refusal is the retired key's and not the strike
+  // register's. `replay`'s and `spare`'s were sealed under the first key.
+  const spare = new H2TlsClient(server);
+  t.ok("a second full handshake under the first key is issued a ticket", spare.resume(port, key, null, old, old) && !spare.resumed && spare.verified && spare.ticket.ok);
+  const kept: Secret<u8[]> = server.h2.rotateTickets(monotonicNanos());
+  const turned = new H2TlsClient(server);
+  t.ok("after one rotation turn, a ticket sealed under the first key resumes under the previous one", turned.resume(port, key, replay.ticket, kept, old) && turned.resumed && turned.verified);
+  const issued = new H2TlsClient(server);
+  t.ok("and a full handshake after it is issued a ticket sealed under the second key", issued.resume(port, key, null, kept, old) && !issued.resumed && issued.verified && issued.ticket.ok);
   wipe(old);
+  const fresh: Secret<u8[]> = server.h2.rotateTickets(monotonicNanos());
+  const retired = new H2TlsClient(server);
+  t.ok("after the second turn, a ticket sealed under the first key falls back to a full handshake", retired.resume(port, key, spare.ticket, fresh, kept) && !retired.resumed && retired.verified);
+  const later = new H2TlsClient(server);
+  t.ok("and one sealed under the second key resumes under the previous one", later.resume(port, key, issued.ticket, fresh, kept) && later.resumed && later.verified);
+  wipe(fresh);
+  wipe(kept);
   wipe(key);
 };
 

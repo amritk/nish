@@ -14,7 +14,7 @@ import { netClose, netLocalPort, pollAdd, pollModify, tcpListen } from "nish:net
 import { TLS_SIGNATURE_ECDSA_SECP256R1_SHA256 } from "nish/net/tls/codec";
 import { TlsServerConfig } from "nish/net/tls";
 import { TLS_RECORD_DONE, TLS_RECORD_SIGN, TLS_RECORD_STATE_OPEN, TLS_RECORD_TICKET } from "nish/net/tls/record-server";
-import { TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketStrikes } from "nish/net/tls/ticket";
+import { TLS_TICKET_STRIKES_DEFAULT, TlsTicketKeyInfo, TlsTicketStrikes, tlsTicketKeyDraw } from "nish/net/tls/ticket";
 import { TLS_TCP_POOL_FULL } from "nish/net/tls-tcp";
 import { httpFieldBytes, httpFieldIs } from "nish/net/http-fields";
 import { H2_AGAIN, H2_DATA, H2_TRAILERS, H2_ERROR, H2_NEED_MORE, H2_REQUEST, H2_WINDOW, Http2Config, Http2Connection } from "nish/net/http2";
@@ -129,6 +129,21 @@ export class InteropH2 {
     this.strikes = new TlsTicketStrikes(TLS_TICKET_STRIKES_DEFAULT);
     this.server.tls.enableTickets();
     this.tickets = true;
+  }
+
+  /**
+   * One rotation turn of the ticket keys `serve` holds (docs/security/tls.md,
+   * "Ticket keys"): makes the current key's record the previous one's and
+   * draws the new current key at `now`, which it answers. The caller, which
+   * owns the keys, wipes its previous key first and then holds its old current
+   * key as the previous one, so a ticket sealed under it opens until the next
+   * turn. The wipe stays with the caller because a `Secret` is wiped by the
+   * function that owns it, and the checker refuses a turn that drops one
+   * unwiped.
+   */
+  rotateTickets(now: i64): Secret<u8[]> {
+    this.previousInfo.copyFrom(this.currentInfo);
+    return tlsTicketKeyDraw(this.currentInfo, now);
   }
 
   /** Accepts every waiting connection into a slot, each with fresh randomness. */
