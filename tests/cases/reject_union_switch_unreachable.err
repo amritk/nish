@@ -1,1 +1,1 @@
-Unreachable code after a `switch` whose clauses all return
+Unreachable code after a `switch` that covers every variant of its union: every path leaves inside it, so the code after it can be deleted

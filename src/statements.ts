@@ -126,7 +126,15 @@ const terminatorName = (stmt: Node): string => {
     case N_IF:
       return "an `if` whose branches all return"
     case N_SWITCH:
-      return "a `switch` whose clauses all return"
+      // With no `default`, a `switch` ends the path only by covering every
+      // variant of a union, which a program written before that rule kept a
+      // trailing `return` for: say that the line can go.
+      for (const clause of stmt.children[1].children) {
+        if (clause.kind === N_DEFAULT) {
+          return "a `switch` whose clauses all return"
+        }
+      }
+      return "a `switch` that covers every variant of its union: every path leaves inside it, so the code after it can be deleted"
     default:
       return "an infinite loop"
   }
