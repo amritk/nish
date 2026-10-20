@@ -100,7 +100,7 @@ Behaviour that belongs to an interface is a top-level function that takes
 it, as `add` does here. An object literal has fields only: no methods, no
 spread, and no computed keys.
 
-A literal can also stand for a class whose members are all fields. A class
+A literal can also stand for a class without methods. A class
 with methods is different: it is made only by `new`. Compiled, a literal
 would get the class's methods, but under Node it is a plain object, and
 calling a method on it throws. So the compiler refuses it with NL2556:
