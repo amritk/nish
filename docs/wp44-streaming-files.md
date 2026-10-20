@@ -63,7 +63,7 @@ function pump(c: Http1Connection, file: i32, size: i64, window: u8[], at: i64): 
   return pos
 }
 
-function main(): void {
+export const main = (): void => {
   const video = fileOpen("public/kyuukurarin.mp4")  // once, at start-up
   if (video < 0) { panic("cannot open the video") }
   const size = fileSize(video)                      // the Content-Length
@@ -139,8 +139,9 @@ part of this package.
   is not `willreturn`). And it reads a character device such as `/dev/null`
   as empty, where `fileOpen` refuses one (§9 Q6).
 - **Errno.** The answer is the negated errno, in Linux's numbering on every
-  platform, as `nish:net` answers (`nish_net_err`, `runtime/runtime-net.c`).
-  The documented set is:
+  platform. `nish:net` does the same for the codes a loop branches on
+  (`nish_net_err`, `runtime/runtime-net.c`). Here a table maps every code in
+  the documented set by name, and folds any other code into `-5`. The set is:
 
   | Value | Meaning |
   | --- | --- |
