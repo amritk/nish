@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1053 programs, 135333 dump lines.
+# 1054 programs, 135361 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -15947,6 +15947,35 @@ function test(): i32 -> @test [exported]
   local 14:9 wide: i64 (const)
   callee 14:16 widen -> @widen
   callee 15:10 pick -> @pick
+program tests/cases/ffi_buffer_declared.ts
+module tests/cases/ffi_buffer_declared.ts (entry)
+function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr -> @memcpy
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer dst: size=0 writesThrough=false captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getentropy(buf: u8[], n: u64): i32 -> @getentropy
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer buf: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): i32 -> @compare
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  pointer a: size=0 writesThrough=false captured=false
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function abs(n: i32): i32 -> @abs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: abs nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  callee 12:18 abs -> @abs
 program tests/cases/ffi_owned_string.ts
 module tests/cases/ffi_owned_string.ts (entry)
 import readCString from "nish:unsafe" -> builtin readCString
