@@ -1239,15 +1239,6 @@ export class QuicConnection {
   phasePending: i64 = -1
   /** The largest DATAGRAM frame the client takes (its `max_datagram_frame_size`), 0 for none. */
   peerMaxDatagramFrame: i64 = 0
-  originalDcidLength: i32 = 0
-  peerScidLength: i32 = 0
-  pathHead: i32 = 0
-  pathCount: i32 = 0
-  state: i32 = 0
-  /** Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. */
-  dropped: i32 = 0
-  /** Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. */
-  keyUpdates: i32 = 0
   /**
    * The AEAD limits this connection keeps (RFC 9001 §6.6): packets one 1-RTT
    * write key seals, and packets that fail to authenticate over the
@@ -1269,6 +1260,16 @@ export class QuicConnection {
   nextSkip: i64 = -1
   skipped: i64[]
   skipsDrawn: i64 = 0
+  originalDcidLength: i32 = 0
+  peerScidLength: i32 = 0
+  pathHead: i32 = 0
+  pathCount: i32 = 0
+  state: i32 = 0
+  /** Packets dropped without closing the connection: unparseable, unauthenticated, duplicated, or for keys not held. */
+  dropped: i32 = 0
+  /** Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. */
+  keyUpdates: i32 = 0
+  /** Where the next skipped packet number goes in `skipped`. */
   skipHead: i32 = 0
   /** Which of the Application Data space's two read slots, and two write slots, hold the current keys. */
   appReadSlot: i32 = 0
