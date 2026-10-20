@@ -1,4 +1,4 @@
-# WP44: Memory for programs that do not exit — regions
+# WP45: Memory for programs that do not exit — regions
 
 **Status: proposed.** Nothing here is built. The anchors below are at
 `c8a00d6`. [LANGUAGE.md](LANGUAGE.md) stays normative; the API in this note is
@@ -17,7 +17,7 @@ frees.
 
 ## 1. The leak, measured
 
-`bench/wp44-memory/sessions.ts` is the server this note is about. One
+`bench/wp45-memory/sessions.ts` is the server this note is about. One
 keep-alive `Http1Connection` is fed `GET /s/<id>` requests in memory. A cache
 holds at most `live` sessions and evicts the oldest; each session holds a
 payload of 16 to 255 bytes. The client asks for ten times as many ids as the
@@ -28,8 +28,8 @@ requests the program prints how many sessions it has made and holds,
 
 ```sh
 npm run build
-build/nish bench/wp44-memory/sessions.ts --link build/wp44/sessions
-build/wp44/sessions 2000000 1000 250000
+build/nish bench/wp45-memory/sessions.ts --link build/wp45/sessions
+build/wp45/sessions 2000000 1000 250000
 ```
 
 | requests | sessions made | held | `Arena.mark()` − first | anonymous resident |
@@ -83,7 +83,8 @@ class Session {
 | `free(r)` | gives the region's chunks back to `malloc`; `r` and every copy of it are dead |
 
 `f` is an arrow or a named function. Like `expose`'s, an arrow captures
-nothing (NL2335), so the root and `arg` are the only ways in.
+nothing (NL2335), so the ways in are the root, `arg` and module state, and the
+rules below follow each of them.
 
 ```ts
 import { Region, enterWith, free, regionWith } from "nish:region"
@@ -133,13 +134,27 @@ this.state[slot] = regionWith(g, sessionFromGrant)   // the host, the player, wh
 free(this.state[slot])
 ```
 
-**The handle is a number.** `Region<T>` lowers to an `i64`: a slot in a
-thread-local table of regions and the slot's generation. `free` bumps the
-generation, so a copy of a freed handle is found stale by `enter`, which
-panics. A slot whose 32-bit generation would wrap is retired rather than
-reused. That one comparison per `enter`, rather than a move-only type, is what
-lets a handle sit in a `Map`, an array or another region's object. The checker
-then has nothing to prove about the handle, only about what `f` does.
+**The handle is a number.** `Region<T>` lowers to an `i64`: a 24-bit slot and
+the slot's 40-bit generation. The slots sit in one process-wide table, made
+lazily a page at a time, and each records the thread that made it, its
+generation and an entered flag. `enter` panics unless all three agree:
+
+- the slot's thread is the caller's, so a handle that reached another thread
+  (through an integer, say) is refused there;
+- the generation matches, so a copy of a freed handle is stale, because
+  `free` bumps it;
+- the slot is not already entered, so `enter(r, …)` inside `r`'s own `f`,
+  directly or through a nested `enter` of another region, panics rather than
+  swapping the region's arena with itself.
+
+A slot whose generation would wrap is retired rather than reused. Taking or
+giving back a slot takes the table's lock, once per `region` and once per
+`free`; `enter` only loads and compares. That check, rather than a move-only
+type, is what lets a handle sit in a `Map`, an array or another region's
+object. The checker then has nothing to prove about the handle, only about
+what `f` does and where the handle travels. The 24-bit slot caps a process at
+16,777,216 live regions; `region` past that panics, as an allocation that
+`malloc` refuses does.
 
 **Checker rules.** Inside `f` the region is the arena, and the rule is the
 `using a = arena()` block's with one change: memory reachable from the root
@@ -151,17 +166,35 @@ callee answers from outside).
 | --- | --- |
 | region memory stored into outer memory, a field, an element or a module-level binding | **NL2556** (new) |
 | outer memory that is not a number, `boolean`, `enum` or string literal stored into region memory: a pass scope could release it while the region still points at it | **NL2557** (new) |
-| `enter`'s `f` answers anything but a number, `boolean` or `enum` (`region`'s answers the root, which is region memory) | **NL2558** (new) |
+| `enter`'s `f` answers anything but a number, `boolean` or `enum` | **NL2558** (new) |
+| `region`'s or `regionWith`'s `f` answers anything but memory it allocated, directly or through a callee that answers fresh memory: `region(() => moduleValue)` and `regionWith(g, (a) => a)` would make outer memory the root, and `enter` would then hand it to `f` as region memory, where NL2557 no longer guards it. NL2423's rule for a `using a = arena()` block's `return`, turned round | **NL2561** (new) |
 | `scope()`, `spawn`, a parallel body or a channel inside `f`, directly or through a callee: another thread allocates from its own arena | **NL2559** (new) |
-| a `Region` handed to a task, a parallel body or a channel | **NL2560** (new) |
+| a value whose type holds a `Region` at any depth (itself, a field, an element, a `Map` key or value) crossing to another thread: a task's argument or its answer, a parallel body's capture, element or result, a value sent on a channel | **NL2560** (new) |
 | `Arena.release` or `Arena.reset` inside `f`, or a callee that reaches either | NL2426, reused |
 | a call the analysis has no facts for | NL2425, reused |
-| `region`, `enter` or `free` in a parallel body | NL2351, reused |
+| `region`, `regionWith`, `enter`, `enterWith` or `free` in a parallel body or a task's function, directly or through a callee | NL2351, reused |
+
+NL2560 is a rule on types, not on values, so a handle hidden in a field of a
+`regionWith` argument, in a callee's answer or in a parallel body's capture is
+caught where it crosses, whatever route brought it there. A handle stored in
+region memory or answered by a callee on the same thread is a number and is
+allowed. The runtime's thread check (above) backs the rule for a handle that
+crosses as a bare integer.
+
+NL2351's message (`arenaMessage` in `src/parallel.ts`) gains the five names:
+"a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or
+`Arena.reset`, open a `using a = arena()` block, or call `region`,
+`regionWith`, `enter`, `enterWith` or `free`". A spawned task's function
+reaches the same message, because `src/compilation.ts` checks a `spawn`'s
+callee through `arenaMessage` as it does a parallel body; the facts gain one
+bit, `usesRegion`, set by the five calls and folded through callees as
+`usesArenaControl` is.
 
 `using a = arena()` inside `f` is allowed: it marks and releases inside the
 region, with NL2416–NL2427 as they stand. The automatic pass scopes do the
 same. `enter` of a second region inside `f` is allowed too, because only
-numbers come out of it. `free(r)` while `r` is entered panics.
+numbers come out of it. `enter` or `enterWith` of a region already entered
+panics, as above, and so does `free(r)` while `r` is entered.
 
 **The three shapes.**
 
@@ -179,8 +212,8 @@ numbers come out of it. `free(r)` while `r` is entered panics.
   refused the same way.
 
 **Runtime and ABI.** A new unit, `runtime/runtime-region.c`, holds the
-thread-local table. Each slot is a `struct nish_arena`, a generation, an
-entered flag and the size of its next chunk. `nish_region_enter` swaps the
+process-wide table. Each slot is a `struct nish_arena`, the thread that made
+it, a generation, an entered flag and the size of its next chunk. `nish_region_enter` swaps the
 thread's `nish_arena` with the slot's, and `nish_region_leave` swaps it back:
 two 32-byte copies. The arena's layout, its 32 bytes and its `_Static_assert`s
 do not change.
@@ -226,7 +259,7 @@ class Cache {
 The relay would evacuate its session arena on a timer.
 
 **Checker rules.** `evacuate` is sound only if the root is the only way into
-the arena. Proving that is the region's rule from §2.1: NL2556–NL2560 again,
+the arena. Proving that is the region's rule from §2.1: NL2556–NL2561 again,
 plus a copy whose cost scales with the live set.
 
 **The three shapes** are covered exactly as for regions, because it is a
@@ -260,7 +293,7 @@ constructor allocates. That makes `rcWith` the same call as `regionWith`, and
 `Rc<T>` the same thing as a region with a count.
 
 **Checker rules.** On every value: none new, but every pointer store and every
-scope exit changes code. For `Rc<T>`: NL2556–NL2560 as for regions, plus a
+scope exit changes code. For `Rc<T>`: NL2556–NL2561 as for regions, plus a
 code for a box handed to another thread unless its count is atomic.
 
 **The three shapes.** On every value they need no rule: a constructor's stores
@@ -298,11 +331,12 @@ reset.
 the region (§2.1). A `scope()` inside `f` is refused (NL2559): its tasks would
 allocate from their own threads' arenas and answer into the region.
 
-**Spawn and parallel bodies.** The table is thread-local, like the arena. A
-handle handed to another thread is refused (NL2560). A handle smuggled
-through an integer is found stale there, because its slot index or generation
-does not match, and `enter` panics. A parallel body may not call `region`,
-`enter` or `free` (NL2351).
+**Spawn and parallel bodies.** A region belongs to the thread that made it,
+like the arena it swaps. A value whose type holds a handle is refused where it
+would cross to another thread (NL2560). A handle smuggled through an integer
+reaches a slot whose recorded thread is not the caller's, and `enter` panics.
+A parallel body or a task's function may not call `region`, `regionWith`,
+`enter`, `enterWith` or `free` (NL2351).
 
 **wasm32 and wasi.** `malloc` and `free` are wasi-libc's, so a freed region's
 chunks are reused by the next one. Linear memory never shrinks, so the peak
@@ -314,7 +348,7 @@ IR, so `runtime-region.c` goes into its link as `runtime.c` does (CLAUDE.md,
 
 ## 4. The options, measured
 
-`bench/wp44-memory/options.c` holds the same cache as §1 in C, once per option,
+`bench/wp45-memory/options.c` holds the same cache as §1 in C, once per option,
 linked against `runtime/runtime.c` so the arena variants use today's
 `nish_alloc_struct`.
 
@@ -329,13 +363,13 @@ linked against `runtime/runtime.c` so the arena variants use today's
 | `ca` | `c` with atomic counts |
 | `g` | counting everything: session and payload counted apart, the response `malloc`'d, a retain and a release per field read |
 
-`bench/wp44-memory/rc-tax.c` measures the tax that counting puts on code that
+`bench/wp45-memory/rc-tax.c` measures the tax that counting puts on code that
 only reads: a random walk over `n` arena objects, plain, with an inline
 count, with a call per retain and release (`call`, as a compiler that does
 not inline its runtime would emit), and with atomic counts.
 
 ```sh
-npm run build && node bench/wp44-memory/run.mjs --rounds 9
+npm run build && node bench/wp45-memory/run.mjs --rounds 9
 ```
 
 Each round runs every variant once, in a fresh process, in an order rotated by
@@ -443,9 +477,9 @@ the arena's ABI as it is.
 
 | Stage | What | Files | Negative tests | `src/` may use it from |
 | --- | --- | --- | --- | --- |
-| 1 | The runtime. The region table, `nish_region_new`/`_enter`/`_leave`/`_free`, the generation check, the region chunk size. A C test that frees a hundred thousand regions and reads RSS flat. | `runtime/runtime-region.c` (new; paired in `scripts/build.sh`'s `halves` and `src/run-cache.ts`'s `runtimeUnits()` in one commit), `runtime/runtime.c` (`nish_arena_grow`), `scripts/build.sh --profile wasm`'s link | a stale handle panics; `free` of an entered region panics; a handle from another thread panics | — (no construct) |
-| 2 | The language. `nish:region` with NL2556–NL2560, its lowering, the guide page, `docs/LANGUAGE.md`'s section, and the cookbook entry. | `src/` (the builtin module, the checker rule beside `src/escape.ts`'s arena rule, codegen), `src/runtime.ts` and the cookbook's runtime prelude (`docs/cookbook/regen.sh`), `runtime/nish.d.ts`, `runtime/nish.mjs`, `std/region.ts` if it carries source like `nish:secret`, `tests/cases/`, `docs/guide/` | one per code, plus the three shapes: a constructor reached by `new` that stores `this` into module state; `using` of `region()` as each declarator; `h.l = this` with `h` the `arg`; then a negative golden after `churn()` for each element type the rule leaves out (CLAUDE.md, #520) | the first release cut after stage 2 merges (0.19.0 at the earliest, against today's 0.18.0 seed) |
-| 3 | The proof. The §1 server rewritten with regions, as a `tests/link` soak that reads `Arena.mark()` and anonymous resident memory flat across 2,000,000 requests, and WP34 N9's game-server note closed. | `bench/wp44-memory/`, `tests/link/`, `docs/wp34-hosting-cs.md` | — | — |
+| 1 | The runtime. The region table, `nish_region_new`/`_enter`/`_leave`/`_free`, the thread, generation and entered checks, the region chunk size. A C test that frees a hundred thousand regions and reads RSS flat. | `runtime/runtime-region.c` (new; paired in `scripts/build.sh`'s `halves` and `src/run-cache.ts`'s `runtimeUnits()` in one commit), `runtime/runtime.c` (`nish_arena_grow`), `scripts/build.sh --profile wasm`'s link, `tests/runtime-budgets.js`: a ceiling row for the new unit, and `RUNTIME_TEXT_BUDGET` (3,684 B) and `RUNTIME_THREADS_TEXT_BUDGET` (3,885 B) raised by what the chunk-size read adds to `nish_arena_grow`, since both measure exactly at their ceilings today | a stale handle panics; `free` of an entered region panics; `enter` and `enterWith` of a region already entered panic, directly and through a nested `enter`; a handle from another thread panics | — (no construct) |
+| 2 | The language. `nish:region` with NL2556–NL2561 and NL2351's wider message, its lowering, the guide page, `docs/LANGUAGE.md`'s section, and the cookbook entry. | `src/` (the builtin module, the checker rule beside `src/escape.ts`'s arena rule, `src/parallel.ts`'s `arenaMessage`, codegen), `src/runtime.ts` and the cookbook's runtime prelude (`docs/cookbook/regen.sh`), `runtime/nish.d.ts`, `runtime/nish.mjs`, `std/region.ts` if it carries source like `nish:secret`, `tests/cases/` with the differential goldens (`node tests/differential/goldens.js --update`), `tests/self/goldens/checked.txt` and `checked-self.txt` (`node tests/self/goldens.js --update`), `docs/LANGUAGE.md`, `docs/guide/` | one per code, plus the three shapes: a constructor reached by `new` that stores `this` into module state; `using` of `region()` as each declarator; `h.l = this` with `h` the `arg`; NL2561's `region(() => moduleValue)` and `regionWith(g, (a) => a)`; NL2560's handle in a field of a task's argument, in a task's answer, in a `Map` sent on a channel and in a parallel body's capture; NL2351's `enter` in a spawned function and through a callee of a parallel body; then a negative golden after `churn()` for each element type the rule leaves out (CLAUDE.md, #520) | the first release cut after stage 2 merges (0.19.0 at the earliest, against today's 0.18.0 seed) |
+| 3 | The proof. The §1 server rewritten with regions, as a `tests/link` soak that reads `Arena.mark()` and anonymous resident memory flat across 2,000,000 requests, and WP34 N9's game-server note closed. | `bench/wp45-memory/`, `tests/link/`, `docs/wp34-hosting-cs.md` | — | — |
 
 The compiler itself has no long-lived state and does not need regions; the
 column says only when the rolling freeze would allow it.

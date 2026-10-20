@@ -1,4 +1,4 @@
-/* WP44's option prototypes: the session cache of `sessions.ts` (a table of
+/* WP45's option prototypes: the session cache of `sessions.ts` (a table of
    sessions keyed by client id, a payload of 16 to 255 bytes each, the oldest
    evicted once `live` are held, ids drawn from `spread` times that many
    clients: 10 by default, so nine requests in ten make a session)
@@ -8,12 +8,15 @@
    counted value of its own.
 
      a   today: sessions bumped from the process arena, never given back
-     a2  a byte-identical copy of `a`, timed beside it for the noise band
+     a2  `a` again: the same functions compiled a second time under other
+         names and picked at run time, timed beside `a` for the noise band
      r   regions: each session in a region of its own, entered by swapping
          the thread's `nish_arena`, freed whole on eviction (64 KiB chunks,
          nish_arena_grow's policy)
      rs  regions as `r`, with a region's first chunk sized to its first
-         request (a runtime change: the minimum chunk becomes per region)
+         request (a runtime change: the minimum chunk becomes per region),
+         allocated without the swap; neither `r` nor `rs` models the handle
+         table's lookup and generation check, a load and a compare per enter
      s   safe reset: sessions in one of two arenas; once the current one has
          bumped 2x the live bytes since the last flip, the live sessions are
          copied into the other and the old one is freed
@@ -22,11 +25,19 @@
      ca  as `c`, with the count atomic (a box shared across threads)
      g   counts on every heap value: the session and its payload counted
          apart, the request's response malloc'd and released rather than
-         bumped, and a retain/release for each field read of a reference
+         bumped, and one retain/release per reference the request path loads
+         (the session from the table, the payload from the session): a lower
+         bound, since a compiler that cannot prove a field read safe counts
+         that too
+
+   Only `r` and `rs` carry a region's arena, in an `rsession` around the
+   session, so every other variant's session is the 40 bytes it needs.
 
    Prints the time per request, under `s` the flips and the longest one in
-   nanoseconds, the anonymous resident set and the address
-   space at the end (statm's resident less shared, and its size), and a checksum folded from every response, which every variant must agree on.
+   nanoseconds, the anonymous resident set and the address space at exit
+   (statm's resident less shared, and its size), the peak resident set
+   (status's VmHWM), and a checksum folded from every response, which every
+   variant must agree on.
 
      cc -O2 options.c runtime.o -o options && ./options <variant> <requests> <live> [spread] */
 #include <stdatomic.h>
@@ -48,8 +59,12 @@ typedef struct session {
   int64_t rc;
   uint32_t len;
   uint8_t *payload;
-  struct nish_arena region; /* the region's arena, `r` and `rs` only */
 } session;
+/* `r` and `rs`: the session first, so a session pointer is the rsession's */
+typedef struct rsession {
+  session s;
+  struct nish_arena region;
+} rsession;
 
 static session **table;
 static uint64_t mask;
@@ -130,16 +145,18 @@ static void *region_alloc(struct nish_arena *r, uint64_t size) {
 static session *r_make(int64_t id) {
   struct nish_arena r = { 0, 0, 0, 0 };
   uint32_t len = size_of(id);
-  if (region_first) region_first = (sizeof(session) + len + 7) & ~(uint64_t)7;
-  session *s = region_alloc(&r, sizeof *s);
+  if (region_first) region_first = (sizeof(rsession) + len + 7) & ~(uint64_t)7;
+  rsession *rs = region_alloc(&r, sizeof *rs);
+  session *s = &rs->s;
   s->len = len;
   s->payload = region_alloc(&r, len);
-  s->region = r;
+  rs->region = r;
   fill(s, id);
   return s;
 }
 static void r_drop(session *s) {
-  struct nish_chunk *c = s->region.chunks;
+  /* the arena lives in its own region: the chunk list is read before freeing */
+  struct nish_chunk *c = ((rsession *)s)->region.chunks;
   while (c) { struct nish_chunk *n = c->next; free(c); c = n; }
 }
 
@@ -232,6 +249,16 @@ static void read_statm(void) {
   if (!f || fscanf(f, "%ld %ld %ld", &statm[0], &statm[1], &statm[2]) != 3) statm[0] = statm[1] = statm[2] = -1;
   if (f) fclose(f);
 }
+/* The peak resident set in bytes, from /proc/self/status's VmHWM (kB). */
+static long read_peak(void) {
+  FILE *f = fopen("/proc/self/status", "r");
+  char line[256];
+  long kb = -1;
+  while (f && fgets(line, sizeof line, f))
+    if (!strncmp(line, "VmHWM:", 6)) kb = atol(line + 6);
+  if (f) fclose(f);
+  return kb < 0 ? -1 : kb * 1024;
+}
 
 int main(int argc, char **argv) {
   if (argc < 4) { fprintf(stderr, "usage: options <variant> <requests> <live> [spread]\n"); return 2; }
@@ -287,7 +314,7 @@ int main(int argc, char **argv) {
       held++;
     }
     /* the handler holds the session for the request */
-    if (kind == 'c') s->rc++;
+    if (kind == 'c' && !atomic) s->rc++;
     if (kind == 'g') { s->rc++; g_box(s->payload)->rc++; }
     if (atomic) atomic_fetch_add_explicit((_Atomic int64_t *)&s->rc, 1, memory_order_relaxed);
     s->hits++;
@@ -298,13 +325,14 @@ int main(int argc, char **argv) {
       g_release(s);
       free(out);
     }
-    if (kind == 'c') c_release(s);
+    if (kind == 'c' && !atomic) c_release(s);
     if (atomic) ca_release(s);
   }
   clock_gettime(CLOCK_MONOTONIC, &t1);
   double ns = ((double)(t1.tv_sec - t0.tv_sec) * 1e9 + (double)(t1.tv_nsec - t0.tv_nsec)) / (double)requests;
   read_statm();
-  printf("%s ns/request %.1f anon %ld size %ld", v, ns, (statm[1] - statm[2]) * 4096, statm[0] * 4096);
+  printf("%s ns/request %.1f anon %ld size %ld peak %ld", v, ns, (statm[1] - statm[2]) * 4096, statm[0] * 4096,
+         read_peak());
   if (kind == 's') printf(" flips %llu longest %.0f", (unsigned long long)flips, longest_flip);
   printf(" checksum %llu\n", (unsigned long long)checksum);
   return 0;

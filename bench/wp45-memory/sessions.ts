@@ -1,4 +1,4 @@
-// WP44's baseline: an HTTP/1.1 server whose long-lived state has no size known
+// WP45's baseline: an HTTP/1.1 server whose long-lived state has no size known
 // at start-up. One keep-alive `Http1Connection` is fed `GET /s/<id>` requests
 // in memory; the handler keeps a session per client id in a `Map`, each with
 // a payload of 16 to 255 bytes, and evicts the oldest once `live` are held, so
@@ -8,8 +8,8 @@
 // process's arena, and an evicted one is never given back: the figures grow
 // with the sessions ever made, not with the live set.
 //
-//   build/nish bench/wp44-memory/sessions.ts --link build/wp44/sessions
-//   build/wp44/sessions <requests> <live> <every>
+//   build/nish bench/wp45-memory/sessions.ts --link build/wp45/sessions
+//   build/wp45/sessions <requests> <live> <every>
 import { readFileSyncOrNull } from "nish:fs"
 import { spawnSyncTo } from "nish:process"
 import { H1_END, H1_NEED_MORE, H1_REQUEST, Http1Config, Http1Connection } from "nish/net/http1-server"
@@ -91,7 +91,7 @@ export const main = (): i32 => {
   const live: i32 = process.argv.length > 2 ? toI32(Number(process.argv[2])) : 1000
   const every: i64 = process.argv.length > 3 ? toI64(Number(process.argv[3])) : 100000
   const argv: string[] = ["sh", "-c", "cat /proc/$PPID/statm"]
-  const scratch: string = "/tmp/wp44-sessions.statm"
+  const scratch: string = "/tmp/wp45-sessions.statm"
   const pages: i64[] = [0, 0, 0]
   const cache: Cache = new Cache(live)
   const conn: Http1Connection = new Http1Connection(new Http1Config())

@@ -2,8 +2,9 @@
    a walk over `n` arena objects, each step a reference loaded from an array
    and a field read through it, which is what most Nish code does. `plain` is
    today's load; `rc` adds the retain and release a counted reference makes
-   when it is copied into a local and dropped, inlined, where the optimiser
-   may fold the pair; `call` makes them calls into the runtime, as Swift's
+   when it is copied into a local and dropped, inlined: at -O2 the optimiser
+   folds the increment and decrement away and keeps only the zero test, so
+   `rc` is what is left when a compiler sees both ends of the pair; `call` makes them calls into the runtime, as Swift's
    swift_retain/swift_release are; `atomic` makes them atomic, as values that
    may cross threads need. The index changes every step and the
    fields read fold into a printed checksum.

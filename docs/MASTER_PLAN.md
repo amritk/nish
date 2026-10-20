@@ -26,7 +26,7 @@ Targets, in priority order:
    `-O3` loop/math speed, zero-cost abstractions, LTO and dead-stripping.
 3. **Zero-GC memory.** Arena/bump allocation by default, explicit reset,
    optional reference counting only for objects that must outlive an arena
-   ([wp44](wp44-long-running-memory.md) weighs it against regions).
+   ([wp45](wp45-long-running-memory.md) weighs it against regions).
 4. **Node/npm interop in one direction only.** Nish exports `.wasm` /
    native addons that Node imports. Nish never embeds a JS engine.
 
@@ -261,7 +261,7 @@ is its plan. [README.md](README.md) indexes them.
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
 | 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; stage 1, the router, built | [wp43](wp43-http-app-layer.md) |
 | 44 | Streaming file reads: a descriptor, a positional read, a size and a close | proposed; design only, open questions for the owner | [wp44](wp44-streaming-files.md) |
-| 44 | Memory for programs that do not exit: regions | proposed | [wp44](wp44-long-running-memory.md) |
+| 45 | Memory for programs that do not exit: regions | proposed | [wp45](wp45-long-running-memory.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
