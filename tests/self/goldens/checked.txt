@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1076 programs, 140029 dump lines.
+# 1076 programs, 140032 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -47768,18 +47768,21 @@ const MS: i64 = 1000000
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_create
-  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_address nish_net_close nish_net_local_port nish_net_shutdown nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_create nish_poll_modify nish_poll_remove nish_poll_wait nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to
-  stackSites=5 stackLocals=5
-  local 14:9 loop: i32 (const)
-  local 15:9 a: i32 (const)
-  local 16:9 b: i32 (const)
-  local 18:9 ready: i32[] (const)
-  local 19:9 pair: i32[] (const)
-  local 20:9 none: i32[] (const)
-  local 24:9 started: i64 (const)
-  local 26:9 waited: i64 (const)
-  local 30:9 toA: u8[] (const)
-  local 32:9 data: u8[] (const)
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_address nish_net_close nish_net_local_port nish_net_shutdown nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_create nish_poll_modify nish_poll_remove nish_poll_wait nish_print nish_str_concat nish_str_from_i32 nish_tcp_connect nish_tcp_listen nish_udp_bind nish_udp_send_to
+  stackSites=6 stackLocals=6
+  local 16:9 loop: i32 (const)
+  local 17:9 a: i32 (const)
+  local 18:9 b: i32 (const)
+  local 20:9 ready: i32[] (const)
+  local 21:9 pair: i32[] (const)
+  local 22:9 none: i32[] (const)
+  local 26:9 started: i64 (const)
+  local 28:9 waited: i64 (const)
+  local 32:9 toA: u8[] (const)
+  local 34:9 data: u8[] (const)
+  local 53:9 listener: i32 (const)
+  local 54:9 toL: u8[] (const)
+  local 56:9 c: i32 (const)
 program tests/cases/net_loop_two.ts
 module tests/cases/net_loop_two.ts (entry)
 import netClose from "nish:net" -> builtin netClose

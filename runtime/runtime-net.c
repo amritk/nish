@@ -512,11 +512,15 @@ static int nish_poll_change(int32_t loop, int32_t fd, int filter, int flags, int
 
 /* Add, modify or remove `fd` in `loop`. epoll does each in one call, with
    the token in `data.u32`. kqueue has a filter per direction rather than a
-   set of events, so a change is the filters deleted and then the ones asked
-   for added, each carrying the token in `udata`. Deleting a filter that was
-   never added is not an error, except to a removal that finds neither, which
-   answers epoll's ENOENT; a modification adds what it asks for either way, so
-   a descriptor added watching nothing, which has no filter, can be modified. */
+   set of events, so the answers epoll gives are built from filters: a
+   descriptor in the loop has at least one, a disabled read filter standing for
+   one added watching nothing; an add first touches both filters with no flags,
+   which answers ENOENT for a filter not there, and is EEXIST when either is;
+   a modification or a removal deletes both, and is ENOENT when neither was
+   there; a modification then adds the ones asked for, each carrying the token
+   in `udata`. A touch rewrites the filter's `udata`, so the add that answers
+   -17 leaves the descriptor watched for its old events under the token it
+   gave rather than the old one. */
 static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, int32_t token) {
   if ((uint32_t)events > 3) return -22;
 #if defined(__linux__)
@@ -526,14 +530,22 @@ static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, i
   e.data.u32 = (uint32_t)token;
   return epoll_ctl(loop, op, fd, &e) != 0 ? nish_net_fail() : 0;
 #else
-  int e = 0;
-  if (op != NISH_POLL_ADD) {
-    int r = nish_poll_change(loop, fd, EVFILT_READ, EV_DELETE, 0);
-    int w = nish_poll_change(loop, fd, EVFILT_WRITE, EV_DELETE, 0);
-    if (op == NISH_POLL_REMOVE) return r != 0 && w != 0 ? nish_net_err(r) : 0;
+  int r, w;
+  if (op == NISH_POLL_ADD) {
+    r = nish_poll_change(loop, fd, EVFILT_READ, 0, token);
+    w = r == ENOENT ? nish_poll_change(loop, fd, EVFILT_WRITE, 0, token) : r;
+    if (r == 0 || w == 0) return -17;
+    if (w != ENOENT) return nish_net_err(w);
+  } else {
+    r = nish_poll_change(loop, fd, EVFILT_READ, EV_DELETE, 0);
+    w = nish_poll_change(loop, fd, EVFILT_WRITE, EV_DELETE, 0);
+    if (r != 0 && w != 0) return nish_net_err(r);
+    if (op == NISH_POLL_REMOVE) return 0;
   }
+  int e = 0;
   if (events & 1) e = nish_poll_change(loop, fd, EVFILT_READ, EV_ADD | EV_ENABLE, token);
   if (e == 0 && (events & 2)) e = nish_poll_change(loop, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, token);
+  if (events == 0) e = nish_poll_change(loop, fd, EVFILT_READ, EV_ADD | EV_DISABLE, token);
   return e != 0 ? nish_net_err(e) : 0;
 #endif
 }
@@ -558,8 +570,7 @@ int32_t nish_poll_remove(int32_t loop, int32_t fd) { return nish_poll_ctl(loop, 
    `NISH_POLL_CHUNK`. A signal that interrupts the wait answers 0, as a
    timeout does, rather than waiting again past the deadline; the program's
    loop comes round and, if it watches `signalFd()`, finds the signal ready.
-   On Darwin a descriptor both readable and writable is two pairs with the
-   same token, one per filter. A `ready` shorter than 2 is -22. */
+   A `ready` shorter than 2 is -22. */
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   uint64_t room = ready->len / 2;
   if (room == 0) return -22;
@@ -569,22 +580,37 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   struct epoll_event e[NISH_POLL_CHUNK];
   /* epoll waits forever for any negative timeout, as the language does. */
   int n = epoll_wait(loop, e, max, timeout_ms);
-#else
-  struct kevent e[NISH_POLL_CHUNK];
-  struct timespec t = {timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000000};
-  int n = kevent(loop, NULL, 0, e, max, timeout_ms < 0 ? NULL : &t);
-#endif
   if (n < 0) return errno == EINTR ? 0 : nish_net_fail();
   for (int i = 0; i < n; i++) {
-#if defined(__linux__)
     uint32_t got = e[i].events;
     out[2 * i] = (int32_t)e[i].data.u32;
     out[2 * i + 1] = ((got & EPOLLIN) ? 1 : 0) | ((got & EPOLLOUT) ? 2 : 0) | ((got & (EPOLLHUP | EPOLLERR)) ? 4 : 0);
-#else
-    out[2 * i] = (int32_t)(intptr_t)e[i].udata;
-    out[2 * i + 1] = (e[i].filter == EVFILT_READ ? 1 : 2) | ((e[i].flags & (EV_EOF | EV_ERROR)) ? 4 : 0);
-#endif
   }
   return n;
+#else
+  /* A record per filter, so a descriptor ready both ways is two, folded here
+     into one pair as epoll's one event is. Twice the room is asked for, so a
+     full `ready` is not cut short by the folding; a descriptor that finds no
+     pair free is still ready at the next wait. */
+  struct kevent e[NISH_POLL_CHUNK];
+  struct timespec t = {timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000000};
+  int got = kevent(loop, NULL, 0, e, 2 * max < NISH_POLL_CHUNK ? 2 * max : NISH_POLL_CHUNK, timeout_ms < 0 ? NULL : &t);
+  if (got < 0) return errno == EINTR ? 0 : nish_net_fail();
+  int n = 0;
+  for (int i = 0; i < got; i++) {
+    int32_t bits = (e[i].filter == EVFILT_READ ? 1 : 2) | ((e[i].flags & (EV_EOF | EV_ERROR)) ? 4 : 0);
+    int k = 0;
+    while (k < n && e[k].ident != e[i].ident) k++;
+    if (k == n) {
+      if (n == max) continue;
+      e[n] = e[i];
+      out[2 * n] = (int32_t)(intptr_t)e[i].udata;
+      out[2 * n + 1] = 0;
+      n++;
+    }
+    out[2 * k + 1] |= bits;
+  }
+  return n;
+#endif
 }
 #endif

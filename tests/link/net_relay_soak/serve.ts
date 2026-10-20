@@ -3,16 +3,17 @@
 // `total` sessions have been closed by their clients, and writes a line to
 // `report` every `every` of them and at the end: the arena's bump position and its offset
 // in the current chunk (`Arena.mark`, `Arena.used`), and the resident set
-// from /proc/self/statm, its anonymous and its file-backed parts apart.
+// from /proc/<pid>/statm, its anonymous and its file-backed parts apart (`ps`'s
+// whole set where there is no /proc, Darwin).
 import { appendFileSync, readFileSyncOrNull, writeFileSync } from "nish:fs";
-import { netLocalPort, udpBind } from "nish:net";
+import { netLocalPort } from "nish:net";
 import { monotonicNanos, spawnSyncTo } from "nish:process";
 import { Secret, secret, wipe } from "nish:secret";
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 import { Relay, RelayConfig } from "../../../examples/relay/relay";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
-import { RIG_WALL, rigRelay } from "../net_relay/rig";
+import { RIG_WALL, rigRelay, rigRelaySocket } from "../net_relay/rig";
 import { SECRET } from "../net_relay/grants";
 import { bytesOf } from "../crypto_x509/hex";
 
@@ -23,13 +24,23 @@ export const SOAK_SESSIONS: i32 = 64;
 const SOAK_STALL_MS: i64 = 30000;
 
 /**
- * Reads this process's /proc/<pid>/statm into `pages`, one field each (pages
- * of 4 KiB): `size`, `resident`, then `shared`, the resident pages a file
- * backs, as many as `pages` holds. Answers whether it read them all. Read
- * through `cat`, run by a shell whose parent is this process: procfs reports
- * a size of 0, which a read sized by `stat` takes at its word. `argv` is
- * `SOAK_STATM`'s and `pages` is the caller's, both made once, so that a
- * checkpoint can release all it allocates.
+ * The shell that prints this process's resident set as /proc/<pid>/statm's
+ * first three fields, in pages of 4 KiB: `size`, `resident`, then `shared`,
+ * the resident pages a file backs. Run with this process as its parent. Where
+ * there is no /proc (Darwin), `ps`'s resident set in KiB, as 4 KiB pages, with
+ * a size and a `shared` of 0: Darwin does not split the set by what backs it,
+ * so the checks there read the whole of it, the stricter figure.
+ */
+export const SOAK_STATM: string =
+  'if [ -r /proc/$PPID/statm ]; then cat /proc/$PPID/statm; else echo "0 $(( $(ps -o rss= -p $PPID) / 4 )) 0 "; fi';
+
+/**
+ * Reads this process's resident set into `pages` (`SOAK_STATM`), one field
+ * each, as many as `pages` holds. Answers whether it read them all. Read
+ * through a shell whose parent is this process: procfs reports a size of 0,
+ * which a read sized by `stat` takes at its word. `argv` runs `SOAK_STATM` and
+ * `pages` is the caller's, both made once, so that a checkpoint can release
+ * all it allocates.
  */
 export const residentPages = (argv: string[], scratch: string, pages: i64[]): boolean => {
   if (spawnSyncTo(argv, scratch, "") !== 0) {
@@ -78,7 +89,7 @@ const checkpoint = (report: string, statm: string, argv: string[], pages: i64[],
  * until `total` sessions are closed or `SOAK_STALL_MS` pass with none accepted or closed.
  */
 export const serve = (portFile: string, report: string, total: i32, every: i32): i32 => {
-  const fd: i32 = udpBind("127.0.0.1", n32(0), n32(2));
+  const fd: i32 = rigRelaySocket();
   const config = new RelayConfig();
   config.maxSessions = SOAK_SESSIONS;
   config.maxPerPeer = SOAK_SESSIONS;
@@ -91,7 +102,7 @@ export const serve = (portFile: string, report: string, total: i32, every: i32):
   writeFileSync(report, "");
   // Made before the first checkpoint, so that none of them allocates what outlives it.
   const statm: string = `${report}.statm`;
-  const argv: string[] = ["sh", "-c", "cat /proc/$PPID/statm"];
+  const argv: string[] = ["sh", "-c", SOAK_STATM];
   const pages: i64[] = [n64(0), n64(0), n64(0)];
   writeFileSync(portFile, `${netLocalPort(fd)}\n`);
   const key: Secret<u8[]> = secret(leafPrivate());

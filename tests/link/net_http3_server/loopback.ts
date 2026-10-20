@@ -36,6 +36,7 @@ import {
   h3Config,
   H3Response,
   H3Wire,
+  WireWait,
   h3Cat,
   h3ClientSettings,
   h3Frame,
@@ -61,11 +62,15 @@ const listenerEntropy = (): u8[] => {
 export class LoopServer {
   server: Http3Server;
   port: i32 = 0;
+  /** The server's socket, waited on before a `receive` that must see a datagram just sent. */
+  arrival: WireWait;
 
   constructor(quicConfig: QuicServerConfig, slots: i32, port: i32) {
     const fd: i32 = udpBind("127.0.0.1", port, n32(0));
     this.port = netLocalPort(fd);
     this.server = new Http3Server(quicConfig, h3Config(), fd, slots, listenerEntropy());
+    this.arrival = new WireWait();
+    this.arrival.watch(fd);
   }
 }
 
@@ -271,6 +276,7 @@ const full = (t: Suite): void => {
 /** What one `receive` of the datagram `d`, sent from `fd`, keeps in the arena, measured in a fresh chunk. */
 const receiveCost = (loop: LoopServer, fd: i32, to: u8[], d: u8[], now: i64): i64 => {
   udpSendTo(fd, d, n32(0), toI32(d.length), to, n32(0), n32(0));
+  loop.arrival.arrived();
   const key: Secret<u8[]> = secret(leafPrivate());
   const filler: u8[] = new Array<u8>(70000);
   const before: i64 = Arena.used();
@@ -341,6 +347,7 @@ const markMoved = (loop: LoopServer, fd: i32, to: u8[], d: u8[], count: i32, now
   let moved: i64 = 0;
   for (let k: i32 = 0; k < count; k++) {
     udpSendTo(fd, d, n32(0), toI32(d.length), to, n32(0), n32(0));
+    loop.arrival.arrived();
     const before: i64 = Arena.mark();
     loop.server.receive(now + toI64(k) * step, key);
     moved = moved + (Arena.mark() - before);
@@ -408,11 +415,15 @@ class Lean {
   body: u8[];
   request: u8[];
   answered: i32 = 0;
+  wait: WireWait;
 
   constructor(loop: LoopServer) {
     this.loop = loop;
     this.c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
     this.fd = udpBind("127.0.0.1", n32(0), n32(0));
+    this.wait = new WireWait();
+    this.wait.watch(loop.server.fd);
+    this.wait.watch(this.fd);
     this.to = new Array<u8>(18);
     netAddress(this.to, "127.0.0.1", loop.port);
     this.rx = new Array<u8>(65536);
@@ -431,7 +442,8 @@ class Lean {
  * The server's loop, each call measured on its own with a `fresh` meter
  * when `m` is one: receive, timers, every ready slot answered (each request
  * at its end, a 200 and 1,000 bytes), flush. Then the client reads what came
- * back, unmeasured. Answers whether anything moved.
+ * back, unmeasured. Answers whether anything moved, or is still on its way
+ * (`WireWait`).
  */
 const leanRound = (l: Lean, m: QmMeter): boolean => {
   const server: Http3Server = l.loop.server;
@@ -475,7 +487,7 @@ const leanRound = (l: Lean, m: QmMeter): boolean => {
     n = udpRecvFrom(l.fd, l.rx, n32(0), n32(65536), l.from, l.meta);
   }
   l.c.now = l.c.now + n64(1);
-  return got > 0 || read > 0;
+  return got > 0 || read > 0 || l.wait.landed();
 };
 
 /** Sends `datagram` to the server and runs rounds until nothing moves. */

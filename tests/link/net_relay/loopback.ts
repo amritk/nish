@@ -373,13 +373,22 @@ const offload = (t: Suite): void => {
   c.datagram([rigData(n32(1), n32(300), n32(1)), rigData(n32(2), n32(300), n32(2)), rigData(n32(3), n32(300), n32(3)), rigData(n32(4), n32(100), n32(4))]);
   rig.settle(n32(50));
   t.eqStr("four DATA in one pass leave in one GSO send, the shorter last", rig.echo.seen(), "300 300 300 100");
-  t.ok("read back by the game server's GRO socket as one", rig.relay.gsoSends === n32(1) && rig.echo.coalesced === n32(1));
+  // Where the host has no GSO or GRO (Darwin: `udpBind` and `udpSendTo` answer -95), the relay
+  // falls back to a send per datagram and counts none, and the game server reads each alone.
+  const offloaded: boolean = rig.echo.offload;
+  t.ok(
+    offloaded ? "read back by the game server's GRO socket as one" : "without GSO, sent and read back as four, none counted as GSO",
+    offloaded ? rig.relay.gsoSends === n32(1) && rig.echo.coalesced === n32(1) : rig.relay.gsoSends === n32(0) && rig.echo.coalesced === n32(0)
+  );
   rig.echo.burst = fill(n32(600), n32(9));
   rig.echo.burstSegment = n32(200);
   rig.echo.serve();
   rig.settle(n32(50));
   const down: u8[][] = ofType(c, RELAY_DATA);
-  t.ok("a GSO burst from the game server arrives as one GRO read, cut into three DATA", rig.relay.groReads === n32(1) && toI32(down.length) === n32(3) && toI32(down[2].length) === n32(203));
+  t.ok(
+    offloaded ? "a GSO burst from the game server arrives as one GRO read, cut into three DATA" : "without GRO, a burst of three datagrams arrives as three DATA, none counted as GRO",
+    rig.relay.groReads === (offloaded ? n32(1) : n32(0)) && toI32(down.length) === n32(3) && toI32(down[2].length) === n32(203)
+  );
 };
 
 /** A warm session keeps nothing in the arena: DATA both ways, PING, STATS, a datagram from a stranger, a stream turned away. */

@@ -494,7 +494,12 @@ static void pool_alloc_body(int64_t lo, int64_t hi, void *ctx) {
 static long pool_peak_rss_kb(void) {
   struct rusage ru;
   getrusage(RUSAGE_SELF, &ru);
+#if defined(__APPLE__)
+  /* Darwin counts `ru_maxrss` in bytes, Linux in kilobytes. */
+  return ru.ru_maxrss / 1024;
+#else
   return ru.ru_maxrss;
+#endif
 }
 
 /* A scope's task: an index in, a square out, through `finish` on the caller. */
