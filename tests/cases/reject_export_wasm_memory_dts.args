@@ -1,0 +1,1 @@
+--emit-dts build/test/interop/reject_export_wasm_memory_dts.d.ts
