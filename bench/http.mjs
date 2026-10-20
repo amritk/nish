@@ -5,17 +5,27 @@
 //   node bench/http.mjs --rounds 7 --duration 5 build/bench/h1-a
 //   node bench/http.mjs --syscalls build/bench/h1-a            # strace -c per request
 //   node bench/http.mjs --only post-json new=build/bench/h1 old=build/bench/h1-old
+//   node bench/http.mjs --only startup build/bench/h1 build/http-twins/bun/serve
 //
 // A server is `<path>`, labelled by its basename, or `<name>=<path>`, labelled
 // `name`. Each is started as `<path> <port> <slots>` and timed once it prints
 // `listening`. Before its first timed round in a scenario, one request checks
 // its answer against the contract: /plaintext's body exactly, /json's by
 // pattern, and /json-echo's and /json-echo-doc's exactly — the payload with
-// its revision one higher. A server that answers 404 is `n/a` in that
-// scenario; any other wrong answer exits 1, naming the first differing byte.
+// its revision one higher. / must answer `Hi`, /id/1?name=bun `1 bun` with an
+// `x-powered-by: benchmark` header, and POST /json bench/http-body.json
+// re-serialized. A server that answers 404 is `n/a` in that scenario; any
+// other wrong answer exits 1, naming the first differing byte.
 //
 // The post-json scenarios POST bench/http-payload.json (or the file
-// NISH_HTTP_PAYLOAD names) through the wrk script bench/http-post-json.lua.
+// NISH_HTTP_PAYLOAD names) through the wrk script bench/http-post-json.lua, and
+// the body scenario bench/http-body.json through the same script.
+//
+// The startup scenario runs no wrk: it times how long each server takes from
+// being spawned to its first answer to GET /, polling once a millisecond, and
+// reads its resident set then. Interpreters count their own start-up, the Nish
+// server the slot pool it builds before it listens, and nginx's serve the
+// shell script that writes its configuration. --syscalls skips it.
 //
 // The server is pinned to CPU 0 and wrk to the others, so the server has one
 // core to itself, as the box in "max out a $12 server" did. Rounds interleave
@@ -60,10 +70,6 @@ if (bins.length === 0) {
   )
   process.exit(2)
 }
-if (spawnSync("wrk", ["--version"]).error) {
-  console.error("wrk is not installed (apt-get install wrk)")
-  process.exit(2)
-}
 
 /** `name=path` is labelled `name`; a bare path keeps its basename. */
 const servers = bins.map((arg) => {
@@ -74,6 +80,10 @@ const servers = bins.map((arg) => {
 })
 
 const luaScript = fileURLToPath(new URL("http-post-json.lua", import.meta.url))
+const bodyFile = fileURLToPath(new URL("http-body.json", import.meta.url))
+// A re-serialized body is compact; the twins that sort an object's keys agree
+// with this one because the body's only object has one key.
+const rewritten = JSON.stringify(JSON.parse(readFileSync(bodyFile, "utf8")))
 const payloadFile = resolvePath(
   process.env.NISH_HTTP_PAYLOAD || fileURLToPath(new URL("http-payload.json", import.meta.url))
 )
@@ -93,18 +103,35 @@ const threads = String(Math.max(1, Math.min(cpus - 1, 4)))
 // Each scenario is one wrk invocation. `close` sends `Connection: close`, so
 // every request is a fresh TCP connection and the accept path is what is timed.
 const scenarios = [
+  // The three routes of the Bun HTTP framework benchmark: a constant, a path
+  // parameter and a query parameter with a response header, and a small JSON
+  // body parsed and serialized again.
+  { name: "ping keep-alive c=500", path: "/", conns: 500 },
+  { name: "query keep-alive c=500", path: "/id/1?name=bun", conns: 500 },
+  { name: "body keep-alive c=500", path: "/json", conns: 500, post: true, file: bodyFile },
   { name: "plaintext keep-alive c=256", path: "/plaintext", conns: 256 },
   { name: "json keep-alive c=256", path: "/json", conns: 256 },
   // A 545-byte JSON request body decoded into a class and encoded back, and
   // the same through a JSON document: the request body is what is timed.
-  { name: "post-json keep-alive c=256", path: "/json-echo", conns: 256, post: true },
-  { name: "post-json-doc keep-alive c=256", path: "/json-echo-doc", conns: 256, post: true },
+  { name: "post-json keep-alive c=256", path: "/json-echo", conns: 256, post: true, file: payloadFile },
+  {
+    name: "post-json-doc keep-alive c=256",
+    path: "/json-echo-doc",
+    conns: 256,
+    post: true,
+    file: payloadFile,
+  },
   { name: "plaintext keep-alive c=4096", path: "/plaintext", conns: 4096 },
   { name: "plaintext close c=64", path: "/plaintext", conns: 64, close: true },
   // The same churn while 8,000 idle connections hold the pool's first slots:
   // what finding a free slot costs once the pool is mostly full.
   { name: "plaintext close c=64 + 8000 idle", path: "/plaintext", conns: 64, close: true, idle: 8000 },
 ].filter((s) => only === null || only.some((o) => s.name.includes(o)))
+const timeStartup = !syscalls && (only === null || only.some((o) => "startup".includes(o)))
+if (scenarios.length > 0 && spawnSync("wrk", ["--version"]).error) {
+  console.error("wrk is not installed (apt-get install wrk)")
+  process.exit(2)
+}
 
 let nextPort = 20000 + (process.pid % 20000)
 
@@ -148,6 +175,12 @@ const cpuTimes = (pid) => {
 /** The server's peak resident set, in MB. */
 const peakRss = (pid) => {
   const m = readFileSync(`/proc/${pid}/status`, "utf8").match(/VmHWM:\s+(\d+) kB/)
+  return m ? Number(m[1]) / 1024 : Number.NaN
+}
+
+/** The server's resident set now, in MB. */
+const residentRss = (pid) => {
+  const m = readFileSync(`/proc/${pid}/status`, "utf8").match(/VmRSS:\s+(\d+) kB/)
   return m ? Number(m[1]) / 1024 : Number.NaN
 }
 
@@ -196,7 +229,7 @@ const wrk = (scenario, port, seconds) => {
   argv.push(`http://127.0.0.1:${port}${scenario.path}`)
   const r = spawnSync("taskset", argv, {
     encoding: "utf8",
-    env: { ...process.env, NISH_HTTP_PAYLOAD: payloadFile },
+    env: { ...process.env, NISH_HTTP_PAYLOAD: scenario.file ?? payloadFile },
   })
   const out = r.stdout
   const rps = Number((out.match(/Requests\/sec:\s+([\d.]+)/) || [])[1])
@@ -217,7 +250,10 @@ const label = (k) =>
 /** How long the pre-check waits for an answer before it fails. */
 const FETCH_TIMEOUT_MS = 5000
 
-/** One request to `port` on the scenario's path: resolves to its status and body, or rejects after `FETCH_TIMEOUT_MS`. */
+/**
+ * One request to `port` on the scenario's path: resolves to its status, headers
+ * and body, or rejects after `FETCH_TIMEOUT_MS`.
+ */
 const fetchOnce = (scenario, port) =>
   new Promise((resolve, reject) => {
     const req = request(
@@ -233,7 +269,11 @@ const fetchOnce = (scenario, port) =>
         const chunks = []
         res.on("data", (c) => chunks.push(c))
         res.on("end", () =>
-          resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString("latin1") })
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString("latin1"),
+          })
         )
         res.on("error", reject)
       }
@@ -242,13 +282,25 @@ const fetchOnce = (scenario, port) =>
       req.destroy(new Error(`no answer in ${FETCH_TIMEOUT_MS / 1000} s`))
     )
     req.on("error", reject)
-    req.end(scenario.post ? Buffer.from(payload, "latin1") : undefined)
+    req.end(scenario.post ? readFileSync(scenario.file) : undefined)
   })
 
 const JSON_HELLO = '{"message":"Hello, World!"}'
 
-/** The answer a scenario's path must give: the exact body, or a pattern and the body it is read against. */
+/**
+ * The answer a scenario must give: the exact body, or a pattern and the body it
+ * is read against, and the headers it must carry.
+ */
 const contract = (scenario) => {
+  if (scenario.file === bodyFile) {
+    return { exact: rewritten }
+  }
+  if (scenario.path === "/") {
+    return { exact: "Hi" }
+  }
+  if (scenario.path.startsWith("/id/")) {
+    return { exact: "1 bun", headers: { "x-powered-by": "benchmark" } }
+  }
   if (scenario.path === "/plaintext") {
     return { exact: "Hello, World!" }
   }
@@ -299,6 +351,11 @@ const verify = async (k, scenario, port, child) => {
   if (!ok) {
     return fail(firstDifference(r.body, want.exact))
   }
+  for (const [name, value] of Object.entries(want.headers ?? {})) {
+    if (r.headers[name] !== value) {
+      return fail(`header ${name} is ${JSON.stringify(r.headers[name])}, expected ${JSON.stringify(value)}`)
+    }
+  }
   return true
 }
 
@@ -342,6 +399,55 @@ if (syscalls) {
   }
   process.exit(0)
 }
+
+/** How long a server may take to give its first answer before the startup scenario fails. */
+const STARTUP_TIMEOUT_MS = 30000
+
+/**
+ * Spawns `bin` on a fresh port, pinned to CPU 0, and polls GET / once a
+ * millisecond: resolves to the milliseconds until the first 200 and the
+ * server's resident set then, in MB.
+ */
+const startup = async (bin) => {
+  nextPort += 1
+  const port = nextPort
+  const began = performance.now()
+  const child = spawn("taskset", ["-c", "0", bin, String(port), slots], {
+    stdio: ["ignore", "ignore", "inherit"],
+  })
+  let exited = null
+  child.on("exit", (code) => {
+    exited = code
+  })
+  for (;;) {
+    if (exited !== null) {
+      throw new Error(`${bin} exited ${exited} before it answered`)
+    }
+    if (performance.now() - began > STARTUP_TIMEOUT_MS) {
+      await stop(child)
+      throw new Error(`${bin} did not answer GET / in ${STARTUP_TIMEOUT_MS / 1000} s`)
+    }
+    let r = null
+    try {
+      r = await fetchOnce({ path: "/" }, port)
+    } catch {
+      await sleep(1)
+      continue
+    }
+    if (r.status !== 200) {
+      await stop(child)
+      throw new Error(`${bin} answered GET / with ${r.status}`)
+    }
+    break
+  }
+  const ms = performance.now() - began
+  const rss = residentRss(child.pid)
+  await stop(child)
+  return { ms, rss }
+}
+
+/** Each round starts every server this many times, in the round's order. */
+const STARTS_PER_ROUND = 4
 
 console.log(
   `# ${new Date().toISOString()}  server on CPU 0, wrk -t${threads} on CPUs ${clientCpus}, ${rounds} rounds x ${duration}s`
@@ -407,6 +513,41 @@ for (const scenario of scenarios) {
       k === baseIndex ? "" : ` (${m >= base ? "+" : ""}${(((m - base) / base) * 100).toFixed(1)}%)`
     console.log(
       `| ${label(k)} | ${Math.round(m).toLocaleString("en-US")}${delta} | ${Math.round(lo).toLocaleString("en-US")}–${Math.round(hi).toLocaleString("en-US")} | ${median(r.p99).toFixed(2)} | ${median(r.user).toFixed(2)} | ${median(r.sys).toFixed(2)} | ${Math.round(median(r.rss))} | ${[...r.errors].join(" ")} |`
+    )
+  }
+}
+
+if (timeStartup) {
+  const results = servers.map(() => ({ ms: [], rss: [] }))
+  for (let round = 0; round < rounds; round++) {
+    const order = servers.map((_, k) => k)
+    if (round % 2 === 1) {
+      order.reverse()
+    }
+    for (let attempt = 0; attempt < STARTS_PER_ROUND; attempt++) {
+      for (const k of order) {
+        let r
+        try {
+          r = await startup(servers[k].path)
+        } catch (e) {
+          console.error(`${label(k)}: startup: ${e.message}`)
+          process.exit(1)
+        }
+        results[k].ms.push(r.ms)
+        results[k].rss.push(r.rss)
+      }
+    }
+  }
+  console.log(`\n## startup, spawn to first answer, ${rounds * STARTS_PER_ROUND} starts each`)
+  console.log("| build | ms (median) | spread | RSS MB then |")
+  console.log("| --- | ---: | ---: | ---: |")
+  const base = servers.length > 0 ? median(results[0].ms) : Number.NaN
+  for (const k of servers.keys()) {
+    const r = results[k]
+    const m = median(r.ms)
+    const delta = k === 0 ? "" : ` (${m >= base ? "+" : ""}${(((m - base) / base) * 100).toFixed(1)}%)`
+    console.log(
+      `| ${label(k)} | ${m.toFixed(1)}${delta} | ${Math.min(...r.ms).toFixed(1)}–${Math.max(...r.ms).toFixed(1)} | ${median(r.rss).toFixed(1)} |`
     )
   }
 }
