@@ -48,13 +48,25 @@ reasons:
 - The computed set is never wider than the policy, because WP36 refuses a
   program whose host-visible functions reach more than the policy grants
   (NL2459). Confining to the policy would grant rights the compiler already
-  knows the program cannot use.
+  knows the program's Nish code cannot use. That is not true of an `ffi`
+  callee, which the next paragraph states.
 - It needs no policy. `nish --link --sandbox app.ts` with no `--allow`, no
   `--deny` and no manifest field still confines the binary to what `main`
   reaches, so a sandbox costs a user one flag.
 - `main` is the only entry a native process has. The wrapper calls it and
   nothing else, so its mask covers every Nish function the process can run.
   A library's other exports reach the process only through `main`.
+
+**The computed set says nothing about what C code needs.** For a `declare
+function` callee the compiler computes the `ffi` bit and no other, and §4
+maps `ffi` to no right. A program whose Nish code reaches only `ffi`, but
+whose C library opens a socket or writes a file (libcurl, sqlite), therefore
+has no `net`, `fs.*` or `process.spawn` in its mask: it is killed at
+`socket()` or refused at `open`, and `--allow net` cannot widen the mask,
+because the wrapper confines to the computed set. As proposed, `--sandbox`
+fits an `ffi` program only when its C code needs nothing the Nish code does
+not also reach. What `--allow` means for such a program under `--sandbox` is
+the owner's call, open question 13.
 
 The mask is read where `refuseCapabilities` (`src/compilation.ts:1415`)
 already reads it: from `this.analyze()`'s facts for the signature
@@ -244,8 +256,11 @@ the sandbox's entry is first, and §8 pins that.
 
 **What `nish_sandbox` does**, in this order, before any constructor:
 
-1. Prime what confinement would break: `nish_cpu_count()` when the runtime has
-   threads (§4, `--threads`).
+1. Prime what confinement would break: the pool's hardware ceiling, which
+   reads files (§4, `--threads`). This step reads no environment variable:
+   on dynamic glibc `getenv` answers `NULL` from a `.preinit_array` entry,
+   because libc has not yet set `environ` (measured on glibc 2.39, where a
+   static link answered).
 2. `prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)`. Both Landlock and seccomp need it
    for an unprivileged process, and after it no `execve` gains a capability
    or an identity: the kernel caps a new program's permitted set at the
@@ -282,9 +297,9 @@ Landlock right withheld, a seccomp rule, or nothing, with the reason.
 |---|---|---|
 | `fs.read` | Landlock | `READ_FILE` and `READ_DIR` withheld everywhere; with `fs.read=<dir>`, granted beneath each directory only |
 | `fs.write` | Landlock | `WRITE_FILE`, `MAKE_REG`, `MAKE_DIR`, `REMOVE_FILE`, `REMOVE_DIR`, `MAKE_SYM`, `MAKE_*` for special files, `REFER` (ABI 2) and `TRUNCATE` (ABI 3) withheld; with `fs.write=<dir>` (open question 1), granted beneath it. The metadata writes Landlock has no right for fail `EPERM` in seccomp (below) |
-| `process.spawn` | seccomp | `execve` and `execveat` kill; `fork`, `vfork` (x86-64 only: AArch64 has neither number) and `clone` without `CLONE_THREAD` kill; `clone3` returns `ENOSYS` |
+| `process.spawn` | seccomp and Landlock | `EXECUTE` withheld everywhere (below, "`process.spawn` widens Landlock"); `execve` and `execveat` kill; `fork`, `vfork` (x86-64 only: AArch64 has neither number) and `clone` without `CLONE_THREAD` kill; `clone3` returns `ENOSYS` |
 | `net` | seccomp | `socket`, `socketpair`, `connect`, `bind`, `listen`, `accept`, `accept4` kill; so do `io_uring_setup`, `io_uring_enter` and `io_uring_register`, since io_uring opens and connects sockets without those syscalls (below) |
-| `ffi` | nothing | it is the reason the sandbox exists: what an `ffi` callee does is held by the rows above, not by its own bit |
+| `ffi` | nothing | it is the reason the sandbox exists: what an `ffi` callee does is held by the rows above, not by its own bit. So an `ffi` callee gets only the rights the Nish code's own bits grant (§1, open question 13) |
 | `unsafe` | nothing | it changes what a Nish expression compiles to, not what the process asks the kernel for |
 | `clock` | nothing | `clock_gettime` is a vDSO call, and `statMtimeSync`'s `stat` is not a right Landlock has |
 | `entropy` | nothing | `getrandom` (`runtime/runtime-host.c:83`), not a file open, so no Landlock right covers it, and denying a syscall glibc may itself use for its own needs costs more than it buys |
@@ -394,10 +409,18 @@ opens `/proc/self/cgroup` and the `cpu.max` files beneath `/sys/fs/cgroup` to
 size the pool. Under Landlock without `fs.read` those opens fail with `EACCES`,
 and `nish_cpu_count` falls back to `sysconf` and the affinity mask: a
 container limited by cgroup quota would get more threads than its share.
-Step 1 of §3 calls `nish_cpu_count` before the ruleset applies, which caches
-the answer in `nish_cpu_cached`, so the count is the unconfined one
-(open question 6). `NISH_NUM_THREADS` only lowers the count, so it is not a
-way to weaken anything.
+Step 1 of §3 therefore splits `nish_cpu_count` (`runtime/runtime-parallel.c:143-168`)
+in two. A new `nish_cpu_prime`, called from step 1, computes the
+environment-free ceiling, `sysconf`, the affinity mask and
+`nish_cgroup_cpus`, before the ruleset applies, and caches it. It is called
+whatever the mask says, and it is empty in a runtime built without
+`NISH_THREADS`, so the wrapper needs no operand saying whether the program
+has threads. `nish_cpu_count` keeps its cache, `nish_cpu_cached`, and on its
+first call, from `main` or later, takes the primed ceiling in place of the
+three reads and applies `NISH_NUM_THREADS` with `getenv`, which by then sees
+the environment. With `NISH_NUM_THREADS` set, the count is the smaller of
+the two, as it is unsandboxed (open question 6). The variable only lowers
+the count, so it is not a way to weaken anything.
 
 **The exit status of a killed run.** The filter's action is
 `SECCOMP_RET_KILL_PROCESS`, so the whole process, every thread, dies of
@@ -448,6 +471,7 @@ The wrapper asks the kernel for its Landlock ABI once and acts on the answer.
 | No Landlock (`ENOSYS` or `EOPNOTSUPP`, or `EPERM` from a container runtime's own seccomp profile denying the call) | refuses to run: `nish: --sandbox: this kernel has no Landlock; build with --sandbox=best-effort to run with seccomp alone`, exit 126 | prints `nish: --sandbox: no Landlock, files are not confined` once on stderr and continues with seccomp alone |
 | Older ABI than the rights the mask withholds | refuses to run when a right §4 withholds is unknown to the ABI: below ABI 3, `truncate(2)` on a file the user owns is not a Landlock right, so a program without `fs.write` needs ABI 3, and so does one granted `fs.write=<dir>`, whose files outside the directory `truncate` would reach | handles the rights the ABI knows, and names the ones it could not withhold, once |
 | ABI 1 to 4, no `IOCTL_DEV` | runs, the one exception to the row above: §4 and §9 state what a reopened terminal keeps (open question 12) | runs, and names `IOCTL_DEV` |
+| A scope directory missing at run time (`open(O_PATH)` for its rule answers `ENOENT`) | refuses to run, naming the directory, exit 126 | leaves the rule out, which only narrows what is granted, and names the directory once |
 | No seccomp, or no `KILL_PROCESS` | refuses to run | refuses to run |
 
 **Missing seccomp is fatal in both modes.** Best-effort exists for kernels
@@ -457,9 +481,9 @@ older than Landlock; a kernel with no seccomp filter at all, or older than
 
 **No environment variable or runtime knob weakens the sandbox.** The mode is
 a constant in the IR; `nish_sandbox` reads no environment variable, file or
-argument that can widen it. Step 1's `nish_cpu_count` reads
-`NISH_NUM_THREADS` (`runtime/runtime-parallel.c:157`), which only lowers the
-pool's size. The only way to a weaker sandbox is to rebuild with a
+argument that can widen it. `nish_cpu_count` reads `NISH_NUM_THREADS`
+(`runtime/runtime-parallel.c:157`) after the sandbox applies (§4), and the
+variable only lowers the pool's size. The only way to a weaker sandbox is to rebuild with a
 different flag, which changes the binary and its run-cache key. Testing the
 missing-kernel path (§8) uses a compile-time define in a test-only build of
 the runtime unit, never a runtime switch.
@@ -509,6 +533,8 @@ on", `tests/run.js:746`), and these checks expect one.
 | `sandbox: the sandbox's preinit entry runs first` | an `ffi` object carrying its own `.preinit_array` entry that opens a file is refused in the same way |
 | `sandbox: a granted program runs as it does unsandboxed` | byte-identical stdout with and without `--sandbox`, and again with `--threads` |
 | `sandbox: a threaded program without process.spawn still runs its pool` | the pool's answer, exit 0 |
+| `sandbox: NISH_NUM_THREADS still lowers the pool` | a `--threads` program, linked dynamically (the default) and run with `NISH_NUM_THREADS=1`, starts no worker thread, sandboxed as unsandboxed (`Threads:` in `/proc/self/status`, printed by an `ffi` helper) |
+| `sandbox: a missing scope directory refuses strict` | the scope removed after the build: exit 126 naming it; best-effort names it once and exit 0 |
 | `sandbox: strict refuses without Landlock` and `sandbox: best-effort warns without Landlock` | exit 126 and the message; stderr's one line and exit 0 |
 | `sandbox: strict refuses below ABI 3 without fs.write` | against the ABI 1 and ABI 2 builds below: exit 126; best-effort's line names `TRUNCATE` |
 | `sandbox: the wasm profile refuses sandboxed IR` | `scripts/build.sh --profile wasm` on a host `.ll` built with `--sandbox`: exit 2 and §3's message |
@@ -597,6 +623,12 @@ creates gives it capabilities only over the namespace's own objects:
 `init_module`, `kexec_load`, `open_by_handle_at` and `bpf` check the initial
 namespace, the domain and the filter stay attached, and Landlock refuses
 `mount` in a confined process.
+
+**What `ffi` code is allowed.** The mask is computed from the Nish code, so
+an `ffi` callee is held to what the Nish code reaches, not to what the C
+code needs (§1). That errs towards refusal: a C library that needs more is
+killed or refused, never granted more. Whether a policy may widen it is open
+question 13.
 
 **What runs before the call.** The dynamic loader, `LD_AUDIT`, `LD_PRELOAD`'s
 interposition and libc's own start-up run first. They are the launcher's
@@ -701,7 +733,7 @@ unstated.
    `process.spawn`. *Recommendation: (a), recorded in the security record:
    (b) breaks on every system whose layout differs, and (c) loses every build
    tool.*
-6. **`/proc/self` and the cgroup files.** (a) Prime `nish_cpu_count` before
+6. **`/proc/self` and the cgroup files.** (a) Prime the pool's ceiling before
    confinement; (b) grant read on `/proc/self` and `/sys/fs/cgroup` always;
    (c) accept the fallback. *Recommendation: (a): it needs no right, and (b)
    would leave `/proc/self/environ` and `/proc/self/mem` readable to a program
@@ -744,3 +776,20 @@ unstated.
     already on fd 0 gives the same power on every ABI, so (b) would raise the
     floor without closing the route; `dev.tty.legacy_tiocsti=0` closes both,
     and the guide page names it.*
+13. **What `--allow` means for an `ffi` program under `--sandbox`.** The
+    computed mask carries `ffi` and nothing for the C code behind it (§1),
+    and `ffi` maps to no right (§4), so the C code gets nothing the Nish code
+    does not reach and no flag can widen it. (a) For a program whose mask
+    has `ffi`, confine to the computed set together with the `net`, `fs.*`
+    and `process.spawn` grants of its policy (`--allow`, `--deny`, the
+    manifest), scopes included; a program without `ffi` keeps the computed
+    set; (b) let `--allow` widen the mask only for capabilities the `ffi`
+    declaration itself names, which needs a new annotation on `declare
+    function`; (c) refuse `--sandbox` for a program whose mask has `ffi`;
+    (d) state the limit as it is. *Recommendation: (a). The policy is where
+    a user already says what the program may do, and NL2459 keeps it honest
+    for the Nish code, so it is the one place that can speak for the C code
+    too, and it needs no new syntax. Without a policy the program stays
+    confined to the computed set, as (d). (b) puts a claim about C code in
+    Nish source the compiler cannot check, and (c) refuses the programs a
+    sandbox helps most.*
