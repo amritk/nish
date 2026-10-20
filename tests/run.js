@@ -4173,6 +4173,7 @@ const LINK_READ_LATER = [
   "std_json_typed",
   "std_json_value",
   "thread_channel_string_many",
+  "thread_scope_reclaim",
   "thread_task_release",
   "unsafe_flag_scope",
 ]
@@ -6416,6 +6417,43 @@ if (!only || "par_map_reclaim".includes(only)) {
   }
 }
 
+// A frame that spawns into a `using s = scope()` gives back what it made once
+// the scope has joined, as one that only runs a map does: a task's argument the
+// task keeps nowhere past the join no longer counts as captured. And inside
+// `using a = arena()`, a fresh array handed to a scope the block opens is
+// accepted rather than refused as stored into memory (NL2424).
+// `thread_scope_reclaim` runs 24 maps over 2^21 elements in returning frames
+// that also spawn into a scope, 24 more in loop passes that each declare their
+// own scope, and 24 fresh arrays of 2^21 spawned from a `using a = arena()`
+// block in main. It peaks at 18 MB on 1, 2 and 8 threads. Built by main at
+// 6948873, the first loop alone peaked at 206 MB on 1 and 8 threads and the
+// second at 206 MB, and main refused the block, so each would pass the 64 MB
+// bound on its own.
+if (!only || "thread_scope_reclaim".includes(only)) {
+  const fixture = linkTests.includes("thread_scope_reclaim")
+  const dir = path.join(buildDir, "link", "thread_scope_reclaim")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/thread_scope_reclaim: 72 arrays spawned into scopes in returning frames, loop passes and a using arena block on ${threads} thread(s) peak under 64 MB`,
+      kb > 0 && kb < 64 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
 // A worker that finds the queue empty for a second lowers glibc's trim
 // threshold, frees a 16 MB block through its own arena so the arena's top is
 // cut back, and trims (`nish_pool_drain`). `par_map_idle` runs four maps of
@@ -6770,7 +6808,14 @@ if (!only || "par_alloc".includes(only)) {
 // `churn()`; and `par_map_reclaim_strings`, whose frames hand a string map's
 // result to a `string[]` callee that keeps it by a field, a return, a map's
 // body, a push, a `Map`, `new`, a constructor's `this`, a second declarator,
-// an alias, a relay or a `string[][]`, each read after `churn()`.
+// an alias, a relay or a `string[][]`, each read after `churn()`. And the
+// frames that spawn into a scope: `thread_scope_reclaim`, which gives back what
+// its frames, passes and `using` block spawned, and
+// `thread_scope_reclaim_escapes`, whose spawned arrays are stored into a field,
+// returned, pushed, put in a `Map`, passed to `new`, handed out by a
+// constructor's `this`, relayed, answered by the task, captured, spawned
+// through a second declarator, aliased, or spawned onto an outer scope from a
+// loop's passes, each read after `churn()`.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -6829,6 +6874,8 @@ for (const name of [
   "par_map_reclaim",
   "par_map_reclaim_escapes",
   "par_map_reclaim_strings",
+  "thread_scope_reclaim",
+  "thread_scope_reclaim_escapes",
   "mem_using_arena_map",
   "std_random",
 ]) {
@@ -7617,7 +7664,8 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `par_map_reclaim`, `par_map_reclaim_escapes` and `par_map_reclaim_strings`
 // free a map's result, and the blocks it adopted, with the frame or block that
 // ran it, and keep every result that escapes it, on a 32-bit target as on a
-// 64-bit one.
+// 64-bit one; `thread_scope_reclaim` and `thread_scope_reclaim_escapes` do
+// the same for what a frame spawns into its scope.
 // The escapes fixture grows its memory to some 120 MB, and Node 22 then
 // collects garbage inside the fast call of WASI's `fd_write`, whose frame walk
 // segfaults (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24
@@ -7641,6 +7689,8 @@ for (const name of [
   "par_map_reclaim",
   "par_map_reclaim_escapes",
   "par_map_reclaim_strings",
+  "thread_scope_reclaim",
+  "thread_scope_reclaim_escapes",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue

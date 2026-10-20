@@ -320,6 +320,15 @@ export const main = (): i32 => {
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.
+- **Spawning costs no memory.** Every task has run before the function, the
+  loop pass or the
+  [`using a = arena()`](../language/memory.md#freeing-a-batch-yourself-using-a--arena)
+  block around the scope gives back what it made, so an array you build and
+  hand to a task is freed with the rest, unless the task answers it or you
+  keep it. Inside an arena block, declare the scope after the arena —
+  `using a = arena(), s = scope()`, or a `using s = scope()` of its own
+  further in — so it joins before the release; a scope declared before the
+  arena joins after it and may not be handed what the block made.
 
 ### Tasks without a destination, and arrow tasks
 

@@ -3393,7 +3393,15 @@ export const main = (): i32 => {
   around it, which releases only after the join, and an argument a task is
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
-  another). A panic ends the process and joins nothing (`throw` is refused by
+  another). Since the join comes first, spawning gives up no memory: a
+  function, a loop's pass or a `using a = arena()` block that hands a task an
+  array it made still gives that array back when it ends, after the join,
+  unless the task keeps it — answers it, or stores it where it outlives the
+  task — or the frame keeps it past its end by any other route
+  (`tests/link/thread_scope_reclaim`, whose peak resident memory
+  `tests/run.js` bounds at every thread count, and
+  `thread_scope_reclaim_escapes`, which reads each route after the memory is
+  reused). A panic ends the process and joins nothing (`throw` is refused by
   Phase 0, `reject_throw`).
 - **A scope is introduced by `using`, and `using` takes only a scope, a
   [`Mutex`'s lock](#a-lock-that-owns-its-data-mutext) or an
@@ -7368,6 +7376,7 @@ const tally = (rows: string[]): i32 => {
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
   | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
+  | `s.spawn(...)` on a scope the same `using` declares ahead of `arena()`, `using s = scope(), a = arena()` | an argument is not older than the block: `s` is disposed after the arena, so it joins after the release | NL2427 | `reject_using_arena_spawn_declarator` |
 
   A number, a `boolean` or an `enum` leaves the block freely, and so does a
   value older than it. The rule is the escape analysis's, so it is
@@ -7388,6 +7397,15 @@ const tally = (rows: string[]): i32 => {
   stops following, as it does for a loop that pushes arrays into an array, so
   the block refuses it as NL2424 and says what to write instead: run that map
   outside the block (`tests/cases/reject_using_arena_map_arrays`).
+- **A task filed on a scope the block declares may read what it allocated.**
+  That scope joins before the block releases, inner `using s = scope()` or
+  `using a = arena(), s = scope()` alike, so the block may hand its task an
+  array or an object it made (`tests/link/thread_scope_reclaim`). The task
+  is followed as any callee is: one that answers its argument into an older
+  destination stores it (NL2424, `tests/cases/reject_using_arena_spawn_relay`,
+  as `reject_using_arena_spawn_stores` for any array answer), and a
+  constructor that makes the argument and hands `this` out stores it too
+  (`reject_using_arena_spawn_constructor`).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
   theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says

@@ -1414,6 +1414,14 @@ r)` on the thread that opened the scope, after the join. The whole of both
 modules is `tests/link/thread_scope_basic`'s golden (docs/LANGUAGE.md, "Scoped
 tasks").
 
+Filing a task does not keep what it is handed. The escape analysis reads the
+spawn instance's own `runTask`, `entry` and `storeResult`, and a pointer
+argument none of them keeps stays the frame's: a function that spawns an array
+it made still marks the arena on entry and releases it after
+`nish_scope_join`, a loop pass rewinds after its join, and a `using a =
+arena()` block may hand a scope it declares what it allocated, the join
+emitted before its `nish_arena_release` (`tests/link/thread_scope_reclaim`).
+
 <!-- cookbook:begin thread-scope -->
 ```ts
 import { scope } from "nish/threads"
