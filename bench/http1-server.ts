@@ -66,6 +66,7 @@ import {
   Http1Connection,
   Http1Server,
 } from "nish/net/http1-server"
+import { Http1Parser } from "nish/net/http1"
 import { ROUTER_METHOD_NOT_ALLOWED, ROUTER_NOT_FOUND, Router, RouterLimits } from "nish/net/router"
 import { JsonWriter } from "nish/json"
 import { JsonLimits } from "nish/json-tokenizer"
@@ -445,7 +446,7 @@ class Bench {
 
   /** Routes a request at its head: starts a body route's body, or answers any other request from the head alone. */
   begin(slot: i32, conn: Http1Connection): void {
-    const p = conn.parser
+    const p: Http1Parser = conn.parser
     const route: i32 = this.router.match(
       p.head,
       p.methodStart,

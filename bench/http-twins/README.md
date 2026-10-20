@@ -61,8 +61,9 @@ How a twin registers them follows what a user of its stack would write:
   Nish server is one of them: it registers its seven measured routes on one
   `nish/net/router` `Router`, then every pattern, then the route table below,
   and switches on the index `match` returns.
-- The hand-written twins (`node-http`, both Go twins and `rust-hyper`) test the measured routes first and then scan the table in
-  order, a segment at a time. The Rust twins share `rust-extra.rs`, which
+- The hand-written twins (`node-http`, both Go twins and `rust-hyper`) test
+  the measured routes first and then scan the table in order, a segment at a
+  time. The Rust twins share `rust-extra.rs`, which
   `build.sh` copies in as `src/extra.rs`.
 - nginx gets a `map` from `"$request_method $uri"` to a flag, one regex per
   route, which `nginx/extra-conf.mjs` writes as `extra.conf` at build time.
@@ -73,8 +74,8 @@ The Nish server also registers the 112-route table of `bench/router.ts`, the
 router's own benchmark, after the extra routes, so that every route it
 answers is looked up among 342: the 7 measured routes, the 224 extra ones and
 111 of the table (its `GET /` is the ping route already). It is a service's
-API: `/v1/...` resources, static assets, a `*` catch-all, and nested routes up to nine segments deep with one
-to three parameters. Each table route answers `ok`, but one:
+API: `/v1/...` resources, static assets, a `*` catch-all, and nested routes
+up to nine segments deep with one to three parameters. Each table route answers `ok`, but one:
 
 | Request | Answer |
 | --- | --- |
@@ -86,6 +87,12 @@ three. No twin registers the table: the table is there to measure
 `nish/net/router` under the server, not to compare routers, which
 `bench/router.ts` does on its own. A twin answers the deep route with 404, its
 cell reads n/a, and `check.mjs` asks for the 404.
+
+Every contract request above, as `check.mjs` and `http.mjs` send it, gets the
+answer it got before the server moved onto the router; only edges outside the
+contract changed: the router checks the method and strips the query, so
+`HEAD /plaintext` is now a 404 where it was a 200, and `GET /plaintext?x=1` or
+`POST /json-echo?x=1` is now served where it was a 404.
 
 The echo decodes the body into a typed order (with `notes` a nullable string),
 increments `revision` and encodes it again compactly, keeping the key order
