@@ -131,9 +131,10 @@ import { isCollectionStruct } from "./generics"
 import { resultMethodName } from "./emit-result"
 import { stdModuleName } from "./std-modules"
 import { StringMap, StringSet } from "./map"
+import { StringBuilder } from "./strings"
 import { ParentTable } from "./parents"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_BOOL, T_STRING, T_VOID, TypeTable } from "./types"
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_BOOL, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
 const THREAD_SCOPE: string = "ThreadScope"
@@ -510,7 +511,14 @@ export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTabl
  * once it is stored into memory, so that is what this usually means, and the
  * site is named when the function's own allocation is the one that escapes.
  */
-export const escapeMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
+export const escapeMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  fn: FunctionSig,
+  facts: FactsTable,
+  call: Node
+): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
   if (own === null || !own.allocates || own.contained) {
     return ""
@@ -521,10 +529,17 @@ export const escapeMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTab
     const at = positionIn(fn, site)
     where = at.length > 0 ? ` at ${at}` : ""
   }
+  const instance = sig.instance
+  let result = fn.returnType
+  if (instance !== null && instance.typeArgs.length > 0) {
+    result = instance.typeArgs[instance.typeArgs.length - 1]
+  }
+  const serial = serialRemedy(program, table, intrinsicName(sig), call, result)
   return (
     `\`${fn.sourceName}\` allocates${where} and stores the allocation into memory, and \`${intrinsicName(sig)}\` ` +
     "releases what a body allocates after every element: a parallel body may allocate only temporaries it drops " +
-    "before it returns, and this analysis stops following a value once it is stored"
+    "before it returns, and this analysis stops following a value once it is stored; " +
+    withSerial("make it answer what it allocates and do the store after the call", serial)
   )
 }
 
@@ -2314,13 +2329,9 @@ const hoistArrowEdits = (program: CheckedProgram, sig: FunctionSig, arrow: Node,
     at = above
     above = commentLineAbove(text, at)
   }
-  const suffix = spawnCallee(program, parents[depth - 2]) !== null ? "Task" : "Body"
-  if (!isIdentifier(sig.sourceName)) {
+  const name = hoistedName(program, sig, parents)
+  if (name.length === 0) {
     return edits
-  }
-  let name = `${sig.sourceName}${suffix}`
-  for (let n = 2; containsWord(text, name); n++) {
-    name = `${sig.sourceName}${suffix}${n}`
   }
   const lineIndent = indentOfLine(text, arrow.start)
   const semi = text.slice(top.start, top.end).endsWith(";") ? ";" : ""
@@ -2330,6 +2341,27 @@ const hoistArrowEdits = (program: CheckedProgram, sig: FunctionSig, arrow: Node,
   edits.push(new Edit(at, at, `const ${name} = ${body}${semi}\n\n`))
   edits.push(new Edit(arrow.start, arrow.end, name))
   return edits
+}
+
+/**
+ * The name an arrow written in `sig` takes as a module function: the
+ * function's own name and `Task` for a `spawn`'s task, `Body` for any other,
+ * numbered past the words the program already holds; "" when the function's
+ * name is not one a `const` may take.
+ */
+const hoistedName = (program: CheckedProgram, sig: FunctionSig, parents: Node[]): string => {
+  if (!isIdentifier(sig.sourceName)) {
+    return ""
+  }
+  const depth = parents.length
+  const spawned = depth >= 2 && spawnCallee(program, parents[depth - 2]) !== null
+  const base = `${sig.sourceName}${spawned ? "Task" : "Body"}`
+  const text = program.source.text
+  let name = base
+  for (let n = 2; containsWord(text, name); n++) {
+    name = `${base}${n}`
+  }
+  return name
 }
 
 /** How many spaces open the line that holds `at`. */
@@ -3793,6 +3825,75 @@ const guardSlot = (program: CheckedProgram, table: TypeTable, guard: i32, name: 
   return `${name}.value`
 }
 
+/**
+ * What the callee of `call` reads through the guard handed to it as `arg`,
+ * rooted at `g`: `g.value.total` when its body reads `p.value.total` through
+ * that parameter. "" when the callee is not this module's, or its body reads
+ * nothing through the parameter that a helper could print.
+ */
+const guardUseIn = (program: CheckedProgram, table: TypeTable, call: Node, arg: Node): string => {
+  const callee = program.nodeCallees[call.id]
+  if ((call.kind !== N_CALL && call.kind !== N_NEW) || callee === null) {
+    return ""
+  }
+  // A constructor reached by `new` is a call too, its arguments the third
+  // child; a generic's instantiation is this module's when its template is,
+  // and its body's types are the instantiation's own.
+  const instance = callee.instance
+  const template: TemplateInfo | null = instance !== null ? instance.template : null
+  const home = template !== null ? template.origin === program.source : callee.definedIn(program.source)
+  if (!home) {
+    return ""
+  }
+  const body = callee.body()
+  const args = call.kind === N_NEW ? call.children[2].children : call.children[1].children
+  let index = callee.paramNames.length > 0 && callee.paramNames[0] === "this" ? 1 : 0
+  let found = false
+  for (const a of args) {
+    if (a === arg) {
+      found = true
+      break
+    }
+    index = index + 1
+  }
+  if (body === null || !found || index >= callee.paramNames.length) {
+    return ""
+  }
+  const types = instance !== null ? instance.nodeTypes : program.nodeTypes
+  return guardUseUnder(program, table, types, body, callee.paramNames[index])
+}
+
+/** The first read of `param.value` under `node` that copies out a number, a `boolean` or a `string`, rooted at `g`. */
+const guardUseUnder = (
+  program: CheckedProgram,
+  table: TypeTable,
+  types: i32[],
+  node: Node,
+  param: string
+): string => {
+  if (node.kind === N_MEMBER || node.kind === N_INDEX) {
+    let root = node
+    while ((root.kind === N_MEMBER || root.kind === N_INDEX) && root.children.length > 0) {
+      root = unwrapParens(root.children[0])
+    }
+    const head = `${param}.value`
+    const text = shownSource(program, node, "")
+    if (root.kind === N_IDENT && root.text === param && text.startsWith(head)) {
+      const slot = copiedSlot(program, table, `g${text.substring(param.length)}`, types[node.id])
+      if (slot.text.length > 0) {
+        return slot.text
+      }
+    }
+  }
+  for (const child of node.children) {
+    const found = guardUseUnder(program, table, types, child, param)
+    if (found.length > 0) {
+      return found
+    }
+  }
+  return ""
+}
+
 const guardUseMessage = (name: string, guard: string, slot: string): string =>
   `A guard is used only as \`${name}.value\`, and \`${name}.value\` only as the base of a field or element ` +
   "read or store: passed, bound, stored, returned or walked, what it reaches would outlive the block that holds the lock; " +
@@ -4313,7 +4414,9 @@ const walkMutexes = (
       }
       if (why.length > 0) {
         const helper = freshName(program.source.text, "useGuard", 0)
-        const message = guardArgumentMessage(named, why, guard, helper, guardSlot(program, table, type, "g"))
+        const used = call !== null ? guardUseIn(program, table, call, at) : ""
+        const slot = used.length > 0 ? used : guardSlot(program, table, type, "g")
+        const message = guardArgumentMessage(named, why, guard, helper, slot)
         out.push(new ScopeFinding(node, message))
         return
       }
@@ -4769,12 +4872,90 @@ const channelDeclareMessage = (
 
 const channelUseMessage = (what: string): string => `${what}${CHANNEL_USE_TAIL}`
 
-/** A channel inside an arrow's body. */
-const channelArrowMessage = (): string =>
-  "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel " +
-  "rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body; " +
-  "write the arrow as a module function, `const sendAll = (ch: Channel<i32>): void => { ch.send(1) }`, and pass " +
-  "`sendAll` where the arrow was"
+/** A channel inside an arrow's body, `arrow` written in `sig`, ending with the arrow as a module function. */
+const channelArrowMessage = (
+  program: CheckedProgram,
+  table: TypeTable,
+  sig: FunctionSig,
+  arrow: Node,
+  parents: Node[],
+  channel: i32
+): string => {
+  let name = hoistedName(program, sig, parents)
+  if (name.length === 0) {
+    name = freshName(program.source.text, "sendAll", 0)
+  }
+  return (
+    "A `Channel` is used inside an arrow here: an arrow is lifted into a function of its own that the channel " +
+    "rules do not follow, so a channel is declared, sent on and received from only in a top-level function's own body; " +
+    `write the arrow as a module function, ${hoistedArrow(program, table, arrow, name, channel)}, and pass ` +
+    `\`${name}\` where the arrow was`
+  )
+}
+
+/**
+ * The arrow as the module function `name`, from the parameters and answer the
+ * checker gave it and the body it was written with: the whole declaration when
+ * the body is one line, its first line when not. An arrow the checker did not
+ * lift, or one that captures a local, is written from the channel it uses,
+ * a `Channel` of `channel`'s element, sending a value of that element.
+ */
+const hoistedArrow = (
+  program: CheckedProgram,
+  table: TypeTable,
+  arrow: Node,
+  name: string,
+  channel: i32
+): string => {
+  const lifted = program.nodeCallees[arrow.id]
+  if (lifted === null || capturesOf(lifted).length > 0) {
+    const element = channelElement(program, table, channel)
+    const carried = element < 0 ? T_I32 : element
+    const sent = slotLiteral(new CopiedSlot("", carried))
+    return `\`const ${name} = (ch: Channel<${table.typeName(carried)}>): void => { ch.send(${sent}) }\``
+  }
+  const params = new StringBuilder()
+  for (let i = 0; i < lifted.writtenArity(); i++) {
+    if (i > 0) {
+      params.add(", ")
+    }
+    params.add(lifted.paramNames[i])
+    params.add(": ")
+    params.add(table.typeName(lifted.paramTypes[i]))
+  }
+  const head = `const ${name} = (${params.toText()}): ${table.typeName(lifted.returnType)} =>`
+  const body = arrow.children[3]
+  const written = oneLineBody(program.source.text, body)
+  if (written.length > 0 && written.length <= 120) {
+    return `\`${head} ${written}\``
+  }
+  return body.kind === N_BLOCK ? `\`${head} {\` and the arrow's body` : `\`${head}\` and the arrow's body`
+}
+
+/**
+ * `body` on one line: as written when it is, a block of one-line statements
+ * joined with their semicolons, or "" when a statement spans lines.
+ */
+const oneLineBody = (text: string, body: Node): string => {
+  const written = text.slice(body.start, body.end)
+  if (written.indexOf("\n") < 0) {
+    return written
+  }
+  if (body.kind !== N_BLOCK) {
+    return ""
+  }
+  const out = new StringBuilder()
+  out.add("{")
+  for (const stmt of body.children) {
+    const line = text.slice(stmt.start, stmt.end)
+    if (line.indexOf("\n") >= 0) {
+      return ""
+    }
+    out.add(` ${line}${line.endsWith(";") ? "" : ";"}`)
+  }
+  out.add(" }")
+  return out.toText()
+}
 
 const channelSendersMessage = (what: string, remedy: string): string =>
   `${what}${CHANNEL_SENDERS_TAIL}; ${remedy}`
@@ -5168,9 +5349,11 @@ const walkChannelUses = (
   if (node.kind === N_ARROW) {
     const used = arrowChannel(program, table, node)
     if (used !== null) {
-      out.push(fixedFinding(used, channelArrowMessage(), hoistArrowEdits(program, sig, node, parents)))
+      const message = channelArrowMessage(program, table, sig, node, parents, program.nodeTypes[used.id])
+      out.push(fixedFinding(used, message, hoistArrowEdits(program, sig, node, parents)))
     } else if (liftedTakesChannel(program, table, node)) {
-      out.push(fixedFinding(node, channelArrowMessage(), hoistArrowEdits(program, sig, node, parents)))
+      const message = channelArrowMessage(program, table, sig, node, parents, -1)
+      out.push(fixedFinding(node, message, hoistArrowEdits(program, sig, node, parents)))
     }
     return
   }
