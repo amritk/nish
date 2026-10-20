@@ -740,6 +740,32 @@ zero `client_request_timeout`. bun kept all 8,000 at 6.5 s, 8 s and 9.5 s, but
 only 755 at 10 s, when its default `idleTimeout` of 10 s closed the rest.
 Every timed round therefore ran with all 8,000 open on every server.
 
+**On `nish/net/router`.** `http1-server.ts` used to compare each request's
+target against its routes by hand. It now registers them on one
+`nish/net/router` `Router`, with the 342-route table of
+[`http-twins/`](http-twins/README.md#the-route-table), and switches on the
+index `match` returns. `old` is the hand-dispatching server at `main` before
+the change (142,960 bytes), and `nish` and `nish-copy` are two builds of the
+router server (158,192 bytes). All are `--profile speed`, timed in the same
+interleaved rounds with `http.mjs --rounds 5 --duration 5` on 2026-10-20, at
+`c1507260`. The machine was the same kind of shared four-vCPU KVM VM, this
+time an Intel Xeon @ 2.10 GHz. The band is `nish-copy`'s median against
+`nish`'s:
+
+| scenario | old | nish | nish-copy | band |
+| --- | ---: | ---: | ---: | ---: |
+| plaintext keep-alive c=256 | 165,078<br>147,906–170,216 | 160,279<br>150,004–165,103 | 135,104<br>103,990–156,949 | −15.7% |
+| json keep-alive c=256 | 159,958<br>120,747–169,992 | 150,831<br>118,618–161,892 | 144,132<br>104,549–159,947 | −4.4% |
+| post-json keep-alive c=256 | 48,329<br>46,425–61,459 | 50,606<br>49,431–56,595 | 51,337<br>49,834–54,536 | +1.4% |
+| deep-route keep-alive c=256 | n/a | 138,037<br>134,089–155,895 | 130,333<br>126,148–155,247 | −5.6% |
+
+`nish` against `old` is −2.9% on plaintext, inside its band. It is −5.7% on
+json and +4.7% on post-json, outside those rows' bands of 4.4% and 1.4%, but
+the two spreads overlap on every row, so this run cannot call any of the three
+different. The deep route, eight segments and three parameters deep in the
+table, runs at 138,037: 86% of plaintext's rate, with its answer built from
+the three parameters. `old` has no such route, so its cell is n/a.
+
 ## P-256
 
 `p256.ts` times ECDSA over P-256 on the three calls a key's life makes:
