@@ -50,6 +50,7 @@ import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
+import { urlFuzzVerdict } from "./link/std_url/verdict.js"
 import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
@@ -6163,6 +6164,71 @@ if (!only || "std_json_tokenizer".includes(only)) {
     )
   } else {
     skip("skipped: link/std_json_tokenizer: no clang, so node.ts is not built natively")
+  }
+}
+
+// `nish/net/url` under the Node prelude, and against Node's own decoders. The
+// link loop runs `std_url` and its four refusals natively; here the same
+// programs run under `runtime/nish.mjs` and print the same bytes, `alloc.ts`
+// reads a target 10,000 times without moving the arena, and `fuzz.ts`'s 3,000
+// seeded inputs are held to `decodeURIComponent`, `URLSearchParams` and the
+// strict rule's regex, natively and under Node.
+if (!only || "std_url".includes(only)) {
+  for (const name of ["std_url", "std_url_escape", "std_url_pairs", "std_url_space", "std_url_window"]) {
+    const dir = path.join(linkDir, name)
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const errFile = path.join(dir, "expected.stderr")
+    const err = fs.existsSync(errFile) ? fs.readFileSync(errFile, "utf8") : null
+    check(
+      `link/${name}: under the Node prelude it exits ${code} and prints expected.out${err === null ? "" : " and expected.stderr"}`,
+      run.status === code && run.stdout === out && (err === null || run.stderr === err),
+      shown(run)
+    )
+  }
+  const urlDir = path.join(linkDir, "std_url")
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_alloc") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_url: 10,000 targets split, decoded and searched leave Arena.used() where it was",
+      run.status === 0 &&
+        /^rounds 10000 failures 0 kept 0 control seen checksum [1-9][0-9]*\n$/.test(run.stdout),
+      shown(run)
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so alloc.ts is not built")
+  }
+  const fuzzEntry = path.join(urlDir, "fuzz.ts")
+  const fuzzNode = runUnderPrelude(fuzzEntry, [])
+  const fromNode = urlFuzzVerdict(fuzzNode.stdout ?? "")
+  check(
+    "link/std_url: 3,000 seeded inputs under Node decode as decodeURIComponent, URLSearchParams and the strict rule say",
+    fuzzNode.status === 0 && fromNode.cases === 3000 && fromNode.bad.length === 0,
+    `${fromNode.cases} cases\n${fromNode.bad.slice(0, 5).join("\n")}\n${shown({ ...fuzzNode, stdout: "" })}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_fuzz") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8", maxBuffer: 1 << 24 }) : built
+    const fromNative = urlFuzzVerdict(native.stdout ?? "")
+    check(
+      "link/std_url: the same 3,000 inputs, built natively, print the Node run's lines byte for byte",
+      native.status === 0 &&
+        fromNative.cases === 3000 &&
+        fromNative.bad.length === 0 &&
+        native.stdout === fuzzNode.stdout,
+      `${fromNative.cases} cases\n${fromNative.bad.slice(0, 5).join("\n")}\n${shown({ ...native, stdout: "" })}`
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so fuzz.ts is not built natively")
   }
 }
 

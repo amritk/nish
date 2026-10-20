@@ -40,6 +40,7 @@ the record that found it. The notes below the table name each such finding.
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
 | JSON | [json.md](json.md) | `std/json-tokenizer.ts`; the typed layer: `std/json-typed.ts`, `src/json-typed.ts`, `src/emit-json.ts`; the dynamic tree: `std/json-value.ts`, `JsonWriter.keyBytes` and `stringBytes` in `std/json.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 1 / 1 ¹⁰ |
+| Percent-decoding and query strings | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | **Total** ⁸ | | | **3 / 10 / 17 / 91** | **0 / 1 / 3 / 15** |
 
@@ -122,6 +123,10 @@ the record that found it. The notes below the table name each such finding.
     the caller passes, leave in the arena only the `HkdfScratch` each makes,
     which wipes its hashers and output blocks before the call returns, and a
     slot the caller owns is the caller's to wipe. It is counted as a fixed Low.
+12. URL-1, URL-2 and URL-3 (Low) are accepted, with the reason in their
+    record, and are not counted: the byte API's output is not checked as
+    UTF-8, a refused decode leaves the bytes before the refusal written, and
+    a repeated key is answered by its first value.
 
 ## Open findings
 

@@ -36,6 +36,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509, base64url |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket |
+| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
 
 ## `nish/testing`
 
@@ -1055,6 +1056,105 @@ export const main = (): i32 => {
 $ nish run request.ts
 GET /hello for example.com
 ```
+
+## `nish/net/url`
+
+A request target is a path and, after a `?`, a query of `key=value` pairs
+joined by `&`, both percent-encoded. `nish/net/url` reads them. For one value,
+`urlQueryGet(target, name)` answers it decoded, `""` for a key written without
+`=`, or null; `urlDecode(s, flags)` decodes a whole string. Both allocate their
+answer and answer null for anything malformed or not UTF-8.
+
+A server reads the bytes it received instead, and allocates nothing:
+`urlQueryStart` finds the `?`, `UrlPathSegments` splits the path on the raw
+`/`, and `UrlQuery` yields the pairs one `next()` at a time, as offsets into
+your array. `percentDecode` and `percentDecodePathSegment` decode one window
+into a buffer you own and answer how many bytes they wrote. An iterator is made
+once and `reset` for each request.
+
+```ts nish:ok
+import {
+  URL_DECODE_FORM,
+  URL_QUERY_PAIR,
+  UrlPathSegments,
+  UrlQuery,
+  UrlQueryLimits,
+  percentDecode,
+  percentDecodePathSegment,
+  urlDecode,
+  urlQueryFind,
+  urlQueryGet,
+  urlQueryStart,
+} from "nish/net/url";
+
+const bytesOf = (s: string): u8[] => {
+  const out: u8[] = new Array<u8>(toI32(s.length));
+  for (let i: i32 = 0; i < toI32(out.length); i++) {
+    out[i] = toU8(s.charCodeAt(i));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  // The string API: one call, an allocated answer, null on anything malformed.
+  const q0 = urlQueryGet("/search?q=a+b%21&page=2", "q");
+  if (q0 !== null) {
+    console.log(`q is ${q0}`); // q is a b!
+  }
+  console.log(`${urlDecode("100%", 0) === null}`); // true: a `%` without two hex digits is refused
+
+  // The byte API: offsets into the target, decoded into a buffer you own.
+  const target = bytesOf("/files/a%2Fb/c?name=J%20Doe&flag");
+  const len = toI32(target.length);
+  const out: u8[] = new Array<u8>(len);
+  const q = urlQueryStart(target, 0, len); // the `?`, or -1
+  const path = new UrlPathSegments();
+  path.reset(target, 0, q);
+  while (path.next()) {
+    const n = percentDecodePathSegment(target, path.start, path.length, out, 0, 0);
+    console.log(`segment of ${n} bytes`); // files, a/b (one segment), c
+  }
+  const query = new UrlQuery(new UrlQueryLimits()); // at most 100 pairs
+  query.reset(target, q + 1, len - q - 1);
+  if (urlQueryFind(query, "name") === URL_QUERY_PAIR) {
+    const n = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM);
+    console.log(`name is ${String.fromBytes(out, 0, n)}`); // name is J Doe
+  }
+  return 0;
+};
+```
+
+```console
+$ nish run route.ts
+q is a b!
+true
+segment of 5 bytes
+segment of 3 bytes
+segment of 1 bytes
+name is J Doe
+```
+
+**Decoding is strict by default.** With flags 0, `percentDecode` answers
+`URL_DECODE_ERR_ESCAPE` for a `%` not followed by two hex digits and
+`URL_DECODE_ERR_NUL` for `%00`, and copies `+` as it is. Add the flags you
+want: `URL_DECODE_FORM` reads `+` as a space, as a form or a query does;
+`URL_DECODE_LENIENT` copies a malformed escape as it is; `URL_DECODE_ALLOW_NUL`
+decodes `%00` to a 0 byte. All three together decode as `URLSearchParams`
+does. A buffer as long as the input is always big enough; a smaller one
+answers `URL_DECODE_ERR_SPACE`, with the bytes before it written.
+
+**A path is split before it is decoded**, so `%2F` stays inside its segment:
+`/a%2Fb/c` is the two segments `a/b` and `c`, never three. `+` is literal in a
+path.
+
+**A query yields at most 100 pairs.** Past `UrlQueryLimits.maxPairs`, `next()`
+answers `URL_QUERY_ERR_PAIRS`, and keeps answering it until `reset`, so a
+target of a hundred thousand `&`-joined pairs costs one bounded scan. Empty
+pairs (`a&&b`) are skipped and not counted. `urlQueryGet` uses the default cap,
+and answers null for a key past it.
+
+The byte API does not check that what it decodes is UTF-8: a value may be
+binary. Nothing here looks for a `#`, which is never part of a request target.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports
