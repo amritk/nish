@@ -11050,7 +11050,9 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
 // prebuilt objects, deliberately: what they assert *is* that the two
 // translation units "compile warning-free together", so compiling them is the
 // check and a cached object would skip it. Two links is what that costs.
-if (!only) {
+// They run under `node tests/run.js runtime_test` on their own, which is how
+// CI's `runtime-net (macos-latest)` job runs runtime-net.c's Darwin branch.
+if (!only || "runtime_test".includes(only)) {
   const rt = spawnSync(
     "clang",
     [
@@ -11066,10 +11068,12 @@ if (!only) {
     ],
     { cwd: root }
   )
+  const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
     "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
-    rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
-    String(rt.stderr)
+    rtRun !== null && rtRun.status === 0,
+    String(rt.stderr) +
+      (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
   )
 
   // WP20 T0: the same file again with -DNISH_THREADS, which is the build where
@@ -11085,7 +11089,9 @@ if (!only) {
     rtThreadsRun !== null && rtThreadsRun.status === 0,
     String(rtThreads.stderr) + (rtThreadsRun ? String(rtThreadsRun.stdout) + String(rtThreadsRun.stderr) : "")
   )
+}
 
+if (!only) {
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
   const preludeLl = path.join(buildDir, "prelude.ll")

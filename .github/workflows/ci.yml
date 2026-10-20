@@ -7,8 +7,8 @@
 #       written for macOS too and that row is commented out; the comment beside
 #       it names the six checks that still fail there, with the run that
 #       measured them. `bootstrap` below has had darwin rows since the 0.4.0
-#       seeds; `nish-cmp` runs on the Linux rows only (.github/seed-matrix.sh
-#       says why).
+#       seeds, `runtime-net` runs the network runtime on a mac, and `nish-cmp`
+#       runs on the Linux rows only (.github/seed-matrix.sh says why).
 # seeds + bootstrap: the rolling freeze (WP19 G3), as a pair of jobs rather
 #       than one, so that "the freeze held" and "there was nothing here to
 #       check it with" are not the same colour. `seeds` asks the last release
@@ -27,6 +27,9 @@
 #       tests on an AArch64 runner, where their native runs are the NEON and
 #       the ARMv8 AES and PMULL paths no x86-64 job can run, and the `aes
 #       kernel` section, std/crypto/aes.ts lowered onto those AES kernels.
+# runtime-net: runtime/runtime-net.c's Darwin branch (kqueue, SO_NOSIGPIPE,
+#       errno translated to Linux's numbers) on a macOS runner: the runtime
+#       unit tests, plain and with -DNISH_THREADS, and every `net_` section.
 # lint: package-lock.json against package.json with no registry involved,
 #       `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
@@ -169,8 +172,9 @@ jobs:
         # 0.4.0, and v0.4.0 and v0.5.0 both carry them -- so `bootstrap
         # (aarch64-darwin)` and `bootstrap (x86_64-darwin)` have been running,
         # and passing, since 0.4.0. They are the reason the LC_UUID cause above
-        # is known rather than suspected. This row is the one macOS gap left in
-        # the file, not the whole of macOS.
+        # is known rather than suspected, and `runtime-net (macos-latest)`
+        # runs the runtime unit tests and the `net_` sections on a mac. This
+        # row is the whole suite on macOS, not the whole of macOS.
         #
         # The install half is written and has now been exercised twice: the two
         # "Install LLVM 18 + lld" steps below are guarded by `runner.os`, so
@@ -487,8 +491,10 @@ jobs:
   #     rather than as the arm that decides a row.
   #
   # So `bootstrap (aarch64-darwin)` and `bootstrap (x86_64-darwin)` are rows
-  # this workflow runs. The macOS gaps left in the file are the `test` row
-  # above and `nish-cmp`, which runs on the Linux rows only. The `stage3 == stage2` comparison that tests/self/bootstrap.js
+  # this workflow runs, as is `runtime-net (macos-latest)` further down. The
+  # macOS gaps left in the file are the `test` row above (the whole suite;
+  # the network runtime is the part `runtime-net` covers) and `nish-cmp`,
+  # which runs on the Linux rows only. The `stage3 == stage2` comparison that tests/self/bootstrap.js
   # makes is *not* the one settled here -- it links its two stages at two
   # paths and is one of the six checks named up there.
   seeds:
@@ -893,6 +899,85 @@ jobs:
           set -o pipefail
           node tests/run.js "aes kernel" | tee "$RUNNER_TEMP/aes-kernel.log"
           grep -E '^PASS  aes kernel: crypto_aes_agree with NISH_AES unset calls all four kernels' "$RUNNER_TEMP/aes-kernel.log"
+
+  # runtime/runtime-net.c's Darwin branch, run (#358). The file is one
+  # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on
+  # Darwin -- and two socket setups (MSG_NOSIGNAL against SO_NOSIGPIPE), with
+  # errno translated to Linux's numbers so a Nish program reads one value on
+  # both. The `bootstrap` darwin rows compile that branch; until this job
+  # nothing ran it. It runs the two runtime unit tests (tests/runtime-test.c's
+  # socket, UDP and poll tests, plain and with -DNISH_THREADS) and every `net_`
+  # section natively on an AArch64 mac, through tests/run.js so the clang line
+  # lives in one place. It is not the commented-out `test` row: that row is the
+  # whole suite and its six named checks, and this is the network runtime alone.
+  runtime-net:
+    name: runtime-net (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # The `test` job's macOS install step, word for word.
+      - name: Install LLVM 18 + lld (macOS)
+        timeout-minutes: 10
+        run: |
+          brew install llvm@18
+          prefix="$(brew --prefix llvm@18)"
+          # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
+          # drops it, fall back to the standalone formula.
+          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      # tests/run.js links its stage1 with the seed before any section runs.
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      # The full RUNTIME_C list with -std=c11 -Wall -Wextra -Werror -O2, run,
+      # then the same with -DNISH_THREADS=1 -pthread: the two checks in
+      # tests/run.js's `runtime_test` block, which a failure's detail prints
+      # the test binary's output for. The grep is the guard against a green
+      # step that ran neither.
+      - name: The runtime unit tests, natively on Darwin
+        run: |
+          set -o pipefail
+          node tests/run.js runtime_test | tee "$RUNNER_TEMP/runtime-test.log"
+          grep -E '^PASS  runtime\.c, runtime-os\.c, .* pass the runtime unit test$' "$RUNNER_TEMP/runtime-test.log"
+          grep -E '^PASS  runtime\.c -DNISH_THREADS: ' "$RUNNER_TEMP/runtime-test.log"
+
+      - name: The net_ sections, natively on Darwin
+        run: |
+          set -o pipefail
+          node tests/run.js net_ | tee "$RUNNER_TEMP/net.log"
+
+      # Every skip is named with its reason, so a green job that skipped its
+      # sockets reads as what it is.
+      - name: Summary
+        if: always()
+        run: |
+          for run in runtime_test:runtime-test net_:net; do
+            f="$RUNNER_TEMP/${run#*:}.log"
+            [ -f "$f" ] || continue
+            {
+              echo "### \`node tests/run.js ${run%%:*}\`"
+              echo
+              grep -E '^[0-9]+ passed, ' "$f" || echo "no summary line: the run did not finish"
+              echo
+              echo "skips: $(grep -c '^SKIP  ' "$f" || true)"
+              grep '^SKIP  ' "$f" | sed 's/^SKIP  /- /' || true
+              grep '^FAIL  ' "$f" | sed 's/^FAIL  /- FAIL: /' || true
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
 
   lint:
     name: lint

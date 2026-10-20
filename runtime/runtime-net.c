@@ -39,7 +39,8 @@
  * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
  * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
- * rows and run by nothing. A WASI build has none of this (the checker refuses
+ * rows and run by its `runtime-net (macos-latest)` job: tests/runtime-test.c and
+ * the `net_` sections of tests/run.js, on a mac. A WASI build has none of this (the checker refuses
  * every `nish:net` call under a wasm target), so there the file is empty.
  */
 #if defined(__wasi__) || defined(__wasm__)
