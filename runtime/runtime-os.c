@@ -411,7 +411,6 @@ static int64_t nish_cgroup_cpus(int64_t n) {
 }
 #endif
 
-
 /* The CPUs this program may use: the smallest of the CPUs online, the ones
    this thread may run on (`taskset`, a container's cpuset), the cgroup quota,
    and `NISH_NUM_THREADS` when it is a positive number. The variable can lower
