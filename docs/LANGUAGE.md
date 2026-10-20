@@ -894,9 +894,17 @@ const area = (s: Shape): i32 => {
   `let` that is assigned or stepped (`i = 1`, `i++`), a parenthesised name or any
   other expression keys no path, so `xs[i]` is not narrowed through it, and a
   store through such an index (`xs[j] = t`) drops nothing, as in `tsc`
-  (`tests/cases/union_narrowing_index`; `reject_union_narrow_path_ident`,
-  `reject_union_narrow_path_steady`, `reject_union_narrow_path_const_index`,
-  `reject_union_narrow_path_index_store`). The union read through the path is
+  (`tests/cases/union_narrowing_index`, `union_narrowing_index_const`;
+  `reject_union_narrow_path_ident`, `reject_union_narrow_path_steady`,
+  `reject_union_narrow_path_const_index`,
+  `reject_union_narrow_path_index_store`,
+  `reject_union_narrow_path_const_chain`,
+  `reject_union_narrow_path_negative_index`,
+  `reject_union_narrow_path_negative_zero`,
+  `reject_union_narrow_path_module_index`,
+  `reject_union_narrow_path_module_literal`,
+  `reject_union_narrow_path_module_ident`,
+  `reject_union_narrow_path_module_negative`). The union read through the path is
   not narrowed (below).
 - A union of two or more variants left still has only its tag
   (`reject_union_narrow_none_if`, `reject_union_narrow_none_ternary`,

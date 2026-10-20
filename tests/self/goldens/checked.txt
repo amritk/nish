@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1065 programs, 137299 dump lines.
+# 1066 programs, 137328 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -55569,6 +55569,36 @@ function main(): void -> @nish_main [exported entry]
   callee 49:15 stepped -> @stepped
   callee 50:15 stored -> @stored
   callee 51:15 walked -> @walked
+program tests/cases/union_narrowing_index_const.ts
+module tests/cases/union_narrowing_index_const.ts (entry)
+const IDX: i32 = 0
+const ONE: i32 = 1
+const J: i32 = 0
+function byIdentity(xs: Kind[]): boolean -> @byIdentity
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function byValue(xs: Kind[]): boolean -> @byValue
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function copied(xs: Kind[]): boolean -> @copied
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 32:9 i: i32 (const)
+  local 33:9 j: i32 (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: byIdentity byValue copied nish_print
+  stackSites=1 stackLocals=1
+  local 41:9 xs: Kind[] (const)
+  callee 42:15 byIdentity -> @byIdentity
+  callee 43:15 byValue -> @byValue
+  callee 44:15 copied -> @copied
 program tests/cases/union_narrowing_join.ts
 module tests/cases/union_narrowing_join.ts (entry)
 struct Circle (class) size=8 align=4
