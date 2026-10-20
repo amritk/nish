@@ -1605,7 +1605,13 @@ if (!only || "net_tcp_connect".includes(only)) {
     shown(loud)
   )
 
-  const loudFlags = runCaseUnderPrelude("net_tcp_reuseport", [])
+  // `net_tcp_reuseport` imports from `nish:net`, a scheme Node's loader refuses
+  // before any call runs, so the prelude is asked of the global instead.
+  const flagsDir = path.join(buildDir, "net-prelude")
+  fs.mkdirSync(flagsDir, { recursive: true })
+  const flagsEntry = path.join(flagsDir, "listen-flags.ts")
+  fs.writeFileSync(flagsEntry, 'export const main = (): number => tcpListenFlags("127.0.0.1", 0, 4, 1);\n')
+  const loudFlags = runUnderPrelude(flagsEntry, [])
   check(
     "net_tcp_reuseport: under the prelude tcpListenFlags fails loudly rather than answering",
     loudFlags.status !== 0 && loudFlags.stderr.includes("`tcpListenFlags` has no synchronous reading under Node"),
