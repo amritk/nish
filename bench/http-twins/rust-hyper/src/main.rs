@@ -1,5 +1,7 @@
-// The hyper 1.x twin of bench/http1-server.ts: a current-thread tokio runtime,
-// so every connection's future runs on the one thread the Nish server gets.
+// The hyper 1.x twin of bench/http1-server.ts. With BENCH_CORES unset or 1, a
+// current-thread tokio runtime, so every connection's future runs on the one
+// thread the Nish server gets; with BENCH_CORES=N, a multi-thread runtime with
+// N workers, as many as the Nish server gets cores.
 //
 //   serve <port> [ignored...]
 mod extra;
@@ -116,6 +118,12 @@ async fn answer(req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infalli
     })
 }
 
+/// BENCH_CORES, the cores bench/http.mjs gives the server, or 1 when it is
+/// unset or not a positive count.
+fn bench_cores() -> usize {
+    std::env::var("BENCH_CORES").ok().and_then(|n| n.parse().ok()).filter(|&n| n > 0).unwrap_or(1)
+}
+
 fn main() {
     let port = std::env::args().nth(1).unwrap_or_else(|| "8080".into());
     let split = |pattern: &str| pattern.split('/').map(String::from).collect();
@@ -123,15 +131,26 @@ fn main() {
     let gets = patterns.iter().map(|p| split(p)).collect();
     let posts = patterns.iter().map(|p| split(&format!("{p}/submit"))).collect();
     EXTRAS.set((gets, posts)).unwrap();
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build().unwrap();
-    runtime.block_on(async {
+    let cores = bench_cores();
+    let mut builder = if cores == 1 {
+        tokio::runtime::Builder::new_current_thread()
+    } else {
+        let mut b = tokio::runtime::Builder::new_multi_thread();
+        b.worker_threads(cores);
+        b
+    };
+    let runtime = builder.enable_io().enable_time().build().unwrap();
+    // The accept loop is spawned, not run inside `block_on`: on the
+    // multi-thread runtime that keeps it on the N workers rather than on an
+    // extra thread beside them.
+    let accept = runtime.spawn(async move {
         let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await.unwrap();
         println!("listening {port}");
         loop {
             let stream = match listener.accept().await {
                 Ok((stream, _)) => stream,
                 // EMFILE and its kind clear only once a connection closes:
-                // wait rather than spin on the one thread.
+                // wait rather than spin on the accepting thread.
                 Err(e) => {
                     eprintln!("accept: {e}");
                     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -144,4 +163,5 @@ fn main() {
             });
         }
     });
+    runtime.block_on(accept).unwrap();
 }

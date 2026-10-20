@@ -1,6 +1,9 @@
 /* Unit test for runtime/runtime.c: arena semantics, string handling, number
  * formatting (checked against what Node prints for `String(x)`), the random
  * generator, and file I/O. */
+/* `SO_REUSEPORT`, which a strict `-std=c11` hides, as runtime-net.c's own
+   `_GNU_SOURCE` does for it. */
+#define _DEFAULT_SOURCE
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
@@ -83,6 +86,7 @@ nish_array *nish_alloc_array(uint64_t, uint64_t);
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
+int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags);
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer);
 int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len);
 int32_t nish_net_write(int32_t fd, const nish_array *buf, int64_t off, int64_t len);
@@ -737,6 +741,38 @@ static void test_net(void) {
   expect_i64(nish_net_close(conn), 0, "the connection closed");
   expect_i64(nish_net_close(conn), -9, "a descriptor closed twice");
   expect_i64(nish_net_close(fd), 0, "the listener closed");
+}
+
+/* `tcpListenFlags`: flag 1 is `SO_REUSEPORT` on the socket, set before the
+   bind, so a second flagged listener shares the port; a `tcpListen` socket
+   carries no such option, and a plain bind on the shared port is refused. The
+   flagged socket is non-blocking and close-on-exec like any other listener. */
+static void test_tcp_reuseport(void) {
+  const nish_str *loopback = nish_str_new("127.0.0.1", 9);
+  int32_t a = nish_tcp_listen_flags(loopback, 0, 4, 1);
+  assert(a >= 0);
+  assert((fcntl(a, F_GETFD) & FD_CLOEXEC) != 0 && (fcntl(a, F_GETFL) & O_NONBLOCK) != 0);
+  int on = 0;
+  socklen_t size = sizeof on;
+  assert(getsockopt(a, SOL_SOCKET, SO_REUSEPORT, &on, &size) == 0);
+  expect_i64(on != 0, 1, "SO_REUSEPORT on a flag-1 listener");
+  int32_t port = nish_net_local_port(a);
+  int32_t b = nish_tcp_listen_flags(loopback, port, 4, 1);
+  assert(b >= 0);
+  expect_i64(nish_net_local_port(b), port, "a second flagged listener on the same port");
+  expect_i64(nish_tcp_listen(loopback, port, 4), -98, "a plain listener on the shared port");
+  expect_i64(nish_tcp_listen_flags(loopback, port, 4, 0), -98, "flag 0 on the shared port");
+  expect_i64(nish_tcp_listen_flags(loopback, 0, 4, 2), -22, "an unknown flag");
+  expect_i64(nish_tcp_listen_flags(loopback, 0, 4, -1), -22, "a negative flags word");
+  int32_t plain = nish_tcp_listen(loopback, 0, 4);
+  assert(plain >= 0);
+  on = 1;
+  size = sizeof on;
+  assert(getsockopt(plain, SOL_SOCKET, SO_REUSEPORT, &on, &size) == 0);
+  expect_i64(on, 0, "no SO_REUSEPORT on a tcpListen socket");
+  expect_i64(nish_net_close(plain), 0, "the plain listener closed");
+  expect_i64(nish_net_close(b), 0, "the second listener closed");
+  expect_i64(nish_net_close(a), 0, "the first listener closed");
 }
 
 /* The UDP half of runtime-net.c: a socket bound to 127.0.0.1 sends to itself,
@@ -1921,6 +1957,7 @@ int main(void) {
   test_parallel_common();
   nish_free_arena();
   test_net();
+  test_tcp_reuseport();
   test_udp();
   test_poll();
   nish_free_arena();

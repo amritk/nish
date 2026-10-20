@@ -445,7 +445,7 @@ refuse the same ticket a third time as a replay, and answer `resume` and
 
 ## Properties verified: resumption
 
-What the psk-wire (#673), ticket-seal (#680) and server-resume stages pin, and
+What the psk-wire (#673), ticket-seal (#680), server-resume and interop-resume stages pin, and
 where the code departs from the design under "Resumption" below, which is
 kept as written.
 
@@ -477,6 +477,35 @@ and twelve `tcp:` checks through `TlsTcpServer` over loopback (the carrier
 paragraph above), the resumed and the fallback ServerHello's share among
 them.
 `net_tls_resume_bench` is the measurement.
+`net_interop_server` and `net_interop_server_f64` run the interop server's
+in-process checks, the HTTP/2 port's tickets among them, over loopback:
+`tickets: a first connection is a full handshake, its Finished verified, and issued a ticket`,
+`its ticket resumes the next connection, the server's Finished verified, and a new ticket issued`,
+`the same ticket replayed falls back to a full handshake`,
+`/close on the resumed connection: 200, its body, then GOAWAY`,
+`and the server closes the connection`.
+Then two rotation turns, each made by `rotateTickets` in `h2.ts`, the
+function `run`'s own turn calls, after the caller's `wipe` of its previous key:
+`a second full handshake under the first key is issued a ticket`,
+`after one rotation turn, a ticket sealed under the first key resumes under the previous one`,
+`and a full handshake after it is issued a ticket sealed under the second key`,
+`after the second turn, a ticket sealed under the first key falls back to a full handshake`,
+`and one sealed under the second key resumes under the previous one`.
+Every ticket in them comes from a full handshake and is offered once, so the
+second turn's refusal is the retired key's, not the strike register's. That
+the retired key is wiped is not read back at run time: a `Secret` cannot be
+read after its wipe, and the turn cannot leave it unwiped, since `previous`
+cannot be assigned again while it holds an unwiped `Secret` (NL2442).
+The rest of `run`'s rotation wiring in `cli.ts` is checked by reading only:
+the `tlsTicketKeyDue` gate, `previous = current` before `rotateTickets`, and
+the order of the keys passed to `step` (current, then previous). The checks
+above call `rotateTickets` directly, and in CI the server never runs long
+enough, or seals enough tickets, for `run` to rotate. The `-O2` wipe-count
+pin on `ticketRotationTurns` (below) covers the rotation turn in
+`tests/link/net_tls_ticket`, written against `std/net/tls/ticket.ts`, not the
+interop server's.
+The interop job's checks against curl and Chromium are in the paragraph
+below.
 
 **The saving.** `link/net_tls_resume_bench: a resumed handshake costs the
 server under 0.85x a full one` reads the medians the bench prints over 41
@@ -508,6 +537,42 @@ its root drop, but one: without `resume`'s arm of `zero` for the early
 secret, `opt` turns a `zero` it inlined elsewhere into a `nish_wipe` call and
 `resume` still reads 72, so `net_tls_resume` reads that secret back as zero
 after every row instead.
+
+**Against curl and Chromium** (interop-resume, `.github/workflows/interop.yml`).
+The interop server (`tests/link/net_interop_server`) turns tickets on for its
+HTTP/2 port: `run` in `cli.ts` holds the current and the previous key in
+locals, rotates them as Ticket keys says (it wipes the previous key, the
+current one takes its place and `rotateTickets` draws the next), and lends both to each `step` (the
+current one as both until the first rotation); the
+slot's turn calls `TlsTcpServer.resume` on a ticket offer and
+`TlsTcpServer.issue` once the connection is open, and logs `tls: full` or
+`tls: resumed` once per connection. A GET of `/close` answers `closing` and
+sends GOAWAY, so the next request has to open a new connection. The curl
+job's step
+`curl --http2 resumes a TLS 1.3 session`
+runs the pinned curl (BoringSSL, without `--ssl-sessions`) once over two
+`/close` URLs, so it keeps the first connection's ticket for the second, and
+checks
+`curl --http2 opens a new connection for the second /close`
+(`num_connects` reads `1 1`; two URLs on one connection read `1 0`) and
+`the server resumed curl's second connection`
+(the log's new handshake lines are exactly `tls: full` then `tls: resumed`).
+The chrome job's step
+`Chromium resumes a TLS 1.3 session on a second connection`,
+under both its certificates, runs `tests/interop/chrome-resume.py`: it reads
+the certificate from the HTTP/2 port, checks its SHA-256 against the
+server's `--hash-file`, waits for the server to log that read's handshake
+and close, launches Playwright's Chromium with
+`--ignore-certificate-errors-spki-list` set to the base64 SHA-256 of its
+SubjectPublicKeyInfo, and navigates to `/close` twice; it passes only if the
+server logged `tls: full` for the first navigation, then closed that
+connection (a close line after that handshake's), and logged `tls: resumed`
+for the second, and a wait on the log that runs out fails naming what never
+came. The
+verdict is the server's log in both jobs, not the client's. **Outcome:**
+Chromium 141.0.7390.37 (Playwright 1.56.0) resumes under the SPKI pin, with
+the minted certificate and with one openssl makes; so does curl 8.17 with
+BoringSSL, and curl 8.5 with OpenSSL run by hand.
 
 **As built.** Where the code departs from the design below:
 
