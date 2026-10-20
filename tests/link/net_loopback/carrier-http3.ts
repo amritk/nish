@@ -96,6 +96,12 @@ export const http3Checks = (t: Suite): void => {
   // must wake the slot when the pacer next allows a flight, which
   // `quicListenerFlightTime` names as a time on the caller's clock.
   const quic = s.quic(n32(0));
+  // Every packet the server sent acknowledged first, so no probe timer is
+  // armed: a slow run could find that timer already due, and the check would
+  // read its wake rather than the pacer's.
+  for (let k: i32 = 0; k < 1000 && quic.recovery.bytesInFlight() > 0 && lp.failure === ""; k++) {
+    lp.step(n32(20));
+  }
   const now: i64 = lbNowMs();
   for (let k: i32 = 0; k < 1000 && quic.recovery.pacerDelay(now, n32(1200)) <= 0; k++) {
     quic.recovery.onPaced(now, n32(1200));
