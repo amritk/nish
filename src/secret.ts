@@ -81,6 +81,7 @@ import {
   SecretNeed,
   STRUCT_CLASS,
   StructInfo,
+  SWITCH_COVERED,
   StructTemplateInfo,
   TemplateInfo,
   capturedReads,
@@ -1064,7 +1065,9 @@ class SecretFlow {
     this.targets.pop()
     const out = target.breaks
     mergeInto(out, fall)
-    if (!hasDefault) {
+    // A value no label names goes past every clause, unless the checker found
+    // the labels name every tag of a union discriminant (`switchCoverage`).
+    if (!hasDefault && this.ctx.program.switchCoverage[stmt.id] !== SWITCH_COVERED) {
       mergeInto(out, entry)
     }
     assign(state, out)

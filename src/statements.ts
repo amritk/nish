@@ -49,9 +49,9 @@ import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { isChannelClass, isIteratorMethod } from "./parallel"
-import { FunctionSig } from "./program"
+import { FunctionSig, SWITCH_COVERED, SWITCH_OPEN } from "./program"
 import { recordGuardFusion } from "./fusion"
-import { builtinNameOf, unwrapParens } from "./emit-util"
+import { builtinNameOf, isOptionalChain, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
@@ -90,6 +90,7 @@ import {
   N_IF,
   N_INDEX_SIGNATURE,
   N_INTERFACE,
+  N_MEMBER,
   N_METHOD,
   N_MODULE_CONST,
   N_NUMBER,
@@ -1164,6 +1165,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // A value no label names falls past every clause, as it was before the
   // `switch`, unless the labels name every value it can have.
   captureNarrowings(kept, before, scope)
+  let covered = false
   if (!hasDefault) {
     const unmatched = scope.child()
     if (tagged !== null || held !== null) {
@@ -1171,8 +1173,12 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     }
     if (!switchCovered(ctx, unmatched, tagged, held, members, clauses)) {
       snapshotExit(ctx, unmatched)
+    } else {
+      covered = tagged !== null || (held === null && readsUnionTag(ctx, stmt.children[0]))
     }
   }
+  const coverage = ctx.program.switchCoverage[stmt.id]
+  ctx.program.switchCoverage[stmt.id] = covered && coverage !== SWITCH_OPEN ? SWITCH_COVERED : SWITCH_OPEN
   const frame = ctx.switchFrames[ctx.switchFrames.length - 1]
   ctx.switchFrames.pop()
   if (tagged !== null || held !== null) {
@@ -1180,9 +1186,25 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   }
   joinExits(ctx, stmt, scope, frame)
   // Anything no clause names reaches the statement after the `switch` unless
-  // a `default` catches it, and so does a `break` or a last clause that falls
-  // out of the bottom.
-  return hasDefault && !broke && lastTerminates
+  // a `default` catches it, or the discriminant is a union's tag and the
+  // labels name every tag it can hold; a `break` or a last clause that falls
+  // out of the bottom reaches it too.
+  return (hasDefault || covered) && !broke && lastTerminates
+}
+
+/**
+ * Whether `node` reads the tag of a union value as it is declared — `s.kind`
+ * on a field, an element or a call's result — so its value is one of the
+ * union's tags: a variant's tag is a `readonly` field written only with its
+ * own member, and a union value never crosses the interop boundary. A plain
+ * enum, which can arrive from C holding any `i32`, never counts, and nor does
+ * a path a test narrowed (`memberSets` then holds the narrowed members).
+ */
+const readsUnionTag = (ctx: CheckContext, node: Node): boolean => {
+  const read = unwrapParens(node)
+  return (
+    read.kind === N_MEMBER && !isOptionalChain(read) && ctx.table.isUnion(ctx.program.memberSets[read.id])
+  )
 }
 
 /**

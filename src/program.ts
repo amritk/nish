@@ -217,6 +217,13 @@ export class FunctionSig {
   }
 }
 
+// What `CheckedProgram.switchCoverage` records of a `switch`.
+
+/** Every instantiation's labels name each tag its union discriminant can hold, and there is no `default`. */
+export const SWITCH_COVERED: i32 = 1
+/** Some instantiation's labels leave a value of the discriminant unnamed, or the switch has a `default`. */
+export const SWITCH_OPEN: i32 = 2
+
 // WP29 P1: what an instantiation is to the data-parallel lowering
 // (`src/parallel.ts` decides, `src/emit-parallel.ts` reads).
 
@@ -1526,6 +1533,15 @@ export class CheckedProgram {
    */
   nodeNullTests: boolean[]
   /**
+   * A `switch` statement's node id -> whether its labels name every tag its
+   * union discriminant can hold, with no `default` (`SWITCH_COVERED`), or not
+   * (`SWITCH_OPEN`), or `0` before the checker reaches it. A generic's body is
+   * checked once per instantiation, and one that leaves a tag out marks the
+   * switch open for every instantiation: the emitter's `unreachable` default
+   * is written only where no instantiation can reach it.
+   */
+  switchCoverage: i32[]
+  /**
    * A `substring` bound node id -> the same analysis placed it in
    * `[0, s.length]`. Keyed by the bound rather than by the call, because one
    * end of an `s.substring(0, n)` is usually proven and the other is not.
@@ -1660,6 +1676,7 @@ export class CheckedProgram {
     this.nodeEnumValues = new Array<i32>(nodeCount)
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeNullTests = new Array<boolean>(nodeCount)
+    this.switchCoverage = new Array<i32>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
     this.nodeProvenRange = new Array<boolean>(nodeCount)
     this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
@@ -1671,6 +1688,7 @@ export class CheckedProgram {
       this.nodeTypes[i] = -1
       this.nodeCoercions[i] = -1
       this.memberSets[i] = -1
+      this.switchCoverage[i] = 0
       // `new Array<string>(n)` is refused — it would zero-fill with null
       // strings — so the empty name every node starts at is pushed instead.
       this.nodeBuiltins.push("")
