@@ -47,4 +47,15 @@ PASS  a key that is not a P-256 key: the ServerHello goes out
 PASS  then internal_error, under the handshake keys like everything after the ServerHello
 PASS  and the connection is closed
 PASS  with nothing gone wrong in the loop
-tls over tcp: 49 passed, 0 failed, 0 skipped
+PASS  a pool of three builds no slot before its first accept
+PASS  a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept
+PASS  with size slots busy the next is shed with TLS_TCP_POOL_FULL and nothing more is built
+PASS  a closed slot is taken again, its TLS state kept rather than built anew
+PASS  the first accept into a slot moves Arena.mark(); closing it and accepting into it again leaves it where it was
+PASS  and every slot is free once closed
+PASS  a pool of 16,384 reports its size with no slot built
+PASS  a slot never built holds nothing: no descriptor, done to every call, -22 to reads and writes
+PASS  closing it and enabling tickets build nothing
+PASS  an accept with no listener answers tcpAccept's -9 and builds nothing
+PASS  a never-built slot's connection is slot 0's, built once, failed, with tickets on as the pool's are
+tls over tcp: 60 passed, 0 failed, 0 skipped

@@ -749,8 +749,8 @@ Evidence:
   slots 0, 1, 2 in order, building each on its first accept"; "with size
   slots busy the next is shed with TLS_TCP_POOL_FULL and nothing more is
   built"; "a closed slot is taken again, its TLS state kept rather than built
-  anew"; "the first accept into a slot grows the arena; closing it and
-  accepting into it again grows it by nothing"; and, over a pool of 16,384 on
+  anew"; "the first accept into a slot moves Arena.mark(); closing it
+  and accepting into it again leaves it where it was"; and, over a pool of 16,384 on
   no socket, "a pool of 16,384 reports its size with no slot built", "a slot
   never built holds nothing: no descriptor, done to every call, -22 to reads
   and writes", "closing it and enabling tickets build nothing", "an accept

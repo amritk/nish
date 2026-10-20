@@ -54,12 +54,16 @@ import { clearRecord, clientKeysFor, recordHello } from "../net_tls_record_commo
 import { Loopback, SIGN_BROKEN, SIGN_LEAF, SIGN_TRACE } from "./harness";
 import { nextTrafficCopy } from "../net_tls_common/secrets";
 
-/** `server.accept`, retried while the connection a client just made has not reached the listener. */
-const acceptWaiting = (server: TlsTcpServer, loop: i32, ready: i32[]): i32 => {
-  let slot: i32 = server.accept(filled(32, 1), filled(32, 2));
+/**
+ * `server.accept`, retried while the connection a client just made has not
+ * reached the listener, with a random and a key made once by the caller, so
+ * an accept allocates only what the server does.
+ */
+const acceptWaiting = (server: TlsTcpServer, loop: i32, ready: i32[], random: u8[], key: u8[]): i32 => {
+  let slot: i32 = server.accept(random, key);
   for (let k: i32 = 0; k < 10 && slot === -11; k++) {
     pollWait(loop, ready, toI32(100));
-    slot = server.accept(filled(32, 1), filled(32, 2));
+    slot = server.accept(random, key);
   }
   return slot;
 };
@@ -72,18 +76,22 @@ const acceptOrder = (t: Suite): void => {
   const loop: i32 = pollCreate();
   pollAdd(loop, listener, toI32(1), ZERO);
   const ready: i32[] = new Array<i32>(8);
+  const random: u8[] = filled(32, 1);
+  const key: u8[] = filled(32, 2);
   const server = new TlsTcpServer(tcpConfig([]), listener, toI32(3));
   t.ok("a pool of three builds no slot before its first accept", server.size() === 3 && toI32(server.connections.length) === 0 && toI32(server.randoms.length) === 0);
   const clients: i32[] = [];
   const slots: i32[] = [];
-  let firstGrowth: i64 = toI64(0);
+  // `Arena.mark()`, not `Arena.used()`: a slot's state may start a chunk.
+  let firstMoved: boolean = false;
   for (let k: i32 = 0; k < 4; k++) {
     clients.push(tcpConnect(addr));
-    const before: i64 = Arena.used();
-    slots.push(acceptWaiting(server, loop, ready));
+    const before: i64 = Arena.mark();
+    const slot: i32 = acceptWaiting(server, loop, ready, random, key);
     if (k === 0) {
-      firstGrowth = Arena.used() - before;
+      firstMoved = Arena.mark() !== before;
     }
+    slots.push(slot);
   }
   t.ok(
     "a pool built as it accepts takes slots 0, 1, 2 in order, building each on its first accept",
@@ -96,16 +104,16 @@ const acceptOrder = (t: Suite): void => {
   const first = server.connection(toI32(1));
   server.close(toI32(1));
   clients.push(tcpConnect(addr));
-  const before: i64 = Arena.used();
-  const again: i32 = acceptWaiting(server, loop, ready);
-  const againGrowth: i64 = Arena.used() - before;
+  const before: i64 = Arena.mark();
+  const again: i32 = acceptWaiting(server, loop, ready, random, key);
+  const againMoved: boolean = Arena.mark() !== before;
   t.ok(
     "a closed slot is taken again, its TLS state kept rather than built anew",
     again === 1 && server.connection(again) === first && server.busy() === 3 && toI32(server.connections.length) === 3
   );
   t.ok(
-    "the first accept into a slot grows the arena; closing it and accepting into it again grows it by nothing",
-    firstGrowth > toI64(0) && againGrowth === toI64(0)
+    "the first accept into a slot moves Arena.mark(); closing it and accepting into it again leaves it where it was",
+    firstMoved && !againMoved
   );
   for (let k: i32 = 0; k < 3; k++) {
     server.close(k);
