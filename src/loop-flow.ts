@@ -37,7 +37,6 @@ import {
   holdKept,
   localsAssignedIn,
   narrowToVariants,
-  variantsIn,
   writesLeft,
 } from "./expressions"
 import { internalErrorFor } from "./ice"
@@ -310,11 +309,14 @@ const flowRead = (ctx: CheckContext, f: LoopFlow, scope: Scope): i32[] => {
       if (bare === base) {
         bits = f.allv[k] | nul
       } else {
-        const variants = variantsIn(ctx, base, bare)
-        for (const variant of variants) {
-          bits = bits | flowBitOf(ctx, f, k, variant)
-        }
-        if (variants.length === 0) {
+        // The variants `variantsIn` would list, read in place so a pass allocates nothing.
+        if (ctx.table.isUnion(bare)) {
+          for (const variant of ctx.table.variantsOf(bare)) {
+            bits = bits | flowBitOf(ctx, f, k, variant)
+          }
+        } else if (ctx.table.hasVariant(base, bare)) {
+          bits = flowBitOf(ctx, f, k, bare)
+        } else {
           bits = f.full[k]
         }
         bits = bits | nul
@@ -364,8 +366,9 @@ const flowImpose = (ctx: CheckContext, f: LoopFlow, scope: Scope, s: i32[]): voi
         let i = 0
         while (i < members.length && i < tags.length) {
           if ((bits & (1 << i)) !== 0) {
+            const tag = tags[i]
             keptVariants.push(members[i])
-            keptTags.push(tags[i])
+            keptTags.push(tag)
           }
           i = i + 1
         }
@@ -424,25 +427,29 @@ const flowEquality = (ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
     const other = unwrapParens(test.children[1 - side])
     if (read.kind === N_IDENT) {
       const k = flowIndex(f, read.text)
-      if (k >= 0 && !f.enums[k] && other.kind === N_NULL) {
+      if (k >= 0 && k < s.length && !f.enums[k] && other.kind === N_NULL) {
         // `u !== null` leaves the variants; `u === null` leaves what held.
         return same ? s : flowSet(s, k, s[k] & ~FLOW_NULL)
       }
-      if (k >= 0 && f.enums[k] && flowConstEnum(ctx, f, other) === f.locals[k].type) {
-        const bits = flowBitsValued(f, k, flowConstValue(ctx, other))
-        return flowSet(s, k, same ? s[k] & bits : s[k] & ~bits)
+      if (k >= 0 && k < s.length && f.enums[k]) {
+        const held = s[k]
+        if (flowConstEnum(ctx, f, other) === f.locals[k].type) {
+          const bits = flowBitsValued(f, k, flowConstValue(ctx, other))
+          return flowSet(s, k, same ? held & bits : held & ~bits)
+        }
       }
     }
     if (read.kind === N_MEMBER && !isOptionalChain(read) && read.children[0].kind === N_IDENT) {
       const k = flowIndex(f, read.children[0].text)
-      if (k >= 0 && !f.enums[k] && (s[k] & FLOW_NULL) === 0) {
+      if (k >= 0 && k < s.length && !f.enums[k] && (s[k] & FLOW_NULL) === 0) {
+        const held = s[k]
         const base = ctx.table.stripNull(f.locals[k].type)
         if (
           read.text === ctx.table.tagNameOf(base) &&
           flowConstEnum(ctx, f, other) === ctx.table.tagEnumOf(base)
         ) {
           const bits = flowBitsValued(f, k, flowConstValue(ctx, other))
-          return flowSet(s, k, same ? s[k] & bits : s[k] & ~bits)
+          return flowSet(s, k, same ? held & bits : held & ~bits)
         }
       }
     }
@@ -506,12 +513,11 @@ const flowJoinArms = (
   localsAssignedIn(ctx, stmt.children[2], f.scope, assigned)
   const joined = flowJoin(f, first, second)
   const out = flowCopy(s)
-  let k = 0
-  while (k < f.locals.length) {
-    if (assigned.indexOf(f.locals[k]) >= 0) {
+  for (const local of assigned) {
+    const k = f.locals.indexOf(local)
+    if (k >= 0 && k < out.length && k < joined.length) {
       out[k] = joined[k]
     }
-    k = k + 1
   }
   return out
 }
@@ -695,10 +701,13 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
   }
   let entry = flowCopy(start)
   let rounds = 0
+  // One unreached set for every round: a `break` or a `continue` replaces it
+  // with a join and never writes into it.
+  const unreached: i32[] = []
   while (rounds < FLOW_ROUNDS && f.status !== "bail") {
     rounds = rounds + 1
-    f.breaks = []
-    f.conts = []
+    f.breaks = unreached
+    f.conts = unreached
     let bodyStart = entry
     if (f.kind !== "do" && cond !== null && cond.kind !== N_EMPTY) {
       bodyStart = flowCond(ctx, f, cond, entry, true)
