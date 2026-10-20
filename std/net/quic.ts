@@ -66,7 +66,11 @@
  * holds back everything ack-eliciting but a probe; an ACK always goes.
  * PATH_RESPONSE and DATAGRAM are never sent again (RFC 9000 §13.3, RFC 9221
  * §5.2). Pacing, and GSO batching, are the carrier's:
- * `nish/net/quic-listener`.
+ * `nish/net/quic-listener`. Once the 1-RTT keys are in, one Application
+ * Data packet number in every 128 to 1024 is skipped, at a distance drawn
+ * from the ID seed, and the last `QUIC_CONN_SKIP_RING` are remembered: an
+ * ACK of one acknowledges a packet never sent, an optimistic ACK meant to
+ * widen the congestion window, and is PROTOCOL_VIOLATION (RFC 9000 §21.4).
  *
  * **Nothing allocated per packet** (QUIC-3). A connection is a slot: every
  * buffer it uses — the packet record, the CRYPTO reassembly, the
@@ -120,6 +124,12 @@
  * update keeps nothing in the arena; each still costs two key derivations of
  * work, so a connection takes at most `QUIC_CONN_MAX_KEY_UPDATES` updates the
  * client starts and closes on the next with KEY_UPDATE_ERROR (QUIC-4).
+ * The AEAD limits are kept (RFC 9001 §6.6): from three quarters of AES-GCM's
+ * confidentiality limit, 2^23 packets under one write key, the server starts
+ * an update itself, and closes with AEAD_LIMIT_REACHED, sealing nothing more,
+ * if it reaches the limit with none possible; past the integrity limit of
+ * packets that fail to authenticate over the connection, 2^52 for AES-GCM
+ * and 2^36 for ChaCha20-Poly1305, it closes with AEAD_LIMIT_REACHED too.
  *
  * **Sans-IO and deterministic.** No socket, no clock and no random device:
  * every random choice (the TLS server random and ephemeral key, the server's
@@ -198,6 +208,7 @@ import {
   quicUnprotectHeader,
 } from "nish/net/quic-packet"
 import {
+  QUIC_ERROR_AEAD_LIMIT_REACHED,
   QUIC_ERROR_APPLICATION,
   QUIC_ERROR_CRYPTO,
   QUIC_ERROR_CRYPTO_BUFFER_EXCEEDED,
@@ -364,6 +375,37 @@ export const QUIC_CONN_PACKET_CONTROL: i32 = 4
  * a probe timeout between two of them.
  */
 export const QUIC_CONN_MAX_KEY_UPDATES: i32 = 64
+/**
+ * AES-GCM's confidentiality limit (RFC 9001 §6.6): how many packets one
+ * 1-RTT write key seals. The server starts a key update at three quarters of
+ * it, and closes the connection with AEAD_LIMIT_REACHED, sending nothing more
+ * under the key, if it reaches it with no update possible. ChaCha20-Poly1305
+ * has no such limit.
+ */
+export const QUIC_CONN_CONFIDENTIALITY_LIMIT: i64 = 8388608
+/**
+ * The integrity limits (RFC 9001 §6.6): how many packets may fail to
+ * authenticate over a connection's life, across every key, before it closes
+ * with AEAD_LIMIT_REACHED. AES-GCM's is 2^52, ChaCha20-Poly1305's 2^36.
+ */
+export const QUIC_CONN_INTEGRITY_LIMIT_GCM: i64 = 4503599627370496
+export const QUIC_CONN_INTEGRITY_LIMIT_CHACHA: i64 = 68719476736
+/**
+ * How many skipped packet numbers the server remembers (RFC 9000 §21.4): an
+ * ACK of any of the last this many closes the connection as an optimistic
+ * acknowledgement. One is skipped every `QUIC_CONN_SKIP_MIN` to
+ * `QUIC_CONN_SKIP_MIN + QUIC_CONN_SKIP_SPREAD - 1` packets, so the ring
+ * reaches back at least a thousand.
+ */
+export const QUIC_CONN_SKIP_RING: i32 = 8
+export const QUIC_CONN_SKIP_MIN: i64 = 128
+export const QUIC_CONN_SKIP_SPREAD: i64 = 897
+/**
+ * The HMAC counter the skip distances are drawn under, past any connection
+ * ID's sequence number (`QUIC_CONN_MAX_ISSUED_CIDS`), so the same seed gives
+ * both without either telling anything about the other.
+ */
+const QUIC_CONN_SKIP_SEQUENCE: i64 = QUIC_MAX_VARINT + 1
 /**
  * How many ack-eliciting datagrams a probe timeout sends in the Initial and
  * Handshake spaces (RFC 9002 §6.2.4 allows up to two). The server's first
@@ -950,6 +992,13 @@ const quicConnAead = (suite: i32): i32 => {
   return QUIC_AEAD_AES_128_GCM
 }
 
+/** Empties a ring of skipped packet numbers. */
+const quicConnForgetSkips = (skipped: i64[]): void => {
+  for (let k: i32 = 0; k < toI32(skipped.length); k += 1) {
+    skipped[k] = -1
+  }
+}
+
 /** Wipes a level's key, IV and header-protection key; `QuicKeysSlot.wipe` takes the header-protection schedule. */
 const quicConnWipeKeys = (keys: QuicKeys | null): void => {
   quicConnWipePacketKey(keys)
@@ -1199,6 +1248,28 @@ export class QuicConnection {
   dropped: i32 = 0
   /** Key updates the client started, against `QUIC_CONN_MAX_KEY_UPDATES`. */
   keyUpdates: i32 = 0
+  /**
+   * The AEAD limits this connection keeps (RFC 9001 §6.6): packets one 1-RTT
+   * write key seals, and packets that fail to authenticate over the
+   * connection. `afterTls` sets them from the suite when the 1-RTT keys
+   * arrive; until then they are AES-GCM's. They are fields so that a test can
+   * lower them after the handshake; nothing else should set them.
+   */
+  confidentialityLimit: i64 = 8388608
+  integrityLimit: i64 = 4503599627370496
+  /** Packets sealed under the current 1-RTT write key, and packets that failed to authenticate, against those limits. */
+  sealedUnderKey: i64 = 0
+  authFailures: i64 = 0
+  /**
+   * The next Application Data packet number skipped (RFC 9000 §21.4), or -1
+   * before the 1-RTT keys; a test may set it to force one. `skipped` holds
+   * the last `QUIC_CONN_SKIP_RING` skipped, -1 where none, `skipHead` where
+   * the next goes, and `skipsDrawn` how many distances were drawn.
+   */
+  nextSkip: i64 = -1
+  skipped: i64[]
+  skipsDrawn: i64 = 0
+  skipHead: i32 = 0
   /** Which of the Application Data space's two read slots, and two write slots, hold the current keys. */
   appReadSlot: i32 = 0
   appWriteSlot: i32 = 0
@@ -1308,6 +1379,8 @@ export class QuicConnection {
     this.writeSecret384 = secret(new Array<u8>(48))
     this.cidScratch = new Array<u8>(QUIC_CONN_CID_LENGTH)
     this.tokenScratch = new Array<u8>(QUIC_RESET_TOKEN_SIZE)
+    this.skipped = new Array<i64>(QUIC_CONN_SKIP_RING)
+    quicConnForgetSkips(this.skipped)
     this.begin(entropy)
   }
 
@@ -1363,6 +1436,14 @@ export class QuicConnection {
     this.state = QUIC_STATE_WAIT_INITIAL
     this.dropped = 0
     this.keyUpdates = 0
+    this.confidentialityLimit = QUIC_CONN_CONFIDENTIALITY_LIMIT
+    this.integrityLimit = QUIC_CONN_INTEGRITY_LIMIT_GCM
+    this.sealedUnderKey = 0
+    this.authFailures = 0
+    this.nextSkip = -1
+    quicConnForgetSkips(this.skipped)
+    this.skipsDrawn = 0
+    this.skipHead = 0
     this.errorIsApplication = false
     this.closeSent = false
     this.addressValidated = false
@@ -1784,7 +1865,7 @@ export class QuicConnection {
     }
     {
       using _scope = arena()
-      used = this.openScoped(buf, header, space, keys)
+      used = this.openScoped(buf, header, space, keys, first)
     }
     if (!used) {
       return false
@@ -1824,7 +1905,7 @@ export class QuicConnection {
    * an allocation, which is what lets the block release the packet's
    * temporaries. Answers whether the packet was used rather than dropped.
    */
-  openScoped(buf: u8[], header: QuicHeader, space: QuicConnSpace, keys: QuicKeys): boolean {
+  openScoped(buf: u8[], header: QuicHeader, space: QuicConnSpace, keys: QuicKeys, first: boolean): boolean {
     const packet: QuicPacket = this.packet
     // Every key generation shares the header-protection key (RFC 9001 §6),
     // so the current keys take it off whatever the Key Phase bit says.
@@ -1839,6 +1920,15 @@ export class QuicConnection {
     const payload: u8[] | null = quicDecryptPayload(open, buf, header, clear, packet)
     if (payload === null) {
       this.drop()
+      // RFC 9001 §6.6: past the integrity limit, the connection closes and
+      // reads nothing more. A first Initial that fails is not counted: the
+      // connection is not started, and the next one starts afresh.
+      if (!first) {
+        this.authFailures = this.authFailures + 1
+        if (this.authFailures > this.integrityLimit) {
+          this.fail(QUIC_ERROR_AEAD_LIMIT_REACHED, QUIC_CONN_NONE)
+        }
+      }
       return false
     }
     // §17.2, §17.3.1: reserved bits set under a valid tag close the connection.
@@ -1965,6 +2055,7 @@ export class QuicConnection {
     this.appWriteSlot = 1 - this.appWriteSlot
     this.writePhase = !this.writePhase
     this.writePhaseFirst = this.application.nextPn
+    this.sealedUnderKey = 0
     return true
   }
 
@@ -2238,7 +2329,7 @@ export class QuicConnection {
    * carried, and each it shows lost has its frames queued again.
    */
   receiveAck(space: QuicConnSpace, frame: QuicFrame): void {
-    if (frame.largest >= space.nextPn) {
+    if (frame.largest >= space.nextPn || (space.level === TLS_LEVEL_APPLICATION && this.acksSkipped(frame))) {
       this.fail(QUIC_ERROR_PROTOCOL_VIOLATION, toI64(frame.type))
       return
     }
@@ -2257,6 +2348,26 @@ export class QuicConnection {
       this.untrack(space, sent.ackedSlot(k))
     }
     this.packetsLost(space, sent)
+  }
+
+  /**
+   * Whether `frame` acknowledges a packet number the server skipped and
+   * still remembers (RFC 9000 §21.4): a client that does is acknowledging
+   * what it never received. Every range the frame stored is read; one past
+   * `QUIC_FRAME_MAX_ACK_RANGES` is not, and loss recovery does not act on
+   * it either.
+   */
+  acksSkipped(frame: QuicFrame): boolean {
+    const ranges: i64[] = frame.ackRanges
+    for (let k: i32 = 0; k < toI32(this.skipped.length); k += 1) {
+      const pn: i64 = this.skipped[k]
+      for (let r: i32 = 0; pn >= 0 && r < frame.ackRangeCount && r * 2 + 1 < toI32(ranges.length); r += 1) {
+        if (pn >= ranges[r * 2] && pn <= ranges[r * 2 + 1]) {
+          return true
+        }
+      }
+    }
+    return false
   }
 
   /**
@@ -2584,6 +2695,12 @@ export class QuicConnection {
           exposeWith(pool.clientApplication, this.readSecret256, tlsHeldCopyOver)
         }
         this.applicationTaken = true
+        // ChaCha20-Poly1305 has no confidentiality limit, and no packet
+        // number, so no count of packets, reaches `QUIC_MAX_VARINT`.
+        const chacha: boolean = aead === QUIC_AEAD_CHACHA20_POLY1305
+        this.integrityLimit = chacha ? QUIC_CONN_INTEGRITY_LIMIT_CHACHA : QUIC_CONN_INTEGRITY_LIMIT_GCM
+        this.confidentialityLimit = chacha ? QUIC_MAX_VARINT : QUIC_CONN_CONFIDENTIALITY_LIMIT
+        this.scheduleSkip(this.application.nextPn)
         tls.wipeSecret(TLS_SECRET_SERVER_APPLICATION)
         tls.wipeSecret(TLS_SECRET_CLIENT_APPLICATION)
         if (aead === QUIC_AEAD_AES_256_GCM) {
@@ -2921,6 +3038,24 @@ export class QuicConnection {
     return this.updateWriteKeys()
   }
 
+  /**
+   * Draws where the next Application Data packet number is skipped (RFC
+   * 9000 §21.4): `QUIC_CONN_SKIP_MIN` plus up to `QUIC_CONN_SKIP_SPREAD - 1`
+   * packets past `from`, the distance taken from the ID seed's HMAC under
+   * `QUIC_CONN_SKIP_SEQUENCE`, so a client that saw where the last gaps fell
+   * cannot tell where the next will.
+   */
+  scheduleSkip(from: i64): void {
+    this.deriveConnectionId(QUIC_CONN_SKIP_SEQUENCE + this.skipsDrawn)
+    this.skipsDrawn = this.skipsDrawn + 1
+    let draw: i64 = 0
+    for (let k: i32 = 0; k < 4 && k < toI32(this.cidScratch.length); k += 1) {
+      draw = (draw << 8) | toI64(this.cidScratch[k])
+    }
+    secureZero(this.cidScratch)
+    this.nextSkip = from + QUIC_CONN_SKIP_MIN + (draw % QUIC_CONN_SKIP_SPREAD)
+  }
+
   // ---- Streams ------------------------------------------------------------------
 
   /**
@@ -3179,11 +3314,38 @@ export class QuicConnection {
     if (this.amplificationBlocked()) {
       return 0
     }
+    this.beforeDatagram()
     {
       using _scope = arena()
       n = this.buildDatagram(out, at)
     }
     return n
+  }
+
+  /**
+   * What the next datagram's Application Data packet needs before it is
+   * built, outside the arena block because a key update stores the keys it
+   * derives. A datagram carries at most one such packet, so this runs once
+   * a packet. From three quarters of the confidentiality limit, each tries a
+   * key update, which goes when `updateKeys` allows (RFC 9001 §6.6). And
+   * the packet number due to be skipped is (RFC 9000 §21.4): remembered,
+   * never sealed nor recorded, and the next skip drawn.
+   */
+  beforeDatagram(): void {
+    const limit: i64 = this.confidentialityLimit
+    if (this.sealedUnderKey >= limit - limit / 4) {
+      this.updateKeys()
+    }
+    const pn: i64 = this.application.nextPn
+    if (pn !== this.nextSkip) {
+      return
+    }
+    if (this.skipHead >= 0 && this.skipHead < toI32(this.skipped.length)) {
+      this.skipped[this.skipHead] = pn
+    }
+    this.skipHead = (this.skipHead + 1) % QUIC_CONN_SKIP_RING
+    this.application.nextPn = pn + 1
+    this.scheduleSkip(pn + 1)
   }
 
   /**
@@ -3486,6 +3648,13 @@ export class QuicConnection {
    * `quicKeys` did not make cause.
    */
   sealAt(space: QuicConnSpace, out: u8[], start: i32, payloadEnd: i32): i32 {
+    // RFC 9001 §6.6: at the confidentiality limit, with no key update made
+    // (`beforeDatagram`), the connection closes, and no packet, its
+    // CONNECTION_CLOSE included, is sealed under the key again.
+    if (space.level === TLS_LEVEL_APPLICATION && this.sealedUnderKey >= this.confidentialityLimit) {
+      this.fail(QUIC_ERROR_AEAD_LIMIT_REACHED, QUIC_CONN_NONE)
+      return 0
+    }
     const keys: QuicKeys | null = space.writeKeys
     const pn: i64 = space.nextPn
     const pnLength: i32 = quicPacketNumberLength(pn, space.largestAcked)
@@ -3525,6 +3694,9 @@ export class QuicConnection {
       return 0
     }
     space.nextPn = pn + 1
+    if (space.level === TLS_LEVEL_APPLICATION) {
+      this.sealedUnderKey = this.sealedUnderKey + 1
+    }
     this.recordSent(space, pn, end - start)
     return end - start
   }

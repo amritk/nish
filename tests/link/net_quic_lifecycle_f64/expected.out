@@ -117,4 +117,16 @@ PASS  under ChaCha20-Poly1305 a client's update is followed too
 PASS  all 64 of the client's updates are followed
 PASS  each, its packet read and the next keys derived in the slot, leaves nothing in the arena (QUIC-4)
 PASS  the 65th is KEY_UPDATE_ERROR, deriving no key
-quic lifecycle: 119 passed, 0 failed, 0 skipped
+PASS  under AES-GCM a write key seals at most 2^23 packets and 2^52 may fail to authenticate (RFC 9001 §6.6)
+PASS  under ChaCha20-Poly1305 2^36 may fail to authenticate, and no count of packets reaches its confidentiality limit
+PASS  at three quarters of the confidentiality limit, 6 packets of 8, the server starts a key update (RFC 9001 §6.6)
+PASS  with no update possible, the key seals up to the limit and the connection closes with AEAD_LIMIT_REACHED, sealing nothing more, its close included
+PASS  packets that fail to authenticate are counted, and up to the integrity limit the connection stays
+PASS  the next past the limit closes it with AEAD_LIMIT_REACHED (RFC 9001 §6.6)
+PASS  a first Initial that fails to authenticate is not counted: no connection is started
+PASS  once the 1-RTT keys are in, a packet number is due to be skipped 128 to 1024 packets on (RFC 9000 §21.4)
+PASS  the number due is never sent: the next packet carries the one after
+PASS  and the next skip is drawn 128 to 1024 packets on again
+PASS  an ACK of the packets sent around it is read
+PASS  an ACK that takes in the skipped number is PROTOCOL_VIOLATION, an optimistic ACK
+quic lifecycle: 131 passed, 0 failed, 0 skipped
