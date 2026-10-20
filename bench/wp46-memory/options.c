@@ -13,9 +13,10 @@
      r   regions: each session in a region of its own, entered by swapping
          the thread's `nish_arena`, freed whole on eviction (64 KiB chunks,
          nish_arena_grow's policy)
-     rs  regions as `r`, with a region's first chunk sized to its first
-         request (a runtime change: the minimum chunk becomes per region),
-         allocated without the swap; neither `r` nor `rs` models the handle
+     rs  regions as `r`, with a region's first chunk sized to its root alone
+         (the rsession; the payload grows a second chunk, as a root whose
+         later allocations are not known in advance must), allocated
+         without the swap; neither `r` nor `rs` models the handle
          table's lookup and generation check, a load and a compare per enter
      s   safe reset: sessions in one of two arenas; once the current one has
          bumped 2x the live bytes since the last flip, the live sessions are
@@ -36,7 +37,8 @@
    Prints the time per request, under `s` the flips and the longest one in
    nanoseconds, the anonymous resident set and the address space at exit
    (statm's resident less shared, and its size), the peak resident set
-   (status's VmHWM), and a checksum folded from every response, which every
+   (status's VmHWM), the minor page faults (getrusage's ru_minflt), and a
+   checksum folded from every response, which every
    variant must agree on.
 
      cc -O2 options.c runtime.o -o options && ./options <variant> <requests> <live> [spread] */
@@ -45,6 +47,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <time.h>
 
 struct nish_chunk { struct nish_chunk *next; uint64_t cap; };
@@ -145,7 +148,9 @@ static void *region_alloc(struct nish_arena *r, uint64_t size) {
 static session *r_make(int64_t id) {
   struct nish_arena r = { 0, 0, 0, 0 };
   uint32_t len = size_of(id);
-  if (region_first) region_first = (sizeof(rsession) + len + 7) & ~(uint64_t)7;
+  /* the first chunk fits the root alone, as the design sizes it: the payload,
+     allocated second, grows a second chunk of twice that or its own size */
+  if (region_first) region_first = (sizeof(rsession) + 7) & ~(uint64_t)7;
   rsession *rs = region_alloc(&r, sizeof *rs);
   session *s = &rs->s;
   s->len = len;
@@ -331,8 +336,10 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &t1);
   double ns = ((double)(t1.tv_sec - t0.tv_sec) * 1e9 + (double)(t1.tv_nsec - t0.tv_nsec)) / (double)requests;
   read_statm();
-  printf("%s ns/request %.1f anon %ld size %ld peak %ld", v, ns, (statm[1] - statm[2]) * 4096, statm[0] * 4096,
-         read_peak());
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  printf("%s ns/request %.1f anon %ld size %ld peak %ld minflt %ld", v, ns, (statm[1] - statm[2]) * 4096,
+         statm[0] * 4096, read_peak(), ru.ru_minflt);
   if (kind == 's') printf(" flips %llu longest %.0f", (unsigned long long)flips, longest_flip);
   printf(" checksum %llu\n", (unsigned long long)checksum);
   return 0;

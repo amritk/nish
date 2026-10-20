@@ -5,14 +5,15 @@
 //
 //   npm run build && node bench/wp46-memory/run.mjs [--rounds 7]
 //
-// Each round runs every variant once, in an order rotated by the round, each
-// in a fresh process so its resident set is its own. A figure is the median
+// Each round runs every variant once, in an order shuffled afresh for the
+// round (a seeded shuffle, so a rerun repeats it), each in a fresh process so
+// its resident set is its own. A figure is the median
 // over the rounds. The noise band is the median over the rounds of the gap
 // between the baseline and a byte-identical copy of it (`a` and `a2`,
 // `plain` and `plain2`), timed in the same rounds: a difference inside it is
 // no difference. The memory columns are medians over the rounds too: the
-// anonymous resident set and the address space at exit, and the peak
-// resident set. Every variant must print the same checksum, or the run fails.
+// anonymous resident set and the address space at exit, the peak resident
+// set, and the minor page faults. Every variant must print the same checksum, or the run fails.
 //
 // Linux only (/proc), run from the repository root.
 import { execFileSync } from "node:child_process"
@@ -23,6 +24,23 @@ const at = args.indexOf("--rounds")
 const rounds = at >= 0 ? Number(args[at + 1]) : 7
 const out = "build/wp46"
 mkdirSync(out, { recursive: true })
+
+// mulberry32: a fixed seed, so a rerun shuffles in the same orders
+let seed = 0x6e697368
+const random = () => {
+  seed = (seed + 0x6d2b79f5) | 0
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+  t ^= t + Math.imul(t ^ (t >>> 7), 61 | t)
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+}
+const shuffled = (xs) => {
+  const s = [...xs]
+  for (let i = s.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
+    ;[s[i], s[j]] = [s[j], s[i]]
+  }
+  return s
+}
 
 const run = (file, argv) => execFileSync(file, argv, { encoding: "utf8" })
 const cc = process.env.CC ?? "clang"
@@ -48,16 +66,16 @@ console.log(run(`${out}/sessions`, ["2000000", "1000", "250000"]))
 
 const interleave = (title, file, variants, argv, base, copy, unit) => {
   const times = Object.fromEntries(variants.map((v) => [v, []]))
-  const mems = Object.fromEntries(variants.map((v) => [v, { anon: [], size: [], peak: [] }]))
+  const kinds = ["anon", "size", "peak", "minflt"]
+  const mems = Object.fromEntries(variants.map((v) => [v, Object.fromEntries(kinds.map((m) => [m, []]))]))
   const last = {}
   const sums = new Set()
   for (let r = 0; r < rounds; r++) {
-    for (let k = 0; k < variants.length; k++) {
-      const v = variants[(k + r) % variants.length]
+    for (const v of shuffled(variants)) {
       const line = run(file, [v, ...argv])
       times[v].push(Number(field(line, unit)))
       sums.add(field(line, "checksum"))
-      for (const m of ["anon", "size", "peak"]) {
+      for (const m of kinds) {
         if (line.includes(` ${m} `)) {
           mems[v][m].push(Number(field(line, m)))
         }
@@ -70,15 +88,19 @@ const interleave = (title, file, variants, argv, base, copy, unit) => {
   }
   const band = median(times[base].map((t, r) => Math.abs(t - times[copy][r]) / t))
   console.log(`## ${title}: ${file} <variant> ${argv.join(" ")}, ${rounds} rounds\n`)
-  console.log(`| variant | ${unit} (median) | vs ${base} | anon at exit | address space | peak resident |`)
-  console.log("| --- | ---: | ---: | ---: | ---: | ---: |")
+  console.log(
+    `| variant | ${unit} (median) | vs ${base} | anon at exit | address space | peak resident | minor faults |`
+  )
+  console.log("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
   const b = median(times[base])
   for (const v of variants) {
     const t = median(times[v])
-    const [anon, size, peak] = ["anon", "size", "peak"].map((m) =>
+    const [anon, size, peak, minflt] = kinds.map((m) =>
       mems[v][m].length > 0 ? String(median(mems[v][m])) : ""
     )
-    console.log(`| ${v} | ${t.toFixed(2)} | ${(t / b).toFixed(2)}x | ${anon} | ${size} | ${peak} |`)
+    console.log(
+      `| ${v} | ${t.toFixed(2)} | ${(t / b).toFixed(2)}x | ${anon} | ${size} | ${peak} | ${minflt} |`
+    )
   }
   if (last.s !== undefined) {
     console.log(`\ns: ${field(last.s, "flips")} flips, the longest ${field(last.s, "longest")} ns`)
