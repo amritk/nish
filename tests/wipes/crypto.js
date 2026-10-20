@@ -119,7 +119,9 @@ export const wipeChecks = [
   // both signing paths call, wipes d, e, f, g and the matrix t; `opt` promotes
   // g and t to stack slots and turns their wipes into thirteen volatile `i32`
   // stores, which this counter does not count, so it reaches 3 (d, e and f)
-  // and adds 3 to `p256SignExposed` and `p256SignSha256Into`.
+  // and adds 3 to `p256SignExposed` and `p256SignSha256Into`. `tests/run.js`
+  // pins those stores itself, nine for g and four for t ("crypto: the wipes
+  // survive opt -O2 (p256ScalarInverse's g and t, …)").
   {
     name: "crypto: the wipes survive opt -O2 (P-256's selected comb entry in p256BaseMultWith; the scratch and accumulator in p256PublicKeyExposed, p256SignExposed and p256SignSha256Into)",
     program: "tests/link/crypto_p256/main.ts",

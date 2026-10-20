@@ -8531,6 +8531,52 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // group is and how a root's wipes are counted).
 runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
 
+// The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
+// `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
+// from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
+// store per limb rather than as a memset. Each array's stores share an SROA base
+// (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
+// four for t; deleting `wipe(g)` or `wipe(t)` removes its group.
+{
+  const name =
+    "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+  if (!only || name.includes(only)) {
+    if (!has("opt")) {
+      skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+    } else {
+      const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnSync(NISH, [path.join(root, "tests/link/crypto_p256/main.ts"), "-o", `${dir}/`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const o =
+        c.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
+              encoding: "utf8",
+            })
+          : c
+      const body =
+        o.status === 0
+          ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+          : ""
+      const groups = new Map()
+      for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
+        groups.set(m[1], (groups.get(m[1]) ?? 0) + 1)
+      }
+      const sizes = [...groups.values()].sort((x, y) => y - x)
+      let detail = `volatile i32 zero stores by array: ${JSON.stringify([...groups])}`
+      if (o.status !== 0) {
+        detail = o.stderr
+      } else if (body === "") {
+        detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+      }
+      check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+    }
+  }
+}
+
 // `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
 // `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
 // the native binary prints.
