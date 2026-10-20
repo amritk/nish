@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1067 programs, 137394 dump lines.
+# 1068 programs, 137446 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -55960,6 +55960,59 @@ function main(): void -> @nish_main [exported entry]
   callee 109:37 rest -> @rest
   callee 109:56 rest -> @rest
   callee 110:18 total -> @total
+program tests/cases/union_switch_generic.ts
+module tests/cases/union_switch_generic.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4
+  constructor -> @Square.constructor
+struct Tri (interface) size=8 align=4
+  field kind: Kind.Tri index=0 offset=0 readonly
+  field base: i32 index=1 offset=4
+function Circle.constructor(this: Circle, r: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: side
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Circle.constructor Square.constructor apply$fn.16.nish_main$arrow0 nish_alloc_struct nish_panic_index nish_panic_overflow nish_print nish_str_from_i32 pick$i32 pick$str
+  stackSites=1 stackLocals=1
+  local 47:9 shapes: (Circle | Square | Tri)[] (const)
+  callee 47:28 new Circle -> @Circle.constructor
+  callee 47:43 new Square -> @Square.constructor
+  callee 47:58 new Circle -> @Circle.constructor
+  local 48:9 n: i32 (const)
+  callee 48:18 apply<(s) => ...> -> @apply$fn.16.nish_main$arrow0
+  callee 58:15 pick<i32> -> @pick$i32
+  callee 58:41 pick<string> -> @pick$str
+function (s) => ...(s: Circle | Square | Tri): i32 -> @nish_main$arrow0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function apply<(s) => ...>(s: Circle | Square | Tri, f: void): i32 -> @apply$fn.16.nish_main$arrow0 [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 44:56 (s) => ... -> @nish_main$arrow0
+function pick<i32>(s: Circle | Square | Tri, a: i32, b: i32): i32 -> @pick$i32 [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b
+  stackSites=0 stackLocals=0
+function pick<string>(s: Circle | Square | Tri, a: string, b: string): string -> @pick$str [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b
+  stackSites=0 stackLocals=0
 program tests/cases/union_types.ts
 module tests/cases/union_types.ts (entry)
 struct Circle (class) size=8 align=4
