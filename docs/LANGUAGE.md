@@ -843,11 +843,23 @@ const area = (s: Shape): i32 => {
   `reject_enum_switch_join`, `reject_enum_switch_unmatched`). What held
   before the `switch` holds again at the start of each clause and in the
   case no label matches, whatever an earlier clause stored
-  (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). For a loop
-  it is every member the local can hold anywhere in it, which may be more
-  than `tsc` knows at a given point, so a comparison refused against it is
-  one `tsc` refuses too, but not every one `tsc` refuses ("Accepted here,
-  refused by `tsc`", below).
+  (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). A loop is
+  followed to a fixpoint, as `tsc` follows it: the head of a `while`, `for`
+  or `do` holds what reaches it before the loop, at the end of an iteration
+  and at a `continue`, joined until it no longer changes; after a `while` or
+  `for` comes the head with its condition false, joined with every `break`,
+  after a `do` the end of the body and its `continue`s with the condition
+  false, and after a `for...of` the head and the `break`s. A loop inside the
+  body and a `switch` inside it are followed the same way
+  (`tests/cases/union_narrowing_loop_flow`; `reject_union_loop_while_join`,
+  `reject_union_loop_do_join`, `reject_union_loop_condition_reassigned`,
+  `reject_enum_loop_for_join`, `reject_enum_loop_do_join`,
+  `reject_enum_loop_top_of_body`, `reject_enum_loop_do_continue`,
+  `reject_enum_loop_break`, `reject_enum_loop_for_of`,
+  `reject_enum_loop_nested`, `reject_enum_loop_switch`). Where the loop
+  holds a shape the fixpoint does not follow, a local or path holds, after
+  it and throughout it, every member stored anywhere in it, which may be
+  more than `tsc` knows ("Accepted here, refused by `tsc`", below).
 - A tag compared with an enum variable narrows on the side where they are
   equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
   `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
@@ -1004,25 +1016,23 @@ wanted is the existing refusal of its position (`reject_union_into_init`,
 stored where a larger one is declared narrows it in `tsc`, as a variant
 does, and is NL2534 too (`reject_union_narrow_subunion`).
 
-**Accepted here, refused by `tsc`.** One shape, and only one, compiles
-here that `tsc --strict` refuses; it is pinned as it stands, with the
-expected `tsc` error written at each comparison, so the case fails on either
-side once the gap closes (`tests/cases/enum_loop_join_gap`,
-`tests/cases/union_narrowing_loop_gap`):
+**Accepted here, refused by `tsc`.** A loop whose body holds one of three
+shapes is not followed to a fixpoint (above); the variables it writes hold
+every member stored anywhere in it, so a comparison `tsc` refuses as TS2367
+may compile here. Each is pinned as it stands, with the expected `tsc` error
+written at the comparison, so the case fails on either side once the gap
+closes (`tests/cases/enum_loop_join_gap`):
 
-- **The join after a loop.** After a `while`, `for` or `do` loop, a variable
-  or path holds every member the body wrote anywhere in it, not only the ones
-  that reach the end of an iteration. `let j: Kind = Kind.A; while (i < n) {
-  j = Kind.B; j = Kind.C; i++ } j === Kind.B` is accepted here, where `j` is
-  `Kind.A | Kind.B | Kind.C`, and is TS2367 to `tsc`, where it is `Kind.A |
-  Kind.C`; so is the same through a path, `h.k`, and in a `for` or a `do`
-  loop. A union narrowed by a tag test inside the body is the same: `while (i
-  < n) { u = make(i); if (u.kind !== Kind.A) return false; i++ } u.kind ===
-  Kind.B`, after `u` was narrowed to `Kind.A` before the loop, is accepted
-  here, where the loop drops the narrowing, and is TS2367 to `tsc`, where `u`
-  is still the `Kind.A` variant; so is the `do` form. The gap closes with a
-  fixpoint over the loop body: what each iteration's end and each `break`
-  leave, joined until it no longer changes.
+- **A path.** A tag or enum held by a field, `h.k`, is joined over the whole
+  loop, not followed through it.
+- **A store inside an expression.** An assignment that is an argument,
+  `keep((j = Kind.C))`, or an initializer, `const t = (j = Kind.C)`, rather
+  than a statement of its own.
+- **A wide type.** A union of more than 29 variants or an enum of more than
+  29 members.
+
+`try`, a labelled statement, destructuring and an arrow that captures a
+local are refused by Nish on their own, so no loop that compiles holds them.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a

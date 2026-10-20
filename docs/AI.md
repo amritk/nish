@@ -1714,9 +1714,12 @@ export const main = (): i32 => {
   `if`, ternary, loop or `switch` stores into holds, after it, what it held
   or any member stored; after a `switch`, what its exits left (each `break`,
   the last clause's end, and the unmatched case when there is no `default`);
-  after a loop, every member the body stored anywhere, which accepts a few
-  comparisons `tsc` refuses (TS2367; LANGUAGE.md, "Accepted here, refused by
-  `tsc`").
+  after a loop, what its condition leaves false at the head, joined until it
+  no longer changes, and each `break`, as `tsc` reads it. A loop holding a
+  path (`h.k`), a store inside an expression or a type of more than 29
+  members falls back to every member the body stored anywhere, which accepts
+  a few comparisons `tsc` refuses (TS2367; LANGUAGE.md, "Accepted here,
+  refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`

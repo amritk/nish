@@ -437,7 +437,10 @@ const flowEquality = (ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
       const k = flowIndex(f, read.children[0].text)
       if (k >= 0 && !f.enums[k] && (s[k] & FLOW_NULL) === 0) {
         const base = ctx.table.stripNull(f.locals[k].type)
-        if (read.text === ctx.table.tagNameOf(base) && flowConstEnum(ctx, f, other) === ctx.table.tagEnumOf(base)) {
+        if (
+          read.text === ctx.table.tagNameOf(base) &&
+          flowConstEnum(ctx, f, other) === ctx.table.tagEnumOf(base)
+        ) {
           const bits = flowBitsValued(f, k, flowConstValue(ctx, other))
           return flowSet(s, k, same ? s[k] & bits : s[k] & ~bits)
         }
@@ -653,7 +656,7 @@ const flowNested = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
   const conts = f.conts
   const iterations = f.iterations
   f.stmt = node
-  f.kind = node.kind === N_WHILE ? "while" : node.kind === N_DO ? "do" : node.kind === N_FOR ? "for" : "for-of"
+  f.kind = flowKindOf(node)
   flowFixpoint(ctx, f, s)
   const out = f.after
   f.stmt = stmt
@@ -727,6 +730,20 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
   f.status = "bail"
 }
 
+/** The name `flowBegin`'s caller gives a loop of `node`'s kind. */
+const flowKindOf = (node: Node): string => {
+  if (node.kind === N_WHILE) {
+    return "while"
+  }
+  if (node.kind === N_DO) {
+    return "do"
+  }
+  if (node.kind === N_FOR) {
+    return "for"
+  }
+  return "for-of"
+}
+
 /** A `for` initializer that is a bare expression, as the statement it stands for. */
 const flowStatementOf = (expr: Node): Node => {
   const stmt = new Node(N_EXPR_STMT, expr.start, expr.end)
@@ -753,7 +770,8 @@ export const flowBegin = (ctx: CheckContext, stmt: Node, scope: Scope, kind: str
   localsAssignedIn(ctx, stmt, scope, assigned)
   for (const local of assigned) {
     const name = local.name
-    const plain = scan.written.indexOf(name) >= 0 && scan.disq.indexOf(name) < 0 && scan.declared.indexOf(name) < 0
+    const plain =
+      scan.written.indexOf(name) >= 0 && scan.disq.indexOf(name) < 0 && scan.declared.indexOf(name) < 0
     const base = ctx.table.stripNull(local.type)
     let tracked = false
     const found = scope.lookup(name)
