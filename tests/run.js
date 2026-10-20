@@ -10452,7 +10452,9 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
 // runs of every threads program under `NISH_NUM_THREADS=1` and `=2`:
 //   - the unit test's pool checks (`test_pool`) again at the two sizes a default run
 //     on a big machine never sees: `NISH_NUM_THREADS=1`, no workers, where the
-//     caller runs every task in spawn order, and `=2`, one worker;
+//     caller runs every task in spawn order, and `=2`, one worker; and at `=3`, `=4`
+//     and `=8` too, so a region's pieces are claimed exactly once at each of those counts
+//     the machine has (`test_parallel_pieces`);
 //   - `nish_cpu_count()` itself: the variable lowers the count and never raises it,
 //     a malformed value is ignored, the affinity mask counts (`taskset`), and so does
 //     a cgroup v2 `cpu.max` quota, rounded up, at the process's own cgroup or any
@@ -10463,7 +10465,7 @@ if (!only || "runtime-parallel".includes(only)) {
     skip("runtime-parallel: clang not installed: the worker pool's checks are not run")
   } else {
     const unit = buildRuntimeTestThreads()
-    for (const threads of ["1", "2"]) {
+    for (const threads of ["1", "2", "3", "4", "8"]) {
       const r =
         unit.status === 0 ? spawnSync(unit.exe, [], { encoding: "utf8", env: envWithThreads(threads) }) : unit
       check(
@@ -15886,7 +15888,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
       "--no-rayon",
       "--twin-runs",
       "1",

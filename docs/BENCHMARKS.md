@@ -58,20 +58,25 @@ Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String buildi
 
 ## Data parallelism (ms, min / median)
 
-Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at a1a5bf8a, the base of the branch it was measured on (branch commit e5f7d943, which a squash merge does not keep, and whose `std/threads.ts` differs from the one merged with it only in a comment of `mapRange`), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
+Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-20, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at 15a1a97, the base of the branch it was measured on (branch commit 6a87ce2, which a squash merge does not keep), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
 
 | Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| par-compute | 64 square roots per element, 2^21 elements (f64) | 898 / 929 | 242 / 251 | 3.72x | 34,028 / 34,472 |
-| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 190 / 205 | 87.9 / 92.5 | 2.17x | 34,016 / 34,460 |
-| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 178 / 183 | 57.8 / 65.0 | 3.07x | 1,524 / 1,836 |
-| par-short | an 8-element map called 2^20 times, each call fed by the last | 58.8 / 65.7 | 62.2 / 68.0 | 0.95x | 1,252 / 1,252 |
-| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 586 / 649 | 65.9 / 84.7 | 8.90x | 2,212 / 2,596 |
-| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 29.4 / 32.7 | 97.1 / 122 | 0.30x | 1,256 / 1,632 |
+| par-compute | 64 square roots per element, 2^21 elements (f64) | 875 / 939 | 228 / 239 | 3.83x | 33,968 / 34,480 |
+| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 173 / 191 | 58.0 / 65.8 | 2.97x | 33,960 / 34,472 |
+| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 174 / 180 | 56.3 / 59.9 | 3.09x | 1,588 / 1,844 |
+| par-short | an 8-element map called 2^20 times, each call fed by the last | 58.4 / 58.9 | 61.4 / 65.2 | 0.95x | 1,320 / 1,320 |
+| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 554 / 632 | 56.3 / 58.0 | 9.83x | 2,216 / 2,728 |
+| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 27.4 / 31.3 | 159 / 193 | 0.17x | 1,320 / 1,576 |
+| par-heavy | 16 integer scramble rounds per element, 2^22 elements, 40 calls; the order-sensitive fold runs on one thread | 2209 / 2299 | 758 / 789 | 2.91x | 34,068 / 34,476 |
+| par-heavy-fold | par-heavy with a fold that vectorises: the same map, a smaller undivided part | 2027 / 2063 | 621 / 636 | 3.26x | 34,068 / 34,472 |
+| par-heavy4 | par-heavy with 64 scramble rounds: four times the divided work, the same fold | 11013 / 11423 | 3217 / 3307 | 3.42x | 34,076 / 34,476 |
+| par-scale | `x * k` over 2^22 elements, 40 calls: a memory-bound map | 343 / 359 | 272 / 293 | 1.26x | 34,072 / 34,476 |
+| par-single | one `x * 3` map over 2^25 elements: a single large region | 220 / 228 | 202 / 204 | 1.09x | 263,332 / 263,844 |
 
 ## Data parallelism against Rust and Go (ms, min / median)
 
-Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map kernels cut the array into one contiguous chunk per thread, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one `add` per bin, is `examples/histogram-atomic.ts` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).
+Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map twins cut the array into one contiguous chunk per thread, the first on the calling thread, as Nish's partitioner did until it began cutting up to eight pieces per thread that the threads claim as they finish ([Scheduling a divided region](#scheduling-a-divided-region)); Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one `add` per bin, is `examples/histogram-atomic.ts` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).
 
 **The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (`nish_panic_overflow` and `nish_panic_index` are reached from par-histogram's `binStream`, for one). The Rust twins build as `--release` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's `--profile speed` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.
 
@@ -142,6 +147,27 @@ The Checksums and Commands sections below are written by a full run, which `--on
   cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
   go build -trimpath -ldflags=-s -w -o build/bench/par-histogram-go build/bench/src/par-histogram.go
   ```
+
+## Scheduling a divided region
+
+Measured on 2026-10-20 on the machine of the data-parallelism table above (Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores), every figure a median in ms over interleaved rounds in which each binary and a byte-identical copy of it ran once; the copy's gap is the noise band, and a difference inside it is no difference.
+
+`nish_parallel_range` used to cut a divided region into one contiguous chunk per thread. A thread that was preempted held every other thread at the join. It now cuts the range into up to eight pieces per thread, never smaller than the grain, and each thread claims the next piece with one relaxed `fetch_add` as it finishes the last; the calling thread runs the first. Eight is the flat middle of a sweep over par-heavy at four threads, nine rounds: 2 pieces per thread was slower and noisier (868, 766–1121), 4 to 32 lay within the copy band (805–822), and so did par-scale's memory-bound map (262–270).
+
+| Kernel | What | `main` | copy | this runtime | copy |
+| --- | --- | ---: | ---: | ---: | ---: |
+| par-heavy, 4 threads, 15 rounds | 16 scramble rounds per element, 2^22 elements, 40 calls | 846 | 834 | 792 | 771 |
+| par-scale, 4 threads | `x * k`, 2^22 elements, 40 calls: memory-bound | 277 | 266 | 270 | 260 |
+| par-single, 4 threads | one `x * 3` map over 2^25 elements | 213 | 209 | 213 | 207 |
+| par-alloc, 4 threads, 9 rounds | a string formatted per element, 2^22 elements: the body allocates | 88 | 79 | 52 | 51 |
+| 3 chunks above the grain | par-heavy at 600,000 elements, 300 calls: three chunks of the grain | 1053 | 1036 | 1071 | 1174 |
+| 8 chunks above the grain | par-heavy at 2^21 elements, 80 calls: eight chunks | 843 | 781 | 815 | 787 |
+
+par-heavy at one thread is 2172 (2108–2315), within main's band. par-heavy goes from 2.33x on `main` to about 2.8x over its own loop on medians (2.91x on the minima of the table above), about 6% faster at four threads. par-alloc, whose body allocates, is the largest gain: 79–88 ms on `main`, 51–52 here, and the gain is the pieces' own: the same runtime with the arena reset between pieces taken out measures 53, the same. par-histogram is a scope of tasks, not a divided region, and its contended lock spreads each binary over 89–258 ms; its medians, 223–229 on `main` and 199–206 here over 15 rounds, are no difference. The others are unchanged. A single 2^25 map is not slower than at efbbd8c8 (212 / 211) or on `main`, and workers touching their own pages first (first-touch) measured within the band, so it is not shipped.
+
+**par-heavy does not reach 3x, and the scheduler is not why.** Its checksum is an order-sensitive fold over the result, which runs on one thread, and so do the fill and the allocation before the map. Timed with zero scramble rounds, so that the map does nearly nothing, the program takes 252 with the fold and 75 without it: the fold is about 177 ms and the fill, the allocation and the near-empty map about 75, some 286 ms of the 2172 one-thread run (13%). By Amdahl the best four cores can do is (2172 − 286) / 4 + 286 ≈ 757 ms, a cap of about 2.9x; the program measures about 2.8x. Inside the region each thread was busy for 500–544 ms of an ideal 471 (87–93% busy efficiency), the region's wall time was 555–591 ms (80–85%), threads started within 1.6–5 ms of each other and finished within 30–60 ms, and each claimed 152–171 pieces.
+
+The fold, not the scheduler, explains `main`'s 2.1–2.3x. With the serial part made smaller or the divided part larger, the same map clears 3x on both runtimes: par-heavy-fold, whose fold vectorises, measures about 3.15x, and par-heavy4, with four times the scramble rounds and the same fold, about 3.4x.
 
 ## Map and Set (WP32)
 
