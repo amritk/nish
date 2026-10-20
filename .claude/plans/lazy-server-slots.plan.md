@@ -85,6 +85,9 @@ stages:
       - id: docs-claim
         content: Rewrite bench/README.md's Pool memory paragraph (the "builds a connection pool per carrier before it listens ... each --slots connections deep" claim) and bench/http.mjs's header comment about the slot pool built before listening — see Pool docs
         status: pending
+      - id: docs-bind-lazily
+        content: In tests/link/net_interop_server/server.ts and examples/relay/relay.ts, bind each slot's WebTransport on the first accept into the slot instead of calling Http3Server.connection(slot) for every slot at start-up, which builds every QUIC slot and hides h3-lazy's start-up win — see Pool docs
+        status: pending
       - id: docs-measure
         content: Measure bench/pool-rss.mjs --per-pool at 16,64,256,1024 slots for the base commit and main in the same interleaved rounds, with a byte-identical copy of main for the noise band, and record the table in bench/README.md — see Pool docs
         status: pending
@@ -283,9 +286,19 @@ machine at base (`--cap`), drop it and say so.
 ## Pool docs
 
 **Owns:** `bench/README.md`, `bench/http.mjs` (its header comment only),
-`tests/link/net_interop_server/server.ts` (the `slots` comment only),
+`tests/link/net_interop_server/**`, `examples/relay/**`,
 `docs/guide/using-nish/standard-library.md`, `std/README.md`,
 `docs/wp39-http-server.md`. Starts after the three code stages are merged.
+
+- *Added during the run (h3-lazy review, #779):* the interop server
+  (`server.ts`, the `wts` loop after `new Http3Server`) and
+  `examples/relay/relay.ts` (~351) call `Http3Server.connection(slot)` for
+  every slot at start-up to bind a `WebTransport`, and `connection` builds the
+  slot it names, so every QUIC slot is still built before the server listens:
+  #779 measured no start-up RSS change in the interop server. Bind each slot's
+  `WebTransport` on the first accept into it instead (or wherever the slot is
+  first handed to the app), keep the interop and relay tests' expected output
+  unchanged, and measure the `h3` pool before and after in this stage's table.
 
 - `bench/README.md` "Pool memory": replace "builds a connection pool per
   carrier before it listens … each `--slots` connections deep" with what is
