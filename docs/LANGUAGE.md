@@ -1777,9 +1777,13 @@ and their `.ll` goldens are byte-identical files.
   (`tests/link/export_c_symbol_allowed`). `main` is the entry's alone
   (`tests/link/main_in_import`), and emitted as `@nish_main`.
 - **A wasm module's function is not named `memory`.** `wasm-ld` exports the
-  module's linear memory as `memory`, so an exported function of that name,
-  or any function under `--no-strict-exports`, is a second export of it, and
-  Node refuses the module ("Duplicate export name 'memory'"). On a wasm
+  module's linear memory as `memory`, and `scripts/build.sh --profile wasm`
+  links with `--export-all`, so in that module an exported function of that
+  name, or any function under `--no-strict-exports`, is a second export of
+  it, and Node refuses the module ("Duplicate export name 'memory'"). The
+  `wasi` command module exports only `memory` and `_start`, so the function
+  does not collide there; the name is reserved there too, so that a program
+  that builds for wasi also builds as a freestanding wasm module. On a wasm
   `--target`, under `--profile wasi`, and in an `--emit-dts` compile, whose
   loader is for the module `scripts/build.sh --profile wasm` links its IR
   into, it is
@@ -1787,7 +1791,9 @@ and their `.ll` goldens are byte-identical files.
   (NL3038; `tests/cases/reject_export_wasm_memory`,
   `reject_export_wasm_memory_wasi`, `reject_export_wasm_memory_dts`,
   `tests/link/export_wasm_memory_sibling`; with `--no-strict-exports`,
-  `reject_export_wasm_memory_no_strict`). IR compiled for the host with `-o`
+  `reject_export_wasm_memory_no_strict`; without the flag a `memory` nobody
+  exported stays internal and compiles, "wasm memory: a --target wasm32
+  compile keeps a `memory` nobody exported" in `tests/run.js`). IR compiled for the host with `-o`
   alone reaches build.sh without the compiler knowing the build is wasm, so
   `build.sh --profile wasm` and `--profile wasi` refuse IR that defines an
   exported `@memory` with exit 2 ("wasm memory: ..." in `tests/run.js`). A

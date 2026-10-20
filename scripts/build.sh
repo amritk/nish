@@ -121,11 +121,13 @@ if [ -n "$cpu" ]; then
     wasm|wasi) echo "error: --cpu x86-64-v3 is an x86-64 level, so the $profile profile does not take it" >&2; exit 2 ;;
   esac
 fi
-# wasm-ld exports a wasm module's linear memory as `memory`, so a function of
-# that name makes a module Node refuses to compile ("Duplicate export name
-# 'memory'", #643). The compiler refuses one (NL3038) when it knows the build is
-# wasm, but IR compiled for the host with `-o` alone reaches these profiles
-# without telling it, so the IR is read here too.
+# wasm-ld exports a wasm module's linear memory as `memory`, so under the wasm
+# profile's `--export-all` a function of that name makes a module Node refuses
+# to compile ("Duplicate export name 'memory'", #643). The wasi module exports
+# only `memory` and `_start`, but the name is reserved there too, so a program
+# that links for wasi also links for wasm. The compiler refuses one (NL3038)
+# when it knows the build is wasm, but IR compiled for the host with `-o` alone
+# reaches these profiles without telling it, so the IR is read here too.
 case "$profile" in
   wasm|wasi)
     for i in ${inputs[@]+"${inputs[@]}"}; do

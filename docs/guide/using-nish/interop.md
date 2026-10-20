@@ -103,10 +103,13 @@ under any WASI host.
 `.node` addon costs about 30 ns and a call into wasm about 2 ns before any work
 is done, so pass whole buffers and let the loop run on the Nish side.
 
-**Do not name an exported function `memory`:** a wasm module exports its
-linear memory under that name, so a wasm `--target`, `--profile wasi` or
-`--emit-dts` compile refuses the function (NL3038), and `build.sh` refuses IR
-that defines one with the `wasm` or `wasi` profile.
+**Do not name an exported function `memory`:** the module `build.sh
+--profile wasm` links exports its linear memory under that name, so a wasm
+`--target`, `--profile wasi` or `--emit-dts` compile refuses the function
+(NL3038), and `build.sh` refuses IR that defines one with the `wasm` or `wasi`
+profile. The wasi module does not export the function, but the name is
+reserved there too, so a program that builds for wasi also builds as a
+freestanding wasm module.
 
 ## C
 

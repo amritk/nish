@@ -11381,12 +11381,27 @@ if (!only || "wasm-memory".includes(only)) {
       `${r.status}: ${r.stderr}`
     )
   }
+  // Without `--no-strict-exports` a `memory` nobody exported is internal, so
+  // it is no second `memory` export (`reject_export_wasm_memory_no_strict`).
+  const privateTs = path.join(memDir, "private.ts")
+  fs.writeFileSync(
+    privateTs,
+    "const memory = (n: i32): i32 => n + 1\nexport const bump = (n: i32): i32 => memory(n)\n"
+  )
+  const wasm32 = spawnSync(
+    NISH,
+    [privateTs, "-o", path.join(memDir, "private-wasm32.ll"), "--target", "wasm32"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "wasm memory: a --target wasm32 compile keeps a `memory` nobody exported",
+    wasm32.status === 0,
+    `${wasm32.status}: ${wasm32.stderr}`
+  )
   if (has("wasm-ld")) {
-    const privateTs = path.join(memDir, "private.ts")
-    fs.writeFileSync(
-      privateTs,
-      "const memory = (n: i32): i32 => n + 1\nexport const bump = (n: i32): i32 => memory(n)\n"
-    )
     const privateLl = path.join(memDir, "private.ll")
     const c = spawnSync(NISH, [privateTs, "-o", privateLl], { cwd: root, encoding: "utf8" })
     const l =
