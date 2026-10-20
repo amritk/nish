@@ -1672,7 +1672,10 @@ export class Http1TlsServer {
     return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
   }
 
-  /** Writes what `slot`'s connection holds into TLS, as far as TLS takes it; a slot never built has nothing to write. */
+  /**
+   * Writes what `slot`'s connection holds into TLS, as far as TLS takes it;
+   * a slot never built has nothing to write.
+   */
   send(slot: i32): void {
     if (slot < 0 || slot >= toI32(this.connections.length)) {
       return
