@@ -64,8 +64,8 @@
  * queues), and holds at most `size` connections once the peak has come;
  * a datagram an established connection reads, and every datagram it sends,
  * allocates nothing; nor does a datagram no slot owns, which the listener
- * reads where it lies and answers into scratch made once, nor a handshake,
- * whose state is the slot's — `docs/security/http3.md` (H3-1, H3-3).
+ * reads where it lies and answers into scratch made once, nor a handshake
+ * into a slot built before, whose state is the slot's — `docs/security/http3.md` (H3-1, H3-3).
  *
  * **The Date.** Every response carries one `date` field (RFC 9110 §6.6.1)
  * from the pool's `HttpDate`, which formats the IMF-fixdate at most once a
