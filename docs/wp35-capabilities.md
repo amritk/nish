@@ -36,16 +36,18 @@ nobody signals is the same run every time.
 
 `unsafe` is not a capability of the world but the one way a program gives up a
 check, and it travels like the others: a function that calls a `nish:unsafe`
-export carries it, and so does every caller, module and package above it, a
-dependency that imports `nish:unsafe` when the entry package does not
-included (#432). It keeps a program deterministic. The deprecated
-`--wrapping` and `--unchecked-indexing` carry no `unsafe`, although they too
-give up a check the source does not show: they reach only the entry package,
-every site they reach is printed as a deprecation or a performance note, and
-they sit on the same command line that passes `--deny unsafe`, so a policy has
-nothing to learn from the bit that the compile does not already print. They
-are on their way out, and `nish --fix` rewrites the sites it can into
-`nish:unsafe` calls, which do carry it.
+export carries it, and so does every caller, module and package above it,
+including a dependency that imports `nish:unsafe` when the entry package does
+not (#432). It keeps a program deterministic. The deprecated `--wrapping` and
+`--unchecked-indexing` carry no `unsafe`, although they too give up a check
+the source does not show: they reach only the entry package, each compile that
+passes one prints its deprecation note (NL9014), and they sit on the same
+command line that passes `--deny unsafe`, so a policy has nothing to learn
+from the bit that the compile does not already print. They are on their way
+out. `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+and `nish --fix` rewrites those into `uncheckedGet` and `uncheckedSet` calls,
+which do carry it; `--wrapping` has no fixer, and its note names the
+`nish:unsafe` exports to write instead.
 
 ## 2. The audit
 

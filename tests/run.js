@@ -21664,9 +21664,9 @@ if (!only || "c-symbols".includes(only)) {
 // read off `--emit-capabilities` for a direct call, a call two frames up, a
 // module with no unsafe call, each of the six exports, and a dependency that
 // imports `nish:unsafe` when the entry package does not. The deprecated
-// `--wrapping` and `--unchecked-indexing` carry no `unsafe`: the opt-out they
-// make is printed at every site they reach, on the command line that would
-// pass the policy too (docs/wp35-capabilities.md §1).
+// `--wrapping` and `--unchecked-indexing` carry no `unsafe`: each prints its
+// deprecation on every compile, on the command line that would pass the
+// policy too (docs/wp35-capabilities.md §1).
 if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeDir = path.join(buildDir, "caps-unsafe")
   fs.rmSync(unsafeDir, { recursive: true, force: true })
