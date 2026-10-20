@@ -299,7 +299,7 @@ const lazy = (t: Suite): void => {
   h3WireConnect(pair.server, pair.port, limits);
   t.ok("a server of two slots takes two clients and refuses none", pair.server.busy() === n32(2) && pair.server.refused === n32(0) && toI32(pair.server.quics.length) === n32(2));
   const late: H3Peer = h3WireConnect(pair.server, pair.port, limits);
-  t.ok("the third, with both busy, is refused and counted, and builds nothing", toI32(late.c.datagrams.length) === n32(0) && pair.server.refused >= n32(1) && toI32(pair.server.quics.length) === n32(2));
+  t.ok("the third, with both busy, is refused and counted, and builds nothing", toI32(late.c.datagrams.length) === n32(0) && pair.server.refused === n32(1) && toI32(pair.server.quics.length) === n32(2));
   pair.server.stop();
 };
 

@@ -231,8 +231,11 @@ own source until the seed compiles it, which is the next release.
     itself builds, so the entry is written in the same pull request as the
     construct rather than a release later. Teach the construct on its
     [user guide](guide/index.md) page, in the same pull request
-    ([README.md](README.md#writing-a-guide-page) has the page rules). The
-    changelog entry is the
+    ([README.md](README.md#writing-a-guide-page) has the page rules). Any
+    other change a user of Nish sees — a builtin or `nish:` module, a
+    `std/` module, a CLI flag or exit code, an install step, a diagnostic a
+    guide page shows — updates its guide page in the same pull request too,
+    as [CLAUDE.md](../CLAUDE.md) states. The changelog entry is the
     commit message, its conventional subject and its body: `scripts/changelog-gen.mjs`
     writes `CHANGELOG.md` from the commits when a release is cut, so the
     file is never edited by hand.

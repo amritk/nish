@@ -65,7 +65,8 @@
  * a datagram an established connection reads, and every datagram it sends,
  * allocates nothing; nor does a datagram no slot owns, which the listener
  * reads where it lies and answers into scratch made once, nor a handshake
- * into a slot built before, whose state is the slot's — `docs/security/http3.md` (H3-1, H3-3).
+ * into a slot built before, whose state is the slot's —
+ * `docs/security/http3.md` (H3-1, H3-3).
  *
  * **The Date.** Every response carries one `date` field (RFC 9110 §6.6.1)
  * from the pool's `HttpDate`, which formats the IMF-fixdate at most once a
@@ -451,7 +452,7 @@ export class Http3Server {
   /** The slots with datagrams for the program, a ring, and the slots with something to send, a stack. */
   readyRing: i32[]
   dirtyStack: i32[]
-  /** Free slots, a stack. */
+  /** Released slots, a stack: a slot never built is taken from `used` instead. */
   free: i32[]
   /** Per slot: 1 while on the ready ring, 2 while on the dirty stack. */
   queued: i32[]
@@ -479,9 +480,11 @@ export class Http3Server {
   sendErrors: i32 = 0
   /**
    * The stream buffers every slot's connection borrows from, made by the
-   * constructor for the stream table `quicConfig` gives every slot: `null` when its streams have none. Each
-   * pool makes a buffer only when a stream first needs one, so an idle
-   * server holds none (QUIC-3).
+   * constructor for the stream table `quicConfig` gives every slot: `null`
+   * when its streams have none. Each pool makes a buffer only when a stream
+   * first needs one, so an idle server holds none (QUIC-3). It is made even
+   * for a configuration `quicConnConfigFits` refuses; `build` shares it only
+   * with a connection whose stream buffers are its size.
    */
   streamPools: QuicStreamPools | null = null
   /** The `bodyChunk`-byte read buffers every slot's `Http3Connection` borrows, one at most each. */
@@ -1011,8 +1014,9 @@ export class Http3Server {
   /**
    * Stops the server for good and wipes the keys it holds: every built slot's
    * connection is released (`QuicConnection.release`, which sends nothing),
-   * as is one built after, by `connection` or `quic`, the listener is released, and the configuration's `statelessResetKey`
-   * and `retryTokenKey`, the index's salt, the connections' entropy scratch
+   * as is one built after, by `connection` or `quic`; the listener is
+   * released; and the configuration's `statelessResetKey` and
+   * `retryTokenKey`, the index's salt, the connections' entropy scratch
    * and the listener's last answer (a Retry's or a reset's token) are
    * zeroed. From then on every datagram is dropped and no connection is
    * accepted. The configuration's two keys are the server's once it is made
