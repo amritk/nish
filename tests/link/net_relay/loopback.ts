@@ -374,12 +374,13 @@ const offload = (t: Suite): void => {
   rig.echo.silent = true;
   c.datagram([rigData(n32(1), n32(300), n32(1)), rigData(n32(2), n32(300), n32(2)), rigData(n32(3), n32(300), n32(3)), rigData(n32(4), n32(100), n32(4))]);
   rig.settle(n32(50));
-  t.eqStr("four DATA in one pass leave in one GSO send, the shorter last", rig.echo.seen(), "300 300 300 100");
+  t.eqStr("four DATA in one pass reach the game server in order, the shorter last", rig.echo.seen(), "300 300 300 100");
   // Where the host has no GSO or GRO (Darwin: `udpBind` and `udpSendTo` answer -95), the relay
-  // falls back to a send per datagram and counts none, and the game server reads each alone.
+  // falls back to a send per datagram and counts none, and the game server reads each alone. The
+  // names are one sentence on both, so expected.out holds either platform to the same lines.
   const offloaded: boolean = rig.echo.offload;
   t.ok(
-    offloaded ? "read back by the game server's GRO socket as one" : "without GSO, sent and read back as four, none counted as GSO",
+    "one GSO send read back as one GRO read where the host offloads, else four sends and none counted",
     offloaded ? rig.relay.gsoSends === n32(1) && rig.echo.coalesced === n32(1) : rig.relay.gsoSends === n32(0) && rig.echo.coalesced === n32(0)
   );
   rig.echo.burst = fill(n32(600), n32(9));
@@ -388,7 +389,7 @@ const offload = (t: Suite): void => {
   rig.settle(n32(50));
   const down: u8[][] = ofType(c, RELAY_DATA);
   t.ok(
-    offloaded ? "a GSO burst from the game server arrives as one GRO read, cut into three DATA" : "without GRO, a burst of three datagrams arrives as three DATA, none counted as GRO",
+    "a burst of three from the game server arrives as three DATA, in one counted GRO read only where the host offloads",
     rig.relay.groReads === (offloaded ? n32(1) : n32(0)) && toI32(down.length) === n32(3) && toI32(down[2].length) === n32(203)
   );
 };
