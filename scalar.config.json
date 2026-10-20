@@ -88,7 +88,8 @@
             "title": "Calling Nish from other languages",
             "filepath": "docs/guide/using-nish/interop.md"
           },
-          "/threads": { "type": "page", "title": "Threads", "filepath": "docs/guide/using-nish/threads.md" }
+          "/threads": { "type": "page", "title": "Threads", "filepath": "docs/guide/using-nish/threads.md" },
+          "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" }
         }
       }
     }
