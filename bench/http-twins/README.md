@@ -2,14 +2,16 @@
 
 Ten servers that answer exactly what the Nish HTTP/1.1 server
 (`bench/http1-server.ts`) answers, built on other runtimes and frameworks so
-that `bench/http.mjs` can time them side by side. Each is held to one core: one
-process, one event loop or one worker, and `bench/http.mjs` pins it to CPU 0
-with `taskset` as it pins the Nish server.
+that `bench/http.mjs` can time them side by side. By default each is held to
+one core: one process, one event loop or one worker, and `bench/http.mjs` pins
+it to CPU 0 with `taskset` as it pins the Nish server. `--cores 1,2,4` runs
+every scenario once per core count N instead (see [Core counts](#core-counts)).
 
 ```bash
 bash bench/http-twins/build.sh      # every twin, into build/http-twins/<name>/
 node bench/http-twins/check.mjs     # every built twin answers the Nish server's bytes
 bash bench/http-twins/run.sh        # nish, nish-copy and every twin, under wrk
+bash bench/http-twins/run.sh --cores 1,2,4   # the same, once per core count
 ```
 
 ## The contract
@@ -18,7 +20,9 @@ Every twin is an executable `build/http-twins/<name>/serve <port> [ignored...]`.
 It binds 127.0.0.1:`<port>`, prints `listening <port>` once bound and exits on
 SIGINT. `serve` is the measured process itself (a binary, or a script that
 `exec`s one), so the pid `bench/http.mjs` reads CPU time and RSS from is the
-server's.
+server's; it sums them over that pid's descendants too, which a multi-process
+twin under `--cores` has. Under `--cores` the twin also reads `BENCH_CORES`
+(see [Core counts](#core-counts)).
 
 | Request | Answer |
 | --- | --- |
@@ -85,14 +89,46 @@ pinned one, and the dependencies are locked by their own tools (`go.sum`,
 | --- | --- | --- |
 | `node-http` | `node:http` `createServer`, one process, no cluster | Node 26.12.0 |
 | `uws` | uWebSockets.js `App`, one process | uWebSockets.js v20.71.0 (commit `9ec36de7`), Node 26.12.0 |
-| `bun` | `Bun.serve` with `routes`, one process, no `reusePort` | Bun 1.4.3 |
-| `bun-elysia` | Elysia on Bun, one process, `parse: "json"` on the POST routes | Bun 1.4.3, Elysia 1.4.30 |
-| `bun-hono` | Hono's default router, served by `Bun.serve`, one process | Bun 1.4.3, Hono 4.13.13 |
-| `go-nethttp` | `net/http` with `encoding/json`, `GOMAXPROCS=1` | Go 1.27.2 |
-| `go-fasthttp` | fasthttp with `encoding/json`, `GOMAXPROCS=1` | Go 1.27.2, fasthttp v1.75.0 |
-| `rust-hyper` | hyper 1 `http1` on a tokio current-thread runtime, serde_json | Rust 1.99.1, hyper 1.12.0, hyper-util 0.1.21, tokio 1.53.3, serde 1.0.229, serde_json 1.0.154 |
-| `rust-actix` | actix-web 4 with `workers(1)`, serde_json | Rust 1.99.1, actix-web 4.17.0, serde 1.0.229, serde_json 1.0.154 |
-| `nginx` | `return`, `worker_processes 1`, `master_process off`, `daemon off` | nginx 1.30.6 (stable) |
+| `bun` | `Bun.serve` with `routes`, one process per core, `reusePort` above one | Bun 1.4.3 |
+| `bun-elysia` | Elysia on Bun, one process per core, `parse: "json"` on the POST routes | Bun 1.4.3, Elysia 1.4.30 |
+| `bun-hono` | Hono's default router, served by `Bun.serve`, one process per core | Bun 1.4.3, Hono 4.13.13 |
+| `go-nethttp` | `net/http` with `encoding/json`, `GOMAXPROCS` from `BENCH_CORES` | Go 1.27.2 |
+| `go-fasthttp` | fasthttp with `encoding/json`, `GOMAXPROCS` from `BENCH_CORES` | Go 1.27.2, fasthttp v1.75.0 |
+| `rust-hyper` | hyper 1 `http1` on a tokio runtime, current-thread at one core, serde_json | Rust 1.99.1, hyper 1.12.0, hyper-util 0.1.21, tokio 1.53.3, serde 1.0.229, serde_json 1.0.154 |
+| `rust-actix` | actix-web 4 with `workers(BENCH_CORES)`, serde_json | Rust 1.99.1, actix-web 4.17.0, serde 1.0.229, serde_json 1.0.154 |
+| `nginx` | `return`, `worker_processes` from `BENCH_CORES`, `daemon off` | nginx 1.30.6 (stable) |
+
+## Core counts
+
+With `--cores 1,2,4`, `bench/http.mjs` runs each scenario once per core count
+N. The server runs under `taskset -c 0-(N-1)` with `BENCH_CORES=N` in its
+environment; wrk runs on the remaining CPUs with one thread per client core,
+at most four. Where no CPU is left (N equal to the machine's count) wrk shares
+the server's cores, and the table header and every cell's notes say so. CPU
+time and RSS are summed over the server's whole process tree. Without
+`--cores` nothing is set and every twin runs as one core, as above.
+
+| Twin | What `BENCH_CORES=N` sets |
+| --- | --- |
+| `node-http` | nothing: prints `single-core` and exits when N > 1, so its row reads `n/a (single-core)` |
+| `uws` | nothing: prints `single-core` and exits when N > 1, so its row reads `n/a (single-core)` |
+| `bun` | N processes on one port with `reusePort`; the first spawns the rest (`bun-cores.mjs`) |
+| `bun-elysia` | as `bun` |
+| `bun-hono` | as `bun` |
+| `go-nethttp` | `GOMAXPROCS=N` |
+| `go-fasthttp` | `GOMAXPROCS=N` |
+| `rust-hyper` | a multi-thread tokio runtime with N workers (current-thread at N = 1); the accept loop runs on a worker |
+| `rust-actix` | `workers(N)`, plus actix's own accept thread beside them |
+| `nginx` | `worker_processes N`, with `master_process on` when N > 1 |
+
+A twin that cannot use more than one core says so by printing `single-core`
+and exiting before it binds; `bench/http.mjs` records the row as not
+applicable rather than as a failure.
+
+`check.mjs` starts every twin without `BENCH_CORES`, so it checks the
+one-core path only; the N-core paths are not checked against the contract.
+Under N > 1, `n` in `/json` also counts per process where the twin runs
+several (the three Bun twins, and nginx's per-connection count as ever), not across the server.
 
 Where each pin lives:
 
