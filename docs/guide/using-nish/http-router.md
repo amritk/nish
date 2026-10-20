@@ -106,7 +106,9 @@ one of:
 | `*` | the rest of the path, possibly empty; only as the last segment |
 
 A trailing slash is a segment of its own, an empty one, so `/users` and
-`/users/` are different routes. Matching is on the bytes as they arrive, case
+`/users/` are different routes, and neither answers the other's target. An
+empty segment inside a pattern, as in `/a//b`, is an empty literal: it matches
+only an empty segment of the target, which a parameter never does. Matching is on the bytes as they arrive, case
 and all.
 
 The query is left alone: the path ends at the first `?`, and what follows is

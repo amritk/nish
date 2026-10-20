@@ -14,8 +14,10 @@ record has it, on base `7611faf`.
 **Result.** Every route a table would hold ambiguously is refused when it is
 added, never resolved by the order routes came in; a refused `add` changes
 nothing. Every target, however long, deep or malformed, answers a route index
-or `ROUTER_NOT_FOUND` / `ROUTER_METHOD_NOT_ALLOWED`; none panics. A lookup
-splits the path once and enters each node of the table at most once, so its
+or `ROUTER_NOT_FOUND` / `ROUTER_METHOD_NOT_ALLOWED`, or
+`ROUTER_TOO_MANY_PARAMS` when the caller's `params` holds too few pairs;
+none panics. `match` panics only on caller misuse: a method or target range
+outside the array it indexes. A lookup splits the path once and enters each node of the table at most once, so its
 cost is bounded by the target's length plus the table's size, whatever the
 target. A match allocates nothing and writes only into the `params` the caller
 passed, and only when every pair fits. Nothing was found to fix or left open.
@@ -61,7 +63,7 @@ in the index.
 | ROUTE-5 | Medium if it failed | `match`, `routerDecode` | `%2F` must not add a segment, and a malformed escape must not be read past. | **Holds.** `match` splits on raw bytes and decodes nothing, so `%2F` stays inside one parameter. `routerDecode` checks every escape before it writes: a `%` at the end, with one digit or a non-hex digit answers `ROUTER_BAD_ESCAPE`, and a decoded length past `out` `ROUTER_NO_ROOM`, each writing nothing. |
 | ROUTE-6 | High if it failed | `match` | A route with more parameter pairs than `params` holds must not write past it. | **Holds.** `match` collects the pairs in its own scratch, sized `2 * maxParams` at construction, and copies them out only when all fit; otherwise it answers `ROUTER_TOO_MANY_PARAMS` and `params` is left as it was. |
 | ROUTE-7 | Low if it failed | `match` | The query must not be matched, nor parsed. | **Holds.** The path ends at the first `?`; neither the query nor a `*`'s pair reaches past it. The query is left to the program. |
-| ROUTE-8 | Low | `match` | Dot segments (`.` and `..`) and empty segments are matched as bytes, not removed as RFC 3986 §5.2.4 removes them, so `/public/../admin` reaches a `/public/*` route with `../admin` as its pair, not an `/admin` route. A program that guards a prefix by its route, and serves files from a parameter, must refuse such a parameter itself. | **Accepted.** Normalising would make the route a target reaches differ from the bytes it spells, and the static-file stage normalises the path it serves. The guide says so: a decoded parameter can hold `/`, `..` and NUL. |
+| ROUTE-8 | Low | `match` | Dot segments (`.` and `..`) and empty segments are matched as bytes, not removed as RFC 3986 §5.2.4 removes them, so `/public/../admin` reaches a `/public/*` route with `../admin` as its pair, not an `/admin` route. A program that guards a prefix by its route, and serves files from a parameter, must refuse such a parameter itself. | **Accepted.** Normalising would make the route a target reaches differ from the bytes it spells. Refusing dot segments in a parameter is the caller's job today; the static-file stage that will normalise the path it serves (`docs/wp42-http-app-layer.md`) is planned, not built. The guide says so: a decoded parameter can hold `/`, `..` and NUL. |
 | ROUTE-9 | Low | `match`, `routerDecode` | The path is matched before it is decoded, so `/%61dmin` does not reach an `/admin` route, while a proxy that decodes first would send it there. | **Accepted.** Decoding first would let `%2F` split a segment, which is the worse confusion; a pattern refuses `%`, so no route can be spelled encoded. RFC 3986 §6.2.2.2 makes `%61` and `a` equivalent, so a server behind a decoding proxy routes on what it receives. |
 
 `add`'s refusals are the program's, not the attacker's, and are listed under
@@ -85,6 +87,13 @@ is `ROUTER_BAD_METHOD`; each limit is `ROUTER_TOO_LONG` or `ROUTER_FULL` one
 past its value and taken at it. "none of the refusals added a node" pins that
 a refused `add` changes nothing, and "a duplicate is still named a duplicate
 when the table is full" that the codes do not depend on the table's state.
+Each refusal is checked in the other order too, so none hangs on what was
+added first: "a duplicate is refused whichever name came first", "* in the
+middle is ambiguous in an empty table", "then a pattern over maxPatternBytes"
+after the exact fits, "are each refused all the same, adding no node"; and a
+literal wins over a parameter whichever came first, "a literal wins over a
+parameter added before it" and "a literal added before a parameter wins over
+it".
 Each refusal also ends a program that checks it, with exit 1 and the message
 its own `panic` gives: `link/net_router_negative_duplicate`, `_ambiguous`,
 `_too_long` and `_too_many_params`, each `exits with 1 and stdout matches
@@ -102,13 +111,19 @@ the absolute form", "nor an empty target", "a bare ? is not rooted either".
 matches", "and visits no node twice (19 of 21)", "visits at most every node
 (18 of 21)", "a path of 5000 segments against a table 7 deep is 404", "after
 visiting no more than the table (4)", "and one of 5000 under a * is taken
-whole".
+whole: 5 [a/a/.../a]", "from just past /static/ to the end (${wholeRest[0]} ..
+${wholeRest[1]})".
 
 **Escapes** (ROUTE-5): "matching is on raw bytes: %2F does not split", "%2F
 decodes to / inside the parameter", "a % at the end is refused", "a % with one
 digit", "a % with a non-hex digit", "a % with a non-hex second digit", "a
 decoded length past out", "a malformed escape late in the range", "writes
-nothing".
+nothing", "a match on /files/a%2Fb", "decodes its pair in place to a/b".
+
+**Empty and trailing segments** (ROUTE-8): "an empty segment is a segment",
+"a trailing slash is significant", "/a alone does not answer /a/", "/a/ alone
+does not answer /a", "a pattern with an empty segment is taken", "a parameter
+does not match an empty segment".
 
 **Params past storage** (ROUTE-6): "a match with more pairs than params holds
 is refused", "and params is left as it was", "a route with no parameters needs

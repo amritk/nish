@@ -111,6 +111,32 @@ export const routerChecks = (): i32 => {
   t.eqStr("matching is on raw bytes: %2F does not split", answer(r, "GET", "/users/a%2Fb"), "2 [a%2Fb]");
   t.eqStr("an empty segment is a segment", answer(r, "GET", "/users//"), `${ROUTER_NOT_FOUND}`);
 
+  // The literal wins in the other order too: added before the parameter.
+  const first = new Router(new RouterLimits());
+  const meFirst: i32 = first.add("GET", "/users/me");
+  const idAfter: i32 = first.add("GET", "/users/:id");
+  t.eqStr("a literal added before a parameter wins over it", answer(first, "GET", "/users/me"), `${meFirst}`);
+  t.eqStr("and the parameter takes the rest", answer(first, "GET", "/users/42"), `${idAfter} [42]`);
+
+  // A trailing slash with only one of the two routes in the table.
+  const bare = new Router(new RouterLimits());
+  bare.add("GET", "/a");
+  t.eqStr("/a alone does not answer /a/", answer(bare, "GET", "/a/"), `${ROUTER_NOT_FOUND}`);
+  const slashed = new Router(new RouterLimits());
+  slashed.add("GET", "/a/");
+  t.eqStr("/a/ alone does not answer /a", answer(slashed, "GET", "/a"), `${ROUTER_NOT_FOUND}`);
+
+  // An empty segment in a pattern is an empty literal: it matches an empty
+  // segment of the target and nothing else, and a parameter never does.
+  const gap = new Router(new RouterLimits());
+  const gapRoute: i32 = gap.add("GET", "/a//b");
+  t.eqI32("a pattern with an empty segment is taken", gapRoute, toI32(0));
+  t.eqStr("and matches the target spelled the same", answer(gap, "GET", "/a//b"), "0");
+  t.eqStr("but not one without the empty segment", answer(gap, "GET", "/a/b"), `${ROUTER_NOT_FOUND}`);
+  const around = new Router(new RouterLimits());
+  around.add("GET", "/a/:x/b");
+  t.eqStr("a parameter does not match an empty segment", answer(around, "GET", "/a//b"), `${ROUTER_NOT_FOUND}`);
+
   // Literal, then parameter, then *, in whichever order they were added, with
   // a branch that fails deeper falling back to the next.
   const order = new Router(new RouterLimits());
@@ -170,6 +196,17 @@ export const routerChecks = (): i32 => {
   t.eqI32("none of the refusals added a node", x.nodeCount(), before + 1);
   t.eqStr("a literal holding : is a literal", `${x.add("GET", "/a:b")} ${answer(x, "GET", "/a:b")}`, "3 3");
 
+  // Each refusal in the other order: the refused pattern first, into an
+  // empty table, or the pair of a duplicate the other way round.
+  const y = new Router(new RouterLimits());
+  y.add("GET", "/a/:name");
+  t.eqI32("a duplicate is refused whichever name came first", y.add("GET", "/a/:id"), ROUTER_DUPLICATE);
+  const z = new Router(new RouterLimits());
+  t.eqI32("* in the middle is ambiguous in an empty table", z.add("GET", "/a/*/b"), ROUTER_AMBIGUOUS);
+  t.eqI32("and so is * then a trailing slash", z.add("GET", "/b/*/"), ROUTER_AMBIGUOUS);
+  t.eqI32("which added no node", z.nodeCount(), toI32(1));
+  t.eqI32("so the shapes they share are taken after", z.add("GET", "/a/*"), toI32(0));
+
   const small = new RouterLimits();
   small.maxPatternBytes = 16;
   small.maxSegments = 4;
@@ -187,6 +224,13 @@ export const routerChecks = (): i32 => {
   t.eqI32("a fourth route is past maxRoutes", s.add("GET", "/y"), ROUTER_FULL);
   t.eqI32("a duplicate is still named a duplicate when the table is full", s.add("GET", "/:p/:q/c/d"), ROUTER_DUPLICATE);
   t.eqI32("the method is checked before the pattern", s.add("", "/aaaaaaaaaaaaaaaaaaaa"), ROUTER_BAD_METHOD);
+  const s2 = new Router(small);
+  t.ok("the exact fits first, into an empty table", s2.add("GET", "/aaaaaaaaaaaaaaa") === 0 && s2.add("GET", "/:a/:b/c/d") === 1);
+  const fits: i32 = s2.nodeCount();
+  t.eqI32("then a pattern over maxPatternBytes", s2.add("GET", "/aaaaaaaaaaaaaaaa"), ROUTER_TOO_LONG);
+  t.eqI32("more segments than maxSegments", s2.add("GET", "/a/b/c/d/e"), ROUTER_TOO_LONG);
+  t.eqI32("and more parameters than maxParams", s2.add("GET", "/:a/:b/*"), ROUTER_TOO_LONG);
+  t.eqI32("are each refused all the same, adding no node", s2.nodeCount(), fits);
 
   // --- targets a router does not route -------------------------------------------------
   t.eqStr("OPTIONS * is not routed", answer(r, "OPTIONS", "*"), `${ROUTER_NOT_FOUND}`);
@@ -215,7 +259,15 @@ export const routerChecks = (): i32 => {
   }
   t.eqStr("a path of 5000 segments against a table 7 deep is 404", answer(back, "GET", longPath.join("")), `${ROUTER_NOT_FOUND}`);
   t.ok(`after visiting no more than the table (${back.lastVisited()})`, back.lastVisited() <= back.nodeCount());
-  t.eqI32("and one of 5000 under a * is taken whole: 5 [a/a/.../a]", toI32(answer(r, "GET", `/static${longPath.join("")}`).length), toI32(3 + 9999 + 1));
+  const getBytes: u8[] = httpFieldBytes("GET");
+  const staticLong: u8[] = httpFieldBytes(`/static${longPath.join("")}`);
+  const wholeRest: i32[] = [0, 0];
+  t.eqI32(
+    "and one of 5000 under a * is taken whole: 5 [a/a/.../a]",
+    r.match(getBytes, toI32(0), toI32(3), staticLong, toI32(0), toI32(staticLong.length), wholeRest),
+    files,
+  );
+  t.ok(`from just past /static/ to the end (${wholeRest[0]} .. ${wholeRest[1]})`, wholeRest[0] === 8 && wholeRest[1] === toI32(staticLong.length) && wholeRest[1] === 8 + 9999);
 
   const tight: i32[] = [7, 7, 7];
   const tm: u8[] = httpFieldBytes("GET");
@@ -279,5 +331,15 @@ export const routerChecks = (): i32 => {
   const mid: u8[] = httpFieldBytes("/f/%41%42/x");
   t.eqI32("a range inside a target decodes only that range", routerDecode(mid, toI32(3), toI32(9), zeros), toI32(2));
   t.ok("to the bytes of that range", zeros[0] === 65 && zeros[1] === 66);
+  // The pair `match` answers fed straight to `routerDecode`, on the same buffer.
+  const fr = new Router(new RouterLimits());
+  fr.add("GET", "/files/:name");
+  const ft: u8[] = httpFieldBytes("/files/a%2Fb?x");
+  const fp: i32[] = [0, 0];
+  const fm: u8[] = httpFieldBytes("GET");
+  t.eqI32("a match on /files/a%2Fb", fr.match(fm, toI32(0), toI32(3), ft, toI32(0), toI32(ft.length), fp), toI32(0));
+  const fout: u8[] = new Array<u8>(8);
+  const fn: i32 = routerDecode(ft, fp[0], fp[1], fout);
+  t.eqStr("decodes its pair in place to a/b", fn < 0 ? `${fn}` : textOf(fout, 0, fn), "a/b");
   return t.done();
 };

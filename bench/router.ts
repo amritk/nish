@@ -7,7 +7,7 @@
 // The table is `routeTable` below, one "METHOD /pattern" string per route, in
 // one place so that a server benchmark can copy it whole: 14 resources with
 // the usual six routes each, a few statics and a `*`, and nested routes up to
-// eight segments deep with one to three parameters.
+// nine segments deep with one to three parameters, the deepest ending in `*`.
 //
 // Each lookup rotates its target through `TARGETS`, four deep paths whose
 // routes sit near the end of the table: the linear scan's honest worst case,

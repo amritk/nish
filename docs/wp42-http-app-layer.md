@@ -124,7 +124,7 @@ its own LANGUAGE.md rule.
 ## 3. Measured
 
 `bench/router.ts` builds a table of 112 routes (77 nodes): statics, 14 REST
-resources of six routes each, and nested routes four to seven segments deep.
+resources of six routes each, and nested routes up to nine segments deep.
 It looks up four deep targets 200,000 times per round, for 15 rounds, against
 a linear scan over the same patterns. A byte-identical copy of the scan gives
 the noise band. Each lookup's result is folded into a printed checksum, and the
