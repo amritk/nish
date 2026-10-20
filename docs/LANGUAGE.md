@@ -4719,15 +4719,54 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   inside a run): it has no length to hold the count to, so the
   `NULL, 0` call C allows is declared with a `CPtr | null` parameter. A `u8[]`
   result is refused by the return rule above (`reject_ffi_buffer_return`).
-- **A call to such a declaration is refused until the release that lowers it**:
-  `` a call to a declared C function that takes a `u8[]` is not lowered yet ``
-  (`reject_ffi_buffer_call`), whether the call names the function, goes
-  through a function parameter bound to it (`reject_ffi_buffer_call_param`),
-  or sits in a constructor (`reject_ffi_buffer_call_constructor`), a method
-  (`reject_ffi_buffer_call_method`) or a spawned arrow
-  (`reject_ffi_buffer_call_spawn`). That lowering passes the array's bytes and
-  panics when the count is larger than any buffer of its run
-  ([`docs/wp40-ffi-buffers-handles.md`](wp40-ffi-buffers-handles.md) §3a).
+- **A call passes the array's data block, and checks the count against every
+  buffer of its run first.** Each buffer is lowered to its data pointer, a
+  `uint8_t *` (`i8*` in the IR), and the count is compared, unsigned, with the
+  buffer's length before C runs. A count larger than one of them stops the
+  program with an `ffi-length` panic, `` `write`: argument 3 (n) counts more
+  bytes than argument 2 (buf) holds ``, exit 1 (`tests/cases/panics_ffi_length`,
+  and `panics_ffi_length_memcpy` for the shorter buffer of a run). The count is
+  a `u64`, so `toU64(0) - toU64(1)` is the largest count there is, and fails
+  (`panics_ffi_length_wrapped`). `--unchecked-indexing` does not remove the
+  check: C cannot check a count, so the boundary keeps it
+  (`panics_ffi_length_unchecked`).
+- **The pointer and the length are read after the last argument is
+  evaluated**, so C sees the array as it is at the call: an argument that
+  pushes or pops before it is seen (`tests/cases/ffi_buffer_late_load`,
+  `panics_ffi_length_shrink`, `panics_ffi_length_inline_pop`).
+- **One count is proved: `toU64(b.length)` of the buffer itself**, where `b`
+  is a `const` local or a parameter named alone and no later argument may
+  resize an array. Such a call carries no check and is not a panic site, so
+  `read(fd, buf, toU64(buf.length))` compiles under `--deny-panics`. A field
+  path, an alias of the buffer, another array's length and a literal are
+  checked (`tests/cases/ffi_buffer_count_proved`). `--deny-panics` refuses
+  any other count and names the one it accepts: `` pass `toU64(buf.length)`
+  of the buffer itself, which needs no check ``.
+- **C borrows the bytes for the call, and writes through a `u8[]`.** As with
+  a `string`, the pointer is lent for the length of the call and C may not
+  keep it, so a buffer made in the call's arena scope is released after it
+  (`tests/cases/ffi_buffer_read`). A `u8[]` argument is written by the call
+  and a `readonly u8[]` one is not, and the compiler records it as it records
+  a store. An exported function that hands its own `u8[]` parameter to such a
+  call writes that parameter: its header drops the `const`, the wasm glue
+  copies the bytes back, and its `define` loses `readonly`
+  (`tests/cases/ffi_buffer_export_written`). A task a scope spawns may not
+  reach such a call: C's body is unseen, so the call may write memory the
+  parent can see, and the task is refused with `` writes memory its caller
+  can see `` (`reject_ffi_buffer_call_spawn`, and
+  `reject_ffi_buffer_scope_race`, `reject_ffi_buffer_scope_field_race` and
+  `reject_ffi_buffer_scope_element_race` for a call reached through a
+  function).
+- **Every kind of call site lowers the same way**: a call by name, through a
+  function parameter bound to the declaration, in a constructor reached by
+  `new` and in a method (`tests/cases/ffi_buffer_call_sites`), and a call that
+  passes a buffer is refused by `--deny ffi` like any other foreign call.
+- **On wasm32 a `u64` count is wider than C's `size_t`.** The data pointer is
+  32 bits there and the length check is the same 64-bit compare, but a C
+  function whose count is a `size_t` takes 32 bits: declare its count `u64`
+  only on a target where `size_t` is 64 bits, until a later release gives the
+  count a target-width type. The freestanding `--profile wasm` link resolves
+  the declaration against the C the link is given.
 
 #### What a declaration cannot say
 
@@ -9248,6 +9287,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
 | `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
+| `ffi-length` | a call to a [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). `--unchecked-indexing` leaves the check in (`panics_ffi_length_unchecked`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
 | `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
