@@ -541,18 +541,15 @@ class RecordIndex {
     return null
   }
 
-  /** The last use of `side` in the source, or `null`: a scan back to the first that names it. */
+  /** The last use of `side` in the source, or `null`. */
   lastUse(side: Side): Node | null {
-    const uses = this.at(`u${side.key}`)
-    let j = uses.length - 1
-    while (j >= 0) {
-      const use = uses[j]
+    let last: Node | null = null
+    for (const use of this.at(`u${side.key}`)) {
       if (side.names(this, use)) {
-        return use
+        last = use
       }
-      j = j - 1
     }
-    return null
+    return last
   }
 
   /**
