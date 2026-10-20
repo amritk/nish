@@ -36,11 +36,20 @@
  * configuration offers `h2` (and may offer `http/1.1` beside it, for a
  * program that serves both and calls `alpn(slot)` itself).
  *
- * **Slots, sized at start-up.** The constructor makes every connection and
- * the TLS pool beside them; `accept` resets the slot's connection, and
- * nothing a connection does after that allocates but a header block's HPACK
- * decoding (`docs/security/http2.md`, H2-1). The caps are the
- * `Http2Config`'s, one for every slot, so a program sets them once.
+ * **Slots, sized at start-up; buffers, borrowed.** The constructor makes
+ * every connection and the TLS pool beside them, but no frame buffer: a
+ * connection borrows its input, output and header-block buffers from the
+ * server's `Http2Pools` when it first needs each, and gives each back once it
+ * is empty and when the slot closes, so a free or idle slot holds none. A
+ * slot whose handshake is not done holds one output buffer, its SETTINGS
+ * written and waiting on TLS, until the handshake ends or the slot closes:
+ * one client that stalls its handshake keeps one buffer, as it kept a whole
+ * slot before (`docs/security/tls.md`, TLS-4). Each pool's ceiling is the
+ * slot count, so a borrow never fails. `accept` resets
+ * the slot's connection, and once the pools are warm nothing a connection
+ * does allocates but a header block's HPACK decoding (`docs/security/http2.md`,
+ * H2-1). The caps are the `Http2Config`'s, one for every slot, so a program
+ * sets them once.
  *
  * **The Date.** Every final response carries one `date` field (RFC 9110
  * §6.6.1) from the pool's `HttpDate`, which formats the IMF-fixdate at most
@@ -52,7 +61,7 @@
  */
 import { Secret } from "nish:secret"
 import { HttpDate } from "nish/net/http1-server"
-import { H2_ERROR, H2_NEED_MORE, Http2Config, Http2Connection } from "nish/net/http2"
+import { H2_ERROR, H2_NEED_MORE, Http2Config, Http2Connection, Http2Pools } from "nish/net/http2"
 import { TlsServerConfig } from "nish/net/tls"
 import { TLS_RECORD_DONE, TLS_RECORD_STATE_OPEN, TLS_RECORD_WANT_WRITE } from "nish/net/tls/record-server"
 import { TlsTcpServer } from "nish/net/tls-tcp"
@@ -76,11 +85,13 @@ export class Http2TlsServer {
    * `connection` and `next`. `date.pin` fixes its clock.
    */
   date: HttpDate
+  /** The frame buffers every slot's connection borrows: one of each per slot at most, none made up front. */
+  readonly pools: Http2Pools
 
   /**
    * A pool of `size` slots, at least one, serving HTTP/2 under `config` over
-   * TLS under `tlsConfig` on `listener`. Every slot's buffers are allocated
-   * here.
+   * TLS under `tlsConfig` on `listener`. Every slot's connection is made
+   * here; its frame buffers are borrowed from `pools` as it needs them.
    */
   constructor(tlsConfig: TlsServerConfig, config: Http2Config, listener: i32, size: i32) {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
@@ -92,6 +103,11 @@ export class Http2TlsServer {
       const conn: Http2Connection = new Http2Connection(config)
       conn.date = date
       this.connections.push(conn)
+    }
+    // After the connections, so a config they refuse panics with their words.
+    this.pools = new Http2Pools("Http2TlsServer", config, this.tls.size())
+    for (let k: i32 = 0; k < this.tls.size(); k++) {
+      this.connections[k].pools = this.pools
     }
   }
 
@@ -144,19 +160,25 @@ export class Http2TlsServer {
   /** The socket of `slot` is readable: TLS reads it, and what HTTP/2 has to send goes after. Answers the interest. */
   readable(slot: i32): i32 {
     this.tls.readable(slot)
-    return this.flush(slot)
+    const wants: i32 = this.flush(slot)
+    this.rest(slot)
+    return wants
   }
 
   /** The socket of `slot` is writable. Answers the interest. */
   writable(slot: i32): i32 {
     this.tls.writable(slot)
-    return this.flush(slot)
+    const wants: i32 = this.flush(slot)
+    this.rest(slot)
+    return wants
   }
 
   /** Signs `slot`'s CertificateVerify with `key`, as `TlsTcpServer.signP256` does. Answers the interest. */
   signP256(slot: i32, key: Secret<u8[]>): i32 {
     this.tls.signP256(slot, key)
-    return this.flush(slot)
+    const wants: i32 = this.flush(slot)
+    this.rest(slot)
+    return wants
   }
 
   /** Whether `slot`'s handshake is done and chose anything but `h2`. */
@@ -197,6 +219,7 @@ export class Http2TlsServer {
     // the program's own `flush` after the loop.
     if (event === H2_NEED_MORE || event === H2_ERROR) {
       this.flush(slot)
+      this.rest(slot)
     }
     return event
   }
@@ -229,8 +252,21 @@ export class Http2TlsServer {
     return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
   }
 
-  /** Ends `slot`'s connection and frees the slot at once, as `TlsTcpServer.close` does. */
+  /**
+   * Ends `slot`'s connection and frees the slot at once, as
+   * `TlsTcpServer.close` does; the connection gives back every buffer it holds.
+   */
   close(slot: i32): void {
+    if (slot >= 0 && slot < toI32(this.connections.length)) {
+      this.connections[slot].drop()
+    }
     this.tls.close(slot)
+  }
+
+  /** Gives back the buffers `slot`'s connection holds and has emptied, so an idle slot holds none. */
+  rest(slot: i32): void {
+    if (slot >= 0 && slot < toI32(this.connections.length)) {
+      this.connections[slot].rest()
+    }
   }
 }
