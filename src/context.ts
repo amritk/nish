@@ -40,10 +40,16 @@ export const LOOP_SWITCH: i32 = 1
 export class SwitchFrame {
   locals: Local[]
   exits: Scope[]
+  /** The scope the `switch` itself is in, where a clause's own scopes end. */
+  outer: Scope
+  /** Every variable a clause's tests narrowed on the way to one of `exits`. */
+  tested: Local[]
 
-  constructor(locals: Local[]) {
+  constructor(locals: Local[], outer: Scope) {
     this.locals = locals
     this.exits = []
+    this.outer = outer
+    this.tested = []
   }
 }
 

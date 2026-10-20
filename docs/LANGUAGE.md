@@ -835,12 +835,20 @@ const area = (s: Shape): i32 => {
   `reject_enum_held_loop_join`, `reject_enum_held_switch_join`). The join
   after an `if` covers every local and path either arm assigns, one first
   assigned in the `else` included (`reject_union_narrow_path_if_join`,
-  `reject_union_narrow_path_if_test`). A `switch` joins what each of its
+  `reject_union_narrow_path_if_test`), and every one a test inside either arm
+  narrowed, whether or not an arm assigns it: two arms that each leave when
+  `k === Kind.A` leave `k` not `Kind.A` past the `if`, joined with what held
+  before it (`tests/cases/union_narrowing_tested_join`;
+  `reject_enum_if_tested_join`, `reject_union_narrow_if_tested_join`,
+  `reject_union_narrow_path_tested_join`, `reject_union_narrow_nullable_tested_join`,
+  `reject_enum_else_if_tested_join`, `reject_enum_if_tested_outer`). A `switch` joins what each of its
   exits leaves: every `break` out of it, the fall off its last clause and,
   when no `default` covers every member, the case no clause matches; a
   clause that returns is no exit (`tests/cases/union_narrowing_switch_join`;
   `reject_union_narrow_path_switch`, `reject_union_narrow_path_switch_late`,
-  `reject_enum_switch_join`, `reject_enum_switch_unmatched`). What held
+  `reject_enum_switch_join`, `reject_enum_switch_unmatched`), a variable only
+  its clauses' tests narrowed included (`reject_enum_switch_tested_join`,
+  `reject_enum_switch_tag_tested_join`). What held
   before the `switch` holds again at the start of each clause and in the
   case no label matches, whatever an earlier clause stored
   (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). A loop is

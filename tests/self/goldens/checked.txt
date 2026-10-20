@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1064 programs, 137256 dump lines.
+# 1065 programs, 137299 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -55839,6 +55839,50 @@ function main(): void -> @nish_main [exported entry]
   callee 112:20 new H -> @H.constructor
   callee 113:15 returned -> @returned
   callee 114:15 looped -> @looped
+program tests/cases/union_narrowing_tested_join.ts
+module tests/cases/union_narrowing_tested_join.ts (entry)
+struct VA (class) size=8 align=4
+  field kind: Kind.A index=0 offset=0 readonly initialized
+  field a: i32 index=1 offset=4 initialized
+struct VB (class) size=8 align=4
+  field kind: Kind.B index=0 offset=0 readonly initialized
+  field b: i32 index=1 offset=4 initialized
+struct VC (class) size=8 align=4
+  field kind: Kind.C index=0 offset=0 readonly initialized
+  field c: i32 index=1 offset=4 initialized
+function m(s: VA | VB | VC, c: boolean): i32 -> @m
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function w(s: VA | VB | VC, n: i32): i32 -> @w
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  stackSites=0 stackLocals=0
+function e(k: Kind, c: boolean): boolean -> @e
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function x(k: Kind, n: i32): boolean -> @x
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  stackSites=0 stackLocals=0
+function o2(k: Kind, c: boolean): boolean -> @o2
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function ei2(k: Kind, n: i32): boolean -> @ei2
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: e ei2 m nish_arena_mark nish_arena_release nish_print nish_str_from_i32 o2 w x
+  stackSites=4 stackLocals=0
+  callee 115:15 m -> @m
+  callee 116:15 m -> @m
+  callee 117:15 w -> @w
+  callee 118:15 w -> @w
+  callee 119:15 e -> @e
+  callee 120:15 x -> @x
+  callee 121:15 o2 -> @o2
+  callee 122:15 ei2 -> @ei2
 program tests/cases/union_types.ts
 module tests/cases/union_types.ts (entry)
 struct Circle (class) size=8 align=4

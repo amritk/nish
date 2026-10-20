@@ -222,6 +222,9 @@ An assignment to the variable drops what a test proved, so a read after it
 needs a new test. Past an `if`, the variable is what the arms that carry on
 left it: after an `else if` chain whose branches all return, `s` is the
 variant no test named, and an arm that assigns `s` leaves what it assigned.
+A test nested inside the arms counts too: when each arm returns if
+`s.kind === Kind.Circle`, `s` is not a `Circle` past the `if`, and the ways out
+of a `switch` join the same way.
 A narrowing of the union belongs to a variable or a parameter: a test of
 `a.b.kind` does not narrow `a.b`, so `a.b.r` is an error (NL2557) — copy it
 into a `const` and test that. The tag read through the path does stay

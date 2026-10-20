@@ -1691,7 +1691,9 @@ export const main = (): i32 => {
   either side proved, `Circle | Square` after two tag tests. A test reads
   through an assignment: `(t = next()).kind === Kind.Square` narrows `t`. Past an `if`, the
   variable is what the arms that fall through left it (an `else if` chain
-  that returns leaves the variant no test named). A path does not narrow the
+  that returns leaves the variant no test named), including what a test nested
+  in each arm proved: two arms that each return when `s.kind === Kind.A` leave
+  `s` not a `VA`; a `switch`'s exits join the same way. A path does not narrow the
   union (`h.s.kind` then `h.s.r` is NL2557): copy it into a local and test
   that. The tag read through a path (`h.k`, `this.k`, `h.s.kind`,
   `xs[0].kind`, `xs[i].kind`) does stay narrowed for later comparisons, until a store to
