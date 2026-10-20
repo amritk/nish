@@ -576,11 +576,18 @@ export const emitForeignBuffers = (
 ): void => {
   const fn = emitter.fn
   let i = 0
-  while (i < callee.paramTypes.length) {
+  while (i < callee.paramTypes.length && i < values.length && i < operands.length) {
     if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
+      const buffer = values[i]
       const count = foreignBufferCount(emitter.table, callee, i)
-      if (!foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts)) {
-        const len = loadLength(emitter, values[i])
+      // The checker gave every buffer a count parameter after it, so `count`
+      // always names an argument.
+      if (
+        count >= 0 &&
+        count < values.length &&
+        !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts)
+      ) {
+        const len = loadLength(emitter, buffer)
         const fits = fn.emitValue(`icmp ule i64 ${values[count]}, ${len}`)
         const okBlock = fn.newBlock("ffi.ok")
         const failBlock = fn.newBlock("ffi.length")
@@ -592,7 +599,7 @@ export const emitForeignBuffers = (
         emitPanicTail(emitter, emitter.stringConstant(message))
         fn.placeBlock(okBlock)
       }
-      operands[i] = `i8* ${loadData(emitter, values[i])}`
+      operands[i] = `i8* ${loadData(emitter, buffer)}`
     }
     i = i + 1
   }

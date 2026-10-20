@@ -17823,6 +17823,19 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // read-back the rule has to refuse: the `pop` divergence above.
       "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
+    [
+      "ffi_buffer_late_load.ts",
+      // WP40 B1.2: the late load is pinned against a `pop` written inline in
+      // a later argument, which shrinks the buffer after its length was read
+      // for the count; its value is the argument, the `pop` divergence above.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
+    ],
+    [
+      "panics_ffi_length_inline_pop.ts",
+      // The same inline `pop`, where the check that reads the length again
+      // fails: the `pop` divergence above.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
+    ],
   ])
   const acceptedCases = fs
     .readdirSync(casesDir)

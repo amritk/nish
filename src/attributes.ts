@@ -2881,9 +2881,10 @@ class FactCollector {
     // (`emitForeignBuffers`).
     let b = 0
     while (b < args.length && b < callee.paramTypes.length) {
+      const buffer = args[b]
       if (isForeignBuffer(this.table, callee.paramTypes[b])) {
         if (!this.table.isReadonlyArray(callee.paramTypes[b])) {
-          this.noteSlotWrite(call, args[b])
+          this.noteSlotWrite(call, buffer)
         }
         const count = foreignBufferCount(this.table, callee, b)
         const proven = foreignBufferCountProven(this.unit.program, this.table, call, b, count, this.known)
@@ -2892,7 +2893,7 @@ class FactCollector {
           panicTailCallees(tail)
           this.addCallees(tail)
         }
-        this.noteSite(args[b], PANIC_FFI_LENGTH, proven, "")
+        this.noteSite(buffer, PANIC_FFI_LENGTH, proven, "")
       }
       b = b + 1
     }
