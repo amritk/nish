@@ -1686,7 +1686,7 @@ export class Compilation {
         messages.push(sharedWriteMessage(program, this.table, sig, fn, facts, call.node))
         messages.push(bodyLockMessageFor(program, this.table, call.node, sig, fn, facts))
         messages.push(arenaMessage(sig, fn, facts))
-        messages.push(escapeMessage(sig, fn, facts))
+        messages.push(escapeMessage(program, this.table, sig, fn, facts, call.node))
         messages.push(
           reduceMessage(sig, fn, identity, program.source.text.substring(identity.start, identity.end))
         )

@@ -11,6 +11,7 @@ port=${1:-8080}
 run="$here/run/$port"
 mkdir -p "$run"
 sed "s/@PORT@/$port/" "$here/nginx.conf" >"$run/nginx.conf"
+cp "$here/extra.conf" "$run/extra.conf"
 (
   for _ in $(seq 1 1000); do
     if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then

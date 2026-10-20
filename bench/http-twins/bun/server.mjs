@@ -2,10 +2,37 @@
 // workers, so it gets the one core the Nish server gets.
 //
 //   bun server.mjs <port> [ignored...]
+//
+// The extra routes go into `routes` first, as a small service would register
+// them, and the measured routes after.
+import { extraRoutes } from "../extra-routes.mjs"
+
 const port = Number(process.argv[2] ?? 8080)
 const text = { "Content-Type": "text/plain" }
 const json = { "Content-Type": "application/json" }
+const query = { "Content-Type": "text/plain", "x-powered-by": "benchmark" }
 let requests = 0
+
+const ok = () => {
+  requests += 1
+  return new Response("ok", { headers: text })
+}
+const extras = {}
+for (const pattern of extraRoutes) {
+  extras[pattern] = { GET: ok }
+  extras[`${pattern}/submit`] = { POST: ok }
+}
+
+/** Re-serializes any JSON body, compactly; 400 when it is not JSON. */
+const rewrite = async (req) => {
+  let value
+  try {
+    value = JSON.parse(await req.text())
+  } catch {
+    return new Response("bad request", { status: 400, headers: text })
+  }
+  return new Response(JSON.stringify(value), { headers: json })
+}
 
 const echo = async (req) => {
   let order
@@ -25,6 +52,20 @@ Bun.serve({
   hostname: "127.0.0.1",
   port,
   routes: {
+    ...extras,
+    "/": {
+      GET: () => {
+        requests += 1
+        return new Response("Hi", { headers: text })
+      },
+    },
+    "/id/:id": {
+      GET: (req) => {
+        requests += 1
+        const name = new URL(req.url).searchParams.get("name") ?? ""
+        return new Response(`${req.params.id} ${name}`, { headers: query })
+      },
+    },
     "/plaintext": {
       GET: () => {
         requests += 1
@@ -35,6 +76,10 @@ Bun.serve({
       GET: () => {
         requests += 1
         return new Response(JSON.stringify({ message: "Hello, World!", n: requests }), { headers: json })
+      },
+      POST: (req) => {
+        requests += 1
+        return rewrite(req)
       },
     },
     "/json-echo": {

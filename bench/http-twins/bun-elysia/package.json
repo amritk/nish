@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "elysia": "1.4.30"
+  }
+}
