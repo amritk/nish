@@ -1,0 +1,1 @@
+`ThreadScope.spawn<i32[], i32[], same>` is called inside the `using arena()` block at 11:5 and stores an allocation into memory

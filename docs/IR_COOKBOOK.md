@@ -1414,6 +1414,14 @@ r)` on the thread that opened the scope, after the join. The whole of both
 modules is `tests/link/thread_scope_basic`'s golden (docs/LANGUAGE.md, "Scoped
 tasks").
 
+Filing a task does not keep what it is handed. The escape analysis reads the
+spawn instance's own `runTask`, `entry` and `storeResult`, and a pointer
+argument none of them keeps stays the frame's: a function that spawns an array
+it made still marks the arena on entry and releases it after
+`nish_scope_join`, a loop pass rewinds after its join, and a `using a =
+arena()` block may hand a scope it declares what it allocated, the join
+emitted before its `nish_arena_release` (`tests/link/thread_scope_reclaim`).
+
 <!-- cookbook:begin thread-scope -->
 ```ts
 import { scope } from "nish/threads"
@@ -9927,6 +9935,122 @@ attributes #2 = { nounwind willreturn memory(argmem: read) }
 attributes #3 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end decl-ffi-owned-string -->
+
+### `u8[]`: a buffer and its count
+
+A `u8[]` or `readonly u8[]` argument to a `declare function` (WP40 B1.2) is
+its data pointer, `i8*`, read from the third field of the array header. The
+count after it is the declaration's word, so it is compared with the header's
+length before C runs: `icmp ule i64 %n, %len`, unsigned because the count is a
+`u64`, branching to an `ffi.length` block that calls `nish_panic` with
+`` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``.
+Both fields are loaded after the last argument is evaluated, so an argument
+that pushes or pops is seen.
+
+The first call below passes `toU64(bytes.length)` of the buffer itself, which
+is the one count the compiler proves: there is no compare and no `ffi.length`
+block, only the length load `toU64(bytes.length)` already makes (a `trunc` to
+`i32` and a `sext` back, as `length` is an `i32`). The second passes `2`,
+and carries the check. Nothing marks the pointer `nocapture` or `readonly` for
+C: like a `string`'s bytes it is lent for the call, and a `u8[]` one may be
+written; a `readonly u8[]` is the declaration's `const`, which C can cast
+away.
+
+<!-- cookbook:begin decl-ffi-buffer -->
+```ts
+declare function write(fd: i32, buf: readonly u8[], n: u64): i64
+
+export const main = (): i32 => {
+  const bytes: u8[] = [104, 105, 10]
+  write(1, bytes, toU64(bytes.length))
+  write(1, bytes, 2)
+  return 0
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [70 x i8] } { i64 69, [70 x i8] c"`write`: argument 3 (n) counts more bytes than argument 2 (buf) holds\00" }, align 8
+
+declare i64 @write(i32, i8*, i64)
+declare void @nish_free_arena() #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %bytes.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i8], align 8
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %2 = bitcast [3 x i8]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %4 = bitcast i8* %2 to i8*
+  %5 = getelementptr inbounds i8, i8* %4, i64 0
+  store i8 104, i8* %5, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %6 = getelementptr inbounds i8, i8* %4, i64 1
+  store i8 105, i8* %6, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %7 = getelementptr inbounds i8, i8* %4, i64 2
+  store i8 10, i8* %7, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %bytes.addr, align 8
+  %8 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
+  %9 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = trunc i64 %11 to i32
+  %13 = sext i32 %12 to i64
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %8, i64 0, i32 2
+  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %16 = call i64 @write(i32 1, i8* %15, i64 %13)
+  %17 = load %struct.nish_array*, %struct.nish_array** %bytes.addr, align 8
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  %19 = load i64, i64* %18, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %20 = icmp ule i64 2, %19
+  br i1 %20, label %ffi.ok, label %ffi.length
+
+ffi.length:
+  call void @nish_panic(i8* bitcast ({ i64, [70 x i8] }* @.str.0 to i8*))
+  unreachable
+
+ffi.ok:
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %23 = call i64 @write(i32 1, i8* %22, i64 2)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element i8", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+```
+<!-- cookbook:end decl-ffi-buffer -->
 
 ### Numeric `enum`
 

@@ -1,5 +1,6 @@
-// WP40 B1.1: a call to a buffer-taking `declare function` inside an arrow a
-// scope spawns is refused as a call in a plain function is.
+// WP40 B1.2: a buffer-taking `declare function` lowers everywhere but in an
+// arrow a scope spawns. A C body is unseen, so a call to any foreign function
+// may write memory its caller can see, and a spawned task may not.
 import { scope } from "nish/threads";
 
 declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
