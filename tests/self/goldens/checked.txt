@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1056 programs, 137346 dump lines.
+# 1057 programs, 138178 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -135643,6 +135643,839 @@ function main(): i32 -> @nish_main [exported entry]
   local 32:12 i: i32 (let)
   callee 33:18 combine -> @combine
   callee 33:26 half -> @half
+program bench/router.ts
+module bench/router.ts (entry)
+import Router from "nish/net/router" -> struct Router
+import RouterLimits from "nish/net/router" -> struct RouterLimits
+import httpFieldBytes from "nish/net/http-fields" -> function @nish.httpFieldBytes
+const LOOKUPS: i32 = 200000
+const ROUNDS: i32 = 15
+const SLASH: i32 = 47
+const LITERAL: i32 = 0
+const PARAM: i32 = 1
+const WILD: i32 = 2
+struct LinearTable (class) size=56 align=8
+  field methods: string[] index=0 offset=0
+  field segFirst: i32[] index=1 offset=8
+  field segCount: i32[] index=2 offset=16
+  field kind: i32[] index=3 offset=24
+  field labelStart: i32[] index=4 offset=32
+  field labelEnd: i32[] index=5 offset=40
+  field labels: u8[] index=6 offset=48
+  constructor -> @LinearTable.constructor
+  method add -> @LinearTable.add
+function routeTable(): string[] -> @routeTable
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function TARGETS(): string[] -> @TARGETS
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function LinearTable.constructor(this: LinearTable): void -> @LinearTable.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=56 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function LinearTable.add(this: LinearTable, method: string, pattern: string): void -> @LinearTable.add [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 180:5
+  escaping: method
+  calls: nish_array_grow nish_panic_index nish_panic_overflow
+  pointer this: size=56 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 182:9 count: i32 (let)
+  local 183:9 start: i32 (let)
+  local 184:11 length: i32 (const)
+  local 185:14 i: i32 (let)
+  local 189:13 first: i32 (const)
+  local 190:11 kind: i32 (let)
+  local 198:16 k: i32 (let)
+function sameMethod(method: u8[], text: string): boolean -> @sameMethod
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer method: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 214:12 k: i32 (let)
+function linearMatch(t: LinearTable, method: u8[], target: u8[], params: i32[]): i32 -> @linearMatch
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 245:9
+  calls: nish_panic_index nish_panic_overflow sameMethod
+  pointer t: size=56 writesThrough=false captured=false
+  pointer method: size=0 writesThrough=false captured=false passedTo=sameMethod#0
+  pointer target: size=0 writesThrough=false captured=false
+  pointer params: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 224:9 end: i32 (const)
+  local 225:12 r: i32 (let)
+  callee 226:10 sameMethod -> @sameMethod
+  local 229:9 pos: i32 (let)
+  local 230:9 pairs: i32 (let)
+  local 231:9 ok: boolean (let)
+  local 232:9 rest: boolean (let)
+  local 233:11 first: i32 (const)
+  local 234:14 s: i32 (let)
+  local 239:11 e: i32 (let)
+  local 243:13 kind: i32 (const)
+  local 260:15 at: i32 (const)
+  local 265:18 k: i32 (let)
+function linearMatchCopy(t: LinearTable, method: u8[], target: u8[], params: i32[]): i32 -> @linearMatchCopy
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 304:9
+  calls: nish_panic_index nish_panic_overflow sameMethod
+  pointer t: size=56 writesThrough=false captured=false
+  pointer method: size=0 writesThrough=false captured=false passedTo=sameMethod#0
+  pointer target: size=0 writesThrough=false captured=false
+  pointer params: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 283:9 end: i32 (const)
+  local 284:12 r: i32 (let)
+  callee 285:10 sameMethod -> @sameMethod
+  local 288:9 pos: i32 (let)
+  local 289:9 pairs: i32 (let)
+  local 290:9 ok: boolean (let)
+  local 291:9 rest: boolean (let)
+  local 292:11 first: i32 (const)
+  local 293:14 s: i32 (let)
+  local 298:11 e: i32 (let)
+  local 302:13 kind: i32 (const)
+  local 319:15 at: i32 (const)
+  local 324:18 k: i32 (let)
+function fold(route: i32, params: i32[]): i64 -> @fold
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer params: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function routerRun(router: Router, method: u8[], targets: u8[][], params: i32[]): i64 -> @routerRun
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Router.match
+  calls: fold nish.Router.match nish_panic_index nish_panic_overflow
+  pointer router: size=208 writesThrough=true captured=false passedTo=nish.Router.match#0
+  pointer method: size=0 writesThrough=false captured=false passedTo=nish.Router.match#1
+  pointer targets: size=0 writesThrough=false captured=false
+  pointer params: size=0 writesThrough=true captured=false passedTo=nish.Router.match#7 fold#1
+  stackSites=0 stackLocals=0
+  local 347:7 sum: i64 (let)
+  local 348:12 i: i32 (let)
+  local 349:11 target: u8[] (const)
+  local 350:11 route: i32 (const)
+  callee 350:19 Router.match -> @nish.Router.match
+  callee 351:12 fold -> @fold
+function linearRun(t: LinearTable, method: u8[], targets: u8[][], params: i32[]): i64 -> @linearRun
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via linearMatch
+  calls: fold linearMatch nish_panic_index nish_panic_overflow
+  pointer t: size=56 writesThrough=false captured=false passedTo=linearMatch#0
+  pointer method: size=0 writesThrough=false captured=false passedTo=linearMatch#1
+  pointer targets: size=0 writesThrough=false captured=false
+  pointer params: size=0 writesThrough=true captured=false passedTo=linearMatch#3 fold#1
+  stackSites=0 stackLocals=0
+  local 357:7 sum: i64 (let)
+  local 358:12 i: i32 (let)
+  local 359:11 target: u8[] (const)
+  callee 360:12 fold -> @fold
+  callee 360:17 linearMatch -> @linearMatch
+function linearRunCopy(t: LinearTable, method: u8[], targets: u8[][], params: i32[]): i64 -> @linearRunCopy
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via linearMatchCopy
+  calls: fold linearMatchCopy nish_panic_index nish_panic_overflow
+  pointer t: size=56 writesThrough=false captured=false passedTo=linearMatchCopy#0
+  pointer method: size=0 writesThrough=false captured=false passedTo=linearMatchCopy#1
+  pointer targets: size=0 writesThrough=false captured=false
+  pointer params: size=0 writesThrough=true captured=false passedTo=linearMatchCopy#3 fold#1
+  stackSites=0 stackLocals=0
+  local 366:7 sum: i64 (let)
+  local 367:12 i: i32 (let)
+  local 368:11 target: u8[] (const)
+  callee 369:12 fold -> @fold
+  callee 369:17 linearMatchCopy -> @linearMatchCopy
+function median(xs: i64[]): i64 -> @median
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 380:7
+  calls: nish_panic_index
+  pointer xs: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 376:12 i: i32 (let)
+  local 377:11 x: i64 (const)
+  local 378:9 j: i32 (let)
+  local 385:9 middle: i32 (const)
+function perLookup(total: i64): string -> @perLookup
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_div nish_panic_overflow nish_str_concat nish_str_from_i64
+  stackSites=0 stackLocals=0
+  local 391:9 tenths: i64 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.Router.add
+  calls: LinearTable.add LinearTable.constructor TARGETS fold linearMatch linearRun linearRunCopy median nish.Router.add nish.Router.constructor nish.Router.match nish.Router.nodeCount nish.httpFieldBytes nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_index_of nish_str_index_of_from nish_str_new perLookup routeTable routerRun
+  stackSites=9 stackLocals=8
+  local 396:9 rows: string[] (const)
+  callee 396:16 routeTable -> @routeTable
+  local 397:9 router: Router (const)
+  callee 397:18 new Router -> @nish.Router.constructor
+  local 398:9 table: LinearTable (const)
+  callee 398:17 new LinearTable -> @LinearTable.constructor
+  local 399:12 r: i32 (let)
+  local 400:11 row: string (const)
+  local 401:11 space: i32 (const)
+  local 402:11 method: string (const)
+  local 403:11 pattern: string (const)
+  callee 404:9 Router.add -> @nish.Router.add
+  callee 407:5 LinearTable.add -> @LinearTable.add
+  local 409:9 names: string[] (const)
+  callee 409:17 TARGETS -> @TARGETS
+  local 410:9 targets: u8[][] (const)
+  local 411:12 k: i32 (let)
+  callee 412:18 httpFieldBytes -> @nish.httpFieldBytes
+  local 414:9 method: u8[] (const)
+  callee 414:18 httpFieldBytes -> @nish.httpFieldBytes
+  local 415:9 params: i32[] (const)
+  local 416:9 check: i32[] (const)
+  local 417:12 k: i32 (let)
+  local 418:11 target: u8[] (const)
+  local 419:11 a: i32 (const)
+  callee 419:15 Router.match -> @nish.Router.match
+  local 420:11 b: i32 (const)
+  callee 420:15 linearMatch -> @linearMatch
+  callee 421:29 fold -> @fold
+  callee 421:49 fold -> @fold
+  local 426:9 routerNs: i64[] (const)
+  local 427:9 linearNs: i64[] (const)
+  local 428:9 copyNs: i64[] (const)
+  local 429:7 checksum: i64 (let)
+  local 430:12 round: i32 (let)
+  local 431:11 a: i64 (const)
+  callee 432:17 routerRun -> @routerRun
+  local 433:11 b: i64 (const)
+  callee 434:17 linearRun -> @linearRun
+  local 435:11 c: i64 (const)
+  callee 436:17 linearRunCopy -> @linearRunCopy
+  local 437:11 d: i64 (const)
+  local 442:9 rMed: i64 (const)
+  callee 442:16 median -> @median
+  local 443:9 lMed: i64 (const)
+  callee 443:16 median -> @median
+  local 444:9 cMed: i64 (const)
+  callee 444:16 median -> @median
+  callee 446:37 Router.nodeCount -> @nish.Router.nodeCount
+  callee 448:35 perLookup -> @perLookup
+  callee 448:72 perLookup -> @perLookup
+  callee 449:35 perLookup -> @perLookup
+  callee 449:72 perLookup -> @perLookup
+  callee 450:35 perLookup -> @perLookup
+  callee 450:70 perLookup -> @perLookup
+  local 451:9 band: i64 (const)
+module std/net/router.ts [package nish]
+const ROUTER_BAD_PATTERN: i32 = -1 [exported]
+const ROUTER_BAD_METHOD: i32 = -2 [exported]
+const ROUTER_TOO_LONG: i32 = -3 [exported]
+const ROUTER_AMBIGUOUS: i32 = -4 [exported]
+const ROUTER_DUPLICATE: i32 = -5 [exported]
+const ROUTER_FULL: i32 = -6 [exported]
+const ROUTER_NOT_FOUND: i32 = -7 [exported]
+const ROUTER_METHOD_NOT_ALLOWED: i32 = -8 [exported]
+const ROUTER_TOO_MANY_PARAMS: i32 = -9 [exported]
+const ROUTER_BAD_ESCAPE: i32 = -10 [exported]
+const ROUTER_NO_ROOM: i32 = -11 [exported]
+const ROUTER_MAX_METHOD: i32 = 32
+const ROUTER_NONE: i32 = -1
+const ROUTER_LITERAL: i32 = 0
+const ROUTER_PARAM: i32 = 1
+const ROUTER_WILD: i32 = 2
+struct RouterLimits (class) size=20 align=4 exported
+  field maxPatternBytes: i32 index=0 offset=0 initialized
+  field maxSegments: i32 index=1 offset=4 initialized
+  field maxParams: i32 index=2 offset=8 initialized
+  field maxRoutes: i32 index=3 offset=12 initialized
+  field maxMethods: i32 index=4 offset=16 initialized
+struct Router (class) size=208 align=8 exported
+  field firstChild: i32[] index=0 offset=0
+  field nextSibling: i32[] index=1 offset=8
+  field labelStart: i32[] index=2 offset=16
+  field labelEnd: i32[] index=3 offset=24
+  field paramChild: i32[] index=4 offset=32
+  field wildChild: i32[] index=5 offset=40
+  field firstEndpoint: i32[] index=6 offset=48
+  field labels: u8[] index=7 offset=56
+  field routeMethod: i32[] index=8 offset=64
+  field endpointNext: i32[] index=9 offset=72
+  field routeParams: i32[] index=10 offset=80
+  field methodBytes: u8[] index=11 offset=88
+  field methodStart: i32[] index=12 offset=96
+  field methodEnd: i32[] index=13 offset=104
+  field segStart: i32[] index=14 offset=112
+  field segEnd: i32[] index=15 offset=120
+  field found: i32[] index=16 offset=128
+  field patKind: i32[] index=17 offset=136
+  field patStart: i32[] index=18 offset=144
+  field patEnd: i32[] index=19 offset=152
+  field maxPatternBytes: i32 index=20 offset=160 initialized
+  field maxSegments: i32 index=21 offset=164 initialized
+  field maxParams: i32 index=22 offset=168 initialized
+  field maxRoutes: i32 index=23 offset=172 initialized
+  field maxMethods: i32 index=24 offset=176 initialized
+  field deepest: i32 index=25 offset=180 initialized
+  field segments: i32 index=26 offset=184 initialized
+  field pathEnd: i32 index=27 offset=188 initialized
+  field wanted: i32 index=28 offset=192 initialized
+  field foundCount: i32 index=29 offset=196 initialized
+  field otherMethod: boolean index=30 offset=200 initialized
+  field visited: i32 index=31 offset=204 initialized
+  constructor -> @nish.Router.constructor
+  method routes -> @nish.Router.routes
+  method nodeCount -> @nish.Router.nodeCount
+  method paramCount -> @nish.Router.paramCount
+  method lastVisited -> @nish.Router.lastVisited
+  method add -> @nish.Router.add
+  method splitPattern -> @nish.Router.splitPattern
+  method childFor -> @nish.Router.childFor
+  method addChild -> @nish.Router.addChild
+  method methodIndex -> @nish.Router.methodIndex
+  method match -> @nish.Router.match
+  method walk -> @nish.Router.walk
+  method endpointFor -> @nish.Router.endpointFor
+function Router.constructor(this: Router, limits: RouterLimits): void -> @nish.Router.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.routerLimit nish_panic nish_panic_overflow
+  pointer this: size=208 writesThrough=true captured=false
+  pointer limits: size=20 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 156:5 routerLimit -> @nish.routerLimit
+  callee 157:5 routerLimit -> @nish.routerLimit
+  callee 158:5 routerLimit -> @nish.routerLimit
+  callee 159:5 routerLimit -> @nish.routerLimit
+  callee 160:5 routerLimit -> @nish.routerLimit
+function Router.routes(this: Router): i32 -> @nish.Router.routes [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Router.nodeCount(this: Router): i32 -> @nish.Router.nodeCount [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Router.paramCount(this: Router, route: i32): i32 -> @nish.Router.paramCount [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: route
+  calls: nish.Router.routes nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_str_concat nish_str_from_i32
+  pointer this: size=208 writesThrough=false captured=false passedTo=nish.Router.routes#0 nish.Router.routes#0
+  stackSites=0 stackLocals=0
+  callee 200:31 Router.routes -> @nish.Router.routes
+  callee 201:71 Router.routes -> @nish.Router.routes
+function Router.lastVisited(this: Router): i32 -> @nish.Router.lastVisited [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Router.add(this: Router, method: string, pattern: string): i32 -> @nish.Router.add [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 268:7
+  escaping: method pattern
+  calls: nish.Router.addChild nish.Router.childFor nish.Router.methodIndex nish.Router.routes nish.Router.splitPattern nish.routerTchar nish_array_grow nish_panic_index nish_panic_overflow
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Router.splitPattern#0 nish.Router.childFor#0 nish.Router.methodIndex#0 nish.Router.routes#0 nish.Router.childFor#0 nish.Router.addChild#0 nish.Router.routes#0
+  stackSites=0 stackLocals=0
+  local 217:11 methodLength: i32 (const)
+  local 221:14 k: i32 (let)
+  callee 222:12 routerTchar -> @nish.routerTchar
+  local 226:11 length: i32 (const)
+  local 233:11 count: i32 (const)
+  callee 233:24 Router.splitPattern -> @nish.Router.splitPattern
+  local 237:9 params: i32 (let)
+  local 238:14 k: i32 (let)
+  local 248:9 node: i32 (let)
+  local 249:9 depth: i32 (let)
+  callee 251:14 Router.childFor -> @nish.Router.childFor
+  local 254:11 known: i32 (const)
+  callee 254:24 Router.methodIndex -> @nish.Router.methodIndex
+  local 256:16 e: i32 (let)
+  callee 262:9 Router.routes -> @nish.Router.routes
+  local 265:9 methodId: i32 (let)
+  local 269:16 k: i32 (let)
+  local 275:14 k: i32 (let)
+  local 276:13 next: i32 (const)
+  callee 276:25 Router.childFor -> @nish.Router.childFor
+  callee 277:33 Router.addChild -> @nish.Router.addChild
+  local 279:11 route: i32 (const)
+  callee 279:24 Router.routes -> @nish.Router.routes
+function Router.splitPattern(this: Router, pattern: string): i32 -> @nish.Router.splitPattern [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 316:7
+  escaping: pattern
+  calls: nish.routerSameName nish.routerSegmentKind nish_panic_index nish_panic_overflow
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 295:11 length: i32 (const)
+  local 296:9 count: i32 (let)
+  local 297:9 start: i32 (let)
+  local 298:14 i: i32 (let)
+  local 299:13 c: i32 (const)
+  local 312:13 kind: i32 (const)
+  callee 312:25 routerSegmentKind -> @nish.routerSegmentKind
+  local 320:18 k: i32 (let)
+  callee 323:13 routerSameName -> @nish.routerSameName
+function Router.childFor(this: Router, node: i32, pattern: string, k: i32): i32 -> @nish.Router.childFor [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: k node pattern
+  calls: nish.routerLabelIsText nish_panic_index nish_panic_overflow
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 337:11 kind: i32 (const)
+  local 344:11 start: i32 (const)
+  local 345:11 length: i32 (const)
+  local 346:14 c: i32 (let)
+  local 347:13 at: i32 (const)
+  callee 348:47 routerLabelIsText -> @nish.routerLabelIsText
+function Router.addChild(this: Router, node: i32, pattern: string, k: i32): i32 -> @nish.Router.addChild [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 360:5
+  escaping: k node
+  calls: nish.Router.nodeCount nish_array_grow nish_panic_index
+  pointer this: size=208 writesThrough=false captured=false passedTo=nish.Router.nodeCount#0
+  stackSites=0 stackLocals=0
+  local 357:11 child: i32 (const)
+  callee 357:24 Router.nodeCount -> @nish.Router.nodeCount
+  local 358:11 kind: i32 (const)
+  local 359:11 at: i32 (const)
+  local 367:13 n: i32 (const)
+  local 368:16 i: i32 (let)
+function Router.methodIndex(this: Router, method: string): i32 -> @nish.Router.methodIndex [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: method
+  calls: nish.routerLabelIsText nish_panic_index nish_panic_overflow
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 384:11 length: i32 (const)
+  local 385:14 m: i32 (let)
+  local 386:13 at: i32 (const)
+  callee 387:48 routerLabelIsText -> @nish.routerLabelIsText
+function Router.match(this: Router, method: u8[], mStart: i32, mEnd: i32, target: u8[], tStart: i32, tEnd: i32, params: i32[]): i32 -> @nish.Router.match [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 408:5
+  escaping: mStart tStart
+  calls: nish.Router.walk nish.routerSameBytes nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Router.walk#0
+  pointer method: size=0 writesThrough=false captured=false passedTo=nish.routerSameBytes#2
+  pointer target: size=0 writesThrough=false captured=false passedTo=nish.Router.walk#1
+  pointer params: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 414:9 end: i32 (let)
+  local 418:11 keep: i32 (const)
+  local 419:9 segments: i32 (let)
+  local 420:9 start: i32 (let)
+  local 421:14 i: i32 (let)
+  local 435:11 methodLength: i32 (const)
+  local 436:14 m: i32 (let)
+  local 437:13 at: i32 (const)
+  callee 440:9 routerSameBytes -> @nish.routerSameBytes
+  local 447:11 route: i32 (const)
+  callee 447:24 Router.walk -> @nish.Router.walk
+  local 451:11 pairs: i32 (const)
+  local 455:14 k: i32 (let)
+function Router.walk(this: Router, target: u8[], node: i32, depth: i32): i32 -> @nish.Router.walk [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 468:5
+  escaping: depth node
+  calls: nish.Router.endpointFor nish.Router.walk nish.routerSameBytes nish_panic_index nish_panic_overflow
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Router.endpointFor#0 nish.Router.walk#0 nish.Router.walk#0 nish.Router.endpointFor#0
+  pointer target: size=0 writesThrough=false captured=false passedTo=nish.routerSameBytes#2 nish.Router.walk#1 nish.Router.walk#1
+  stackSites=0 stackLocals=0
+  callee 470:14 Router.endpointFor -> @nish.Router.endpointFor
+  local 472:11 start: i32 (const)
+  local 473:11 end: i32 (const)
+  local 474:11 length: i32 (const)
+  local 475:14 c: i32 (let)
+  local 476:13 at: i32 (const)
+  callee 477:47 routerSameBytes -> @nish.routerSameBytes
+  local 478:15 route: i32 (const)
+  callee 478:28 Router.walk -> @nish.Router.walk
+  local 486:11 param: i32 (const)
+  local 488:13 top: i32 (const)
+  local 492:13 route: i32 (const)
+  callee 492:26 Router.walk -> @nish.Router.walk
+  local 498:11 wild: i32 (const)
+  local 501:13 route: i32 (const)
+  callee 501:26 Router.endpointFor -> @nish.Router.endpointFor
+  local 503:15 top: i32 (const)
+function Router.endpointFor(this: Router, node: i32): i32 -> @nish.Router.endpointFor [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 519:7
+  escaping: node
+  calls: nish_panic_index
+  pointer this: size=208 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 515:14 e: i32 (let)
+function routerDecode(target: u8[], start: i32, end: i32, out: u8[]): i32 -> @nish.routerDecode [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: 561:7
+  escaping: start
+  calls: nish.routerHex nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32
+  pointer target: size=0 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 538:7 length: i32 (let)
+  local 539:7 i: i32 (let)
+  callee 542:27 routerHex -> @nish.routerHex
+  callee 542:66 routerHex -> @nish.routerHex
+  local 554:7 at: i32 (let)
+  local 556:9 room: i32 (const)
+  local 557:9 n: i32 (const)
+  local 559:11 c: i32 (const)
+  callee 561:22 routerHex -> @nish.routerHex
+  callee 561:61 routerHex -> @nish.routerHex
+function routerLimit(field: string, value: i32, low: i32, high: i32): void -> @nish.routerLimit
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function routerTchar(c: i32): boolean -> @nish.routerTchar
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function routerSegmentKind(pattern: string, start: i32, end: i32): i32 -> @nish.routerSegmentKind
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: start
+  calls: nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 612:9 param: boolean (const)
+  local 616:9 n: i32 (const)
+  local 617:12 i: i32 (let)
+  local 618:11 c: i32 (const)
+  local 622:11 nameByte: boolean (const)
+function routerSameName(pattern: string, a: i32, aEnd: i32, b: i32, bEnd: i32): boolean -> @nish.routerSameName
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 636:12 k: i32 (let)
+function routerLabelIsText(bytes: u8[], at: i32, text: string, from: i32, length: i32): boolean -> @nish.routerLabelIsText
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 646:12 k: i32 (let)
+function routerSameBytes(a: u8[], at: i32, b: u8[], from: i32, length: i32): boolean -> @nish.routerSameBytes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer a: size=0 writesThrough=false captured=false
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 656:12 k: i32 (let)
+function routerHex(c: i32): i32 -> @nish.routerHex
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+module std/net/http-fields.ts [package nish]
+const HTTP_FIELDS_OK: i32 = 0 [exported]
+const HTTP_FIELDS_BAD_NAME: i32 = -1 [exported]
+const HTTP_FIELDS_BAD_VALUE: i32 = -2 [exported]
+const HTTP_FIELDS_CONNECTION_SPECIFIC: i32 = -3 [exported]
+const HTTP_FIELDS_PSEUDO_UNKNOWN: i32 = -4 [exported]
+const HTTP_FIELDS_PSEUDO_REPEATED: i32 = -5 [exported]
+const HTTP_FIELDS_PSEUDO_AFTER_FIELD: i32 = -6 [exported]
+const HTTP_FIELDS_PSEUDO_MISSING: i32 = -7 [exported]
+const HTTP_FIELDS_PSEUDO_FORBIDDEN: i32 = -8 [exported]
+const HTTP_FIELDS_BAD_PSEUDO_VALUE: i32 = -9 [exported]
+const HTTP_FIELDS_AUTHORITY_MISMATCH: i32 = -10 [exported]
+const HTTP_FIELDS_BAD_CONTENT_LENGTH: i32 = -11 [exported]
+const HTTP_FIELDS_NO_LENGTH: i64 = -1 [exported]
+const HTTP_FIELDS_METHOD: i32 = 1
+const HTTP_FIELDS_SCHEME: i32 = 2
+const HTTP_FIELDS_AUTHORITY: i32 = 4
+const HTTP_FIELDS_PATH: i32 = 8
+const HTTP_FIELDS_PROTOCOL: i32 = 16
+const HTTP_FIELDS_STATUS: i32 = 32
+const HTTP_FIELDS_MAX_LENGTH_DIGITS: i32 = 18
+const HTTP_FIELDS_ZERO: i32 = 0
+const HTTP_DATE_SIZE: i32 = 29 [exported]
+const HTTP_DATE_LAST_SECOND: i64 = 253402300799 [exported]
+const HTTP_FIELDS_DATE_NAMES: string = "SunMonTueWedThuFriSatJanFebMarAprMayJunJulAugSepOctNovDec"
+struct HttpFields (class) size=80 align=8 exported
+  field method: u8[] index=0 offset=0
+  field scheme: u8[] index=1 offset=8
+  field authority: u8[] index=2 offset=16
+  field path: u8[] index=3 offset=24
+  field protocol: u8[] index=4 offset=32
+  field status: i32 index=5 offset=40 initialized
+  field names: u8[][] index=6 offset=48
+  field values: u8[][] index=7 offset=56
+  field contentLength: i64 index=8 offset=64 initialized
+  field none: u8[] index=9 offset=72
+  constructor -> @nish.HttpFields.constructor
+  method clear -> @nish.HttpFields.clear
+  method isConnect -> @nish.HttpFields.isConnect
+  method get -> @nish.HttpFields.get
+  method readSection -> @nish.HttpFields.readSection
+  method takePseudo -> @nish.HttpFields.takePseudo
+  method readRequest -> @nish.HttpFields.readRequest
+  method readResponse -> @nish.HttpFields.readResponse
+  method readTrailers -> @nish.HttpFields.readTrailers
+function httpFieldsLowerTchar(c: i32): boolean -> @nish.httpFieldsLowerTchar
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: c
+  stackSites=0 stackLocals=0
+function httpFieldsAllTchar(bytes: u8[], upper: boolean): boolean -> @nish.httpFieldsAllTchar
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldsLowerTchar
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 154:14 b: u8 (const)
+  local 155:11 c: i32 (const)
+  callee 156:10 httpFieldsLowerTchar -> @nish.httpFieldsLowerTchar
+function httpFieldNameValid(name: u8[]): boolean -> @nish.httpFieldNameValid [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldsAllTchar
+  pointer name: size=0 writesThrough=false captured=false passedTo=nish.httpFieldsAllTchar#0
+  stackSites=0 stackLocals=0
+  callee 168:60 httpFieldsAllTchar -> @nish.httpFieldsAllTchar
+function httpFieldValueValid(value: u8[]): boolean -> @nish.httpFieldValueValid [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer value: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 176:9 n: i32 (const)
+  local 177:14 b: u8 (const)
+  local 178:11 c: i32 (const)
+  local 186:9 first: i32 (const)
+  local 187:9 last: i32 (const)
+function httpFieldIs(bytes: u8[], text: string): boolean -> @nish.httpFieldIs [exported]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 193:9 n: i32 (const)
+  local 197:12 k: i32 (let)
+function httpFieldBytes(text: string): u8[] -> @nish.httpFieldBytes [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_array_grow
+  stackSites=0 stackLocals=0
+  local 207:9 out: u8[] (const)
+  local 208:9 n: i32 (const)
+  local 209:12 k: i32 (let)
+function httpFieldConnectionSpecific(name: u8[], value: u8[]): boolean -> @nish.httpFieldConnectionSpecific [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldIs
+  pointer name: size=0 writesThrough=false captured=false passedTo=nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0
+  pointer value: size=0 writesThrough=false captured=false passedTo=nish.httpFieldIs#0
+  stackSites=0 stackLocals=0
+  callee 223:7 httpFieldIs -> @nish.httpFieldIs
+  callee 224:13 httpFieldIs -> @nish.httpFieldIs
+  callee 227:5 httpFieldIs -> @nish.httpFieldIs
+  callee 228:5 httpFieldIs -> @nish.httpFieldIs
+  callee 229:5 httpFieldIs -> @nish.httpFieldIs
+  callee 230:5 httpFieldIs -> @nish.httpFieldIs
+  callee 231:5 httpFieldIs -> @nish.httpFieldIs
+function httpFieldSensitive(name: u8[]): boolean -> @nish.httpFieldSensitive [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldIs
+  pointer name: size=0 writesThrough=false captured=false passedTo=nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0
+  stackSites=0 stackLocals=0
+  callee 244:3 httpFieldIs -> @nish.httpFieldIs
+  callee 245:3 httpFieldIs -> @nish.httpFieldIs
+  callee 246:3 httpFieldIs -> @nish.httpFieldIs
+  callee 247:3 httpFieldIs -> @nish.httpFieldIs
+function httpFieldsLower(c: i32): i32 -> @nish.httpFieldsLower
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: c
+  stackSites=0 stackLocals=0
+function httpFieldsSameHost(bytes: u8[], other: u8[]): boolean -> @nish.httpFieldsSameHost
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldsLower
+  pointer bytes: size=0 writesThrough=false captured=false
+  pointer other: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 257:9 n: i32 (const)
+  local 261:12 k: i32 (let)
+  callee 262:9 httpFieldsLower -> @nish.httpFieldsLower
+  callee 262:46 httpFieldsLower -> @nish.httpFieldsLower
+function httpFieldsPseudoOf(name: u8[]): i32 -> @nish.httpFieldsPseudoOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldIs nish_panic_index
+  pointer name: size=0 writesThrough=false captured=false passedTo=nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0 nish.httpFieldIs#0
+  stackSites=0 stackLocals=0
+  callee 274:7 httpFieldIs -> @nish.httpFieldIs
+  callee 277:7 httpFieldIs -> @nish.httpFieldIs
+  callee 280:7 httpFieldIs -> @nish.httpFieldIs
+  callee 283:7 httpFieldIs -> @nish.httpFieldIs
+  callee 286:7 httpFieldIs -> @nish.httpFieldIs
+  callee 289:7 httpFieldIs -> @nish.httpFieldIs
+function httpFieldsSchemeValid(scheme: u8[]): boolean -> @nish.httpFieldsSchemeValid
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer scheme: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 297:9 n: i32 (const)
+  local 298:12 k: i32 (let)
+  local 299:11 c: i32 (const)
+  local 300:11 letter: boolean (const)
+  local 301:11 rest: boolean (const)
+function httpFieldsStatusOf(value: u8[]): i32 -> @nish.httpFieldsStatusOf
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer value: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 314:7 code: i32 (let)
+  local 315:14 b: u8 (const)
+  local 316:11 digit: i32 (const)
+function httpFieldsLengthOf(value: u8[]): i64 -> @nish.httpFieldsLengthOf
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer value: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 327:9 n: i32 (const)
+  local 331:7 length: i64 (let)
+  local 332:14 b: u8 (const)
+  local 333:11 digit: i32 (const)
+function httpFieldsHasUserinfo(authority: u8[]): boolean -> @nish.httpFieldsHasUserinfo
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer authority: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 344:14 b: u8 (const)
+function httpFieldsCheckOutgoing(names: u8[][], values: u8[][]): i32 -> @nish.httpFieldsCheckOutgoing [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldConnectionSpecific nish.httpFieldNameValid nish.httpFieldValueValid
+  pointer names: size=0 writesThrough=false captured=false
+  pointer values: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 360:9 n: i32 (const)
+  local 364:12 k: i32 (let)
+  local 365:11 name: u8[] (const)
+  local 366:11 value: u8[] (const)
+  callee 367:10 httpFieldNameValid -> @nish.httpFieldNameValid
+  callee 370:10 httpFieldValueValid -> @nish.httpFieldValueValid
+  callee 373:9 httpFieldConnectionSpecific -> @nish.httpFieldConnectionSpecific
+function HttpFields.constructor(this: HttpFields): void -> @nish.HttpFields.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=80 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function HttpFields.clear(this: HttpFields): void -> @nish.HttpFields.clear [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 424:5
+  pointer this: size=80 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function HttpFields.isConnect(this: HttpFields): boolean -> @nish.HttpFields.isConnect [exported method]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.httpFieldIs
+  pointer this: size=80 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 441:12 httpFieldIs -> @nish.httpFieldIs
+function HttpFields.get(this: HttpFields, name: string): u8[] | null -> @nish.HttpFields.get [exported method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: nish.httpFieldIs
+  pointer this: size=80 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 446:11 n: i32 (const)
+  local 447:14 k: i32 (let)
+  callee 448:11 httpFieldIs -> @nish.httpFieldIs
+function HttpFields.readSection(this: HttpFields, names: u8[][], values: u8[][], allowed: i32): i32 -> @nish.HttpFields.readSection [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 508:9
+  calls: nish.HttpFields.clear nish.HttpFields.takePseudo nish.httpFieldConnectionSpecific nish.httpFieldIs nish.httpFieldNameValid nish.httpFieldValueValid nish.httpFieldsLengthOf nish.httpFieldsPseudoOf nish_array_grow
+  pointer this: size=80 writesThrough=true captured=false passedTo=nish.HttpFields.clear#0 nish.HttpFields.takePseudo#0
+  pointer names: size=0 writesThrough=false captured=false
+  pointer values: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 462:5 HttpFields.clear -> @nish.HttpFields.clear
+  local 463:11 n: i32 (const)
+  local 467:9 seen: i32 (let)
+  local 468:9 regular: boolean (let)
+  local 469:14 k: i32 (let)
+  local 470:13 name: u8[] (const)
+  local 471:13 value: u8[] (const)
+  callee 472:12 httpFieldValueValid -> @nish.httpFieldValueValid
+  local 475:13 pseudo: i32 (const)
+  callee 475:27 httpFieldsPseudoOf -> @nish.httpFieldsPseudoOf
+  local 490:15 result: i32 (const)
+  callee 490:29 HttpFields.takePseudo -> @nish.HttpFields.takePseudo
+  callee 497:12 httpFieldNameValid -> @nish.httpFieldNameValid
+  callee 500:11 httpFieldConnectionSpecific -> @nish.httpFieldConnectionSpecific
+  callee 503:11 httpFieldIs -> @nish.httpFieldIs
+  local 504:15 length: i64 (const)
+  callee 504:29 httpFieldsLengthOf -> @nish.httpFieldsLengthOf
+function HttpFields.takePseudo(this: HttpFields, pseudo: i32, value: u8[]): i32 -> @nish.HttpFields.takePseudo [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 520:9
+  escaping: pseudo value
+  calls: nish.httpFieldsAllTchar nish.httpFieldsHasUserinfo nish.httpFieldsSchemeValid nish.httpFieldsStatusOf
+  pointer this: size=80 writesThrough=true captured=false
+  pointer value: size=0 writesThrough=true captured=true passedTo=nish.httpFieldsAllTchar#0 nish.httpFieldsSchemeValid#0 nish.httpFieldsHasUserinfo#0 nish.httpFieldsAllTchar#0 nish.httpFieldsStatusOf#0
+  stackSites=0 stackLocals=0
+  callee 521:16 httpFieldsAllTchar -> @nish.httpFieldsAllTchar
+  callee 524:16 httpFieldsSchemeValid -> @nish.httpFieldsSchemeValid
+  callee 527:16 httpFieldsHasUserinfo -> @nish.httpFieldsHasUserinfo
+  callee 533:16 httpFieldsAllTchar -> @nish.httpFieldsAllTchar
+  callee 535:23 httpFieldsStatusOf -> @nish.httpFieldsStatusOf
+function HttpFields.readRequest(this: HttpFields, names: u8[][], values: u8[][], extendedConnect: boolean): i32 -> @nish.HttpFields.readRequest [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HttpFields.readSection
+  calls: nish.HttpFields.get nish.HttpFields.isConnect nish.HttpFields.readSection nish.httpFieldIs nish.httpFieldsSameHost
+  pointer this: size=80 writesThrough=true captured=false passedTo=nish.HttpFields.readSection#0 nish.HttpFields.isConnect#0 nish.HttpFields.get#0
+  pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpFields.readSection#1
+  pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpFields.readSection#2
+  stackSites=0 stackLocals=0
+  local 551:11 all: i32 (const)
+  local 557:11 seen: i32 (const)
+  callee 557:23 HttpFields.readSection -> @nish.HttpFields.readSection
+  local 564:11 connect: boolean (const)
+  callee 564:30 HttpFields.isConnect -> @nish.HttpFields.isConnect
+  local 569:13 tunnel: i32 (const)
+  callee 584:12 httpFieldIs -> @nish.httpFieldIs
+  callee 584:44 httpFieldIs -> @nish.httpFieldIs
+  local 588:11 host: u8[] | null (const)
+  callee 588:31 HttpFields.get -> @nish.HttpFields.get
+  callee 589:67 httpFieldsSameHost -> @nish.httpFieldsSameHost
+function HttpFields.readResponse(this: HttpFields, names: u8[][], values: u8[][]): i32 -> @nish.HttpFields.readResponse [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HttpFields.readSection
+  calls: nish.HttpFields.readSection
+  pointer this: size=80 writesThrough=true captured=false passedTo=nish.HttpFields.readSection#0
+  pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpFields.readSection#1
+  pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpFields.readSection#2
+  stackSites=0 stackLocals=0
+  local 597:11 seen: i32 (const)
+  callee 597:23 HttpFields.readSection -> @nish.HttpFields.readSection
+function HttpFields.readTrailers(this: HttpFields, names: u8[][], values: u8[][]): i32 -> @nish.HttpFields.readTrailers [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.HttpFields.readSection
+  calls: nish.HttpFields.readSection
+  pointer this: size=80 writesThrough=true captured=false passedTo=nish.HttpFields.readSection#0
+  pointer names: size=0 writesThrough=false captured=false passedTo=nish.HttpFields.readSection#1
+  pointer values: size=0 writesThrough=false captured=false passedTo=nish.HttpFields.readSection#2
+  stackSites=0 stackLocals=0
+  local 606:11 seen: i32 (const)
+  callee 606:23 HttpFields.readSection -> @nish.HttpFields.readSection
+function httpFieldsPutName(out: u8[], at: i32, index: i32): void -> @nish.httpFieldsPutName
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 625:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 624:12 k: i32 (let)
+function httpFieldsPutTwo(out: u8[], at: i32, n: i32): void -> @nish.httpFieldsPutTwo
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 633:3
+  escaping: at
+  calls: nish_panic_index
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local 631:9 tens: i32 (const)
+  local 632:9 ones: i32 (const)
+function httpDateWrite(out: u8[], at: i32, seconds: i64): i32 -> @nish.httpDateWrite [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 678:3
+  escaping: at
+  calls: nish.httpFieldsPutName nish.httpFieldsPutTwo nish_panic_index nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.httpFieldsPutName#0 nish.httpFieldsPutTwo#0 nish.httpFieldsPutName#0 nish.httpFieldsPutTwo#0 nish.httpFieldsPutTwo#0 nish.httpFieldsPutTwo#0 nish.httpFieldsPutTwo#0 nish.httpFieldsPutTwo#0
+  stackSites=0 stackLocals=0
+  local 662:9 days: i64 (const)
+  local 663:9 inDay: i32 (const)
+  local 665:9 weekday: i32 (const)
+  local 667:9 z: i64 (const)
+  local 668:9 era: i64 (const)
+  local 669:9 dayOfEra: i64 (const)
+  local 670:9 yearOfEra: i64 (const)
+  local 671:9 dayOfYear: i64 (const)
+  local 673:9 marchMonth: i64 (const)
+  local 674:9 day: i32 (const)
+  local 675:9 month: i32 (const)
+  local 676:9 year: i32 (const)
+  callee 677:3 httpFieldsPutName -> @nish.httpFieldsPutName
+  callee 680:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
+  callee 682:3 httpFieldsPutName -> @nish.httpFieldsPutName
+  callee 684:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
+  callee 685:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
+  callee 687:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
+  callee 689:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
+  callee 691:3 httpFieldsPutTwo -> @nish.httpFieldsPutTwo
 program bench/scan.ts
 module bench/scan.ts (entry)
 const ERR_DEPTH: i32 = -1
