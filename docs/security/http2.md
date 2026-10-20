@@ -156,7 +156,22 @@ HPACK table (`headerTableSize`, 4,096), the output buffer (`outputSize`, 64
 KiB, of which 128 bytes are kept for control frames) and the reset budget
 (`resetBudget`, 100). A cap RFC 9113 does not allow panics when the connection
 is made (`net_http2_bad_config`). The carrier uses one configuration for every
-slot.
+slot, and makes slot 0's connection in its constructor, so a bad configuration
+is refused there with the connection's own words.
+
+**A slot's connection is made by the first accept into it** (`net_http2_tls`,
+written against `main` at `c8a00d6`, cited by function). `Http2TlsServer`'s
+constructor makes the TLS pool, the shared `Http2Pools` and slot 0's
+connection, and no other: `accept` makes a slot's connection the first time
+the carrier hands that slot out, and keeps it, restarting it on every later
+accept. `size()` stays the cap, and the pool never holds more than `size`
+connections, so the memory a full pool holds is what it was when every slot
+was made up front; what moves is when it is spent. A slot never accepted into
+answers as a free one — no descriptor, `H2_ERROR` to `next`, done to `flush`,
+nothing to `rest` and `close` — and `connection(slot)` names slot 0's. A second
+accept into slot 0 moves `Arena.used()` by 0 bytes; the first into slot 1
+moves it by that slot's connection; a 1,024-slot server has made one
+connection, slot 0's.
 
 **Nothing on the data path allocates.** Over a scripted client, a thousand
 DATA frames in with WINDOW_UPDATEs and PINGs, and a hundred out, move

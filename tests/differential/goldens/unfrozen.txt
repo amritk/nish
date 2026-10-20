@@ -142,6 +142,7 @@ cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with
+cases/export_memory_native added after R6: no rewriter to freeze it with
 cases/ffi_buffer_call_sites added after R6: no rewriter to freeze it with
 cases/ffi_buffer_count_proved added after R6: no rewriter to freeze it with
 cases/ffi_buffer_declared added after R6: no rewriter to freeze it with
