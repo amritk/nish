@@ -93,10 +93,10 @@
  * first accept into it and keeps it, so a pool sized for its peak costs at
  * start-up only what does not depend on the size, and holds at most `size`
  * connections once the peak has come; `Http1TlsServer` does the same for a
- * slot's connection and, through `TlsTcpServer`, its TLS state. Every buffer is allocated with its slot or grown
- * to its cap on first use and kept, so a warmed slot serves request after
- * request with `Arena.used()` flat. Accepting a WebSocket allocates (the
- * accept key), once a connection.
+ * slot's connection and, through `TlsTcpServer`, its TLS state. Every buffer
+ * is allocated with its slot or grown to its cap on first use and kept, so a
+ * warmed slot serves request after request with `Arena.used()` flat.
+ * Accepting a WebSocket allocates (the accept key), once a connection.
  *
  * **Output is borrowed.** The pools' slots share an `Http1OutputPool`: a
  * connection takes an `outputSize` buffer when it first needs room to write
