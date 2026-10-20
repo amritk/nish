@@ -33,13 +33,7 @@
 
 import { CheckContext, LoopFlow } from "./context"
 import { isOptionalChain, unwrapParens } from "./emit-util"
-import {
-  enumMembersOf,
-  heldMembers,
-  holdKept,
-  narrowToVariants,
-  writesLeft,
-} from "./expressions"
+import { enumMembersOf, heldMembers, holdKept, narrowToVariants, writesLeft } from "./expressions"
 import { internalErrorFor } from "./ice"
 import {
   N_ARROW,
