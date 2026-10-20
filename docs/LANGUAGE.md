@@ -5596,7 +5596,11 @@ Three consequences, each of them a rule:
   `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
   that storage; index `ps` again afterwards rather than holding the element
   across it `` (`reject_arr_element_across_push`,
-  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `reject_arr_element_loop_push`). A second name for the element is one too:
+  `const q = p`, `q = p` (in a nested block as well, since `q` outlives it),
+  and either side of `c ? p : r` or `m ?? p` (`tests/cases/arr_ref_alias_*`);
+  a call's result is not, since a helper may return a copy
+  (`arr_ref_alias_clone`). A loop is checked as a whole, because a
   `push` at the bottom of the body reaches a reference taken at the top on the
   next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
   its own (`reject_arr_element_push_self`).
