@@ -9,8 +9,18 @@
 // paths resolve against) and process.argv (argv[0] is the module path, like
 // the native binary) all behave as in the native build. The process exit
 // status is the program's return value.
+//
+// Node 22 calls WASI's `fd_write` as a V8 fast API call, and uvwasi's buffer
+// for it is reported to V8 as external memory, which can start a full garbage
+// collection inside that call; the collector's frame walk then segfaults
+// (`InnerPointerToCodeCache::GetCacheEntry`). A long-running module trips it
+// after printing a few lines. Turning fast API calls off before any code is
+// compiled keeps every call on the slow path, where a collection is safe.
 import { readFileSync } from "node:fs"
+import { setFlagsFromString } from "node:v8"
 import { WASI } from "node:wasi"
+
+setFlagsFromString("--no-turbo-fast-api-calls")
 
 const [module, ...args] = process.argv.slice(2)
 if (!module) {

@@ -50,6 +50,15 @@
  * borrows for the call, and `signatureInput` / `sign` hand the input out and
  * take any signature back.
  *
+ * **Resumption is opt-in, and its keys are the caller's.** After
+ * `enableTickets`, a slot whose interest says `TLS_RECORD_TICKET` waits on
+ * the program: in the handshake, `resume` reads the ClientHello's tickets
+ * under the current and previous ticket keys and a strike register the
+ * program lends for the call, and answers the hello resumed or in full; once
+ * the connection is open, `issue` seals it one ticket. The pool keeps no
+ * ticket key and no register of its own (`docs/security/tls.md`,
+ * "Resumption").
+ *
  * `read`, `write` and `close` answer as `nish:net`'s calls do — a count, `0`
  * at the end of the stream, `-11` to wait — so a program written against a
  * plain socket moves over with the `slot` in place of the descriptor.
@@ -64,6 +73,7 @@ import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
 import { TlsP256Signer, TlsServer, TlsServerConfig } from "nish/net/tls"
 import { TLS_ALERT_INTERNAL_ERROR } from "nish/net/tls/codec"
 import { TLS_MAX_RECORD } from "nish/net/tls/record"
+import { TlsTicketKeyInfo, TlsTicketStrikes } from "nish/net/tls/ticket"
 import {
   TLS_RECORD_AGAIN,
   TLS_RECORD_DONE,
@@ -322,6 +332,54 @@ export class TlsTcpServer {
       return this.flush(slot)
     }
     return this.sign(slot, signature)
+  }
+
+  /**
+   * Turns session resumption on for every slot (`TlsServer.enableTickets`):
+   * from the next `accept`, a connection offering a ticket, or one that may
+   * be issued one, says `TLS_RECORD_TICKET` in its interest.
+   */
+  enableTickets(): void {
+    for (let k: i32 = 0; k < toI32(this.connections.length); k++) {
+      this.connections[k].tls.enableTickets()
+    }
+  }
+
+  /**
+   * While `slot`'s interest says `TLS_RECORD_TICKET` in the handshake: reads
+   * its ClientHello's tickets under `current` and `previous`, with what each
+   * `info` says of them, records the one it resumes in `strikes`, and sends
+   * the flight that answers the hello, resumed or in full
+   * (`TlsRecordServer.resume`). The keys and the register are borrowed for
+   * the call. Answers the slot's interest.
+   */
+  resume(
+    slot: i32,
+    current: Secret<u8[]>,
+    currentInfo: TlsTicketKeyInfo,
+    previous: Secret<u8[]>,
+    previousInfo: TlsTicketKeyInfo,
+    strikes: TlsTicketStrikes,
+    now: i64
+  ): i32 {
+    if (!this.holds(slot)) {
+      return TLS_RECORD_DONE
+    }
+    this.connections[slot].resume(current, currentInfo, previous, previousInfo, strikes, now)
+    return this.flush(slot)
+  }
+
+  /**
+   * While `slot`'s interest says `TLS_RECORD_TICKET` on an open connection:
+   * seals one ticket under the borrowed `key` and sends its
+   * NewSessionTicket (`TlsRecordServer.issue`). Answers the slot's interest.
+   */
+  issue(slot: i32, key: Secret<u8[]>, info: TlsTicketKeyInfo, now: i64): i32 {
+    if (!this.holds(slot)) {
+      return TLS_RECORD_DONE
+    }
+    this.connections[slot].issue(key, info, now)
+    return this.flush(slot)
   }
 
   /**
