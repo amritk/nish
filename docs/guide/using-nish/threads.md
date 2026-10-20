@@ -945,7 +945,7 @@ with an example on this page that compiles.
 | NL2513 | an atomic read inside the scope's block after a `spawn` | read it after the block, `const seen = a.load()`: [atomics](#counting-without-a-lock-atomici32-and-atomici64) |
 | NL2516 | two scopes of one `using` share an atomic | one `using` per scope, `using s = scope()` and `using t = scope()`: [below](#two-scopes-that-share-an-atomic) |
 | NL2481 | a channel's receiver spawned before a sender | spawn every sender first, `s.spawn(produce, new Pipe(ch, 10), sent, 0)` above `s.spawn(consume, new Pipe(ch, 0), sums, 0)`: [`Channel<T>`](#passing-values-channelt) |
-| NL2484 | an arrow that uses a channel | a module function the `spawn` names, `const sendOne = (c: Channel<i32>): void => {` and `s.spawn(sendOne, ch)`: [below](#a-channel-in-an-arrow) |
+| NL2484 | an arrow that uses a channel | a module function the `spawn` names, `const mainTask = (c: Channel<i32>): void => {` and `s.spawn(mainTask, ch)`: [below](#a-channel-in-an-arrow) |
 
 ### A `let` read by a parallel arrow
 
@@ -1080,13 +1080,14 @@ export const main = (): i32 => {
 };
 ```
 
-Write the task as a module function and name it in the `spawn`, as
-`nish --fix` does with `mainTask`:
+The refusal writes the arrow out as a module function, named for the function
+it was in, `mainTask`; put it above `main` and name it in the `spawn`, as
+`nish --fix` does:
 
 ```ts nish:ok
 import { Channel, scope } from "nish/threads";
 
-const sendOne = (c: Channel<i32>): void => {
+const mainTask = (c: Channel<i32>): void => {
   c.send(1);
 };
 
@@ -1094,7 +1095,7 @@ export const main = (): i32 => {
   const ch = new Channel<i32>();
   {
     using s = scope();
-    s.spawn(sendOne, ch);
+    s.spawn(mainTask, ch);
   }
   let total: i32 = 0;
   for (const v of ch) {

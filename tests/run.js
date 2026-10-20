@@ -17997,7 +17997,7 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
   // paste, so no fragment of the clause holds a placeholder: `...`, `<field>`, or a
   // single-letter type, `Channel<T>`, `new T()`.
   const threadsPage = "docs/guide/using-nish/threads.md"
-  /** @type {Map<string, string>} the first message each `nish:err` code of the page is refused with */
+  /** @type {Map<string, { message: string, source: string }>} the first message each `nish:err` code of the page is refused with, and the fence it refuses */
   const threadRefusals = new Map()
   /** The remedy of a refusal: its text after the last `; `, else its last sentence, else after its last `: `. */
   const lastClause = (message) => {
@@ -18069,6 +18069,49 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
       })
     )
 
+  /** The names a program spells: its identifiers and keywords, and each `Name<args>` it writes, args unspaced. */
+  const spelledIn = (source) => {
+    const words = new Set(source.match(/[A-Za-z_]\w*/g) ?? [])
+    const generics = new Map()
+    for (const m of source.matchAll(/\b([A-Z]\w*)<([^<>]+)>/g)) {
+      const args = m[2].replace(/\s+/g, "")
+      generics.set(m[1], [...(generics.get(m[1]) ?? []), args])
+    }
+    return { words, generics }
+  }
+  /**
+   * The concrete types a remedy's code quotes that its program does not use, or
+   * [] when there are none: a `Name<args>` whose argument names are not the
+   * program's, or that the program spells only with other arguments (a guard's
+   * `MutexGuard<A>` is the program's `Mutex<A>`), and an annotation `: Name` of
+   * a name the program never writes. `Channel<i32>` in a program of
+   * `Channel<string>` is the remedy of some other program.
+   */
+  const foreignTypes = (clause, source) => {
+    const { words, generics } = spelledIn(source)
+    const foreign = []
+    for (const m of clause.matchAll(/(`+)(?!`)(.+?)(?<!`)\1(?!`)/g)) {
+      const fragment = m[2]
+      for (const g of fragment.matchAll(/\b([A-Z]\w*)<([^<>]+)>/g)) {
+        const args = g[2].replace(/\s+/g, "")
+        const names = args.match(/[A-Za-z_]\w*/g) ?? []
+        const spelled = [
+          ...(generics.get(g[1]) ?? []),
+          ...(g[1] === "MutexGuard" ? (generics.get("Mutex") ?? []) : []),
+        ]
+        if (names.some((n) => !words.has(n)) || (spelled.length > 0 && !spelled.includes(args))) {
+          foreign.push(g[0])
+        }
+      }
+      for (const a of fragment.matchAll(/:\s*([A-Za-z_]\w*)(?![\w<])/g)) {
+        if (a[1] !== "void" && !words.has(a[1])) {
+          foreign.push(`: ${a[1]}`)
+        }
+      }
+    }
+    return foreign
+  }
+
   for (const page of docPages) {
     const rel = path.relative(root, page).split(path.sep).join("/")
     const text = fs.readFileSync(page, "utf8")
@@ -18108,7 +18151,7 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
       if (rel === threadsPage && s.kind === "err") {
         const refused = errors.find((e) => e.code === s.code)
         if (refused && !threadRefusals.has(s.code)) {
-          threadRefusals.set(s.code, refused.message)
+          threadRefusals.set(s.code, { message: refused.message, source: body })
         }
       }
       if (s.kind === "ok") {
@@ -18134,13 +18177,19 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     check(`${threadsPage}: ${code} has a row in the refusal table`, tableCodes.includes(code), "no row")
   }
   for (const code of tableCodes) {
-    const message = threadRefusals.get(code)
-    if (message === undefined) {
+    const refused = threadRefusals.get(code)
+    if (refused === undefined) {
       check(`${threadsPage}: ${code} has a nish:err example`, false, "no fence refused with it")
       continue
     }
-    const clause = lastClause(message)
+    const clause = lastClause(refused.message)
     check(`${threadsPage}: ${code} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
+    const foreign = foreignTypes(clause, refused.source)
+    check(
+      `${threadsPage}: ${code}'s remedy quotes only types its fence uses`,
+      foreign.length === 0,
+      `${foreign.join(", ")} in: ${clause}`
+    )
   }
   // Each row's "write instead" cell quotes code the page compiles: every fragment of
   // more than one word is in a `nish:ok` fence, and the cell links to an example.
@@ -18162,7 +18211,8 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
   // code reached several ways (NL2479 from a spawn, a constructor, two scopes and a
   // late send) builds its remedy several ways, and each one ends with the code.
   const wordingDir = path.join(root, "tests", "wordings")
-  const remedyCodes = /^nl(2345|2348|2388|2465|246[6-9]|247\d|248[14]|2500|2503|2506|2511|2513|2516|2536)_/
+  const remedyCodes =
+    /^nl(2345|2348|2352|2388|2465|246[6-9]|247\d|248[14]|2500|2503|2506|2511|2513|2516|2536)_/
   for (const file of fs.readdirSync(wordingDir).sort()) {
     if (!file.endsWith(".err") || !remedyCodes.test(file)) {
       continue
@@ -18170,6 +18220,13 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
     const message = fs.readFileSync(path.join(wordingDir, file), "utf8").split("\n")[0]
     const clause = lastClause(message)
     check(`tests/wordings/${file} ends with the code to write`, holdsCode(clause), `last clause: ${clause}`)
+    const source = fs.readFileSync(path.join(wordingDir, file.replace(/\.err$/, ".ts")), "utf8")
+    const foreign = foreignTypes(clause, source)
+    check(
+      `tests/wordings/${file}'s remedy quotes only types its program uses`,
+      foreign.length === 0,
+      `${foreign.join(", ")} in: ${clause}`
+    )
   }
 }
 
