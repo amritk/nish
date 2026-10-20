@@ -124,7 +124,8 @@ entry measured on the same machine in the same interleaved rounds, with the
 noise band, as CLAUDE.md's `Measured:` rules require.
 
 **Built.** `bench/techempower/` holds the program (`main.ts`, `server.ts`),
-`nish.dockerfile`, `benchmark_config.json` and `run.sh`, unsubmitted (D1).
+`nish.dockerfile`, `benchmark-config.json` (upstream's `benchmark_config.json`)
+and `run.sh`, unsubmitted (D1).
 There is no pass arena: NL2424 refuses `using a = arena()` around a serve,
 because `Http1Server` stores into the slot's parser and output, which outlive
 the pass. None is needed either, since a warmed pass allocates nothing, and

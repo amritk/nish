@@ -2,8 +2,11 @@
 
 A Nish entry for two of the TechEmpower Framework Benchmarks' (TFB) test
 types, `json` and `plaintext`, in the layout upstream keeps under
-`frameworks/<Language>/<name>/`: `benchmark_config.json`, and `nish.dockerfile`
-for the test named `default`. It is WP39's E5
+`frameworks/<Language>/<name>/`: a benchmark config, and `nish.dockerfile` for
+the test named `default`. The config is `benchmark-config.json` here, because
+the repository's file names are kebab-case (`npm run lint`); it becomes
+upstream's `benchmark_config.json` when it is copied into that layout (WP39
+D2). It is WP39's E5
 ([docs/wp39-http-server.md](../../docs/wp39-http-server.md)).
 
 **It is not submitted.** Sending an entry to TechEmpower/FrameworkBenchmarks

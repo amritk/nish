@@ -520,3 +520,66 @@ Checksum `serialize 18100868296888812225 452530`, the same from every implementa
 
 Noise band, Nish against its byte-identical copy: 1.1% on the minimums (0.0% on the medians). A ratio within it is no difference.
 <!-- json-compare:end -->
+
+<!-- techempower:begin -->
+## TechEmpower json and plaintext
+
+Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every contestant started afresh and warmed for 1 s before each count), and copied here from the report it writes to `build/tfb/results.md`. `bench/run.mjs` carries this section over between its `techempower` markers when it rewrites the file. The entry is [bench/techempower/](../bench/techempower/README.md): one process, one thread, one `pollWait` loop on `Http1Server`. The other rows are the HTTP twins of [bench/http-twins/](../bench/http-twins/README.md), each run as its own `serve <port>`. `entry-copy` is a second build of the same `main.ts` that `cmp` finds byte-identical, so the gap between `entry` and `entry-copy` is the noise band every other difference is read against.
+
+| | |
+| --- | --- |
+| Date | 2026-10-20 |
+| nish | nish 0.18.0 (commit 753a9ae), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores |
+| OS | linux 6.18.44-fc-v139 (x64) |
+| Client | wrk 4.1.0, `-t 3`, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | server on CPU 0, wrk on CPUs 1-3. **Client-shared**: wrk and the server share one 4-core machine, so three cores drive one server core, and a server faster than wrk can drive shows wrk's ceiling |
+| Limits | `ulimit -n` 20000, `net.core.somaxconn` 4096; no concurrency was clamped |
+| Command | `npm run build && bash bench/http-twins/build.sh && bash bench/techempower/run.sh` |
+
+### /plaintext, 16 requests pipelined per write (req/s, median (min) of 3 rounds of 10 s)
+
+| contestant | 256 | 1024 | 4096 | 16384 |
+| --- | ---: | ---: | ---: | ---: |
+| entry | 293029 (269257) | 293834 (292180) | 290545 (288226) | 282426 (247703) |
+| entry-copy | 295430 (275617) | 307194 (303535) | 280104 (274925) | 278579 (272772) |
+| node-http | 28949 (28779) | 27828 (27193) | 29314 (28486) | 26107 (25637) |
+| uws | 386380 (370862) | 348203 (347952) | 370756 (357186) | 356221 (352581) |
+| bun | 53226 (52420) | 52340 (52128) | 51770 (49452) | 46165 (41302) |
+| bun-elysia | 51883 (51093) | 48632 (47412) | 47080 (46874) | 37719 (36435) |
+| bun-hono | 38184 (37078) | 36906 (36631) | 36785 (36350) | 31213 (29777) |
+| go-nethttp | 30123 (29324) | 30081 (29547) | 28476 (27843) | 22368 (20442) |
+| go-fasthttp | 334818 (333676) | 345297 (338569) | 334326 (295650) | 300728 (290852) |
+| rust-hyper | 93361 (89754) | 87402 (86807) | 88190 (83287) | 71947 (71190) |
+| rust-actix | 10027 (9993) | 9398 (8389) | 5019 (3490) | 0 (0) |
+| nginx | 40025 (39591) | 39722 (38347) | 37558 (33843) | 35135 (30260) |
+
+Noise band, the entry against its byte-identical copy (medians): 256 connections: 0.8%, 1024 connections: 4.5%, 4096 connections: 3.6%, 16384 connections: 1.4%.
+
+### /json, one request at a time (req/s, median (min) of 3 rounds of 10 s)
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 59882 (57620) | 72002 (69511) | 75238 (74366) | 85930 (81415) | 80589 (70369) | 55644 (48729) |
+| entry-copy | 60377 (60294) | 72753 (69866) | 76615 (76443) | 84380 (75165) | 75966 (70861) | 62753 (50954) |
+| node-http | 19969 (19833) | 20595 (20465) | 18845 (17682) | 18410 (16332) | 16590 (16358) | 16130 (16086) |
+| uws | 53925 (52834) | 63173 (61784) | 65798 (62568) | 71951 (70027) | 74895 (73918) | 65477 (54743) |
+| bun | 33162 (32965) | 39950 (38108) | 42807 (42800) | 43276 (42594) | 35676 (32574) | 33432 (32240) |
+| bun-elysia | 32114 (31120) | 39075 (38966) | 40593 (40262) | 39933 (35946) | 36855 (34148) | 35680 (28845) |
+| bun-hono | 28452 (27744) | 29960 (29843) | 30972 (30016) | 31001 (30462) | 26430 (24884) | 25477 (24388) |
+| go-nethttp | 25710 (25417) | 26319 (24555) | 24473 (23842) | 23020 (21467) | 21597 (21490) | 20553 (20530) |
+| go-fasthttp | 43137 (42038) | 47243 (47221) | 46463 (45007) | 45672 (43477) | 39315 (36671) | 36507 (35721) |
+| rust-hyper | 49663 (49046) | 57141 (54954) | 60746 (55261) | 57613 (57329) | 54866 (49386) | 47641 (46333) |
+| rust-actix | 10076 (8356) | 9752 (9745) | 9387 (9254) | 9851 (9078) | 9230 (9124) | 9913 (9595) |
+| nginx | 47084 (46862) | 51884 (51044) | 59109 (58196) | 59798 (58792) | 54208 (51144) | 50328 (48663) |
+
+Noise band, the entry against its byte-identical copy (medians): 16 connections: 0.8%, 32 connections: 1.0%, 64 connections: 1.8%, 128 connections: 1.8%, 256 connections: 5.7%, 512 connections: 12.8%.
+
+What the rows say, read against that band:
+
+- The twins answer `/json` with `{"message":"Hello, World!","n":<n>}`: 8 bytes more than the entry's `{"message":"Hello, World!"}`, and a counter. The entry serializes its body with a `JsonWriter` on every request, as TFB requires; the twins vary in how they build theirs.
+- One core of the entry serves `/plaintext` at medians of 278,579 to 307,194 req/s across both builds and every concurrency: below `uws` and `go-fasthttp`, and above every other twin. On `/json` it leads every twin from 16 to 256 connections by more than the band (85,930 against `uws`'s 71,951 at 128; 80,589 against 74,895 at 256, where the band is 5.7%). At 512 the band widens to 12.8%, and `uws` is outside it, faster: 65,477 against 55,644.
+- At 16384 connections wrk reported read errors (connections reset) in one of the entry's three rounds (9,302) and in two of the copy's (250 and 122), which is why the entry's minimum there is 247,703.
+- `rust-actix` answers about 10,000 req/s throughout and 0 at 16384 connections; it shows 6.4 ms of latency per request when run alone too, so the figure is the twin's own, reported as measured.
+- `TCP_NODELAY` (WP39 E2) is not on `main` yet, so the entry's `nodelay` argument sets nothing. Once it is, `run.sh --nodelay-compare` adds `entry-nodelay0` to the same rounds, and the default is the one outside the band.
+<!-- techempower:end -->
