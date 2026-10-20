@@ -1017,10 +1017,42 @@ keys in locals — draw both with `tlsTicketKeyDraw` at start-up, each into its
 own `TlsTicketKeyInfo` — and runs the rotation itself when `tlsTicketKeyDue` says so —
 `wipe(previous)`, `previous = current`, `previousInfo.copyFrom(currentInfo)`,
 `current = tlsTicketKeyDraw(currentInfo, now)`. Every time it takes is
-`monotonicNanos()`, read by you and passed in. Strike each opened ticket's
-`id` in a `TlsTicketStrikes` before you resume from it: `take` answers false
-for a replay, and for every ticket once the register is full, so make it as
-large as the tickets you issue in two hours.
+`monotonicNanos()`, read by you and passed in. The servers strike each
+ticket they resume in a `TlsTicketStrikes` you make and lend them: its `take`
+answers false for a replay, and for every ticket once the register is full,
+so make it as large as the tickets you issue in two hours.
+
+Resumption is off until you turn it on. Call `enableTickets()` on the
+`TlsServer` (`conn.tls` of a `TlsRecordServer`) or on the `TlsTcpServer`,
+once; it is kept across `restart`. From then on a connection's interest says
+`TLS_RECORD_TICKET` (from `nish/net/tls/record-server`) twice. In the
+handshake, when the ClientHello offers a ticket, call
+`resume(current, currentInfo, previous, previousInfo, strikes, now)`, with
+the current key as both if you have only one: the server opens the ticket,
+checks its binder, strikes it and answers the hello, resumed with
+`psk_dhe_ke` (no certificate, no signature, so no `TLS_RECORD_SIGN`) or as a
+full handshake when the ticket is refused. Once the connection is open, call
+`issue(current, currentInfo, now)` to send it one ticket, whether or not it
+resumed. On a `TlsRecordServer`, `resume` answers 0 or the alert it failed
+with, and `issue` whether it sent a ticket; on a `TlsTcpServer` both take the
+`slot` first and answer the slot's new interest bits. A ticket the server
+cannot use (an unknown or retired key, an expired or replayed ticket, another
+suite's hash or another server name, a full register) falls back to a full
+handshake; a selected ticket whose binder does not verify fails the
+connection with `decrypt_error`. QUIC
+never resumes: `enableTickets` on a QUIC connection's `TlsServer` leaves
+tickets off. A resumed handshake costs the server about 0.6x a full one
+(`tests/link/net_tls_resume_bench`).
+
+```ts
+// In the loop, for a slot `poll` says is readable:
+let wants: i32 = tcp.readable(slot);
+if ((wants & TLS_RECORD_TICKET) !== 0) {
+  wants = tcp.connection(slot).state === TLS_RECORD_STATE_OPEN
+    ? tcp.issue(slot, current, currentInfo, monotonicNanos())
+    : tcp.resume(slot, current, currentInfo, previous, previousInfo, strikes, monotonicNanos());
+}
+```
 
 ```ts nish:ok
 import { HTTP1_END, HTTP1_ERROR, HTTP1_HEAD, HTTP1_NEED_MORE, Http1Parser } from "nish/net/http1";

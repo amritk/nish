@@ -4138,6 +4138,7 @@ const INDEX_OF_ANY_REFUSALS = [
  * here, or it reads nothing in a sharded run.
  */
 const LINK_READ_LATER = [
+  "net_tls_resume_bench",
   "par_dst_short",
   "par_map_idle",
   "par_map_join_small",
@@ -4499,10 +4500,11 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // as `./p256`, and the two fixture directories it imports beside that. The
 // program's header says what it runs; its expected.out ends in a checksum of
 // every comb output. Natively, and as a `--profile wasi` module under Node.
-// Node runs it with `--single-threaded-gc`: its default concurrent marker
-// segfaults this long, allocation-heavy wasm run intermittently, at or just
-// before exit, after every line has printed, and the flag is the whole
-// difference (six of six crashed without it, none with it, Node 22).
+// The wasi run segfaults in Node 22 unless V8's fast API calls are off, which
+// examples/wasi-host.mjs now does itself: a collection inside WASI's
+// `fd_write` fast call crashes its frame walk. On Node 22.22.0, 16 of 20 runs
+// crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
+// used to pass, and none of 50 with the host turning the calls off.
 if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
   const agreeDir = path.join(buildDir, "p256-agree")
   const programDir = path.join(agreeDir, "crypto_p256_agree")
@@ -4543,7 +4545,7 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
     )
     const ran =
       built.status === 0
-        ? spawnSync("node", ["--no-warnings", "--single-threaded-gc", "examples/wasi-host.mjs", wasm], {
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
             cwd: root,
             encoding: "utf8",
           })
@@ -4594,6 +4596,36 @@ if (!only || "par_dst_short".includes(only)) {
       String(run.stderr).includes("parallelMapInto: dst has 2 elements and src has 3") &&
       String(run.stdout).trim() === "before",
     run !== null ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : missing
+  )
+}
+
+// What TLS 1.3 resumption saves the server (docs/security/tls.md,
+// "Resumption"). `net_tls_resume_bench` runs 41 interleaved rounds of a full
+// handshake, the same full handshake again and a resumed one, each on a
+// server whose random and x25519 key are drawn fresh, and prints the medians
+// of the server's own time per handshake on stderr; the link loop above pins
+// its stdout, the counts, the bytes and a checksum folded from every
+// session's traffic secret. Measured after its first review round, nine
+// runs, eight of them: full 416-436 us, its byte-identical copy within 1.2%
+// of it (the noise band), resumed 256-262 us, 0.60-0.62x the full handshake;
+// the ninth, on a loaded machine, was slower in every arm alike (712 and
+// 452 us, 0.63x). psk_dhe_ke still does
+// the x25519 exchange and leaves out the certificate and the P-256 signature.
+// On the wire, 854 bytes a full handshake against 637 a resumed one, both
+// sides and the NewSessionTicket counted. The bound is the resumed median
+// below 0.85x the smaller full one, far outside the band.
+if (!only || "net_tls_resume_bench".includes(only)) {
+  const fixture = linkTests.includes("net_tls_resume_bench")
+  const exe = path.join(buildDir, "link", "net_tls_resume_bench", "app")
+  const run = fixture && fs.existsSync(exe) ? spawnSync(exe, [], { encoding: "utf8" }) : null
+  const missing = fixture ? `no such binary: ${exe}` : "no such fixture: tests/link/net_tls_resume_bench"
+  const m =
+    run === null ? null : /resume bench ns: full (\d+) copy (\d+) resumed (\d+)/.exec(String(run.stderr))
+  const [full, copy, resumed] = m === null ? [0, 0, 0] : [Number(m[1]), Number(m[2]), Number(m[3])]
+  check(
+    "link/net_tls_resume_bench: a resumed handshake costs the server under 0.85x a full one",
+    run !== null && run.status === 0 && m !== null && resumed > 0 && resumed < 0.85 * Math.min(full, copy),
+    run !== null ? `exit ${run.status}\nstderr: ${run.stderr}` : missing
   )
 }
 
@@ -5967,12 +5999,11 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `par_map_reclaim` and `par_map_reclaim_escapes` free a map's result, and
 // the blocks it adopted, with the frame or block that ran it, and keep every
 // result that escapes it, on a 32-bit target as on a 64-bit one.
-// Node runs them with `--no-turbo-fast-api-calls`: the escapes fixture grows its
-// memory to some 120 MB, and Node 22 then collects garbage inside the fast
-// call of WASI's `fd_write`, whose frame walk segfaults
-// (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24 (three of
-// three crashed without the flag, none of six with it). The slow call is the
-// whole difference.
+// The escapes fixture grows its memory to some 120 MB, and Node 22 then
+// collects garbage inside the fast call of WASI's `fd_write`, whose frame walk
+// segfaults (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24
+// (three of three crashed with fast API calls on, none of six with them off).
+// examples/wasi-host.mjs turns them off itself, so the slow call is what runs.
 for (const name of [
   "thread_atomic_tasks",
   "par_atomic",
@@ -6003,7 +6034,7 @@ for (const name of [
     )
     const ran =
       built.status === 0
-        ? spawnSync("node", ["--no-warnings", "--no-turbo-fast-api-calls", "examples/wasi-host.mjs", wasm], {
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
             cwd: root,
             encoding: "utf8",
           })

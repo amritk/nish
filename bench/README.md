@@ -526,7 +526,12 @@ answers `GET /plaintext` with 13 bytes and `GET /json` with
 buffer per request. `POST /json-echo` takes the 545-byte order in
 `http-payload.json`, decodes it with `jsonDecode` into one reused class, raises
 its `revision` by one and encodes it back; `POST /json-echo-doc` gives the same
-answer through one reused `JsonDocument`. `http.mjs` load-tests builds of it against each other with
+answer through one reused `JsonDocument`. It also answers the three routes of
+the bun-http-framework-benchmark: `GET /` with `Hi`, `GET /id/:id?name=<name>`
+with `<id> <name>` and an `x-powered-by: benchmark` header, and `POST /json`
+with the posted object parsed and serialized again. Beside them it holds the
+112-pattern table of `http-twins/extra-routes.mjs`, scanned after the measured
+routes, so its route lookup is a small service's. `http.mjs` load-tests builds of it against each other with
 [wrk](https://github.com/wg/wrk), with the server pinned to CPU 0 and wrk to
 the other CPUs, so the server has one core to itself:
 
@@ -538,6 +543,7 @@ node bench/http.mjs build/bench/h1 build/bench/h1-copy      # the noise band: a 
 node bench/http.mjs build/bench/h1 build/bench/h1-other     # two builds, interleaved round by round
 node bench/http.mjs --syscalls build/bench/h1               # system calls per request, under strace
 node bench/http.mjs --only keep-alive --rounds 7 build/bench/h1
+node bench/http.mjs --only startup build/bench/h1 build/bench/h1-copy   # spawn to first answer
 ```
 
 Each scenario is one wrk run of five seconds after a one-second warm-up, and
@@ -551,7 +557,22 @@ the machine the way throughput does. The scenarios are keep-alive at 256 and
 4,096 connections, `Connection: close` at 64 (every request a new TCP
 connection), and the same churn while 8,000 idle connections hold the pool's
 first slots, plus `post-json` and `post-json-doc` (keep-alive at 256, wrk
-POSTing the payload through `http-post-json.lua`).
+POSTing the payload through `http-post-json.lua`). The `ping`, `query` and
+`body` scenarios come first, keep-alive at 500 connections as the
+bun-http-framework-benchmark runs them; `body` POSTs `http-body.json` through
+the same script, and the check before each scenario holds every server to the
+exact bytes, and to the `x-powered-by` header on `query`.
+
+`startup` is not a wrk scenario. Four times a round, for each build in the
+round's order, it spawns the server pinned to CPU 0 and asks `GET /` every
+millisecond until one answers; it reports the median time from spawn to that
+first answer, the spread, and the RSS at that moment. It runs with the other
+scenarios when `--only` is not given, and needs no wrk. A Nish server's
+startup includes building its whole pool, so it moves with `--slots`. On the
+commit that adds it, on a shared four-vCPU VM and two rounds (eight starts a
+build), `nish` took 51.7 ms and 65.3 MB at 16,384 slots, with its byte-identical
+copy 3.8% away; at `--slots 1024` it took 7.4 ms and 5.8 MB (the copy 18.7%
+away), and Go's `net/http`, which allocates per connection, 9.6 ms and 7.4 MB.
 
 **Measured on the commit that adds this section.** x86-64, four-core Intel
 Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3, wrk 4.1.0, `-t3`.
@@ -616,16 +637,18 @@ seven rounds, against +2.2% and −3.7% for a byte-identical copy) and up
 12.7% at 4,096 (copy +2.6%), where the slots no longer touch 4,096 cold
 buffers. `net_http1_server` runs its whole plain section on one buffer.
 
-**Against other servers.** [`http-twins/`](http-twins/README.md) holds eight
+**Against other servers.** [`http-twins/`](http-twins/README.md) holds ten
 servers that answer what this one answers, byte for byte, on other runtimes:
-`node:http`, uWebSockets.js, `Bun.serve`, Go's `net/http` and fasthttp, hyper,
-actix-web, and nginx answering from `return`. Each runs on one core, as this
-server does. `bash bench/http-twins/run.sh` builds `http1-server.ts` twice, as
-`nish` and a byte-identical `nish-copy`, then runs `check.mjs` and times all
-ten servers interleaved under `http.mjs`. The copy's distance from `nish` is
+`node:http`, uWebSockets.js, `Bun.serve`, Elysia and Hono on Bun, Go's
+`net/http` and fasthttp, hyper, actix-web, and nginx answering from `return`.
+Each runs on one core, as this server does. `bash bench/http-twins/run.sh`
+builds `http1-server.ts` twice, as `nish` and a byte-identical `nish-copy`,
+then runs `check.mjs` and times all twelve servers interleaved under
+`http.mjs`. The copy's distance from `nish` is
 the noise band, and every other difference is read against it.
 
-Measured on 2026-10-17 at `aa75cec`. The machine is a shared cloud VM (KVM),
+The table below predates the Elysia and Hono twins and the `ping`, `query`,
+`body` and `startup` scenarios. Measured on 2026-10-17 at `aa75cec`. The machine is a shared cloud VM (KVM),
 with four vCPUs of an Intel Xeon @ 2.80 GHz at one thread per core, Linux
 6.18.44, Ubuntu clang 18.1.3 and wrk 4.1.0 (Ubuntu's `4.1.0-4build2`). The
 server runs on CPU 0 and wrk on CPUs 1–3 with `-t3`. The run was

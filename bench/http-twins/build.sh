@@ -12,8 +12,9 @@
 # from a staging copy, because the repository's file-name rule keeps
 # `Cargo.toml` and `Cargo.lock` as `cargo.toml` and `cargo.lock`.
 #
-# TWINS_RELOCK=1 regenerates the Rust twins' cargo.lock with cargo and copies it
-# back into the tree; without it the committed lock is used with --locked.
+# TWINS_RELOCK=1 regenerates the Rust twins' cargo.lock with cargo, and the Bun
+# framework twins' bun.lock with bun, and copies them back into the tree;
+# without it the committed lock is used with --locked or --frozen-lockfile.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -30,7 +31,7 @@ RUST_VERSION=1.99.1
 NGINX_VERSION=1.30.6
 NGINX_SHA256=3cf46f5ed7504d460125866b7bea99fb357f31d887e2e63b35503310e9b8b6c8
 
-ALL=(node-http uws bun go-nethttp go-fasthttp rust-hyper rust-actix nginx)
+ALL=(node-http uws bun bun-elysia bun-hono go-nethttp go-fasthttp rust-hyper rust-actix nginx)
 
 die() {
   echo "build.sh: $*" >&2
@@ -47,13 +48,15 @@ pinned() {
   echo "$bin"
 }
 
-# A serve script that runs server.mjs, copied beside it, under the interpreter $2.
+# A serve script that runs server.mjs under the interpreter $2. extra-routes.mjs
+# goes one level up, where server.mjs imports it from in the tree too.
 # It drops NODE_OPTIONS and BUN_OPTIONS, so a flag in the caller's environment
 # (such as Bun's --smol) cannot change the runtime being measured.
 script_twin() {
   local name=$1 interpreter=$2
   mkdir -p "$out/$name"
-  cp "$here/$name/server.mjs" "$out/$name/server.mjs"
+  cp "$here/$name/server.mjs" "$out/$name/"
+  cp "$here/extra-routes.mjs" "$out/"
   printf '#!/bin/sh\nunset NODE_OPTIONS BUN_OPTIONS\nexec %s %s "$@"\n' "$interpreter" "$out/$name/server.mjs" >"$out/$name/serve"
   chmod +x "$out/$name/serve"
 }
@@ -95,6 +98,22 @@ build_bun() {
   script_twin bun "$bun"
 }
 
+# A framework on Bun (Elysia, Hono): its package.json and bun.lock are copied
+# beside server.mjs and installed there, so nothing lands in bench/http-twins.
+build_bun_framework() {
+  local name=$1 bun
+  bun=$(pinned "${BUN:-}" bun "$BUN_VERSION")
+  script_twin "$name" "$bun"
+  local dir="$out/$name"
+  cp "$here/$name/package.json" "$dir/package.json"
+  if [ "${TWINS_RELOCK:-}" = 1 ]; then
+    (cd "$dir" && rm -f bun.lock && "$bun" install --silent)
+    cp "$dir/bun.lock" "$here/$name/bun.lock"
+  fi
+  cp "$here/$name/bun.lock" "$dir/bun.lock"
+  (cd "$dir" && "$bun" install --silent --frozen-lockfile --production)
+}
+
 # go.mod's `toolchain` line makes `go` fetch the pinned release when the
 # installed one is older (GOTOOLCHAIN=auto, the default).
 build_go() {
@@ -112,6 +131,7 @@ build_rust() {
   rm -rf "$dir/src"
   mkdir -p "$dir"
   cp -r "$here/$name/src" "$dir/src"
+  cp "$here/rust-extra.rs" "$dir/src/extra.rs"
   cp "$here/$name/cargo.toml" "$dir/Cargo.toml"
   cp "$here/rust-toolchain.toml" "$dir/rust-toolchain.toml"
   if command -v rustup >/dev/null; then
@@ -155,6 +175,7 @@ build_nginx() {
     )
   fi
   cp "$here/nginx/nginx.conf" "$dest/nginx.conf"
+  "${NODE:-node}" "$here/nginx/extra-conf.mjs" >"$dest/extra.conf"
   cp "$here/nginx/serve" "$dest/serve"
   chmod +x "$dest/serve"
 }
@@ -164,6 +185,7 @@ build() {
     node-http) build_node_http ;;
     uws) build_uws ;;
     bun) build_bun ;;
+    bun-elysia | bun-hono) build_bun_framework "$1" ;;
     go-nethttp | go-fasthttp) build_go "$1" ;;
     rust-hyper | rust-actix) build_rust "$1" ;;
     nginx) build_nginx ;;
