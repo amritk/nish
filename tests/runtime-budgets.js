@@ -82,8 +82,20 @@ const RUNTIME_TEXT_BUDGET = 3684
  * clang 18 on linux-x64, leaving 143. It is that small because it reads nothing itself:
  * it hands the bytes `nish_read_file_or_null` already put in the arena to a fresh array
  * header, so there is one read path and one `S_ISDIR` guard for both builtins.
+ *
+ * It measured **1,530 bytes** at the head WP34 N12 started from, 6 under the ceiling.
+ * **Raised to 2,560 by WP34 N12**, measured **2,383 bytes** on 2026-10-20 with clang
+ * 18.1.3 on linux-x64, 853 more, in two parts. 276 are the new process builtins: `spawn`
+ * (`nish_spawn_child`, 9, and the start factored out of `nish_spawn_impl`, 31 more for
+ * its errno answers), `kill` (53), `waitPid` (134) and `totalMemory` (49), as
+ * `-ffunction-sections` sizes them. The other 577 are not new: they are the CPU count
+ * (`nish_cpu_online`, the affinity mask, the cgroup v2 quota and `NISH_NUM_THREADS`)
+ * moved here from runtime-parallel.c, whose `--threads` row fell by 575, because
+ * `availableParallelism` reads it in a build without `--threads` and that build of
+ * runtime-parallel.c compiles none of it. The two files together grew by 278. The
+ * budget is the next 256-byte boundary above the measurement, leaving 177.
  */
-const RUNTIME_OS_TEXT_BUDGET = 1536
+const RUNTIME_OS_TEXT_BUDGET = 2560
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
@@ -214,8 +226,15 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * file had nothing to give: the bytes are the pool's, and dropping the 64 MB threshold
  * instead cost the bursts it was set for (586-700 ms against 440-466 ms on the 1.2
  * million strings).
+ *
+ * **Lowered to 2,560 by WP34 N12**, measured **2,325 bytes** on 2026-10-20 with clang
+ * 18.1.3 on linux-x64, 575 fewer: the CPU count's reading (the affinity mask, the cgroup
+ * v2 quota and `NISH_NUM_THREADS`) moved to runtime-os.c as `nish_cpu_online`, which
+ * `availableParallelism` calls in every build, and `nish_cpu_count` here keeps only its
+ * cache and the call. The ceiling comes down with it, to the next 256-byte boundary
+ * above the measurement, so the room the move freed is not left for something else.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2944
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2560
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and

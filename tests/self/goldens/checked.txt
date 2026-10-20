@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1056 programs, 136685 dump lines.
+# 1063 programs, 136742 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -4963,6 +4963,13 @@ function pick<string, firstLine>(x: string, f: void): string -> @pick$str$fn.9.f
   calls: firstLine
   stackSites=0 stackLocals=0
   callee 6:53 firstLine -> @firstLine
+program tests/cases/caps_host.ts
+module tests/cases/caps_host.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_cpu_online nish_print nish_total_memory
+  stackSites=0 stackLocals=0
 program tests/cases/caps_net.ts
 module tests/cases/caps_net.ts (entry)
 import netAddress from "nish:net" -> builtin netAddress
@@ -4993,6 +5000,19 @@ function main(): i32 -> @nish_main [exported entry]
   calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32 run
   stackSites=0 stackLocals=0
   callee 6:15 run -> @run
+program tests/cases/caps_process_wait.ts
+module tests/cases/caps_process_wait.ts (entry)
+function stop(pid: i32): i32 -> @stop [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_kill
+  calls: nish_kill nish_panic_index nish_wait_pid
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_print nish_spawn_child nish_str_from_i32 stop
+  stackSites=0 stackLocals=0
+  callee 11:15 stop -> @stop
 program tests/cases/caps_pure.ts
 module tests/cases/caps_pure.ts (entry)
 function total(xs: i32[]): i32 -> @total [exported]
@@ -48625,6 +48645,30 @@ function main(): i32 -> @nish_main [exported entry]
   callee 60:52 secondNext -> @secondNext
   callee 60:72 either -> @either
   callee 60:94 either -> @either
+program tests/cases/os_cpu.ts
+module tests/cases/os_cpu.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_cpu_online nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 5:9 n: i32 (const)
+program tests/cases/os_kill.ts
+module tests/cases/os_kill.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_spawn_child
+  calls: nish_kill nish_panic_index nish_print nish_spawn_child nish_str_from_i32 nish_wait_pid
+  stackSites=0 stackLocals=0
+  local 6:9 pid: i32 (const)
+program tests/cases/os_memory.ts
+module tests/cases/os_memory.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i64 nish_total_memory
+  stackSites=0 stackLocals=0
+  local 5:9 bytes: i64 (const)
 program tests/cases/os_mtime.ts --number-mode f64
 module tests/cases/os_mtime.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -48718,6 +48762,26 @@ function main(): i32 -> @nish_main [exported entry]
   calls: nish_arena_mark nish_arena_release nish_print nish_read_signal nish_signal_fd nish_str_from_i32
   stackSites=0 stackLocals=0
   local 6:9 fd: i32 (const)
+program tests/cases/os_spawn.ts
+module tests/cases/os_spawn.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_spawn_child
+  calls: nish_panic_index nish_print nish_spawn_child nish_str_from_i32 nish_wait_pid
+  stackSites=0 stackLocals=0
+  local 6:9 pid: i32 (const)
+  local 9:9 done: i32[] (const)
+program tests/cases/os_wait.ts
+module tests/cases/os_wait.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_spawn_child
+  calls: nish_kill nish_panic_index nish_print nish_spawn_child nish_str_from_i32 nish_wait_pid
+  stackSites=0 stackLocals=0
+  local 5:9 pid: i32 (const)
+  local 6:9 none: i32[] (const)
+  local 11:9 done: i32[] (const)
+  local 14:9 empty: i32[] (const)
 program tests/cases/ovf_checked.ts
 module tests/cases/ovf_checked.ts (entry)
 function mix(a: i32, b: i32, c: i64): i64 -> @mix [exported]

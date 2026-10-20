@@ -21356,6 +21356,9 @@ declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #
 declare zeroext i1 @nish_is_dir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8) #3
 declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #2
+declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #2
+declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #3
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_monotonic_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -21414,6 +21417,8 @@ declare void @nish_cross_end(i8* noundef nonnull) #3
 declare void @nish_cross_adopt(i8* noundef, i8* noundef nonnull, i64 noundef) #3
 declare noundef nonnull i8* @nish_guard_keep(i8* noundef, i8* noundef nonnull) #3
 declare noundef i64 @nish_cpu_count() #2
+declare noundef i64 @nish_cpu_online() #2
+declare noundef i64 @nish_total_memory() #2
 declare i32 @nish_aes_hw() #8
 declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2

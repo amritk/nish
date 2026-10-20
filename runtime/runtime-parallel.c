@@ -33,9 +33,6 @@
  * workers that are started once, on the first region or join that divides, and
  * park between calls.
  */
-#if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE /* `sched_getaffinity` and `CPU_COUNT`, for `nish_cpu_count` */
-#endif
 #include "nish.h"
 
 #include <stdlib.h>
@@ -44,7 +41,6 @@
 
 #if defined(NISH_THREADS) && !defined(__wasi__) && !defined(__wasm__)
 #define NISH_PAR_REAL 1
-#include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
 #ifdef __GLIBC__
@@ -74,83 +70,14 @@
  * decides how many threads a loop is divided into. */
 static int64_t nish_cpu_cached = 0;
 
-#if defined(NISH_PAR_REAL) && defined(__linux__)
-/* Reads up to `cap - 1` bytes of a small file into `buf`, terminated; 0 bytes
- * when it cannot be opened. */
-static void nish_read_small(const char *path, char *buf, size_t cap) {
-  ssize_t got = -1;
-  int fd = open(path, O_RDONLY | O_CLOEXEC);
-  if (fd >= 0) {
-    got = read(fd, buf, cap - 1);
-    close(fd);
-  }
-  buf[got > 0 ? got : 0] = 0;
-}
-
-/* The cgroup v2 CPU quota of this process and of every cgroup above it, as a
- * whole number of CPUs rounded up, and `n` when it is lower or there is none.
- * A container limited to 1.5 CPUs on a 64-core host is what this is for: its
- * affinity mask still names all 64, and 63 workers time-sliced into a budget
- * of 1.5 cores is the slowest way there is to run a loop. `cpu.max` reads
- * `<quota> <period>`, or `max <period>` when there is no limit, which the
- * digit test leaves out. The path is the `0::` line of /proc/self/cgroup under
- * /sys/fs/cgroup, where a v2-only system and a container mount the hierarchy;
- * a v1 system has no `cpu.max` there and keeps `n`. */
-static int64_t nish_cgroup_cpus(int64_t n) {
-  char text[512];
-  char path[512] = "/sys/fs/cgroup";
-  nish_read_small("/proc/self/cgroup", text, sizeof text);
-  char *at = strstr(text, "0::/");
-  if (!at || (at != text && at[-1] != '\n')) return n;
-  size_t len = strcspn(at + 3, "\n");
-  if (len > sizeof path - 24) return n;
-  memcpy(path + 14, at + 3, len);
-  for (;;) {
-    memcpy(path + 14 + len, "/cpu.max", 9);
-    nish_read_small(path, text, sizeof text);
-    if (text[0] >= '1' && text[0] <= '9') {
-      char *rest;
-      int64_t quota = strtoll(text, &rest, 10);
-      int64_t period = strtoll(rest, 0, 10);
-      if (period > 0) {
-        int64_t cpus = quota / period + (quota % period != 0);
-        if (cpus < n) n = cpus;
-      }
-    }
-    /* Up one level, by dropping the last component, until the root is read. */
-    if (len <= 1) return n;
-    while (len > 1 && path[14 + len - 1] != '/') len--;
-    if (len > 1) len--;
-  }
-}
-#endif
-
-/* The CPUs a region may use: the smallest of the CPUs online, the ones this
- * thread may run on (`taskset`, a container's cpuset), the cgroup quota, and
- * `NISH_NUM_THREADS` when it is a positive number. The variable can lower the
- * count and never raise it, so it caps a program's threads (a CI job sharing
- * its machine, a benchmark pinned to one core) without ever putting more of
- * them on the machine than it has. */
+/* The CPUs a region may use: `nish_cpu_online` (runtime-os.c), which
+ * `availableParallelism` reads in every build, and 1 in the sequential one,
+ * which divides nothing. */
 int64_t nish_cpu_count(void) {
   int64_t n = __atomic_load_n(&nish_cpu_cached, __ATOMIC_RELAXED);
   if (n != 0) return n;
 #ifdef NISH_PAR_REAL
-  long got = sysconf(_SC_NPROCESSORS_ONLN);
-  n = got > 0 ? (int64_t)got : 1;
-#ifdef __linux__
-  cpu_set_t set;
-  if (sched_getaffinity(0, sizeof set, &set) == 0) {
-    int mine = CPU_COUNT(&set);
-    if (mine > 0 && mine < n) n = mine;
-  }
-  n = nish_cgroup_cpus(n);
-#endif
-  const char *env = getenv("NISH_NUM_THREADS");
-  if (env) {
-    char *end;
-    long long want = strtoll(env, &end, 10);
-    if (end != env && *end == 0 && want > 0 && want < n) n = (int64_t)want;
-  }
+  n = nish_cpu_online();
 #else
   n = 1;
 #endif

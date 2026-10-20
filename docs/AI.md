@@ -2038,6 +2038,16 @@ path cannot be stat'd, so test `m !== m`), and `signalFd()` / `readSignal(fd)`:
 call `signalFd()` once at the top of `main`, then `readSignal(fd)` blocks until
 SIGTERM or SIGINT and answers 15 or 2. None of them exists on a wasm target.
 
+**Children and the machine.** `spawn(argv)` starts a child like `spawnSync` but
+answers its pid (`i32`) at once, without waiting; `kill(pid, sig)` sends 0, 2,
+9 or 15 and answers 0 (any other signal is `-22`); `waitPid(pid, flags)` answers
+`[pid, status]` as an `i32[]` — pid `-1` is any child, flag `1` does not block,
+`[0, 0]` means none has exited yet, and the status is the exit code or 128 plus
+the signal. Each answers a **negative errno** on failure (`[-10, 0]`: no child
+left). `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
+`totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
+the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
+
 **Sockets** (`nish:net`, or the same names as globals). `tcpListen(host, port,
 backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
 `netWrite(fd, buf, off, len)`, `netShutdown(fd, how)`, `netClose(fd)`,

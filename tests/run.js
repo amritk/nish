@@ -1356,6 +1356,82 @@ if (!only || "os_host".includes(only)) {
     loud.status !== 0 && loud.stderr.includes("signalFd has no synchronous reading under Node"),
     shown(loud)
   )
+
+  // WP34 N12: the core count and the memory size, natively and under the prelude.
+  // Natively the count is the smallest of the online cores, the affinity mask and
+  // the cgroup quota, so it is at most Node's `os.availableParallelism()` (the
+  // mask alone); a positive NISH_NUM_THREADS caps it on both sides. The memory
+  // size is the kernel's, the number `os.totalmem()` reads.
+  const cpuExe = buildCaseIn(osDir, "os_cpu")
+  const memoryExe = buildCaseIn(osDir, "os_memory")
+  const nodeCores = os.availableParallelism()
+  for (const [side, cpu, memory] of [
+    ["natively", (args, env) => spawnSync(cpuExe, args, { cwd: root, encoding: "utf8", env }), (args) => osNative(memoryExe, args)],
+    [
+      "under the prelude",
+      (args, env) => {
+        const saved = process.env.NISH_NUM_THREADS
+        process.env.NISH_NUM_THREADS = env.NISH_NUM_THREADS ?? ""
+        const r = runCaseUnderPrelude("os_cpu", args)
+        process.env.NISH_NUM_THREADS = saved ?? ""
+        if (saved === undefined) {
+          delete process.env.NISH_NUM_THREADS
+        }
+        return r
+      },
+      (args) => runCaseUnderPrelude("os_memory", args),
+    ],
+  ]) {
+    if (cpuExe === null || memoryExe === null) {
+      break
+    }
+    const unset = { ...process.env }
+    delete unset.NISH_NUM_THREADS
+    const free = cpu(["print"], unset)
+    const cores = Number(linesOf(free)[1])
+    check(
+      `os_cpu: availableParallelism() ${side} is at least 1 and at most Node's ${nodeCores}`,
+      free.status === 0 && linesOf(free)[0] === "true" && Number.isInteger(cores) && cores >= 1 && cores <= nodeCores,
+      shown(free)
+    )
+    const capped = cpu(["print"], { ...unset, NISH_NUM_THREADS: "1" })
+    check(
+      `os_cpu: availableParallelism() ${side} is 1 under NISH_NUM_THREADS=1`,
+      capped.status === 0 && linesOf(capped).join(" ") === "true 1",
+      shown(capped)
+    )
+    const m = memory(["print"])
+    check(
+      `os_memory: totalMemory() ${side} is Node's os.totalmem(), ${os.totalmem()}`,
+      m.status === 0 && linesOf(m).join(" ") === `true ${os.totalmem()}`,
+      shown(m)
+    )
+  }
+
+  // spawn, kill and waitPid under the prelude. A child is reaped by the event
+  // loop, which a synchronous wait never returns to, so `spawn` and `waitPid`
+  // fail loudly rather than answering; `kill` has a synchronous reading and
+  // answers what runtime-os.c answers, -3 for a pid no process has and -22 for a
+  // signal outside 0, 2, 9 and 15.
+  const loudSpawn = runCaseUnderPrelude("os_spawn", [])
+  check(
+    "os_spawn: under the prelude spawn fails loudly rather than answering",
+    loudSpawn.status !== 0 && loudSpawn.stderr.includes("`spawn` has no synchronous reading under Node"),
+    shown(loudSpawn)
+  )
+  const reaper = path.join(osDir, "reaper.ts")
+  fs.writeFileSync(
+    reaper,
+    "export const main = (): number => {\n  console.log(kill(2147483647, 0));\n  console.log(kill(1, 7));\n  console.log(kill(-1, 15));\n  console.log(waitPid(-1, 1)[0]);\n  return 0;\n};\n"
+  )
+  const reaped = runUnderPrelude(reaper, [])
+  check(
+    "waitPid: under the prelude kill answers -3 and -22, and waitPid then fails loudly rather than answering",
+    reaped.status !== 0 &&
+      reaped.stdout === "-3\n-22\n-22\n" &&
+      reaped.stderr.includes("`waitPid` has no synchronous reading under Node"),
+    shown(reaped)
+  )
 }
 
 // A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is
