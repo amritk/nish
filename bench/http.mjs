@@ -15,8 +15,9 @@
 // pattern, and /json-echo's and /json-echo-doc's exactly — the payload with
 // its revision one higher. / must answer `Hi`, /id/1?name=bun `1 bun` with an
 // `x-powered-by: benchmark` header, and POST /json bench/http-body.json
-// re-serialized. A server that answers 404 is `n/a` in that scenario; any
-// other wrong answer exits 1, naming the first differing byte.
+// re-serialized, and the deep route `acme api 97`. A server that answers 404
+// is `n/a` in that scenario; any other wrong answer exits 1, naming the first
+// differing byte.
 //
 // The post-json scenarios POST bench/http-payload.json (or the file
 // NISH_HTTP_PAYLOAD names) through the wrk script bench/http-post-json.lua, and
@@ -148,6 +149,7 @@ const layout = (n) => {
 
 // Each scenario is one wrk invocation. `close` sends `Connection: close`, so
 // every request is a fresh TCP connection and the accept path is what is timed.
+const DEEP_PATH = "/v1/orgs/acme/projects/api/builds/97/artifacts"
 const scenarios = [
   // The three routes of the Bun HTTP framework benchmark: a constant, a path
   // parameter and a query parameter with a response header, and a small JSON
@@ -167,6 +169,10 @@ const scenarios = [
     post: true,
     file: payloadFile,
   },
+  // A route eight segments and three parameters deep in the Nish server's
+  // 342-route table, its answer built from the three. The twins register no
+  // such table and answer 404, so their cells read n/a.
+  { name: "deep-route keep-alive c=256", path: DEEP_PATH, conns: 256 },
   { name: "plaintext keep-alive c=4096", path: "/plaintext", conns: 4096 },
   { name: "plaintext close c=64", path: "/plaintext", conns: 64, close: true },
   // The same churn while 8,000 idle connections hold the pool's first slots:
@@ -415,6 +421,9 @@ const contract = (scenario) => {
   }
   if (scenario.path.startsWith("/id/")) {
     return { exact: "1 bun", headers: { "x-powered-by": "benchmark" } }
+  }
+  if (scenario.path === DEEP_PATH) {
+    return { exact: "acme api 97" }
   }
   if (scenario.path === "/plaintext") {
     return { exact: "Hello, World!" }

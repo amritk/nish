@@ -42,7 +42,7 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -6289,6 +6289,33 @@ if (!only || "thread_channel_string_many".includes(only)) {
     run !== null && run.status === 0 && String(run.stdout) === "1000000 54792\n" && ms < 10_000,
     run !== null ? `exit ${run.status}, signal ${run.signal}, after ${ms} ms\nstdout: ${run.stdout}` : missing
   )
+}
+
+// `Http1Server` builds a slot's connection on the first accept into it, so a
+// pool sized for a busy day costs little before its first connection.
+// `tests/link/net_http1_server/startup.ts` builds a pool of 16,384 slots on no
+// socket and prints the arena bytes it took, which the ceiling
+// `HTTP1_SERVER_START_BYTES` in `tests/runtime-budgets.js` holds, and whether
+// they fit in one chunk, without which `Arena.used()` measures nothing.
+if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only)) {
+  const dir = path.join(buildDir, "link", "net_http1_server.startup")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "net_http1_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    check(
+      "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
+      `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
 }
 
 // A task's temporaries are released on the thread that ran it once it has
