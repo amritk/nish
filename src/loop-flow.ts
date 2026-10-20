@@ -713,6 +713,10 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
       bodyStart = flowCond(ctx, f, cond, entry, true)
     }
     const end = flowExec(ctx, f, body, bodyStart)
+    // These joins allocate in the loop on purpose (the one NL9011 the baseline
+    // keeps for this file): a round's sets must outlive it, because the next
+    // round starts from `entry` and the fixpoint keeps `join` as `f.join`. They
+    // are bounded: at most FLOW_ROUNDS rounds, each one i32[] per tracked variable.
     const join = flowJoin(f, end, f.conts)
     let next = flowJoin(f, start, join)
     if (f.kind === "do") {
