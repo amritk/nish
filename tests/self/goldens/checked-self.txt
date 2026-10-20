@@ -22157,7 +22157,7 @@ function joinHeld(ctx: CheckContext, scope: Scope, local: Local, first: Scope, s
   callee 2529:11 TypeTable.memberValue -> @TypeTable.memberValue
   callee 2529:44 TypeTable.memberValue -> @TypeTable.memberValue
   callee 2540:3 holdKept -> @holdKept
-function variantsIn(ctx: CheckContext, union: i32, type: i32): i32[] -> @variantsIn [exported]
+function variantsIn(ctx: CheckContext, union: i32, type: i32): i32[] -> @variantsIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: type union
   calls: TypeTable.hasVariant TypeTable.isUnion TypeTable.variantsOf nish_array_grow
