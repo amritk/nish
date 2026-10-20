@@ -198,9 +198,10 @@ the caller takes the blocks whole at the join rather than copying each string
 again, so the copy runs on every thread at once. A map of a million
 `` `s${x % 100000}` `` strings took a median of 24 ms on 4 threads (22 to 32 ms
 over nine runs), against 40 ms for the sequential loop. On one thread the same
-map takes 65 ms, since every element still pays the move, so measure your own
-case. Reach for the threads when each element does some work, or when there is
-more than one core to run it.
+map takes as long as the loop, so a program that runs with
+`NISH_NUM_THREADS=1`, or on a single core, loses nothing by using it. Still,
+measure your own case: the threads pay off when each element does some work,
+or when there is more than one core to run it.
 
 **What is refused, and why.** The rules for `f` above, and an answer that is
 an array of strings, an array of arrays, an object, a `Map` or a `Set`
