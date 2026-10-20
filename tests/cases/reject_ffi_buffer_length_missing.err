@@ -1,0 +1,1 @@
+`declare function SHA256` takes the buffer `md` with no count after it: a run of `u8[]` parameters is followed by one `u64`, the byte count C may touch in each

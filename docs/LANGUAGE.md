@@ -4395,13 +4395,16 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**A parameter is a scalar, a `CPtr` or a borrowed `string`; a return is a
-scalar, a `CPtr` or a copied `string`** — `i32`, `i64`, `u8`, `u16`, `u32`,
-`u64`, `f32`, `f64`, `boolean`, `void`, the foreign pointer below, and
-`string` and `string | null` in either position. An array, a class or an
-interface is rejected with
-`` and a declared C function takes scalars and `CPtr` only, besides a `string`
-it borrows as `const char *` `` in a parameter
+**A parameter is a scalar, a `CPtr`, a borrowed `string` or a `u8[]` buffer
+with its count; a return is a scalar, a `CPtr` or a copied `string`** — `i32`,
+`i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`, `boolean`, `void`, the foreign
+pointer below, `string` and `string | null` in either position, and
+[a buffer](#a-u8-parameter-a-buffer-and-its-count) as a parameter. A class
+or an interface is rejected with
+`` and a declared C function takes scalars, `CPtr`, a `string` it borrows as
+`const char *` and a `u8[]` buffer followed by its `u64` count `` in a
+parameter (`reject_ffi_class_param`), any other array with
+`` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
 (`tests/cases/reject_ffi_string_array_param`: a `string[]` too, which would be
 a `char **` the compiler built per call) and
 `` returns a scalar, a `CPtr` or a `string` it copies from a `const char *` ``
@@ -4633,6 +4636,78 @@ if.end:
   a `nish_str_new`, which every runtime has, so `readCString` adds nothing to
   the link; whether the program links there is the `declare function`'s
   question, answered by the libc the target has.
+
+#### A `u8[]` parameter: a buffer and its count
+
+**A `u8[]` or `readonly u8[]` parameter is a buffer C reads or writes, and a
+run of one or more of them is followed by exactly one `u64`: the byte count C
+may touch in every buffer of the run.** Pairing the count by position is the
+declaration's word, not a proof. `fwrite(ptr, size, nmemb, stream)` touches
+`size * nmemb` bytes, so declared as `fwrite(buf: readonly u8[], size: u64,
+nmemb: u64, f: CPtr)` it pairs `size` with the buffer, and `fwrite(buf, 1,
+1000, f)` on a 10-byte array overflows it. The safe spelling declares the size
+as the count and passes `1` as `nmemb`: `fwrite(buf: readonly u8[], n: u64,
+one: u64, f: CPtr)`, called as `fwrite(buf, n, 1, f)`. Nothing stops a call from
+passing another `nmemb`, which is the same class of mistake as declaring `free`
+with two parameters.
+
+```ts
+declare function memcpy(dst: u8[], src: readonly u8[], n: u64): CPtr;
+declare function getentropy(buf: u8[], n: u64): i32;
+declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): i32;
+```
+
+- **`memcpy(dst, src, n)` is one run of two buffers sharing a count**, and
+  `(a, na, b, nb)` is two runs with a count each (`tests/cases/ffi_buffer_declared`).
+  The same array passed twice in one run, `memcpy(a, a, n)`, is not refused:
+  C sees two pointers to one block, and overlapping `memcpy` is undefined in C
+  (`memmove` is the one that allows it).
+- **`readonly u8[]` is C's `const`.** A `u8[]` parameter says C may write the
+  bytes; a `readonly u8[]` says it only reads them. C can cast the `const`
+  away, and the compiler cannot check that.
+- **A run with no count after it is refused**, with `` takes the buffer `md`
+  with no count after it: a run of `u8[]` parameters is followed by one `u64` ``
+  (`reject_ffi_buffer_length_missing`, `SHA256(d, n, md)`'s fixed-size output),
+  and so is a count of any other type, `` and the parameter after a run of
+  `u8[]` buffers is their byte count, a `u64` `` (`reject_ffi_buffer_length_type`).
+- **Only `u8` crosses.** `i32[]` or `f64[]` is
+  `` the only array a declared C function takes is a `u8[]` or a `readonly u8[]` ``
+  (`reject_ffi_buffer_element`).
+- **A buffer is never null and never a result.** `u8[] | null` is refused
+  (`reject_ffi_buffer_nullable`, and `reject_ffi_buffer_nullable_in_run` for one
+  inside a run): it has no length to hold the count to, so the
+  `NULL, 0` call C allows is declared with a `CPtr | null` parameter. A `u8[]`
+  result is refused by the return rule above (`reject_ffi_buffer_return`).
+- **A call to such a declaration is refused until the release that lowers it**:
+  `` a call to a declared C function that takes a `u8[]` is not lowered yet ``
+  (`reject_ffi_buffer_call`), whether the call names the function, goes
+  through a function parameter bound to it (`reject_ffi_buffer_call_param`),
+  or sits in a constructor (`reject_ffi_buffer_call_constructor`), a method
+  (`reject_ffi_buffer_call_method`) or a spawned arrow
+  (`reject_ffi_buffer_call_spawn`). That lowering passes the array's bytes and
+  panics when the count is larger than any buffer of its run
+  ([`docs/wp40-ffi-buffers-handles.md`](wp40-ffi-buffers-handles.md) §3a).
+
+#### What a declaration cannot say
+
+Each of these is refused, and each refusal is pinned by a case:
+
+- **A variadic C function, spelled variadically.** A rest parameter is
+  `Rest parameters are not supported` before its type is read, `...bytes:
+  u8[]` included (`reject_ffi_variadic`, `reject_ffi_buffer_rest`). A variadic function declared with a
+  fixed arity, `printf(fmt: string, x: i32)`, is accepted and is the
+  declaration's contract: the compiler cannot tell `open` is variadic from its
+  name.
+- **`syscall`, by name**: `` `declare function syscall` is refused ``
+  (`reject_ffi_syscall`). It is variadic and bypasses libc; declare the libc
+  function that wraps the system call.
+- **A callback.** A function is never a value, so an arrow passed to a
+  declared C function is refused (`reject_ffi_callback`).
+- **A read through a `CPtr`.** `p[0]` is `Cannot index a value of type CPtr`
+  (`reject_ffi_pointer_deref`); `readCString` above is the one read.
+- **Inline assembly.** `asm("nop")` is an unknown function (`reject_ffi_asm`).
+- **An allocator from C memory.** `arena()` takes no argument, so `using a =
+  arena(p)` is refused (`reject_ffi_allocator`).
 
 **A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
 `export`ed** (`reject_ffi_export`), because `export` offers other modules a
