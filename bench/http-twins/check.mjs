@@ -19,8 +19,11 @@
 // re-serialized, `{"hello":"world"}`, and a body that is not JSON a 400. nginx
 // has no JSON, so its POST /json is a 404. Last, every route in
 // extra-routes.mjs, a sample path for each GET pattern and a POST to it with
-// `/submit`, must answer `ok`. Only the media type of Content-Type is compared,
-// so a twin that adds `; charset=utf-8` still passes.
+// `/submit`, must answer `ok`. The Nish server also registers bench/router.ts's
+// route table, and answers its deep route,
+// GET /v1/orgs/acme/projects/api/builds/97/artifacts, `acme api 97`; from a
+// twin, which has no table, it must be a 404. Only the media type of
+// Content-Type is compared, so a twin that adds `; charset=utf-8` still passes.
 //
 // The Nish server, build/bench/h1, is checked first when it is built. Exit 1
 // names the server, the request and the first byte that differs; with no names
@@ -50,6 +53,7 @@ const noEcho = new Set(["nginx"])
 const body = readFileSync(join(root, "bench", "http-body.json"))
 const rewritten = Buffer.from('{"hello":"world"}')
 const powered = { "x-powered-by": "benchmark" }
+const DEEP_PATH = "/v1/orgs/acme/projects/api/builds/97/artifacts"
 
 const args = process.argv.slice(2)
 let payloadFile = join(root, "bench", "http-payload.json")
@@ -187,6 +191,11 @@ const check = async (server) => {
       ["GET", sampleOf(pattern), null, 200, "text/plain", Buffer.from("ok")],
       ["POST", `${sampleOf(pattern)}/submit`, null, 200, "text/plain", Buffer.from("ok")],
     ]),
+    // The route table is the Nish server's alone (bench/http-twins/README.md,
+    // "The route table"): a twin has no such route and must answer 404.
+    server.name === "nish"
+      ? ["GET", DEEP_PATH, null, 200, "text/plain", Buffer.from("acme api 97")]
+      : ["GET", DEEP_PATH, null, 404],
     ["GET", "/orders/", null, 404],
     ["POST", "/orders/42", null, 404],
   ]
