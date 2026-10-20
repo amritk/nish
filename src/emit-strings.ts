@@ -576,30 +576,32 @@ export const emitForeignBuffers = (
 ): void => {
   const fn = emitter.fn
   let i = 0
-  while (i < callee.paramTypes.length && i < values.length && i < operands.length) {
+  while (i < callee.paramTypes.length && i < values.length) {
     if (isForeignBuffer(emitter.table, callee.paramTypes[i])) {
       const buffer = values[i]
       const count = foreignBufferCount(emitter.table, callee, i)
       // The checker gave every buffer a count parameter after it, so `count`
       // always names an argument.
-      if (
-        count >= 0 &&
-        count < values.length &&
-        !foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts)
-      ) {
-        const len = loadLength(emitter, buffer)
-        const fits = fn.emitValue(`icmp ule i64 ${values[count]}, ${len}`)
-        const okBlock = fn.newBlock("ffi.ok")
-        const failBlock = fn.newBlock("ffi.length")
-        fn.emit(`br i1 ${fits}, label %${okBlock.label}, label %${failBlock.label}`)
-        fn.placeBlock(failBlock)
-        const message =
-          `\`${callee.sourceName}\`: argument ${count + 1} (${callee.paramNames[count]}) counts more bytes than ` +
-          `argument ${i + 1} (${callee.paramNames[i]}) holds`
-        emitPanicTail(emitter, emitter.stringConstant(message))
-        fn.placeBlock(okBlock)
+      if (count >= 0 && count < values.length) {
+        const counted = values[count]
+        if (!foreignBufferCountProven(emitter.program, emitter.table, call, i, count, emitter.facts)) {
+          const len = loadLength(emitter, buffer)
+          const fits = fn.emitValue(`icmp ule i64 ${counted}, ${len}`)
+          const okBlock = fn.newBlock("ffi.ok")
+          const failBlock = fn.newBlock("ffi.length")
+          fn.emit(`br i1 ${fits}, label %${okBlock.label}, label %${failBlock.label}`)
+          fn.placeBlock(failBlock)
+          const message =
+            `\`${callee.sourceName}\`: argument ${count + 1} (${callee.paramNames[count]}) counts more bytes than ` +
+            `argument ${i + 1} (${callee.paramNames[i]}) holds`
+          emitPanicTail(emitter, emitter.stringConstant(message))
+          fn.placeBlock(okBlock)
+        }
       }
-      operands[i] = `i8* ${loadData(emitter, buffer)}`
+      const data = loadData(emitter, buffer)
+      if (i < operands.length) {
+        operands[i] = `i8* ${data}`
+      }
     }
     i = i + 1
   }
