@@ -2053,7 +2053,10 @@ and there is no `async` and no callback: your `main` is the loop. A client calls
 wait for it to be writable, then `connectResult(fd)` is 0 or the failure. Buffers
 are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
 the port big-endian); hosts are numeric literals, because there is no DNS.
-`netRead` / `netWrite` panic on a range outside the buffer. UDP is
+`netRead` / `netWrite` panic on a range outside the buffer.
+`tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
+`SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
+spreads the connections; any other bit is `-22`). UDP is
 `udpBind(host, port, flags)` (flag 1 `SO_REUSEPORT`, flag 2 GRO),
 `udpSendTo(fd, buf, off, len, to, segment, ecn)` and
 `udpRecvFrom(fd, buf, off, len, from, meta)`: a `segment` above 0 sends one

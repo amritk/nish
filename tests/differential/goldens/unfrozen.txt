@@ -277,6 +277,7 @@ cases/net_tcp_connect added after R6: no rewriter to freeze it with
 cases/net_tcp_connect_import added after R6: no rewriter to freeze it with
 cases/net_tcp_echo added after R6: no rewriter to freeze it with
 cases/net_tcp_import added after R6: no rewriter to freeze it with
+cases/net_tcp_reuseport added after R6: no rewriter to freeze it with
 cases/net_udp_calls added after R6: no rewriter to freeze it with
 cases/net_udp_echo added after R6: no rewriter to freeze it with
 cases/net_udp_offload added after R6: no rewriter to freeze it with

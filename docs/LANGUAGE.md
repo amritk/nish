@@ -5690,7 +5690,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
@@ -6741,7 +6741,7 @@ would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All eighteen functions
+so a child that `spawnSync` starts inherits none of them. All nineteen functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -6754,11 +6754,20 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
+| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener that did not ask for it, or asked by one that does not, is `-98` | write | `net_tcp_reuseport`, `link/net_tcp_reuseport_spread`; `reject_net_reuseport_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
+
+What `tcpListenFlags`'s flag `1` does on each platform:
+
+| Platform | Flag `1` |
+| --- | --- |
+| Linux | Listeners that share the port each get new connections, spread by a hash of the connection's 4-tuple; only listeners of the same user may share |
+| Darwin | Listeners share the port, but one of them takes the connections: the flag buys a restart without a gap rather than a spread |
+| `wasm32`, `--profile wasi` | Refused at compile time with NL2404, as every `nish:net` call is |
 
 **Errors are numbers.** Every call answers an `i32`: `>= 0` is success (a
 descriptor, a count, `0`), and a negative number is the failure's errno,
@@ -6980,7 +6989,10 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   to reach, and `runtime-net.c` is empty there, so every call is refused by the
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
-  `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`).
+  `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`,
+  `reject_net_reuseport_wasm`). The freestanding `--profile wasm` link, which
+  takes IR compiled for the host, has no `runtime-net.c` either, so a program
+  that calls one fails there at the link, on the undefined `nish_` symbol.
 - **Not yet.** There is no name resolution (`reject_net_unknown_export`), no
   `sendmmsg` or `recvmmsg`, no edge-triggered mode and no timer
   but `pollWait`'s timeout. A program that does not want a loop can still wait
