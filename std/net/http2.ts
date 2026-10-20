@@ -553,13 +553,8 @@ export class Http2Connection {
    */
   restart(): void {
     const config: Http2Config = this.config
+    // Gives every buffer back and zeroes the cursors over them.
     this.drop()
-    this.inputStart = 0
-    this.inputEnd = 0
-    this.outputStart = 0
-    this.outputEnd = 0
-    this.blockLength = 0
-    this.blockStream = 0
     this.blockEndStream = false
     this.blockError = 0
     this.blockFragments = 0
@@ -640,6 +635,14 @@ export class Http2Connection {
       if (raise > 0) {
         this.wrote(http2WriteWindowUpdate(this.output, this.outputEnd, H2_ZERO, raise))
       }
+    }
+  }
+
+  /** Borrows `block` unless the connection holds it. */
+  holdBlock(): void {
+    if (this.block.length === 0) {
+      this.block = this.lender().block.take()
+      this.blockUsed = 0
     }
   }
 
@@ -1144,10 +1147,7 @@ export class Http2Connection {
 
   /** Appends a fragment of a header block; a block past `maxHeaderBlock` or `H2_MAX_FRAGMENTS` ends the connection. */
   gather(f: Http2Frame): boolean {
-    if (this.block.length === 0) {
-      this.block = this.lender().block.take()
-      this.blockUsed = 0
-    }
+    this.holdBlock()
     this.blockFragments = this.blockFragments + 1
     if (
       this.blockFragments > H2_MAX_FRAGMENTS ||
