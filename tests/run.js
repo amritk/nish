@@ -1532,6 +1532,7 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_address",
       "nish_net_local_port",
       "nish_tcp_listen",
+      "nish_tcp_listen_flags",
       "nish_tcp_accept",
       "nish_net_read",
       "nish_net_write",
@@ -1602,6 +1603,13 @@ if (!only || "net_tcp_connect".includes(only)) {
     "net_tcp_connect: under the prelude tcpConnect fails loudly rather than answering",
     loud.status !== 0 && loud.stderr.includes("`tcpConnect` has no synchronous reading under Node"),
     shown(loud)
+  )
+
+  const loudFlags = runCaseUnderPrelude("net_tcp_reuseport", [])
+  check(
+    "net_tcp_reuseport: under the prelude tcpListenFlags fails loudly rather than answering",
+    loudFlags.status !== 0 && loudFlags.stderr.includes("`tcpListenFlags` has no synchronous reading under Node"),
+    shown(loudFlags)
   )
 }
 
