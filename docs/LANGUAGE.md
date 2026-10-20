@@ -3015,6 +3015,18 @@ from the whole-program facts, and each rule is reported there:
   (main against a byte-identical copy of itself: about 2%). One call over
   2^25 elements is unchanged, 251.3 against 252.5 ms, inside that band
   (`tests/link/par_map_reclaim`).
+  A string map's result handed to a function whose `string[]` parameter keeps
+  none of it, reading it or handing it on only to another such parameter, is
+  still freed with the frame: 72 string maps over 2^17 whose frames each pass
+  the array to such a callee peak at 20 MB on 1 thread and 22 MB on 8, where
+  they peaked at 237 MB. The parameter keeps it, and the frame keeps the
+  strings, when the callee stores the array or one of its strings into a
+  field, an outer array or a `Map`, returns either, passes it to `new` or to a
+  constructor that hands `this` out, stores it through any declarator of a
+  statement or through a local alias, or hands it to a callee that keeps it,
+  and whenever the callee holds an arrow, such as a map's body; the proof
+  covers a parameter typed `string[]` exactly, so one typed `string[][]` keeps
+  the strings it reaches (`tests/link/par_map_reclaim_strings`).
 - **A reduce's `T` stays a number, a `boolean` or an enum.** It is the
   element, the identity and every partial as well as the answer, folded on
   several threads, so a string would be copied at every combine; a reduce over

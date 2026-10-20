@@ -86,7 +86,8 @@ export const main = (): i32 => {
   answers in when they hold less, so the array you get back holds strings you
   own. They are freed like anything else your function allocates: a function
   that runs a map and returns only a number gives the result and its strings
-  back when it returns, and a map may run inside
+  back when it returns, even when it passes the strings to a helper that only
+  reads them, and a map may run inside
   [`using a = arena()`](../language/memory.md#freeing-a-batch-yourself-using-a--arena)
   unless its body answers arrays. An array of strings, an array of arrays,
   an object, a `Map` or a `Set` is refused: copying one would mean following
