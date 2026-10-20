@@ -3833,11 +3833,20 @@ const guardSlot = (program: CheckedProgram, table: TypeTable, guard: i32, name: 
  */
 const guardUseIn = (program: CheckedProgram, table: TypeTable, call: Node, arg: Node): string => {
   const callee = program.nodeCallees[call.id]
-  if (call.kind !== N_CALL || callee === null || !callee.definedIn(program.source)) {
+  if ((call.kind !== N_CALL && call.kind !== N_NEW) || callee === null) {
+    return ""
+  }
+  // A constructor reached by `new` is a call too, its arguments the third
+  // child; a generic's instantiation is this module's when its template is,
+  // and its body's types are the instantiation's own.
+  const instance = callee.instance
+  const template: TemplateInfo | null = instance !== null ? instance.template : null
+  const home = template !== null ? template.origin === program.source : callee.definedIn(program.source)
+  if (!home) {
     return ""
   }
   const body = callee.body()
-  const args = call.children[1].children
+  const args = call.kind === N_NEW ? call.children[2].children : call.children[1].children
   let index = callee.paramNames.length > 0 && callee.paramNames[0] === "this" ? 1 : 0
   let found = false
   for (const a of args) {
@@ -3850,11 +3859,18 @@ const guardUseIn = (program: CheckedProgram, table: TypeTable, call: Node, arg: 
   if (body === null || !found || index >= callee.paramNames.length) {
     return ""
   }
-  return guardUseUnder(program, table, body, callee.paramNames[index])
+  const types = instance !== null ? instance.nodeTypes : program.nodeTypes
+  return guardUseUnder(program, table, types, body, callee.paramNames[index])
 }
 
 /** The first read of `param.value` under `node` that copies out a number, a `boolean` or a `string`, rooted at `g`. */
-const guardUseUnder = (program: CheckedProgram, table: TypeTable, node: Node, param: string): string => {
+const guardUseUnder = (
+  program: CheckedProgram,
+  table: TypeTable,
+  types: i32[],
+  node: Node,
+  param: string
+): string => {
   if (node.kind === N_MEMBER || node.kind === N_INDEX) {
     let root = node
     while ((root.kind === N_MEMBER || root.kind === N_INDEX) && root.children.length > 0) {
@@ -3863,14 +3879,14 @@ const guardUseUnder = (program: CheckedProgram, table: TypeTable, node: Node, pa
     const head = `${param}.value`
     const text = shownSource(program, node, "")
     if (root.kind === N_IDENT && root.text === param && text.startsWith(head)) {
-      const slot = copiedSlot(program, table, `g${text.substring(param.length)}`, program.nodeTypes[node.id])
+      const slot = copiedSlot(program, table, `g${text.substring(param.length)}`, types[node.id])
       if (slot.text.length > 0) {
         return slot.text
       }
     }
   }
   for (const child of node.children) {
-    const found = guardUseUnder(program, table, child, param)
+    const found = guardUseUnder(program, table, types, child, param)
     if (found.length > 0) {
       return found
     }
