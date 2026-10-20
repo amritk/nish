@@ -61,11 +61,24 @@ Two jobs took longer than 15 minutes unsplit, so each runs as four:
 
 - **`test`.** `node tests/run.js --shard <i>/<n>` splits the suite. Every shard
   builds stage1 and runs everything before the `tests/link/` programs, which is
-  under two minutes. Shard 1 runs every section after them, together with the
-  link programs whose output a later check reads (`LINK_READ_LATER`). Shards 2
-  to `n` share the remaining link programs round-robin and stop once theirs are
-  done. What a shard leaves to another is counted as **delegated** and names the
-  shard that proves it, so no shard's summary claims checks it did not make.
+  under two minutes. Shard 1 runs every section after them but WP14
+  self-hosting, together with the link programs whose output a later check
+  reads (`LINK_READ_LATER`). The WP14 section and the remaining link programs
+  are dealt by cost: `tests/shard-costs.json` holds the seconds each took in a
+  CI shard, and `linkShard` in `tests/run.js` gives each, largest first, to the
+  shard with the least so far, shard 1 starting from its own sections' cost.
+  The deal is deterministic, so every shard computes the same one; a link
+  program missing from the table costs the table's median. Every shard but 1
+  stops once its share is done. What a shard leaves to another is counted as
+  **delegated** and names the shard that proves it, so no shard's summary
+  claims checks it did not make.
+
+  Regenerate the table when a shard drifts more than about a fifth from the
+  others: the costs are the gaps between consecutive programs' last lines in a
+  CI shard's log, and `shardOne` and `selfHosting` the spans of those
+  sections. The shard-1 steps after the suite that require a `PASS` line
+  (`simd`, the AES kernels, `cpu-level`) grep the Test step's log for it
+  rather than running their section again.
 - **`runner`.** `build/nish-runner --shard <i>/<n>` deals the cases and link
   programs the runner selects round-robin.
 
@@ -244,7 +257,8 @@ on WP14 self-hosting (its fixed point included, which CI delegates), 96 s on the
 WP13 differential and 56 s building stage1. Every other section took under
 35 s, and they came to 213 s together. CI's `test` step took 24 min 29 s on the
 same commit. The shard split follows from those numbers: the link programs are
-the part worth dealing out.
+the part worth dealing out, and WP14 is the one section large enough to deal
+with them.
 
 ## Running the same steps locally
 
