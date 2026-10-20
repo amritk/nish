@@ -21658,4 +21658,154 @@ if (!only || "c-symbols".includes(only)) {
   }
 }
 
+// ---- #432: the `unsafe` capability, reported ----------------------------------------
+// A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
+// the bit travels through callers, modules and packages like every other: here
+// read off `--emit-capabilities` for a direct call, a call two frames up, a
+// module with no unsafe call, each of the six exports, and a dependency that
+// imports `nish:unsafe` when the entry package does not. The deprecated
+// `--wrapping` and `--unchecked-indexing` carry no `unsafe`: the opt-out they
+// make is printed at every site they reach, on the command line that would
+// pass the policy too (docs/wp35-capabilities.md §1).
+if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
+  const unsafeDir = path.join(buildDir, "caps-unsafe")
+  fs.rmSync(unsafeDir, { recursive: true, force: true })
+  const program = {
+    "leaf.ts":
+      'import { uncheckedGet } from "nish:unsafe";\n\n' +
+      "export const first = (xs: i32[]): i32 => (xs.length > 0 ? uncheckedGet(xs, 0) : 0);\n",
+    "mid.ts":
+      'import { first } from "./leaf";\n\nexport const firstTwice = (xs: i32[]): i32 => first(xs) + first(xs);\n',
+    "pure.ts":
+      "export const sum = (xs: i32[]): i32 => {\n  let s = 0;\n  for (const x of xs) {\n    s = s + x;\n  }\n  return s;\n};\n",
+    "main.ts":
+      'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
+    "each.ts":
+      "import { readCString, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      '"nish:unsafe";\n\n' +
+      "declare function cbuf(): CPtr | null;\n\n" +
+      "export const get = (xs: i32[]): i32 => uncheckedGet(xs, 0);\n" +
+      "export const set = (xs: i32[]): void => {\n  uncheckedSet(xs, 0, 1);\n};\n" +
+      "export const add = (a: i32): i32 => wrappingAdd(a, 1);\n" +
+      "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
+      "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
+      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+    "node_modules/pkg_fast/package.json":
+      '{ "name": "pkg_fast", "version": "1.0.0", "exports": { ".": { "nish": "./src/index.ts" } } }\n',
+    "node_modules/pkg_fast/src/index.ts":
+      'import { wrappingMul } from "nish:unsafe";\n\n' +
+      "const mix = (h: i32): i32 => wrappingMul(h, 31);\n\n" +
+      "export const hash = (xs: i32[]): i32 => {\n  let h = 7;\n  for (const x of xs) {\n    h = mix(h) ^ x;\n  }\n  return h;\n};\n",
+    "dep.ts":
+      'import { hash } from "pkg_fast";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => (hash([1, 2]) & 0) + sum([1]);\n",
+    "flags.ts":
+      "export const main = (): i32 => {\n  const xs: i32[] = [1, 2];\n  let i = 0;\n  i = i + 1;\n" +
+      "  return xs[i] * 2147483647;\n};\n",
+  }
+  for (const [file, text] of Object.entries(program)) {
+    fs.mkdirSync(path.dirname(path.join(unsafeDir, file)), { recursive: true })
+    fs.writeFileSync(path.join(unsafeDir, file), text)
+  }
+  /** Compile `entry` in the program's directory; the report parsed, or null with the run beside it. */
+  const unsafeReport = (entry, extra = []) => {
+    const stem = path.basename(entry, ".ts")
+    const json = path.join(unsafeDir, `${stem}.caps.json`)
+    const r = spawnSync(
+      NISH,
+      [
+        entry,
+        "-o",
+        `${path.join(unsafeDir, `${stem}.ir`)}${path.sep}`,
+        "--emit-capabilities",
+        json,
+        ...extra,
+      ],
+      { cwd: unsafeDir, encoding: "utf8" }
+    )
+    return {
+      r,
+      report: r.status === 0 && fs.existsSync(json) ? JSON.parse(fs.readFileSync(json, "utf8")) : null,
+    }
+  }
+  const moduleOf = (report, file) =>
+    report?.packages.flatMap((p) => p.modules).find((m) => m.path === file) ?? null
+  const fnOf = (report, file, name) => moduleOf(report, file)?.functions.find((f) => f.name === name) ?? null
+  const chainOf = (fn) => (fn?.witnesses.unsafe ?? []).map((w) => `${w.function}->${w.calls}`).join(" ")
+
+  const direct = unsafeReport("main.ts", ["--capabilities"])
+  check(
+    "capabilities: a direct `uncheckedGet` call carries `unsafe`, its witness the call itself",
+    JSON.stringify(fnOf(direct.report, "leaf.ts", "first")?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(direct.report, "leaf.ts", "first")) === "first->uncheckedGet",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` reaches a caller two frames up, with the whole chain as its witness",
+    chainOf(fnOf(direct.report, "main.ts", "main")) ===
+      "main->firstTwice firstTwice->first first->uncheckedGet" &&
+      JSON.stringify(moduleOf(direct.report, "mid.ts")?.capabilities) === '["unsafe"]' &&
+      JSON.stringify(direct.report?.capabilities) === '["unsafe"]',
+    shown(direct.r)
+  )
+  check(
+    "capabilities: a module with no `nish:unsafe` call carries no `unsafe`",
+    JSON.stringify(moduleOf(direct.report, "pure.ts")?.capabilities) === "[]",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` keeps a program deterministic, and `--capabilities` names it",
+    direct.report?.deterministic === true && direct.r.stderr.includes("capabilities: unsafe (deterministic)"),
+    shown(direct.r)
+  )
+
+  const each = unsafeReport("each.ts")
+  const exportsSeen = [
+    ["get", "uncheckedGet"],
+    ["set", "uncheckedSet"],
+    ["add", "wrappingAdd"],
+    ["sub", "wrappingSub"],
+    ["mul", "wrappingMul"],
+    ["str", "readCString"],
+  ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
+  check(
+    "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 6,
+    `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
+  )
+
+  const dep = unsafeReport("dep.ts")
+  const depPackage = dep.report?.packages.find((p) => p.name === "pkg_fast")
+  check(
+    "capabilities: a dependency that imports `nish:unsafe` gives `unsafe` to its package and to the entry that calls it",
+    JSON.stringify(depPackage?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(dep.report, "dep.ts", "main")) === "main->hash hash->mix mix->wrappingMul" &&
+      JSON.stringify(moduleOf(dep.report, "pure.ts")?.capabilities) === "[]",
+    shown(dep.r)
+  )
+  const depDenied = spawnSync(
+    NISH,
+    ["dep.ts", "-o", `${path.join(unsafeDir, "dep-denied.ir")}${path.sep}`, "--deny", "unsafe"],
+    { cwd: unsafeDir, encoding: "utf8" }
+  )
+  check(
+    "capabilities: `--deny unsafe` refuses an `unsafe` reached only through a dependency, naming the chain into it",
+    depDenied.status === 1 &&
+      depDenied.stderr.includes("`main` reaches `unsafe`, which the capability policy does not grant") &&
+      depDenied.stderr.includes("node_modules/pkg_fast/src/index.ts:3:30 calls wrappingMul"),
+    shown(depDenied)
+  )
+
+  const flags = unsafeReport("flags.ts", ["--wrapping", "--unchecked-indexing", "--deny", "unsafe"])
+  check(
+    "capabilities: `--wrapping` and `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them",
+    flags.r.status === 0 &&
+      JSON.stringify(flags.report?.capabilities) === "[]" &&
+      flags.r.stderr.includes("--wrapping is deprecated") &&
+      flags.r.stderr.includes("--unchecked-indexing is deprecated"),
+    shown(flags.r)
+  )
+}
+
 summarise()

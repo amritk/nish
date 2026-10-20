@@ -34,6 +34,19 @@ between runs, or each is a constant of the build. A program is
 deterministic, since a chosen status is computed from the input and a run
 nobody signals is the same run every time.
 
+`unsafe` is not a capability of the world but the one way a program gives up a
+check, and it travels like the others: a function that calls a `nish:unsafe`
+export carries it, and so does every caller, module and package above it, a
+dependency that imports `nish:unsafe` when the entry package does not
+included (#432). It keeps a program deterministic. The deprecated
+`--wrapping` and `--unchecked-indexing` carry no `unsafe`, although they too
+give up a check the source does not show: they reach only the entry package,
+every site they reach is printed as a deprecation or a performance note, and
+they sit on the same command line that passes `--deny unsafe`, so a policy has
+nothing to learn from the bit that the compile does not already print. They
+are on their way out, and `nish --fix` rewrites each site into a
+`nish:unsafe` call, which does carry it.
+
 ## 2. The audit
 
 Every builtin the checker accepts has exactly one row in `builtinCapability`
@@ -57,7 +70,7 @@ labelled apart.
 | `signal` | `signalFd`, `readSignal` |
 | `exit` | `process.exit` (and `exit` from `nish:process`) |
 | `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
-| `unsafe` | the five `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`); wired by WP36 |
+| `unsafe` | the six `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`); wired by WP36, reported since #432 |
 | none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `String.fromBytes`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
 
 Three rows deserve their reason:
