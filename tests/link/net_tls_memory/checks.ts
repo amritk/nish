@@ -16,7 +16,10 @@
 //   3. An AES-256-GCM-SHA384 handshake over loopback through `TlsTcpServer`'s slot pool,
 //      a Nish client on plain `nish:net` sending recorded bytes: accept,
 //      handshake, the P-256 signature made by `signP256` every time, close, a
-//      thousand times, and `Arena.mark()` does not move.
+//      thousand times, and `Arena.mark()` does not move. The record buffers
+//      the slots borrow from the server's `TlsRecordPools` are made by the
+//      first connection, one of each, and all given back once it ends; a
+//      server of 1,024 slots and no connections has made none.
 //
 // The client's side of 2 and 3 is worked out once, by the record-layer
 // tests' client, and replayed: with the randomness and the signature the
@@ -76,6 +79,7 @@ import {
   TLS_RECORD_DATA,
   TLS_RECORD_SIGN,
   TLS_RECORD_STATE_OPEN,
+  TlsRecordPools,
   TlsRecordServer,
 } from "nish/net/tls/record-server";
 import { TlsTcpServer } from "nish/net/tls-tcp";
@@ -394,12 +398,14 @@ export const memoryChecks = (): i32 => {
   let traceExact: i32 = 0;
   let traceMark: i64 = 0;
   for (let round: i32 = 0; round < ROUNDS; round++) {
-    if (round === 1) {
-      traceMark = Arena.mark();
-    }
     refill(slotKey, traceKey);
     traceTls.restart(traceRandom, slotKey);
     traceConn.start(traceTls);
+    // The second `start` is the first give-back, which grows each pool's free
+    // list once: the mark is taken after it.
+    if (round === 1) {
+      traceMark = Arena.mark();
+    }
     feed(traceConn, traceHello);
     const hello: boolean = sends(traceConn, traceServerHello);
     traceConn.sign(traceSignature);
@@ -436,12 +442,12 @@ export const memoryChecks = (): i32 => {
   let slotExact: i32 = 0;
   let slotMark: i64 = 0;
   for (let round: i32 = 0; round < ROUNDS; round++) {
-    if (round === 1) {
-      slotMark = Arena.mark();
-    }
     refill(slotKey, padded.key);
     slotTls.restart(padded.random, slotKey);
     slot.start(slotTls);
+    if (round === 1) {
+      slotMark = Arena.mark();
+    }
     feed(slot, padded.hello);
     const signing: boolean = (slot.interest() & TLS_RECORD_SIGN) !== 0;
     slot.sign(padded.signature);
@@ -510,10 +516,12 @@ export const memoryChecks = (): i32 => {
   const w = new Wire(wired.config);
   let wireExact: i32 = 0;
   let wireMark: i64 = 0;
+  let wireMade: i32 = 0;
   const wireKey: Secret<u8[]> = secret(leafPrivate());
   for (let round: i32 = 0; round < ROUNDS; round++) {
     if (round === 1) {
       wireMark = Arena.mark();
+      wireMade = w.server.pools.made();
     }
     if (oneConnection(w, wired, wireKey)) {
       wireExact = wireExact + 1;
@@ -525,6 +533,21 @@ export const memoryChecks = (): i32 => {
   t.eqI32("a thousand connections accepted, handshaken and closed over loopback under AES-256-GCM, every byte the recorded one", wireExact, ROUNDS);
   t.ok("and after the first Arena.mark() did not move: accept, handshake, signP256's ECDSA signature (9,312 bytes a connection before TlsP256Signer) and close reuse the slot", wireAfter === wireMark);
   t.eqI32("every slot is free again", w.server.busy(), ZERO);
+  t.eqI32("and with every connection ended the record pools have lent nothing: lent() is 0", w.server.pools.lent(), ZERO);
+  t.eqStr(
+    "the first connection made one buffer of each of the four pools and the other 999 made none: flat after warm-up",
+    `${wireMade} ${w.server.pools.made()}`,
+    "4 4"
+  );
+  // A thousand slots and no connection: the record buffers are borrowed
+  // only by a connection, so not one is made.
+  const wide = new TlsTcpServer(wired.config, w.listener, toI32(1024));
+  const widePools: TlsRecordPools = wide.pools;
+  t.eqStr(
+    "a TlsTcpServer with 1,024 slots and no connections has made no buffer in any pool",
+    `${widePools.output.made} ${widePools.plain.made} ${widePools.scratch.made} ${widePools.reader.made} ${wide.busy()}`,
+    "0 0 0 0 0"
+  );
   netClose(w.listener);
   netClose(w.loop);
 

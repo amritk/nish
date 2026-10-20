@@ -25,7 +25,7 @@
  * nothing per request. A `Router` is therefore not reentrant: one match at a
  * time, which is what a connection loop does.
  *
- * **The rules** (`docs/wp42-http-app-layer.md` §2):
+ * **The rules** (`docs/wp43-http-app-layer.md` §2):
  *
  * - The path is the target up to its first `?` (the query is left alone) and
  *   must start with `/`: the `*` of `OPTIONS *` and the authority form of
