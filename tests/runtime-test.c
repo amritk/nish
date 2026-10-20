@@ -796,7 +796,7 @@ static void test_tcp_reuseport(void) {
   expect_i64(nish_net_local_port(b), port, "a second flagged listener on the same port");
   expect_i64(nish_tcp_listen(loopback, port, 4), -98, "a plain listener on the shared port");
   expect_i64(nish_tcp_listen_flags(loopback, port, 4, 0), -98, "flag 0 on the shared port");
-  expect_i64(nish_tcp_listen_flags(loopback, 0, 4, 2), -22, "an unknown flag");
+  expect_i64(nish_tcp_listen_flags(loopback, 0, 4, 4), -22, "an unknown flag");
   expect_i64(nish_tcp_listen_flags(loopback, 0, 4, -1), -22, "a negative flags word");
   int32_t plain = nish_tcp_listen(loopback, 0, 4);
   assert(plain >= 0);
