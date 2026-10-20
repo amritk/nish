@@ -610,6 +610,13 @@ export class RuntimeTable {
       )
     )
     this.add(
+      plain(
+        "nish_tcp_listen_flags",
+        `declare noundef i32 @nish_tcp_listen_flags(${STR_NOCAP}, i32 noundef, i32 noundef, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
       new RuntimeFunction(
         "nish_tcp_accept",
         `declare noundef i32 @nish_tcp_accept(i32 noundef, ${NET_BUFFER})`,

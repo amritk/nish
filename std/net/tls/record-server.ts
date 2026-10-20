@@ -32,16 +32,21 @@
  * are refused. A stream that ends without `close_notify` is truncation, but
  * only once the records still waiting for the caller have been read.
  *
- * **Fixed buffers.** The record being read, the bytes to send and the
- * application data waiting for the caller each live in an array allocated
- * once, in the constructor, so a connection that has finished its handshake
- * allocates nothing that outlives a record, and a slot can be handed the
- * next connection with `start`. The handshake's messages are sealed straight
- * out of `TlsServer`'s own buffers, and the application secrets are copied
- * into this slot's fields, so a slot that hands its `TlsServer` the next
- * connection with `restart` runs every handshake after the first without
- * moving the arena, whichever suite it negotiates; a KeyUpdate's key
- * install leaves nothing either (TLS-3 in `docs/security/tls.md`). When the caller leaves application data unread
+ * **Borrowed buffers.** The record being read, the record being opened, the
+ * bytes to send and the application data waiting for the caller each live in
+ * an array borrowed from a `TlsRecordPools` when the connection first needs
+ * it, kept while the connection lasts, and given back zeroed with
+ * `BufferPool.giveSecret` when it ends (`start`, `wipe`, `release`), so a
+ * slot with no connection holds none of them, a connection that has finished
+ * its handshake allocates nothing that outlives a record, and a slot can be
+ * handed the next connection with `start`. Each give-back zeroes the whole
+ * buffer, so it happens once a connection rather than once a record. The handshake's messages are
+ * sealed straight out of `TlsServer`'s own buffers, and the application
+ * secrets are copied into this slot's fields, so a slot that hands its
+ * `TlsServer` the next connection with `restart` runs every handshake after
+ * the first without moving the arena, whichever suite it negotiates; a
+ * KeyUpdate's key install leaves nothing either (TLS-3 in
+ * `docs/security/tls.md`). When the caller leaves application data unread
  * for long enough to fill its buffer, records stay in the reader and
  * `interest` stops asking for reads, which is how the peer is made to wait.
  *
@@ -116,6 +121,7 @@ import {
   TlsRecordReader,
   tlsRecordWindowFits,
 } from "nish/net/tls/record"
+import { BufferPool } from "nish/net/buffer-pool"
 
 // ---- States ----------------------------------------------------------------------
 
@@ -162,6 +168,41 @@ const TLS_RECORD_OUTPUT_SIZE: i32 = 2 * TLS_MAX_RECORD
 const TLS_RECORD_PLAIN_SIZE: i32 = 2 * TLS_MAX_PLAINTEXT
 /** Where a record's content is opened to before it is handed on: the most content a record carries. */
 const TLS_RECORD_SCRATCH_SIZE: i32 = TLS_MAX_PLAINTEXT
+/**
+ * The four pools a connection's record buffers are borrowed from: `output`,
+ * `plain` and `scratch` for `TlsRecordServer`'s fields of those names, and
+ * `reader` for its `TlsRecordReader`. A carrier with many slots makes one set
+ * with a ceiling of its slot count and points every slot at it with
+ * `TlsRecordServer.borrowFrom`, so a full server holds what preallocating
+ * every slot would have held and an idle one holds only what earlier
+ * connections left on the free lists. Each buffer goes back zeroed
+ * (`BufferPool.giveSecret`): it held plaintext, or handshake bytes.
+ */
+export class TlsRecordPools {
+  output: BufferPool
+  plain: BufferPool
+  scratch: BufferPool
+  reader: BufferPool
+
+  /** Four empty pools of `ceiling` buffers each; nothing is made until a slot needs it. */
+  constructor(ceiling: i32) {
+    this.output = new BufferPool("TlsRecordServer.output", TLS_RECORD_OUTPUT_SIZE, ceiling)
+    this.plain = new BufferPool("TlsRecordServer.plain", TLS_RECORD_PLAIN_SIZE, ceiling)
+    this.scratch = new BufferPool("TlsRecordServer.scratch", TLS_RECORD_SCRATCH_SIZE, ceiling)
+    this.reader = new BufferPool("TlsRecordReader.buffer", TLS_MAX_RECORD, ceiling)
+  }
+
+  /** How many buffers of the four pools are lent now: 0 once every connection has given its back. */
+  lent(): i32 {
+    return this.output.lent() + this.plain.lent() + this.scratch.lent() + this.reader.lent()
+  }
+
+  /** How many buffers the four pools have made: their high-water mark together. */
+  made(): i32 {
+    return this.output.made + this.plain.made + this.scratch.made + this.reader.made
+  }
+}
+
 /** A KeyUpdate message: type, a 24-bit length of 1, and `request_update`. */
 const TLS_KEY_UPDATE_SIZE: i32 = 5
 /** Where ServerHello and HelloRetryRequest hold `legacy_session_id_echo`'s length: past the header, version and random. */
@@ -249,11 +290,16 @@ export class TlsRecordServer {
   reader: TlsRecordReader
   readProtection: TlsRecordProtection
   writeProtection: TlsRecordProtection
-  /** Bytes to send are `output[outputStart .. outputEnd)`. */
+  /** Bytes to send are `output[outputStart .. outputEnd)`; `empty` until a record is sealed. */
   output: u8[]
-  /** Application data the caller has not read is `plain[plainStart .. plainEnd)`. */
+  /** Application data the caller has not read is `plain[plainStart .. plainEnd)`; `empty` until a record brings some. */
   plain: u8[]
+  /** Where a record is opened to; `empty` until the first protected record. */
   scratch: u8[]
+  /** The zero-length array a buffer field is while it holds no borrowed buffer. */
+  empty: u8[]
+  /** Where `output`, `plain`, `scratch` and the reader's buffer are borrowed from. */
+  pools: TlsRecordPools
   /**
    * The client's and the server's current application traffic secrets, for
    * KeyUpdate, each held at both hash lengths: `readHash` and `writeHash`
@@ -277,8 +323,12 @@ export class TlsRecordServer {
   writeLevel: i32 = 0
   outputStart: i32 = 0
   outputEnd: i32 = 0
+  /** How far into `output` this borrowing has written, which says whether its give-back zeroes. */
+  outputUsed: i32 = 0
   plainStart: i32 = 0
   plainEnd: i32 = 0
+  /** How far into `plain` this borrowing has written. */
+  plainUsed: i32 = 0
   /** How much of `TlsServer`'s Initial-level output is already in records. */
   pendingInitialAt: i32 = 0
   /** How much of `TlsServer`'s Handshake-level output is already in records. */
@@ -311,9 +361,13 @@ export class TlsRecordServer {
     this.reader = new TlsRecordReader()
     this.readProtection = new TlsRecordProtection()
     this.writeProtection = new TlsRecordProtection()
-    this.output = new Array<u8>(TLS_RECORD_OUTPUT_SIZE)
-    this.plain = new Array<u8>(TLS_RECORD_PLAIN_SIZE)
-    this.scratch = new Array<u8>(TLS_RECORD_SCRATCH_SIZE)
+    this.empty = []
+    this.output = this.empty
+    this.plain = this.empty
+    this.scratch = this.empty
+    // A slot of its own: one buffer of each, until a carrier shares its pools.
+    this.pools = new TlsRecordPools(1)
+    this.reader.borrowFrom(this.pools.reader)
     this.readTraffic256 = secret(new Array<u8>(SHA256_SIZE))
     this.readTraffic384 = secret(new Array<u8>(SHA384_SIZE))
     this.writeTraffic256 = secret(new Array<u8>(SHA256_SIZE))
@@ -325,8 +379,8 @@ export class TlsRecordServer {
   /**
    * Starts a new connection in this slot with `tls`, which should be fresh
    * or just restarted (`TlsServer.restart`, which reuses its buffers):
-   * every buffer is emptied and the keys of the last connection are wiped;
-   * the buffers are reused, and nothing is allocated. A
+   * every buffer is emptied and given back, zeroed, and the keys of the last
+   * connection are wiped; nothing is allocated. A
    * `tls` that has already failed — a configuration
    * or randomness `TlsServer` refused — fails this connection at once, with
    * its alert queued in the clear.
@@ -346,8 +400,8 @@ export class TlsRecordServer {
     this.readLevel = TLS_LEVEL_INITIAL
     this.writeLevel = TLS_LEVEL_INITIAL
     this.dropOutput()
-    this.plainStart = 0
-    this.plainEnd = 0
+    this.dropPlain()
+    this.giveBackIdle()
     this.firstMessageSeen = false
     this.started = false
     this.postHandshakeLength = 0
@@ -356,6 +410,64 @@ export class TlsRecordServer {
     if (tls.state === TLS_STATE_FAILED) {
       this.fail(tls.alert)
     }
+  }
+
+  /**
+   * Borrows the record buffers from `pools` from now on, a carrier's set its
+   * slots share. Whatever is held from the old pools is given back first,
+   * zeroed, and dropped with it, so call it on a slot with nothing in flight:
+   * the carrier does, right after the constructor.
+   */
+  borrowFrom(pools: TlsRecordPools): void {
+    this.release()
+    this.pools = pools
+    this.reader.borrowFrom(pools.reader)
+  }
+
+  /**
+   * Gives back every record buffer this slot holds, zeroed, and drops what
+   * was in them: unsent output, unread application data and a partial
+   * record. The carrier calls it when it closes the slot, after the last
+   * flush and `wipeKeys`, so a free slot holds no buffer of the pools'.
+   */
+  release(): void {
+    this.outputStart = 0
+    this.outputEnd = 0
+    this.dropPlain()
+    this.reader.reset()
+    this.giveBackIdle()
+  }
+
+  /**
+   * Gives back each record buffer that holds nothing still needed, as a
+   * connection ends: `output` once everything in it is sent, `plain` once the
+   * caller has read it all, and `scratch`. Zeroed with `giveSecret`: every one
+   * held plaintext or handshake bytes, and the next connection to borrow it
+   * reads zeros. Not called between records, since `giveSecret` zeroes the
+   * whole buffer however little of it a record used.
+   */
+  giveBackIdle(): void {
+    if (this.output.length > 0 && this.outputStart === this.outputEnd) {
+      this.pools.output.giveSecret(this.output, this.outputUsed)
+      this.output = this.empty
+      this.outputUsed = 0
+    }
+    if (this.plain.length > 0 && this.plainStart === this.plainEnd) {
+      this.pools.plain.giveSecret(this.plain, this.plainUsed)
+      this.plain = this.empty
+      this.plainUsed = 0
+    }
+    if (this.scratch.length > 0) {
+      // `open` may write as far as the record's ciphertext: zero all of it.
+      this.pools.scratch.giveSecret(this.scratch, TLS_RECORD_SCRATCH_SIZE)
+      this.scratch = this.empty
+    }
+  }
+
+  /** Forgets the application data the caller has not read. */
+  dropPlain(): void {
+    this.plainStart = 0
+    this.plainEnd = 0
   }
 
   /**
@@ -371,9 +483,12 @@ export class TlsRecordServer {
   /**
    * Wipes everything this slot holds, which is what `wipeKeys` does: both
    * traffic secrets at both hash lengths, both directions' keys, and
-   * everything `TlsServer` holds.
+   * everything `TlsServer` holds. The record buffers that hold nothing still
+   * needed go back too; a failure's alert waiting in `output` stays until it
+   * is sent or `release` drops it.
    */
   wipe(): void {
+    this.giveBackIdle()
     wipe(this.readTraffic256)
     wipe(this.readTraffic384)
     wipe(this.writeTraffic256)
@@ -588,7 +703,7 @@ export class TlsRecordServer {
    * a caller reading a byte at a time does not move the buffer each time.
    */
   plainHasRoom(): boolean {
-    const capacity: i32 = toI32(this.plain.length)
+    const capacity: i32 = TLS_RECORD_PLAIN_SIZE
     if (capacity - (this.plainEnd - this.plainStart) < TLS_MAX_PLAINTEXT) {
       return false
     }
@@ -599,6 +714,9 @@ export class TlsRecordServer {
       }
       this.plainStart = 0
       this.plainEnd = held
+    }
+    if (this.plain.length === 0) {
+      this.plain = this.pools.plain.take()
     }
     return true
   }
@@ -618,6 +736,9 @@ export class TlsRecordServer {
   handleRecord(buf: u8[], off: i32, n: i32): i32 {
     if (toI32(buf[off]) === TLS_CONTENT_CHANGE_CIPHER_SPEC) {
       return this.handleChangeCipherSpec(buf, off, n - TLS_RECORD_HEADER_SIZE)
+    }
+    if (this.scratch.length === 0) {
+      this.scratch = this.pools.scratch.take()
     }
     const length: i32 = this.readProtection.open(buf, off, n, this.scratch, TLS_RECORD_SERVER_FROM)
     if (length < 0) {
@@ -695,6 +816,9 @@ export class TlsRecordServer {
           this.plain[this.plainEnd + k] = this.scratch[k]
         }
         this.plainEnd = this.plainEnd + length
+        if (this.plainEnd > this.plainUsed) {
+          this.plainUsed = this.plainEnd
+        }
         this.idleRecords = 0
         return 0
       }
@@ -868,9 +992,16 @@ export class TlsRecordServer {
     this.pump()
   }
 
-  /** Whether `need` more bytes fit in `output`, moving what is unsent to the front first. */
+  /**
+   * Whether `need` more bytes fit in `output`, moving what is unsent to the
+   * front first. Borrows `output` when none is held, since a record is about
+   * to be sealed into it.
+   */
   outputHasRoom(need: i32): boolean {
-    const capacity: i32 = toI32(this.output.length)
+    if (this.output.length === 0) {
+      this.output = this.pools.output.take()
+    }
+    const capacity: i32 = TLS_RECORD_OUTPUT_SIZE
     if (this.outputEnd + need > capacity && this.outputStart > 0) {
       const held: i32 = this.outputEnd - this.outputStart
       for (let k: i32 = 0; k < held; k++) {
@@ -912,8 +1043,13 @@ export class TlsRecordServer {
    * mistake here could cause, fails the connection.
    */
   sealRecord(type: i32, data: u8[], off: i32, len: i32): boolean {
-    if (!this.outputHasRoom(this.recordRoom(len))) {
+    const room: i32 = this.recordRoom(len)
+    if (!this.outputHasRoom(room)) {
       return false
+    }
+    // Counted before the seal, so a refused seal's partial write is wiped when the buffer goes back.
+    if (this.outputEnd + room > this.outputUsed) {
+      this.outputUsed = this.outputEnd + room
     }
     const n: i32 = this.writeProtection.seal(
       type,
@@ -1180,7 +1316,7 @@ export class TlsRecordServer {
       let chunk: i32 = left < most ? left : most
       // A record shortened to the room there is, rather than none at all.
       this.outputHasRoom(this.recordRoom(chunk))
-      const room: i32 = toI32(this.output.length) - this.outputEnd - this.recordRoom(TLS_RECORD_SERVER_FROM)
+      const room: i32 = TLS_RECORD_OUTPUT_SIZE - this.outputEnd - this.recordRoom(TLS_RECORD_SERVER_FROM)
       if (room < chunk) {
         chunk = room
       }

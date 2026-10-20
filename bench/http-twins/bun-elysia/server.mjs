@@ -1,6 +1,8 @@
-// The Elysia twin of bench/http1-server.ts, on Bun: one `Elysia` app, one
-// process, no `reusePort` workers. build.sh installs the pinned Elysia from
-// bun.lock beside this file in build/http-twins/bun-elysia/node_modules.
+// The Elysia twin of bench/http1-server.ts, on Bun: one `Elysia` app. With
+// BENCH_CORES unset or 1, one process, no `reusePort` workers; with
+// BENCH_CORES=N, N processes on the one port (bun-cores.mjs). build.sh
+// installs the pinned Elysia from bun.lock beside this file in
+// build/http-twins/bun-elysia/node_modules.
 //
 //   bun server.mjs <port> [ignored...]
 //
@@ -8,6 +10,7 @@
 // them, and the measured routes after. Elysia parses the JSON bodies itself
 // (`parse: "json"`), so a body that is not JSON reaches onError as PARSE.
 import { Elysia } from "elysia"
+import { reusePort, spawnWorkers } from "../bun-cores.mjs"
 import { extraRoutes } from "../extra-routes.mjs"
 
 const port = Number(process.argv[2] ?? 8080)
@@ -70,5 +73,6 @@ app
     },
     { parse: "json" }
   )
-  .listen({ hostname: "127.0.0.1", port })
+  .listen({ hostname: "127.0.0.1", port, reusePort })
+await spawnWorkers(import.meta.path, port)
 console.log(`listening ${port}`)

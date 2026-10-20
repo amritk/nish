@@ -188,10 +188,10 @@ int32_t nish_net_local_port(int32_t fd) {
    IPv4 host is an `AF_INET` socket; any other is `AF_INET6` with
    `IPV6_V6ONLY` off, so `::` hears both families. A stream gets
    `SO_REUSEADDR` and `arg` its backlog; a datagram socket's `arg` is
-   `udpBind`'s flags. Every option is set before the bind, which is where
-   `SO_REUSEPORT` has to be, and where `UDP_GRO` has to be for the first
-   datagram to be coalesced. */
-static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int32_t arg) {
+   `udpBind`'s flags. `reuse` asks for `SO_REUSEPORT`. Every option is set
+   before the bind, which is where `SO_REUSEPORT` has to be, and where
+   `UDP_GRO` has to be for the first datagram to be coalesced. */
+static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int32_t arg, int reuse) {
   unsigned char a[16];
   if ((uint32_t)port > 65535 || !nish_net_parse(host, a)) return -22;
   int v4 = memcmp(a, nish_mapped_prefix, 12) == 0;
@@ -209,11 +209,10 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
   /* Both families at once on an IPv6 socket; on an IPv4 one this fails with
      `ENOPROTOOPT` and changes nothing, which is cheaper than asking. */
   setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
-  int bad = 0;
+  int bad = reuse ? setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof one) : 0;
   if (type == SOCK_STREAM) {
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
   } else {
-    if (arg & 1) bad = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof one);
 #if defined(__linux__)
     if (arg & 2) bad |= setsockopt(fd, IPPROTO_UDP, UDP_GRO, &one, sizeof one);
     /* ECN is always read. An IPv6 socket needs both: a datagram from an IPv4
@@ -236,7 +235,16 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
    so a restarted server rebinds a port whose old connections are still in
    TIME_WAIT. */
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
-  return nish_net_bound(host, port, SOCK_STREAM, backlog);
+  return nish_net_bound(host, port, SOCK_STREAM, backlog, 0);
+}
+
+/* `tcpListenFlags(host, port, backlog, flags)`: `tcpListen`'s socket, with
+   `SO_REUSEPORT` for flag 1, so several listeners of one uid share the port
+   (Linux spreads new connections across them; Darwin hands them all to one).
+   Any other bit is -22. */
+int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags) {
+  if ((uint32_t)flags > 1) return -22;
+  return nish_net_bound(host, port, SOCK_STREAM, backlog, flags);
 }
 
 /* A socket address of `n` bytes into the caller's 18-byte form. An IPv4 peer
@@ -348,7 +356,7 @@ int32_t nish_udp_bind(const nish_str *host, int32_t port, int32_t flags) {
 #if !defined(__linux__)
   if (flags & 2) return -95;
 #endif
-  return nish_net_bound(host, port, SOCK_DGRAM, flags);
+  return nish_net_bound(host, port, SOCK_DGRAM, flags, flags & 1);
 }
 
 /* Room for the two control messages either direction carries: a segment size

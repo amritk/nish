@@ -289,6 +289,13 @@ export class UdpClient {
   /** The largest 1-RTT packet number the client has acknowledged. */
   acked: i64 = -1;
   closeApp: boolean = false;
+  /**
+   * Whether the client has sent or read a CONNECTION_CLOSE. From then on it
+   * sends nothing (RFC 9000 §10.2): the server frees the slot when it closes
+   * or drains, so its listener would answer a late ACK with a stateless
+   * reset, to a port the next client may have been given.
+   */
+  closing: boolean = false;
 
   constructor(port: i32) {
     this.c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
@@ -385,6 +392,7 @@ export class UdpClient {
         } else if (f.type === QUIC_FRAME_CONNECTION_CLOSE || f.type === QUIC_FRAME_CONNECTION_CLOSE_APP) {
           this.closeCode = f.errorCode;
           this.closeApp = f.type === QUIC_FRAME_CONNECTION_CLOSE_APP;
+          this.closing = true;
         }
         at = f.end;
       }
@@ -569,7 +577,7 @@ export class UdpLoop {
     }
   }
 
-  /** Reads every datagram on the client's socket and opens it; acknowledges what came in 1-RTT. Answers how many. */
+  /** Reads every datagram on the client's socket and opens it; acknowledges what came in 1-RTT until the connection closes. Answers how many. */
   clientRead(): i32 {
     const cl: UdpClient = this.client;
     let read: i32 = 0;
@@ -588,7 +596,7 @@ export class UdpLoop {
       n = udpRecvFrom(cl.fd, cl.rx, n32(0), toI32(cl.rx.length), cl.from, cl.meta);
     }
     cl.scan();
-    if (cl.c.appWrite !== null && cl.c.largestApp > cl.acked) {
+    if (cl.c.appWrite !== null && !cl.closing && cl.c.largestApp > cl.acked) {
       const none: u8[] = [];
       this.packet(none);
     }
@@ -704,6 +712,7 @@ export class UdpLoop {
     const none: u8[] = [];
     quicPushConnectionClose(payload, true, code, n64(0), none);
     this.packet(payload);
+    this.client.closing = true;
   }
 
   /** Sends `data` as one DATAGRAM frame and runs the loop until one more comes back: answers it, or an empty array on a timeout. */

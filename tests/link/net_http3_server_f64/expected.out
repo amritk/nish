@@ -64,4 +64,10 @@ PASS  each served its five requests
 PASS  from the second on, nothing after the handshake keeps arena memory: streams, requests, GOAWAY, close, release
 PASS  though the pinned clock moved a second on for each, the date formatted once a second
 PASS  and from the second on, each handshake through the listener into the slot keeps 0 bytes: from the first Initial to the close, nothing
-http3 server: 66 passed, 0 failed, 0 skipped
+PASS  the first connection made the buffers the slot borrows
+PASS  and from the second on, no pool made another: each connection borrowed what the last gave back
+PASS  every connection ended, nothing is lent from any pool
+PASS  a server of 1,024 slots shares one set of stream pools across them
+PASS  and with no connection, the stream pools have made no buffer nor bitmap
+PASS  nor the data and section pools of its HTTP/3 connections
+http3 server: 72 passed, 0 failed, 0 skipped
