@@ -59,6 +59,7 @@ PASS  quic: and every server call kept 0 bytes over them
 PASS  quic: the client's CONNECTION_CLOSE with code 7 reaches the server, which drains and frees the slot
 PASS  quic: as the client's close, the application's, with its code
 PASS  quic: three more connections through the slot, each closed by the server with code 9, which the client reads
+PASS  quic: after every CONNECTION_CLOSE the client sent nothing, so the listener had no late packet to answer with a stateless reset
 PASS  quic: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's or the signature's (H3-1, QUIC-3)
 PASS  quic: no datagram was dropped by the program
 PASS  quic: with nothing gone wrong in the loop
@@ -72,6 +73,7 @@ PASS  http/3: a slot whose pacer has no credit left is woken when it has some, n
 PASS  http/3: the server's GOAWAY: with every request done it closes the connection
 PASS  http/3: and the client reads H3_NO_ERROR, the application's
 PASS  http/3: three more connections, each a GET and the client's CONNECTION_CLOSE with H3_NO_ERROR, which frees the slot
+PASS  http/3: after every CONNECTION_CLOSE the client sent nothing, so the listener had no late packet to answer with a stateless reset
 PASS  http/3: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's, the signature's or the listener's (H3-1, H3-3)
 PASS  http/3: the program held nothing it could not place
 PASS  http/3: with nothing gone wrong in the loop
@@ -93,4 +95,4 @@ PASS  webtransport: three more connections, each a session and a datagram, close
 PASS  webtransport: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's, the signature's or the listener's (WT-1, H3-1, H3-3)
 PASS  webtransport: the program was refused nothing and held nothing it could not place
 PASS  webtransport: with nothing gone wrong in the loop
-net loopback: 92 passed, 0 failed, 0 skipped
+net loopback: 94 passed, 0 failed, 0 skipped

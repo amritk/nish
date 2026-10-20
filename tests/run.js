@@ -6408,14 +6408,16 @@ if (!only || "par_map_release".includes(only)) {
 // A function that runs a map and answers a scalar frees the map's result, and
 // the blocks a string map adopts from its workers, when it returns, as its
 // sequential twin does; `using a = arena()` frees a map run in main's own frame.
-// `par_map_reclaim` runs five loops of maps in frames that give them back:
+// `par_map_reclaim` runs six loops of maps in frames that give them back:
 // 24 int maps over 2^21 elements, 72 string maps over 2^17 (blocks linked in),
-// 8000 string maps over 512 (blocks copied in), 64 int maps over 2^19 (below
-// the grain, on the calling thread), and 24 int maps over 2^21 in a
-// `using a = arena()` block in main. It peaks at 21 to 23 MB on 1, 2 and 8
-// threads. Each of the first four loops alone, built by main at efbbd8c8,
-// peaked at 206, 232, 112 and 143 MB on 1 and 8 threads, and main refused the
-// block, so each would pass the 64 MB bound on its own.
+// 72 more whose frames hand the array to a `string[]` callee that keeps none
+// of it, 8000 string maps over 512 (blocks copied in), 64 int maps over 2^19
+// (below the grain, on the calling thread), and 24 int maps over 2^21 in a
+// `using a = arena()` block in main. It peaks at 21 to 23 MB on 1 and 8
+// threads. Each of the first loops alone, built by main at efbbd8c8, peaked at
+// 206, 232, 112 and 143 MB on 1 and 8 threads, and main refused the block, so
+// each would pass the 64 MB bound on its own; the handed loop, built by main
+// before its callees were proved to keep nothing, peaked at 237 MB.
 if (!only || "par_map_reclaim".includes(only)) {
   const fixture = linkTests.includes("par_map_reclaim")
   const dir = path.join(buildDir, "link", "par_map_reclaim")
@@ -6434,7 +6436,7 @@ if (!only || "par_map_reclaim".includes(only)) {
       ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
       : "no such fixture"
     check(
-      `link/par_map_reclaim: 8184 maps in returning frames, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
+      `link/par_map_reclaim: 8256 maps in returning frames, handed to a callee, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
       kb > 0 && kb < 64 * 1024,
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
     )
@@ -6792,7 +6794,10 @@ if (!only || "par_alloc".includes(only)) {
 // as `string[][]`, chosen by a ternary, pushed, put in a `Map` or a `Set`,
 // sent on a channel, stored through a mutex guard, handed to a callee that
 // keeps them, aliased, and carried into the next iteration, each read after
-// `churn()`.
+// `churn()`; and `par_map_reclaim_strings`, whose frames hand a string map's
+// result to a `string[]` callee that keeps it by a field, a return, a map's
+// body, a push, a `Map`, `new`, a constructor's `this`, a second declarator,
+// an alias, a relay or a `string[][]`, each read after `churn()`.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -6850,6 +6855,7 @@ for (const name of [
   "thread_adopt_lifetime",
   "par_map_reclaim",
   "par_map_reclaim_escapes",
+  "par_map_reclaim_strings",
   "mem_using_arena_map",
   "std_random",
 ]) {
@@ -7635,9 +7641,10 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // whose transfer block carries a tag in its pointer's low bit on a 32-bit
 // pointer as on a 64-bit one; `thread_adopt_lifetime` adopts those blocks, and
 // a 24-byte transfer state, on wasm32 as on a 64-bit target.
-// `par_map_reclaim` and `par_map_reclaim_escapes` free a map's result, and
-// the blocks it adopted, with the frame or block that ran it, and keep every
-// result that escapes it, on a 32-bit target as on a 64-bit one.
+// `par_map_reclaim`, `par_map_reclaim_escapes` and `par_map_reclaim_strings`
+// free a map's result, and the blocks it adopted, with the frame or block that
+// ran it, and keep every result that escapes it, on a 32-bit target as on a
+// 64-bit one.
 // The escapes fixture grows its memory to some 120 MB, and Node 22 then
 // collects garbage inside the fast call of WASI's `fd_write`, whose frame walk
 // segfaults (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24
@@ -7660,6 +7667,7 @@ for (const name of [
   "thread_adopt_lifetime",
   "par_map_reclaim",
   "par_map_reclaim_escapes",
+  "par_map_reclaim_strings",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue

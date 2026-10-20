@@ -35,7 +35,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509, base64url |
-| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket |
+| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router |
 
 ## `nish/testing`
 
@@ -963,6 +963,10 @@ an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
 a slot's connection on the first accept into it and keeps it for the next, so
 a pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core.
+
+`nish/net/router` maps a request's method and path to a route you added, on
+any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
+shows it.
 
 Every final response an `Http1Connection` sends carries a `Date` field, and so
 does every final response an `Http2TlsServer` or `Http3Server` slot sends, as
