@@ -281,7 +281,7 @@ class TlsClient {
 /** `server`'s next accept, waiting on `loop` up to a second for the connection to arrive; the slot, or what `accept` answered last. */
 const acceptWaiting = (server: Http1Server, loop: i32, ready: i32[]): i32 => {
   let slot: i32 = server.accept();
-  for (let k: i32 = 0; k < 10 && slot === -11; k++) {
+  for (let k: i32 = 0; k < 10 && slot === H1_AGAIN; k++) {
     pollWait(loop, ready, toI32(100));
     slot = server.accept();
   }

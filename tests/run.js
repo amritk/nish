@@ -4635,13 +4635,13 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
     [path.join(root, "tests", "link", "net_http1_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
     { cwd: root, encoding: "utf8" }
   )
-  if (check("net_http1_server: startup.ts links", built.status === 0, String(built.stderr))) {
+  if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
     const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
     const [bytes, , chunk] = String(run.stdout).trim().split(" ")
     check(
       "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
-      `exit ${run.status}, stdout ${run.stdout}, ceiling ${HTTP1_SERVER_START_BYTES}\n${run.stderr}`
+      `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
     )
   }
 }
