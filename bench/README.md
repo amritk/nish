@@ -487,6 +487,27 @@ run on macOS. So on any other host, or where valgrind is not on `PATH`, the chec
 is a counted skip that names the reason. CI's Linux job installs valgrind beside
 LLVM, so the check runs there on every push.
 
+## Crypto against other languages
+
+[`crypto/`](crypto/README.md) holds the crypto twins: each family, such as
+`crypto/hash/` (SHA-256, SHA-512, HMAC-SHA256, HKDF), is one program per
+language over the same inputs. The languages are Nish, OpenSSL's libcrypto in
+C, Go's standard library, RustCrypto and `node:crypto`, each with a portable
+column where the library can switch its assembly off. `crypto/run.mjs` checks
+that every program prints the family's pinned checksums and times them in
+interleaved rounds beside a copy of the Nish binary, the noise band. It writes
+the `crypto` block of docs/BENCHMARKS.md, which `bench/run.mjs` carries over
+when it rewrites the file.
+
+```bash
+node bench/crypto/run.mjs --validate               # what CI runs: every checksum, and the portable proof
+node bench/crypto/run.mjs --only hash --record     # time a family; rewrite the crypto block
+node bench/run.mjs --only crypto                   # the same, from this runner
+```
+
+The two drivers below time Nish against itself only: they are baselines for
+one kernel's own work packages, not comparisons with other languages.
+
 ## AES-GCM
 
 `aes-gcm.ts` times the AEADs on the sizes a server seals and opens. AES-128-GCM

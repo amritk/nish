@@ -1,0 +1,21 @@
+{
+  "title": "SHA-2, HMAC and HKDF",
+  "kernels": [
+    { "name": "sha256", "sizes": [64, 1024, 1048576], "unit": "MB/s" },
+    { "name": "sha512", "sizes": [64, 1024, 1048576], "unit": "MB/s" },
+    { "name": "hmac-sha256", "sizes": [64, 1024], "unit": "MB/s" },
+    { "name": "hkdf-sha256", "sizes": [32], "unit": "op/s" }
+  ],
+  "twins": {
+    "openssl": {
+      "portable": { "env": { "OPENSSL_ia32cap": "~0x1000020000000000:~0x20000120" } }
+    },
+    "go": { "portable": { "tags": ["purego"] } },
+    "rust": { "portable": { "rustflags": ["--cfg", "sha2_backend=\"soft\""] } },
+    "node": {
+      "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off"
+    }
+  },
+  "portableProof": "sha512@1048576",
+  "portableMinRatio": { "rust": null }
+}
