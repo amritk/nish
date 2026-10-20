@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1071 programs, 138594 dump lines.
+# 1071 programs, 138593 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -16233,23 +16233,23 @@ function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
   sharedWrite: foreign
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function echo(fd: i32): i64 -> @echo
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function echo(fd: i32, size: i32): i64 -> @echo
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via read
-  escaping: fd
-  calls: nish_panic read write
-  stackSites=1 stackLocals=1
-  local 10:9 buf: u8[] (const)
-  local 11:9 n: i64 (const)
-  callee 11:13 read -> @read
-  callee 13:5 write -> @write
+  escaping: fd size
+  calls: nish_arena_mark nish_arena_release nish_panic read write
+  stackSites=0 stackLocals=0
+  local 12:9 buf: u8[] (const)
+  local 13:9 n: i64 (const)
+  callee 13:13 read -> @read
+  callee 15:5 write -> @write
 function run(fd: i32): i32 -> @run [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via echo
   escaping: fd
   calls: echo
   stackSites=0 stackLocals=0
-  callee 19:16 echo -> @echo
+  callee 21:16 echo -> @echo
 program tests/cases/ffi_buffer_write.ts
 module tests/cases/ffi_buffer_write.ts (entry)
 function write(fd: i32, buf: readonly u8[], n: u64): i64 -> @write
@@ -16261,11 +16261,10 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via write
   calls: nish_panic write
-  stackSites=2 stackLocals=2
+  stackSites=1 stackLocals=1
   local 9:9 bytes: u8[] (const)
   callee 10:3 write -> @write
-  local 11:9 prefix: u8[] (const)
-  callee 12:3 write -> @write
+  callee 11:3 write -> @write
 program tests/cases/ffi_owned_string.ts
 module tests/cases/ffi_owned_string.ts (entry)
 import readCString from "nish:unsafe" -> builtin readCString

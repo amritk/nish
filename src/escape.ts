@@ -751,11 +751,14 @@ class EscapeAnalysis {
       ) {
         return new Outcome(FLOW_LOCAL, true, false)
       }
-      // WP27 S3.1: a `string` handed to a `declare function` is borrowed for
-      // the length of the call, and the C function may not keep its address
-      // (`docs/wp27-ffi.md` §8b). Nothing about a C body can be proved, so
-      // this is the decision read as a fact: a read, as `console.log`'s is,
-      // and the arena scope may release once the call has returned.
+      // WP27 S3.1 and WP40 B1.2: a `string` or a `u8[]` handed to a `declare
+      // function` is borrowed for the length of the call, and the C function
+      // may not keep its address (`docs/wp27-ffi.md` §8b,
+      // `docs/wp40-ffi-buffers-handles.md` §5). Nothing about a C body can be
+      // proved, so this is the decision read as a fact: the argument does not
+      // escape, and the arena scope may release once the call has returned.
+      // What C writes through a `u8[]` is recorded as a write by the foreign
+      // facts, not here.
       if (callee !== null && callee.foreign()) {
         return new Outcome(FLOW_LOCAL, true, false)
       }

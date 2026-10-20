@@ -388,7 +388,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
             )
           : hostBuilt
       let want = 0n
-      for (const b of Buffer.from("hello\nhi\n")) {
+      for (const b of fs.readFileSync(path.join(root, "tests", "cases", "ffi_buffer_write.out"))) {
         want = BigInt.asIntN(64, want * 31n + BigInt(b))
       }
       let got = ""
