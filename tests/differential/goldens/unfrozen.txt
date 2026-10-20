@@ -263,6 +263,7 @@ cases/mem_return_array_scope added after R6: no rewriter to freeze it with
 cases/mem_using_arena added after R6: no rewriter to freeze it with
 cases/mem_using_arena_or_return added after R6: no rewriter to freeze it with
 cases/mem_using_arena_tail added after R6: no rewriter to freeze it with
+cases/mem_wait_pid_scope added after R6: no rewriter to freeze it with
 cases/neg_literal_i64_min added after R6: no rewriter to freeze it with
 cases/neg_literal_int_min_hex added after R6: no rewriter to freeze it with
 cases/neg_literal_unsigned added after R6: no rewriter to freeze it with

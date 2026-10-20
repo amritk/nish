@@ -136,6 +136,7 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "getenv" ||
   name === "readdirSync" ||
   name === "realpathSync" ||
+  name === "waitPid" ||
   name === "readCString"
 
 /**

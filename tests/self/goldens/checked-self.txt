@@ -30203,23 +30203,23 @@ function isListingCall(program: CheckedProgram, facts: FactsTable, expr: Node): 
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 156:9 e: Node (const)
-  callee 156:13 unwrapParens -> @unwrapParens
-  local 160:9 callee: FunctionSig | null (const)
-  callee 162:12 answersFreshElements -> @answersFreshElements
-  callee 162:33 builtinNameOf -> @builtinNameOf
-  local 164:9 g: FunctionFacts | null (const)
-  callee 164:13 FactsTable.get -> @FactsTable.get
+  local 157:9 e: Node (const)
+  callee 157:13 unwrapParens -> @unwrapParens
+  local 161:9 callee: FunctionSig | null (const)
+  callee 163:12 answersFreshElements -> @answersFreshElements
+  callee 163:33 builtinNameOf -> @builtinNameOf
+  local 165:9 g: FunctionFacts | null (const)
+  callee 165:13 FactsTable.get -> @FactsTable.get
 function EscapeResult.constructor(this: EscapeResult, nodeCount: i32): void -> @EscapeResult.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: nodeCount
   calls: StringSet.constructor nish_alloc_struct nish_panic
   pointer this: size=96 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 256:24 new StringSet -> @StringSet.constructor
+  callee 257:24 new StringSet -> @StringSet.constructor
 function EscapeResult.noteEscape(this: EscapeResult, node: Node): void -> @EscapeResult.noteEscape [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 270:5
+  sharedWrite: 271:5
   escaping: node
   calls: nish_array_grow
   pointer this: size=96 writesThrough=true captured=false
@@ -30253,132 +30253,132 @@ function EscapeAnalysis.constructor(this: EscapeAnalysis, unit: AnalysisUnit, ta
   pointer opts: size=152 writesThrough=true captured=true
   pointer sig: size=136 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 375:19 new EscapeResult -> @EscapeResult.constructor
+  callee 376:19 new EscapeResult -> @EscapeResult.constructor
 function EscapeAnalysis.paramLocal(this: EscapeAnalysis, name: string): Local | null -> @EscapeAnalysis.paramLocal [method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 392:9 i: i32 (let)
-  local 394:13 v: Local (const)
+  local 393:9 i: i32 (let)
+  local 395:13 v: Local (const)
 function EscapeAnalysis.addRef(this: EscapeAnalysis, local: Local, node: Node): void -> @EscapeAnalysis.addRef [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 407:9
+  sharedWrite: 408:9
   escaping: local node
   calls: nish_array_grow nish_panic_index
   pointer this: size=120 writesThrough=false captured=false
   pointer local: size=48 writesThrough=true captured=true
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 404:9 i: i32 (let)
-  local 412:11 list: Node[] (const)
+  local 405:9 i: i32 (let)
+  local 413:11 list: Node[] (const)
 function EscapeAnalysis.refsOf(this: EscapeAnalysis, local: Local): Node[] -> @EscapeAnalysis.refsOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=120 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 419:9 i: i32 (let)
+  local 420:9 i: i32 (let)
 function EscapeAnalysis.elementSize(this: EscapeAnalysis, elem: i32): i32 -> @EscapeAnalysis.elementSize [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: elem
   calls: elementStride
   pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 437:12 elementStride -> @elementStride
+  callee 438:12 elementStride -> @elementStride
 function EscapeAnalysis.visit(this: EscapeAnalysis, node: Node): void -> @EscapeAnalysis.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 459:7
+  sharedWrite: 460:7
   escaping: node
   calls: EscapeAnalysis.addRef EscapeAnalysis.elementSize EscapeAnalysis.visit EscapeAnalysis.visitCall EscapeAnalysis.visitNew Site.constructor TypeTable.isArray TypeTable.refOf TypeTable.resultByValue isTemplateExpression nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_eq unwrapStringPassthrough
   pointer this: size=120 writesThrough=true captured=false passedTo=EscapeAnalysis.addRef#0 EscapeAnalysis.visitNew#0 EscapeAnalysis.elementSize#0 EscapeAnalysis.visitCall#0 EscapeAnalysis.visit#0
   pointer node: size=40 writesThrough=true captured=true passedTo=EscapeAnalysis.addRef#2 EscapeAnalysis.visitNew#1 Site.constructor#1 Site.constructor#1 Site.constructor#1 isTemplateExpression#0 unwrapStringPassthrough#1 Site.constructor#1 EscapeAnalysis.visitCall#1
   stackSites=0 stackLocals=0
-  local 441:11 program: CheckedProgram (const)
-  local 448:13 local: Local | null (const)
-  callee 454:47 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 456:9 EscapeAnalysis.addRef -> @EscapeAnalysis.addRef
-  callee 461:7 EscapeAnalysis.visitNew -> @EscapeAnalysis.visitNew
-  callee 463:23 new Site -> @Site.constructor
-  local 465:13 type: i32 (const)
-  local 466:13 stackable: boolean (const)
-  callee 468:9 TypeTable.isArray -> @TypeTable.isArray
-  callee 469:32 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
-  callee 469:49 TypeTable.refOf -> @TypeTable.refOf
-  callee 470:23 new Site -> @Site.constructor
-  callee 473:25 new Site -> @Site.constructor
-  callee 475:16 isTemplateExpression -> @isTemplateExpression
-  callee 476:11 unwrapStringPassthrough -> @unwrapStringPassthrough
-  callee 477:25 new Site -> @Site.constructor
-  callee 480:7 EscapeAnalysis.visitCall -> @EscapeAnalysis.visitCall
-  local 482:16 child: Node (const)
-  callee 483:7 EscapeAnalysis.visit -> @EscapeAnalysis.visit
+  local 442:11 program: CheckedProgram (const)
+  local 449:13 local: Local | null (const)
+  callee 455:47 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 457:9 EscapeAnalysis.addRef -> @EscapeAnalysis.addRef
+  callee 462:7 EscapeAnalysis.visitNew -> @EscapeAnalysis.visitNew
+  callee 464:23 new Site -> @Site.constructor
+  local 466:13 type: i32 (const)
+  local 467:13 stackable: boolean (const)
+  callee 469:9 TypeTable.isArray -> @TypeTable.isArray
+  callee 470:32 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
+  callee 470:49 TypeTable.refOf -> @TypeTable.refOf
+  callee 471:23 new Site -> @Site.constructor
+  callee 474:25 new Site -> @Site.constructor
+  callee 476:16 isTemplateExpression -> @isTemplateExpression
+  callee 477:11 unwrapStringPassthrough -> @unwrapStringPassthrough
+  callee 478:25 new Site -> @Site.constructor
+  callee 481:7 EscapeAnalysis.visitCall -> @EscapeAnalysis.visitCall
+  local 483:16 child: Node (const)
+  callee 484:7 EscapeAnalysis.visit -> @EscapeAnalysis.visit
 function EscapeAnalysis.visitNew(this: EscapeAnalysis, node: Node): void -> @EscapeAnalysis.visitNew [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 491:7
+  sharedWrite: 492:7
   calls: EscapeAnalysis.elementSize Site.constructor TypeTable.isArray TypeTable.isStruct TypeTable.refOf intrinsicType literalLength nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.elementSize#0
   pointer node: size=40 writesThrough=true captured=true passedTo=intrinsicType#1 Site.constructor#1 Site.constructor#1
   stackSites=0 stackLocals=0
-  local 489:11 type: i32 (const)
-  callee 489:18 intrinsicType -> @intrinsicType
-  callee 490:22 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 491:23 new Site -> @Site.constructor
-  callee 494:22 TypeTable.isArray -> @TypeTable.isArray
-  local 497:11 args: Node (const)
-  local 498:11 n: i32 (const)
-  callee 498:42 literalLength -> @literalLength
-  local 499:11 stackable: boolean (const)
-  callee 499:37 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
-  callee 499:54 TypeTable.refOf -> @TypeTable.refOf
-  callee 500:21 new Site -> @Site.constructor
+  local 490:11 type: i32 (const)
+  callee 490:18 intrinsicType -> @intrinsicType
+  callee 491:22 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 492:23 new Site -> @Site.constructor
+  callee 495:22 TypeTable.isArray -> @TypeTable.isArray
+  local 498:11 args: Node (const)
+  local 499:11 n: i32 (const)
+  callee 499:42 literalLength -> @literalLength
+  local 500:11 stackable: boolean (const)
+  callee 500:37 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
+  callee 500:54 TypeTable.refOf -> @TypeTable.refOf
+  callee 501:21 new Site -> @Site.constructor
 function EscapeAnalysis.visitCall(this: EscapeAnalysis, call: Node): void -> @EscapeAnalysis.visitCall [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 509:9
+  sharedWrite: 510:9
   escaping: call
   calls: EscapeAnalysis.isPointerResult FactsTable.get FunctionSig.foreign Site.constructor TypeTable.resultByValue builtinNameOf dottedName isAllocatingBuiltin isJoinCall isNumeric isPushCall isResultConstructorCall isStringAllocCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq resultMethodName
   pointer this: size=120 writesThrough=true captured=false passedTo=EscapeAnalysis.isPointerResult#0
   pointer call: size=40 writesThrough=true captured=true passedTo=Site.constructor#1 Site.constructor#1 isPushCall#2 isStringAllocCall#1 isJoinCall#2 Site.constructor#1 resultMethodName#2 isResultConstructorCall#2 Site.constructor#1 builtinNameOf#1 Site.constructor#1
   stackSites=0 stackLocals=0
-  local 504:11 program: CheckedProgram (const)
-  local 505:11 callee: FunctionSig | null (const)
-  local 507:13 g: FunctionFacts | null (const)
-  callee 507:17 FactsTable.get -> @FactsTable.get
-  callee 511:11 EscapeAnalysis.isPointerResult -> @EscapeAnalysis.isPointerResult
-  local 512:15 site: Site (const)
-  callee 512:22 new Site -> @Site.constructor
-  callee 516:14 FunctionSig.foreign -> @FunctionSig.foreign
-  callee 520:18 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 525:25 new Site -> @Site.constructor
-  callee 529:9 isPushCall -> @isPushCall
-  callee 536:9 isStringAllocCall -> @isStringAllocCall
-  callee 536:45 isJoinCall -> @isJoinCall
-  callee 537:23 new Site -> @Site.constructor
-  callee 545:9 resultMethodName -> @resultMethodName
-  local 551:11 target: Node (const)
-  callee 555:11 isResultConstructorCall -> @isResultConstructorCall
-  callee 556:25 new Site -> @Site.constructor
-  callee 571:11 isAllocatingBuiltin -> @isAllocatingBuiltin
-  callee 571:31 builtinNameOf -> @builtinNameOf
-  callee 572:25 new Site -> @Site.constructor
-  local 576:11 name: string (const)
-  callee 576:18 dottedName -> @dottedName
-  local 582:13 args: Node (const)
-  local 583:13 type: i32 (const)
-  callee 584:24 isNumeric -> @isNumeric
+  local 505:11 program: CheckedProgram (const)
+  local 506:11 callee: FunctionSig | null (const)
+  local 508:13 g: FunctionFacts | null (const)
+  callee 508:17 FactsTable.get -> @FactsTable.get
+  callee 512:11 EscapeAnalysis.isPointerResult -> @EscapeAnalysis.isPointerResult
+  local 513:15 site: Site (const)
+  callee 513:22 new Site -> @Site.constructor
+  callee 517:14 FunctionSig.foreign -> @FunctionSig.foreign
+  callee 521:18 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 526:25 new Site -> @Site.constructor
+  callee 530:9 isPushCall -> @isPushCall
+  callee 537:9 isStringAllocCall -> @isStringAllocCall
+  callee 537:45 isJoinCall -> @isJoinCall
+  callee 538:23 new Site -> @Site.constructor
+  callee 546:9 resultMethodName -> @resultMethodName
+  local 552:11 target: Node (const)
+  callee 556:11 isResultConstructorCall -> @isResultConstructorCall
+  callee 557:25 new Site -> @Site.constructor
+  callee 572:11 isAllocatingBuiltin -> @isAllocatingBuiltin
+  callee 572:31 builtinNameOf -> @builtinNameOf
+  callee 573:25 new Site -> @Site.constructor
+  local 577:11 name: string (const)
+  callee 577:18 dottedName -> @dottedName
+  local 583:13 args: Node (const)
+  local 584:13 type: i32 (const)
+  callee 585:24 isNumeric -> @isNumeric
 function EscapeAnalysis.isPointerResult(this: EscapeAnalysis, type: i32): boolean -> @EscapeAnalysis.isPointerResult [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isArray TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.resultByValue TypeTable.stripNull
   pointer this: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 594:11 inner: i32 (const)
-  callee 594:19 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 600:7 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 601:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 602:7 TypeTable.isUnion -> @TypeTable.isUnion
-  callee 604:8 TypeTable.isResult -> @TypeTable.isResult
-  callee 604:39 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 595:11 inner: i32 (const)
+  callee 595:19 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 601:7 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 602:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 603:7 TypeTable.isUnion -> @TypeTable.isUnion
+  callee 605:8 TypeTable.isResult -> @TypeTable.isResult
+  callee 605:39 TypeTable.resultByValue -> @TypeTable.resultByValue
 function EscapeAnalysis.flowTarget(this: EscapeAnalysis, expr: Node): FlowTarget -> @EscapeAnalysis.flowTarget [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   escaping: expr
@@ -30386,18 +30386,18 @@ function EscapeAnalysis.flowTarget(this: EscapeAnalysis, expr: Node): FlowTarget
   pointer this: size=120 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 612:9 node: Node (let)
-  local 614:13 parent: Node | null (const)
-  callee 614:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 616:16 new FlowTarget -> @FlowTarget.constructor
-  callee 633:26 yieldsInteriorPointer -> @yieldsInteriorPointer
-  callee 641:26 storesInlineElements -> @storesInlineElements
-  callee 643:16 new FlowTarget -> @FlowTarget.constructor
-  callee 649:16 new FlowTarget -> @FlowTarget.constructor
-  callee 652:16 new FlowTarget -> @FlowTarget.constructor
-  callee 659:16 new FlowTarget -> @FlowTarget.constructor
-  local 661:13 neither: FlowTarget (const)
-  callee 661:23 new FlowTarget -> @FlowTarget.constructor
+  local 613:9 node: Node (let)
+  local 615:13 parent: Node | null (const)
+  callee 615:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 617:16 new FlowTarget -> @FlowTarget.constructor
+  callee 634:26 yieldsInteriorPointer -> @yieldsInteriorPointer
+  callee 642:26 storesInlineElements -> @storesInlineElements
+  callee 644:16 new FlowTarget -> @FlowTarget.constructor
+  callee 650:16 new FlowTarget -> @FlowTarget.constructor
+  callee 653:16 new FlowTarget -> @FlowTarget.constructor
+  callee 660:16 new FlowTarget -> @FlowTarget.constructor
+  local 662:13 neither: FlowTarget (const)
+  callee 662:23 new FlowTarget -> @FlowTarget.constructor
 function EscapeAnalysis.calleeCaptures(this: EscapeAnalysis, callee: FunctionSig, index: i32): boolean -> @EscapeAnalysis.calleeCaptures [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
@@ -30405,12 +30405,12 @@ function EscapeAnalysis.calleeCaptures(this: EscapeAnalysis, callee: FunctionSig
   pointer this: size=120 writesThrough=false captured=false
   pointer callee: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 673:11 g: FunctionFacts | null (const)
-  callee 673:15 FactsTable.get -> @FactsTable.get
-  local 677:11 name: string (const)
-  local 678:11 pointer: PointerParamFacts | null (const)
-  callee 678:21 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  callee 679:50 StringSet.has -> @StringSet.has
+  local 674:11 g: FunctionFacts | null (const)
+  callee 674:15 FactsTable.get -> @FactsTable.get
+  local 678:11 name: string (const)
+  local 679:11 pointer: PointerParamFacts | null (const)
+  callee 679:21 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  callee 680:50 StringSet.has -> @StringSet.has
 function EscapeAnalysis.assignedLocal(this: EscapeAnalysis, expr: Node): Local | null -> @EscapeAnalysis.assignedLocal [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: expr
@@ -30418,12 +30418,12 @@ function EscapeAnalysis.assignedLocal(this: EscapeAnalysis, expr: Node): Local |
   pointer this: size=120 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 692:9 node: Node (let)
-  local 694:13 parent: Node | null (const)
-  callee 694:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 704:28 yieldsInteriorPointer -> @yieldsInteriorPointer
-  callee 712:10 isAssignmentOperator -> @isAssignmentOperator
-  local 717:13 target: Local | null (const)
+  local 693:9 node: Node (let)
+  local 695:13 parent: Node | null (const)
+  callee 695:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 705:28 yieldsInteriorPointer -> @yieldsInteriorPointer
+  callee 713:10 isAssignmentOperator -> @isAssignmentOperator
+  local 718:13 target: Local | null (const)
 function EscapeAnalysis.useOutcome(this: EscapeAnalysis, expr: Node, visiting: Local[]): Outcome -> @EscapeAnalysis.useOutcome [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via classifyUse
@@ -30432,29 +30432,29 @@ function EscapeAnalysis.useOutcome(this: EscapeAnalysis, expr: Node, visiting: L
   pointer expr: size=40 writesThrough=true captured=true passedTo=classifyUse#2 EscapeAnalysis.handsOutElements#1 EscapeAnalysis.pushedIntoJoinedParts#1 EscapeAnalysis.storedIntoReturnedArray#1 EscapeAnalysis.assignedLocal#1
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.storedIntoReturnedArray#2 EscapeAnalysis.localOutcome#2
   stackSites=0 stackLocals=0
-  local 726:11 found: ParamUse (const)
-  callee 726:19 classifyUse -> @classifyUse
-  local 727:11 handsOn: boolean (const)
-  callee 728:36 EscapeAnalysis.handsOutElements -> @EscapeAnalysis.handsOutElements
-  callee 729:14 new Outcome -> @Outcome.constructor
-  callee 732:14 new Outcome -> @Outcome.constructor
-  local 735:13 callee: FunctionSig | null (const)
-  callee 741:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 743:16 new Outcome -> @Outcome.constructor
-  callee 750:30 FunctionSig.foreign -> @FunctionSig.foreign
-  callee 751:16 new Outcome -> @Outcome.constructor
-  local 753:13 captures: boolean (const)
-  callee 753:49 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
-  callee 754:14 new Outcome -> @Outcome.constructor
-  callee 759:9 EscapeAnalysis.pushedIntoJoinedParts -> @EscapeAnalysis.pushedIntoJoinedParts
-  callee 760:14 new Outcome -> @Outcome.constructor
-  local 762:11 carried: Outcome | null (const)
-  callee 762:21 EscapeAnalysis.storedIntoReturnedArray -> @EscapeAnalysis.storedIntoReturnedArray
-  local 766:11 target: Local | null (const)
-  callee 766:20 EscapeAnalysis.assignedLocal -> @EscapeAnalysis.assignedLocal
-  local 767:11 escapes: boolean (const)
-  callee 767:46 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 768:12 new Outcome -> @Outcome.constructor
+  local 727:11 found: ParamUse (const)
+  callee 727:19 classifyUse -> @classifyUse
+  local 728:11 handsOn: boolean (const)
+  callee 729:36 EscapeAnalysis.handsOutElements -> @EscapeAnalysis.handsOutElements
+  callee 730:14 new Outcome -> @Outcome.constructor
+  callee 733:14 new Outcome -> @Outcome.constructor
+  local 736:13 callee: FunctionSig | null (const)
+  callee 742:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 744:16 new Outcome -> @Outcome.constructor
+  callee 751:30 FunctionSig.foreign -> @FunctionSig.foreign
+  callee 752:16 new Outcome -> @Outcome.constructor
+  local 754:13 captures: boolean (const)
+  callee 754:49 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
+  callee 755:14 new Outcome -> @Outcome.constructor
+  callee 760:9 EscapeAnalysis.pushedIntoJoinedParts -> @EscapeAnalysis.pushedIntoJoinedParts
+  callee 761:14 new Outcome -> @Outcome.constructor
+  local 763:11 carried: Outcome | null (const)
+  callee 763:21 EscapeAnalysis.storedIntoReturnedArray -> @EscapeAnalysis.storedIntoReturnedArray
+  local 767:11 target: Local | null (const)
+  callee 767:20 EscapeAnalysis.assignedLocal -> @EscapeAnalysis.assignedLocal
+  local 768:11 escapes: boolean (const)
+  callee 768:46 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 769:12 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.pushedIntoJoinedParts(this: EscapeAnalysis, expr: Node): boolean -> @EscapeAnalysis.pushedIntoJoinedParts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via EscapeAnalysis.localOutcome
@@ -30462,98 +30462,98 @@ function EscapeAnalysis.pushedIntoJoinedParts(this: EscapeAnalysis, expr: Node):
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#0 EscapeAnalysis.refsOf#0 EscapeAnalysis.localOutcome#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=pushedOnto#2
   stackSites=1 stackLocals=1
-  local 795:11 v: Local | null (const)
-  callee 795:15 pushedOnto -> @pushedOnto
-  callee 799:8 isJoinedParts -> @isJoinedParts
-  callee 799:48 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
-  callee 799:71 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  local 803:11 visiting: Local[] (const)
-  callee 804:12 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  local 796:11 v: Local | null (const)
+  callee 796:15 pushedOnto -> @pushedOnto
+  callee 800:8 isJoinedParts -> @isJoinedParts
+  callee 800:48 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
+  callee 800:71 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  local 804:11 visiting: Local[] (const)
+  callee 805:12 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
 function EscapeAnalysis.freshArrayLocal(this: EscapeAnalysis, receiver: Node): Local | null -> @EscapeAnalysis.freshArrayLocal [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: EscapeAnalysis.declarationOf isFreshArrayLocal nish_panic_index unwrapParens
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#0
   pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 809:11 e: Node (const)
-  callee 809:15 unwrapParens -> @unwrapParens
-  local 810:11 v: Local | null (const)
-  callee 811:26 isFreshArrayLocal -> @isFreshArrayLocal
-  callee 811:59 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
+  local 810:11 e: Node (const)
+  callee 810:15 unwrapParens -> @unwrapParens
+  local 811:11 v: Local | null (const)
+  callee 812:26 isFreshArrayLocal -> @isFreshArrayLocal
+  callee 812:59 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
 function EscapeAnalysis.storedIntoReturnedArray(this: EscapeAnalysis, expr: Node, visiting: Local[]): Outcome | null -> @EscapeAnalysis.storedIntoReturnedArray [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 885:7
+  sharedWrite: 886:7
   escaping: expr
   calls: EscapeAnalysis.freshArrayLocal EscapeAnalysis.isCarrierUse EscapeAnalysis.localOutcome EscapeAnalysis.refsOf EscapeAnalysis.standsAlone EscapeAnalysis.storedIntoChunkDst Outcome.constructor ParentTable.parentOf TypeTable.refOf TypeTable.stripNull isPushCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq unwrapParens
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.standsAlone#0 EscapeAnalysis.freshArrayLocal#0 EscapeAnalysis.storedIntoChunkDst#0 EscapeAnalysis.refsOf#0 EscapeAnalysis.isCarrierUse#0 EscapeAnalysis.localOutcome#0
   pointer expr: size=40 writesThrough=true captured=true
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.localOutcome#2
   stackSites=0 stackLocals=0
-  local 839:11 program: CheckedProgram (const)
-  local 840:9 node: Node (let)
-  local 841:9 parent: Node | null (let)
-  callee 841:18 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 844:16 ParentTable.parentOf -> @ParentTable.parentOf
-  local 849:9 receiver: Node | null (let)
-  local 854:13 target: Node (const)
-  callee 854:22 unwrapParens -> @unwrapParens
-  callee 855:38 EscapeAnalysis.standsAlone -> @EscapeAnalysis.standsAlone
-  local 859:13 call: Node | null (const)
-  callee 859:20 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 860:28 isPushCall -> @isPushCall
-  local 864:11 v: Local | null (const)
-  callee 864:56 EscapeAnalysis.freshArrayLocal -> @EscapeAnalysis.freshArrayLocal
-  callee 866:14 EscapeAnalysis.storedIntoChunkDst -> @EscapeAnalysis.storedIntoChunkDst
-  callee 872:23 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 872:44 TypeTable.refOf -> @TypeTable.refOf
-  local 875:16 ref: Node (const)
-  callee 875:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  callee 876:12 EscapeAnalysis.isCarrierUse -> @EscapeAnalysis.isCarrierUse
-  local 880:11 outcome: Outcome (const)
-  callee 880:21 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 889:12 new Outcome -> @Outcome.constructor
+  local 840:11 program: CheckedProgram (const)
+  local 841:9 node: Node (let)
+  local 842:9 parent: Node | null (let)
+  callee 842:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 845:16 ParentTable.parentOf -> @ParentTable.parentOf
+  local 850:9 receiver: Node | null (let)
+  local 855:13 target: Node (const)
+  callee 855:22 unwrapParens -> @unwrapParens
+  callee 856:38 EscapeAnalysis.standsAlone -> @EscapeAnalysis.standsAlone
+  local 860:13 call: Node | null (const)
+  callee 860:20 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 861:28 isPushCall -> @isPushCall
+  local 865:11 v: Local | null (const)
+  callee 865:56 EscapeAnalysis.freshArrayLocal -> @EscapeAnalysis.freshArrayLocal
+  callee 867:14 EscapeAnalysis.storedIntoChunkDst -> @EscapeAnalysis.storedIntoChunkDst
+  callee 873:23 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 873:44 TypeTable.refOf -> @TypeTable.refOf
+  local 876:16 ref: Node (const)
+  callee 876:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  callee 877:12 EscapeAnalysis.isCarrierUse -> @EscapeAnalysis.isCarrierUse
+  local 881:11 outcome: Outcome (const)
+  callee 881:21 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 890:12 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.storedIntoChunkDst(this: EscapeAnalysis, store: Node, receiver: Node): Outcome | null -> @EscapeAnalysis.storedIntoChunkDst [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 914:5
+  sharedWrite: 915:5
   escaping: store
   calls: Outcome.constructor TypeTable.refOf TypeTable.stripNull chunkDstIndex nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq unwrapParens
   pointer this: size=120 writesThrough=false captured=false
   pointer store: size=40 writesThrough=true captured=true
   pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 900:11 at: i32 (const)
-  callee 900:16 chunkDstIndex -> @chunkDstIndex
-  local 901:11 e: Node (const)
-  callee 901:15 unwrapParens -> @unwrapParens
-  local 902:11 v: Local | null (const)
-  callee 910:7 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 910:28 TypeTable.refOf -> @TypeTable.refOf
-  callee 917:12 new Outcome -> @Outcome.constructor
+  local 901:11 at: i32 (const)
+  callee 901:16 chunkDstIndex -> @chunkDstIndex
+  local 902:11 e: Node (const)
+  callee 902:15 unwrapParens -> @unwrapParens
+  local 903:11 v: Local | null (const)
+  callee 911:7 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 911:28 TypeTable.refOf -> @TypeTable.refOf
+  callee 918:12 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.decideFills(this: EscapeAnalysis): void -> @EscapeAnalysis.decideFills [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 951:11
+  sharedWrite: 952:11
   calls: EscapeAnalysis.forwardsFill EscapeAnalysis.freshArrayLocal EscapeAnalysis.localOutcome EscapeAnalysis.onlyFilled EscapeResult.noteEscape FactsTable.get nish_array_grow nish_panic_index nish_str_eq unwrapParens
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.forwardsFill#0 EscapeAnalysis.freshArrayLocal#0 EscapeAnalysis.onlyFilled#0 EscapeAnalysis.localOutcome#0
   stackSites=1 stackLocals=1
-  local 931:11 program: CheckedProgram (const)
-  local 932:16 call: Node (const)
-  local 933:13 callee: FunctionSig | null (const)
-  local 934:13 g: FunctionFacts | null (const)
-  callee 934:64 FactsTable.get -> @FactsTable.get
-  local 935:13 args: Node (const)
-  callee 943:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
-  local 946:13 arg: Node (const)
-  callee 946:19 unwrapParens -> @unwrapParens
-  local 947:13 v: Local | null (const)
-  callee 948:56 EscapeAnalysis.forwardsFill -> @EscapeAnalysis.forwardsFill
-  local 949:15 at: i32 (const)
-  local 957:13 made: Local | null (const)
-  callee 957:54 EscapeAnalysis.freshArrayLocal -> @EscapeAnalysis.freshArrayLocal
-  callee 958:56 EscapeAnalysis.onlyFilled -> @EscapeAnalysis.onlyFilled
-  local 959:15 fresh: Local[] (const)
-  local 960:15 outcome: Outcome (const)
-  callee 960:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 970:7 EscapeResult.noteEscape -> @EscapeResult.noteEscape
+  local 932:11 program: CheckedProgram (const)
+  local 933:16 call: Node (const)
+  local 934:13 callee: FunctionSig | null (const)
+  local 935:13 g: FunctionFacts | null (const)
+  callee 935:64 FactsTable.get -> @FactsTable.get
+  local 936:13 args: Node (const)
+  callee 944:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
+  local 947:13 arg: Node (const)
+  callee 947:19 unwrapParens -> @unwrapParens
+  local 948:13 v: Local | null (const)
+  callee 949:56 EscapeAnalysis.forwardsFill -> @EscapeAnalysis.forwardsFill
+  local 950:15 at: i32 (const)
+  local 958:13 made: Local | null (const)
+  callee 958:54 EscapeAnalysis.freshArrayLocal -> @EscapeAnalysis.freshArrayLocal
+  callee 959:56 EscapeAnalysis.onlyFilled -> @EscapeAnalysis.onlyFilled
+  local 960:15 fresh: Local[] (const)
+  local 961:15 outcome: Outcome (const)
+  callee 961:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 971:7 EscapeResult.noteEscape -> @EscapeResult.noteEscape
 function EscapeAnalysis.isFillArgument(this: EscapeAnalysis, ref: Node): boolean -> @EscapeAnalysis.isFillArgument [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: ref
@@ -30561,15 +30561,15 @@ function EscapeAnalysis.isFillArgument(this: EscapeAnalysis, ref: Node): boolean
   pointer this: size=120 writesThrough=false captured=false
   pointer ref: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 976:9 node: Node (let)
-  local 977:9 list: Node | null (let)
-  callee 977:16 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 980:14 ParentTable.parentOf -> @ParentTable.parentOf
-  local 982:11 call: Node | null (const)
-  callee 982:54 ParentTable.parentOf -> @ParentTable.parentOf
-  local 992:11 callee: FunctionSig | null (const)
-  local 993:11 g: FunctionFacts | null (const)
-  callee 993:62 FactsTable.get -> @FactsTable.get
+  local 977:9 node: Node (let)
+  local 978:9 list: Node | null (let)
+  callee 978:16 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 981:14 ParentTable.parentOf -> @ParentTable.parentOf
+  local 983:11 call: Node | null (const)
+  callee 983:54 ParentTable.parentOf -> @ParentTable.parentOf
+  local 993:11 callee: FunctionSig | null (const)
+  local 994:11 g: FunctionFacts | null (const)
+  callee 994:62 FactsTable.get -> @FactsTable.get
 function EscapeAnalysis.forwardsFill(this: EscapeAnalysis, v: Local): boolean -> @EscapeAnalysis.forwardsFill [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via identRefs
@@ -30577,15 +30577,15 @@ function EscapeAnalysis.forwardsFill(this: EscapeAnalysis, v: Local): boolean ->
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.isFillArgument#0
   pointer v: size=48 writesThrough=false captured=false passedTo=identRefs#2
   stackSites=1 stackLocals=1
-  local 1008:11 body: Node | null (const)
-  callee 1008:18 FunctionSig.body -> @FunctionSig.body
-  local 1012:11 refs: Node[] (const)
-  callee 1013:5 identRefs -> @identRefs
-  local 1014:16 ref: Node (const)
-  local 1015:13 access: Node | null (const)
-  callee 1015:22 ParentTable.parentOf -> @ParentTable.parentOf
-  local 1016:13 length: boolean (const)
-  callee 1018:23 EscapeAnalysis.isFillArgument -> @EscapeAnalysis.isFillArgument
+  local 1009:11 body: Node | null (const)
+  callee 1009:18 FunctionSig.body -> @FunctionSig.body
+  local 1013:11 refs: Node[] (const)
+  callee 1014:5 identRefs -> @identRefs
+  local 1015:16 ref: Node (const)
+  local 1016:13 access: Node | null (const)
+  callee 1016:22 ParentTable.parentOf -> @ParentTable.parentOf
+  local 1017:13 length: boolean (const)
+  callee 1019:23 EscapeAnalysis.isFillArgument -> @EscapeAnalysis.isFillArgument
 function EscapeAnalysis.onlyFilled(this: EscapeAnalysis, v: Local): boolean -> @EscapeAnalysis.onlyFilled [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via identRefs
@@ -30593,16 +30593,16 @@ function EscapeAnalysis.onlyFilled(this: EscapeAnalysis, v: Local): boolean -> @
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.refsOf#0 EscapeAnalysis.isCarrierUse#0 EscapeAnalysis.isFillArgument#0
   pointer v: size=48 writesThrough=false captured=false passedTo=identRefs#2 EscapeAnalysis.refsOf#1
   stackSites=1 stackLocals=1
-  local 1030:11 body: Node | null (const)
-  callee 1030:18 FunctionSig.body -> @FunctionSig.body
-  callee 1031:26 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 1031:47 TypeTable.refOf -> @TypeTable.refOf
-  local 1034:11 refs: Node[] (const)
-  callee 1035:5 identRefs -> @identRefs
-  callee 1036:25 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  local 1039:16 ref: Node (const)
-  callee 1040:12 EscapeAnalysis.isCarrierUse -> @EscapeAnalysis.isCarrierUse
-  callee 1040:39 EscapeAnalysis.isFillArgument -> @EscapeAnalysis.isFillArgument
+  local 1031:11 body: Node | null (const)
+  callee 1031:18 FunctionSig.body -> @FunctionSig.body
+  callee 1032:26 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 1032:47 TypeTable.refOf -> @TypeTable.refOf
+  local 1035:11 refs: Node[] (const)
+  callee 1036:5 identRefs -> @identRefs
+  callee 1037:25 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  local 1040:16 ref: Node (const)
+  callee 1041:12 EscapeAnalysis.isCarrierUse -> @EscapeAnalysis.isCarrierUse
+  callee 1041:39 EscapeAnalysis.isFillArgument -> @EscapeAnalysis.isFillArgument
 function EscapeAnalysis.standsAlone(this: EscapeAnalysis, node: Node): boolean -> @EscapeAnalysis.standsAlone [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node
@@ -30610,10 +30610,10 @@ function EscapeAnalysis.standsAlone(this: EscapeAnalysis, node: Node): boolean -
   pointer this: size=120 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1049:9 at: Node (let)
-  local 1050:9 parent: Node | null (let)
-  callee 1050:18 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 1053:16 ParentTable.parentOf -> @ParentTable.parentOf
+  local 1050:9 at: Node (let)
+  local 1051:9 parent: Node | null (let)
+  callee 1051:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 1054:16 ParentTable.parentOf -> @ParentTable.parentOf
 function EscapeAnalysis.isCarrierUse(this: EscapeAnalysis, ref: Node): boolean -> @EscapeAnalysis.isCarrierUse [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via classifyUse
@@ -30622,19 +30622,19 @@ function EscapeAnalysis.isCarrierUse(this: EscapeAnalysis, ref: Node): boolean -
   pointer this: size=120 writesThrough=false captured=false
   pointer ref: size=40 writesThrough=true captured=true passedTo=ParentTable.parentOf#1
   stackSites=0 stackLocals=0
-  local 1060:11 program: CheckedProgram (const)
-  local 1061:11 access: Node | null (const)
-  callee 1061:20 ParentTable.parentOf -> @ParentTable.parentOf
-  local 1066:13 above: Node | null (const)
-  callee 1066:21 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 1071:9 isAssignmentOperator -> @isAssignmentOperator
-  callee 1076:14 classifyUse -> @classifyUse
-  local 1079:13 above: Node | null (const)
-  callee 1079:21 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 1081:16 isPushCall -> @isPushCall
-  local 1086:9 node: Node (let)
-  local 1087:9 parent: Node | null (let)
-  callee 1090:16 ParentTable.parentOf -> @ParentTable.parentOf
+  local 1061:11 program: CheckedProgram (const)
+  local 1062:11 access: Node | null (const)
+  callee 1062:20 ParentTable.parentOf -> @ParentTable.parentOf
+  local 1067:13 above: Node | null (const)
+  callee 1067:21 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 1072:9 isAssignmentOperator -> @isAssignmentOperator
+  callee 1077:14 classifyUse -> @classifyUse
+  local 1080:13 above: Node | null (const)
+  callee 1080:21 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 1082:16 isPushCall -> @isPushCall
+  local 1087:9 node: Node (let)
+  local 1088:9 parent: Node | null (let)
+  callee 1091:16 ParentTable.parentOf -> @ParentTable.parentOf
 function EscapeAnalysis.handsOutElements(this: EscapeAnalysis, expr: Node): boolean -> @EscapeAnalysis.handsOutElements [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: expr
@@ -30642,51 +30642,51 @@ function EscapeAnalysis.handsOutElements(this: EscapeAnalysis, expr: Node): bool
   pointer this: size=120 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1107:11 program: CheckedProgram (const)
-  local 1108:11 type: i32 (const)
-  callee 1109:22 TypeTable.isArray -> @TypeTable.isArray
-  callee 1109:41 TypeTable.stripNull -> @TypeTable.stripNull
-  local 1112:9 node: Node (let)
-  local 1113:9 access: Node | null (let)
-  callee 1113:18 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 1116:16 ParentTable.parentOf -> @ParentTable.parentOf
-  local 1121:11 above: Node | null (const)
-  callee 1121:19 ParentTable.parentOf -> @ParentTable.parentOf
-  local 1123:13 method: string (const)
-  callee 1123:22 arrayMethodName -> @arrayMethodName
+  local 1108:11 program: CheckedProgram (const)
+  local 1109:11 type: i32 (const)
+  callee 1110:22 TypeTable.isArray -> @TypeTable.isArray
+  callee 1110:41 TypeTable.stripNull -> @TypeTable.stripNull
+  local 1113:9 node: Node (let)
+  local 1114:9 access: Node | null (let)
+  callee 1114:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 1117:16 ParentTable.parentOf -> @ParentTable.parentOf
+  local 1122:11 above: Node | null (const)
+  callee 1122:19 ParentTable.parentOf -> @ParentTable.parentOf
+  local 1124:13 method: string (const)
+  callee 1124:22 arrayMethodName -> @arrayMethodName
 function EscapeAnalysis.memoised(this: EscapeAnalysis, v: Local): Outcome | null -> @EscapeAnalysis.memoised [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=120 writesThrough=false captured=false
   pointer v: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1130:9 i: i32 (let)
+  local 1131:9 i: i32 (let)
 function EscapeAnalysis.localOutcome(this: EscapeAnalysis, v: Local, visiting: Local[]): Outcome -> @EscapeAnalysis.localOutcome [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
-  sharedWrite: 1154:5
+  sharedWrite: 1155:5
   escaping: v
   calls: EscapeAnalysis.memoised EscapeAnalysis.refsOf EscapeAnalysis.valueOutcome Outcome.constructor ParentTable.parentOf isAssignmentOperator nish_alloc_struct nish_array_grow nish_panic_index worse
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.memoised#0 EscapeAnalysis.refsOf#0 EscapeAnalysis.valueOutcome#0
   pointer v: size=48 writesThrough=true captured=true passedTo=EscapeAnalysis.memoised#1 EscapeAnalysis.refsOf#1
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.valueOutcome#2
   stackSites=0 stackLocals=0
-  local 1141:11 known: Outcome | null (const)
-  callee 1141:19 EscapeAnalysis.memoised -> @EscapeAnalysis.memoised
-  local 1145:16 seen: Local (const)
-  callee 1151:16 new Outcome -> @Outcome.constructor
-  local 1155:9 flow: i32 (let)
-  local 1156:9 stable: boolean (let)
-  local 1157:9 escapes: boolean (let)
-  local 1158:16 ref: Node (const)
-  callee 1158:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  local 1159:13 parent: Node | null (const)
-  callee 1159:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 1164:9 isAssignmentOperator -> @isAssignmentOperator
-  local 1171:13 step: Outcome (const)
-  callee 1171:20 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
-  callee 1172:14 worse -> @worse
-  local 1176:11 outcome: Outcome (const)
-  callee 1176:21 new Outcome -> @Outcome.constructor
+  local 1142:11 known: Outcome | null (const)
+  callee 1142:19 EscapeAnalysis.memoised -> @EscapeAnalysis.memoised
+  local 1146:16 seen: Local (const)
+  callee 1152:16 new Outcome -> @Outcome.constructor
+  local 1156:9 flow: i32 (let)
+  local 1157:9 stable: boolean (let)
+  local 1158:9 escapes: boolean (let)
+  local 1159:16 ref: Node (const)
+  callee 1159:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  local 1160:13 parent: Node | null (const)
+  callee 1160:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 1165:9 isAssignmentOperator -> @isAssignmentOperator
+  local 1172:13 step: Outcome (const)
+  callee 1172:20 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
+  callee 1173:14 worse -> @worse
+  local 1177:11 outcome: Outcome (const)
+  callee 1177:21 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.valueOutcome(this: EscapeAnalysis, expr: Node, visiting: Local[]): Outcome -> @EscapeAnalysis.valueOutcome [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=8
   sharedWrite: via EscapeAnalysis.localOutcome
@@ -30695,107 +30695,107 @@ function EscapeAnalysis.valueOutcome(this: EscapeAnalysis, expr: Node, visiting:
   pointer expr: size=40 writesThrough=true captured=true passedTo=EscapeAnalysis.flowTarget#1 EscapeAnalysis.useOutcome#1
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.localOutcome#2 EscapeAnalysis.useOutcome#2
   stackSites=0 stackLocals=0
-  local 1183:11 target: FlowTarget (const)
-  callee 1183:20 EscapeAnalysis.flowTarget -> @EscapeAnalysis.flowTarget
-  callee 1188:14 new Outcome -> @Outcome.constructor
-  local 1190:11 local: Local | null (const)
-  callee 1192:14 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  local 1196:11 used: Node | null (const)
-  callee 1197:12 EscapeAnalysis.useOutcome -> @EscapeAnalysis.useOutcome
+  local 1184:11 target: FlowTarget (const)
+  callee 1184:20 EscapeAnalysis.flowTarget -> @EscapeAnalysis.flowTarget
+  callee 1189:14 new Outcome -> @Outcome.constructor
+  local 1191:11 local: Local | null (const)
+  callee 1193:14 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  local 1197:11 used: Node | null (const)
+  callee 1198:12 EscapeAnalysis.useOutcome -> @EscapeAnalysis.useOutcome
 function EscapeAnalysis.decide(this: EscapeAnalysis): void -> @EscapeAnalysis.decide [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1209:7
+  sharedWrite: 1210:7
   calls: CallSite.constructor EscapeAnalysis.calleeCaptures EscapeAnalysis.decideFills EscapeAnalysis.holdsStackObject EscapeAnalysis.localOutcome EscapeAnalysis.ownsSite EscapeAnalysis.paramLocal EscapeAnalysis.refsOf EscapeAnalysis.valueOutcome EscapeResult.noteEscape StringSet.add TypeTable.isArray TypeTable.resultByValue TypeTable.stripNull constructorOf intrinsicType isListingCall nish_alloc_struct nish_array_grow nish_panic_index unwrapParens
   pointer this: size=120 writesThrough=true captured=false passedTo=EscapeAnalysis.valueOutcome#0 EscapeAnalysis.calleeCaptures#0 EscapeAnalysis.decideFills#0 EscapeAnalysis.paramLocal#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.refsOf#0 EscapeAnalysis.holdsStackObject#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.ownsSite#0 EscapeAnalysis.localOutcome#0
   stackSites=4 stackLocals=4
-  local 1203:16 site: Site (const)
-  local 1204:13 fresh: Local[] (const)
-  local 1207:13 memoLocals: Local[] (const)
-  local 1208:13 memoValues: Outcome[] (const)
-  callee 1209:22 isListingCall -> @isListingCall
-  local 1214:13 outcome: Outcome (const)
-  callee 1214:23 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
-  callee 1220:9 TypeTable.isArray -> @TypeTable.isArray
-  callee 1220:28 TypeTable.stripNull -> @TypeTable.stripNull
-  local 1227:11 flow: i32 (let)
-  local 1228:11 escapes: boolean (let)
-  local 1233:15 ctor: FunctionSig | null (const)
-  callee 1233:22 constructorOf -> @constructorOf
-  callee 1233:67 intrinsicType -> @intrinsicType
-  callee 1234:30 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
-  callee 1241:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
-  callee 1244:36 new CallSite -> @CallSite.constructor
-  callee 1262:5 EscapeAnalysis.decideFills -> @EscapeAnalysis.decideFills
-  local 1268:9 p: i32 (let)
-  callee 1270:11 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 1271:15 name: string (const)
-  local 1272:15 v: Local | null (const)
-  callee 1272:19 EscapeAnalysis.paramLocal -> @EscapeAnalysis.paramLocal
-  local 1273:13 flow: i32 (let)
-  local 1274:13 stable: boolean (let)
-  local 1276:17 fresh: Local[] (const)
-  local 1277:17 outcome: Outcome (const)
-  callee 1277:27 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 1281:13 EscapeResult.noteEscape -> @EscapeResult.noteEscape
-  callee 1281:36 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  callee 1285:11 StringSet.add -> @StringSet.add
-  local 1298:16 decl: Node (const)
-  local 1299:13 v: Local | null (const)
-  local 1303:13 init: Node (const)
-  callee 1303:20 unwrapParens -> @unwrapParens
-  local 1304:11 holds: boolean (let)
-  local 1306:15 alias: Local | null (const)
-  callee 1307:35 EscapeAnalysis.holdsStackObject -> @EscapeAnalysis.holdsStackObject
-  local 1309:13 visiting: Local[] (const)
-  callee 1310:20 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  local 1318:16 push: Node (const)
-  local 1319:13 receiver: Node (const)
-  callee 1319:24 unwrapParens -> @unwrapParens
-  local 1320:11 v: Local | null (let)
-  local 1324:11 owned: boolean (let)
-  local 1326:11 growth: i32 (let)
-  local 1330:11 escapes: boolean (let)
-  callee 1331:56 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
-  local 1332:15 visiting: Local[] (const)
-  local 1333:15 outcome: Outcome (const)
-  callee 1333:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 1339:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
+  local 1204:16 site: Site (const)
+  local 1205:13 fresh: Local[] (const)
+  local 1208:13 memoLocals: Local[] (const)
+  local 1209:13 memoValues: Outcome[] (const)
+  callee 1210:22 isListingCall -> @isListingCall
+  local 1215:13 outcome: Outcome (const)
+  callee 1215:23 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
+  callee 1221:9 TypeTable.isArray -> @TypeTable.isArray
+  callee 1221:28 TypeTable.stripNull -> @TypeTable.stripNull
+  local 1228:11 flow: i32 (let)
+  local 1229:11 escapes: boolean (let)
+  local 1234:15 ctor: FunctionSig | null (const)
+  callee 1234:22 constructorOf -> @constructorOf
+  callee 1234:67 intrinsicType -> @intrinsicType
+  callee 1235:30 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
+  callee 1242:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
+  callee 1245:36 new CallSite -> @CallSite.constructor
+  callee 1263:5 EscapeAnalysis.decideFills -> @EscapeAnalysis.decideFills
+  local 1269:9 p: i32 (let)
+  callee 1271:11 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 1272:15 name: string (const)
+  local 1273:15 v: Local | null (const)
+  callee 1273:19 EscapeAnalysis.paramLocal -> @EscapeAnalysis.paramLocal
+  local 1274:13 flow: i32 (let)
+  local 1275:13 stable: boolean (let)
+  local 1277:17 fresh: Local[] (const)
+  local 1278:17 outcome: Outcome (const)
+  callee 1278:27 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 1282:13 EscapeResult.noteEscape -> @EscapeResult.noteEscape
+  callee 1282:36 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  callee 1286:11 StringSet.add -> @StringSet.add
+  local 1299:16 decl: Node (const)
+  local 1300:13 v: Local | null (const)
+  local 1304:13 init: Node (const)
+  callee 1304:20 unwrapParens -> @unwrapParens
+  local 1305:11 holds: boolean (let)
+  local 1307:15 alias: Local | null (const)
+  callee 1308:35 EscapeAnalysis.holdsStackObject -> @EscapeAnalysis.holdsStackObject
+  local 1310:13 visiting: Local[] (const)
+  callee 1311:20 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  local 1319:16 push: Node (const)
+  local 1320:13 receiver: Node (const)
+  callee 1320:24 unwrapParens -> @unwrapParens
+  local 1321:11 v: Local | null (let)
+  local 1325:11 owned: boolean (let)
+  local 1327:11 growth: i32 (let)
+  local 1331:11 escapes: boolean (let)
+  callee 1332:56 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
+  local 1333:15 visiting: Local[] (const)
+  local 1334:15 outcome: Outcome (const)
+  callee 1334:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 1340:9 EscapeResult.noteEscape -> @EscapeResult.noteEscape
 function EscapeAnalysis.holdsStackObject(this: EscapeAnalysis, local: Local): boolean -> @EscapeAnalysis.holdsStackObject [method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=120 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1355:16 candidate: Local (const)
+  local 1356:16 candidate: Local (const)
 function EscapeAnalysis.ownsSite(this: EscapeAnalysis, v: Local): boolean -> @EscapeAnalysis.ownsSite [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: EscapeAnalysis.declarationOf EscapeAnalysis.ownsSite nish_panic_index unwrapParens
   pointer this: size=120 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#0 EscapeAnalysis.ownsSite#0
   pointer v: size=48 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#1
   stackSites=0 stackLocals=0
-  local 1365:11 decl: Node | null (const)
-  callee 1365:18 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
-  local 1369:11 init: Node (const)
-  callee 1369:18 unwrapParens -> @unwrapParens
-  local 1370:16 site: Site (const)
-  local 1378:11 alias: Local | null (const)
-  callee 1379:80 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
+  local 1366:11 decl: Node | null (const)
+  callee 1366:18 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
+  local 1370:11 init: Node (const)
+  callee 1370:18 unwrapParens -> @unwrapParens
+  local 1371:16 site: Site (const)
+  local 1379:11 alias: Local | null (const)
+  callee 1380:80 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
 function EscapeAnalysis.declarationOf(this: EscapeAnalysis, v: Local): Node | null -> @EscapeAnalysis.declarationOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
   pointer this: size=120 writesThrough=false captured=false
   pointer v: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1383:16 decl: Node (const)
-  local 1384:13 declared: Local | null (const)
+  local 1384:16 decl: Node (const)
+  local 1385:13 declared: Local | null (const)
 function reclaimsReturnedString(callee: FunctionSig, facts: FactsTable): boolean -> @reclaimsReturnedString [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get FunctionSig.foreign
   pointer callee: size=136 writesThrough=false captured=false passedTo=FunctionSig.foreign#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
-  callee 1417:41 FunctionSig.foreign -> @FunctionSig.foreign
-  local 1420:9 g: FunctionFacts | null (const)
-  callee 1420:13 FactsTable.get -> @FactsTable.get
+  callee 1418:41 FunctionSig.foreign -> @FunctionSig.foreign
+  local 1421:9 g: FunctionFacts | null (const)
+  callee 1421:13 FactsTable.get -> @FactsTable.get
 function marksTailCall(table: TypeTable, caller: FunctionFacts, callee: FunctionSig, argTypes: i32[], facts: FactsTable): boolean -> @marksTailCall [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get TypeTable.resultByValue isScalarArgument reclaimsReturnedString
@@ -30805,20 +30805,20 @@ function marksTailCall(table: TypeTable, caller: FunctionFacts, callee: Function
   pointer argTypes: size=0 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=reclaimsReturnedString#1 FactsTable.get#0
   stackSites=0 stackLocals=0
-  callee 1481:7 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 1481:49 reclaimsReturnedString -> @reclaimsReturnedString
-  local 1487:14 type: i32 (const)
-  callee 1488:10 isScalarArgument -> @isScalarArgument
-  local 1492:9 g: FunctionFacts | null (const)
-  callee 1492:13 FactsTable.get -> @FactsTable.get
+  callee 1482:7 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 1482:49 reclaimsReturnedString -> @reclaimsReturnedString
+  local 1488:14 type: i32 (const)
+  callee 1489:10 isScalarArgument -> @isScalarArgument
+  local 1493:9 g: FunctionFacts | null (const)
+  callee 1493:13 FactsTable.get -> @FactsTable.get
 function isScalarArgument(table: TypeTable, type: i32): boolean -> @isScalarArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.enumBase isNumeric
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.enumBase#0
   stackSites=0 stackLocals=0
-  callee 1507:3 isNumeric -> @isNumeric
-  callee 1507:41 TypeTable.enumBase -> @TypeTable.enumBase
+  callee 1508:3 isNumeric -> @isNumeric
+  callee 1508:41 TypeTable.enumBase -> @TypeTable.enumBase
 function rootsHoldNoPointer(program: CheckedProgram, table: TypeTable, sig: FunctionSig): boolean -> @rootsHoldNoPointer [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: holdsNoPointerSlot
@@ -30826,8 +30826,8 @@ function rootsHoldNoPointer(program: CheckedProgram, table: TypeTable, sig: Func
   pointer table: size=96 writesThrough=false captured=false passedTo=holdsNoPointerSlot#1
   pointer sig: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1542:14 type: i32 (const)
-  callee 1543:10 holdsNoPointerSlot -> @holdsNoPointerSlot
+  local 1543:14 type: i32 (const)
+  callee 1544:10 holdsNoPointerSlot -> @holdsNoPointerSlot
 function holdsNoPointerSlot(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @holdsNoPointerSlot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -30835,18 +30835,18 @@ function holdsNoPointerSlot(program: CheckedProgram, table: TypeTable, type: i32
   pointer program: size=640 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isScalarArgument#0 TypeTable.stripNull#0 TypeTable.isStruct#0 TypeTable.nameOf#0 isScalarArgument#0
   stackSites=0 stackLocals=0
-  callee 1551:7 isScalarArgument -> @isScalarArgument
-  local 1554:9 inner: i32 (const)
-  callee 1554:17 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 1558:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 1561:9 info: StructInfo | null (const)
-  callee 1561:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 1561:31 TypeTable.nameOf -> @TypeTable.nameOf
-  local 1565:14 field: FieldInfo (const)
-  callee 1566:10 isScalarArgument -> @isScalarArgument
+  callee 1552:7 isScalarArgument -> @isScalarArgument
+  local 1555:9 inner: i32 (const)
+  callee 1555:17 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 1559:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 1562:9 info: StructInfo | null (const)
+  callee 1562:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 1562:31 TypeTable.nameOf -> @TypeTable.nameOf
+  local 1566:14 field: FieldInfo (const)
+  callee 1567:10 isScalarArgument -> @isScalarArgument
 function identRefs(program: CheckedProgram, node: Node, local: Local, out: Node[]): void -> @identRefs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1577:5
+  sharedWrite: 1578:5
   escaping: node
   calls: identRefs nish_array_grow nish_panic_index
   pointer program: size=640 writesThrough=false captured=false passedTo=identRefs#0
@@ -30854,9 +30854,9 @@ function identRefs(program: CheckedProgram, node: Node, local: Local, out: Node[
   pointer local: size=48 writesThrough=false captured=false passedTo=identRefs#2
   pointer out: size=0 writesThrough=true captured=false passedTo=identRefs#3
   stackSites=0 stackLocals=0
-  local 1575:9 named: Local | null (const)
-  local 1579:14 child: Node (const)
-  callee 1580:5 identRefs -> @identRefs
+  local 1576:9 named: Local | null (const)
+  local 1580:14 child: Node (const)
+  callee 1581:5 identRefs -> @identRefs
 function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, facts: FactsTable, opts: Options): EscapeResult -> @analyzeEscapes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=96
   sharedWrite: via EscapeAnalysis.visit
@@ -30867,19 +30867,19 @@ function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, 
   pointer facts: size=16 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#3
   pointer opts: size=152 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#4
   stackSites=1 stackLocals=1
-  local 1591:9 analysis: EscapeAnalysis (const)
-  callee 1591:20 new EscapeAnalysis -> @EscapeAnalysis.constructor
-  callee 1598:5 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 1600:9 body: Node | null (const)
-  callee 1600:16 FunctionSig.body -> @FunctionSig.body
-  callee 1604:3 EscapeAnalysis.visit -> @EscapeAnalysis.visit
-  callee 1605:3 EscapeAnalysis.decide -> @EscapeAnalysis.decide
+  local 1592:9 analysis: EscapeAnalysis (const)
+  callee 1592:20 new EscapeAnalysis -> @EscapeAnalysis.constructor
+  callee 1599:5 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 1601:9 body: Node | null (const)
+  callee 1601:16 FunctionSig.body -> @FunctionSig.body
+  callee 1605:3 EscapeAnalysis.visit -> @EscapeAnalysis.visit
+  callee 1606:3 EscapeAnalysis.decide -> @EscapeAnalysis.decide
 function holdsLocal(list: Local[], local: Local): boolean -> @holdsLocal
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer list: size=0 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1665:14 candidate: Local (const)
+  local 1666:14 candidate: Local (const)
 function PassWalk.constructor(this: PassWalk, unit: AnalysisUnit, table: TypeTable, facts: FactsTable, scope: LoopScope): void -> @PassWalk.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: facts scope table unit
@@ -30895,14 +30895,14 @@ function PassWalk.isPassListing(this: PassWalk, receiver: Node): boolean -> @Pas
   pointer this: size=72 writesThrough=false captured=false
   pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 1737:11 e: Node (const)
-  callee 1737:15 unwrapParens -> @unwrapParens
-  callee 1738:9 isListingCall -> @isListingCall
-  local 1741:11 local: Local | null (const)
-  callee 1742:30 holdsLocal -> @holdsLocal
+  local 1738:11 e: Node (const)
+  callee 1738:15 unwrapParens -> @unwrapParens
+  callee 1739:9 isListingCall -> @isListingCall
+  local 1742:11 local: Local | null (const)
+  callee 1743:30 holdsLocal -> @holdsLocal
 function PassWalk.refuse(this: PassWalk, why: i32, at: Node | null, name: string): void -> @PassWalk.refuse [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1748:7
+  sharedWrite: 1749:7
   escaping: at name why
   pointer this: size=72 writesThrough=false captured=false
   pointer at: size=40 writesThrough=true captured=true
@@ -30913,7 +30913,7 @@ function PassWalk.declaredInPass(this: PassWalk, local: Local): boolean -> @Pass
   pointer this: size=72 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false passedTo=holdsLocal#1
   stackSites=0 stackLocals=0
-  callee 1755:12 holdsLocal -> @holdsLocal
+  callee 1756:12 holdsLocal -> @holdsLocal
 function PassWalk.refuseCarriedStores(this: PassWalk, f: FunctionFacts, start: i32, end: i32): void -> @PassWalk.refuseCarriedStores [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via PassWalk.refuse
@@ -30921,59 +30921,59 @@ function PassWalk.refuseCarriedStores(this: PassWalk, f: FunctionFacts, start: i
   pointer this: size=72 writesThrough=false captured=false passedTo=PassWalk.declaredInPass#0 PassWalk.refuse#0
   pointer f: size=408 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1765:9 i: i32 (let)
-  local 1767:13 store: Node (const)
-  callee 1768:56 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  callee 1769:9 PassWalk.refuse -> @PassWalk.refuse
+  local 1766:9 i: i32 (let)
+  local 1768:13 store: Node (const)
+  callee 1769:56 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  callee 1770:9 PassWalk.refuse -> @PassWalk.refuse
 function PassWalk.isOld(this: PassWalk, expr: Node): boolean -> @PassWalk.isOld [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get PassWalk.declaredInPass PassWalk.isOld PassWalk.isPassListing coalescesMaybe isScalarArgument nish_panic_index nish_str_eq storesInlineElements unwrapParens
   pointer this: size=72 writesThrough=false captured=false passedTo=PassWalk.declaredInPass#0 PassWalk.isOld#0 PassWalk.isPassListing#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0 PassWalk.isOld#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
-  local 1780:11 program: CheckedProgram (const)
-  local 1781:11 e: Node (const)
-  callee 1781:15 unwrapParens -> @unwrapParens
-  local 1782:11 type: i32 (const)
-  callee 1783:22 isScalarArgument -> @isScalarArgument
-  local 1790:13 local: Local | null (const)
-  callee 1791:30 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  local 1795:11 i: i32 (let)
-  callee 1798:18 PassWalk.isOld -> @PassWalk.isOld
-  local 1809:13 holder: Node (const)
-  callee 1809:22 unwrapParens -> @unwrapParens
-  callee 1810:11 PassWalk.isPassListing -> @PassWalk.isPassListing
-  callee 1810:70 PassWalk.isOld -> @PassWalk.isOld
-  callee 1813:15 storesInlineElements -> @storesInlineElements
-  callee 1813:75 PassWalk.isOld -> @PassWalk.isOld
-  callee 1816:14 PassWalk.isOld -> @PassWalk.isOld
-  callee 1816:43 PassWalk.isOld -> @PassWalk.isOld
-  callee 1822:12 coalescesMaybe -> @coalescesMaybe
-  callee 1823:16 PassWalk.isOld -> @PassWalk.isOld
-  callee 1823:45 PassWalk.isOld -> @PassWalk.isOld
-  callee 1825:14 PassWalk.isOld -> @PassWalk.isOld
-  local 1828:13 callee: FunctionSig | null (const)
-  local 1829:13 g: FunctionFacts | null (const)
-  callee 1829:64 FactsTable.get -> @FactsTable.get
+  local 1781:11 program: CheckedProgram (const)
+  local 1782:11 e: Node (const)
+  callee 1782:15 unwrapParens -> @unwrapParens
+  local 1783:11 type: i32 (const)
+  callee 1784:22 isScalarArgument -> @isScalarArgument
+  local 1791:13 local: Local | null (const)
+  callee 1792:30 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  local 1796:11 i: i32 (let)
+  callee 1799:18 PassWalk.isOld -> @PassWalk.isOld
+  local 1810:13 holder: Node (const)
+  callee 1810:22 unwrapParens -> @unwrapParens
+  callee 1811:11 PassWalk.isPassListing -> @PassWalk.isPassListing
+  callee 1811:70 PassWalk.isOld -> @PassWalk.isOld
+  callee 1814:15 storesInlineElements -> @storesInlineElements
+  callee 1814:75 PassWalk.isOld -> @PassWalk.isOld
+  callee 1817:14 PassWalk.isOld -> @PassWalk.isOld
+  callee 1817:43 PassWalk.isOld -> @PassWalk.isOld
+  callee 1823:12 coalescesMaybe -> @coalescesMaybe
+  callee 1824:16 PassWalk.isOld -> @PassWalk.isOld
+  callee 1824:45 PassWalk.isOld -> @PassWalk.isOld
+  callee 1826:14 PassWalk.isOld -> @PassWalk.isOld
+  local 1829:13 callee: FunctionSig | null (const)
+  local 1830:13 g: FunctionFacts | null (const)
+  callee 1830:64 FactsTable.get -> @FactsTable.get
 function PassWalk.visitCallee(this: PassWalk, callee: FunctionSig, node: Node): void -> @PassWalk.visitCallee [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1846:7
+  sharedWrite: 1847:7
   calls: FactsTable.get PassWalk.declaredInPass PassWalk.refuse isSpawnEntry nish_panic_index unwrapParens
   pointer this: size=72 writesThrough=true captured=false passedTo=PassWalk.refuse#0 PassWalk.refuse#0 PassWalk.refuse#0 PassWalk.declaredInPass#0 PassWalk.refuse#0
   pointer callee: size=136 writesThrough=false captured=false passedTo=isSpawnEntry#0
   pointer node: size=40 writesThrough=true captured=true passedTo=PassWalk.refuse#2 PassWalk.refuse#2 PassWalk.refuse#2 PassWalk.refuse#2
   stackSites=0 stackLocals=0
-  local 1837:11 g: FunctionFacts | null (const)
-  callee 1837:15 FactsTable.get -> @FactsTable.get
-  callee 1839:7 PassWalk.refuse -> @PassWalk.refuse
-  callee 1843:7 PassWalk.refuse -> @PassWalk.refuse
-  callee 1849:7 PassWalk.refuse -> @PassWalk.refuse
-  callee 1853:23 isSpawnEntry -> @isSpawnEntry
-  local 1854:13 receiver: Node (const)
-  callee 1854:24 unwrapParens -> @unwrapParens
-  local 1855:13 local: Local | null (const)
-  callee 1856:30 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  callee 1857:9 PassWalk.refuse -> @PassWalk.refuse
+  local 1838:11 g: FunctionFacts | null (const)
+  callee 1838:15 FactsTable.get -> @FactsTable.get
+  callee 1840:7 PassWalk.refuse -> @PassWalk.refuse
+  callee 1844:7 PassWalk.refuse -> @PassWalk.refuse
+  callee 1850:7 PassWalk.refuse -> @PassWalk.refuse
+  callee 1854:23 isSpawnEntry -> @isSpawnEntry
+  local 1855:13 receiver: Node (const)
+  callee 1855:24 unwrapParens -> @unwrapParens
+  local 1856:13 local: Local | null (const)
+  callee 1857:30 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  callee 1858:9 PassWalk.refuse -> @PassWalk.refuse
 function PassWalk.visitPush(this: PassWalk, call: Node): void -> @PassWalk.visitPush [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via PassWalk.refuse
@@ -30981,20 +30981,20 @@ function PassWalk.visitPush(this: PassWalk, call: Node): void -> @PassWalk.visit
   pointer this: size=72 writesThrough=false captured=false passedTo=PassWalk.declaredInPass#0 PassWalk.freshArray#0 PassWalk.refuse#0
   pointer call: size=40 writesThrough=true captured=true passedTo=PassWalk.refuse#2
   stackSites=0 stackLocals=0
-  local 1864:11 program: CheckedProgram (const)
-  local 1865:11 receiver: Node (const)
-  callee 1865:22 unwrapParens -> @unwrapParens
-  local 1866:11 local: Local | null (const)
-  callee 1867:45 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  callee 1867:75 PassWalk.freshArray -> @PassWalk.freshArray
-  callee 1870:5 PassWalk.refuse -> @PassWalk.refuse
+  local 1865:11 program: CheckedProgram (const)
+  local 1866:11 receiver: Node (const)
+  callee 1866:22 unwrapParens -> @unwrapParens
+  local 1867:11 local: Local | null (const)
+  callee 1868:45 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  callee 1868:75 PassWalk.freshArray -> @PassWalk.freshArray
+  callee 1871:5 PassWalk.refuse -> @PassWalk.refuse
 function PassWalk.freshArray(this: PassWalk, local: Local): boolean -> @PassWalk.freshArray [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: PassWalk.initialiserIsFresh
   pointer this: size=72 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#0
   pointer local: size=48 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#2
   stackSites=0 stackLocals=0
-  callee 1875:12 PassWalk.initialiserIsFresh -> @PassWalk.initialiserIsFresh
+  callee 1876:12 PassWalk.initialiserIsFresh -> @PassWalk.initialiserIsFresh
 function PassWalk.initialiserIsFresh(this: PassWalk, node: Node, local: Local): boolean -> @PassWalk.initialiserIsFresh [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: PassWalk.initialiserIsFresh nish_panic_index unwrapParens
@@ -31002,55 +31002,55 @@ function PassWalk.initialiserIsFresh(this: PassWalk, node: Node, local: Local): 
   pointer node: size=40 writesThrough=false captured=false
   pointer local: size=48 writesThrough=false captured=false passedTo=PassWalk.initialiserIsFresh#2
   stackSites=0 stackLocals=0
-  local 1879:11 declared: Local | null (const)
-  local 1881:13 init: Node (const)
-  callee 1881:20 unwrapParens -> @unwrapParens
-  local 1884:16 child: Node (const)
-  callee 1885:11 PassWalk.initialiserIsFresh -> @PassWalk.initialiserIsFresh
+  local 1880:11 declared: Local | null (const)
+  local 1882:13 init: Node (const)
+  callee 1882:20 unwrapParens -> @unwrapParens
+  local 1885:16 child: Node (const)
+  callee 1886:11 PassWalk.initialiserIsFresh -> @PassWalk.initialiserIsFresh
 function PassWalk.visit(this: PassWalk, node: Node): void -> @PassWalk.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 1905:9
+  sharedWrite: 1906:9
   calls: PassWalk.declaredInPass PassWalk.isOld PassWalk.isPassListing PassWalk.refuse PassWalk.visit PassWalk.visitCallee PassWalk.visitPush constructorOf dottedName intrinsicType isAssignmentOperator isPushCall isScalarArgument nish_array_grow nish_panic_index nish_str_eq resultMethodName unwrapParens
   pointer this: size=72 writesThrough=true captured=false passedTo=PassWalk.isPassListing#0 PassWalk.visitCallee#0 PassWalk.visitPush#0 PassWalk.refuse#0 PassWalk.refuse#0 PassWalk.visitCallee#0 PassWalk.declaredInPass#0 PassWalk.isOld#0 PassWalk.refuse#0 PassWalk.declaredInPass#0 PassWalk.isPassListing#0 PassWalk.isOld#0 PassWalk.refuse#0 PassWalk.isOld#0 PassWalk.refuse#0 PassWalk.visit#0
   pointer node: size=40 writesThrough=true captured=true passedTo=PassWalk.visitCallee#2 isPushCall#2 PassWalk.visitPush#1 resultMethodName#2 PassWalk.refuse#2 PassWalk.refuse#2 intrinsicType#1 PassWalk.visitCallee#2 PassWalk.refuse#2 PassWalk.refuse#2 PassWalk.refuse#2
   stackSites=0 stackLocals=0
-  local 1898:11 program: CheckedProgram (const)
-  local 1903:13 local: Local | null (const)
-  callee 1906:13 PassWalk.isPassListing -> @PassWalk.isPassListing
-  local 1911:13 variable: Local | null (const)
-  local 1918:13 callee: FunctionSig | null (const)
-  callee 1920:9 PassWalk.visitCallee -> @PassWalk.visitCallee
-  callee 1921:18 isPushCall -> @isPushCall
-  callee 1922:9 PassWalk.visitPush -> @PassWalk.visitPush
-  callee 1923:18 resultMethodName -> @resultMethodName
-  callee 1928:11 PassWalk.refuse -> @PassWalk.refuse
-  local 1931:15 name: string (const)
-  callee 1931:22 dottedName -> @dottedName
-  callee 1933:11 PassWalk.refuse -> @PassWalk.refuse
-  local 1937:13 ctor: FunctionSig | null (const)
-  callee 1937:20 constructorOf -> @constructorOf
-  callee 1937:55 intrinsicType -> @intrinsicType
-  callee 1939:9 PassWalk.visitCallee -> @PassWalk.visitCallee
-  callee 1941:42 isAssignmentOperator -> @isAssignmentOperator
-  local 1942:13 target: Node (const)
-  callee 1942:22 unwrapParens -> @unwrapParens
-  local 1943:13 local: Local | null (const)
-  callee 1946:10 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  callee 1947:10 isScalarArgument -> @isScalarArgument
-  callee 1948:32 PassWalk.isOld -> @PassWalk.isOld
-  callee 1950:9 PassWalk.refuse -> @PassWalk.refuse
-  callee 1952:29 PassWalk.declaredInPass -> @PassWalk.declaredInPass
-  callee 1952:59 PassWalk.isPassListing -> @PassWalk.isPassListing
-  local 1956:15 type: i32 (const)
-  callee 1958:26 isScalarArgument -> @isScalarArgument
-  callee 1959:34 PassWalk.isOld -> @PassWalk.isOld
-  callee 1961:11 PassWalk.refuse -> @PassWalk.refuse
-  local 1965:13 value: Node (const)
-  local 1968:13 handsNothing: boolean (const)
-  callee 1969:55 PassWalk.isOld -> @PassWalk.isOld
-  callee 1971:9 PassWalk.refuse -> @PassWalk.refuse
-  local 1974:16 child: Node (const)
-  callee 1975:7 PassWalk.visit -> @PassWalk.visit
+  local 1899:11 program: CheckedProgram (const)
+  local 1904:13 local: Local | null (const)
+  callee 1907:13 PassWalk.isPassListing -> @PassWalk.isPassListing
+  local 1912:13 variable: Local | null (const)
+  local 1919:13 callee: FunctionSig | null (const)
+  callee 1921:9 PassWalk.visitCallee -> @PassWalk.visitCallee
+  callee 1922:18 isPushCall -> @isPushCall
+  callee 1923:9 PassWalk.visitPush -> @PassWalk.visitPush
+  callee 1924:18 resultMethodName -> @resultMethodName
+  callee 1929:11 PassWalk.refuse -> @PassWalk.refuse
+  local 1932:15 name: string (const)
+  callee 1932:22 dottedName -> @dottedName
+  callee 1934:11 PassWalk.refuse -> @PassWalk.refuse
+  local 1938:13 ctor: FunctionSig | null (const)
+  callee 1938:20 constructorOf -> @constructorOf
+  callee 1938:55 intrinsicType -> @intrinsicType
+  callee 1940:9 PassWalk.visitCallee -> @PassWalk.visitCallee
+  callee 1942:42 isAssignmentOperator -> @isAssignmentOperator
+  local 1943:13 target: Node (const)
+  callee 1943:22 unwrapParens -> @unwrapParens
+  local 1944:13 local: Local | null (const)
+  callee 1947:10 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  callee 1948:10 isScalarArgument -> @isScalarArgument
+  callee 1949:32 PassWalk.isOld -> @PassWalk.isOld
+  callee 1951:9 PassWalk.refuse -> @PassWalk.refuse
+  callee 1953:29 PassWalk.declaredInPass -> @PassWalk.declaredInPass
+  callee 1953:59 PassWalk.isPassListing -> @PassWalk.isPassListing
+  local 1957:15 type: i32 (const)
+  callee 1959:26 isScalarArgument -> @isScalarArgument
+  callee 1960:34 PassWalk.isOld -> @PassWalk.isOld
+  callee 1962:11 PassWalk.refuse -> @PassWalk.refuse
+  local 1966:13 value: Node (const)
+  local 1969:13 handsNothing: boolean (const)
+  callee 1970:55 PassWalk.isOld -> @PassWalk.isOld
+  callee 1972:9 PassWalk.refuse -> @PassWalk.refuse
+  local 1975:16 child: Node (const)
+  callee 1976:7 PassWalk.visit -> @PassWalk.visit
 function loopBody(loop: Node): Node -> @loopBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: nish_panic_index
@@ -31067,11 +31067,11 @@ function controllingCallee(facts: FactsTable, f: FunctionFacts): string -> @cont
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer f: size=408 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1995:7 c: i32 (let)
-  callee 1996:14 StringSet.size -> @StringSet.size
-  local 1997:11 g: FunctionFacts | null (const)
-  callee 1997:15 FactsTable.get -> @FactsTable.get
-  callee 1997:25 StringSet.at -> @StringSet.at
+  local 1996:7 c: i32 (let)
+  callee 1997:14 StringSet.size -> @StringSet.size
+  local 1998:11 g: FunctionFacts | null (const)
+  callee 1998:15 FactsTable.get -> @FactsTable.get
+  callee 1998:25 StringSet.at -> @StringSet.at
 function decideLoopScopes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, f: FunctionFacts, facts: FactsTable): void -> @decideLoopScopes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectLoopScopes
@@ -31082,12 +31082,12 @@ function decideLoopScopes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig
   pointer f: size=408 writesThrough=false captured=false passedTo=collectLoopScopes#2
   pointer facts: size=16 writesThrough=true captured=true passedTo=collectLoopScopes#3
   stackSites=0 stackLocals=0
-  local 2017:9 body: Node | null (const)
-  callee 2017:16 FunctionSig.body -> @FunctionSig.body
-  callee 2021:5 collectLoopScopes -> @collectLoopScopes
+  local 2018:9 body: Node | null (const)
+  callee 2018:16 FunctionSig.body -> @FunctionSig.body
+  callee 2022:5 collectLoopScopes -> @collectLoopScopes
 function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, node: Node): void -> @collectLoopScopes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2041:5
+  sharedWrite: 2042:5
   calls: LoopScope.constructor collectLoopScopes decidePass loopBody nish_alloc_struct nish_array_grow nish_panic_index
   pointer unit: size=16 writesThrough=true captured=true passedTo=decidePass#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0 collectLoopScopes#0
   pointer table: size=96 writesThrough=true captured=true passedTo=decidePass#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1 collectLoopScopes#1
@@ -31095,19 +31095,19 @@ function collectLoopScopes(unit: AnalysisUnit, table: TypeTable, f: FunctionFact
   pointer facts: size=16 writesThrough=true captured=true passedTo=decidePass#3 collectLoopScopes#3 collectLoopScopes#3 collectLoopScopes#3 collectLoopScopes#3
   pointer node: size=40 writesThrough=true captured=true passedTo=LoopScope.constructor#1 loopBody#0
   stackSites=0 stackLocals=0
-  local 2037:9 kind: i32 (const)
-  local 2039:11 scope: LoopScope (const)
-  callee 2039:19 new LoopScope -> @LoopScope.constructor
-  callee 2039:39 loopBody -> @loopBody
-  callee 2040:5 decidePass -> @decidePass
-  callee 2042:5 collectLoopScopes -> @collectLoopScopes
-  local 2050:16 child: Node (const)
-  callee 2051:7 collectLoopScopes -> @collectLoopScopes
-  callee 2054:5 collectLoopScopes -> @collectLoopScopes
+  local 2038:9 kind: i32 (const)
+  local 2040:11 scope: LoopScope (const)
+  callee 2040:19 new LoopScope -> @LoopScope.constructor
+  callee 2040:39 loopBody -> @loopBody
+  callee 2041:5 decidePass -> @decidePass
+  callee 2043:5 collectLoopScopes -> @collectLoopScopes
+  local 2051:16 child: Node (const)
+  callee 2052:7 collectLoopScopes -> @collectLoopScopes
   callee 2055:5 collectLoopScopes -> @collectLoopScopes
+  callee 2056:5 collectLoopScopes -> @collectLoopScopes
 function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, facts: FactsTable, scope: LoopScope): void -> @decidePass
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2084:3
+  sharedWrite: 2085:3
   calls: PassWalk.constructor PassWalk.refuse PassWalk.refuseCarriedStores PassWalk.visit controllingCallee within
   pointer unit: size=16 writesThrough=true captured=true passedTo=PassWalk.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=PassWalk.constructor#2
@@ -31115,27 +31115,27 @@ function decidePass(unit: AnalysisUnit, table: TypeTable, f: FunctionFacts, fact
   pointer facts: size=16 writesThrough=true captured=true passedTo=PassWalk.constructor#3 controllingCallee#0
   pointer scope: size=40 writesThrough=true captured=true passedTo=PassWalk.constructor#4
   stackSites=1 stackLocals=1
-  local 2066:9 walk: PassWalk (const)
-  callee 2066:16 new PassWalk -> @PassWalk.constructor
-  callee 2068:5 PassWalk.refuse -> @PassWalk.refuse
-  callee 2068:59 controllingCallee -> @controllingCallee
-  local 2071:9 body: Node (const)
-  local 2072:14 node: Node (const)
-  callee 2073:9 within -> @within
-  callee 2074:7 PassWalk.refuse -> @PassWalk.refuse
-  local 2077:14 node: Node (const)
-  callee 2078:9 within -> @within
-  callee 2082:3 PassWalk.visit -> @PassWalk.visit
-  callee 2083:3 PassWalk.refuseCarriedStores -> @PassWalk.refuseCarriedStores
+  local 2067:9 walk: PassWalk (const)
+  callee 2067:16 new PassWalk -> @PassWalk.constructor
+  callee 2069:5 PassWalk.refuse -> @PassWalk.refuse
+  callee 2069:59 controllingCallee -> @controllingCallee
+  local 2072:9 body: Node (const)
+  local 2073:14 node: Node (const)
+  callee 2074:9 within -> @within
+  callee 2075:7 PassWalk.refuse -> @PassWalk.refuse
+  local 2078:14 node: Node (const)
+  callee 2079:9 within -> @within
+  callee 2083:3 PassWalk.visit -> @PassWalk.visit
+  callee 2084:3 PassWalk.refuseCarriedStores -> @PassWalk.refuseCarriedStores
 function isArenaUsing(program: CheckedProgram, stmt: Node): boolean -> @isArenaUsing [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isArenaCall nish_panic_index unwrapParens
   pointer program: size=640 writesThrough=false captured=false passedTo=isArenaCall#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2119:14 decl: Node (const)
-  callee 2120:9 isArenaCall -> @isArenaCall
-  callee 2120:30 unwrapParens -> @unwrapParens
+  local 2120:14 decl: Node (const)
+  callee 2121:9 isArenaCall -> @isArenaCall
+  callee 2121:30 unwrapParens -> @unwrapParens
 function decideArenaBlock(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, block: Node, from: i32): LoopScope -> @decideArenaBlock
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via PassWalk.visit
@@ -31148,18 +31148,18 @@ function decideArenaBlock(unit: AnalysisUnit, table: TypeTable, facts: FactsTabl
   pointer f: size=408 writesThrough=false captured=false passedTo=PassWalk.refuseCarriedStores#1
   pointer block: size=40 writesThrough=true captured=true passedTo=LoopScope.constructor#1 LoopScope.constructor#2
   stackSites=1 stackLocals=1
-  local 2142:9 scope: LoopScope (const)
-  callee 2142:17 new LoopScope -> @LoopScope.constructor
-  local 2143:9 walk: PassWalk (const)
-  callee 2143:16 new PassWalk -> @PassWalk.constructor
-  callee 2145:25 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 2146:7 i: i32 (let)
-  callee 2148:5 PassWalk.visit -> @PassWalk.visit
-  local 2151:9 start: i32 (const)
-  local 2152:14 node: Node (const)
-  callee 2153:58 initialisesUsing -> @initialisesUsing
-  callee 2154:7 PassWalk.refuse -> @PassWalk.refuse
-  callee 2157:3 PassWalk.refuseCarriedStores -> @PassWalk.refuseCarriedStores
+  local 2143:9 scope: LoopScope (const)
+  callee 2143:17 new LoopScope -> @LoopScope.constructor
+  local 2144:9 walk: PassWalk (const)
+  callee 2144:16 new PassWalk -> @PassWalk.constructor
+  callee 2146:25 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 2147:7 i: i32 (let)
+  callee 2149:5 PassWalk.visit -> @PassWalk.visit
+  local 2152:9 start: i32 (const)
+  local 2153:14 node: Node (const)
+  callee 2154:58 initialisesUsing -> @initialisesUsing
+  callee 2155:7 PassWalk.refuse -> @PassWalk.refuse
+  callee 2158:3 PassWalk.refuseCarriedStores -> @PassWalk.refuseCarriedStores
 function initialisesUsing(unit: AnalysisUnit, node: Node): boolean -> @initialisesUsing
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node
@@ -31167,21 +31167,21 @@ function initialisesUsing(unit: AnalysisUnit, node: Node): boolean -> @initialis
   pointer unit: size=16 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 2169:7 at: Node (let)
-  local 2170:7 parent: Node | null (let)
-  callee 2170:16 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 2173:14 ParentTable.parentOf -> @ParentTable.parentOf
-  local 2178:9 list: Node | null (const)
-  callee 2178:16 ParentTable.parentOf -> @ParentTable.parentOf
-  local 2179:9 stmt: Node | null (const)
-  callee 2179:52 ParentTable.parentOf -> @ParentTable.parentOf
+  local 2170:7 at: Node (let)
+  local 2171:7 parent: Node | null (let)
+  callee 2171:16 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 2174:14 ParentTable.parentOf -> @ParentTable.parentOf
+  local 2179:9 list: Node | null (const)
+  callee 2179:16 ParentTable.parentOf -> @ParentTable.parentOf
+  local 2180:9 stmt: Node | null (const)
+  callee 2180:52 ParentTable.parentOf -> @ParentTable.parentOf
 function sourceText(unit: AnalysisUnit, node: Node): string -> @sourceText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
   pointer unit: size=16 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2188:9 text: string (const)
+  local 2189:9 text: string (const)
 function arenaBlockMessage(unit: AnalysisUnit, scope: LoopScope, using: Node): string -> @arenaBlockMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.columnOf SourceFile.lineOf isMapEntry nish_panic_index nish_str_concat nish_str_from_i32 sourceText
@@ -31189,28 +31189,28 @@ function arenaBlockMessage(unit: AnalysisUnit, scope: LoopScope, using: Node): s
   pointer scope: size=40 writesThrough=false captured=false
   pointer using: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2194:9 source: SourceFile (const)
-  local 2195:9 block: string (const)
-  callee 2195:51 SourceFile.lineOf -> @SourceFile.lineOf
-  callee 2195:81 SourceFile.columnOf -> @SourceFile.columnOf
-  local 2196:9 at: Node | null (const)
-  local 2197:9 why: i32 (const)
-  local 2201:9 value: string (const)
-  callee 2201:40 sourceText -> @sourceText
-  callee 2201:75 sourceText -> @sourceText
-  local 2202:9 inside: string (const)
-  callee 2211:50 sourceText -> @sourceText
-  callee 2218:53 sourceText -> @sourceText
-  local 2230:11 array: string (const)
-  local 2238:11 how: string (const)
-  local 2239:11 handed: string (const)
-  callee 2239:43 sourceText -> @sourceText
-  local 2246:11 stores: string (const)
-  local 2253:11 callee: FunctionSig | null (const)
-  callee 2254:28 isMapEntry -> @isMapEntry
+  local 2195:9 source: SourceFile (const)
+  local 2196:9 block: string (const)
+  callee 2196:51 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 2196:81 SourceFile.columnOf -> @SourceFile.columnOf
+  local 2197:9 at: Node | null (const)
+  local 2198:9 why: i32 (const)
+  local 2202:9 value: string (const)
+  callee 2202:40 sourceText -> @sourceText
+  callee 2202:75 sourceText -> @sourceText
+  local 2203:9 inside: string (const)
+  callee 2212:50 sourceText -> @sourceText
+  callee 2219:53 sourceText -> @sourceText
+  local 2231:11 array: string (const)
+  local 2239:11 how: string (const)
+  local 2240:11 handed: string (const)
+  callee 2240:43 sourceText -> @sourceText
+  local 2247:11 stores: string (const)
+  local 2254:11 callee: FunctionSig | null (const)
+  callee 2255:28 isMapEntry -> @isMapEntry
 function findArenaBlocks(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, node: Node, out: ArenaFinding[]): void -> @findArenaBlocks
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2309:11
+  sharedWrite: 2310:11
   calls: ArenaFinding.constructor arenaBlockMessage decideArenaBlock findArenaBlocks isArenaUsing nish_alloc_struct nish_array_grow
   pointer unit: size=16 writesThrough=true captured=true passedTo=decideArenaBlock#0 arenaBlockMessage#0 findArenaBlocks#0
   pointer table: size=96 writesThrough=true captured=true passedTo=decideArenaBlock#1 findArenaBlocks#1
@@ -31220,17 +31220,17 @@ function findArenaBlocks(unit: AnalysisUnit, table: TypeTable, facts: FactsTable
   pointer node: size=40 writesThrough=true captured=true passedTo=decideArenaBlock#5
   pointer out: size=0 writesThrough=true captured=false passedTo=findArenaBlocks#6
   stackSites=0 stackLocals=0
-  local 2301:9 i: i32 (let)
-  local 2303:13 stmt: Node (const)
-  callee 2304:11 isArenaUsing -> @isArenaUsing
-  local 2305:15 scope: LoopScope (const)
-  callee 2305:23 decideArenaBlock -> @decideArenaBlock
-  local 2306:15 message: string (const)
-  callee 2306:25 arenaBlockMessage -> @arenaBlockMessage
-  local 2307:15 at: Node | null (const)
-  callee 2309:20 new ArenaFinding -> @ArenaFinding.constructor
-  local 2315:14 child: Node (const)
-  callee 2316:5 findArenaBlocks -> @findArenaBlocks
+  local 2302:9 i: i32 (let)
+  local 2304:13 stmt: Node (const)
+  callee 2305:11 isArenaUsing -> @isArenaUsing
+  local 2306:15 scope: LoopScope (const)
+  callee 2306:23 decideArenaBlock -> @decideArenaBlock
+  local 2307:15 message: string (const)
+  callee 2307:25 arenaBlockMessage -> @arenaBlockMessage
+  local 2308:15 at: Node | null (const)
+  callee 2310:20 new ArenaFinding -> @ArenaFinding.constructor
+  local 2316:14 child: Node (const)
+  callee 2317:5 findArenaBlocks -> @findArenaBlocks
 function arenaBlockFindings(unit: AnalysisUnit, table: TypeTable, facts: FactsTable): ArenaFinding[] -> @arenaBlockFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckedProgram.enterInstance
@@ -31239,18 +31239,18 @@ function arenaBlockFindings(unit: AnalysisUnit, table: TypeTable, facts: FactsTa
   pointer table: size=96 writesThrough=true captured=true passedTo=findArenaBlocks#1
   pointer facts: size=16 writesThrough=true captured=true passedTo=FactsTable.get#0 findArenaBlocks#2
   stackSites=0 stackLocals=0
-  local 2331:9 out: ArenaFinding[] (const)
-  local 2332:9 program: CheckedProgram (const)
-  local 2336:14 sig: FunctionSig (const)
-  local 2337:11 body: Node | null (const)
-  callee 2337:18 FunctionSig.body -> @FunctionSig.body
-  local 2338:11 f: FunctionFacts | null (const)
-  callee 2338:15 FactsTable.get -> @FactsTable.get
-  callee 2339:41 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local 2342:11 instance: Instantiation | null (const)
-  callee 2344:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee 2346:5 findArenaBlocks -> @findArenaBlocks
-  callee 2348:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 2332:9 out: ArenaFinding[] (const)
+  local 2333:9 program: CheckedProgram (const)
+  local 2337:14 sig: FunctionSig (const)
+  local 2338:11 body: Node | null (const)
+  callee 2338:18 FunctionSig.body -> @FunctionSig.body
+  local 2339:11 f: FunctionFacts | null (const)
+  callee 2339:15 FactsTable.get -> @FactsTable.get
+  callee 2340:41 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local 2343:11 instance: Instantiation | null (const)
+  callee 2345:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee 2347:5 findArenaBlocks -> @findArenaBlocks
+  callee 2349:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 function ArenaFinding.constructor(this: ArenaFinding, node: Node, message: string): void -> @ArenaFinding.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: message node
@@ -31263,20 +31263,20 @@ function arenaLoopFindings(unit: AnalysisUnit, facts: FactsTable): ArenaFinding[
   pointer unit: size=16 writesThrough=false captured=false passedTo=noScopeReason#0 findArenaLoops#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 calleeWhere#0 noScopeReason#1 findArenaLoops#1
   stackSites=0 stackLocals=0
-  local 2392:9 out: ArenaFinding[] (const)
-  local 2393:14 sig: FunctionSig (const)
-  callee 2394:10 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local 2397:11 f: FunctionFacts | null (const)
-  callee 2397:15 FactsTable.get -> @FactsTable.get
-  local 2398:11 body: Node | null (const)
-  callee 2398:18 FunctionSig.body -> @FunctionSig.body
-  callee 2404:7 calleeWhere -> @calleeWhere
-  local 2408:11 reason: string (const)
-  callee 2408:20 noScopeReason -> @noScopeReason
-  callee 2410:7 findArenaLoops -> @findArenaLoops
+  local 2393:9 out: ArenaFinding[] (const)
+  local 2394:14 sig: FunctionSig (const)
+  callee 2395:10 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local 2398:11 f: FunctionFacts | null (const)
+  callee 2398:15 FactsTable.get -> @FactsTable.get
+  local 2399:11 body: Node | null (const)
+  callee 2399:18 FunctionSig.body -> @FunctionSig.body
+  callee 2405:7 calleeWhere -> @calleeWhere
+  local 2409:11 reason: string (const)
+  callee 2409:20 noScopeReason -> @noScopeReason
+  callee 2411:7 findArenaLoops -> @findArenaLoops
 function findArenaLoops(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts, reason: string, node: Node, loop: LoopScope | null, reclaimed: boolean, head: boolean, out: ArenaFinding[]): void -> @findArenaLoops
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 2447:7
+  sharedWrite: 2448:7
   escaping: head reason reclaimed
   calls: ArenaFinding.constructor FactsTable.get diesWithPass findArenaLoops isArenaUsing leavesGarbage loopScopeOf nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq passReason
   pointer unit: size=16 writesThrough=false captured=false passedTo=passReason#0 findArenaLoops#0 findArenaLoops#0 findArenaLoops#0
@@ -31286,49 +31286,49 @@ function findArenaLoops(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts,
   pointer loop: size=40 writesThrough=false captured=false passedTo=passReason#1 findArenaLoops#5
   pointer out: size=0 writesThrough=true captured=false passedTo=findArenaLoops#8 findArenaLoops#8 findArenaLoops#8
   stackSites=0 stackLocals=0
-  local 2436:11 callee: FunctionSig | null (const)
-  local 2437:11 g: FunctionFacts | null (const)
-  callee 2437:62 FactsTable.get -> @FactsTable.get
-  local 2438:11 why: string (const)
-  callee 2440:9 passReason -> @passReason
-  callee 2441:42 leavesGarbage -> @leavesGarbage
-  callee 2441:62 diesWithPass -> @diesWithPass
-  local 2443:13 fn: string (const)
-  callee 2448:9 new ArenaFinding -> @ArenaFinding.constructor
-  local 2458:9 isLoop: boolean (const)
-  local 2459:9 scope: LoopScope | null (const)
-  callee 2459:44 loopScopeOf -> @loopScopeOf
-  local 2462:7 released: boolean (let)
-  local 2463:7 i: i32 (let)
-  local 2465:11 child: Node (const)
-  callee 2466:54 isArenaUsing -> @isArenaUsing
-  local 2468:11 once: boolean (const)
-  callee 2470:7 findArenaLoops -> @findArenaLoops
-  callee 2472:7 findArenaLoops -> @findArenaLoops
-  callee 2474:7 findArenaLoops -> @findArenaLoops
+  local 2437:11 callee: FunctionSig | null (const)
+  local 2438:11 g: FunctionFacts | null (const)
+  callee 2438:62 FactsTable.get -> @FactsTable.get
+  local 2439:11 why: string (const)
+  callee 2441:9 passReason -> @passReason
+  callee 2442:42 leavesGarbage -> @leavesGarbage
+  callee 2442:62 diesWithPass -> @diesWithPass
+  local 2444:13 fn: string (const)
+  callee 2449:9 new ArenaFinding -> @ArenaFinding.constructor
+  local 2459:9 isLoop: boolean (const)
+  local 2460:9 scope: LoopScope | null (const)
+  callee 2460:44 loopScopeOf -> @loopScopeOf
+  local 2463:7 released: boolean (let)
+  local 2464:7 i: i32 (let)
+  local 2466:11 child: Node (const)
+  callee 2467:54 isArenaUsing -> @isArenaUsing
+  local 2469:11 once: boolean (const)
+  callee 2471:7 findArenaLoops -> @findArenaLoops
+  callee 2473:7 findArenaLoops -> @findArenaLoops
+  callee 2475:7 findArenaLoops -> @findArenaLoops
 function loopScopeOf(f: FunctionFacts, loop: Node): LoopScope | null -> @loopScopeOf [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer f: size=408 writesThrough=false captured=false
   pointer loop: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2481:14 scope: LoopScope (const)
+  local 2482:14 scope: LoopScope (const)
 function passReason(unit: AnalysisUnit, loop: LoopScope): string -> @passReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.lineOf nish_str_concat nish_str_from_i32
   pointer unit: size=16 writesThrough=false captured=false
   pointer loop: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2491:9 at: Node | null (const)
-  local 2492:9 line: string (const)
-  callee 2492:38 SourceFile.lineOf -> @SourceFile.lineOf
-  local 2493:9 why: i32 (const)
+  local 2492:9 at: Node | null (const)
+  local 2493:9 line: string (const)
+  callee 2493:38 SourceFile.lineOf -> @SourceFile.lineOf
+  local 2494:9 why: i32 (const)
 function diesWithPass(f: FunctionFacts, g: FunctionFacts, call: Node): boolean -> @diesWithPass
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer f: size=408 writesThrough=false captured=false
   pointer g: size=408 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2528:14 site: CallSite (const)
+  local 2529:14 site: CallSite (const)
 function noScopeReason(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts): string -> @noScopeReason
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: SourceFile.lineOf calleeWhere nish_str_concat nish_str_from_i32
@@ -31336,12 +31336,12 @@ function noScopeReason(unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts):
   pointer facts: size=16 writesThrough=false captured=false passedTo=calleeWhere#0 calleeWhere#0
   pointer f: size=408 writesThrough=false captured=false passedTo=calleeWhere#1 calleeWhere#1
   stackSites=0 stackLocals=0
-  local 2546:11 site: Node | null (const)
-  callee 2548:40 SourceFile.lineOf -> @SourceFile.lineOf
-  local 2550:11 leaky: FunctionFacts | null (const)
-  callee 2550:19 calleeWhere -> @calleeWhere
-  local 2556:11 control: FunctionFacts | null (const)
-  callee 2556:21 calleeWhere -> @calleeWhere
+  local 2547:11 site: Node | null (const)
+  callee 2549:40 SourceFile.lineOf -> @SourceFile.lineOf
+  local 2551:11 leaky: FunctionFacts | null (const)
+  callee 2551:19 calleeWhere -> @calleeWhere
+  local 2557:11 control: FunctionFacts | null (const)
+  callee 2557:21 calleeWhere -> @calleeWhere
 function leavesGarbage(g: FunctionFacts): boolean -> @leavesGarbage
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer g: size=408 writesThrough=false captured=false
@@ -31352,12 +31352,12 @@ function calleeWhere(facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFa
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer f: size=408 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 2574:7 c: i32 (let)
-  callee 2575:14 StringSet.size -> @StringSet.size
-  local 2576:11 g: FunctionFacts | null (const)
-  callee 2576:15 FactsTable.get -> @FactsTable.get
-  callee 2576:25 StringSet.at -> @StringSet.at
-  callee 2581:37 leavesGarbage -> @leavesGarbage
+  local 2575:7 c: i32 (let)
+  callee 2576:14 StringSet.size -> @StringSet.size
+  local 2577:11 g: FunctionFacts | null (const)
+  callee 2577:15 FactsTable.get -> @FactsTable.get
+  callee 2577:25 StringSet.at -> @StringSet.at
+  callee 2582:37 leavesGarbage -> @leavesGarbage
 module src/emit-util.ts
 import isNetWrittenLetter from "./nish-modules" -> function @isNetWrittenLetter
 import netSignature from "./nish-modules" -> function @netSignature
