@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1083 programs, 158690 dump lines.
+# 1087 programs, 158805 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -13844,6 +13844,125 @@ function main(): i32 -> @nish_main [exported entry]
   callee 15:42 ones -> @ones
   callee 16:23 ones -> @ones
   callee 16:32 ones -> @ones
+program tests/cases/ctor_empty_init_basic.ts
+module tests/cases/ctor_empty_init_basic.ts (entry)
+struct Dn (class) size=16 align=8
+  field x: f64 index=0 offset=0 initialized
+  field n: i32 index=1 offset=8 initialized
+  field on: boolean index=2 offset=12 initialized
+  constructor -> @Dn.constructor
+  method scaled -> @Dn.scaled
+struct Bare (class) size=0 align=1
+  constructor -> @Bare.constructor
+  method one -> @Bare.one
+function Dn.constructor(this: Dn): void -> @Dn.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Dn.scaled(this: Dn): f64 -> @Dn.scaled [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Bare.constructor(this: Bare): void -> @Bare.constructor [constructor]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Bare.one(this: Bare): i32 -> @Bare.one [method]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Bare.constructor Bare.one Dn.constructor Dn.scaled nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 27:9 d: Dn (const)
+  callee 27:13 new Dn -> @Dn.constructor
+  callee 31:15 Dn.scaled -> @Dn.scaled
+  local 32:9 b: Bare (const)
+  callee 32:13 new Bare -> @Bare.constructor
+  callee 33:15 Bare.one -> @Bare.one
+program tests/cases/ctor_empty_init_param.ts
+module tests/cases/ctor_empty_init_param.ts (entry)
+struct Counter (class) size=4 align=4
+  field hits: i32 index=0 offset=0 initialized
+struct Probe (class) size=8 align=4
+  field level: i32 index=0 offset=0 initialized
+  field label: i32 index=1 offset=4 initialized
+  constructor -> @Probe.constructor
+function Probe.constructor(this: Probe, seen: Counter): void -> @Probe.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: 12:5
+  calls: nish_panic_overflow
+  pointer this: size=8 writesThrough=true captured=false
+  pointer seen: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Probe.constructor nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32
+  stackSites=2 stackLocals=2
+  local 17:9 c: Counter (const)
+  local 18:7 total: i32 (let)
+  local 19:12 i: i32 (let)
+  local 20:11 p: Probe (const)
+  callee 20:15 new Probe -> @Probe.constructor
+program tests/cases/ctor_empty_init_reads.ts
+module tests/cases/ctor_empty_init_reads.ts (entry)
+struct Gauge (class) size=8 align=4
+  field base: i32 index=0 offset=0 initialized
+  field step: i32 index=1 offset=4 initialized
+  constructor -> @Gauge.constructor
+  method next -> @Gauge.next
+function Gauge.constructor(this: Gauge): void -> @Gauge.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=true sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Gauge.next nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  pointer this: size=8 writesThrough=true captured=false passedTo=Gauge.next#0
+  stackSites=0 stackLocals=0
+  callee 8:17 Gauge.next -> @Gauge.next
+function Gauge.next(this: Gauge): i32 -> @Gauge.next [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via Gauge.constructor
+  calls: Gauge.constructor nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 17:9 g: Gauge (const)
+  callee 17:13 new Gauge -> @Gauge.constructor
+program tests/cases/ctor_empty_init_tag.ts
+module tests/cases/ctor_empty_init_tag.ts (entry)
+struct A (class) size=8 align=4
+  field kind: Kind.A index=0 offset=0 readonly initialized
+  field a: i32 index=1 offset=4 initialized
+  constructor -> @A.constructor
+struct B (class) size=8 align=4
+  field kind: Kind.B index=0 offset=0 readonly initialized
+  field b: i32 index=1 offset=4 initialized
+function A.constructor(this: A): void -> @A.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function pick(n: i32): A | B -> @pick
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: A.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+  callee 24:12 new A -> @A.constructor
+function score(u: A | B): i32 -> @score
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32 pick score
+  stackSites=0 stackLocals=0
+  local 41:7 s: i32 (let)
+  local 42:12 i: i32 (let)
+  callee 43:10 score -> @score
+  callee 43:16 pick -> @pick
 program tests/cases/dbg_arrow.ts
 module tests/cases/dbg_arrow.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -18693,8 +18812,8 @@ function count(xs: integer<0, 9>[]): i32 -> @count [exported]
   pointer xs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Slot.constructor(this: Slot): void -> @Slot.constructor [exported constructor]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function slotDay(s: Slot): i32 -> @slotDay [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -18733,8 +18852,8 @@ function twice(d: integer<0, 9>): i32 -> @twice
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function Clock.constructor(this: Clock): void -> @Clock.constructor [exported constructor]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Clock.set(this: Clock, h: integer<0, 23>): i32 -> @Clock.set [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
