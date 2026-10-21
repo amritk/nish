@@ -516,6 +516,28 @@ run on macOS. So on any other host, or where valgrind is not on `PATH`, the chec
 is a counted skip that names the reason. CI's Linux job installs valgrind beside
 LLVM, so the check runs there on every push.
 
+## Crypto against other languages
+
+[`crypto/`](crypto/README.md) holds the crypto twins: each family, such as
+`crypto/hash/` (SHA-256, SHA-512, HMAC-SHA256, HKDF), is one program per
+language over the same inputs. The languages are Nish, OpenSSL's libcrypto in
+C, Go's standard library, RustCrypto and `node:crypto`, each with a portable
+column where the library can switch its assembly off. `crypto/run.mjs` checks
+that every program prints the family's pinned checksums and times them in
+interleaved rounds beside a copy of the Nish binary, the noise band. It writes
+the `crypto` block of docs/BENCHMARKS.md, which `bench/run.mjs` carries over
+when it rewrites the file.
+
+```bash
+node bench/crypto/run.mjs --validate               # what CI runs: every checksum, and the portable proof
+node bench/crypto/run.mjs --record                 # time every family; rewrite the crypto block
+node bench/crypto/run.mjs --only hash --out x.md   # time one family into a file of its own
+node bench/run.mjs --only crypto                   # --record, from this runner (no --no-rust or --no-go)
+```
+
+The two drivers below time Nish against itself only: they are baselines for
+one kernel's own work packages, not comparisons with other languages.
+
 ## AES-GCM
 
 `aes-gcm.ts` times the AEADs on the sizes a server seals and opens. AES-128-GCM
@@ -850,6 +872,46 @@ call, in microseconds and calls a second. `--check` runs all three at a 16th of
 the count, in one process, and fails if the checksum differs from the one
 pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
 must keep printing it.
+
+## TLS handshake
+
+`tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
+`tests/link/net_interop_server` run as `serve`, its own P-256 certificate,
+answering new connections on its h2 port. It is
+[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline)'s
+measure for the scalar inversion, where `bench/p256.mjs` times the signature on
+its own. It is not in this suite's tables. It needs `curl` with HTTP/2 and
+`taskset`.
+
+```bash
+npm run build
+node bench/tls-handshake.mjs --check                # three handshakes: TLS 1.3, X25519 and h2, and CPU read
+node bench/tls-handshake.mjs --runs 16              # this checkout's server against a copy of itself
+node bench/tls-handshake.mjs --baseline main        # also the server built from another rev, and its copy
+node bench/tls-handshake.mjs --json out.json        # every round's figures, for a script
+```
+
+The targets are the server built by this checkout, a byte-identical copy of
+it, and with `--baseline REV` the server built from REV in a worktree under
+`build/` by that tree's own `build/nish`, and a copy of that. A target is named
+by its commit's short hash, with `+dirty` when the checkout has uncommitted
+changes, and a `--baseline` that names a target already measured is refused,
+since rounds are pooled by name. Each round starts
+every target fresh, in an order rotated by one each round, pinned to CPU 0.
+After five warm-up handshakes it makes `--handshakes` new connections (600 by
+default), each one `curl --http2 --tlsv1.3 -k` process pinned to CPUs 1–3, so
+every handshake is a full one and none is resumed. Each must return the
+17-byte file over HTTP/2. The figure is the server's utime + stime over those
+connections, read from `/proc/<pid>/stat`, a handshake's share of it: the
+handshake, one request and its response. curl's own connect-to-handshake time
+is reported beside it but is mostly the client's.
+
+The report gives each target's minimum and median over the rounds, user and
+system CPU apart, and each copy against its own build: whatever separates a
+server from its copy is the machine, and a difference between builds reads as
+one only outside that band. It also prints the fewest clock ticks
+in any round (10 ms each) so their resolution can be read, and the handshake every server
+negotiated, which must be the same for all of them or the run stops.
 
 ## Pool memory
 

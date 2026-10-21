@@ -7,8 +7,10 @@
 //     --runs N          timed runs per binary (default 5), after --warmup N (default 1)
 //     --only a,b        benchmark names to include (default: all); `awfy` names
 //                       the Are We Fast Yet ports in bench/awfy/, which run only
-//                       when named, and `maps` the WP32 map programs (see
-//                       bench/README.md)
+//                       when named, `maps` the WP32 map programs (see
+//                       bench/README.md), and `crypto` the crypto twins, run by
+//                       bench/crypto/run.mjs: --record (--validate when
+//                       validating, the section alone into --out when given)
 //     --n name=value    override a benchmark's size (the `bench:n` line in its
 //                       sources); `maps=<n>` sizes all the map programs at once
 //     --validate        build and compare checksums only: no timing, no docs written
@@ -827,6 +829,7 @@ const selected = BENCHMARKS.filter((b) => !opts.only || opts.only.has(b.name))
 const selectedParallel = PARALLEL.filter((b) => !opts.only || opts.only.has(b.name) || opts.only.has("par"))
 const known = (name) =>
   name === "awfy" ||
+  name === "crypto" ||
   name === "par" ||
   name === "maps" ||
   BENCHMARKS.some((b) => b.name === name) ||
@@ -838,6 +841,43 @@ if (opts.only) {
     if (!known(name)) {
       fail(`unknown benchmark \`${name}\``)
     }
+  }
+}
+
+// `--only crypto` hands the crypto twins to their own runner, which writes
+// docs/BENCHMARKS.md's crypto block; the rest of `--only` runs here after it.
+if (opts.only?.has("crypto")) {
+  const outGiven = opts.out !== path.join(root, "docs", "BENCHMARKS.md")
+  if (outGiven && !opts.validate && opts.only.size > 1) {
+    fail("--out with --only crypto writes the crypto section alone, so name crypto by itself")
+  }
+  let mode = ["--record"]
+  // --record rewrites the whole crypto section, so every twin it can build must run.
+  if (!opts.validate && !outGiven && !(opts.rust && opts.go)) {
+    fail(
+      "--only crypto records the whole crypto section, so it takes no --no-rust or --no-go; use --validate, or --out for a partial table"
+    )
+  }
+  if (opts.validate) {
+    mode = ["--validate"]
+  } else if (outGiven) {
+    mode = ["--out", opts.out]
+  }
+  const compiler = process.argv.indexOf("--compiler")
+  const child = spawnSync(
+    process.execPath,
+    [
+      path.join(root, "bench", "crypto", "run.mjs"),
+      ...mode,
+      ...(compiler >= 0 ? ["--compiler", path.resolve(process.argv[compiler + 1])] : []),
+      ...(opts.rust ? [] : ["--no-rust"]),
+      ...(opts.go ? [] : ["--no-go"]),
+    ],
+    { stdio: "inherit" }
+  )
+  opts.only.delete("crypto")
+  if (child.status !== 0 || opts.only.size === 0) {
+    process.exit(child.status ?? 1)
   }
 }
 

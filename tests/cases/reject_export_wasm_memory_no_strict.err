@@ -1,0 +1,1 @@
+`memory` is the name a wasm module exports its linear memory under: `--no-strict-exports` keeps every function's name as its symbol

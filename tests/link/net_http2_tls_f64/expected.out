@@ -16,7 +16,11 @@ PASS  and closed
 PASS  a client that will close at once completes the handshake
 PASS  its requests and its close_notify in one write: both requests are still answered
 PASS  and only then does the server close its side
-PASS  two clients fill the pool
+PASS  one client at a time has used slot 0 alone, and slot 1's connection is not made (1 made)
+PASS  a client accepted again into slot 0
+PASS  moves the arena not at all (0 bytes)
+PASS  and a second fills the pool, accepted into slot 1
+PASS  whose connection the first accept into it makes (some bytes, 2 made)
 PASS  a third is accepted and shed
 PASS  each slot's response carries the one date
 PASS  which the two slots share: formatted once between them (1)
@@ -28,4 +32,7 @@ PASS  a free slot answers H2_ERROR to next and done to the rest
 PASS  a slot out of range names the first connection
 PASS  with nothing gone wrong in the loop
 PASS  a server of 1024 slots and no connection has made no frame buffer (0)
-http2 over tls: 30 passed, 0 failed, 0 skipped
+PASS  and has made one slot's connection, slot 0's (1)
+PASS  a slot never accepted into is free: no descriptor, H2_ERROR to next, done to flush
+PASS  and names slot 0's connection, making none for itself
+http2 over tls: 37 passed, 0 failed, 0 skipped
