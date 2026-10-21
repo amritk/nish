@@ -106,8 +106,10 @@ The checks in `tests/run.js` that hold the above:
   `std/net/tls.ts`, `std/crypto/x509-random.ts`, `std/crypto/hkdf.ts`,
   `std/crypto/x25519.ts` and `std/crypto/x509.ts`.
 - `${name}: IR matches golden` and `${name}: native output matches .out`, for
-  `secret_flow`, `secret_wipe`, `secret_wipe_o2` and `secret_wipe_o2_plain`:
-  the positives, unchanged.
+  `secret_flow`, `secret_wipe`, `secret_wipe_o2`, `secret_wipe_o2_plain`,
+  `secret_inferred`, `secret_wipe_o2_inferred` and
+  `secret_wipe_o2_inferred_plain`: the positives, the last three binding the
+  `Secret` unannotated (#613).
 - `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
   for `docs/guide/using-nish/standard-library.md`: the alias refused with
   NL2512, and the copy accepted.
