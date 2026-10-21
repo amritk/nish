@@ -4423,7 +4423,8 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`, `…_alias`,
   `…_coalesce`, `…_coalesce_chain`, `…_coalesce_field`, `…_coalesce_call`,
   `…_coalesce_map`, `…_coalesce_optional`, `…_coalesce_ternary`,
-  `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
+  `…_equality`, `…_index_of`, `…_math_max`, `…_fn_param`, `…_unary`,
+  `…_compound_bitwise`, `…_compound_arith`, `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
   `…_imported`). A generic method counts as a method; a constructor does
   not. A class with fields alone, and an interface, still take a literal
   (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
