@@ -106,7 +106,15 @@ import { caseValue } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
-import { flowBegin, flowDoCondition, flowEnd, flowForUpdate, flowHead, flowNoteBack, flowNoteBreak } from "./loop-flow"
+import {
+  flowBegin,
+  flowDoCondition,
+  flowEnd,
+  flowForUpdate,
+  flowHead,
+  flowNoteBack,
+  flowNoteBreak,
+} from "./loop-flow"
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const terminatorName = (stmt: Node): string => {

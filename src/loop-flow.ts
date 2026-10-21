@@ -526,7 +526,15 @@ const flowTestedRead = (node: Node): Node => {
  * union's tag holds in `s`, which the checker reads no wider. 0 is unknown:
  * a field, a method call, a `let` declared in the loop.
  */
-const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[], firm: boolean, depth: i32): i32 => {
+const flowKnown = (
+  ctx: CheckContext,
+  f: LoopFlow,
+  k: i32,
+  node: Node,
+  s: i32[],
+  firm: boolean,
+  depth: i32
+): i32 => {
   const bare = unwrapParens(node)
   const want = flowWant(ctx, f, k)
   if (depth > 8 || want < 0) {
@@ -538,7 +546,15 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
   if (bare.kind === N_CONDITIONAL) {
     const cond = bare.children[0]
     const whenTrue = flowKnown(ctx, f, k, bare.children[1], flowCond(ctx, f, cond, s, true), firm, depth + 1)
-    const whenFalse = flowKnown(ctx, f, k, bare.children[2], flowCond(ctx, f, cond, s, false), firm, depth + 1)
+    const whenFalse = flowKnown(
+      ctx,
+      f,
+      k,
+      bare.children[2],
+      flowCond(ctx, f, cond, s, false),
+      firm,
+      depth + 1
+    )
     return whenTrue !== 0 && whenFalse !== 0 ? whenTrue | whenFalse : 0
   }
   if (bare.kind === N_BINARY && bare.text === "=") {
@@ -572,7 +588,11 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
       return 0
     }
     const sig = ctx.signature(name)
-    if (sig !== null && ctx.table.isEnumMemberType(sig.returnType) && ctx.table.enumBase(sig.returnType) === want) {
+    if (
+      sig !== null &&
+      ctx.table.isEnumMemberType(sig.returnType) &&
+      ctx.table.enumBase(sig.returnType) === want
+    ) {
       return flowDomainBit(f, k, ctx.table.memberValue(sig.returnType))
     }
     return 0
@@ -595,7 +615,14 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
  * holds, or for one member also to the others. Only a `firm` reading narrows,
  * one the checker's own set for `other` is sure to equal.
  */
-const flowNarrowTo = (ctx: CheckContext, f: LoopFlow, k: i32, other: Node, s: i32[], same: boolean): i32[] => {
+const flowNarrowTo = (
+  ctx: CheckContext,
+  f: LoopFlow,
+  k: i32,
+  other: Node,
+  s: i32[],
+  same: boolean
+): i32[] => {
   const known = flowKnown(ctx, f, k, other, s, true, 0)
   if (known === 0) {
     return s
