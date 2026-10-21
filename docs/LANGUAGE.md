@@ -6240,7 +6240,7 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   per module, an `unsafe import <line>:<col> <name> from "nish:unsafe"` line for
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
-  rather than the source (`tests/self/goldens/checked.txt`).
+  rather than the source (`tests/self/goldens/checked/`, one file per module).
 - **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
   or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
   as `unchecked` sites with `"allowed": true`, because they cannot panic and

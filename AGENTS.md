@@ -252,10 +252,9 @@ it is not there yet:
   green, and never push an empty commit to kick CI.
 - **A conflict** → merge `main` in and resolve it, regenerating lockfiles and
   generated files with the repo's own tooling rather than by hand. **Expect it
-  on the self-goldens:** `tests/self/goldens/checked-self.txt` (and often
-  `checked.txt`) is a dump of `src/`, so every `src/` commit on `main`
-  conflicts with every open pull request that touches `src/`, and `main` can
-  move faster than one CI run. Merge `main` in (never rebase), regenerate with
+  on the self-goldens:** `tests/self/goldens/checked/` holds one dump per
+  module, so a `src/` commit on `main` conflicts with an open pull request that
+  changes the same module, and `main` can move faster than one CI run. Merge `main` in (never rebase), regenerate with
   `node tests/self/goldens.js --update` after `npm run build`, re-check that a
   new diagnostic still has the next free code in `src/codes.ts`, run
   `npm run check` and `node tests/run.js self` plus your change's own prefix,

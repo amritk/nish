@@ -105,12 +105,13 @@ WASI sysroot (`WASI_SYSROOT=/usr` where the wasi-libc package is installed),
 so read its skip line.
 
 **Generated goldens are regenerated, never edited or merged by hand.**
-`tests/self/goldens/checked.txt` and `checked-self.txt` are stage1's
-`--emit-checked` dump of the golden cases and of `src/`, so any change to
-`src/`, to `std/` or to a positive `tests/cases/*.ts` moves them, and every
-`src/` commit on `main` conflicts with every open pull request that touches
-`src/`. A plan stage that changes `src/` or `std/` therefore owns these goldens
-too (#532 regenerated `checked.txt` outside its declared files). Rewrite
+`tests/self/goldens/checked/` is stage1's `--emit-checked` dump of the
+corpus and of `src/`, one file per module, each body's lines counted from its
+first position, so any change to `src/`, to `std/` or to a positive
+`tests/cases/*.ts` moves the files of the modules it touches. Two pull requests
+that change different modules merge cleanly; two that change the same module
+conflict there. A plan stage that changes `src/` or `std/` therefore owns these
+goldens too (#532 regenerated them outside its declared files). Rewrite
 them only with `node tests/self/goldens.js --update` (add
 `--seed build/seed/bin/nish` when `build/nish` is not built) and read the diff
 before committing it. On a conflict, merge `main` in and regenerate rather
