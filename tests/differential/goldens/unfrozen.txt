@@ -393,8 +393,11 @@ cases/secret_field added after R6: no rewriter to freeze it with
 cases/secret_field_wipe_o2 added after R6: no rewriter to freeze it with
 cases/secret_field_wipe_o2_plain added after R6: no rewriter to freeze it with
 cases/secret_flow added after R6: no rewriter to freeze it with
+cases/secret_inferred added after R6: no rewriter to freeze it with
 cases/secret_wipe added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2 added after R6: no rewriter to freeze it with
+cases/secret_wipe_o2_inferred added after R6: no rewriter to freeze it with
+cases/secret_wipe_o2_inferred_plain added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_plain added after R6: no rewriter to freeze it with
 cases/set_i32 added after R6: no rewriter to freeze it with
 cases/set_iter added after R6: no rewriter to freeze it with
