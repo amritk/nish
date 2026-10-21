@@ -79738,7 +79738,7 @@ function relayH3Config(): Http3Config -> @relayH3Config [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=20
   calls: nish_alloc_struct
   stackSites=0 stackLocals=0
-  local 193:9 config: Http3Config (const)
+  local 194:9 config: Http3Config (const)
 function relayCount32(n: i64): i64 -> @relayCount32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
@@ -79754,7 +79754,6 @@ function Relay.constructor(this: Relay, config: RelayConfig, quicConfig: QuicSer
   pointer verifier: size=16 writesThrough=true captured=true
   pointer entropy: size=0 writesThrough=true captured=false passedTo=RelayPeers.constructor#2 nish.Http3Server.constructor#5
   stackSites=0 stackLocals=0
-  callee 330:5 relayCheck -> @relayCheck
   callee 331:5 relayCheck -> @relayCheck
   callee 332:5 relayCheck -> @relayCheck
   callee 333:5 relayCheck -> @relayCheck
@@ -79762,13 +79761,14 @@ function Relay.constructor(this: Relay, config: RelayConfig, quicConfig: QuicSer
   callee 335:5 relayCheck -> @relayCheck
   callee 336:5 relayCheck -> @relayCheck
   callee 337:5 relayCheck -> @relayCheck
-  local 342:11 slots: i32 (const)
-  callee 344:18 new RelayPeers -> @RelayPeers.constructor
-  callee 345:19 new Http3Server -> @nish.Http3Server.constructor
-  callee 345:47 relayH3Config -> @relayH3Config
-  callee 347:18 new Http3Wheel -> @nish.Http3Wheel.constructor
-  local 354:14 k: i32 (let)
-  callee 379:18 new RelayGrant -> @RelayGrant.constructor
+  callee 338:5 relayCheck -> @relayCheck
+  local 343:11 slots: i32 (const)
+  callee 345:18 new RelayPeers -> @RelayPeers.constructor
+  callee 346:19 new Http3Server -> @nish.Http3Server.constructor
+  callee 346:47 relayH3Config -> @relayH3Config
+  callee 348:18 new Http3Wheel -> @nish.Http3Wheel.constructor
+  local 355:14 k: i32 (let)
+  callee 380:18 new RelayGrant -> @RelayGrant.constructor
 function Relay.watchSignals(this: Relay, fd: i32): void -> @Relay.watchSignals [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_add
@@ -79787,51 +79787,51 @@ function Relay.log(this: Relay, line: string): void -> @Relay.log [exported meth
   stackSites=0 stackLocals=0
 function Relay.step(this: Relay, now: i64, wall: i64, key: Secret<u8[]>, grantKey: Secret<u8[]>, waitMs: i32): boolean -> @Relay.step [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 421:5
+  sharedWrite: 422:5
   escaping: now wall
   calls: Relay.flush Relay.serveSlot Relay.timers Relay.upstreamReady nish.Http3Server.ready nish.Http3Server.receive nish.Http3Server.tick nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_poll_wait
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.upstreamReady#0 Relay.timers#0 Relay.serveSlot#0 Relay.flush#0
   pointer key: size=8 writesThrough=false captured=false passedTo=nish.Http3Server.receive#2
   pointer grantKey: size=8 writesThrough=false captured=false passedTo=Relay.serveSlot#4
   stackSites=0 stackLocals=0
-  local 422:11 n: i32 (const)
-  local 423:9 signalled: boolean (let)
-  local 424:14 k: i32 (let)
-  local 425:13 token: i32 (const)
-  callee 429:9 Relay.upstreamReady -> @Relay.upstreamReady
-  callee 432:5 Http3Server.receive -> @nish.Http3Server.receive
-  callee 433:5 Http3Server.tick -> @nish.Http3Server.tick
-  callee 434:5 Relay.timers -> @Relay.timers
-  local 435:9 slot: i32 (let)
-  callee 435:21 Http3Server.ready -> @nish.Http3Server.ready
-  callee 437:7 Relay.serveSlot -> @Relay.serveSlot
-  callee 438:14 Http3Server.ready -> @nish.Http3Server.ready
-  callee 440:5 Relay.flush -> @Relay.flush
+  local 423:11 n: i32 (const)
+  local 424:9 signalled: boolean (let)
+  local 425:14 k: i32 (let)
+  local 426:13 token: i32 (const)
+  callee 430:9 Relay.upstreamReady -> @Relay.upstreamReady
+  callee 433:5 Http3Server.receive -> @nish.Http3Server.receive
+  callee 434:5 Http3Server.tick -> @nish.Http3Server.tick
+  callee 435:5 Relay.timers -> @Relay.timers
+  local 436:9 slot: i32 (let)
+  callee 436:21 Http3Server.ready -> @nish.Http3Server.ready
+  callee 438:7 Relay.serveSlot -> @Relay.serveSlot
+  callee 439:14 Http3Server.ready -> @nish.Http3Server.ready
+  callee 441:5 Relay.flush -> @Relay.flush
 function Relay.timeout(this: Relay, now: i64): i32 -> @Relay.timeout [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: now
   calls: nish.Http3Server.timeout nish.Http3Wheel.next
   pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 446:11 quic: i32 (const)
-  callee 446:23 Http3Server.timeout -> @nish.Http3Server.timeout
-  local 447:11 own: i32 (const)
-  callee 447:22 Http3Wheel.next -> @nish.Http3Wheel.next
+  local 447:11 quic: i32 (const)
+  callee 447:23 Http3Server.timeout -> @nish.Http3Server.timeout
+  local 448:11 own: i32 (const)
+  callee 448:22 Http3Wheel.next -> @nish.Http3Wheel.next
 function Relay.flush(this: Relay, now: i64): void -> @Relay.flush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 459:9
+  sharedWrite: 460:9
   escaping: now
   calls: Relay.reconcile nish.Http3Server.flush nish.Http3Server.holds nish.Http3Server.quic nish.Http3Server.touch nish.QuicConnection.close nish_panic_index nish_panic_overflow
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.reconcile#0
   stackSites=0 stackLocals=0
-  callee 456:5 Http3Server.flush -> @nish.Http3Server.flush
-  local 460:15 slot: i32 (const)
-  callee 461:13 Http3Server.holds -> @nish.Http3Server.holds
-  callee 462:11 QuicConnection.close -> @nish.QuicConnection.close
-  callee 462:11 Http3Server.quic -> @nish.Http3Server.quic
-  callee 463:11 Http3Server.touch -> @nish.Http3Server.touch
-  callee 466:7 Http3Server.flush -> @nish.Http3Server.flush
-  callee 474:7 Relay.reconcile -> @Relay.reconcile
+  callee 457:5 Http3Server.flush -> @nish.Http3Server.flush
+  local 461:15 slot: i32 (const)
+  callee 462:13 Http3Server.holds -> @nish.Http3Server.holds
+  callee 463:11 QuicConnection.close -> @nish.QuicConnection.close
+  callee 463:11 Http3Server.quic -> @nish.Http3Server.quic
+  callee 464:11 Http3Server.touch -> @nish.Http3Server.touch
+  callee 467:7 Http3Server.flush -> @nish.Http3Server.flush
+  callee 475:7 Relay.reconcile -> @Relay.reconcile
 function Relay.shutdown(this: Relay, now: i64): void -> @Relay.shutdown [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Relay.close
@@ -79839,164 +79839,164 @@ function Relay.shutdown(this: Relay, now: i64): void -> @Relay.shutdown [exporte
   calls: Relay.close Relay.flush Relay.size nish_panic_index
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.size#0 Relay.close#0 Relay.close#0 Relay.flush#0
   stackSites=0 stackLocals=0
-  local 480:14 slot: i32 (let)
-  callee 480:36 Relay.size -> @Relay.size
-  local 481:13 state: i32 (const)
-  callee 483:9 Relay.close -> @Relay.close
-  callee 485:9 Relay.close -> @Relay.close
-  callee 488:5 Relay.flush -> @Relay.flush
+  local 481:14 slot: i32 (let)
+  callee 481:36 Relay.size -> @Relay.size
+  local 482:13 state: i32 (const)
+  callee 484:9 Relay.close -> @Relay.close
+  callee 486:9 Relay.close -> @Relay.close
+  callee 489:5 Relay.flush -> @Relay.flush
 function Relay.reconcile(this: Relay, slot: i32, now: i64): void -> @Relay.reconcile [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 508:7
+  sharedWrite: 509:7
   escaping: now slot
   calls: Relay.close Relay.recheck Relay.release RelayPeers.claim nish.Http3Server.connection nish.Http3Server.holds nish.Http3Wheel.file nish.h3Count nish_panic_index nish_panic_overflow
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.release#0 Relay.close#0 Relay.recheck#0
   stackSites=0 stackLocals=0
-  local 501:11 generation: i32 (const)
-  callee 501:29 Http3Server.connection -> @nish.Http3Server.connection
-  local 502:11 holds: boolean (const)
-  callee 502:28 Http3Server.holds -> @nish.Http3Server.holds
-  callee 507:7 Relay.release -> @Relay.release
-  local 523:11 peer: u8[] (const)
-  local 524:11 from: u8[] (const)
-  local 525:14 k: i32 (let)
-  callee 528:27 RelayPeers.claim -> @RelayPeers.claim
-  callee 537:21 h3Count -> @nish.h3Count
-  callee 538:9 Relay.close -> @Relay.close
-  callee 544:5 Http3Wheel.file -> @nish.Http3Wheel.file
-  callee 544:27 Relay.recheck -> @Relay.recheck
+  local 502:11 generation: i32 (const)
+  callee 502:29 Http3Server.connection -> @nish.Http3Server.connection
+  local 503:11 holds: boolean (const)
+  callee 503:28 Http3Server.holds -> @nish.Http3Server.holds
+  callee 508:7 Relay.release -> @Relay.release
+  local 524:11 peer: u8[] (const)
+  local 525:11 from: u8[] (const)
+  local 526:14 k: i32 (let)
+  callee 529:27 RelayPeers.claim -> @RelayPeers.claim
+  callee 538:21 h3Count -> @nish.h3Count
+  callee 539:9 Relay.close -> @Relay.close
+  callee 545:5 Http3Wheel.file -> @nish.Http3Wheel.file
+  callee 545:27 Relay.recheck -> @Relay.recheck
 function Relay.recheck(this: Relay, slot: i32, now: i64): i64 -> @Relay.recheck [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: nish_panic_index nish_panic_overflow
   pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 549:11 next: i64 (const)
+  local 550:11 next: i64 (const)
 function Relay.release(this: Relay, slot: i32): void -> @Relay.release [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 556:7
+  sharedWrite: 557:7
   escaping: slot
   calls: RelayPeers.release nish.Http3Wheel.unfile nish_net_close nish_panic_index nish_panic_overflow nish_poll_remove
   pointer this: size=424 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 565:7 RelayPeers.release -> @RelayPeers.release
-  local 568:11 fd: i32 (const)
-  callee 579:5 Http3Wheel.unfile -> @nish.Http3Wheel.unfile
+  callee 566:7 RelayPeers.release -> @RelayPeers.release
+  local 569:11 fd: i32 (const)
+  callee 580:5 Http3Wheel.unfile -> @nish.Http3Wheel.unfile
 function Relay.close(this: Relay, slot: i32, code: i32, reason: string, quicCode: i64, now: i64): void -> @Relay.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 601:5
+  sharedWrite: 602:5
   escaping: code now quicCode reason slot
   calls: Relay.flushBatch Relay.log Relay.release Relay.wt nish.Http3Server.touch nish.Http3Wheel.file nish.WebTransport.sendDatagram nish_arena_release nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 relayEncodeClose
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.flushBatch#0 Relay.wt#0 Relay.release#0 Relay.log#0
   stackSites=0 stackLocals=0
-  local 588:11 state: i32 (const)
-  callee 592:5 Relay.flushBatch -> @Relay.flushBatch
-  local 593:11 session: i64 (const)
-  local 595:13 n: i32 (const)
-  callee 595:22 relayEncodeClose -> @relayEncodeClose
-  callee 597:9 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
-  callee 597:9 Relay.wt -> @Relay.wt
-  callee 600:5 Relay.release -> @Relay.release
-  callee 607:5 Http3Server.touch -> @nish.Http3Server.touch
-  callee 609:5 Http3Wheel.file -> @nish.Http3Wheel.file
-  local 612:13 a: i64 (const)
-  callee 613:7 Relay.log -> @Relay.log
+  local 589:11 state: i32 (const)
+  callee 593:5 Relay.flushBatch -> @Relay.flushBatch
+  local 594:11 session: i64 (const)
+  local 596:13 n: i32 (const)
+  callee 596:22 relayEncodeClose -> @relayEncodeClose
+  callee 598:9 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
+  callee 598:9 Relay.wt -> @Relay.wt
+  callee 601:5 Relay.release -> @Relay.release
+  callee 608:5 Http3Server.touch -> @nish.Http3Server.touch
+  callee 610:5 Http3Wheel.file -> @nish.Http3Wheel.file
+  local 613:13 a: i64 (const)
+  callee 614:7 Relay.log -> @Relay.log
 function Relay.wt(this: Relay, slot: i32): WebTransport -> @Relay.wt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=368
-  sharedWrite: 626:7
+  sharedWrite: 627:7
   escaping: slot
   calls: nish.Http3Server.connection nish.WebTransport.constructor nish_alloc_struct nish_array_grow nish_panic_index
   pointer this: size=424 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 626:21 new WebTransport -> @nish.WebTransport.constructor
-  callee 626:53 Http3Server.connection -> @nish.Http3Server.connection
+  callee 627:21 new WebTransport -> @nish.WebTransport.constructor
+  callee 627:53 Http3Server.connection -> @nish.Http3Server.connection
 function Relay.serveSlot(this: Relay, slot: i32, now: i64, wall: i64, grantKey: Secret<u8[]>): void -> @Relay.serveSlot [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 635:7
+  sharedWrite: 636:7
   escaping: now slot wall
   calls: Relay.close Relay.flushBatch Relay.hello Relay.pump Relay.reconcile Relay.session Relay.wt nish.Http3Connection.respond nish.Http3Server.connection nish.WebTransport.next nish.WebTransport.resetStream nish.WebTransport.stopSending nish.h3Count nish_panic_index nish_panic_overflow
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.reconcile#0 Relay.wt#0 Relay.pump#0 Relay.hello#0 Relay.session#0 Relay.close#0 Relay.flushBatch#0
   pointer grantKey: size=8 writesThrough=false captured=false passedTo=Relay.hello#5
   stackSites=1 stackLocals=1
-  callee 633:5 Relay.reconcile -> @Relay.reconcile
-  local 638:11 wt: WebTransport (const)
-  callee 638:30 Relay.wt -> @Relay.wt
-  local 639:9 event: i32 (let)
-  callee 639:22 WebTransport.next -> @nish.WebTransport.next
-  local 640:14 guard: i32 (let)
-  local 642:15 state: i32 (const)
-  callee 644:11 Relay.pump -> @Relay.pump
-  callee 646:11 Relay.hello -> @Relay.hello
-  callee 649:9 Relay.session -> @Relay.session
-  callee 652:31 h3Count -> @nish.h3Count
-  callee 653:11 Relay.close -> @Relay.close
-  callee 657:9 WebTransport.resetStream -> @nish.WebTransport.resetStream
-  callee 658:9 WebTransport.stopSending -> @nish.WebTransport.stopSending
-  local 660:15 h3: Http3Connection (const)
-  callee 660:20 Http3Server.connection -> @nish.Http3Server.connection
-  local 661:15 none: u8[][] (const)
-  callee 662:9 Http3Connection.respond -> @nish.Http3Connection.respond
-  callee 664:15 WebTransport.next -> @nish.WebTransport.next
-  callee 666:5 Relay.flushBatch -> @Relay.flushBatch
+  callee 634:5 Relay.reconcile -> @Relay.reconcile
+  local 639:11 wt: WebTransport (const)
+  callee 639:30 Relay.wt -> @Relay.wt
+  local 640:9 event: i32 (let)
+  callee 640:22 WebTransport.next -> @nish.WebTransport.next
+  local 641:14 guard: i32 (let)
+  local 643:15 state: i32 (const)
+  callee 645:11 Relay.pump -> @Relay.pump
+  callee 647:11 Relay.hello -> @Relay.hello
+  callee 650:9 Relay.session -> @Relay.session
+  callee 653:31 h3Count -> @nish.h3Count
+  callee 654:11 Relay.close -> @Relay.close
+  callee 658:9 WebTransport.resetStream -> @nish.WebTransport.resetStream
+  callee 659:9 WebTransport.stopSending -> @nish.WebTransport.stopSending
+  local 661:15 h3: Http3Connection (const)
+  callee 661:20 Http3Server.connection -> @nish.Http3Server.connection
+  local 662:15 none: u8[][] (const)
+  callee 663:9 Http3Connection.respond -> @nish.Http3Connection.respond
+  callee 665:15 WebTransport.next -> @nish.WebTransport.next
+  callee 667:5 Relay.flushBatch -> @Relay.flushBatch
 function Relay.session(this: Relay, slot: i32, wt: WebTransport, now: i64): void -> @Relay.session [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 675:7
+  sharedWrite: 676:7
   escaping: now slot
   calls: Relay.close Relay.isPath nish.Http3Wheel.file nish.WebTransport.accept nish.WebTransport.refuse nish.h3Count nish_panic_index nish_panic_overflow
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.isPath#0 Relay.close#0 Relay.close#0
   pointer wt: size=368 writesThrough=true captured=false passedTo=nish.WebTransport.refuse#0 nish.WebTransport.accept#0
   stackSites=0 stackLocals=0
-  local 671:11 id: i64 (const)
-  callee 672:52 Relay.isPath -> @Relay.isPath
-  callee 674:7 WebTransport.refuse -> @nish.WebTransport.refuse
-  callee 675:26 h3Count -> @nish.h3Count
-  callee 678:5 WebTransport.accept -> @nish.WebTransport.accept
-  callee 682:26 h3Count -> @nish.h3Count
-  callee 683:7 Relay.close -> @Relay.close
-  callee 687:26 h3Count -> @nish.h3Count
-  callee 688:7 Relay.close -> @Relay.close
-  callee 697:21 h3Count -> @nish.h3Count
-  callee 699:5 Http3Wheel.file -> @nish.Http3Wheel.file
+  local 672:11 id: i64 (const)
+  callee 673:52 Relay.isPath -> @Relay.isPath
+  callee 675:7 WebTransport.refuse -> @nish.WebTransport.refuse
+  callee 676:26 h3Count -> @nish.h3Count
+  callee 679:5 WebTransport.accept -> @nish.WebTransport.accept
+  callee 683:26 h3Count -> @nish.h3Count
+  callee 684:7 Relay.close -> @Relay.close
+  callee 688:26 h3Count -> @nish.h3Count
+  callee 689:7 Relay.close -> @Relay.close
+  callee 698:21 h3Count -> @nish.h3Count
+  callee 700:5 Http3Wheel.file -> @nish.Http3Wheel.file
 function Relay.isPath(this: Relay, path: u8[]): boolean -> @Relay.isPath [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=424 writesThrough=false captured=false
   pointer path: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 704:11 want: string (const)
-  local 705:11 n: i32 (const)
-  local 709:14 k: i32 (let)
+  local 705:11 want: string (const)
+  local 706:11 n: i32 (const)
+  local 710:14 k: i32 (let)
 function Relay.hello(this: Relay, slot: i32, wt: WebTransport, now: i64, wall: i64, grantKey: Secret<u8[]>): void -> @Relay.hello [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 722:7
+  sharedWrite: 723:7
   escaping: now slot wall
   calls: GrantVerifier.verify Relay.close Relay.log Relay.openUpstream nish.Http3Wheel.file nish.WebTransport.sendDatagram nish.h3Count nish_alloc_struct nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_poll_add nish_str_concat nish_str_from_i32 nish_str_from_i64 relayDecode relayEncodeHelloOk
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.close#0 Relay.close#0 Relay.close#0 Relay.openUpstream#0 Relay.close#0 Relay.log#0
   pointer wt: size=368 writesThrough=true captured=false passedTo=nish.WebTransport.sendDatagram#0
   pointer grantKey: size=8 writesThrough=false captured=false passedTo=GrantVerifier.verify#5
   stackSites=1 stackLocals=1
-  local 719:11 f: RelayFrame (const)
-  local 720:11 type: i32 (const)
-  callee 720:23 relayDecode -> @relayDecode
-  callee 722:27 h3Count -> @nish.h3Count
-  callee 723:7 Relay.close -> @Relay.close
-  callee 727:27 h3Count -> @nish.h3Count
-  callee 728:7 Relay.close -> @Relay.close
-  local 731:11 g: RelayGrant (const)
-  callee 732:9 GrantVerifier.verify -> @GrantVerifier.verify
-  callee 733:27 h3Count -> @nish.h3Count
-  callee 734:7 Relay.close -> @Relay.close
-  local 738:11 fd: i32 (const)
-  callee 738:21 Relay.openUpstream -> @Relay.openUpstream
-  callee 740:30 h3Count -> @nish.h3Count
-  callee 741:7 Relay.close -> @Relay.close
-  local 746:11 n: i32 (const)
-  callee 746:20 relayEncodeHelloOk -> @relayEncodeHelloOk
-  callee 747:5 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
-  callee 755:5 Http3Wheel.file -> @nish.Http3Wheel.file
-  local 757:13 a: i64 (const)
-  local 758:13 host: string[] (const)
-  local 759:16 k: i32 (let)
-  callee 762:7 Relay.log -> @Relay.log
+  local 720:11 f: RelayFrame (const)
+  local 721:11 type: i32 (const)
+  callee 721:23 relayDecode -> @relayDecode
+  callee 723:27 h3Count -> @nish.h3Count
+  callee 724:7 Relay.close -> @Relay.close
+  callee 728:27 h3Count -> @nish.h3Count
+  callee 729:7 Relay.close -> @Relay.close
+  local 732:11 g: RelayGrant (const)
+  callee 733:9 GrantVerifier.verify -> @GrantVerifier.verify
+  callee 734:27 h3Count -> @nish.h3Count
+  callee 735:7 Relay.close -> @Relay.close
+  local 739:11 fd: i32 (const)
+  callee 739:21 Relay.openUpstream -> @Relay.openUpstream
+  callee 741:30 h3Count -> @nish.h3Count
+  callee 742:7 Relay.close -> @Relay.close
+  local 747:11 n: i32 (const)
+  callee 747:20 relayEncodeHelloOk -> @relayEncodeHelloOk
+  callee 748:5 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
+  callee 756:5 Http3Wheel.file -> @nish.Http3Wheel.file
+  local 758:13 a: i64 (const)
+  local 759:13 host: string[] (const)
+  local 760:16 k: i32 (let)
+  callee 763:7 Relay.log -> @Relay.log
 function Relay.openUpstream(this: Relay, slot: i32, g: RelayGrant): i32 -> @Relay.openUpstream [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Relay.address
@@ -80005,153 +80005,153 @@ function Relay.openUpstream(this: Relay, slot: i32, g: RelayGrant): i32 -> @Rela
   pointer this: size=424 writesThrough=false captured=false passedTo=Relay.address#0
   pointer g: size=40 writesThrough=false captured=false passedTo=Relay.address#1
   stackSites=0 stackLocals=0
-  local 776:11 to: u8[] (const)
-  callee 777:10 Relay.address -> @Relay.address
-  local 780:9 v4: boolean (let)
-  local 781:14 k: i32 (let)
-  local 784:11 bind: string (const)
-  local 785:9 fd: i32 (let)
+  local 777:11 to: u8[] (const)
+  callee 778:10 Relay.address -> @Relay.address
+  local 781:9 v4: boolean (let)
+  local 782:14 k: i32 (let)
+  local 785:11 bind: string (const)
+  local 786:9 fd: i32 (let)
 function Relay.address(this: Relay, g: RelayGrant, to: u8[]): boolean -> @Relay.address [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: 805:12
+  sharedWrite: 806:12
   calls: nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_net_address nish_panic_index nish_str_eq
   pointer this: size=424 writesThrough=false captured=false
   pointer g: size=40 writesThrough=false captured=false
   pointer to: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local 799:11 a: i64 (const)
-  local 800:11 parts: string[] (const)
-  local 801:14 k: i32 (let)
-  local 804:11 host: string (const)
+  local 800:11 a: i64 (const)
+  local 801:11 parts: string[] (const)
+  local 802:14 k: i32 (let)
+  local 805:11 host: string (const)
 function Relay.pump(this: Relay, slot: i32, wt: WebTransport, now: i64): void -> @Relay.pump [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 810:5
+  sharedWrite: 811:5
   escaping: now slot
   calls: Relay.close Relay.sendUp nish.WebTransport.sendDatagram nish.h3Count nish_monotonic_nanos nish_panic_index nish_panic_overflow relayCount32 relayDecode relayEncodePong
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.close#0 Relay.sendUp#0 Relay.close#0
   pointer wt: size=368 writesThrough=true captured=false passedTo=nish.WebTransport.sendDatagram#0
   stackSites=0 stackLocals=0
-  callee 816:30 h3Count -> @nish.h3Count
-  callee 818:26 h3Count -> @nish.h3Count
-  callee 819:7 Relay.close -> @Relay.close
-  local 822:11 f: RelayFrame (const)
-  local 823:11 type: i32 (const)
-  callee 823:23 relayDecode -> @relayDecode
-  callee 826:26 h3Count -> @nish.h3Count
-  callee 829:31 relayCount32 -> @relayCount32
-  callee 830:7 Relay.sendUp -> @Relay.sendUp
-  local 833:13 dwell: i64 (const)
-  local 834:13 n: i32 (const)
-  callee 834:22 relayEncodePong -> @relayEncodePong
-  callee 835:7 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
-  callee 837:27 h3Count -> @nish.h3Count
-  callee 838:7 Relay.close -> @Relay.close
-  callee 841:24 h3Count -> @nish.h3Count
+  callee 817:30 h3Count -> @nish.h3Count
+  callee 819:26 h3Count -> @nish.h3Count
+  callee 820:7 Relay.close -> @Relay.close
+  local 823:11 f: RelayFrame (const)
+  local 824:11 type: i32 (const)
+  callee 824:23 relayDecode -> @relayDecode
+  callee 827:26 h3Count -> @nish.h3Count
+  callee 830:31 relayCount32 -> @relayCount32
+  callee 831:7 Relay.sendUp -> @Relay.sendUp
+  local 834:13 dwell: i64 (const)
+  local 835:13 n: i32 (const)
+  callee 835:22 relayEncodePong -> @relayEncodePong
+  callee 836:7 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
+  callee 838:27 h3Count -> @nish.h3Count
+  callee 839:7 Relay.close -> @Relay.close
+  callee 842:24 h3Count -> @nish.h3Count
 function Relay.sendUp(this: Relay, slot: i32, buf: u8[], off: i32, len: i32): void -> @Relay.sendUp [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 855:5
+  sharedWrite: 856:5
   escaping: len off slot
   calls: Relay.flushBatch nish.h3Count nish.quicPacketCopy nish_panic_index nish_panic_overflow nish_panic_slice nish_udp_send_to
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.flushBatch#0 Relay.flushBatch#0 Relay.flushBatch#0
   pointer buf: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
   stackSites=0 stackLocals=0
-  local 851:11 fd: i32 (const)
-  callee 855:24 h3Count -> @nish.h3Count
-  callee 857:7 Relay.flushBatch -> @Relay.flushBatch
-  callee 863:7 Relay.flushBatch -> @Relay.flushBatch
-  callee 867:5 quicPacketCopy -> @nish.quicPacketCopy
-  callee 871:7 Relay.flushBatch -> @Relay.flushBatch
+  local 852:11 fd: i32 (const)
+  callee 856:24 h3Count -> @nish.h3Count
+  callee 858:7 Relay.flushBatch -> @Relay.flushBatch
+  callee 864:7 Relay.flushBatch -> @Relay.flushBatch
+  callee 868:5 quicPacketCopy -> @nish.quicPacketCopy
+  callee 872:7 Relay.flushBatch -> @Relay.flushBatch
 function Relay.flushBatch(this: Relay): void -> @Relay.flushBatch [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 880:5
+  sharedWrite: 881:5
   calls: nish.h3Count nish_panic_index nish_panic_overflow nish_panic_slice nish_udp_send_to
   pointer this: size=424 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 877:11 slot: i32 (const)
-  local 878:11 count: i32 (const)
-  local 879:11 length: i32 (const)
-  local 886:11 fd: i32 (const)
-  local 887:11 to: u8[] (const)
-  local 892:11 sent: i32 (const)
-  callee 894:23 h3Count -> @nish.h3Count
-  local 900:14 at: i32 (let)
-  local 901:13 n: i32 (const)
+  local 878:11 slot: i32 (const)
+  local 879:11 count: i32 (const)
+  local 880:11 length: i32 (const)
+  local 887:11 fd: i32 (const)
+  local 888:11 to: u8[] (const)
+  local 893:11 sent: i32 (const)
+  callee 895:23 h3Count -> @nish.h3Count
+  local 901:14 at: i32 (let)
+  local 902:13 n: i32 (const)
 function Relay.upstreamReady(this: Relay, slot: i32): void -> @Relay.upstreamReady [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 923:22
+  sharedWrite: 924:22
   escaping: slot
   calls: Relay.cameFrom Relay.size Relay.wt nish.Http3Server.holds nish.Http3Server.touch nish.WebTransport.sendDatagram nish.h3Count nish_panic_index nish_panic_overflow nish_panic_slice nish_udp_recv_from relayCount32 relayEncodeData
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.size#0 Relay.wt#0 Relay.cameFrom#0
   stackSites=0 stackLocals=0
-  callee 914:29 Relay.size -> @Relay.size
-  callee 914:84 Http3Server.holds -> @nish.Http3Server.holds
-  local 917:11 fd: i32 (const)
-  local 918:11 to: u8[] (const)
-  local 919:11 wt: WebTransport (const)
-  callee 919:30 Relay.wt -> @Relay.wt
-  local 920:11 session: i64 (const)
-  local 921:11 cap: i32 (const)
-  local 922:14 reads: i32 (let)
-  local 923:13 n: i32 (const)
-  callee 927:12 Relay.cameFrom -> @Relay.cameFrom
-  callee 928:24 h3Count -> @nish.h3Count
-  local 931:13 segment: i32 (const)
-  callee 933:25 h3Count -> @nish.h3Count
-  local 936:16 at: i32 (let)
-  local 937:15 len: i32 (const)
-  callee 938:35 relayCount32 -> @relayCount32
-  local 940:15 framed: i32 (const)
-  callee 940:29 relayEncodeData -> @relayEncodeData
-  callee 941:27 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
-  callee 942:30 h3Count -> @nish.h3Count
-  callee 944:32 h3Count -> @nish.h3Count
-  callee 948:5 Http3Server.touch -> @nish.Http3Server.touch
+  callee 915:29 Relay.size -> @Relay.size
+  callee 915:84 Http3Server.holds -> @nish.Http3Server.holds
+  local 918:11 fd: i32 (const)
+  local 919:11 to: u8[] (const)
+  local 920:11 wt: WebTransport (const)
+  callee 920:30 Relay.wt -> @Relay.wt
+  local 921:11 session: i64 (const)
+  local 922:11 cap: i32 (const)
+  local 923:14 reads: i32 (let)
+  local 924:13 n: i32 (const)
+  callee 928:12 Relay.cameFrom -> @Relay.cameFrom
+  callee 929:24 h3Count -> @nish.h3Count
+  local 932:13 segment: i32 (const)
+  callee 934:25 h3Count -> @nish.h3Count
+  local 937:16 at: i32 (let)
+  local 938:15 len: i32 (const)
+  callee 939:35 relayCount32 -> @relayCount32
+  local 941:15 framed: i32 (const)
+  callee 941:29 relayEncodeData -> @relayEncodeData
+  callee 942:27 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
+  callee 943:30 h3Count -> @nish.h3Count
+  callee 945:32 h3Count -> @nish.h3Count
+  callee 949:5 Http3Server.touch -> @nish.Http3Server.touch
 function Relay.cameFrom(this: Relay, to: u8[]): boolean -> @Relay.cameFrom [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=424 writesThrough=false captured=false
   pointer to: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 953:14 k: i32 (let)
+  local 954:14 k: i32 (let)
 function Relay.timers(this: Relay, now: i64): void -> @Relay.timers [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 967:7
+  sharedWrite: 968:7
   escaping: now
   calls: Relay.timer nish.Http3Wheel.file nish.Http3Wheel.take nish_panic_index nish_panic_overflow
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.timer#0
   stackSites=0 stackLocals=0
-  local 965:11 wheel: Http3Wheel (const)
-  local 972:9 steps: i32 (let)
-  local 974:11 slot: i32 (let)
-  callee 974:23 Http3Wheel.take -> @nish.Http3Wheel.take
-  callee 978:11 Http3Wheel.file -> @nish.Http3Wheel.file
-  callee 980:11 Relay.timer -> @Relay.timer
-  callee 982:16 Http3Wheel.take -> @nish.Http3Wheel.take
+  local 966:11 wheel: Http3Wheel (const)
+  local 973:9 steps: i32 (let)
+  local 975:11 slot: i32 (let)
+  callee 975:23 Http3Wheel.take -> @nish.Http3Wheel.take
+  callee 979:11 Http3Wheel.file -> @nish.Http3Wheel.file
+  callee 981:11 Relay.timer -> @Relay.timer
+  callee 983:16 Http3Wheel.take -> @nish.Http3Wheel.take
 function Relay.timer(this: Relay, slot: i32, now: i64): void -> @Relay.timer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 998:7
+  sharedWrite: 999:7
   escaping: now slot
   calls: Relay.close Relay.recheck Relay.reconcile Relay.wt nish.Http3Server.quic nish.Http3Server.touch nish.Http3Wheel.file nish.WebTransport.sendDatagram nish.h3Count nish_panic_index nish_panic_overflow relayEncodeStats
   pointer this: size=424 writesThrough=true captured=false passedTo=Relay.reconcile#0 Relay.close#0 Relay.close#0 Relay.wt#0 Relay.close#0 Relay.recheck#0
   stackSites=0 stackLocals=0
-  callee 994:5 Relay.reconcile -> @Relay.reconcile
-  local 995:11 state: i32 (const)
-  callee 998:28 h3Count -> @nish.h3Count
-  callee 999:7 Relay.close -> @Relay.close
-  callee 1002:27 h3Count -> @nish.h3Count
-  callee 1003:9 Relay.close -> @Relay.close
-  local 1006:13 rtt: i64 (const)
-  callee 1006:24 Http3Server.quic -> @nish.Http3Server.quic
-  local 1007:13 n: i32 (const)
-  callee 1007:22 relayEncodeStats -> @relayEncodeStats
-  callee 1014:7 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
-  callee 1014:7 Relay.wt -> @Relay.wt
-  callee 1017:7 Http3Server.touch -> @nish.Http3Server.touch
-  callee 1018:7 Http3Wheel.file -> @nish.Http3Wheel.file
-  callee 1022:32 h3Count -> @nish.h3Count
-  callee 1023:9 Relay.close -> @Relay.close
-  callee 1025:9 Http3Wheel.file -> @nish.Http3Wheel.file
-  callee 1025:31 Relay.recheck -> @Relay.recheck
-  callee 1028:7 Http3Wheel.file -> @nish.Http3Wheel.file
+  callee 995:5 Relay.reconcile -> @Relay.reconcile
+  local 996:11 state: i32 (const)
+  callee 999:28 h3Count -> @nish.h3Count
+  callee 1000:7 Relay.close -> @Relay.close
+  callee 1003:27 h3Count -> @nish.h3Count
+  callee 1004:9 Relay.close -> @Relay.close
+  local 1007:13 rtt: i64 (const)
+  callee 1007:24 Http3Server.quic -> @nish.Http3Server.quic
+  local 1008:13 n: i32 (const)
+  callee 1008:22 relayEncodeStats -> @relayEncodeStats
+  callee 1015:7 WebTransport.sendDatagram -> @nish.WebTransport.sendDatagram
+  callee 1015:7 Relay.wt -> @Relay.wt
+  callee 1018:7 Http3Server.touch -> @nish.Http3Server.touch
+  callee 1019:7 Http3Wheel.file -> @nish.Http3Wheel.file
+  callee 1023:32 h3Count -> @nish.h3Count
+  callee 1024:9 Relay.close -> @Relay.close
+  callee 1026:9 Http3Wheel.file -> @nish.Http3Wheel.file
+  callee 1026:31 Relay.recheck -> @Relay.recheck
+  callee 1029:7 Http3Wheel.file -> @nish.Http3Wheel.file
 module std/net/http3.ts [package nish]
 import HTTP_FIELDS_OK from "nish/net/http-fields" -> const HTTP_FIELDS_OK
 import HttpFields from "nish/net/http-fields" -> struct HttpFields
