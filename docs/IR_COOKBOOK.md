@@ -10423,6 +10423,281 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end decl-union -->
 
+A test of the tag narrows `s` to one variant, and a field read through the
+narrowed `s` is a `bitcast` of the `%union.tagged*` back to the variant's
+struct pointer, then the variant's own `getelementptr` and load. The tag test
+is the only check, and the code after an arm that returns is narrowed to the
+other variant, so `s.side` is cast to `%struct.Square*` the same way
+(`tests/cases/union_narrowing`).
+
+<!-- cookbook:begin decl-union-narrow -->
+```ts
+enum Kind {
+  Circle,
+  Square,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle
+  r: i32 = 3
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square
+  side: i32 = 4
+}
+
+type Shape = Circle | Square
+
+const pick = (round: boolean): Shape => (round ? new Circle() : new Square())
+
+const size = (s: Shape): i32 => {
+  if (s.kind === Kind.Circle) {
+    return s.r
+  }
+  return s.side
+}
+
+export const main = (): number => {
+  console.log(size(pick(true)))
+  return 0
+}
+```
+
+```llvm
+%struct.Circle = type { i32, i32 }
+%struct.Square = type { i32, i32 }
+%union.tagged = type { i32 }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define internal noundef %union.tagged* @pick(i1 noundef zeroext %round) #0 {
+entry:
+  br i1 %round, label %cond.true, label %cond.false
+
+cond.true:
+  %0 = call i8* @nish_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Circle*
+  %2 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 0
+  store i32 0, i32* %2, align 4, !tbaa !4
+  %3 = getelementptr inbounds %struct.Circle, %struct.Circle* %1, i32 0, i32 1
+  store i32 3, i32* %3, align 4, !tbaa !5
+  %4 = bitcast %struct.Circle* %1 to %union.tagged*
+  br label %cond.end
+
+cond.false:
+  %5 = call i8* @nish_alloc_struct(i64 8)
+  %6 = bitcast i8* %5 to %struct.Square*
+  %7 = getelementptr inbounds %struct.Square, %struct.Square* %6, i32 0, i32 0
+  store i32 1, i32* %7, align 4, !tbaa !7
+  %8 = getelementptr inbounds %struct.Square, %struct.Square* %6, i32 0, i32 1
+  store i32 4, i32* %8, align 4, !tbaa !8
+  %9 = bitcast %struct.Square* %6 to %union.tagged*
+  br label %cond.end
+
+cond.end:
+  %10 = phi %union.tagged* [ %4, %cond.true ], [ %9, %cond.false ]
+  ret %union.tagged* %10
+}
+
+define internal noundef i32 @size(%union.tagged* noundef %s) #1 {
+entry:
+  %0 = getelementptr inbounds %union.tagged, %union.tagged* %s, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  %2 = icmp eq i32 %1, 0
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = bitcast %union.tagged* %s to %struct.Circle*
+  %4 = getelementptr inbounds %struct.Circle, %struct.Circle* %3, i32 0, i32 1
+  %5 = load i32, i32* %4, align 4, !tbaa !5
+  ret i32 %5
+
+if.end:
+  %6 = bitcast %union.tagged* %s to %struct.Square*
+  %7 = getelementptr inbounds %struct.Square, %struct.Square* %6, i32 0, i32 1
+  %8 = load i32, i32* %7, align 4, !tbaa !8
+  ret i32 %8
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call %union.tagged* @pick(i1 true)
+  %1 = call i32 @size(%union.tagged* %0)
+  %2 = call i8* @nish_str_from_i32(i32 %1)
+  call void @nish_print(i8* %2)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Circle", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
+!6 = !{!"Square", !2, i64 0, !2, i64 4}
+!7 = !{!6, !2, i64 0}
+!8 = !{!6, !2, i64 4}
+```
+<!-- cookbook:end decl-union-narrow -->
+
+A `switch` on the tag whose labels name every variant, with no `default`, is
+complete: the tag is a `readonly` field each variant writes with its own
+member, and a union never crosses the interop boundary, so the `switch`'s
+default edge goes to a block holding only `unreachable`, not to a block after
+the `switch`. Nothing is tested for it, the function needs no `ret` after the
+`switch`. A
+`switch` on a plain enum, which C can hand any `i32`, keeps its end block
+(`tests/cases/union_switch`, `reject_union_switch_enum`).
+
+<!-- cookbook:begin union-switch -->
+```ts
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle
+  r: i32 = 3
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square
+  side: i32 = 4
+}
+
+interface Tri {
+  readonly kind: Kind.Tri
+  base: i32
+}
+
+type Shape = Circle | Square | Tri
+
+const sides = (s: Shape): i32 => {
+  switch (s.kind) {
+    case Kind.Circle:
+      return 0
+    case Kind.Square:
+      return 4
+    case Kind.Tri:
+      return 3
+  }
+}
+
+export const main = (): i32 => {
+  const t: Tri = { kind: Kind.Tri, base: 2 }
+  return sides(t)
+}
+```
+
+```llvm
+%struct.Circle = type { i32, i32 }
+%struct.Square = type { i32, i32 }
+%struct.Tri = type { i32, i32 }
+%union.tagged = type { i32 }
+
+declare void @nish_free_arena() #2
+
+define internal noundef i32 @sides(%union.tagged* noundef %s) #0 {
+entry:
+  %0 = getelementptr inbounds %union.tagged, %union.tagged* %s, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  switch i32 %1, label %sw.unreachable [
+    i32 0, label %sw.case
+    i32 1, label %sw.case.1
+    i32 2, label %sw.case.2
+  ]
+
+sw.case:
+  ret i32 0
+
+sw.case.1:
+  ret i32 4
+
+sw.case.2:
+  ret i32 3
+
+sw.unreachable:
+  unreachable
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %t.addr = alloca %struct.Tri*, align 8
+  %Tri.obj = alloca %struct.Tri, align 8
+  %0 = getelementptr inbounds %struct.Tri, %struct.Tri* %Tri.obj, i32 0, i32 0
+  store i32 2, i32* %0, align 4
+  %1 = getelementptr inbounds %struct.Tri, %struct.Tri* %Tri.obj, i32 0, i32 1
+  store i32 2, i32* %1, align 4
+  store %struct.Tri* %Tri.obj, %struct.Tri** %t.addr, align 8
+  %2 = load %struct.Tri*, %struct.Tri** %t.addr, align 8
+  %3 = bitcast %struct.Tri* %2 to %union.tagged*
+  %4 = call i32 @sides(%union.tagged* %3)
+  ret i32 %4
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+```
+<!-- cookbook:end union-switch -->
+
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that

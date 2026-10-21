@@ -1,0 +1,1 @@
+This `===` is always false: `t.kind` is `Kind.Circle | Kind.Square` and `Kind.Tri` is `Kind.Tri`, which share no member

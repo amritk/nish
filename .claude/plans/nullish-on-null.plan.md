@@ -225,7 +225,7 @@ npm run check
 npm test                                   # read the skip count: undegraded only
 node tests/run.js wasi                      # WASI_SYSROOT=/usr where wasi-libc is installed; read its skip line
 node tests/run.js performance
-node tests/self/goldens.js --update        # then read the diff of checked.txt and checked-self.txt
+node tests/self/goldens.js --update        # then read the diff of tests/self/goldens/checked/
 node tests/differential/goldens.js --update
 npm run lint
 ```
