@@ -51,9 +51,10 @@ build/tfb/entry 8080
 curl -i http://127.0.0.1:8080/json
 ```
 
-The image builds from a released compiler, installed by `install.sh`. Its
-`NISH_VERSION` build argument must name a release after 0.18.0, the first with
-`tcpListenFlags` and `JsonWriter`:
+The image builds from a released compiler, installed by the `install.sh` of
+that release's tag. Its `NISH_VERSION` build argument must name a release after
+0.18.0, which has neither `tcpListenFlags` nor `JsonWriter`. 0.19.0 is the first
+release to have both, so the image builds only once 0.19.0 is out:
 
 ```bash
 docker build -f bench/techempower/nish.dockerfile --build-arg NISH_VERSION=0.19.0 -t nish-tfb bench/techempower
