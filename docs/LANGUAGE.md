@@ -6929,7 +6929,8 @@ program learns that from the `-95` a send with an `ecn` above `0` answers, and
 on Darwin it reads every arrival as Not-ECT. CI's `runtime-net (macos-latest)`
 job runs that branch: the `net_` sections there take the `-95` a GSO send and a
 GRO bind answer, and fall back to one datagram a send (`net_loopback`,
-`net_relay`). On Linux no UDP call answers `-95`, and the code is pinned there
+`net_relay`), and `net_udp_offload` requires the `-95` of GSO, the GRO bind and
+each ECN mark, with nothing sent by them while a plain send still arrives. On Linux no UDP call answers `-95`, and the code is pinned there
 by `tcpAccept` on a datagram socket instead, above.
 
 #### The readiness loop
@@ -6988,11 +6989,14 @@ and the runtime builds epoll's answers from the filters: `pollAdd` of a
 descriptor already watched is `-17`, `pollModify` and `pollRemove` of one not
 watched are `-2`, a descriptor added watching nothing holds a disabled read
 filter so the loop still knows it, and a descriptor both readable and writable
-is one pair, `3`, folded from its two filters' records. Two differences stay.
-The `pollAdd` that answers `-17` leaves the descriptor, both ways, under the
-token it gave rather than the old one. And a descriptor watching nothing is
+is one pair, `3`, folded from its two filters' records. Three differences
+stay. The `pollAdd` that answers `-17` leaves the descriptor, both ways, under
+the token it gave rather than the old one. A descriptor watching nothing is
 never reported: epoll still reports its hang-up or error as `4`, but a disabled
-filter reports nothing. CI's
+filter reports nothing. And a peer's half-close is `1` on Linux but `5`, `1|4`,
+on Darwin: kqueue marks the read filter with end-of-file as soon as the FIN
+arrives, and the runtime reads end-of-file as `4`, where epoll sets its
+hang-up bit only once both directions are shut. CI's
 `runtime-net (macos-latest)` job runs `net_loop_calls` and `net_loop_two` on a
 mac, as it runs every `net_` section.
 
