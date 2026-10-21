@@ -15870,7 +15870,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-histogram-atomic=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
       "--no-rayon",
       "--twin-runs",
       "1",
@@ -15914,7 +15914,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         parRun.status === 0 &&
           twinsAt > parText.indexOf(parHeading) &&
           parText.split(twinsHeading).length === 2 &&
-          ["par-compute", "par-nbody", "par-regions", "par-histogram"].every((k) =>
+          ["par-compute", "par-nbody", "par-regions", "par-histogram", "par-histogram-atomic"].every((k) =>
             twinsTable.includes(`| ${k} |`)
           ) &&
           twinsTable.includes("every binary below printed the Nish `par` run's output"),

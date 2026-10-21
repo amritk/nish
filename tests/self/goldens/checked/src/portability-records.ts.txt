@@ -15,12 +15,15 @@ import unwrapParens from "./emit-util" -> function @unwrapParens
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
+import N_CALL from "./nodes" -> const N_CALL
 import N_DO from "./nodes" -> const N_DO
 import N_FOR from "./nodes" -> const N_FOR
 import N_FOR_OF from "./nodes" -> const N_FOR_OF
 import N_IDENT from "./nodes" -> const N_IDENT
 import N_INDEX from "./nodes" -> const N_INDEX
 import N_MEMBER from "./nodes" -> const N_MEMBER
+import N_NEW from "./nodes" -> const N_NEW
+import N_PARAM from "./nodes" -> const N_PARAM
 import N_PAREN from "./nodes" -> const N_PAREN
 import N_UNARY from "./nodes" -> const N_UNARY
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
@@ -30,13 +33,23 @@ import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
 import PortabilityWalk from "./portability" -> struct PortabilityWalk
+import CheckedProgram from "./program" -> struct CheckedProgram
 import capturedReads from "./program" -> function @capturedReads
+import FunctionSig from "./program" -> struct FunctionSig
+import inlineElementStruct from "./program" -> function @inlineElementStruct
+import ROLE_FUNCTION from "./program" -> const ROLE_FUNCTION
 import Local from "./symbols" -> struct Local
 import sourceLocal from "./symbols" -> function @sourceLocal
+import TypeTable from "./types" -> struct TypeTable
 const SEEN_BY_NONE: i32 = 0
 const SEEN_BY_ARRAY: i32 = 1
 const SEEN_BY_SOURCE: i32 = 2
 const SEEN_BY_OTHER_COPY: i32 = 3
+const EFFECT_WRITE: i32 = 1
+const EFFECT_COPY: i32 = 2
+const EFFECT_STORE: i32 = 4
+const EFFECT_ANY: i32 = 7
+const EFFECT_DEPTH: i32 = 8
 struct Side (class) size=40 align=8
   field local: Local | null index=0 offset=0
   field root: string index=1 offset=8
@@ -54,7 +67,7 @@ struct CopySite (class) size=24 align=8
 struct NodeList (class) size=8 align=8
   field nodes: Node[] index=0 offset=0
   constructor -> @NodeList.constructor
-struct RecordIndex (class) size=56 align=8
+struct RecordIndex (class) size=80 align=8
   field walk: PortabilityWalk index=0 offset=0
   field aliased: StringSet index=1 offset=8
   field keys: StringMap index=2 offset=16
@@ -62,7 +75,13 @@ struct RecordIndex (class) size=56 align=8
   field empty: Node[] index=4 offset=32
   field copies: CopySite[] index=5 offset=40
   field copyCounts: StringMap index=6 offset=48
+  field aliasFrom: Local[] index=7 offset=56
+  field aliasTo: Local[] index=8 offset=64
+  field effects: CalleeEffects index=9 offset=72
   constructor -> @RecordIndex.constructor
+  method canonical -> @RecordIndex.canonical
+  method bindingOf -> @RecordIndex.bindingOf
+  method indexAlias -> @RecordIndex.indexAlias
   method add -> @RecordIndex.add
   method at -> @RecordIndex.at
   method sideOf -> @RecordIndex.sideOf
@@ -71,12 +90,26 @@ struct RecordIndex (class) size=56 align=8
   method indexCopy -> @RecordIndex.indexCopy
   method indexUse -> @RecordIndex.indexUse
   method indexWrite -> @RecordIndex.indexWrite
+  method addArrayWrite -> @RecordIndex.addArrayWrite
+  method indexCall -> @RecordIndex.indexCall
+  method argumentEffectOf -> @RecordIndex.argumentEffectOf
   method index -> @RecordIndex.index
   method indexArrowUses -> @RecordIndex.indexArrowUses
   method declarationOf -> @RecordIndex.declarationOf
   method lastUse -> @RecordIndex.lastUse
   method readLimit -> @RecordIndex.readLimit
   method readAfter -> @RecordIndex.readAfter
+struct CalleeEffects (class) size=40 align=8
+  field program: CheckedProgram index=0 offset=0
+  field table: TypeTable index=1 offset=8
+  field known: StringMap index=2 offset=16
+  field visiting: string[] index=3 offset=24
+  field assumed: i32 index=4 offset=32
+  constructor -> @CalleeEffects.constructor
+  method argument -> @CalleeEffects.argument
+  method parameter -> @CalleeEffects.parameter
+  method uses -> @CalleeEffects.uses
+  method callUses -> @CalleeEffects.callUses
 function recordFindings(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @recordFindings [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via aliasedRecordElements
@@ -97,17 +130,18 @@ function Side.constructor(this: Side, local: Local | null, root: string, elem: s
   pointer local: size=48 writesThrough=true captured=true
   pointer spelled: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function Side.names(this: Side, walk: PortabilityWalk, node: Node): boolean -> @Side.names [method]
+function Side.names(this: Side, index: RecordIndex, node: Node): boolean -> @Side.names [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: inlineArrayElement namesLocal nish_arena_mark nish_arena_release nish_str_eq referenceRoot
   pointer this: size=40 writesThrough=false captured=false
-  pointer walk: size=48 writesThrough=false captured=false passedTo=namesLocal#0
+  pointer index: size=80 writesThrough=false captured=false passedTo=namesLocal#0
   pointer node: size=40 writesThrough=true captured=true passedTo=namesLocal#1 inlineArrayElement#2 referenceRoot#0
   stackSites=0 stackLocals=0
-  local +0:11 local: Local | null (const)
-  callee +2:14 namesLocal -> @namesLocal
-  callee +7:9 inlineArrayElement -> @inlineArrayElement
-  callee +10:38 referenceRoot -> @referenceRoot
+  local +0:11 walk: PortabilityWalk (const)
+  local +1:11 local: Local | null (const)
+  callee +3:14 namesLocal -> @namesLocal
+  callee +8:9 inlineArrayElement -> @inlineArrayElement
+  callee +11:38 referenceRoot -> @referenceRoot
 function Side.same(this: Side, other: Side): boolean -> @Side.same [method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -116,15 +150,15 @@ function Side.same(this: Side, other: Side): boolean -> @Side.same [method]
   stackSites=0 stackLocals=0
   local +0:11 local: Local | null (const)
   local +1:11 theirs: Local | null (const)
-function namesLocal(walk: PortabilityWalk, node: Node, local: Local): boolean -> @namesLocal
+function namesLocal(index: RecordIndex, node: Node, local: Local): boolean -> @namesLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index sourceLocal
-  pointer walk: size=48 writesThrough=false captured=false
-  pointer node: size=40 writesThrough=false captured=false
+  calls: RecordIndex.bindingOf
+  pointer index: size=80 writesThrough=false captured=false passedTo=RecordIndex.bindingOf#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=RecordIndex.bindingOf#1
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 bound: Local | null (const)
-  callee +0:17 sourceLocal -> @sourceLocal
+  callee +0:17 RecordIndex.bindingOf -> @RecordIndex.bindingOf
 function CopySite.constructor(this: CopySite, source: Node, local: Local, into: Side): void -> @CopySite.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: into local source
@@ -138,21 +172,53 @@ function NodeList.constructor(this: NodeList): void -> @NodeList.constructor [co
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function RecordIndex.constructor(this: RecordIndex, walk: PortabilityWalk, aliased: StringSet): void -> @RecordIndex.constructor [constructor]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: aliased walk
-  calls: StringMap.constructor nish_alloc_struct
-  pointer this: size=56 writesThrough=true captured=false
+  calls: CalleeEffects.constructor StringMap.constructor nish_alloc_struct
+  pointer this: size=80 writesThrough=true captured=false
   pointer walk: size=48 writesThrough=true captured=true
   pointer aliased: size=8 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:17 new StringMap -> @StringMap.constructor
   callee +4:23 new StringMap -> @StringMap.constructor
+  callee +7:20 new CalleeEffects -> @CalleeEffects.constructor
+function RecordIndex.canonical(this: RecordIndex, local: Local | null): Local | null -> @RecordIndex.canonical [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: local
+  calls: nish_panic_index
+  pointer this: size=80 writesThrough=false captured=false
+  pointer local: size=48 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local +0:11 at: i32 (const)
+function RecordIndex.bindingOf(this: RecordIndex, node: Node): Local | null -> @RecordIndex.bindingOf [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: RecordIndex.canonical nish_panic_index sourceLocal
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.canonical#0
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:12 RecordIndex.canonical -> @RecordIndex.canonical
+  callee +0:27 sourceLocal -> @sourceLocal
+function RecordIndex.indexAlias(this: RecordIndex, decl: Node, local: Local): void -> @RecordIndex.indexAlias [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: local
+  calls: RecordIndex.bindingOf inlineElementStruct nish_array_grow nish_panic_index unwrapParens
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.bindingOf#0
+  pointer decl: size=40 writesThrough=false captured=false
+  pointer local: size=48 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  local -11:11 walk: PortabilityWalk (const)
+  local -10:11 init: Node (const)
+  callee -10:18 unwrapParens -> @unwrapParens
+  callee -6:7 inlineElementStruct -> @inlineElementStruct
+  local -2:11 target: Local | null (const)
+  callee -2:20 RecordIndex.bindingOf -> @RecordIndex.bindingOf
 function RecordIndex.add(this: RecordIndex, key: string, node: Node): void -> @RecordIndex.add [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: key node
   calls: NodeList.constructor StringMap.get StringMap.set nish_alloc_struct nish_array_grow nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=80 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local -4:9 at: i32 (let)
@@ -163,14 +229,14 @@ function RecordIndex.at(this: RecordIndex, key: string): Node[] -> @RecordIndex.
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: key
   calls: StringMap.get nish_panic_index
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 StringMap.get -> @StringMap.get
 function RecordIndex.sideOf(this: RecordIndex, expr: Node): Side | null -> @RecordIndex.sideOf [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Side.constructor StringSet.has inlineArrayElement nish_alloc_struct nish_panic_index nish_str_eq referenceRoot sourceLocal unwrapParens
-  pointer this: size=56 writesThrough=false captured=false
+  pointer this: size=80 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:11 inner: Node (const)
@@ -189,7 +255,7 @@ function RecordIndex.literalSide(this: RecordIndex, literal: Node): Side | null 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: literal
   calls: ParentTable.parentOf RecordIndex.sideOf Side.constructor StringSet.has inlineArrayElement nish_alloc_struct nish_panic_index nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.sideOf#0
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.sideOf#0
   pointer literal: size=40 writesThrough=true captured=true passedTo=inlineArrayElement#2 Side.constructor#4 ParentTable.parentOf#1
   stackSites=0 stackLocals=0
   local +0:11 walk: PortabilityWalk (const)
@@ -207,14 +273,15 @@ function RecordIndex.literalSide(this: RecordIndex, literal: Node): Side | null 
 function RecordIndex.addCopy(this: RecordIndex, value: Node, into: Side | null): void -> @RecordIndex.addCopy [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CopySite.constructor StringMap.get StringMap.set nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat unwrapParens
-  pointer this: size=56 writesThrough=false captured=false
+  calls: CopySite.constructor RecordIndex.canonical StringMap.get StringMap.set nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat unwrapParens
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.canonical#0
   pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer into: size=40 writesThrough=true captured=true passedTo=CopySite.constructor#3
   stackSites=0 stackLocals=0
   local -6:11 source: Node (const)
   callee -6:20 unwrapParens -> @unwrapParens
   local -2:11 local: Local | null (const)
+  callee -2:19 RecordIndex.canonical -> @RecordIndex.canonical
   callee +0:24 new CopySite -> @CopySite.constructor
   local +1:13 pair: string (const)
   callee +2:7 StringMap.set -> @StringMap.set
@@ -223,7 +290,7 @@ function RecordIndex.indexCopy(this: RecordIndex, node: Node): void -> @RecordIn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RecordIndex.addCopy
   calls: RecordIndex.addCopy RecordIndex.literalSide RecordIndex.sideOf isPushCall methodReceiver nish_panic_index slotStoreArray storesInlineElements
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.sideOf#0 RecordIndex.addCopy#0 RecordIndex.literalSide#0 RecordIndex.addCopy#0 RecordIndex.addCopy#0 RecordIndex.sideOf#0
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.sideOf#0 RecordIndex.addCopy#0 RecordIndex.literalSide#0 RecordIndex.addCopy#0 RecordIndex.addCopy#0 RecordIndex.sideOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=methodReceiver#0 isPushCall#2 storesInlineElements#2 RecordIndex.literalSide#1 slotStoreArray#2
   stackSites=0 stackLocals=0
   local +0:11 walk: PortabilityWalk (const)
@@ -247,13 +314,13 @@ function RecordIndex.indexCopy(this: RecordIndex, node: Node): void -> @RecordIn
 function RecordIndex.indexUse(this: RecordIndex, node: Node): void -> @RecordIndex.indexUse [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RecordIndex.add
-  calls: RecordIndex.add inlineArrayElement nish_panic_index nish_str_concat nish_str_eq referenceRoot sourceLocal
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.add#0 RecordIndex.add#0 RecordIndex.add#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RecordIndex.add#2 inlineArrayElement#2 RecordIndex.add#2 referenceRoot#0 RecordIndex.add#2
+  calls: RecordIndex.add RecordIndex.bindingOf inlineArrayElement nish_str_concat nish_str_eq referenceRoot
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.bindingOf#0 RecordIndex.add#0 RecordIndex.add#0 RecordIndex.add#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RecordIndex.bindingOf#1 RecordIndex.add#2 inlineArrayElement#2 RecordIndex.add#2 referenceRoot#0 RecordIndex.add#2
   stackSites=0 stackLocals=0
   local +0:11 walk: PortabilityWalk (const)
   local +2:13 local: Local | null (const)
-  callee +2:21 sourceLocal -> @sourceLocal
+  callee +2:21 RecordIndex.bindingOf -> @RecordIndex.bindingOf
   callee +4:9 RecordIndex.add -> @RecordIndex.add
   local +10:11 elem: string (const)
   callee +10:18 inlineArrayElement -> @inlineArrayElement
@@ -264,32 +331,83 @@ function RecordIndex.indexUse(this: RecordIndex, node: Node): void -> @RecordInd
 function RecordIndex.indexWrite(this: RecordIndex, node: Node): void -> @RecordIndex.indexWrite [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RecordIndex.add
-  calls: RecordIndex.add RecordIndex.sideOf inlineArrayElement isAssignmentOperator nish_panic_index nish_str_concat nish_str_eq unwrapParens writtenRecord
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.add#0 RecordIndex.sideOf#0 RecordIndex.add#0 RecordIndex.add#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=writtenRecord#0 RecordIndex.add#2 RecordIndex.add#2 RecordIndex.add#2
+  calls: RecordIndex.add RecordIndex.addArrayWrite RecordIndex.canonical isAssignmentOperator nish_panic_index nish_str_concat nish_str_eq unwrapParens writtenRecord
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.canonical#0 RecordIndex.add#0 RecordIndex.addArrayWrite#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=writtenRecord#0 RecordIndex.add#2 RecordIndex.addArrayWrite#1
   stackSites=0 stackLocals=0
   local +0:11 writes: boolean (const)
   callee +1:34 isAssignmentOperator -> @isAssignmentOperator
   callee +3:20 unwrapParens -> @unwrapParens
-  local +6:11 walk: PortabilityWalk (const)
-  local +7:11 record: Node (const)
-  callee +7:20 writtenRecord -> @writtenRecord
-  local +9:13 local: Local | null (const)
-  callee +11:9 RecordIndex.add -> @RecordIndex.add
-  local +18:11 array: Node (const)
-  callee +18:19 unwrapParens -> @unwrapParens
-  local +19:11 side: Side | null (const)
-  callee +19:18 RecordIndex.sideOf -> @RecordIndex.sideOf
-  callee +21:7 RecordIndex.add -> @RecordIndex.add
-  local +23:11 elem: string (const)
-  callee +23:18 inlineArrayElement -> @inlineArrayElement
-  callee +25:7 RecordIndex.add -> @RecordIndex.add
+  local +6:11 record: Node (const)
+  callee +6:20 writtenRecord -> @writtenRecord
+  local +8:13 local: Local | null (const)
+  callee +8:21 RecordIndex.canonical -> @RecordIndex.canonical
+  callee +10:9 RecordIndex.add -> @RecordIndex.add
+  callee +15:7 RecordIndex.addArrayWrite -> @RecordIndex.addArrayWrite
+  callee +15:32 unwrapParens -> @unwrapParens
+function RecordIndex.addArrayWrite(this: RecordIndex, write: Node, array: Node): void -> @RecordIndex.addArrayWrite [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RecordIndex.add
+  calls: RecordIndex.add RecordIndex.sideOf inlineArrayElement nish_str_concat nish_str_eq
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.sideOf#0 RecordIndex.add#0 RecordIndex.add#0
+  pointer write: size=40 writesThrough=true captured=true passedTo=RecordIndex.add#2 RecordIndex.add#2
+  pointer array: size=40 writesThrough=true captured=true passedTo=RecordIndex.sideOf#1 inlineArrayElement#2
+  stackSites=0 stackLocals=0
+  local +0:11 walk: PortabilityWalk (const)
+  local +1:11 side: Side | null (const)
+  callee +1:18 RecordIndex.sideOf -> @RecordIndex.sideOf
+  callee +3:7 RecordIndex.add -> @RecordIndex.add
+  local +5:11 elem: string (const)
+  callee +5:18 inlineArrayElement -> @inlineArrayElement
+  callee +7:7 RecordIndex.add -> @RecordIndex.add
+function RecordIndex.indexCall(this: RecordIndex, node: Node): void -> @RecordIndex.indexCall [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RecordIndex.argumentEffectOf
+  calls: RecordIndex.add RecordIndex.addArrayWrite RecordIndex.addCopy RecordIndex.argumentEffectOf RecordIndex.bindingOf RecordIndex.sideOf arrayOfArgument callArguments copiesInto isPushCall nish_str_concat unwrapParens writesThroughArgument
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.argumentEffectOf#0 RecordIndex.bindingOf#0 RecordIndex.add#0 RecordIndex.addArrayWrite#0 RecordIndex.argumentEffectOf#0 RecordIndex.addCopy#0 RecordIndex.sideOf#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=isPushCall#2 callArguments#0 RecordIndex.argumentEffectOf#1 RecordIndex.add#2 RecordIndex.addArrayWrite#1 RecordIndex.argumentEffectOf#1
+  stackSites=0 stackLocals=0
+  local +0:11 walk: PortabilityWalk (const)
+  callee +1:9 isPushCall -> @isPushCall
+  local +4:11 args: Node[] (const)
+  callee +4:18 callArguments -> @callArguments
+  local +5:9 j: i32 (let)
+  local +7:13 arg: Node (const)
+  callee +7:19 unwrapParens -> @unwrapParens
+  local +8:13 effect: i32 (const)
+  callee +8:22 RecordIndex.argumentEffectOf -> @RecordIndex.argumentEffectOf
+  local +10:15 local: Local | null (const)
+  callee +10:23 RecordIndex.bindingOf -> @RecordIndex.bindingOf
+  callee +12:11 RecordIndex.add -> @RecordIndex.add
+  callee +15:11 writesThroughArgument -> @writesThroughArgument
+  callee +16:9 RecordIndex.addArrayWrite -> @RecordIndex.addArrayWrite
+  callee +16:34 arrayOfArgument -> @arrayOfArgument
+  local +19:13 k: i32 (let)
+  local +21:17 into: Node (const)
+  callee +21:24 unwrapParens -> @unwrapParens
+  callee +24:13 copiesInto -> @copiesInto
+  callee +25:14 RecordIndex.argumentEffectOf -> @RecordIndex.argumentEffectOf
+  callee +27:13 RecordIndex.addCopy -> @RecordIndex.addCopy
+  callee +27:31 RecordIndex.sideOf -> @RecordIndex.sideOf
+function RecordIndex.argumentEffectOf(this: RecordIndex, node: Node, arg: Node, j: i32): i32 -> @RecordIndex.argumentEffectOf [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CalleeEffects.argument
+  escaping: j
+  calls: CalleeEffects.argument isRecordValue storesInlineElements
+  pointer this: size=80 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false passedTo=CalleeEffects.argument#4
+  pointer arg: size=40 writesThrough=false captured=false passedTo=isRecordValue#1 storesInlineElements#2
+  stackSites=0 stackLocals=0
+  local +0:11 walk: PortabilityWalk (const)
+  callee +1:10 isRecordValue -> @isRecordValue
+  callee +1:39 storesInlineElements -> @storesInlineElements
+  callee +4:12 CalleeEffects.argument -> @CalleeEffects.argument
 function RecordIndex.index(this: RecordIndex, node: Node): void -> @RecordIndex.index [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via capturedReads
-  calls: RecordIndex.add RecordIndex.index RecordIndex.indexArrowUses RecordIndex.indexCopy RecordIndex.indexUse RecordIndex.indexWrite capturedReads nish_panic_index nish_str_concat
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.indexArrowUses#0 RecordIndex.indexCopy#0 RecordIndex.indexUse#0 RecordIndex.indexWrite#0 RecordIndex.add#0 RecordIndex.index#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=capturedReads#1 RecordIndex.indexArrowUses#1 RecordIndex.indexCopy#1 RecordIndex.indexUse#1 RecordIndex.indexWrite#1 RecordIndex.add#2
+  calls: RecordIndex.add RecordIndex.index RecordIndex.indexAlias RecordIndex.indexArrowUses RecordIndex.indexCall RecordIndex.indexCopy RecordIndex.indexUse RecordIndex.indexWrite capturedReads nish_panic_index nish_str_concat
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.indexArrowUses#0 RecordIndex.indexCopy#0 RecordIndex.indexUse#0 RecordIndex.indexWrite#0 RecordIndex.indexCall#0 RecordIndex.add#0 RecordIndex.indexAlias#0 RecordIndex.index#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=capturedReads#1 RecordIndex.indexArrowUses#1 RecordIndex.indexCopy#1 RecordIndex.indexUse#1 RecordIndex.indexWrite#1 RecordIndex.indexCall#1 RecordIndex.add#2 RecordIndex.indexAlias#1
   stackSites=1 stackLocals=1
   local +0:13 reads: Node[] (const)
   callee +1:7 capturedReads -> @capturedReads
@@ -297,15 +415,17 @@ function RecordIndex.index(this: RecordIndex, node: Node): void -> @RecordIndex.
   callee +7:5 RecordIndex.indexCopy -> @RecordIndex.indexCopy
   callee +8:5 RecordIndex.indexUse -> @RecordIndex.indexUse
   callee +9:5 RecordIndex.indexWrite -> @RecordIndex.indexWrite
-  local +11:13 local: Local | null (const)
-  callee +13:9 RecordIndex.add -> @RecordIndex.add
-  local +16:16 child: Node (const)
-  callee +17:7 RecordIndex.index -> @RecordIndex.index
+  callee +11:7 RecordIndex.indexCall -> @RecordIndex.indexCall
+  local +14:13 local: Local | null (const)
+  callee +16:9 RecordIndex.add -> @RecordIndex.add
+  callee +17:9 RecordIndex.indexAlias -> @RecordIndex.indexAlias
+  local +20:16 child: Node (const)
+  callee +21:7 RecordIndex.index -> @RecordIndex.index
 function RecordIndex.indexArrowUses(this: RecordIndex, node: Node): void -> @RecordIndex.indexArrowUses [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RecordIndex.indexUse
   calls: RecordIndex.indexArrowUses RecordIndex.indexUse
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.indexUse#0 RecordIndex.indexArrowUses#0
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.indexUse#0 RecordIndex.indexArrowUses#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RecordIndex.indexUse#1
   stackSites=0 stackLocals=0
   callee +0:5 RecordIndex.indexUse -> @RecordIndex.indexUse
@@ -314,27 +434,26 @@ function RecordIndex.indexArrowUses(this: RecordIndex, node: Node): void -> @Rec
 function RecordIndex.declarationOf(this: RecordIndex, local: Local): Node | null -> @RecordIndex.declarationOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: RecordIndex.at nish_panic_index nish_str_concat
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.at#0
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.at#0
   pointer local: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 decl: Node (const)
   callee +0:24 RecordIndex.at -> @RecordIndex.at
   local +1:13 declared: Local | null (const)
 function RecordIndex.lastUse(this: RecordIndex, side: Side): Node | null -> @RecordIndex.lastUse [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: RecordIndex.at Side.names nish_str_concat
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.at#0
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.at#0 Side.names#1
   pointer side: size=40 writesThrough=false captured=false passedTo=Side.names#0
   stackSites=0 stackLocals=0
-  local +0:11 uses: Node[] (const)
-  callee +0:18 RecordIndex.at -> @RecordIndex.at
-  local +1:9 j: i32 (let)
-  local +3:13 use: Node (const)
-  callee +4:11 Side.names -> @Side.names
+  local +0:9 last: Node | null (let)
+  local +1:16 use: Node (const)
+  callee +1:23 RecordIndex.at -> @RecordIndex.at
+  callee +2:11 Side.names -> @Side.names
 function RecordIndex.readLimit(this: RecordIndex, side: Side, decl: Node | null): i32 -> @RecordIndex.readLimit [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: RecordIndex.lastUse repeatingLoop
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.lastUse#0
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.lastUse#0
   pointer side: size=40 writesThrough=false captured=false passedTo=RecordIndex.lastUse#1
   pointer decl: size=40 writesThrough=false captured=false passedTo=repeatingLoop#2
   stackSites=0 stackLocals=0
@@ -345,7 +464,7 @@ function RecordIndex.readLimit(this: RecordIndex, side: Side, decl: Node | null)
 function RecordIndex.readAfter(this: RecordIndex, side: Side, write: Node, loop: Node | null): boolean -> @RecordIndex.readAfter [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: RecordIndex.at RecordIndex.lastUse Side.names firstFrom nish_str_concat
-  pointer this: size=56 writesThrough=false captured=false passedTo=RecordIndex.lastUse#0 RecordIndex.at#0
+  pointer this: size=80 writesThrough=false captured=false passedTo=RecordIndex.lastUse#0 RecordIndex.at#0 Side.names#1
   pointer side: size=40 writesThrough=false captured=false passedTo=RecordIndex.lastUse#1 Side.names#0
   pointer write: size=40 writesThrough=false captured=false
   pointer loop: size=40 writesThrough=false captured=false
@@ -418,30 +537,67 @@ function copyFinding(walk: PortabilityWalk, copy: CopySite, write: Node, seenBy:
   callee +10:111 PortabilityWalk.textOf -> @PortabilityWalk.textOf
   callee +10:141 SourceFile.lineOf -> @SourceFile.lineOf
 function unseenBy(index: RecordIndex, copy: CopySite, source: Side, write: Node, decl: Node | null, twice: boolean): i32 -> @unseenBy
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: RecordIndex.readAfter Side.names namesLocal nish_panic_index repeatingLoop unwrapParens writtenRecord
-  pointer index: size=56 writesThrough=false captured=false passedTo=RecordIndex.readAfter#0 RecordIndex.readAfter#0 RecordIndex.readAfter#0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via writesRecordLocal
+  calls: RecordIndex.readAfter repeatingLoop writesRecordLocal writesThrough
+  pointer index: size=80 writesThrough=false captured=false passedTo=writesRecordLocal#0 RecordIndex.readAfter#0 writesThrough#0 RecordIndex.readAfter#0 RecordIndex.readAfter#0
   pointer copy: size=24 writesThrough=false captured=false
   pointer source: size=40 writesThrough=false captured=false passedTo=RecordIndex.readAfter#1
-  pointer write: size=40 writesThrough=false captured=false passedTo=writtenRecord#0 repeatingLoop#1 RecordIndex.readAfter#2 RecordIndex.readAfter#2 RecordIndex.readAfter#2
+  pointer write: size=40 writesThrough=false captured=false passedTo=repeatingLoop#1 writesRecordLocal#1 RecordIndex.readAfter#2 writesThrough#1 RecordIndex.readAfter#2 RecordIndex.readAfter#2
   pointer decl: size=40 writesThrough=false captured=false passedTo=repeatingLoop#2
   stackSites=0 stackLocals=0
-  local +0:9 walk: PortabilityWalk (const)
-  local +1:9 record: Node (const)
-  callee +1:18 writtenRecord -> @writtenRecord
-  local +2:9 loop: Node | null (const)
-  callee +2:16 repeatingLoop -> @repeatingLoop
-  callee +3:7 namesLocal -> @namesLocal
-  callee +4:12 RecordIndex.readAfter -> @RecordIndex.readAfter
-  callee +6:35 Side.names -> @Side.names
-  callee +6:57 unwrapParens -> @unwrapParens
-  callee +9:7 RecordIndex.readAfter -> @RecordIndex.readAfter
-  callee +12:19 RecordIndex.readAfter -> @RecordIndex.readAfter
+  local +0:9 loop: Node | null (const)
+  callee +0:16 repeatingLoop -> @repeatingLoop
+  callee +1:7 writesRecordLocal -> @writesRecordLocal
+  callee +2:12 RecordIndex.readAfter -> @RecordIndex.readAfter
+  callee +4:8 writesThrough -> @writesThrough
+  callee +7:7 RecordIndex.readAfter -> @RecordIndex.readAfter
+  callee +10:19 RecordIndex.readAfter -> @RecordIndex.readAfter
+function writesRecordLocal(index: RecordIndex, write: Node, local: Local): boolean -> @writesRecordLocal
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RecordIndex.argumentEffectOf
+  calls: RecordIndex.argumentEffectOf callArguments namesLocal unwrapParens writtenRecord
+  pointer index: size=80 writesThrough=false captured=false passedTo=namesLocal#0 namesLocal#0 RecordIndex.argumentEffectOf#0
+  pointer write: size=40 writesThrough=false captured=false passedTo=writtenRecord#0 callArguments#0 RecordIndex.argumentEffectOf#1
+  pointer local: size=48 writesThrough=false captured=false passedTo=namesLocal#2 namesLocal#2
+  stackSites=0 stackLocals=0
+  callee +0:12 namesLocal -> @namesLocal
+  callee +0:30 writtenRecord -> @writtenRecord
+  local +2:9 args: Node[] (const)
+  callee +2:16 callArguments -> @callArguments
+  local +3:7 j: i32 (let)
+  local +5:11 arg: Node (const)
+  callee +5:17 unwrapParens -> @unwrapParens
+  callee +6:9 namesLocal -> @namesLocal
+  callee +6:43 RecordIndex.argumentEffectOf -> @RecordIndex.argumentEffectOf
+function writesThrough(index: RecordIndex, write: Node, side: Side): boolean -> @writesThrough
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RecordIndex.argumentEffectOf
+  calls: RecordIndex.argumentEffectOf Side.names arrayOfArgument callArguments nish_panic_index unwrapParens writesThroughArgument writtenRecord
+  pointer index: size=80 writesThrough=false captured=false passedTo=Side.names#1 RecordIndex.argumentEffectOf#0 Side.names#1
+  pointer write: size=40 writesThrough=false captured=false passedTo=writtenRecord#0 callArguments#0 RecordIndex.argumentEffectOf#1
+  pointer side: size=40 writesThrough=false captured=false passedTo=Side.names#0 Side.names#0
+  stackSites=0 stackLocals=0
+  local +0:11 record: Node (const)
+  callee +0:20 writtenRecord -> @writtenRecord
+  callee +1:39 Side.names -> @Side.names
+  callee +1:57 unwrapParens -> @unwrapParens
+  local +3:9 walk: PortabilityWalk (const)
+  local +4:9 args: Node[] (const)
+  callee +4:16 callArguments -> @callArguments
+  local +5:7 j: i32 (let)
+  local +7:11 arg: Node (const)
+  callee +7:17 unwrapParens -> @unwrapParens
+  callee +9:7 writesThroughArgument -> @writesThroughArgument
+  callee +9:40 RecordIndex.argumentEffectOf -> @RecordIndex.argumentEffectOf
+  callee +10:7 Side.names -> @Side.names
+  callee +10:25 arrayOfArgument -> @arrayOfArgument
 function firstUnseen(index: RecordIndex, copy: CopySite, source: Side, writes: Node[], decl: Node | null, copyLoop: Node | null, twice: boolean, limit: i32): Node | null -> @firstUnseen
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via unseenBy
   escaping: twice
   calls: firstFrom runsAfter unseenBy
-  pointer index: size=56 writesThrough=false captured=false passedTo=unseenBy#0
+  pointer index: size=80 writesThrough=false captured=false passedTo=unseenBy#0
   pointer copy: size=24 writesThrough=false captured=false passedTo=unseenBy#1
   pointer source: size=40 writesThrough=false captured=false passedTo=unseenBy#2
   pointer writes: size=0 writesThrough=false captured=false passedTo=firstFrom#0
@@ -488,6 +644,187 @@ function copyFindings(walk: PortabilityWalk, aliased: StringSet, out: Portabilit
   local -5:9 write: Node | null (let)
   callee +0:16 copyFinding -> @copyFinding
   callee +0:47 unseenBy -> @unseenBy
+function callArguments(call: Node): Node[] -> @callArguments
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function isRecordValue(walk: PortabilityWalk, expr: Node): boolean -> @isRecordValue
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: inlineElementStruct nish_panic_index
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer expr: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 inlineElementStruct -> @inlineElementStruct
+function writesThroughArgument(walk: PortabilityWalk, arg: Node, effect: i32): boolean -> @writesThroughArgument
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index storesInlineElements
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer arg: size=40 writesThrough=false captured=false passedTo=storesInlineElements#2
+  stackSites=0 stackLocals=0
+  callee +0:45 storesInlineElements -> @storesInlineElements
+  callee +2:10 storesInlineElements -> @storesInlineElements
+function arrayOfArgument(walk: PortabilityWalk, arg: Node): Node -> @arrayOfArgument
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
+  escaping: arg
+  calls: nish_panic_index storesInlineElements unwrapParens
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer arg: size=40 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee +0:27 storesInlineElements -> @storesInlineElements
+  callee +1:7 unwrapParens -> @unwrapParens
+function copiesInto(walk: PortabilityWalk, record: Node, array: Node): boolean -> @copiesInto
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: TypeTable.refOf nish_panic_index storesInlineElements
+  pointer walk: size=48 writesThrough=false captured=false
+  pointer record: size=40 writesThrough=false captured=false
+  pointer array: size=40 writesThrough=false captured=false passedTo=storesInlineElements#2
+  stackSites=0 stackLocals=0
+  local +0:9 program: CheckedProgram (const)
+  callee +1:35 storesInlineElements -> @storesInlineElements
+  callee +4:10 TypeTable.refOf -> @TypeTable.refOf
+function namesParameter(node: Node, name: string): boolean -> @namesParameter
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq unwrapParens
+  pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  stackSites=0 stackLocals=0
+  local +0:9 inner: Node (const)
+  callee +0:17 unwrapParens -> @unwrapParens
+function redeclares(n: Node, name: string): boolean -> @redeclares
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: namesParameter nish_panic_index redeclares
+  pointer n: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:56 namesParameter -> @namesParameter
+  local +3:14 child: Node (const)
+  callee +4:9 redeclares -> @redeclares
+function mentionsIdent(n: Node, name: string): boolean -> @mentionsIdent
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: name
+  calls: mentionsIdent nish_str_eq
+  pointer n: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 child: Node (const)
+  callee +1:9 mentionsIdent -> @mentionsIdent
+function CalleeEffects.constructor(this: CalleeEffects, program: CheckedProgram, table: TypeTable): void -> @CalleeEffects.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  escaping: program table
+  calls: StringMap.constructor nish_alloc_struct
+  pointer this: size=40 writesThrough=true captured=false
+  pointer program: size=640 writesThrough=true captured=true
+  pointer table: size=96 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee +0:18 new StringMap -> @StringMap.constructor
+function CalleeEffects.argument(this: CalleeEffects, callees: FunctionSig | null[], types: i32[], coercions: i32[], call: Node, j: i32): i32 -> @CalleeEffects.argument [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CalleeEffects.parameter
+  escaping: j
+  calls: CalleeEffects.parameter CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf builtinEffect nish_panic_index
+  pointer this: size=40 writesThrough=true captured=false passedTo=CalleeEffects.parameter#0
+  pointer callees: size=0 writesThrough=false captured=false
+  pointer types: size=0 writesThrough=false captured=false
+  pointer coercions: size=0 writesThrough=false captured=false
+  pointer call: size=40 writesThrough=false captured=false passedTo=builtinEffect#0
+  stackSites=0 stackLocals=0
+  local +0:9 sig: FunctionSig | null (let)
+  callee +4:16 builtinEffect -> @builtinEffect
+  local +8:13 coerced: i32 (const)
+  local +9:13 type: i32 (const)
+  callee +10:24 TypeTable.isStruct -> @TypeTable.isStruct
+  local +11:15 info: StructInfo | null (const)
+  callee +11:22 CheckedProgram.struct -> @CheckedProgram.struct
+  callee +11:42 TypeTable.nameOf -> @TypeTable.nameOf
+  callee +20:12 CalleeEffects.parameter -> @CalleeEffects.parameter
+function CalleeEffects.parameter(this: CalleeEffects, sig: FunctionSig, k: i32): i32 -> @CalleeEffects.parameter [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: k
+  calls: CalleeEffects.uses FunctionSig.body FunctionSig.definedIn FunctionSig.foreign StringMap.get StringMap.set nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 redeclares
+  pointer this: size=40 writesThrough=true captured=false passedTo=CalleeEffects.uses#0
+  pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.body#0 FunctionSig.definedIn#0 FunctionSig.foreign#0
+  stackSites=0 stackLocals=0
+  local -18:11 program: CheckedProgram (const)
+  local -17:11 body: Node | null (const)
+  callee -17:18 FunctionSig.body -> @FunctionSig.body
+  callee -14:8 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee -11:7 FunctionSig.foreign -> @FunctionSig.foreign
+  local -6:11 key: string (const)
+  local -5:11 known: i32 (const)
+  callee -5:19 StringMap.get -> @StringMap.get
+  local +7:11 name: string (const)
+  local +8:11 before: i32 (const)
+  local +9:9 effect: i32 (let)
+  callee +10:10 redeclares -> @redeclares
+  callee +12:16 CalleeEffects.uses -> @CalleeEffects.uses
+  callee +16:7 StringMap.set -> @StringMap.set
+function CalleeEffects.uses(this: CalleeEffects, n: Node, name: string): i32 -> @CalleeEffects.uses [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CalleeEffects.uses
+  escaping: name
+  calls: CalleeEffects.callUses CalleeEffects.uses isAssignmentOperator mentionsIdent namesParameter nish_panic_index nish_str_eq unwrapParens
+  pointer this: size=40 writesThrough=true captured=false passedTo=CalleeEffects.uses#0 CalleeEffects.uses#0 CalleeEffects.uses#0 CalleeEffects.uses#0 CalleeEffects.uses#0 CalleeEffects.callUses#0 CalleeEffects.uses#0
+  pointer n: size=40 writesThrough=false captured=false passedTo=mentionsIdent#0 CalleeEffects.callUses#1
+  stackSites=0 stackLocals=0
+  callee +0:14 mentionsIdent -> @mentionsIdent
+  local +2:11 writes: boolean (const)
+  callee +3:31 isAssignmentOperator -> @isAssignmentOperator
+  local +6:13 target: Node (const)
+  callee +6:22 unwrapParens -> @unwrapParens
+  local +7:13 value: i32 (const)
+  callee +7:43 CalleeEffects.uses -> @CalleeEffects.uses
+  local +9:15 record: Node (const)
+  callee +9:24 unwrapParens -> @unwrapParens
+  callee +10:13 namesParameter -> @namesParameter
+  callee +13:40 namesParameter -> @namesParameter
+  callee +14:33 CalleeEffects.uses -> @CalleeEffects.uses
+  callee +17:38 namesParameter -> @namesParameter
+  callee +18:31 CalleeEffects.uses -> @CalleeEffects.uses
+  callee +21:32 namesParameter -> @namesParameter
+  callee +27:7 namesParameter -> @namesParameter
+  callee +29:14 CalleeEffects.uses -> @CalleeEffects.uses
+  local +32:11 effect: i32 (let)
+  local +33:18 element: Node (const)
+  callee +34:28 namesParameter -> @namesParameter
+  callee +34:74 CalleeEffects.uses -> @CalleeEffects.uses
+  callee +39:14 CalleeEffects.callUses -> @CalleeEffects.callUses
+  local +41:9 effect: i32 (let)
+  local +42:16 child: Node (const)
+  callee +43:25 CalleeEffects.uses -> @CalleeEffects.uses
+function CalleeEffects.callUses(this: CalleeEffects, call: Node, name: string): i32 -> @CalleeEffects.callUses [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CalleeEffects.uses
+  escaping: name
+  calls: CalleeEffects.argument CalleeEffects.uses callArguments namesParameter nish_panic_index nish_str_eq unwrapParens
+  pointer this: size=40 writesThrough=true captured=false passedTo=CalleeEffects.uses#0 CalleeEffects.uses#0 CalleeEffects.argument#0 CalleeEffects.uses#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=callArguments#0 CalleeEffects.argument#4
+  stackSites=0 stackLocals=0
+  local +0:11 callee: Node (const)
+  local +1:9 effect: i32 (let)
+  local +3:13 receiver: Node (const)
+  callee +3:24 unwrapParens -> @unwrapParens
+  callee +4:11 namesParameter -> @namesParameter
+  callee +7:18 CalleeEffects.uses -> @CalleeEffects.uses
+  callee +10:16 CalleeEffects.uses -> @CalleeEffects.uses
+  local +12:11 program: CheckedProgram (const)
+  local +13:11 outside: boolean (const)
+  local +14:11 callees: FunctionSig | null[] (const)
+  local +15:11 types: i32[] (const)
+  local +16:11 coercions: i32[] (const)
+  local +17:11 args: Node[] (const)
+  callee +17:18 callArguments -> @callArguments
+  local +18:9 j: i32 (let)
+  local +20:13 arg: Node (const)
+  callee +23:10 namesParameter -> @namesParameter
+  callee +23:38 CalleeEffects.argument -> @CalleeEffects.argument
+  callee +23:90 CalleeEffects.uses -> @CalleeEffects.uses
+function builtinEffect(call: Node): i32 -> @builtinEffect
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_str_eq
+  pointer call: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  local +4:9 method: string (const)
 function overwriteFinding(walk: PortabilityWalk, found: SlotOverwrite): PortabilityFinding -> @overwriteFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: PortabilityFinding.constructor PortabilityWalk.textOf SourceFile.lineOf nish_alloc_struct nish_str_concat nish_str_from_i32

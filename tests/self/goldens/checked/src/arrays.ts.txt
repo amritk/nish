@@ -37,6 +37,7 @@ import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
 import N_DEFAULT from "./nodes" -> const N_DEFAULT
 import N_DO from "./nodes" -> const N_DO
 import N_EMPTY from "./nodes" -> const N_EMPTY
+import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
 import N_FOR from "./nodes" -> const N_FOR
 import N_FOR_OF from "./nodes" -> const N_FOR_OF
 import N_IDENT from "./nodes" -> const N_IDENT
@@ -99,21 +100,26 @@ struct SlotOverwrite (class) size=24 align=8 exported
   field reference: Local index=1 offset=8
   field read: Node index=2 offset=16
   constructor -> @SlotOverwrite.constructor
-struct RefWalk (class) size=72 align=8
+struct RefWalk (class) size=88 align=8
   field program: CheckedProgram index=0 offset=0
   field table: TypeTable index=1 offset=8
   field ctx: CheckContext | null index=2 offset=16
   field live: ElementRef[] index=3 offset=24
-  field reported: boolean index=4 offset=32
-  field overwrites: SlotOverwrite[] | null index=5 offset=40
-  field aliased: StringSet index=6 offset=48
-  field held: Node[] index=7 offset=56
-  field heldScopes: Local[] index=8 offset=64
+  field declared: Local[] index=4 offset=32
+  field statement: Node | null index=5 offset=40
+  field statementBlock: i32 index=6 offset=48
+  field reported: boolean index=7 offset=52
+  field overwrites: SlotOverwrite[] | null index=8 offset=56
+  field aliased: StringSet index=9 offset=64
+  field held: Node[] index=10 offset=72
+  field heldScopes: Local[] index=11 offset=80
   constructor -> @RefWalk.constructor
   method holdTaskInputs -> @RefWalk.holdTaskInputs
   method readHeld -> @RefWalk.readHeld
   method report -> @RefWalk.report
   method dropTo -> @RefWalk.dropTo
+  method keepFrom -> @RefWalk.keepFrom
+  method declaredSince -> @RefWalk.declaredSince
   method invalidate -> @RefWalk.invalidate
   method overwrite -> @RefWalk.overwrite
   method mutationsWithin -> @RefWalk.mutationsWithin
@@ -123,6 +129,10 @@ struct RefWalk (class) size=72 align=8
   method visitLoop -> @RefWalk.visitLoop
   method visitCall -> @RefWalk.visitCall
   method visitDeclaration -> @RefWalk.visitDeclaration
+  method visitAssignment -> @RefWalk.visitAssignment
+  method bind -> @RefWalk.bind
+  method referencesOf -> @RefWalk.referencesOf
+  method aliasesOf -> @RefWalk.aliasesOf
 function checkArrayLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkArrayLiteral [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
@@ -653,7 +663,7 @@ function slotStoreArray(program: CheckedProgram, table: TypeTable, node: Node): 
 function RefWalk.constructor(this: RefWalk, program: CheckedProgram, table: TypeTable, ctx: CheckContext | null, overwrites: SlotOverwrite[] | null, aliased: StringSet): void -> @RefWalk.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: aliased ctx overwrites program table
-  pointer this: size=72 writesThrough=true captured=false
+  pointer this: size=88 writesThrough=true captured=false
   pointer program: size=640 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   pointer ctx: size=224 writesThrough=true captured=true
@@ -664,7 +674,7 @@ function RefWalk.holdTaskInputs(this: RefWalk, node: Node): void -> @RefWalk.hol
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: capturedReads namesUnder nish_array_grow nish_panic_index sourceLocal unwrapParens
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=88 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local -25:11 callee: FunctionSig | null (const)
@@ -685,7 +695,7 @@ function RefWalk.readHeld(this: RefWalk, block: Node): void -> @RefWalk.readHeld
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: RefWalk.visitIdentifier declaresUsing nish_array_grow
-  pointer this: size=72 writesThrough=true captured=false passedTo=RefWalk.visitIdentifier#0
+  pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.visitIdentifier#0
   pointer block: size=40 writesThrough=false captured=false passedTo=declaresUsing#1
   stackSites=0 stackLocals=0
   local -14:11 keptNames: Node[] (const)
@@ -700,22 +710,42 @@ function RefWalk.report(this: RefWalk, node: Node, message: string): void -> @Re
   sharedWrite: +0:5
   escaping: message
   calls: CheckContext.error
-  pointer this: size=72 writesThrough=true captured=false
+  pointer this: size=88 writesThrough=true captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local -4:11 ctx: CheckContext | null (const)
   callee -2:7 CheckContext.error -> @CheckContext.error
-function RefWalk.dropTo(this: RefWalk, depth: i32): void -> @RefWalk.dropTo [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+function RefWalk.dropTo(this: RefWalk, depth: i32, declaredDepth: i32): void -> @RefWalk.dropTo [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish_panic_index
-  pointer this: size=72 writesThrough=false captured=false
+  escaping: declaredDepth depth
+  calls: RefWalk.declaredSince RefWalk.keepFrom nish_array_grow nish_panic_index
+  pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.declaredSince#0 RefWalk.keepFrom#0
+  stackSites=1 stackLocals=1
+  local -10:11 kept: ElementRef[] (const)
+  local -9:9 i: i32 (let)
+  callee -7:12 RefWalk.declaredSince -> @RefWalk.declaredSince
+  callee -2:5 RefWalk.keepFrom -> @RefWalk.keepFrom
+function RefWalk.keepFrom(this: RefWalk, depth: i32, kept: ElementRef[]): void -> @RefWalk.keepFrom [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish_array_grow nish_panic_index
+  pointer this: size=88 writesThrough=false captured=false
+  pointer kept: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +2:16 ref: ElementRef (const)
+function RefWalk.declaredSince(this: RefWalk, local: Local, declaredDepth: i32): boolean -> @RefWalk.declaredSince [method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: declaredDepth
+  pointer this: size=88 writesThrough=false captured=false
+  pointer local: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 i: i32 (let)
 function RefWalk.invalidate(this: RefWalk, m: Mutation): void -> @RefWalk.invalidate [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: ElementRef.reachedBy nish_str_eq
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=88 writesThrough=false captured=false
   pointer m: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -4:9 i: i32 (let)
@@ -726,7 +756,7 @@ function RefWalk.overwrite(this: RefWalk, node: Node): void -> @RefWalk.overwrit
   sharedWrite: +0:9
   escaping: node
   calls: ElementRef.reachedBy StringSet.has inlineArrayElement nish_arena_mark nish_arena_release referenceRoot slotStoreArray
-  pointer this: size=72 writesThrough=false captured=false
+  pointer this: size=88 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=slotStoreArray#2
   stackSites=0 stackLocals=0
   local -10:11 array: Node | null (const)
@@ -743,7 +773,7 @@ function RefWalk.mutationsWithin(this: RefWalk, node: Node, out: Mutation[]): vo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectMutations
   calls: RefWalk.mutationsWithin RefWalk.overwrite collectMutations
-  pointer this: size=72 writesThrough=false captured=false passedTo=RefWalk.overwrite#0 RefWalk.mutationsWithin#0
+  pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.overwrite#0 RefWalk.mutationsWithin#0
   pointer node: size=40 writesThrough=true captured=true passedTo=collectMutations#2 RefWalk.overwrite#1
   pointer out: size=0 writesThrough=true captured=false passedTo=collectMutations#3 RefWalk.mutationsWithin#2
   stackSites=0 stackLocals=0
@@ -752,27 +782,32 @@ function RefWalk.mutationsWithin(this: RefWalk, node: Node, out: Mutation[]): vo
   local +3:16 child: Node (const)
   callee +4:7 RefWalk.mutationsWithin -> @RefWalk.mutationsWithin
 function RefWalk.visit(this: RefWalk, node: Node): void -> @RefWalk.visit [method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via RefWalk.visitIdentifier
-  calls: RefWalk.dropTo RefWalk.overwrite RefWalk.readHeld RefWalk.visitCall RefWalk.visitChildren RefWalk.visitDeclaration RefWalk.visitIdentifier RefWalk.visitLoop
-  pointer this: size=72 writesThrough=true captured=false passedTo=RefWalk.visitIdentifier#0 RefWalk.visitChildren#0 RefWalk.readHeld#0 RefWalk.dropTo#0 RefWalk.visitLoop#0 RefWalk.visitCall#0 RefWalk.visitDeclaration#0 RefWalk.visitChildren#0 RefWalk.overwrite#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=RefWalk.visitIdentifier#1 RefWalk.visitChildren#1 RefWalk.readHeld#1 RefWalk.visitLoop#1 RefWalk.visitCall#1 RefWalk.visitDeclaration#1 RefWalk.visitChildren#1 RefWalk.overwrite#1
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  calls: RefWalk.dropTo RefWalk.overwrite RefWalk.readHeld RefWalk.visit RefWalk.visitAssignment RefWalk.visitCall RefWalk.visitChildren RefWalk.visitDeclaration RefWalk.visitIdentifier RefWalk.visitLoop nish_panic_index nish_str_eq unwrapParens
+  pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.visitIdentifier#0 RefWalk.visit#0 RefWalk.readHeld#0 RefWalk.dropTo#0 RefWalk.visitLoop#0 RefWalk.visitCall#0 RefWalk.visitDeclaration#0 RefWalk.visitChildren#0 RefWalk.overwrite#0 RefWalk.visitAssignment#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=RefWalk.visitIdentifier#1 RefWalk.readHeld#1 RefWalk.visitLoop#1 RefWalk.visitCall#1 RefWalk.visitDeclaration#1 RefWalk.visitChildren#1 RefWalk.overwrite#1 RefWalk.visitAssignment#1
   stackSites=0 stackLocals=0
-  callee +0:7 RefWalk.visitIdentifier -> @RefWalk.visitIdentifier
-  local +4:13 depth: i32 (const)
-  callee +5:7 RefWalk.visitChildren -> @RefWalk.visitChildren
-  callee +7:9 RefWalk.readHeld -> @RefWalk.readHeld
-  callee +9:7 RefWalk.dropTo -> @RefWalk.dropTo
-  callee +13:7 RefWalk.visitLoop -> @RefWalk.visitLoop
-  callee +17:7 RefWalk.visitCall -> @RefWalk.visitCall
-  callee +21:7 RefWalk.visitDeclaration -> @RefWalk.visitDeclaration
-  callee +24:5 RefWalk.visitChildren -> @RefWalk.visitChildren
-  callee +27:5 RefWalk.overwrite -> @RefWalk.overwrite
+  callee -8:7 RefWalk.visitIdentifier -> @RefWalk.visitIdentifier
+  local -4:13 depth: i32 (const)
+  local -3:13 declaredDepth: i32 (const)
+  local -2:18 child: Node (const)
+  local -1:15 expression: Node (const)
+  callee -1:57 unwrapParens -> @unwrapParens
+  callee +2:9 RefWalk.visit -> @RefWalk.visit
+  callee +6:9 RefWalk.readHeld -> @RefWalk.readHeld
+  callee +8:7 RefWalk.dropTo -> @RefWalk.dropTo
+  callee +12:7 RefWalk.visitLoop -> @RefWalk.visitLoop
+  callee +16:7 RefWalk.visitCall -> @RefWalk.visitCall
+  callee +20:7 RefWalk.visitDeclaration -> @RefWalk.visitDeclaration
+  callee +23:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  callee +26:5 RefWalk.overwrite -> @RefWalk.overwrite
+  callee +28:7 RefWalk.visitAssignment -> @RefWalk.visitAssignment
 function RefWalk.visitChildren(this: RefWalk, node: Node): void -> @RefWalk.visitChildren [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visit
   calls: RefWalk.visit
-  pointer this: size=72 writesThrough=true captured=false passedTo=RefWalk.visit#0
+  pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.visit#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 child: Node (const)
@@ -781,7 +816,7 @@ function RefWalk.visitIdentifier(this: RefWalk, node: Node): void -> @RefWalk.vi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: RefWalk.report SlotOverwrite.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq sourceLocal
-  pointer this: size=72 writesThrough=true captured=false passedTo=RefWalk.report#0
+  pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.report#0
   pointer node: size=40 writesThrough=true captured=true passedTo=SlotOverwrite.constructor#3 RefWalk.report#1
   stackSites=0 stackLocals=0
   local -14:11 local: Local | null (const)
@@ -796,29 +831,30 @@ function RefWalk.visitLoop(this: RefWalk, node: Node): void -> @RefWalk.visitLoo
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: ElementRef.constructor RefWalk.dropTo RefWalk.invalidate RefWalk.mutationsWithin RefWalk.visitChildren inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText
-  pointer this: size=72 writesThrough=true captured=false passedTo=RefWalk.mutationsWithin#0 RefWalk.invalidate#0 RefWalk.visitChildren#0 RefWalk.dropTo#0
+  pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.mutationsWithin#0 RefWalk.invalidate#0 RefWalk.visitChildren#0 RefWalk.dropTo#0
   pointer node: size=40 writesThrough=true captured=true passedTo=RefWalk.mutationsWithin#1 RefWalk.visitChildren#1
   stackSites=1 stackLocals=1
-  local -15:11 found: Mutation[] (const)
-  callee -14:5 RefWalk.mutationsWithin -> @RefWalk.mutationsWithin
-  local -13:16 m: Mutation (const)
-  callee -12:7 RefWalk.invalidate -> @RefWalk.invalidate
-  local -10:11 depth: i32 (const)
+  local -16:11 found: Mutation[] (const)
+  callee -15:5 RefWalk.mutationsWithin -> @RefWalk.mutationsWithin
+  local -14:16 m: Mutation (const)
+  callee -13:7 RefWalk.invalidate -> @RefWalk.invalidate
+  local -11:11 depth: i32 (const)
+  local -10:11 declaredDepth: i32 (const)
   local -5:13 iterable: Node (const)
   local -4:13 elem: string (const)
   callee -4:20 inlineArrayElement -> @inlineArrayElement
   local -3:13 decl: Node (const)
   local -2:13 local: Local | null (const)
-  callee +1:11 new ElementRef -> @ElementRef.constructor
-  callee +1:33 referenceRoot -> @referenceRoot
-  callee +1:64 rootText -> @rootText
-  callee +5:5 RefWalk.visitChildren -> @RefWalk.visitChildren
-  callee +6:5 RefWalk.dropTo -> @RefWalk.dropTo
+  callee +4:11 new ElementRef -> @ElementRef.constructor
+  callee +4:33 referenceRoot -> @referenceRoot
+  callee +4:64 rootText -> @rootText
+  callee +8:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  callee +9:5 RefWalk.dropTo -> @RefWalk.dropTo
 function RefWalk.visitCall(this: RefWalk, node: Node): void -> @RefWalk.visitCall [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via RefWalk.visitChildren
   calls: RefWalk.holdTaskInputs RefWalk.invalidate RefWalk.report RefWalk.visitChildren collectMutations elementSource nish_panic_index nish_str_concat nish_str_eq referenceRoot
-  pointer this: size=72 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0 RefWalk.holdTaskInputs#0 RefWalk.report#0 RefWalk.invalidate#0
+  pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0 RefWalk.holdTaskInputs#0 RefWalk.report#0 RefWalk.invalidate#0
   pointer node: size=40 writesThrough=false captured=false passedTo=RefWalk.visitChildren#1 RefWalk.holdTaskInputs#1 collectMutations#2
   stackSites=1 stackLocals=1
   callee +0:5 RefWalk.visitChildren -> @RefWalk.visitChildren
@@ -834,23 +870,80 @@ function RefWalk.visitCall(this: RefWalk, node: Node): void -> @RefWalk.visitCal
   callee +18:7 RefWalk.invalidate -> @RefWalk.invalidate
 function RefWalk.visitDeclaration(this: RefWalk, node: Node): void -> @RefWalk.visitDeclaration [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:7
-  calls: ElementRef.constructor RefWalk.visitChildren elementSource inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText unwrapParens
-  pointer this: size=72 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0
+  sharedWrite: +0:5
+  calls: RefWalk.bind RefWalk.visitChildren nish_array_grow nish_panic_index
+  pointer this: size=88 writesThrough=true captured=false passedTo=RefWalk.visitChildren#0 RefWalk.bind#0
   pointer node: size=40 writesThrough=false captured=false passedTo=RefWalk.visitChildren#1
   stackSites=0 stackLocals=0
-  callee -19:5 RefWalk.visitChildren -> @RefWalk.visitChildren
-  local -18:11 local: Local | null (const)
-  local -17:11 initializer: Node (const)
-  local -13:11 source: Node | null (const)
-  callee -13:20 elementSource -> @elementSource
-  local -9:11 elem: string (const)
-  callee -9:18 inlineArrayElement -> @inlineArrayElement
-  local -7:13 ref: ElementRef (const)
-  callee -7:19 new ElementRef -> @ElementRef.constructor
-  callee -5:9 referenceRoot -> @referenceRoot
-  callee -3:9 rootText -> @rootText
-  callee -1:22 unwrapParens -> @unwrapParens
+  callee -5:5 RefWalk.visitChildren -> @RefWalk.visitChildren
+  local -4:11 local: Local | null (const)
+  local +1:11 initializer: Node (const)
+  callee +3:7 RefWalk.bind -> @RefWalk.bind
+function RefWalk.visitAssignment(this: RefWalk, node: Node): void -> @RefWalk.visitAssignment [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RefWalk.bind
+  calls: RefWalk.bind nish_panic_index unwrapParens
+  pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.bind#0
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 target: Node (const)
+  callee +0:20 unwrapParens -> @unwrapParens
+  local +1:11 local: Local | null (const)
+  local +3:13 statement: Node | null (const)
+  local +4:13 replaceFrom: i32 (const)
+  callee +5:7 RefWalk.bind -> @RefWalk.bind
+function RefWalk.bind(this: RefWalk, local: Local, value: Node, replaceFrom: i32): void -> @RefWalk.bind [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via RefWalk.referencesOf
+  escaping: replaceFrom
+  calls: RefWalk.keepFrom RefWalk.referencesOf nish_array_grow nish_panic_index
+  pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.referencesOf#0 RefWalk.keepFrom#0
+  pointer local: size=48 writesThrough=true captured=true passedTo=RefWalk.referencesOf#1
+  pointer value: size=40 writesThrough=true captured=true passedTo=RefWalk.referencesOf#2
+  stackSites=2 stackLocals=2
+  local +0:11 found: ElementRef[] (const)
+  callee +1:5 RefWalk.referencesOf -> @RefWalk.referencesOf
+  local +2:11 kept: ElementRef[] (const)
+  local +3:9 i: i32 (let)
+  local +10:16 ref: ElementRef (const)
+  callee +13:5 RefWalk.keepFrom -> @RefWalk.keepFrom
+function RefWalk.referencesOf(this: RefWalk, local: Local, value: Node, out: ElementRef[]): void -> @RefWalk.referencesOf [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  calls: ElementRef.constructor RefWalk.aliasesOf RefWalk.referencesOf elementSource inlineArrayElement nish_alloc_struct nish_array_grow nish_panic_index nish_str_eq referenceRoot rootText sourceLocal unwrapParens
+  pointer this: size=88 writesThrough=false captured=false passedTo=RefWalk.aliasesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0 RefWalk.referencesOf#0
+  pointer local: size=48 writesThrough=true captured=true passedTo=ElementRef.constructor#1 RefWalk.aliasesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1 RefWalk.referencesOf#1
+  pointer value: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=RefWalk.aliasesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3 RefWalk.referencesOf#3
+  stackSites=0 stackLocals=0
+  local -12:11 inner: Node (const)
+  callee -12:19 unwrapParens -> @unwrapParens
+  local -11:11 source: Node | null (const)
+  callee -11:20 elementSource -> @elementSource
+  local -9:13 elem: string (const)
+  callee -9:20 inlineArrayElement -> @inlineArrayElement
+  local -7:15 ref: ElementRef (const)
+  callee -7:21 new ElementRef -> @ElementRef.constructor
+  callee -5:11 referenceRoot -> @referenceRoot
+  callee -3:11 rootText -> @rootText
+  callee +5:7 RefWalk.aliasesOf -> @RefWalk.aliasesOf
+  callee +5:29 sourceLocal -> @sourceLocal
+  callee +9:7 RefWalk.referencesOf -> @RefWalk.referencesOf
+  callee +10:7 RefWalk.referencesOf -> @RefWalk.referencesOf
+  callee +14:7 RefWalk.referencesOf -> @RefWalk.referencesOf
+  callee +15:7 RefWalk.referencesOf -> @RefWalk.referencesOf
+function RefWalk.aliasesOf(this: RefWalk, local: Local, from: Local | null, out: ElementRef[]): void -> @RefWalk.aliasesOf [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  calls: ElementRef.constructor nish_alloc_struct nish_array_grow
+  pointer this: size=88 writesThrough=false captured=false
+  pointer local: size=48 writesThrough=true captured=true passedTo=ElementRef.constructor#1
+  pointer from: size=48 writesThrough=false captured=false
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:16 ref: ElementRef (const)
+  local -3:15 alias: ElementRef (const)
+  callee -3:23 new ElementRef -> @ElementRef.constructor
 function namesUnder(node: Node, out: Node[]): void -> @namesUnder
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
