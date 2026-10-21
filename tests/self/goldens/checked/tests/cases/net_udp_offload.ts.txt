@@ -28,22 +28,25 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_udp_bind
   calls: intact llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to receive
-  stackSites=5 stackLocals=3
+  stackSites=6 stackLocals=3
   local +0:9 node: i32 (const)
   local +1:9 data: u8[] (const)
   local +2:12 i: i32 (let)
   local +5:9 to: u8[] (const)
   local +6:9 sender: i32 (const)
-  local +10:9 buf: u8[] (const)
-  local +11:9 from: u8[] (const)
-  local +12:9 meta: i32[] (const)
-  local +13:9 gro: i32 (const)
-  local +14:9 plain: i32 (const)
-  local +15:14 fd: i32 (const)
-  local +18:11 n: i32 (const)
-  callee +18:15 receive -> @receive
-  callee +19:91 intact -> @intact
-  local +23:14 ecn: i32 (const)
-  local +26:9 n: i32 (let)
-  callee +26:13 receive -> @receive
-  callee +28:11 receive -> @receive
+  local +8:9 gso: i32 (const)
+  local +11:11 refused: i32 (const)
+  local +13:16 ecn: i32 (const)
+  local +20:9 buf: u8[] (const)
+  local +21:9 from: u8[] (const)
+  local +22:9 meta: i32[] (const)
+  local +23:9 gro: i32 (const)
+  local +24:9 plain: i32 (const)
+  local +25:14 fd: i32 (const)
+  local +28:11 n: i32 (const)
+  callee +28:15 receive -> @receive
+  callee +29:91 intact -> @intact
+  local +33:14 ecn: i32 (const)
+  local +36:9 n: i32 (let)
+  callee +36:13 receive -> @receive
+  callee +38:11 receive -> @receive

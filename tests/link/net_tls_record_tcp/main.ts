@@ -4,7 +4,7 @@
 // `serve <n>` it is the server alone for a third-party client: it prints
 // `port <p>`, serves `n` connections — an echo, or an HTTP answer to a GET —
 // printing a line as each ends, and exits 0. The `net_tls_tcp` block of
-// tests/run.js drives that mode with openssl s_client and curl.
+// tests/run.js drives that mode with openssl s_client and Node's https.
 import { tcpConfig } from "../net_tls_common/server";
 import { Loopback, SIGN_LEAF } from "./harness";
 import { tcpChecks } from "./checks";

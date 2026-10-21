@@ -199,9 +199,9 @@ PASS  and hold no more slots than its cap and the 2 spare ones
 PASS  the two past that are closed with code 1 at their first Initial, counted
 PASS  another address still opens a session and is answered HELLO_OK
 PASS  and its DATA goes up and comes back down
-PASS  four DATA in one pass leave in one GSO send, the shorter last
-PASS  read back by the game server's GRO socket as one
-PASS  a GSO burst from the game server arrives as one GRO read, cut into three DATA
+PASS  four DATA in one pass reach the game server in order, the shorter last
+PASS  one GSO send read back as one GRO read where the host offloads, else four sends and none counted
+PASS  a burst of three from the game server arrives as three DATA, in one counted GRO read only where the host offloads
 PASS  200 rounds of a DATA each way and a PING, and a STATS every two seconds, on a warm session
 PASS  keep no arena memory in the relay
 PASS  a datagram to the upstream socket from another address is dropped and counted
