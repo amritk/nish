@@ -22,7 +22,6 @@ class Box {
   k: Kind = Kind.Circle;
 }
 
-
 const poison = (b: Box): void => {
   b.k = Kind.Tri;
 };

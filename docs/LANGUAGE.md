@@ -1043,11 +1043,17 @@ boundary, so no other `i32` reaches it.
   whose labels name every member of an enum as complete, and so ends a
   function in it; this version does so for a union's tag only (above). A
   plain enum, `switch (k)` for `k: Kind`, can arrive from C holding any
-  `i32`, so its `switch` is never complete (`reject_union_switch_enum`), nor
-  is one on the tag copied into an enum local, `const k: Kind = s.kind`
-  (`reject_union_switch_tag_local`), nor on a path's tag a test narrowed,
-  which a call between the test and the `switch` could have reassigned
-  (`reject_union_switch_path_narrowed`), nor on an enum field assigned from
+  `i32`, so a `switch` on a plain `Kind` local or field is never complete
+  (`reject_union_switch_enum`), nor is one on the tag copied into an enum
+  local, `const k: Kind = s.kind`, or a `let` one reassigned on another path
+  (`reject_union_switch_tag_local`, `reject_union_switch_tag_local_reassigned`).
+  A narrowed path needs every tag of the whole union: `switch (h.s.kind)`
+  after `if (h.s.kind === Kind.A) return` is complete only with `Kind.A`
+  labelled too, since a call between the test and the `switch` could have
+  reassigned `h.s` (`reject_union_switch_path_narrowed`); a narrowed union
+  local, which nothing reassigns unseen, is complete with the labels of the
+  variants left to it (`tests/cases/union_switch_narrowed`). Nor is a `switch`
+  complete on an enum field assigned from
   a tag, `b.k = s.kind`, which a call, an alias, a method or `this` can
   overwrite with any member (`reject_union_switch_enum_field_call` and its
   siblings): what decides is the subject's static type, a union's tag field,

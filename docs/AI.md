@@ -1740,10 +1740,13 @@ export const main = (): i32 => {
   case is `unreachable` in the IR. A statement after it is unreachable code
   when every clause returns; a clause's `break` reaches it.
   With a variant unnamed it is the missing-return error, as TS2366. A
-  `switch (k)` on an enum variable (a parameter, or `const k: Kind = s.kind`),
-  on a path's tag a test narrowed, or on an enum field assigned from a tag
+  `switch (k)` on an enum variable (a parameter, or `const k: Kind = s.kind`,
+  `let` or `const`), or on an enum field assigned from a tag
   (`b.k = s.kind`), is never complete, whatever its labels
   (C may pass an enum any `i32`): give it a `default` or return after it.
+  A path's tag a test narrowed (`h.s.kind` after
+  `if (h.s.kind === Kind.A) return`) needs every tag of the whole union; a
+  narrowed union local is complete with the variants left to it.
 - An enum variable, a parameter `k: Kind` as much as such a tag local, narrows
   on `k === Kind.A` / `!==` in the same forms as a union, `switch (k)`
   included: after `if (k === Kind.A) return`, `k === Kind.A` is NL2531.

@@ -22,7 +22,6 @@ class Box {
   k: Kind = Kind.Circle;
 }
 
-
 class Outer {
   b: Box;
   constructor() {

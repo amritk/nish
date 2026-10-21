@@ -18,8 +18,6 @@ class Square {
 
 type Shape = Circle | Square;
 
-
-
 class Box {
   k: Kind = Kind.Circle;
 

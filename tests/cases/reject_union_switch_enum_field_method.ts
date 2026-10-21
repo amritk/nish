@@ -21,8 +21,7 @@ class Box {
   k: Kind = Kind.Circle;
   poison(): void {
     this.k = Kind.Tri;
-  
-}
+  }
 }
 
 const f = (b: Box, s: Shape): i32 => {

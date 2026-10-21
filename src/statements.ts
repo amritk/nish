@@ -27,7 +27,6 @@ import {
   joinArms,
   literalIndexName,
   localsAssignedIn,
-  MEMBERS_NONE,
   memberSetName,
   memberSetOf,
   membersDisjoint,
@@ -1248,7 +1247,7 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
       narrowClause(ctx, unmatched, tagged, held, clauses, [], true)
     }
     if (tagged !== null) {
-      covered = switchCovered(ctx, unmatched, tagged, held, members, clauses)
+      covered = switchCovered(ctx, unmatched, tagged, members, clauses)
     } else {
       const union = unionTagRead(ctx, stmt.children[0])
       covered =
@@ -1304,28 +1303,21 @@ const unionTagRead = (ctx: CheckContext, node: Node): i32 => {
 }
 
 /**
- * Whether no value of the discriminant escapes the labels of `clauses`:
- * they name every member it can be, or `unmatched`, narrowed by none of them
- * matching, leaves the switched variable nothing.
+ * Whether no tag of the union variable `tagged` escapes the labels of
+ * `clauses`: they name every member it can be, or `unmatched`, narrowed by
+ * none of them matching, leaves it no variant.
  */
 const switchCovered = (
   ctx: CheckContext,
   unmatched: Scope,
-  tagged: Local | null,
-  held: Local | null,
+  tagged: Local,
   members: i32[],
   clauses: Node[]
 ): boolean => {
   if (members.length > 0 && withoutMembers(ctx, members, labelledMembers(ctx, clauses)).length === 0) {
     return true
   }
-  if (tagged !== null) {
-    return unmatched.exhausted(tagged)
-  }
-  if (held !== null) {
-    return unmatched.heldBy(held) === MEMBERS_NONE
-  }
-  return false
+  return unmatched.exhausted(tagged)
 }
 
 /** Every member a `case` label of `clauses` names. */

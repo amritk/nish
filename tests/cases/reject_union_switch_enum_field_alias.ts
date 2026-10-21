@@ -22,7 +22,6 @@ class Box {
   k: Kind = Kind.Circle;
 }
 
-
 const f = (b: Box, s: Shape): i32 => {
   const a = b;
   b.k = s.kind;
