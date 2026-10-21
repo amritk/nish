@@ -8,6 +8,9 @@
 # only once 0.19.0 is released.
 FROM ubuntu:24.04
 
+# A failed download fails the build rather than piping nothing into sh.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG NISH_VERSION=0.19.0
 
 RUN apt-get update \

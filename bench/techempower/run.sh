@@ -49,10 +49,13 @@ compare=0
 while [ $# -gt 0 ]; do
   case $1 in
     --quick) quick=1 ;;
-    --rounds) rounds=$2; shift ;;
-    --duration) duration=$2; shift ;;
+    --rounds | --duration)
+      case ${2:-} in '' | *[!0-9]* | 0) echo "run.sh: $1 takes a positive whole number, not '${2:-}'" >&2; exit 2 ;; esac
+      if [ "$1" = --rounds ]; then rounds=$2; else duration=$2; fi
+      shift
+      ;;
     --only)
-      only=$2
+      only=${2:-}
       shift
       case $only in plaintext | json) ;; *) echo "run.sh: --only takes plaintext or json, not $only" >&2; exit 2 ;; esac
       ;;
@@ -91,7 +94,8 @@ cpus=$(nproc)
 if [ "$cpus" -ge 2 ]; then
   serverCpu=(taskset -c 0)
   clientCpu=(taskset -c "1-$((cpus - 1))")
-  threads=$((cpus - 1))
+  # wrk needs a connection per thread, and the fewest connections measured is 16.
+  threads=$((cpus - 1 > 16 ? 16 : cpus - 1))
   pinning="server on CPU 0, client on CPUs 1-$((cpus - 1)) (client-shared: $cpus cores)"
 else
   serverCpu=()
