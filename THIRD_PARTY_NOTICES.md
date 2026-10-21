@@ -34,7 +34,10 @@ it, for the same reason. fiat-crypto is offered under MIT, Apache-2.0 or
 BSD-1-Clause, and this repository takes MIT, the one of the three on
 [`.claude/licensing.md`](.claude/licensing.md)'s list. As with BearSSL, the MIT
 licence makes no exception for object code: a program built with
-`nish/crypto/p256` and distributed carries fiat-crypto's notice with it.
+`nish/crypto/p256` and distributed carries fiat-crypto's notice with it. The
+same file's inversion of the signing nonce is ported from libsecp256k1, under
+MIT too, so the package carries `std/crypto/LICENSE-libsecp256k1` beside it as
+well, and such a program carries libsecp256k1's notice beside fiat-crypto's.
 
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
@@ -134,6 +137,18 @@ and `fiat-c/src/p256_scalar_32.c` at commit
 Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
 ```
 
+### `std/crypto/LICENSE-libsecp256k1`
+
+[libsecp256k1](https://github.com/bitcoin-core/secp256k1), Copyright (c) 2013
+Pieter Wuille, with `src/modinv32_impl.h` Copyright (c) 2020 Peter Dettman,
+under the MIT licence. The port reads `src/modinv32_impl.h` and
+`src/scalar_8x32_impl.h` at tag `v0.6.0`; the licence text is that tag's
+`COPYING`, verbatim.
+
+```notice
+Ported from libsecp256k1 (https://github.com/bitcoin-core/secp256k1), src/modinv32_impl.h. Copyright (c) 2020 Peter Dettman. Used under the MIT licence; see std/crypto/LICENSE-libsecp256k1.
+```
+
 ### `tests/json-suite/LICENSE-jsontestsuite`
 
 [JSONTestSuite](https://github.com/nst/JSONTestSuite)'s parsing corpus,
@@ -204,6 +219,8 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
 | `std/crypto/p256.ts` | fiat-crypto, `fiat-c/src/p256_32.c` (`mul`, `square`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p256_scalar_32.c` (`mul`, `add`, `set_one`), as the `p256Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256FiatMul`, `p256FiatSquare`, `p256FiatScalarMul`, `p256FiatCmovznzU32` and helpers, for the assembly check | MIT | `std/crypto/LICENSE-fiat-crypto` |
+| `std/crypto/p256.ts` | libsecp256k1 v0.6.0, `src/modinv32_impl.h` (`secp256k1_modinv32_divsteps_30`, `_update_de_30`, `_update_fg_30`, `_normalize_30` and `secp256k1_modinv32`) and the signed-30 conversions of `src/scalar_8x32_impl.h`, as `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`, `p256Normalize30`, `p256ScalarInverse`, `p256ToSigned30` and `p256FromSigned30` | MIT | `std/crypto/LICENSE-libsecp256k1` |
+| `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256Divsteps30`, `p256UpdateDe30` and `p256UpdateFg30`, for the assembly check | MIT | `std/crypto/LICENSE-libsecp256k1` |
 | `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdh_secp256r1.ts` | Wycheproof `testvectors_v1/ecdh_secp256r1_ecpoint_test.json` at `3fa63dd`: all 355 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 484 cases and the 113 group keys of `ecdsa_secp256r1_sha256_test.json`, all 262 cases of `ecdsa_secp256r1_sha256_p1363_test.json`, all 554 cases and the 111 group keys of `ecdsa_secp256r1_sha512_test.json` and all 332 cases of `ecdsa_secp256r1_sha512_p1363_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |

@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 684
+export const RULE_COUNT: i32 = 685
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -241,6 +241,8 @@ const diagnosticRules = (): string[] => [
   "NL2349",
   " and cannot be the default of another `??`: the default stands in for a missing value, so it is a value; give this one a default of its own first, `a ?? (b ?? d)`",
   "NL2371",
+  "` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new ",
+  "NL2556",
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
   ", and that scope is declared outside the block: the task runs, and its answer is stored, when the scope joins, after the block has released what it allocated",
@@ -433,8 +435,6 @@ const diagnosticRules = (): string[] => [
   "NL3019",
   "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)",
   "NL2145",
-  ")` and cannot be read again: the plain array would be key material outside the `Secret`'s rules",
-  "NL2445",
   "`; a class or interface name is program-wide, so one program cannot have both (rename this one)",
   "NL3030",
   "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate",
@@ -741,6 +741,8 @@ const diagnosticRules = (): string[] => [
   "NL2094",
   "Union variants must take their tags from one enum: `",
   "NL2524",
+  " would be key material outside the `Secret`'s rules",
+  "NL2445",
   "; there is no top-level code to build anything else",
   "NL2026",
   "); handle it here instead: `if (r.isErr()) { ... }`",

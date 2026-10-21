@@ -156,7 +156,8 @@ side. It covers:
   results for `int4` and `text`;
 - pipelining several queries before one Sync, which is what the strongest
   `query` and `update` entries do;
-- a pool of connections sized at start-up (N9's discipline);
+- a pool of connections whose size is a cap, a slot's connection built on its
+  first use rather than at start-up (N9's discipline);
 - refusing a malformed or oversized message with a defined error.
 
 Postgres over TLS needs N13, the client role of T1. TFB's database sits on a

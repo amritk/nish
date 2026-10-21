@@ -45,6 +45,12 @@ Give the compiler the file with `main` and it finds the rest by following the
 imports: `nish run main.ts` prints `25`, and `nish main.ts --link app` builds
 one executable from both files.
 
+A generic function or class imported from another file works as one declared
+in yours, and what it answers needs no annotation. If `box.ts` exports
+`box = <T>(value: T): Box<T> => new Box<T>(value)`, then `const b = box(7)` in
+`main.ts` is a `Box<i32>`, with `b.get()` and `b.value` to hand, even though
+`main.ts` never writes `Box<i32>`.
+
 A declaration without `export` is private to its file, and importing it is an
 error that tells you to add `export`. Modules have no top-level code that
 runs, so two modules may import each other.
