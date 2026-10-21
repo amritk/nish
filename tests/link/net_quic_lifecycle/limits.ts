@@ -171,6 +171,7 @@ const llSkips = (t: Suite): void => {
   const next: i64 = conn.nextSkip - (skip + n64(1));
   t.ok("the number due is never sent: the next packet carries the one after", opened.ok && opened.pn === skip + n64(1));
   t.ok("and the next skip is drawn 128 to 1024 packets on again", next >= QUIC_CONN_SKIP_MIN && next <= most);
+  t.ok("and its distance is not the last one's: each is drawn afresh", next !== due && conn.skipsDrawn === toI64(2));
 
   lcSend(conn, c, write0, c.appPn, lcAck(opened.pn));
   t.ok("an ACK of the packets sent around it is read", conn.state === QUIC_STATE_CONNECTED);

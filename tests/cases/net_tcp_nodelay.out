@@ -1,0 +1,8 @@
+flags 0: TCP_NODELAY 0
+flags 1: TCP_NODELAY 0
+flags 2: TCP_NODELAY 1
+flags 3: TCP_NODELAY 1
+flags 4: -22
+flags 6: -22
+flags 8: -22
+flags -1: -22

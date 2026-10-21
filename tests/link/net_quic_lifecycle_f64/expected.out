@@ -127,6 +127,7 @@ PASS  a first Initial that fails to authenticate is not counted: no connection i
 PASS  once the 1-RTT keys are in, a packet number is due to be skipped 128 to 1024 packets on (RFC 9000 §21.4)
 PASS  the number due is never sent: the next packet carries the one after
 PASS  and the next skip is drawn 128 to 1024 packets on again
+PASS  and its distance is not the last one's: each is drawn afresh
 PASS  an ACK of the packets sent around it is read
 PASS  an ACK that takes in the skipped number is PROTOCOL_VIOLATION, an optimistic ACK
 PASS  an ACK of two ranges, neither taking in the skipped number, is read
@@ -135,4 +136,4 @@ PASS  two numbers skipped on one connection are both remembered, and an ACK of t
 PASS  an ACK that takes in the older skipped number and not the newer is PROTOCOL_VIOLATION
 PASS  reset forgets the skipped numbers and zeroes the counts, and the limits are AES-GCM's again
 PASS  on the reused slot the next connection sends the number the last one skipped, and an ACK of it is read
-quic lifecycle: 137 passed, 0 failed, 0 skipped
+quic lifecycle: 138 passed, 0 failed, 0 skipped

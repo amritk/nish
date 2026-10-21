@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1077 programs, 140136 dump lines.
+# 1078 programs, 140164 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -48072,6 +48072,35 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=1 stackLocals=1
   local 7:9 out: u8[] (const)
   local 10:9 fd: i32 (const)
+program tests/cases/net_tcp_nodelay.ts
+module tests/cases/net_tcp_nodelay.ts (entry)
+import netAddress from "nish:net" -> builtin netAddress
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import pollAdd from "nish:net" -> builtin pollAdd
+import pollCreate from "nish:net" -> builtin pollCreate
+import pollWait from "nish:net" -> builtin pollWait
+import tcpAccept from "nish:net" -> builtin tcpAccept
+import tcpConnect from "nish:net" -> builtin tcpConnect
+import tcpListenFlags from "nish:net" -> builtin tcpListenFlags
+function accepted(flags: i32): i32 -> @accepted [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen_flags
+  calls: nish_net_address nish_net_close nish_net_local_port nish_poll_add nish_poll_create nish_poll_wait nish_tcp_accept nish_tcp_connect nish_tcp_listen_flags
+  stackSites=3 stackLocals=3
+  local 12:9 listener: i32 (const)
+  local 16:9 addr: u8[] (const)
+  local 18:9 client: i32 (const)
+  local 19:9 loop: i32 (const)
+  local 21:9 ready: i32[] (const)
+  local 22:9 peer: u8[] (const)
+  local 23:9 conn: i32 (const)
+function opened(flags: i32): i32 -> @opened [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen_flags
+  calls: nish_net_close nish_tcp_listen_flags
+  stackSites=0 stackLocals=0
+  local 32:9 fd: i32 (const)
 program tests/cases/net_tcp_reuseport.ts
 module tests/cases/net_tcp_reuseport.ts (entry)
 import netClose from "nish:net" -> builtin netClose
@@ -48083,9 +48112,9 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_tcp_listen_flags
   calls: nish_arena_mark nish_arena_release nish_net_close nish_net_local_port nish_print nish_str_from_i32 nish_tcp_listen nish_tcp_listen_flags
   stackSites=0 stackLocals=0
-  local 8:9 a: i32 (const)
-  local 9:9 port: i32 (const)
-  local 10:9 b: i32 (const)
+  local 9:9 a: i32 (const)
+  local 10:9 port: i32 (const)
+  local 11:9 b: i32 (const)
 program tests/cases/net_tcp_unchecked.ts
 module tests/cases/net_tcp_unchecked.ts (entry)
 function echoOnce(fd: i32, buf: u8[]): i32 -> @echoOnce [exported]
