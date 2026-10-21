@@ -438,7 +438,7 @@ file names relative to the working directory.
   per module: `struct` lines (layout, fields with index and byte offset),
   `import` lines, and `function` lines (signature, `@symbol`, flags), each with
   its `facts:`, `pointer <param>:` facts and `local` / `callee` lines.
-  `tests/self/goldens/checked.txt` and `checked-self.txt` are this dump.
+  `tests/self/goldens/checked/` holds this dump, one file per module.
 
 Goldens: `tests/cases/dump_*.stdout`.
 
