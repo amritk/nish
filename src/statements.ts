@@ -15,8 +15,9 @@
 import { LANGUAGE } from "./branding"
 import {
   addLocals,
-  checkCondition,
+  assignsVariable,
   captureNarrowings,
+  checkCondition,
   checkExpression,
   clearNarrowingsAssignedIn,
   enumVariable,
@@ -40,7 +41,6 @@ import {
   unproven,
   WANT_INFERRED,
   WANT_MAYBE,
-  assignsVariable,
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
 import { syntaxKindName } from "./checker"
@@ -107,7 +107,16 @@ import { caseValue } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
-import { flowBegin, flowDoCondition, flowEnd, flowHead, flowNoteBack, flowNoteBreak } from "./loop-flow"
+import {
+  flowBegin,
+  flowDoCondition,
+  flowEnd,
+  flowForUpdate,
+  flowHead,
+  flowNoteBack,
+  flowNoteBreak,
+  flowUpdated,
+} from "./loop-flow"
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const terminatorName = (stmt: Node): string => {
@@ -617,19 +626,28 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (condition.kind !== N_EMPTY) {
     checkCondition(ctx, condition, outer)
   }
-  const update = stmt.children[2]
-  if (update.kind !== N_EMPTY) {
-    checkExpression(ctx, update, outer, -1)
-  }
   const body = outer.child()
   if (condition.kind !== N_EMPTY) {
     narrow(ctx, condition, body, true)
   }
+  // A body that is one statement, not a block, leaves `errored` set when it
+  // is refused; the update is checked after it, but is no part of it.
+  const headErrored = ctx.errored
   ctx.pushLoop(LOOP_ITERATION)
   if (!checkStatement(ctx, stmt.children[3], body)) {
     flowNoteBack(ctx, body)
   }
   const broke = ctx.popLoop()
+  ctx.errored = headErrored
+  // The update runs after the body, on what its end and its continues leave,
+  // so a store there reaches the next iteration's head, not this body.
+  const update = stmt.children[2]
+  if (update.kind !== N_EMPTY) {
+    const tail = outer.child()
+    flowForUpdate(ctx, flow, tail)
+    checkExpression(ctx, update, tail, -1)
+    flowUpdated(ctx, flow, tail)
+  }
   scope.adopt(held)
   flowEnd(ctx, flow, scope)
   return condition.kind === N_EMPTY && !broke

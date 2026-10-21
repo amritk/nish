@@ -1,7 +1,13 @@
 # WP39: The HTTP server — a TechEmpower entry, then a general-purpose server
 
-**Status: proposed.** Nothing here is built. The anchors below are at
-`ce9d394`.
+**Status: Part A in progress.** E1, E3, E4 and E5 are built. E1 is
+`tcpListenFlags`, `SO_REUSEPORT` on a TCP listener (#733). E3 is `JsonWriter`
+in `std/json.ts`. E4 is `httpDateWrite` in `std/net/http-fields.ts` and
+`HttpDate` in `std/net/http1-server.ts`. E5 is `bench/techempower/`, pinned by
+`tests/link/tfb_entry`, with its numbers in
+[BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext). E2
+(`TCP_NODELAY`) is flags 2 and 3 of `tcpListenFlags` (#770). E6 to E9 and Part B are not started. The
+anchors below are at `ce9d394`; §1 says where each row stands now.
 
 [WP34](wp34-hosting-cs.md) built a network stack for one program: cs's relay.
 That stack serves HTTP/1.1 with WebSocket, HTTP/2, HTTP/3 and WebTransport, and
@@ -32,12 +38,13 @@ names here, and this note says which of them each stage takes.
 
 | | Today | Proof |
 | --- | --- | --- |
-| Cores | **One.** `nish:net` is refused inside a `scope()` task or a parallel body (`reject_net_task`), and `tcpListen` has no `SO_REUSEPORT` flag (`udpBind` has one), so N processes cannot share a TCP port | [#478](https://github.com/amritk/nish/issues/478) |
+| Cores | **One per process.** `nish:net` is refused inside a `scope()` task or a parallel body (`reject_net_task`). `tcpListenFlags` flag 1 sets `SO_REUSEPORT` (E1, #733), so N processes can share a TCP port, but nothing in Nish starts them yet | [#478](https://github.com/amritk/nish/issues/478), `tests/link/net_tcp_reuseport_spread` |
 | HTTP/1.1 | Keep-alive, chunked bodies both ways and pipelining. A burst of pipelined responses leaves in one write (`Http1Server.next`, `flush`). A warmed slot allocates nothing per request, and a slot's connection is built on the first accept into it | `tests/link/net_loopback`, `tests/link/net_http1_server`; no third-party client yet |
 | HTTP/2 | Over TLS with ALPN `h2` only (`std/net/http2-tls.ts`); no cleartext h2c | `h2spec`, `curl --http2` |
 | HTTP/3 and WebTransport | `Http3Server` behind a `QuicListener`; WebTransport pinned to the draft Chrome negotiates | the runner's `http3` case, `curl --http3-only`, Chromium |
 | One handler for all three versions | **None.** Each carrier has its own event API, so a program that serves all three versions answers each one separately. `tests/link/net_interop_server` does exactly that (`app.ts`, `h2.ts`, `server.ts`) | — |
-| JSON | A reader only (`std/json.ts`'s `jsonField`) | `tests/link/std_json` |
+| JSON | A reader (`jsonField`) and a writer into a caller-owned `u8[]` (`JsonWriter`, E3), both in `std/json.ts` | `tests/link/std_json`, `tests/link/std_json_writer` |
+| TechEmpower `json` and `plaintext` | `bench/techempower/` (E5): one core, one `pollWait` loop on `Http1Server`, with `Server` and a cached `Date` (`HttpDate`, E4) | `tests/link/tfb_entry`; [BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext) |
 | Databases | **None.** No Postgres client; the TLS client role (N13) is unbuilt | — |
 | Crypto speed | ChaCha20-Poly1305 is portable and fast. AES-GCM is bitsliced (K3) and slow, yet it is what Chrome and curl list first on AES-capable machines, and the server takes the client's first suite (`chooseSuite`, `std/net/tls.ts`). No session tickets, so every connection pays a full handshake | WP34 K3, S1 |
 
@@ -116,6 +123,23 @@ concurrency levels go into [BENCHMARKS.md](BENCHMARKS.md) beside a reference
 entry measured on the same machine in the same interleaved rounds, with the
 noise band, as CLAUDE.md's `Measured:` rules require.
 
+**Built.** `bench/techempower/` holds the program (`main.ts`, `server.ts`),
+`nish.dockerfile`, `benchmark-config.json` (upstream's `benchmark_config.json`)
+and `run.sh`, unsubmitted (D1).
+There is no pass arena: NL2424 refuses `using a = arena()` around a serve,
+because `Http1Server` stores into the slot's parser and output, which outlive
+the pass. None is needed either, since a warmed pass allocates nothing, and
+`tests/link/tfb_entry` pins every server call over 200 requests to leave
+`Arena.used()` where it was instead. The
+reference entries are the HTTP twins (`bench/http-twins/`). With E2 in, the
+entry sets `TCP_NODELAY` by default, and `run.sh --nodelay-compare` measures it
+against the same build with the flag off: the flag is never slower outside the
+noise band and faster outside it at four levels, so it stays on
+([BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext)).
+
+**Follow-up.** Multi-core: one entry process per core on one `SO_REUSEPORT`
+port, through #719's prefork supervisor (`std/net/prefork.ts`) once it lands.
+
 ### E6. A Postgres client (L, std lane)
 
 `std/net/postgres` is sans-IO, like every other `nish/net` module: it takes
@@ -132,7 +156,8 @@ side. It covers:
   results for `int4` and `text`;
 - pipelining several queries before one Sync, which is what the strongest
   `query` and `update` entries do;
-- a pool of connections sized at start-up (N9's discipline);
+- a pool of connections whose size is a cap, a slot's connection built on its
+  first use rather than at start-up (N9's discipline);
 - refusing a malformed or oversized message with a defined error.
 
 Postgres over TLS needs N13, the client role of T1. TFB's database sits on a

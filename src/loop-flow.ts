@@ -11,15 +11,19 @@
  * This pass runs that fixpoint over the loop first, on sets of variants and
  * members, and the checker then reads the body from the head it found:
  *
- *   entry₀ = before;  entryₙ₊₁ = before ∪ end ∪ continues
+ *   entry₀ = before;  entryₙ₊₁ = before ∪ update(end ∪ continues)
  *   after  = entry* narrowed by the condition being false, ∪ breaks
  *
- * and for a `do`, whose body runs first, the condition reads the body's end
- * and continues. Every union or enum variable the loop names is tracked,
- * written or only tested: an `if` or a `switch` on it narrows its arms here as
- * the checker narrows them. The pass is coarser than the checker everywhere it
- * differs — a store it cannot read (a call, a copy of an untracked value)
- * leaves the variable whatever it was declared — and gives a loop up whole
+ * where `update` is a `for`'s update, which the checker reads after the body,
+ * and nothing for any other loop; for a `do`, whose body runs first, the
+ * condition reads the body's end and continues. Every union or enum variable
+ * the loop names is tracked, written or only tested: an `if` or a `switch` on
+ * it narrows its arms here as the checker narrows them. The pass is coarser
+ * than the checker everywhere it differs — a store it cannot read (a field
+ * read through an element or a call, a `let` the loop declares) leaves the
+ * variable whatever it was declared, and a test narrows only against a value
+ * whose members it knows as surely as the checker's `memberSetOf`
+ * (`flowKnown`) — and gives a loop up whole
  * (`status` "bail") on a form it does not model: a `try`, a label, a
  * destructuring, unreachable code. A variable written through a path, a
  * compound assignment or a closure it leaves untracked, to the checker's own
@@ -36,12 +40,14 @@ import { isOptionalChain, unwrapParens } from "./emit-util"
 import { enumMembersOf, heldMembers, holdKept, narrowToVariants, writesLeft } from "./expressions"
 import { internalErrorFor } from "./ice"
 import {
+  FLAG_CONST,
   N_ARROW,
   N_AS,
   N_BINARY,
   N_BINDING_PATTERN,
   N_BLOCK,
   N_BREAK,
+  N_CALL,
   N_CLASS,
   N_CONSTRUCTOR,
   N_CONDITIONAL,
@@ -64,6 +70,7 @@ import {
   N_PAREN,
   N_RETURN,
   N_SWITCH,
+  N_THIS,
   N_THROW,
   N_TRUE,
   N_TRY,
@@ -74,6 +81,7 @@ import {
   N_WITH,
   Node,
 } from "./nodes"
+import { StructInfo } from "./program"
 import { Scope } from "./symbols"
 
 /** The bit a nullable union variable's `null` takes, above every variant's. */
@@ -91,6 +99,10 @@ class FlowScan {
   disq: string[]
   /** The names a declaration inside the loop binds. */
   declared: string[]
+  /** The names it binds more than once. */
+  redeclared: string[]
+  /** Its `const` declarations that have an initializer. */
+  consts: Node[]
   /** Every name the loop mentions outside a nested function: what it may test or write. */
   mentioned: string[]
   bail: boolean
@@ -99,6 +111,8 @@ class FlowScan {
     this.mentioned = []
     this.disq = []
     this.declared = []
+    this.redeclared = []
+    this.consts = []
     this.bail = false
   }
 }
@@ -152,7 +166,18 @@ const flowScanNode = (node: Node, top: boolean, scan: FlowScan): void => {
     flowAddName(scan.mentioned, node.text)
   }
   if (kind === N_VAR_DECL && node.children.length > 0) {
-    flowAddName(scan.declared, node.children[0].text)
+    const name = node.children[0].text
+    if (scan.declared.indexOf(name) >= 0) {
+      flowAddName(scan.redeclared, name)
+    }
+    flowAddName(scan.declared, name)
+  }
+  if (kind === N_VAR && (node.flags & FLAG_CONST) !== 0 && node.children.length > 0) {
+    for (const decl of node.children[0].children) {
+      if (decl.kind === N_VAR_DECL && decl.children.length > 2 && decl.children[2].kind !== N_EMPTY) {
+        scan.consts.push(decl)
+      }
+    }
   }
   if (kind === N_BINARY && writesLeft(node.text)) {
     const target = node.children[0]
@@ -172,9 +197,9 @@ const flowScanNode = (node: Node, top: boolean, scan: FlowScan): void => {
   }
   let i = 0
   for (const child of node.children) {
-    // A statement's own expression, and a `for`'s initializer, may assign
-    // a tracked variable; an assignment anywhere else in an expression may not.
-    flowScanNode(child, kind === N_EXPR_STMT || (kind === N_FOR && i === 0), scan)
+    // A statement's own expression, and a `for`'s initializer and update, may
+    // assign a tracked variable; an assignment anywhere else in an expression may not.
+    flowScanNode(child, kind === N_EXPR_STMT || (kind === N_FOR && (i === 0 || i === 2)), scan)
     i = i + 1
   }
 }
@@ -416,40 +441,313 @@ const flowBitsValued = (f: LoopFlow, k: i32, value: i32): i32 => {
   return bits
 }
 
-/** `s` where `test`, `x === e` or `x !== e`, comes out `whenTrue`. */
+/** The enum whose members variable `k`'s domain lists: its own, or a union's tag enum. */
+const flowWant = (ctx: CheckContext, f: LoopFlow, k: i32): i32 =>
+  f.enums[k] ? f.locals[k].type : ctx.table.tagEnumOf(ctx.table.stripNull(f.locals[k].type))
+
+/** The bit of variable `k`'s domain whose member's value is `value`, or 0. */
+const flowDomainBit = (f: LoopFlow, k: i32, value: i32): i32 => {
+  const domain = f.domain[k]
+  let i = 0
+  while (i < domain.length) {
+    if (domain[i] === value) {
+      return 1 << i
+    }
+    i = i + 1
+  }
+  return 0
+}
+
+/** The domain bits of what tracked variable `j`'s set `bits` holds, the values of its members or tags. */
+const flowDomainOf = (f: LoopFlow, k: i32, j: i32, bits: i32): i32 => {
+  let out = 0
+  let i = 0
+  while (i < f.values[j].length) {
+    if ((bits & (1 << i)) !== 0) {
+      out = out | flowDomainBit(f, k, f.values[j][i])
+    }
+    i = i + 1
+  }
+  return out
+}
+
+/** Variable `k`'s bits for the domain bits `known`. */
+const flowToSpace = (f: LoopFlow, k: i32, known: i32): i32 => {
+  let bits = 0
+  let i = 0
+  while (i < f.domain[k].length) {
+    if ((known & (1 << i)) !== 0) {
+      bits = bits | flowBitsValued(f, k, f.domain[k][i])
+    }
+    i = i + 1
+  }
+  return bits
+}
+
+const flowCount = (bits: i32): i32 => {
+  let n = 0
+  let i = 0
+  while (i < FLOW_BITS) {
+    if ((bits & (1 << i)) !== 0) {
+      n = n + 1
+    }
+    i = i + 1
+  }
+  return n
+}
+
+/** The one `const` in the loop that declares `name` with an initializer, or `null`. */
+const flowConstDecl = (f: LoopFlow, name: string): Node | null => {
+  if (f.redeclared.indexOf(name) >= 0) {
+    return null
+  }
+  for (const decl of f.consts) {
+    if (decl.children[0].text === name) {
+      return decl
+    }
+  }
+  return null
+}
+
+/** What a test reads through `(e)` and an assignment, as the checker's `testedRead`. */
+const flowTestedRead = (node: Node): Node => {
+  let read = unwrapParens(node)
+  while (read.kind === N_BINARY && read.text === "=") {
+    read = unwrapParens(read.children[0])
+  }
+  return read
+}
+
+/** The bit of variable `k`'s domain for `type` when it is a member of the enum `k` reads, or 0. */
+const flowMemberBit = (ctx: CheckContext, f: LoopFlow, k: i32, type: i32): i32 => {
+  if (!ctx.table.isEnumMemberType(type) || ctx.table.enumBase(type) !== flowWant(ctx, f, k)) {
+    return 0
+  }
+  return flowDomainBit(f, k, ctx.table.memberValue(type))
+}
+
+/**
+ * The class or interface `node` is declared as, whatever the loop does, or
+ * `null`: `this`, a local or parameter the loop does not redeclare, and a
+ * field of one of those, nullable or not. A class's fields and methods are
+ * typed up front, so a member-typed one reads as that member, as the checker
+ * reads it.
+ */
+const flowStructOf = (ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): StructInfo | null => {
+  if (depth > 8) {
+    return null
+  }
+  const bare = unwrapParens(node)
+  let type = -1
+  if (bare.kind === N_THIS || bare.kind === N_IDENT) {
+    const name = bare.kind === N_THIS ? "this" : bare.text
+    const local = f.scope.lookup(name)
+    type = local === null || f.declared.indexOf(name) >= 0 ? -1 : local.type
+  } else if (bare.kind === N_MEMBER && !isOptionalChain(bare)) {
+    const owner = flowStructOf(ctx, f, bare.children[0], depth + 1)
+    if (owner !== null) {
+      const field = owner.field(bare.text)
+      type = field === null ? -1 : field.type
+    }
+  }
+  // A read through a nullable one compiles only where it is not null.
+  type = type < 0 ? type : ctx.table.stripNull(type)
+  if (type < 0 || !ctx.table.isStruct(type)) {
+    return null
+  }
+  return ctx.program.struct(ctx.table.nameOf(type))
+}
+
+/**
+ * The members `node` holds in state `s`, as bits of variable `k`'s domain,
+ * where the pass can read before the body is checked what the checker's
+ * `memberSetOf` will answer: a member; a ternary of two known arms, each read
+ * on its side of the condition; a chained `=`'s right side; a local, a
+ * function, a field or a method of a member type; a `const` the loop
+ * declares once, by its initializer; what a tracked enum variable or a
+ * tracked union's tag holds in `s`, which the checker reads no wider. 0 is
+ * unknown: a `let` declared in the loop, a tracked variable that may hold
+ * anything, whose read the checker records no members for.
+ */
+const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[], depth: i32): i32 => {
+  const bare = unwrapParens(node)
+  const want = flowWant(ctx, f, k)
+  if (depth > 8 || want < 0) {
+    return 0
+  }
+  if (flowConstEnum(ctx, f, bare) === want) {
+    return flowDomainBit(f, k, flowConstValue(ctx, bare))
+  }
+  if (bare.kind === N_CONDITIONAL) {
+    const cond = bare.children[0]
+    const whenTrue = flowKnown(ctx, f, k, bare.children[1], flowCond(ctx, f, cond, s, true), depth + 1)
+    const whenFalse = flowKnown(ctx, f, k, bare.children[2], flowCond(ctx, f, cond, s, false), depth + 1)
+    return whenTrue !== 0 && whenFalse !== 0 ? whenTrue | whenFalse : 0
+  }
+  if (bare.kind === N_BINARY && bare.text === "=") {
+    return flowKnown(ctx, f, k, bare.children[1], s, depth + 1)
+  }
+  if (bare.kind === N_IDENT) {
+    const name = bare.text
+    const j = flowIndex(f, name)
+    if (j >= 0) {
+      if (j >= s.length || !f.enums[j] || f.locals[j].type !== want || s[j] === f.full[j]) {
+        return 0
+      }
+      return flowDomainOf(f, k, j, s[j])
+    }
+    if (f.declared.indexOf(name) >= 0) {
+      const decl = flowConstDecl(f, name)
+      if (decl === null || f.scope.lookup(name) !== null) {
+        return 0
+      }
+      return flowKnown(ctx, f, k, decl.children[2], f.full, depth + 1)
+    }
+    const local = f.scope.lookup(name)
+    if (local !== null && ctx.table.isEnumMemberType(local.type) && ctx.table.enumBase(local.type) === want) {
+      return flowDomainBit(f, k, ctx.table.memberValue(local.type))
+    }
+    return 0
+  }
+  if (bare.kind === N_CALL && bare.children[0].kind === N_IDENT) {
+    const name = bare.children[0].text
+    if (f.scope.lookup(name) !== null || f.declared.indexOf(name) >= 0) {
+      return 0
+    }
+    const sig = ctx.signature(name)
+    if (
+      sig !== null &&
+      ctx.table.isEnumMemberType(sig.returnType) &&
+      ctx.table.enumBase(sig.returnType) === want
+    ) {
+      return flowDomainBit(f, k, ctx.table.memberValue(sig.returnType))
+    }
+    return 0
+  }
+  if (bare.kind === N_CALL && bare.children[0].kind === N_MEMBER && !isOptionalChain(bare.children[0])) {
+    const access = bare.children[0]
+    const info = flowStructOf(ctx, f, access.children[0], 0)
+    if (info === null) {
+      return 0
+    }
+    const method = info.method(access.text)
+    return method === null ? 0 : flowMemberBit(ctx, f, k, method.returnType)
+  }
+  if (bare.kind !== N_MEMBER || isOptionalChain(bare)) {
+    return 0
+  }
+  if (bare.children[0].kind === N_IDENT) {
+    const j = flowIndex(f, bare.children[0].text)
+    if (j >= 0 && j < s.length && !f.enums[j] && (s[j] & FLOW_NULL) === 0 && s[j] !== f.full[j]) {
+      const base = ctx.table.stripNull(f.locals[j].type)
+      if (bare.text === ctx.table.tagNameOf(base) && ctx.table.tagEnumOf(base) === want) {
+        return flowDomainOf(f, k, j, s[j])
+      }
+    }
+  }
+  const info = flowStructOf(ctx, f, bare.children[0], 0)
+  if (info === null) {
+    return 0
+  }
+  const field = info.field(bare.text)
+  return field === null ? 0 : flowMemberBit(ctx, f, k, field.type)
+}
+
+/**
+ * `s` with variable `k` narrowed by `k === other` coming out `same`, as the
+ * checker's `narrowHeld` and `narrowToTags` narrow it: to the members `other`
+ * holds, or for one member also to the others. What the pass reads `other`
+ * to hold is never less than the checker's set for it, so keeping those
+ * members keeps no fewer; dropping them is left to one member, which the
+ * checker's set then is too.
+ */
+const flowNarrowTo = (
+  ctx: CheckContext,
+  f: LoopFlow,
+  k: i32,
+  other: Node,
+  s: i32[],
+  same: boolean
+): i32[] => {
+  const known = flowKnown(ctx, f, k, other, s, 0)
+  if (known === 0) {
+    return s
+  }
+  const bits = flowToSpace(f, k, known)
+  const held = s[k]
+  if (flowCount(known) === 1) {
+    return flowSet(s, k, same ? held & bits : held & ~bits)
+  }
+  return same ? flowSet(s, k, held & bits) : s
+}
+
+/**
+ * `s` where `test`, `x === e` or `x !== e`, comes out `whenTrue`. The checker
+ * narrows one side, in its order: a union's tag on the left, then on the
+ * right, and failing both an enum variable on the left, then on the right.
+ * Where that side may be a variable the pass does not track — a path, a
+ * name the loop declares — the pass narrows nothing, which is never finer.
+ */
 const flowEquality = (ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], whenTrue: boolean): i32[] => {
   const same = test.text === "===" ? whenTrue : !whenTrue
   let side = 0
   while (side < 2) {
     const read = unwrapParens(test.children[side])
     const other = unwrapParens(test.children[1 - side])
-    if (read.kind === N_IDENT) {
+    if (read.kind === N_IDENT && other.kind === N_NULL) {
       const k = flowIndex(f, read.text)
-      if (k >= 0 && k < s.length && !f.enums[k] && other.kind === N_NULL) {
+      if (k >= 0 && k < s.length && !f.enums[k]) {
         // `u !== null` leaves the variants; `u === null` leaves what held.
         return same ? s : flowSet(s, k, s[k] & ~FLOW_NULL)
       }
-      if (k >= 0 && k < s.length && f.enums[k]) {
-        const held = s[k]
-        if (flowConstEnum(ctx, f, other) === f.locals[k].type) {
-          const bits = flowBitsValued(f, k, flowConstValue(ctx, other))
-          return flowSet(s, k, same ? held & bits : held & ~bits)
+    }
+    side = side + 1
+  }
+  side = 0
+  while (side < 2) {
+    const read = unwrapParens(test.children[side])
+    if (read.kind === N_MEMBER && !isOptionalChain(read)) {
+      const receiver = flowTestedRead(read.children[0])
+      if (receiver.kind === N_IDENT) {
+        if (f.declared.indexOf(receiver.text) >= 0) {
+          return s
+        }
+        const local = f.scope.lookup(receiver.text)
+        if (local !== null) {
+          const union = ctx.table.stripNull(local.type)
+          if (ctx.table.isUnion(union) && read.text === ctx.table.tagNameOf(union)) {
+            const k = flowIndex(f, receiver.text)
+            if (k < 0 || k >= s.length || f.enums[k] || s[k] === 0 || (s[k] & FLOW_NULL) !== 0) {
+              return s
+            }
+            return flowNarrowTo(ctx, f, k, test.children[1 - side], s, same)
+          }
         }
       }
     }
-    if (read.kind === N_MEMBER && !isOptionalChain(read) && read.children[0].kind === N_IDENT) {
-      const k = flowIndex(f, read.children[0].text)
-      if (k >= 0 && k < s.length && !f.enums[k] && (s[k] & FLOW_NULL) === 0) {
-        const held = s[k]
-        const base = ctx.table.stripNull(f.locals[k].type)
-        if (
-          read.text === ctx.table.tagNameOf(base) &&
-          flowConstEnum(ctx, f, other) === ctx.table.tagEnumOf(base)
-        ) {
-          const bits = flowBitsValued(f, k, flowConstValue(ctx, other))
-          return flowSet(s, k, same ? held & bits : held & ~bits)
-        }
+    side = side + 1
+  }
+  side = 0
+  while (side < 2) {
+    const read = flowTestedRead(test.children[side])
+    if (read.kind === N_IDENT) {
+      if (f.declared.indexOf(read.text) >= 0) {
+        return s
       }
+      const local = f.scope.lookup(read.text)
+      if (local !== null && ctx.table.isEnum(local.type)) {
+        const k = flowIndex(f, read.text)
+        if (k < 0 || k >= s.length || !f.enums[k]) {
+          return s
+        }
+        return flowNarrowTo(ctx, f, k, test.children[1 - side], s, same)
+      }
+    } else if (
+      (read.kind === N_MEMBER || read.kind === N_INDEX || read.kind === N_THIS) &&
+      flowConstEnum(ctx, f, read) < 0
+    ) {
+      // A path is a variable of the checker's own, which it may narrow instead.
+      return s
     }
     side = side + 1
   }
@@ -498,63 +796,13 @@ const flowCond = (ctx: CheckContext, f: LoopFlow, cond: Node, s: i32[], whenTrue
 // ---- statements ---------------------------------------------------------------------------
 
 /**
- * The bits a store of `value` leaves enum variable `k` in state `s`: a
- * member's own; a ternary of members, either; another tracked enum of the
- * same type or the tag of a tracked union, what that holds; a chained `=`,
- * what its right side leaves. Anything else is every member, and so is a
- * copy of what holds nothing, which the checker records no set for.
+ * The bits a store of `value` leaves enum variable `k` in state `s`: what
+ * `flowKnown` reads it to hold, or every member where it reads nothing,
+ * which is also what a copy of a variable that holds nothing leaves.
  */
 const flowValueBits = (ctx: CheckContext, f: LoopFlow, k: i32, value: Node, s: i32[]): i32 => {
-  const bare = unwrapParens(value)
-  const type = f.locals[k].type
-  if (flowConstEnum(ctx, f, bare) === type) {
-    return flowBitsValued(f, k, flowConstValue(ctx, bare))
-  }
-  if (bare.kind === N_CONDITIONAL && flowConstArms(ctx, f, bare, type)) {
-    return flowValueBits(ctx, f, k, bare.children[1], s) | flowValueBits(ctx, f, k, bare.children[2], s)
-  }
-  if (bare.kind === N_BINARY && bare.text === "=" && bare.children[0].kind === N_IDENT) {
-    return flowValueBits(ctx, f, k, bare.children[1], s)
-  }
-  if (bare.kind === N_IDENT) {
-    const j = flowIndex(f, bare.text)
-    if (j >= 0 && j < s.length && f.enums[j] && f.locals[j].type === type && s[j] !== 0) {
-      return s[j]
-    }
-  }
-  if (bare.kind === N_MEMBER && !isOptionalChain(bare) && bare.children[0].kind === N_IDENT) {
-    const j = flowIndex(f, bare.children[0].text)
-    if (j >= 0 && j < s.length && !f.enums[j] && (s[j] & FLOW_NULL) === 0) {
-      const base = ctx.table.stripNull(f.locals[j].type)
-      if (bare.text === ctx.table.tagNameOf(base) && ctx.table.tagEnumOf(base) === type) {
-        let bits = 0
-        let i = 0
-        while (i < f.values[j].length) {
-          if ((s[j] & (1 << i)) !== 0) {
-            bits = bits | flowBitsValued(f, k, f.values[j][i])
-          }
-          i = i + 1
-        }
-        return bits === 0 ? f.full[k] : bits
-      }
-    }
-  }
-  return f.full[k]
-}
-
-/** Whether both arms of the ternary `node` are members of enum `type`, or ternaries of them. */
-const flowConstArms = (ctx: CheckContext, f: LoopFlow, node: Node, type: i32): boolean => {
-  let side = 1
-  while (side < 3) {
-    const arm = unwrapParens(node.children[side])
-    const known =
-      flowConstEnum(ctx, f, arm) === type || (arm.kind === N_CONDITIONAL && flowConstArms(ctx, f, arm, type))
-    if (!known) {
-      return false
-    }
-    side = side + 1
-  }
-  return true
+  const known = flowKnown(ctx, f, k, value, s, 0)
+  return known === 0 ? f.full[k] : flowToSpace(f, k, known)
 }
 
 const flowExec = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] => {
@@ -710,9 +958,9 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
     const body = clause.kind === N_DEFAULT ? clause.children[0] : clause.children[1]
     if (body.children.length > 0 || i === clauses.length - 1) {
       let state = s
-      if (k >= 0 && groupDefault) {
+      if (k >= 0 && k < s.length && groupDefault) {
         state = flowSet(s, k, s[k] & ~(labelled & ~group))
-      } else if (k >= 0 && groupKnown) {
+      } else if (k >= 0 && k < s.length && groupKnown) {
         state = flowSet(s, k, s[k] & group)
       }
       for (const statement of body.children) {
@@ -730,7 +978,7 @@ const flowSwitch = (ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
     i = i + 1
   }
   if (!hasDefault) {
-    out = flowJoin(f, out, k >= 0 ? flowSet(s, k, s[k] & ~labelled) : s)
+    out = flowJoin(f, out, k >= 0 && k < s.length ? flowSet(s, k, s[k] & ~labelled) : s)
   }
   out = flowJoin(f, out, f.breaks)
   f.breaks = breaks
@@ -775,6 +1023,7 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
   const stmt = f.stmt
   let start = before
   let cond: Node | null = null
+  let update: Node | null = null
   let body = stmt.children[1]
   if (f.kind === "for") {
     const init = stmt.children[0]
@@ -783,6 +1032,9 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
     }
     cond = stmt.children[1]
     body = stmt.children[3]
+    if (stmt.children[2].kind !== N_EMPTY) {
+      update = flowStatementOf(stmt.children[2])
+    }
   } else if (f.kind === "while") {
     cond = stmt.children[0]
   } else if (f.kind === "do") {
@@ -810,7 +1062,8 @@ const flowFixpoint = (ctx: CheckContext, f: LoopFlow, before: i32[]): void => {
     // round starts from `entry` and the fixpoint keeps `join` as `f.join`. They
     // are bounded: at most FLOW_ROUNDS rounds, each one i32[] per tracked variable.
     const join = flowJoin(f, end, f.conts)
-    let next = flowJoin(f, start, join)
+    // A `for`'s update runs on the way back, after the body's end and continues.
+    let next = flowJoin(f, start, update === null ? join : flowExec(ctx, f, update, join))
     if (f.kind === "do") {
       next = flowJoin(f, start, cond === null ? join : flowCond(ctx, f, cond, join, true))
     }
@@ -869,6 +1122,8 @@ export const flowBegin = (ctx: CheckContext, stmt: Node, scope: Scope, kind: str
     return f
   }
   f.declared = scan.declared
+  f.redeclared = scan.redeclared
+  f.consts = scan.consts
   // Every variable the loop names is tracked, the ones it only tests as much
   // as the ones it writes: a test in the body narrows what reaches a `break`,
   // and a `while`'s condition what leaves.
@@ -893,6 +1148,15 @@ export const flowBegin = (ctx: CheckContext, stmt: Node, scope: Scope, kind: str
         f.members.push(variants)
         f.allv.push(allv)
         f.full.push(ctx.table.isNullable(local.type) ? allv | FLOW_NULL : allv)
+        const domain: i32[] = []
+        const tagEnum = ctx.table.tagEnumOf(base)
+        const tagMembers = tagEnum >= 0 ? enumMembersOf(ctx, tagEnum) : domain
+        if (tagMembers.length <= FLOW_BITS) {
+          for (const member of tagMembers) {
+            domain.push(ctx.table.memberValue(member))
+          }
+        }
+        f.domain.push(domain)
       }
     } else if (ctx.table.isEnum(local.type)) {
       const members = enumMembersOf(ctx, local.type)
@@ -908,6 +1172,7 @@ export const flowBegin = (ctx: CheckContext, stmt: Node, scope: Scope, kind: str
         f.members.push(members)
         f.allv.push(allv)
         f.full.push(allv)
+        f.domain.push(values)
       }
     }
   }
@@ -982,6 +1247,35 @@ export const flowDoCondition = (ctx: CheckContext, f: LoopFlow, scope: Scope): v
   flowImpose(ctx, f, scope, flowMeet(f.join, f.widened))
 }
 
+const flowForUpdated = (f: LoopFlow): boolean => f.kind === "for" && f.stmt.children[2].kind !== N_EMPTY
+
+/**
+ * A `for`'s update, about to be read in `scope` once the body is checked:
+ * what the body's end and continues leave, which is what reaches it.
+ */
+export const flowForUpdate = (ctx: CheckContext, f: LoopFlow, scope: Scope): void => {
+  if (!f.active) {
+    return
+  }
+  if (ctx.sink.count() === f.errors && !flowWithin(f.realBack, f.join)) {
+    flowFail(ctx, f, "a state at the end of the body")
+  }
+  flowImpose(ctx, f, scope, flowMeet(f.join, f.widened))
+}
+
+/**
+ * A `for`'s update, read in `scope`: what it leaves goes back to the head,
+ * so it must lie within what the pass imposed there.
+ */
+export const flowUpdated = (ctx: CheckContext, f: LoopFlow, scope: Scope): void => {
+  if (!f.active || flowDead(flowMeet(f.join, f.widened)) || ctx.sink.count() > f.errors) {
+    return
+  }
+  if (!flowWithin(flowRead(ctx, f, scope), f.imposed)) {
+    flowFail(ctx, f, "a state after the update")
+  }
+}
+
 /** After the loop, once the checker has put back its widening: narrow `scope` to what leaves the loop. */
 export const flowEnd = (ctx: CheckContext, f: LoopFlow, scope: Scope): void => {
   const top = flowTop(ctx)
@@ -992,7 +1286,7 @@ export const flowEnd = (ctx: CheckContext, f: LoopFlow, scope: Scope): void => {
     if (ctx.sink.count() > f.errors) {
       flowImpose(ctx, f, scope, f.widened)
     } else {
-      if (f.kind !== "do" && !flowWithin(f.realBack, f.imposed)) {
+      if (f.kind !== "do" && !flowForUpdated(f) && !flowWithin(f.realBack, f.imposed)) {
         flowFail(ctx, f, "a state at a way back to the head")
       }
       if (!flowWithin(f.realBreaks, f.breaks)) {

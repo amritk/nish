@@ -6,20 +6,6 @@ enum Kind {
   C,
 }
 
-class S {
-  readonly kind: Kind.A = Kind.A
-}
-
-class T {
-  readonly kind: Kind.B = Kind.B
-}
-
-class V {
-  readonly kind: Kind.C = Kind.C
-}
-
-type U = S | T | V
-
 const g = (n: i32, j0: Kind): boolean => {
   const j: Kind = j0;
   if (j === Kind.A) {

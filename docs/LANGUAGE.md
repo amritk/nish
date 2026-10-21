@@ -733,7 +733,7 @@ and each has its own code:
   (NL2523, `reject_union_untagged`, `reject_paren_union_type`). A first
   field typed with its whole enum, `readonly kind: Kind = Kind.A`, holds a tag
   but types it as every variant's, so the union could not tell its variants
-  apart by it; that is NL2558, which names the member to write:
+  apart by it; that is NL2559, which names the member to write:
   `` `First` cannot be a union variant: its tag `kind` has the whole enum `Kind` as its type, which every variant shares, so give it the one member it holds instead: `readonly kind: Kind.A = Kind.A` ``
   (`reject_union_tag_whole_enum`).
 - The tag is `readonly`: otherwise
@@ -854,8 +854,9 @@ const area = (s: Shape): i32 => {
   (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). A loop is
   followed to a fixpoint, as `tsc` follows it: the head of a `while`, `for`
   or `do` holds what reaches it before the loop, at the end of an iteration
-  and at a `continue`, joined until it no longer changes; after a `while` or
-  `for` comes the head with its condition false, joined with every `break`,
+  and at a `continue` (through its update, for a `for`), joined until it no
+  longer changes; after a `while` or `for` comes the head with its condition
+  false, joined with every `break`,
   after a `do` the end of the body and its `continue`s with the condition
   false, and after a `for...of` the head and the `break`s. A loop inside the
   body and a `switch` inside it are followed the same way, an `if` or a
@@ -873,18 +874,42 @@ const area = (s: Shape): i32 => {
   `reject_enum_loop_tested_do`, `reject_enum_loop_tested_break`,
   `reject_enum_loop_tested_inner`, `reject_enum_loop_switch_tested`,
   `reject_union_loop_tested_while`, `reject_union_loop_null_tested`). A
-  store of a member, of a ternary of members, of another enum variable or of
-  a union's tag holds what that value holds; a store of anything else, a call
-  for one, holds the whole declared type (`reject_enum_loop_ternary_store`,
-  `reject_enum_loop_copy_store`, `reject_union_loop_tag_copy`). Where the loop
-  holds a shape the fixpoint does not follow, a local or path holds, after
-  it and throughout it, every member stored anywhere in it, which may be
-  more than `tsc` knows ("Accepted here, refused by `tsc`", below).
+  store holds what its value holds where the value is one of: a member; a
+  local of a member type, `const m: Kind.B`; a call of a function that
+  returns a member type; a field of a member type, or a call of a method
+  that returns one, read through `this`, a local or parameter or a field of
+  one, nullable or not; a `const` the loop declares once, read by its
+  initializer; another
+  enum variable; a union's tag; or a ternary of two of these, each arm read
+  on its side of the condition
+  (`reject_enum_loop_ternary_store`, `reject_enum_loop_copy_store`,
+  `reject_union_loop_tag_copy`, `reject_enum_loop_member_local`,
+  `reject_enum_loop_member_call`, `reject_enum_loop_field_store`,
+  `reject_enum_loop_method_store`, `reject_enum_loop_nullable_receiver`,
+  `reject_enum_loop_body_const`,
+  `reject_enum_loop_ternary_narrowed`, `reject_enum_loop_ternary_tracked`,
+  `reject_enum_loop_ternary_self`). A test against a member, a local of a
+  member type or such a call narrows as outside a loop, and so does a test
+  against another enum variable, by the members it holds there
+  (`reject_enum_loop_const_test`, `reject_union_loop_const_test`,
+  `reject_enum_loop_held_operand`, `reject_enum_loop_held_single`,
+  `reject_enum_loop_held_ternary`, `reject_union_loop_held_operand`;
+  `tests/cases/enum_loop_held_several`). A `for`
+  update runs after the body and before the next test, and is followed
+  there (`tests/cases/enum_loop_for_update`;
+  `reject_enum_loop_for_update_store`, `reject_enum_loop_for_update_cond`),
+  and is checked when the body is one refused statement, so both errors are
+  reported (`reject_for_update_after_body`). A store of any other value holds
+  the whole declared type. Where the loop holds a shape the fixpoint does not
+  follow, a local or path holds, after it and throughout it, every member
+  stored anywhere in it, which may be more than `tsc` knows ("Accepted here,
+  refused by `tsc`", below).
 - A tag compared with an enum variable narrows on the side where they are
   equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
   `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
   `k`'s members. Where they differ, nothing is known, since `k` may hold
-  either (`tests/cases/union_narrowing_arms`;
+  either, unless `k` holds one member, which is then left out
+  (`tests/cases/union_narrowing_arms`;
   `reject_union_narrow_tag_variable`, `reject_enum_compare_variable`).
 - A tag tested through a path — a field `h.k`, `this.k`, a field of a field
   `h.s.kind`, a literal index `xs[0].kind` — stays narrowed for the
@@ -1012,7 +1037,7 @@ boundary, so no other `i32` reaches it.
   tag read through the path (above) but the union only in a variable, so a
   read of a variant's member through the path is
   `` `r` cannot be used on the union `Circle | Square | Tri` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that ``
-  (NL2557, `reject_union_narrow_path`).
+  (NL2558, `reject_union_narrow_path`).
 - **A complete `switch` reads the union's tag.** `tsc` treats a `switch`
   whose labels name every member of an enum as complete, and so ends a
   function in it; this version does so for a union's tag only (above). A
@@ -1027,7 +1052,7 @@ boundary, so no other `i32` reaches it.
   variable `never` and accepts a read of it; this version has no such type, so
   the read is
   `` `s` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for ``
-  (NL2556, `reject_union_narrow_exhausted`).
+  (NL2557, `reject_union_narrow_exhausted`).
 - **No narrowing through a stored condition.** `tsc` narrows `s` where a
   `const` holding a test of its tag is true, `const round = s.kind ===
   Kind.Circle; if (round) { s.r }`; this version narrows on the test
@@ -1038,7 +1063,7 @@ boundary, so no other `i32` reaches it.
   narrows it (NL2528, `reject_union_member_field`).
 - **A tag of one member.** `tsc` accepts a variant whose tag is typed with its
   whole enum, `readonly kind: Kind = Kind.A`, which then discriminates
-  nothing; this version asks for the member type (NL2558,
+  nothing; this version asks for the member type (NL2559,
   `reject_union_tag_whole_enum`).
 - **No covariant arrays.** A `Circle[]` is not a `Shape[]`, since a push
   through the wider type would put a `Square` among the circles; build the
@@ -1073,19 +1098,32 @@ wanted is the existing refusal of its position (`reject_union_into_init`,
 stored where a larger one is declared narrows it in `tsc`, as a variant
 does, and is NL2534 too (`reject_union_narrow_subunion`).
 
-**Accepted here, refused by `tsc`.** A loop whose body holds one of three
-shapes is not followed to a fixpoint (above); the variables it writes hold
-every member stored anywhere in it, so a comparison `tsc` refuses as TS2367
-may compile here. Each is pinned as it stands, with the expected `tsc` error
-written at the comparison, so the case fails on either side once the gap
-closes (`tests/cases/enum_loop_join_gap`):
+**Accepted here, refused by `tsc`.** The loop pass (above) reads less than
+`tsc` in the shapes below, and these are all of them: a variable holds every
+member stored anywhere in the loop, or its whole declared type, so a
+comparison `tsc` refuses as TS2367 may compile here. Each is pinned as it
+stands, with the expected `tsc` error written at the comparison, so the case
+fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 
 - **A path.** A tag or enum held by a field, `h.k`, is joined over the whole
   loop, not followed through it.
 - **A store inside an expression.** An assignment that is an argument,
-  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, the inner
-  store of a chain, `k = j = Kind.C`, or a `for` header's update,
-  `for (; i < n; j = Kind.C)`, rather than a statement of its own.
+  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, or the
+  inner store of a chain, `k = j = Kind.C`, rather than a statement of its
+  own.
+- **A value the pass cannot read.** A store of a field or a method call
+  read through anything but `this`, a local or parameter the loop does not
+  declare, or a field of one — an element, `j = gs[0].b` or
+  `j = gs[0].pick()`, a call's result, `j = makeG().b`, a receiver the loop
+  declares, `const g = new G(); j = g.b` — holds the whole declared type,
+  though the field or method is typed with one member. So does a store of a
+  `let` the loop declares, or of a `const` it declares from a tracked
+  variable, as the swap `const t: Kind = a; a = b; b = t;` does.
+- **An arm that holds nothing.** A ternary arm that reads the stored
+  variable where the condition leaves it no member, the `k` of
+  `k = k === Kind.A ? Kind.B : k` while `k` holds only `Kind.A`, reads as
+  the whole type, as the checker reads a variable narrowed to `never`, so
+  the store holds every member from then on.
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 
@@ -2022,6 +2060,31 @@ and their `.ll` goldens are byte-identical files.
   whose symbol carries the package, may have any of these names
   (`tests/link/export_c_symbol_allowed`). `main` is the entry's alone
   (`tests/link/main_in_import`), and emitted as `@nish_main`.
+- **A wasm module's function is not named `memory`.** `wasm-ld` exports the
+  module's linear memory as `memory`, and `scripts/build.sh --profile wasm`
+  links with `--export-all`, so in that module an exported function of that
+  name, or any function under `--no-strict-exports`, is a second export of
+  it, and Node refuses the module ("Duplicate export name 'memory'"). The
+  `wasi` command module exports only `memory` and `_start`, so the function
+  does not collide there; the name is reserved there too, so that a program
+  that builds for wasi also builds as a freestanding wasm module. On a wasm
+  `--target`, under `--profile wasi`, and in an `--emit-dts` compile, whose
+  loader is for the module `scripts/build.sh --profile wasm` links its IR
+  into, it is
+  `` `memory` is the name a wasm module exports its linear memory under: an exported function of the program's own package keeps its name as its symbol, so the module would export two things named `memory` and no host could load it; rename it ``
+  (NL3038; `tests/cases/reject_export_wasm_memory`,
+  `reject_export_wasm_memory_wasi`, `reject_export_wasm_memory_dts`,
+  `tests/link/export_wasm_memory_sibling`; with `--no-strict-exports`,
+  `reject_export_wasm_memory_no_strict`; without the flag a `memory` nobody
+  exported stays internal and compiles, "wasm memory: a --target wasm32
+  compile keeps a `memory` nobody exported" in `tests/run.js`). IR compiled for the host with `-o`
+  alone reaches build.sh without the compiler knowing the build is wasm, so
+  `build.sh --profile wasm` and `--profile wasi` refuse IR that defines an
+  exported `@memory` with exit 2 ("wasm memory: ..." in `tests/run.js`). A
+  native build has no linear memory to collide with and keeps the name
+  (`export_memory_native`, `tests/link/export_memory_native_sibling`). The
+  linker's other names, `_start`, `__heap_base`, `__data_end` and
+  `__indirect_function_table`, are already refused by the rule above.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
@@ -4633,6 +4696,24 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `const z = c ? { v: 7 } : null` is still
   `Object literal needs a contextual class or interface type`
   (`reject_obj_lit_nullable_context`).
+- A **class with methods** is made only by `new`. Natively a literal would
+  take the class's layout and its methods, but under Node it is a plain
+  object, and a call on it throws, so wherever a context above types a
+  literal as such a class it is
+  `` `Counter` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new Counter(...)` ``
+  (NL2556; `tests/cases/reject_class_literal_decl`, `…_return`,
+  `…_arrow_body`, `…_call_arg`, `…_method_arg`, `…_new_arg`,
+  `…_array_elem`, `…_push`, `…_index_assign`, `…_map_set`,
+  `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`, `…_alias`,
+  `…_coalesce`, `…_coalesce_chain`, `…_coalesce_field`, `…_coalesce_call`,
+  `…_coalesce_map`, `…_coalesce_optional`, `…_coalesce_ternary`,
+  `…_equality`, `…_index_of`, `…_math_max`, `…_fn_param`, `…_unary`,
+  `…_compound_bitwise`, `…_compound_arith`, `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
+  `…_imported`). A generic method counts as a method; a constructor does
+  not. A class with fields alone, and an interface, still take a literal
+  (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
+  their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
+  keeps NL2545.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -5846,7 +5927,11 @@ Three consequences, each of them a rule:
   `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
   that storage; index `ps` again afterwards rather than holding the element
   across it `` (`reject_arr_element_across_push`,
-  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `reject_arr_element_loop_push`). A second name for the element is one too:
+  `const q = p`, `q = p` (in a nested block as well, since `q` outlives it),
+  and either side of `c ? p : r` or `m ?? p` (`tests/cases/arr_ref_alias_*`);
+  a call's result is not, since a helper may return a copy
+  (`arr_ref_alias_clone`). A loop is checked as a whole, because a
   `push` at the bottom of the body reaches a reference taken at the top on the
   next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
   its own (`reject_arr_element_push_self`).
@@ -6473,10 +6558,10 @@ export const main = (): i32 => {
 | Export | Meaning | Test |
 | --- | --- | --- |
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
-| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*` |
+| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`, `secret_inferred`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*`, `reject_secret_inferred_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
 | `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
-| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
+| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`, `secret_wipe_o2_inferred`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
 
 `nish:secret` is the one builtin module with source behind it: `std/secret.ts`,
 loaded like a standard-library module, imported only by the builtin name
@@ -6486,6 +6571,21 @@ module that uses it, so it writes no `.ll` of its own. `runtime/nish.d.ts`
 declares it for `tsc`, with a private constructor and field so that `tsc`
 refuses `new Secret` and `s.value` too. Under Node (`runtime/nish.mjs`) a
 `Secret` is a plain wrapper and `wipe` zero-fills it.
+
+**A `Secret` local needs no annotation.** `const k = secret(v)` gives `k` the
+type `secret` answers, `Secret<T>` for the `T` that `v` is, and every rule
+below holds for it as for `const k: Secret<T> = secret(v)`: the payload's
+shape, the move and the second reference, each judged where `v` is written
+(`secret_inferred` binds an array literal, `new Array`, a call, a moved local,
+a ternary, a record and a class unannotated; `reject_secret_inferred_literal`,
+`_alias`, `_call`, `_field` and `_moved_class` are refused unannotated as
+annotated). The same holds for any generic an imported module declares:
+`const b = box(7)` holds the `Box<i32>` that `box` answers, whose layout comes
+with the call (`tests/link/generic_import_inferred`), with its methods even
+where the module already held `Box<i32>` as a type argument
+(`tests/link/generic_import_inferred_held`), and with those of every struct
+its fields reach, through an array, a nullable, a `Result` or a nested
+instance, in either order (`tests/link/generic_import_inferred_closure`).
 
 **What a `Secret` may hold.** One run of integers, so that `wipe` reaches every
 byte with one store: `` `Secret<string>` is not key material `` (NL2428,
@@ -6548,10 +6648,12 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
 - `secret(v)` takes a value nothing else holds, and moves it, because a
   second name for the bytes would read the key outside the `Secret`, and
   zeros once `wipe` has run. A local handed in is not read again (NL2445,
-  `reject_secret_moved`), and neither is the local in either arm of
-  `secret(c ? a : b)`. A parameter, a field or an element, whose owner keeps
-  the plain bytes, is refused (NL2447, `reject_secret_unmovable`). Everything
-  else is judged where it is written:
+  `reject_secret_moved`, whose message says the plain array, and
+  `reject_secret_inferred_moved_class` and `reject_secret_moved_interface`,
+  where it names the class or interface the plain value is), and neither is
+  the local in either arm of `secret(c ? a : b)`. A parameter, a field or an element,
+  whose owner keeps the plain bytes, is refused (NL2447,
+  `reject_secret_unmovable`). Everything else is judged where it is written:
   - an array or object literal, `null`, and a ternary of fresh values are
     fresh, and so is a `new` whose constructor keeps no `this`;
   - a call is fresh when its callee answers a fresh value, judged over the
@@ -6769,6 +6871,10 @@ volatile memory intrinsic, so the store survives every optimisation, inlining
 included: `tests/run.js` compiles `secret_wipe_o2`, whose wiped bytes nothing
 reads again, beside a twin that zeroes them with `fill(0)`, and after
 `opt -O2` the twin holds no store and the wipe holds one volatile zero per byte.
+`secret_wipe_o2_inferred` does the same for a `Secret` bound with no
+annotation, beside `secret_wipe_o2_inferred_plain` ("nish:secret: an inferred
+`Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the
+twin's fill(0) is deleted").
 Two things it does not reach, and says so: a buffer a `push` outgrew, which is
 no longer the array's, and a string, which is immutable and is not key material.
 
@@ -7033,7 +7139,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
-| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener that did not ask for it, or asked by one that does not, is `-98` | write | `net_tcp_reuseport`, `link/net_tcp_reuseport_spread`; `reject_net_reuseport_wasm` |
+| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flags add: `3` is both. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
@@ -8424,7 +8530,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`) |
+| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
@@ -8497,6 +8603,20 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   (`tests/link/caps_policy_deny_unsafe`) — and never allowed: the import is
   the opt-in, so an allowlist does not refuse it and `--allow unsafe` is a
   usage error.
+- `unsafe` travels like every other capability — to each caller, however far
+  up, and to the module and package above it, including a dependency that
+  imports `nish:unsafe` when the entry package does not — and keeps a program
+  deterministic ("capabilities: `unsafe` reaches a caller two frames up, with
+  the whole chain as its witness", "capabilities: a dependency that imports
+  `nish:unsafe` gives `unsafe` to its package and to the entry that calls
+  it"). The deprecated `--wrapping` and `--unchecked-indexing` carry no
+  `unsafe`, so `--deny unsafe` passes them: they reach only the entry package
+  and each compile that passes one prints its deprecation note (NL9014).
+  `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+  which `nish --fix` rewrites into `uncheckedGet` and `uncheckedSet` calls
+  that do carry it; `--wrapping` has no fixer, and its note names the
+  `nish:unsafe` exports to write instead ("capabilities: `--wrapping` and
+  `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them").
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
@@ -9953,6 +10073,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
 | an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
 | an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
+| an object literal typed as a class with methods | `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` `` | `reject_class_literal_*`, `nl2556_class_literal` |
 | more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
 | a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
 | `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |

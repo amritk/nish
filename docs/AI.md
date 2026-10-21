@@ -1533,6 +1533,27 @@ The context reaches a nested literal and a `null`, and stops there: a numeric
 literal in a property keeps the mode's default type (above), and `[]` has no
 element type at all in that position.
 
+A class with methods is made only by `new`: a literal typed as one would be a
+plain object under Node, without the methods (NL2556). A class with fields
+alone, and an interface, still take a literal.
+
+```ts nish:err NL2556
+class Counter {
+  n: i32;
+  constructor(n: i32) {
+    this.n = n;
+  }
+  get(): i32 {
+    return this.n;
+  }
+}
+
+export const main = (): i32 => {
+  const c: Counter = { n: 5 }; // write `new Counter(5)`
+  return c.get();
+};
+```
+
 ### Type aliases and enums
 
 ```ts nish:ok
@@ -1675,7 +1696,7 @@ export const main = (): i32 => {
   Kind.Circle`. All variants of a union take their tags from one enum, under
   one field name, with different members; a union names at least two. Each
   broken rule has its code (NL2522–NL2527); a tag that is not `readonly` is
-  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2558. Any
+  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2559. Any
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
   (`Shape | null`). An alias may name another union, which is flattened. A
@@ -1697,7 +1718,7 @@ export const main = (): i32 => {
   that returns leaves the variant no test named), including what a test nested
   in each arm proved: two arms that each return when `s.kind === Kind.A` leave
   `s` not a `VA`; a `switch`'s exits join the same way. A path does not narrow the
-  union (`h.s.kind` then `h.s.r` is NL2557): copy it into a local and test
+  union (`h.s.kind` then `h.s.r` is NL2558): copy it into a local and test
   that. The tag read through a path (`h.k`, `this.k`, `h.s.kind`,
   `xs[0].kind`, `xs[i].kind`) does stay narrowed for later comparisons, until a store to
   the path, a prefix of it or its root. An index `i` is part of the path when
@@ -1706,7 +1727,7 @@ export const main = (): i32 => {
   (`const IDX: i32 = 0` makes `xs[IDX]` the path `xs[0]`), or a `let` nothing
   assigns; through a `let` that is assigned
   or stepped, `xs[i]` is not narrowed, and `xs[j] = t` drops nothing. A read where every variant was excluded is
-  NL2556.
+  NL2557.
 - The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
   `const k = s.kind` is NL2530. `k` holds only the variants' members. A
   union is read-only, even for a field every variant has (NL2529). Comparing
@@ -1732,11 +1753,17 @@ export const main = (): i32 => {
   after a loop, what its condition leaves false at the head, joined until it
   no longer changes, and each `break`, as `tsc` reads it — a variable the
   loop only tests included, and an `if` or `switch` inside the loop narrowing
-  as it does outside. A loop holding a path (`h.k`), a store inside an
-  expression (an argument, an initializer, a chain's inner `=`, a `for`
-  update) or a type of more than 29 members falls back to every member the body stored anywhere, which accepts
-  a few comparisons `tsc` refuses (TS2367; LANGUAGE.md, "Accepted here,
-  refused by `tsc`").
+  as it does outside; a `for` update is read after the body. A loop holding
+  a path (`h.k`), a store inside an expression (an argument, an initializer,
+  a chain's inner `=`), a store of a field or method call read through an
+  element, a call or a receiver the loop declares (`gs[0].b`,
+  `makeG().b`), of a `let` the loop declares or of a `const` it declares
+  from a tracked variable (a swap's `const t: Kind = a`), a ternary arm
+  reading the stored variable where it holds no member
+  (`k = k === Kind.A ? Kind.B : k`), or a type of more than 29 members
+  falls back to every member the body stored
+  anywhere or the whole type, which accepts a few comparisons `tsc` refuses
+  (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
@@ -1810,6 +1837,11 @@ export const main = (): i32 => {
   build alike. `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
   (NL3037). Name it `writeLine`, or leave it private: a private function with
   such a name gets a symbol ending in `$`.
+- **Nor, in a wasm build, `memory`**: a wasm `--target`, `--profile wasi` or
+  `--emit-dts` refuses it, because the `--profile wasm` module exports its
+  linear memory under that name; wasi reserves it too, so a program that
+  builds for wasi also builds as a freestanding wasm module. `` `memory` is the name a wasm module exports its linear memory under: an exported function of the program's own package keeps its name as its symbol, so the module would export two things named `memory` and no host could load it; rename it ``
+  (NL3038). A native build keeps it.
 
 ## Statements
 
@@ -2103,7 +2135,8 @@ the port big-endian); hosts are numeric literals, because there is no DNS.
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
-spreads the connections; any other bit is `-22`). UDP is
+spreads the connections), and flag 2 `TCP_NODELAY` on every socket `tcpAccept`
+takes from it; flags add, and any other bit is `-22`. UDP is
 `udpBind(host, port, flags)` (flag 1 `SO_REUSEPORT`, flag 2 GRO),
 `udpSendTo(fd, buf, off, len, to, segment, ecn)` and
 `udpRecvFrom(fd, buf, off, len, from, meta)`: a `segment` above 0 sends one
@@ -2466,6 +2499,21 @@ bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
 never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
 `tests/link/std_text_index_of_any` is its program.)
+
+**Decode a URL or read a query** — there is no `decodeURIComponent` and no
+`URLSearchParams`: `nish/net/url` has both readings. `urlDecode(s, flags)` and
+`urlQueryGet(target, name)` answer a `string | null`; the byte API
+(`percentDecode`, `UrlPathSegments`, `UrlQuery`, `urlQueryFind`) reads a
+window of a `u8[]` and allocates nothing. Decoding is strict by default — a
+malformed escape or `%00` is refused, `+` is kept — and `URL_DECODE_FORM`,
+`URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL` add `URLSearchParams`'s
+repairs, short of its U+FFFD for invalid UTF-8. `percentDecode` answers the
+length or a negative `URL_DECODE_ERR_*` code — test it before reading `out`,
+since a peer's `%zz` makes it negative and `urlQueryStart` answers -1 for no
+`?` — and `percentDecodeErrorAt` the offset an error is at; a query yields at
+most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
+program, and the user guide's [standard-library
+page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
 
 **Shared behaviour over several shapes** — there is no inheritance and no
 dispatch. Give each class the interface's fields **first**, `implements` it,

@@ -1590,6 +1590,7 @@ const SEEDED = [
   ["tailLeak", "load", "leakyRow", "a secret load inside a followed tail call"],
   ["secretDivide", "latency", null, "a divide of a secret"],
   ["leakyBaseRead", "load", null, "a P-256 comb entry read at the digit's offset"],
+  ["leakyDivstep", "branch", null, "a P-256 safegcd divstep that tests g's low bit with an `if`"],
 ]
 
 const seedMisses = () => {

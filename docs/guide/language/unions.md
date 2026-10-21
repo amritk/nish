@@ -61,7 +61,7 @@ type Thing = Point | Line;
 ```
 
 The tag's type is the one member, `readonly kind: Kind.Circle = Kind.Circle`,
-not the whole enum: `readonly kind: Kind = Kind.Circle` is an error (NL2558),
+not the whole enum: `readonly kind: Kind = Kind.Circle` is an error (NL2559),
 because every variant would then share that type and a test of it could not
 tell them apart.
 
@@ -226,7 +226,7 @@ A test nested inside the arms counts too: when each arm returns if
 `s.kind === Kind.Circle`, `s` is not a `Circle` past the `if`, and the ways out
 of a `switch` join the same way.
 A narrowing of the union belongs to a variable or a parameter: a test of
-`a.b.kind` does not narrow `a.b`, so `a.b.r` is an error (NL2557) — copy it
+`a.b.kind` does not narrow `a.b`, so `a.b.r` is an error (NL2558) — copy it
 into a `const` and test that. The tag read through the path does stay
 narrowed, as in TypeScript, so a second `a.b.kind === Kind.Circle` after the
 first ruled it out is an error, until a store to `a.b`, `a.b.kind` or `a`.
@@ -237,7 +237,7 @@ so is `xs[j]` after `const j = i`), a module constant (after
 assigns. Through a loop counter, which `i++` assigns,
 `xs[i]` is not narrowed, and a store `xs[j] = t` through it clears nothing.
 And where TypeScript would type a value `never`,
-because every tag has been tested away, reading it is an error (NL2556).
+because every tag has been tested away, reading it is an error (NL2557).
 
 A comparison the tests above it have already ruled out is an error, as in
 TypeScript: after `if (s.kind === Kind.Circle) { return 1; }`, a second
@@ -305,10 +305,14 @@ const settled = (n: i32): boolean => {
 
 A loop that holds a field path such as `h.k`, an assignment written inside
 another expression (an argument, an initializer, the inner `=` of
-`k = j = Kind.C`, a `for` header's update), or a type of more than 29 members
-is read more loosely:
-there the local holds every member the body stores anywhere, so a few
-comparisons TypeScript refuses still compile. The language reference lists
+`k = j = Kind.C`), a store of a field or method call read through an array
+element, a call's result or an object the loop itself creates (`gs[0].b`),
+a store of a `let` the loop declares or of a `const` it copies from another
+enum local (the `const t = a` of a swap), a ternary arm that reads the
+local where the condition leaves it nothing (`k = k === Kind.A ? Kind.B :
+k`), or a type of more than 29 members is read more loosely: there the
+local holds every member the body stores anywhere, or the whole enum, so a
+few comparisons TypeScript refuses still compile. The language reference lists
 these shapes under "Accepted here, refused by `tsc`".
 
 A comparison that can never be true is an error, as in TypeScript:
