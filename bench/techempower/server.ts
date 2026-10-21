@@ -46,6 +46,9 @@ const OWES_JSON: i32 = 2
 const OWES_NOT_FOUND: i32 = 3
 /** The body offset of a reply whose head is not written yet. */
 const HEAD_OWED: i32 = -1
+/** `tcpAccept`'s failures that a closed connection cures: EMFILE and ENFILE. */
+const OUT_OF_FILES: i32 = -24
+const SYSTEM_OUT_OF_FILES: i32 = -23
 
 const tfbBytes = (s: string): u8[] => {
   const out: u8[] = new Array<u8>(s.length)
@@ -78,9 +81,12 @@ export class TfbServer {
   owedAt: i32[]
   /** Per slot: the owed body's length. */
   owedLength: i32[]
+  /** Whether the listener is out of the loop until a connection closes, after EMFILE or ENFILE. */
+  paused: boolean = false
 
-  /** A pool of `slots` serving on `listener`, which this adds to `loop`. */
-  constructor(loop: i32, listener: i32, slots: i32) {
+  /** A pool of `slots`, at least one as `Http1Server` makes it, serving on `listener`, which this adds to `loop`. */
+  constructor(loop: i32, listener: i32, size: i32) {
+    const slots: i32 = size < 1 ? 1 : size
     this.loop = loop
     this.listener = listener
     this.server = new Http1Server(new Http1Config(), listener, slots)
@@ -200,15 +206,33 @@ export class TfbServer {
     }
   }
 
-  /** Accepts every waiting connection into the loop; a full pool closes the extra ones. */
+  /**
+   * Accepts every waiting connection into the loop; a full pool closes the
+   * extra ones. Out of descriptors (EMFILE or ENFILE), the waiting connection
+   * stays queued and the listener stays readable, so a level-triggered loop
+   * would spin on it: the listener leaves the loop until a slot closes.
+   */
   acceptAll(): void {
     while (true) {
       const slot: i32 = this.server.accept()
       if (slot >= 0) {
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
+      } else if (slot === OUT_OF_FILES || slot === SYSTEM_OUT_OF_FILES) {
+        pollModify(this.loop, this.listener, ZERO, TFB_LISTENER)
+        this.paused = true
+        return
       } else if (slot !== H1_POOL_FULL) {
         return
       }
+    }
+  }
+
+  /** Closes `slot`, and puts a listener paused for want of descriptors back in the loop. */
+  close(slot: i32): void {
+    this.server.close(slot)
+    if (this.paused) {
+      this.paused = false
+      pollModify(this.loop, this.listener, H1_WANT_READ, TFB_LISTENER)
     }
   }
 
@@ -234,7 +258,7 @@ export class TfbServer {
     }
     const wants: i32 = this.server.flush(slot)
     if ((wants & H1_DONE) !== 0) {
-      this.server.close(slot)
+      this.close(slot)
       return
     }
     if (this.server.rearm(slot, wants)) {

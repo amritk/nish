@@ -9,12 +9,15 @@
 //      answered in order: 16 whole responses and nothing more. A burst of 1000,
 //      whose answers are twice what the server's output holds, is answered
 //      whole and in order too: a reply the full output held back resumes.
-//   4. Every /json answer is serialized again: the writer's count moves by one
-//      per request, not by trust in the code.
+//   4. Every /json answer is serialized again: with the answer buffer
+//      overwritten by junk before each request, every answer is still the
+//      exact body, which it is only if the writer ran for that request.
 //   5. A warmed connection serves 200 requests, /json and /plaintext in turn,
-//      and the server's calls move `Arena.used()` by nothing.
+//      and no one of the server's calls moves `Arena.used()`.
 //   6. Any other path answers 404; a malformed request answers 400 and closes
 //      that connection, and the server goes on serving a new one.
+//   7. A pool asked for 0 slots has one, as `Http1Server` clamps it, and
+//      answers on it.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a hang.
 import {
@@ -174,9 +177,10 @@ class TfbLoop {
   buf: u8[];
   /** The first thing that went wrong, or empty. */
   failure: string = "";
-  /** While set, how far the server's calls moved the arena, summed. */
+  /** While set, the server's calls are counted, and those that moved `Arena.used()` either way. */
   measuring: boolean = false;
-  growth: i64 = 0;
+  calls: i32 = 0;
+  moved: i32 = 0;
 
   constructor(slots: i32) {
     this.ready = new Array<i32>(64);
@@ -242,7 +246,10 @@ class TfbLoop {
         const before: i64 = Arena.used();
         this.tfb.dispatch(who, this.ready[2 * i + 1]);
         if (this.measuring && who !== TFB_LISTENER) {
-          this.growth = this.growth + (Arena.used() - before);
+          this.calls = this.calls + 1;
+          if (Arena.used() !== before) {
+            this.moved = this.moved + 1;
+          }
         }
       }
     }
@@ -474,18 +481,29 @@ export const main = (): i32 => {
   t.eqI32("and the handler answered each of them once", lb.tfb.answered - deepBefore, toI32(1000));
 
   // --- 4. /json is serialized per request -------------------------------------------------------
+  // Junk of the answer's length and more over the whole buffer: an answer
+  // served from what the buffer held reads `X`s, not the body.
   const before: i32 = lb.tfb.serialized;
+  let fresh: i32 = 0;
   for (let k: i32 = 0; k < 5; k++) {
+    for (let i: i32 = 0; i < toI32(lb.tfb.jsonBuf.length); i++) {
+      lb.tfb.jsonBuf[i] = toU8(88);
+    }
     lb.send(c, get("/json"));
-    lb.response(c);
+    const r: Response = lb.response(c);
+    if (r.status === 200 && r.body === json && r.length === toI32(json.length)) {
+      fresh = fresh + 1;
+    }
   }
+  t.eqI32("five /json requests over a junked buffer are five exact bodies", fresh, toI32(5));
   t.eqI32("five /json requests are five serializations by the writer", lb.tfb.serialized - before, toI32(5));
   lb.send(c, get("/plaintext"));
   lb.response(c);
   t.eqI32("and a /plaintext request is none", lb.tfb.serialized - before, toI32(5));
 
   // --- 5. 200 warmed requests, the arena flat ---------------------------------------------------
-  lb.growth = 0;
+  lb.calls = 0;
+  lb.moved = 0;
   lb.measuring = true;
   let served: i32 = 0;
   for (let k: i32 = 0; k < 200; k++) {
@@ -497,7 +515,8 @@ export const main = (): i32 => {
   }
   lb.measuring = false;
   t.eqI32("a warmed connection answers 200 requests", served, toI32(200));
-  t.ok(`and the server's calls moved Arena.used() by nothing (${lb.growth} bytes)`, lb.growth === toI64(0));
+  t.ok("and the server was called for them", lb.calls >= toI32(200));
+  t.eqI32("and no server call moved Arena.used()", lb.moved, toI32(0));
 
   // --- 6. 404, then a malformed request ---------------------------------------------------------
   lb.send(c, get("/nothing"));
@@ -517,5 +536,15 @@ export const main = (): i32 => {
     t.fail("the loop", lb.failure);
   }
   lb.shutdown();
+
+  // --- 7. A pool of 0 slots is a pool of one ----------------------------------------------------
+  const one = new TfbLoop(0);
+  const e: i32 = one.connect();
+  one.send(e, get("/json"));
+  verify(t, "a pool asked for 0 slots", one.response(e), json, "application/json");
+  if (one.failure !== "") {
+    t.fail("the 0-slot loop", one.failure);
+  }
+  one.shutdown();
   return t.done();
 };
