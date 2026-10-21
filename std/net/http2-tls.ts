@@ -1,7 +1,9 @@
 /**
  * `nish/net/http2-tls` — HTTP/2 over TLS 1.3 on TCP: a pool of
  * `Http2Connection`s, one beside each slot of a `TlsTcpServer`, for a
- * program that owns its readiness loop.
+ * program that owns its readiness loop. Slot 0's connection is built with the
+ * server, so a bad `Http2Config` is refused there; every other slot's is built
+ * on the first accept into it.
  *
  *     const listener = tcpListen("0.0.0.0", 8443, 128);
  *     const server = new Http2TlsServer(tlsConfig, new Http2Config(), listener, 64);
