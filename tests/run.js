@@ -42,7 +42,12 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import {
+  budgetLabel,
+  HTTP1_SERVER_START_BYTES,
+  HTTP3_SERVER_START_BYTES,
+  RUNTIME_BUDGETS,
+} from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -6355,6 +6360,34 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
   }
 }
 
+// `Http3Server` builds a slot's QUIC and HTTP/3 connections and its address on
+// the first Initial accepted into it, so what a pool costs before its first
+// connection is its per-slot tables. `tests/link/net_http3_server/startup.ts`
+// builds a pool of 65,536 slots on no socket and prints the arena bytes it
+// took, which the ceiling `HTTP3_SERVER_START_BYTES` in
+// `tests/runtime-budgets.js` holds, and whether they fit in one chunk, without
+// which `Arena.used()` measures nothing.
+if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only)) {
+  const dir = path.join(buildDir, "link", "net_http3_server.startup")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "net_http3_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    check(
+      "net_http3_server: a 65,536-slot Http3Server takes at most HTTP3_SERVER_START_BYTES before its first connection",
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP3_SERVER_START_BYTES,
+      `ceiling ${HTTP3_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
 // A task's temporaries are released on the thread that ran it once it has
 // answered, whatever it answers. `thread_task_release` spawns three scopes of
 // 8,000 tasks of some 60 KB each, answering a string, an `i32` and nothing;
@@ -11448,6 +11481,79 @@ if (!only) {
       "wasm profile links Math.min/Math.max of f64 and f32, and they drop a NaN as minnum does natively",
       mr !== null && String(mr.stdout).trim() === "0 9 1 1 2 NaN -1 -3 1.5 0.25 2",
       String(mc.stderr) + String(ml.stderr) + (mr ? String(mr.stdout) + String(mr.stderr) : "")
+    )
+  }
+}
+
+// ---- #643: a function named `memory` in a wasm module -----------------------------
+// wasm-ld exports a wasm module's linear memory as `memory`, so a function of that
+// name makes a module Node refuses to compile. The compiler refuses one (NL3038) when
+// it knows the build is wasm (`reject_export_wasm_memory*`), but IR compiled for the
+// host with `-o` alone reaches build.sh's wasm and wasi profiles without telling it,
+// so build.sh reads the IR and refuses an exported `@memory` with exit 2. An
+// `internal` one is no export, and still links.
+if (!only || "wasm-memory".includes(only)) {
+  const memDir = path.join(buildDir, "wasm-memory")
+  fs.rmSync(memDir, { recursive: true, force: true })
+  fs.mkdirSync(memDir, { recursive: true })
+  const exportedLl = path.join(memDir, "exported.ll")
+  const exported = spawnSync(NISH, [path.join(casesDir, "export_memory_native.ts"), "-o", exportedLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check("wasm memory: a native -o compile keeps an exported `memory`", exported.status === 0, exported.stderr)
+  for (const profile of ["wasm", "wasi"]) {
+    const r = spawnSync(
+      "bash",
+      ["scripts/build.sh", exportedLl, "-o", path.join(memDir, `refused-${profile}`), "--profile", profile],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `wasm memory: build.sh --profile ${profile} refuses host IR defining an exported @memory with exit 2`,
+      r.status === 2 &&
+        r.stderr.includes("defines a function named `memory`") &&
+        r.stderr.includes(`the ${profile} profile's module exports its linear memory under`),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+  // Without `--no-strict-exports` a `memory` nobody exported is internal, so
+  // it is no second `memory` export (`reject_export_wasm_memory_no_strict`).
+  const privateTs = path.join(memDir, "private.ts")
+  fs.writeFileSync(
+    privateTs,
+    "const memory = (n: i32): i32 => n + 1\nexport const bump = (n: i32): i32 => memory(n)\n"
+  )
+  const wasm32 = spawnSync(
+    NISH,
+    [privateTs, "-o", path.join(memDir, "private-wasm32.ll"), "--target", "wasm32"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "wasm memory: a --target wasm32 compile keeps a `memory` nobody exported",
+    wasm32.status === 0,
+    `${wasm32.status}: ${wasm32.stderr}`
+  )
+  if (has("wasm-ld")) {
+    const privateLl = path.join(memDir, "private.ll")
+    const c = spawnSync(NISH, [privateTs, "-o", privateLl], { cwd: root, encoding: "utf8" })
+    const l =
+      c.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", privateLl, "-o", path.join(memDir, "private.wasm"), "--profile", "wasm"],
+            {
+              cwd: root,
+              encoding: "utf8",
+            }
+          )
+        : c
+    check(
+      "wasm memory: build.sh --profile wasm links host IR whose @memory is internal",
+      l.status === 0,
+      `${l.status}: ${l.stderr}`
     )
   }
 }
