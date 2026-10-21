@@ -129,4 +129,6 @@ PASS  the number due is never sent: the next packet carries the one after
 PASS  and the next skip is drawn 128 to 1024 packets on again
 PASS  an ACK of the packets sent around it is read
 PASS  an ACK that takes in the skipped number is PROTOCOL_VIOLATION, an optimistic ACK
-quic lifecycle: 131 passed, 0 failed, 0 skipped
+PASS  an ACK of two ranges, neither taking in the skipped number, is read
+PASS  an ACK that takes in the skipped number in its second range is PROTOCOL_VIOLATION too
+quic lifecycle: 133 passed, 0 failed, 0 skipped
