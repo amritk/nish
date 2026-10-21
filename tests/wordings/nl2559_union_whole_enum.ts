@@ -1,4 +1,4 @@
-// NL2558: a variant whose tag is typed with its whole enum.
+// NL2559: a variant whose tag is typed with its whole enum.
 enum Kind {
   A,
   B,

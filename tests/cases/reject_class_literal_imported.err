@@ -1,0 +1,1 @@
+`Rng` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new Rng(...)`

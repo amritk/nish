@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1096 programs, 158193 dump lines.
+# 1097 programs, 158229 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -6330,6 +6330,43 @@ function main(): i32 -> @nish_main [exported entry]
   local 27:9 second: i32 (const)
   local 28:9 t: Tagged (const)
   callee 29:15 describe -> @describe
+program tests/cases/cls_literal_methodless.ts
+module tests/cases/cls_literal_methodless.ts (entry)
+struct Point (class) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  constructor -> @Point.constructor
+struct Size (interface) size=8 align=4
+  field w: i32 index=0 offset=0
+  field h: i32 index=1 offset=4
+struct Counter (class) size=4 align=4
+  field n: i32 index=0 offset=0
+  constructor -> @Counter.constructor
+  method get -> @Counter.get
+function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: x y
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Counter.constructor(this: Counter, n: i32): void -> @Counter.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: n
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Counter.get(this: Counter): i32 -> @Counter.get [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Counter.constructor Counter.get nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_from_i32
+  stackSites=3 stackLocals=3
+  local 29:9 p: Point (const)
+  local 30:9 s: Size (const)
+  local 31:9 c: Counter (const)
+  callee 31:13 new Counter -> @Counter.constructor
+  callee 34:15 Counter.get -> @Counter.get
 program tests/cases/cls_nested.ts
 module tests/cases/cls_nested.ts (entry)
 struct Point (class) size=8 align=4

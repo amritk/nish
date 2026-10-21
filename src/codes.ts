@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 687
+export const RULE_COUNT: i32 = 688
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -241,6 +241,8 @@ const diagnosticRules = (): string[] => [
   "NL2349",
   " and cannot be the default of another `??`: the default stands in for a missing value, so it is a value; give this one a default of its own first, `a ?? (b ?? d)`",
   "NL2371",
+  "` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new ",
+  "NL2556",
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
   ", and that scope is declared outside the block: the task runs, and its answer is stored, when the scope joins, after the block has released what it allocated",
@@ -250,7 +252,7 @@ const diagnosticRules = (): string[] => [
   " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`",
   "NL2373",
   "` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for",
-  "NL2556",
+  "NL2557",
   "` runs may reach no I/O, no clock, no entropy, no C, and no `panic` or exit whose message or status is computed, so that what it returns is all that leaves",
   "NL2448",
   "`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one",
@@ -316,7 +318,7 @@ const diagnosticRules = (): string[] => [
   "` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself",
   "NL2522",
   "` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that",
-  "NL2557",
+  "NL2558",
   "` cannot be handed a `Secret`: a builtin reaches the outside world or reads the bytes, and a `Secret` is read only through `expose`",
   "NL2432",
   "A `Secret` cannot be a condition: a branch taken on key material is a timing channel, and a `Secret` is read only through `expose`",
@@ -422,7 +424,7 @@ const diagnosticRules = (): string[] => [
   ": each field is renamed and made optional at most once, and no two fields share a key on the wire",
   "NL2497",
   "` as its type, which every variant shares, so give it the one member it holds instead: `readonly ",
-  "NL2558",
+  "NL2559",
   "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",
   "NL2157",
   ", and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it",

@@ -733,7 +733,7 @@ and each has its own code:
   (NL2523, `reject_union_untagged`, `reject_paren_union_type`). A first
   field typed with its whole enum, `readonly kind: Kind = Kind.A`, holds a tag
   but types it as every variant's, so the union could not tell its variants
-  apart by it; that is NL2558, which names the member to write:
+  apart by it; that is NL2559, which names the member to write:
   `` `First` cannot be a union variant: its tag `kind` has the whole enum `Kind` as its type, which every variant shares, so give it the one member it holds instead: `readonly kind: Kind.A = Kind.A` ``
   (`reject_union_tag_whole_enum`).
 - The tag is `readonly`: otherwise
@@ -1016,12 +1016,12 @@ member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
   tag read through the path (above) but the union only in a variable, so a
   read of a variant's member through the path is
   `` `r` cannot be used on the union `Circle | Square | Tri` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that ``
-  (NL2557, `reject_union_narrow_path`).
+  (NL2558, `reject_union_narrow_path`).
 - **No `never`.** Where the tests have excluded every variant, `tsc` types the
   variable `never` and accepts a read of it; this version has no such type, so
   the read is
   `` `s` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for ``
-  (NL2556, `reject_union_narrow_exhausted`).
+  (NL2557, `reject_union_narrow_exhausted`).
 - **No narrowing through a stored condition.** `tsc` narrows `s` where a
   `const` holding a test of its tag is true, `const round = s.kind ===
   Kind.Circle; if (round) { s.r }`; this version narrows on the test
@@ -1032,7 +1032,7 @@ member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
   narrows it (NL2528, `reject_union_member_field`).
 - **A tag of one member.** `tsc` accepts a variant whose tag is typed with its
   whole enum, `readonly kind: Kind = Kind.A`, which then discriminates
-  nothing; this version asks for the member type (NL2558,
+  nothing; this version asks for the member type (NL2559,
   `reject_union_tag_whole_enum`).
 - **No covariant arrays.** A `Circle[]` is not a `Shape[]`, since a push
   through the wider type would put a `Square` among the circles; build the
@@ -4656,6 +4656,24 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `const z = c ? { v: 7 } : null` is still
   `Object literal needs a contextual class or interface type`
   (`reject_obj_lit_nullable_context`).
+- A **class with methods** is made only by `new`. Natively a literal would
+  take the class's layout and its methods, but under Node it is a plain
+  object, and a call on it throws, so wherever a context above types a
+  literal as such a class it is
+  `` `Counter` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new Counter(...)` ``
+  (NL2556; `tests/cases/reject_class_literal_decl`, `…_return`,
+  `…_arrow_body`, `…_call_arg`, `…_method_arg`, `…_new_arg`,
+  `…_array_elem`, `…_push`, `…_index_assign`, `…_map_set`,
+  `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`, `…_alias`,
+  `…_coalesce`, `…_coalesce_chain`, `…_coalesce_field`, `…_coalesce_call`,
+  `…_coalesce_map`, `…_coalesce_optional`, `…_coalesce_ternary`,
+  `…_equality`, `…_index_of`, `…_math_max`, `…_fn_param`, `…_unary`,
+  `…_compound_bitwise`, `…_compound_arith`, `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
+  `…_imported`). A generic method counts as a method; a constructor does
+  not. A class with fields alone, and an interface, still take a literal
+  (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
+  their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
+  keeps NL2545.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -9993,6 +10011,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
 | an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
 | an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
+| an object literal typed as a class with methods | `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` `` | `reject_class_literal_*`, `nl2556_class_literal` |
 | more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
 | a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
 | `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |

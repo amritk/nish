@@ -1533,6 +1533,27 @@ The context reaches a nested literal and a `null`, and stops there: a numeric
 literal in a property keeps the mode's default type (above), and `[]` has no
 element type at all in that position.
 
+A class with methods is made only by `new`: a literal typed as one would be a
+plain object under Node, without the methods (NL2556). A class with fields
+alone, and an interface, still take a literal.
+
+```ts nish:err NL2556
+class Counter {
+  n: i32;
+  constructor(n: i32) {
+    this.n = n;
+  }
+  get(): i32 {
+    return this.n;
+  }
+}
+
+export const main = (): i32 => {
+  const c: Counter = { n: 5 }; // write `new Counter(5)`
+  return c.get();
+};
+```
+
 ### Type aliases and enums
 
 ```ts nish:ok
@@ -1675,7 +1696,7 @@ export const main = (): i32 => {
   Kind.Circle`. All variants of a union take their tags from one enum, under
   one field name, with different members; a union names at least two. Each
   broken rule has its code (NL2522–NL2527); a tag that is not `readonly` is
-  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2558. Any
+  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2559. Any
   other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
   (`Shape | null`). An alias may name another union, which is flattened. A
@@ -1697,7 +1718,7 @@ export const main = (): i32 => {
   that returns leaves the variant no test named), including what a test nested
   in each arm proved: two arms that each return when `s.kind === Kind.A` leave
   `s` not a `VA`; a `switch`'s exits join the same way. A path does not narrow the
-  union (`h.s.kind` then `h.s.r` is NL2557): copy it into a local and test
+  union (`h.s.kind` then `h.s.r` is NL2558): copy it into a local and test
   that. The tag read through a path (`h.k`, `this.k`, `h.s.kind`,
   `xs[0].kind`, `xs[i].kind`) does stay narrowed for later comparisons, until a store to
   the path, a prefix of it or its root. An index `i` is part of the path when
@@ -1706,7 +1727,7 @@ export const main = (): i32 => {
   (`const IDX: i32 = 0` makes `xs[IDX]` the path `xs[0]`), or a `let` nothing
   assigns; through a `let` that is assigned
   or stepped, `xs[i]` is not narrowed, and `xs[j] = t` drops nothing. A read where every variant was excluded is
-  NL2556.
+  NL2557.
 - The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
   `const k = s.kind` is NL2530. `k` holds only the variants' members. A
   union is read-only, even for a field every variant has (NL2529). Comparing

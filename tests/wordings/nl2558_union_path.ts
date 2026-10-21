@@ -1,4 +1,4 @@
-// NL2556: a union variable read after every tag was tested away.
+// NL2558: a variant field read through a property path, which a tag test does not narrow.
 enum Kind {
   Circle,
   Square,
@@ -38,19 +38,18 @@ const pick = (n: i32): Shape => {
   const t: Tri = { kind: Kind.Tri, base: n };
   return t;
 };
-const f = (s: Shape): i32 => {
-  if (s.kind === Kind.Circle) {
-    return 1;
+class H {
+  node: Shape;
+  constructor(node: Shape) {
+    this.node = node;
   }
-  if (s.kind === Kind.Square) {
-    return 2;
+}
+const f = (h: H): i32 => {
+  if (h.node.kind === Kind.Circle) {
+    return h.node.r;
   }
-  if (s.kind === Kind.Tri) {
-    return 3;
-  }
-  const t: Shape = s;
-  return t === s ? 0 : 4;
+  return 0;
 };
 export const main = (): void => {
-  console.log(f(pick(0)));
+  console.log(f(new H(pick(0))));
 };
