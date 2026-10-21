@@ -957,6 +957,48 @@ requests rather than 20,000 because its rate falls as the one connection's
 streams pile up (about 1,900 requests a second over 20,000), and a longer run
 would measure that build-up rather than a request.
 
+### Lazy slots
+
+Start-up memory once every pool builds a slot on its first accept:
+`pool-rss.mjs --per-pool --runs 1`, 3 rounds a count, each round running base
+(`c8a00d6`), `main` at `c21e4a7` with the interop server's lazy `WebTransport`
+binding, and a byte-identical copy of that build, in an order
+that rotates each round. The machine has 4 CPUs and 16 GB with no swap. Each
+figure is the median VmRSS in MB; the plain and TLS HTTP/1.1 pools stop at
+500 slots (`TLS_SLOTS`), so their 1024 row is 500.
+
+| pool | slots | base | main | copy |
+| --- | ---: | ---: | ---: | ---: |
+| all | 16 | 10.1 | 5.9 | 5.9 |
+| all | 64 | 28.0 | 10.6 | 10.6 |
+| all | 256 | 99.8 | 29.4 | 29.4 |
+| all | 1024 | 358.7 | 104.3 | 104.3 |
+| QUIC (HTTP/3) | 16 | 8.2 | 5.8 | 5.8 |
+| QUIC (HTTP/3) | 64 | 20.1 | 10.2 | 10.2 |
+| QUIC (HTTP/3) | 256 | 67.8 | 27.5 | 27.5 |
+| QUIC (HTTP/3) | 1024 | 258.3 | 97.0 | 97.0 |
+| HTTP/2 | 16 | 5.6 | 4.6 | 4.6 |
+| HTTP/2 | 64 | 9.0 | 4.9 | 4.9 |
+| HTTP/2 | 256 | 22.9 | 6.3 | 6.3 |
+| HTTP/2 | 1024 | 78.3 | 11.7 | 11.7 |
+| HTTPS/1.1 | 16 | 5.4 | 4.5 | 4.5 |
+| HTTPS/1.1 | 64 | 7.9 | 4.5 | 4.5 |
+| HTTPS/1.1 | 256 | 18.1 | 4.5 | 4.5 |
+| HTTPS/1.1 | 1024 (500) | 31.2 | 4.6 | 4.6 |
+| HTTP/1.1 | 16 to 1024 (500) | 4.5 | 4.5 | 4.5 |
+
+The all-one-slot server is 4.5 MB in all three builds. Every count fits on
+this machine at base too, so none is dropped: base `c8a00d6` already sat far
+below the `249cbe9` figures above. The copy's median equals `main`'s in every
+row and every round's spread is at most 0.1 MB, so the noise band is 0.1 MB and
+every base-to-`main` difference but plain HTTP/1.1's, already lazy at base,
+lies outside it. What `main` still takes grows
+with the slots: QUIC's tables sized from `--slots` (about 93 kB a slot at
+1024) and HTTP/2's (about 7 kB), not slots built before the first connection.
+Time to listen with every pool at 1024 slots is 56 ms (52–58) on `main`
+against 214 ms (209–216) at base; the copy's 54 ms (53–64) puts that noise band
+at about 10 ms.
+
 ## HTTP/3 latency
 
 `h3-latency.mjs` times `std/net`'s HTTP/3 server, run as
