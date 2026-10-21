@@ -186,7 +186,9 @@ unchanged.
 - **`--capabilities`** prints, on stderr, what the program can reach — files,
   processes, the network, the environment, the clock and so on — and
   `--allow <cap>` / `--deny <cap>` refuse a program that reaches more than you
-  grant. `nish run --capabilities hello.ts` prints
+  grant. A call to a `nish:unsafe` function, in your code or in a
+  dependency's, shows up as `unsafe`, and `--deny unsafe` refuses it.
+  `nish run --capabilities hello.ts` prints
   `capabilities: none (deterministic)` before the program's own output. See
   [Capabilities](../../LANGUAGE.md#capabilities).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
