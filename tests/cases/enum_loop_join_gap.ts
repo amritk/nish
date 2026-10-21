@@ -52,7 +52,12 @@ class H {
 
 class G {
   readonly b: Kind.B = Kind.B;
+  pick(): Kind.B {
+    return Kind.B;
+  }
 }
+
+const makeG = (): G => new G();
 
 const keep = (k: Kind): Kind => k;
 
@@ -118,6 +123,63 @@ const elementFieldStore = (gs: G[], n: i32): boolean => {
   return j === Kind.C;
 };
 
+const elementMethodStore = (gs: G[], n: i32): boolean => {
+  let j: Kind = Kind.A;
+  let i = 0;
+  while (i < n) {
+    j = gs[0].pick();
+    i++;
+  }
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a method called through an element is not read
+  return j === Kind.C;
+};
+
+const callResultStore = (n: i32): boolean => {
+  let j: Kind = Kind.A;
+  let i = 0;
+  while (i < n) {
+    j = makeG().b;
+    i++;
+  }
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a field read through a call's result is not read
+  return j === Kind.C;
+};
+
+const loopReceiverStore = (n: i32): boolean => {
+  let j: Kind = Kind.A;
+  let i = 0;
+  do {
+    const g = new G();
+    j = g.b;
+    i++;
+  } while (i < n);
+  // @ts-expect-error TS2367: `j` is `Kind.B`, a field read through a receiver the loop declares is not read
+  return j === Kind.A;
+};
+
+const swapStore = (n: i32): boolean => {
+  let a: Kind = Kind.A;
+  let b: Kind = Kind.B;
+  let i = 0;
+  while (i < n) {
+    const t: Kind = a;
+    a = b;
+    b = t;
+    i++;
+  }
+  // @ts-expect-error TS2367: `a` is `Kind.A | Kind.B`, a `const` the loop declares from a tracked variable is not read
+  return a === Kind.C;
+};
+
+const selfTernaryStore = (n: i32): boolean => {
+  let k: Kind = Kind.A;
+  for (let i = 0; i < n; k = k === Kind.A ? Kind.B : k) {
+    i++;
+  }
+  // @ts-expect-error TS2367: `k` is `Kind.A | Kind.B`, an arm that reads `k` where it holds no member is not read
+  return k === Kind.C;
+};
+
 const bodyLetStore = (n: i32): boolean => {
   let j: Kind = Kind.A;
   let i = 0;
@@ -151,6 +213,11 @@ export const main = (): void => {
   console.log(initializerStore(2));
   console.log(chainStore(2));
   console.log(elementFieldStore([new G()], 2));
+  console.log(elementMethodStore([new G()], 2));
+  console.log(callResultStore(2));
+  console.log(loopReceiverStore(2));
+  console.log(swapStore(2));
+  console.log(selfTernaryStore(2));
   console.log(bodyLetStore(2));
   console.log(wideLoop(2));
 };

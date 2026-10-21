@@ -306,8 +306,11 @@ const settled = (n: i32): boolean => {
 A loop that holds a field path such as `h.k`, an assignment written inside
 another expression (an argument, an initializer, the inner `=` of
 `k = j = Kind.C`), a store of a field or method call read through an array
-element or a call's result (`gs[0].b`), a store of a `let` the loop
-declares, or a type of more than 29 members is read more loosely: there the
+element, a call's result or an object the loop itself creates (`gs[0].b`),
+a store of a `let` the loop declares or of a `const` it copies from another
+enum local (the `const t = a` of a swap), a ternary arm that reads the
+local where the condition leaves it nothing (`k = k === Kind.A ? Kind.B :
+k`), or a type of more than 29 members is read more loosely: there the
 local holds every member the body stores anywhere, or the whole enum, so a
 few comparisons TypeScript refuses still compile. The language reference lists
 these shapes under "Accepted here, refused by `tsc`".

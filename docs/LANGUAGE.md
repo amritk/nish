@@ -878,19 +878,23 @@ const area = (s: Shape): i32 => {
   local of a member type, `const m: Kind.B`; a call of a function that
   returns a member type; a field of a member type, or a call of a method
   that returns one, read through `this`, a local or parameter or a field of
-  one; a `const` the loop declares once, read by its initializer; another
+  one, nullable or not; a `const` the loop declares once, read by its
+  initializer; another
   enum variable; a union's tag; or a ternary of two of these, each arm read
   on its side of the condition
   (`reject_enum_loop_ternary_store`, `reject_enum_loop_copy_store`,
   `reject_union_loop_tag_copy`, `reject_enum_loop_member_local`,
   `reject_enum_loop_member_call`, `reject_enum_loop_field_store`,
-  `reject_enum_loop_method_store`, `reject_enum_loop_body_const`,
+  `reject_enum_loop_method_store`, `reject_enum_loop_nullable_receiver`,
+  `reject_enum_loop_body_const`,
   `reject_enum_loop_ternary_narrowed`, `reject_enum_loop_ternary_tracked`,
   `reject_enum_loop_ternary_self`). A test against a member, a local of a
   member type or such a call narrows as outside a loop, and so does a test
   against another enum variable, by the members it holds there
   (`reject_enum_loop_const_test`, `reject_union_loop_const_test`,
-  `reject_enum_loop_held_operand`). A `for`
+  `reject_enum_loop_held_operand`, `reject_enum_loop_held_single`,
+  `reject_enum_loop_held_ternary`, `reject_union_loop_held_operand`;
+  `tests/cases/enum_loop_held_several`). A `for`
   update runs after the body and before the next test, and is followed
   there (`tests/cases/enum_loop_for_update`;
   `reject_enum_loop_for_update_store`, `reject_enum_loop_for_update_cond`),
@@ -904,7 +908,8 @@ const area = (s: Shape): i32 => {
   equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
   `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
   `k`'s members. Where they differ, nothing is known, since `k` may hold
-  either (`tests/cases/union_narrowing_arms`;
+  either, unless `k` holds one member, which is then left out
+  (`tests/cases/union_narrowing_arms`;
   `reject_union_narrow_tag_variable`, `reject_enum_compare_variable`).
 - A tag tested through a path — a field `h.k`, `this.k`, a field of a field
   `h.s.kind`, a literal index `xs[0].kind` — stays narrowed for the
@@ -1081,9 +1086,18 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
   inner store of a chain, `k = j = Kind.C`, rather than a statement of its
   own.
 - **A value the pass cannot read.** A store of a field or a method call
-  read through anything but `this`, a local, a parameter or a field of one,
-  `j = gs[0].b`, or of a `let` the loop declares, holds the whole declared
-  type, though the field, method or `let` is typed with one member.
+  read through anything but `this`, a local or parameter the loop does not
+  declare, or a field of one — an element, `j = gs[0].b` or
+  `j = gs[0].pick()`, a call's result, `j = makeG().b`, a receiver the loop
+  declares, `const g = new G(); j = g.b` — holds the whole declared type,
+  though the field or method is typed with one member. So does a store of a
+  `let` the loop declares, or of a `const` it declares from a tracked
+  variable, as the swap `const t: Kind = a; a = b; b = t;` does.
+- **An arm that holds nothing.** A ternary arm that reads the stored
+  variable where the condition leaves it no member, the `k` of
+  `k = k === Kind.A ? Kind.B : k` while `k` holds only `Kind.A`, reads as
+  the whole type, as the checker reads a variable narrowed to `never`, so
+  the store holds every member from then on.
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 

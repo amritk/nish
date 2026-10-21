@@ -15,8 +15,9 @@
 import { LANGUAGE } from "./branding"
 import {
   addLocals,
-  checkCondition,
+  assignsVariable,
   captureNarrowings,
+  checkCondition,
   checkExpression,
   clearNarrowingsAssignedIn,
   enumVariable,
@@ -40,7 +41,6 @@ import {
   unproven,
   WANT_INFERRED,
   WANT_MAYBE,
-  assignsVariable,
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
 import { syntaxKindName } from "./checker"
@@ -111,10 +111,10 @@ import {
   flowDoCondition,
   flowEnd,
   flowForUpdate,
-  flowUpdated,
   flowHead,
   flowNoteBack,
   flowNoteBreak,
+  flowUpdated,
 } from "./loop-flow"
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */

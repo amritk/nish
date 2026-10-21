@@ -529,8 +529,9 @@ const flowMemberBit = (ctx: CheckContext, f: LoopFlow, k: i32, type: i32): i32 =
 /**
  * The class or interface `node` is declared as, whatever the loop does, or
  * `null`: `this`, a local or parameter the loop does not redeclare, and a
- * field of one of those. A class's fields and methods are typed up front, so
- * a member-typed one reads as that member, as the checker reads it.
+ * field of one of those, nullable or not. A class's fields and methods are
+ * typed up front, so a member-typed one reads as that member, as the checker
+ * reads it.
  */
 const flowStructOf = (ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): StructInfo | null => {
   if (depth > 8) {
@@ -549,6 +550,8 @@ const flowStructOf = (ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): S
       type = field === null ? -1 : field.type
     }
   }
+  // A read through a nullable one compiles only where it is not null.
+  type = type < 0 ? type : ctx.table.stripNull(type)
   if (type < 0 || !ctx.table.isStruct(type)) {
     return null
   }
