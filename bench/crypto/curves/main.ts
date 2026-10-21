@@ -182,7 +182,9 @@ export const main = (): i32 => {
   }
   const curve25519: boolean = a.kernel === "x25519-base" || a.kernel === "x25519"
   if (curve25519 ? a.size !== 32 : a.size < 4) {
-    writeError(curve25519 ? "curves: an X25519 kernel's size is 32\n" : "curves: the size is at least 4 bytes\n")
+    writeError(
+      curve25519 ? "curves: an X25519 kernel's size is 32\n" : "curves: the size is at least 4 bytes\n"
+    )
     return 2
   }
   if (a.kernel === "x25519-base") {

@@ -34,8 +34,8 @@ const base = Buffer.from(msg.subarray(0, 4))
 let sum = FOLD_START
 
 /** The raw public key: the bytes after the SPKI's fixed prefix. */
-const rawPublic = (key, length) => {
-  const spki = createPublicKey(key).export({ format: "der", type: "spki" })
+const rawPublic = (privateKey, length) => {
+  const spki = createPublicKey(privateKey).export({ format: "der", type: "spki" })
   return spki.subarray(spki.length - length)
 }
 
@@ -43,11 +43,21 @@ const x25519Key = (scalar) =>
   createPrivateKey({ key: Buffer.concat([X25519_PKCS8, scalar]), format: "der", type: "pkcs8" })
 
 const ec = a.kernel.startsWith("p256-")
-const key = curve25519
-  ? null
-  : ec
-    ? createPrivateKey({ key: Buffer.concat([P256_SEC1[0], inp.key, P256_SEC1[1]]), format: "der", type: "sec1" })
-    : createPrivateKey({ key: Buffer.concat([ED25519_PKCS8, inp.key]), format: "der", type: "pkcs8" })
+/** The fixed signing key: P-256 from a SEC1 ECPrivateKey, Ed25519 from PKCS #8; none for X25519. */
+const signingKey = () => {
+  if (curve25519) {
+    return null
+  }
+  if (ec) {
+    return createPrivateKey({
+      key: Buffer.concat([P256_SEC1[0], inp.key, P256_SEC1[1]]),
+      format: "der",
+      type: "sec1",
+    })
+  }
+  return createPrivateKey({ key: Buffer.concat([ED25519_PKCS8, inp.key]), format: "der", type: "pkcs8" })
+}
+const key = signingKey()
 const pub = key === null ? null : createPublicKey(key)
 // ECDSA hashes with SHA-256; Ed25519 takes the message whole.
 const hash = ec ? "sha256" : null

@@ -1,0 +1,18 @@
+{
+  "title": "X.509 certificates",
+  "kernels": [
+    { "name": "x509-mint", "sizes": [16], "unit": "op/s" },
+    { "name": "x509-parse", "sizes": [338], "unit": "op/s" }
+  ],
+  "twins": {
+    "openssl": { "portable": { "env": { "OPENSSL_ia32cap": "~0x1000000000000000:~0x80120" } } },
+    "go": { "portable": { "tags": ["purego"] } },
+    "rust": {
+      "portable": "RustCrypto's p256, rcgen and x509-parser are pure Rust, so there is no curve assembly to switch off"
+    },
+    "node": {
+      "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off",
+      "lacks": { "x509-mint": "node:crypto's X509Certificate reads certificates and cannot write one" }
+    }
+  }
+}

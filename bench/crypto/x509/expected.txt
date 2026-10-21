@@ -1,0 +1,3 @@
+# <kernel> <size> <iterations> <checksum>, written by `node bench/crypto/run.mjs --validate --write-expected`.
+x509-mint 16 3 62422e17
+x509-parse 338 3 26dc2e2e

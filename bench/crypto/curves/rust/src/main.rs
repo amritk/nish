@@ -28,7 +28,8 @@ fn main() {
             eprintln!("rust: an X25519 kernel's size is 32");
             std::process::exit(2);
         }
-        "x25519-base" | "x25519" | "p256-sign" | "p256-verify" | "ed25519-sign" | "ed25519-verify" => {}
+        "x25519-base" | "x25519" | "p256-sign" | "p256-verify" | "ed25519-sign"
+        | "ed25519-verify" => {}
         _ => {
             eprintln!("rust: no kernel {kernel}");
             std::process::exit(2);
@@ -38,7 +39,11 @@ fn main() {
     let mut inp = gen::inputs(&kernel, size, key_len, 0, 0, size);
     let base = [inp.msg[0], inp.msg[1], inp.msg[2], inp.msg[3]];
     let mut sum = gen::FOLD_START;
-    let key: [u8; 32] = if key_len == 32 { inp.key[..].try_into().unwrap() } else { [0; 32] };
+    let key: [u8; 32] = if key_len == 32 {
+        inp.key[..].try_into().unwrap()
+    } else {
+        [0; 32]
+    };
 
     match kernel.as_str() {
         "x25519-base" => {
@@ -56,13 +61,16 @@ fn main() {
             let mut u: [u8; 32] = inp.msg[..].try_into().unwrap();
             let started = Instant::now();
             for _ in 0..iterations {
-                u = secret.diffie_hellman(&x25519_dalek::PublicKey::from(u)).to_bytes();
+                u = secret
+                    .diffie_hellman(&x25519_dalek::PublicKey::from(u))
+                    .to_bytes();
                 sum = gen::fold(sum, &u);
             }
             gen::report(sum, started);
         }
         "p256-sign" => {
-            let signer = p256::ecdsa::SigningKey::from_slice(&key).unwrap_or_else(|_| fail("the P-256 key"));
+            let signer =
+                p256::ecdsa::SigningKey::from_slice(&key).unwrap_or_else(|_| fail("the P-256 key"));
             let verifier = signer.verifying_key();
             sum = gen::fold(sum, verifier.to_sec1_point(false).as_bytes());
             let mut digests = Vec::with_capacity(iterations);
@@ -71,7 +79,11 @@ fn main() {
             for i in 0..iterations {
                 gen::tweak(&mut inp.msg, 0, base, i as u32);
                 let digest = Sha256::digest(&inp.msg);
-                sigs.push(signer.sign_prehash(&digest).unwrap_or_else(|_| fail("signing")));
+                sigs.push(
+                    signer
+                        .sign_prehash(&digest)
+                        .unwrap_or_else(|_| fail("signing")),
+                );
                 digests.push(digest);
             }
             // Folded as every twin folds it: each digest and whether its
@@ -102,20 +114,30 @@ fn main() {
                 })
                 .collect();
             let verify: Box<dyn Fn(&[u8], usize) -> bool> = if kernel == "p256-verify" {
-                let signer = p256::ecdsa::SigningKey::from_slice(&key).unwrap_or_else(|_| fail("the P-256 key"));
+                let signer = p256::ecdsa::SigningKey::from_slice(&key)
+                    .unwrap_or_else(|_| fail("the P-256 key"));
                 let verifier = *signer.verifying_key();
                 sum = gen::fold(sum, verifier.to_sec1_point(false).as_bytes());
                 let sigs: Vec<p256::ecdsa::Signature> = msgs
                     .iter()
-                    .map(|m| signer.sign_prehash(&Sha256::digest(m)).unwrap_or_else(|_| fail("signing")))
+                    .map(|m| {
+                        signer
+                            .sign_prehash(&Sha256::digest(m))
+                            .unwrap_or_else(|_| fail("signing"))
+                    })
                     .collect();
                 // Verifier::verify would hash too; hashed here, as the other twins do.
-                Box::new(move |m, j| verifier.verify_prehash(&Sha256::digest(m), &sigs[j]).is_ok())
+                Box::new(move |m, j| {
+                    verifier
+                        .verify_prehash(&Sha256::digest(m), &sigs[j])
+                        .is_ok()
+                })
             } else {
                 let signer = ed25519_dalek::SigningKey::from_bytes(&key);
                 let verifier = signer.verifying_key();
                 sum = gen::fold(sum, verifier.as_bytes());
-                let sigs: Vec<ed25519_dalek::Signature> = msgs.iter().map(|m| signer.sign(m)).collect();
+                let sigs: Vec<ed25519_dalek::Signature> =
+                    msgs.iter().map(|m| signer.sign(m)).collect();
                 Box::new(move |m, j| verifier.verify(m, &sigs[j]).is_ok())
             };
             msgs[TAMPERED][size - 1] ^= 1;
