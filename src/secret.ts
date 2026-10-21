@@ -81,8 +81,8 @@ import {
   SecretNeed,
   STRUCT_CLASS,
   StructInfo,
-  SWITCH_COVERED,
   StructTemplateInfo,
+  SWITCH_COVERED,
   TemplateInfo,
   capturedReads,
 } from "./program"

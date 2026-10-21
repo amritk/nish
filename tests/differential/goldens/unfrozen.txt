@@ -445,6 +445,7 @@ cases/union_narrowing_paths added after R6: no rewriter to freeze it with
 cases/union_narrowing_switch_join added after R6: no rewriter to freeze it with
 cases/union_narrowing_tested_join added after R6: no rewriter to freeze it with
 cases/union_switch added after R6: no rewriter to freeze it with
+cases/union_switch_flow added after R6: no rewriter to freeze it with
 cases/union_switch_generic added after R6: no rewriter to freeze it with
 cases/union_switch_secret added after R6: no rewriter to freeze it with
 cases/union_types added after R6: no rewriter to freeze it with

@@ -25,8 +25,8 @@ import {
 } from "./emit-ops"
 import { unwrapParens } from "./emit-util"
 import { IRBlock } from "./ir"
-import { SWITCH_COVERED } from "./program"
 import { FLAG_POSTFIX, N_CASE, N_EMPTY, N_TRUE, N_VAR, Node } from "./nodes"
+import { SWITCH_COVERED } from "./program"
 import { isFloat } from "./types"
 
 // ---- Branch helpers -----------------------------------------------------------

@@ -31,6 +31,7 @@ import {
   memberSetName,
   memberSetOf,
   membersDisjoint,
+  membersOfSet,
   narrow,
   narrowHeld,
   narrowToTags,
@@ -1246,10 +1247,16 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     if (tagged !== null || held !== null) {
       narrowClause(ctx, unmatched, tagged, held, clauses, [], true)
     }
-    if (!switchCovered(ctx, unmatched, tagged, held, members, clauses)) {
-      snapshotExit(ctx, unmatched)
+    if (tagged !== null) {
+      covered = switchCovered(ctx, unmatched, tagged, held, members, clauses)
     } else {
-      covered = tagged !== null || readsUnionTag(ctx, stmt.children[0])
+      const union = unionTagRead(ctx, stmt.children[0])
+      covered =
+        union >= 0 &&
+        withoutMembers(ctx, membersOfSet(ctx, union), labelledMembers(ctx, clauses)).length === 0
+    }
+    if (!covered) {
+      snapshotExit(ctx, unmatched)
     }
   }
   const coverage = ctx.program.switchCoverage[stmt.id]
@@ -1275,18 +1282,25 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
 }
 
 /**
- * Whether `node` reads the tag of a union value as it is declared — `s.kind`
- * on a field, an element or a call's result — so its value is one of the
- * union's tags: a variant's tag is a `readonly` field written only with its
- * own member, and a union value never crosses the interop boundary. A plain
- * enum, which can arrive from C holding any `i32`, never counts, and nor does
- * a path a test narrowed (`memberSets` then holds the narrowed members).
+ * The union whose tag `node` reads, or `-1`: a read of the tag field of a
+ * value whose static type is a union —
+ * `s.kind` on a local, a field, an element or a call's result — so its value
+ * is one of the union's tags: a variant's tag is a `readonly` field written
+ * only with its own member, and a union value never crosses the interop
+ * boundary. What the read *is* decides, never what a path was narrowed or
+ * assigned to hold: a plain enum field assigned from a tag (`b.k = s.kind`)
+ * can be overwritten through an alias or a call the checker does not follow,
+ * and a plain enum can arrive from C holding any `i32`. The labels must name
+ * every tag of the whole union, since a path a test narrowed can be
+ * reassigned behind the checker's back too.
  */
-const readsUnionTag = (ctx: CheckContext, node: Node): boolean => {
+const unionTagRead = (ctx: CheckContext, node: Node): i32 => {
   const read = unwrapParens(node)
-  return (
-    read.kind === N_MEMBER && !isOptionalChain(read) && ctx.table.isUnion(ctx.program.memberSets[read.id])
-  )
+  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
+    return -1
+  }
+  const receiver = ctx.program.nodeTypes[unwrapParens(read.children[0]).id]
+  return ctx.table.isUnion(receiver) && read.text === ctx.table.tagNameOf(receiver) ? receiver : -1
 }
 
 /**

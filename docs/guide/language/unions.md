@@ -429,12 +429,16 @@ const sides = (s: Shape): i32 => {
 };
 ```
 
-A statement after a complete `switch` is unreachable code, as it is after an
-`if` whose branches both return.
+A statement after a complete `switch` whose clauses all return is unreachable
+code, as it is after an `if` whose branches both return. A clause that
+`break`s reaches the statement after it, as in TypeScript.
 
 Only a union's own tag makes a `switch` complete. A `switch` on a plain enum
 never is, even with every member named, because a C caller can pass an enum
 any `i32`. Nor is one on the tag copied into a local, `const k: Kind =
 s.kind`, or on a field's tag that an earlier `if` narrowed, since a call in
-between could have replaced the field. TypeScript accepts all three. Give such
-a `switch` a `default`, or return after it.
+between could have replaced the field. Nor is one on an enum field given a
+tag, `b.k = s.kind`: the field is still a `Kind`, and a call, an alias or a
+method can store any member in it. What counts is the subject itself, a
+variant's tag field read on a union value. TypeScript accepts all four. Give
+such a `switch` a `default`, or return after it.

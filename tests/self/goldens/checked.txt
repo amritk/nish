@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1117 programs, 160326 dump lines.
+# 1118 programs, 160374 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -57861,6 +57861,55 @@ function main(): void -> @nish_main [exported entry]
   callee 109:37 rest -> @rest
   callee 109:56 rest -> @rest
   callee 110:18 total -> @total
+program tests/cases/union_switch_flow.ts
+module tests/cases/union_switch_flow.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4 initialized
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4 initialized
+struct Box (class) size=4 align=4
+  field k: Kind index=0 offset=0 initialized
+function poison(b: Box): void -> @poison
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 29:3
+  pointer b: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function boxed(b: Box, s: Circle | Square): i32 -> @boxed
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 33:3
+  calls: poison
+  pointer b: size=4 writesThrough=true captured=false passedTo=poison#0
+  stackSites=0 stackLocals=0
+  callee 34:3 poison -> @poison
+function broken(s: Circle | Square): i32 -> @broken
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 46:7 n: i32 (let)
+function nested(s: Circle | Square, t: Circle | Square): i32 -> @nested
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function skipped(shapes: (Circle | Square)[]): i32 -> @skipped
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer shapes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 78:7 n: i32 (let)
+  local 79:14 s: Circle | Square (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: boxed broken nested nish_alloc_struct nish_print nish_str_concat nish_str_from_i32 skipped
+  stackSites=2 stackLocals=1
+  local 93:9 shapes: (Circle | Square)[] (const)
+  callee 94:18 boxed -> @boxed
+  callee 94:49 broken -> @broken
+  callee 94:70 broken -> @broken
+  callee 95:18 nested -> @nested
+  callee 95:50 nested -> @nested
+  callee 96:18 skipped -> @skipped
 program tests/cases/union_switch_generic.ts
 module tests/cases/union_switch_generic.ts (entry)
 struct Circle (class) size=8 align=4

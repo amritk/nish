@@ -978,8 +978,9 @@ as `tsc`'s TS2367 and TS2678 are (`tests/cases/enum_narrowing`;
 member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
 (`reject_enum_narrow_let_member`), as in `tsc`.
 
-A `switch` on a union's tag with no `default`, whose labels name every
-variant the tag can hold, is **complete**: no value reaches the case no label
+A `switch` whose subject reads a union variant's tag field, with no
+`default` and labels that name every variant the tag can hold, is
+**complete**: no value reaches the case no label
 names, so when no `break` targets the `switch` and its last clause leaves, the
 `switch` terminates (see Termination) and can end a function that returns a
 value, as in `tsc`. Its unmatched case compiles to LLVM's `unreachable`. The
@@ -1046,8 +1047,12 @@ boundary, so no other `i32` reaches it.
   is one on the tag copied into an enum local, `const k: Kind = s.kind`
   (`reject_union_switch_tag_local`), nor on a path's tag a test narrowed,
   which a call between the test and the `switch` could have reassigned
-  (`reject_union_switch_path_narrowed`). End such a function after the
-  `switch`, or give it a `default`.
+  (`reject_union_switch_path_narrowed`), nor on an enum field assigned from
+  a tag, `b.k = s.kind`, which a call, an alias, a method or `this` can
+  overwrite with any member (`reject_union_switch_enum_field_call` and its
+  siblings): what decides is the subject's static type, a union's tag field,
+  never what a path was assigned or narrowed to hold. End such a function
+  after the `switch`, or give it a `default` (`tests/cases/union_switch_flow`).
 - **No `never`.** Where the tests have excluded every variant, `tsc` types the
   variable `never` and accepts a read of it; this version has no such type, so
   the read is
