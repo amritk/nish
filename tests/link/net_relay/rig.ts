@@ -17,7 +17,6 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
-  quicPushAck,
   quicPushStream,
   quicPutDatagram,
 } from "nish/net/quic-frame";
@@ -33,7 +32,7 @@ import { RELAY_HELLO, RELAY_PROTOCOL_VERSION } from "../../../examples/relay/fra
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafCertificate, leafPrivate } from "../net_tls_common/server";
-import { QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcReadFlight, qcReceive, qcRetried, qcShort } from "../net_quic_conn/client";
+import { QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcRetried, qcShort } from "../net_quic_conn/client";
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, h3Cat, h3Frame, h3Section, h3Varint } from "../net_http3/peer";
 import { wtClientSettingIds, wtClientSettingValues, wtSettingsFrame } from "../net_webtransport/peer";
 import { SECRET, signGrant } from "./grants";
@@ -214,7 +213,7 @@ export class RigClient {
   packet(payload: u8[]): void {
     const all: u8[] = [];
     if (this.c.largestApp >= 0) {
-      quicPushAck(all, [n64(0), this.c.largestApp], n32(1), n64(0));
+      qcPushAppAck(all, this.c);
       this.acked = this.c.largestApp;
     }
     for (const b of payload) {

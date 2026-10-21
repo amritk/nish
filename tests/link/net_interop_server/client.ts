@@ -19,7 +19,6 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
-  quicPushAck,
   quicPushStream,
   quicPutDatagram,
 } from "nish/net/quic-frame";
@@ -51,7 +50,7 @@ import { Opened, ZERO, filled, openOne, protectionFor, range, sealOne } from "..
 import { SUITE, Session, Ticket, bindHello, selectedIdentity, sessionFor, ticketFrom } from "../net_tls_resume/client";
 import { clearRecord, clientKeysFor } from "../net_tls_record_common/client";
 import { FrameLog, Wire, textAt } from "../net_http2/peer";
-import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
 import { fromHex, textOf } from "../crypto_x509/hex";
 import { InteropServer } from "./server";
 
@@ -131,7 +130,7 @@ export class QuicClient {
   packet(payload: u8[]): void {
     const frames: u8[] = [];
     if (this.c.largestApp >= 0) {
-      quicPushAck(frames, [n64(0), this.c.largestApp], n32(1), n64(0));
+      qcPushAppAck(frames, this.c);
     }
     for (const b of payload) {
       frames.push(b);

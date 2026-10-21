@@ -19,7 +19,6 @@ import {
   QUIC_FRAME_STREAM,
   QuicFrame,
   quicParseFrame,
-  quicPushAck,
   quicPushStream,
   quicPushStreamError,
 } from "nish/net/quic-frame";
@@ -70,6 +69,7 @@ import {
   qcFinishedPacket,
   qcHello,
   qcInitial,
+  qcPushAppAck,
   qcReadFlight,
   qcReceive,
   qcShort,
@@ -594,7 +594,7 @@ export class H3Peer {
       return;
     }
     const ack: u8[] = [];
-    quicPushAck(ack, [n64(0), this.c.largestApp], n32(1), n64(0));
+    qcPushAppAck(ack, this.c);
     this.packet(ack);
   }
 

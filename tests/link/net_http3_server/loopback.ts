@@ -14,7 +14,7 @@ import { netAddress, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
-import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
+import { quicPushStream } from "nish/net/quic-frame";
 import { QUIC_LISTENER_ENTROPY_SIZE, quicListenerFlightTime, quicListenerPaceTime } from "nish/net/quic-listener";
 import { QuicServerConfig } from "nish/net/quic";
 import { QuicStreamPools } from "nish/net/quic-stream";
@@ -25,7 +25,7 @@ import { QpackEncoder } from "nish/net/qpack";
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
-import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
 import { QmMeter, qmPlain } from "../net_quic_memory/meter";
 import {
   CLIENT_CONTROL,
@@ -525,7 +525,7 @@ const leanSend = (l: Lean, datagram: u8[], m: QmMeter): void => {
 const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
   const all: u8[] = [];
   if (l.c.largestApp >= n64(0)) {
-    quicPushAck(all, [n64(0), l.c.largestApp], n32(1), n64(0));
+    qcPushAppAck(all, l.c);
   }
   for (const b of payload) {
     all.push(b);
