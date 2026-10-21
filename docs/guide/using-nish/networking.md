@@ -82,10 +82,10 @@ until `netRead` does, and holds on to what `netWrite` could not send yet. The
 loop is level-triggered: anything you leave unread is reported again on the
 next `pollWait`.
 
-## Sharing a port: `tcpListenFlags`
+## Sharing a port and turning Nagle off: `tcpListenFlags`
 
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with one more
-argument. Flag `1` sets `SO_REUSEPORT`, which lets several listeners that all
+argument, a set of flags added together. Flag `1` sets `SO_REUSEPORT`, which lets several listeners that all
 ask for it open the same port, each with its own queue of waiting connections:
 
 - **On Linux** the kernel spreads new connections across them. Start the same
@@ -96,9 +96,16 @@ ask for it open the same port, each with its own queue of waiting connections:
   still lets a new copy of a server open the port before the old one closes,
   so a restart drops nothing.
 
-Flag `0` is `tcpListen` exactly, and any other bit answers `-22`. A plain
-`tcpListen` cannot open a port a flagged listener holds, and a flagged one
-cannot open a port a plain one holds: both answer `-98`.
+Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the
+listener, on every platform. Without it the kernel may hold a small write back
+until the peer acknowledges the last one (Nagle's algorithm), which saves
+packets for a stream of tiny writes and costs a round trip for a server that
+answers each request with one small write. The bytes that arrive are the same
+either way; only when they leave changes.
+
+Flag `0` is `tcpListen` exactly, `3` is both, and any other bit answers `-22`.
+A listener without flag `1` cannot open a port a listener with it holds, nor
+the other way round: both answer `-98`.
 
 ```ts nish:ok
 import { netClose, netLocalPort, tcpListenFlags } from "nish:net";
@@ -112,7 +119,7 @@ export const main = (): i32 => {
   // The same port again: allowed, because both listeners asked for it.
   const second = tcpListenFlags("127.0.0.1", port, 64, 1);
   console.log(`${second >= 0}`); // true
-  console.log(`${tcpListenFlags("127.0.0.1", port, 64, 2)}`); // -22
+  console.log(`${tcpListenFlags("127.0.0.1", port, 64, 4)}`); // -22
   netClose(second);
   netClose(first);
   return 0;
@@ -120,7 +127,8 @@ export const main = (): i32 => {
 ```
 
 A program can watch both listeners in one loop, as in the server above, and
-accept from whichever is ready.
+accept from whichever is ready. A server that wants both the shared port and
+its small answers sent at once opens each listener with `3`.
 
 ## Under Node
 
