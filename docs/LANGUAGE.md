@@ -854,7 +854,7 @@ const area = (s: Shape): i32 => {
   (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). A loop is
   followed to a fixpoint, as `tsc` follows it: the head of a `while`, `for`
   or `do` holds what reaches it before the loop, at the end of an iteration
-  and at a `continue`, joined until it no longer changes; after a `while` or
+  and at a `continue` (through its update, for a `for`), joined until it no longer changes; after a `while` or
   `for` comes the head with its condition false, joined with every `break`,
   after a `do` the end of the body and its `continue`s with the condition
   false, and after a `for...of` the head and the `break`s. A loop inside the
@@ -873,13 +873,26 @@ const area = (s: Shape): i32 => {
   `reject_enum_loop_tested_do`, `reject_enum_loop_tested_break`,
   `reject_enum_loop_tested_inner`, `reject_enum_loop_switch_tested`,
   `reject_union_loop_tested_while`, `reject_union_loop_null_tested`). A
-  store of a member, of a ternary of members, of another enum variable or of
-  a union's tag holds what that value holds; a store of anything else, a call
-  for one, holds the whole declared type (`reject_enum_loop_ternary_store`,
-  `reject_enum_loop_copy_store`, `reject_union_loop_tag_copy`). Where the loop
-  holds a shape the fixpoint does not follow, a local or path holds, after
-  it and throughout it, every member stored anywhere in it, which may be
-  more than `tsc` knows ("Accepted here, refused by `tsc`", below).
+  store holds what its value holds where the value is one of: a member; a
+  local of a member type, `const m: Kind.B`; a call of a function that
+  returns a member type; a `const` the loop declares once, read by its
+  initializer; another enum variable; a union's tag; or a ternary of two
+  of these, each arm read on its side of the condition
+  (`reject_enum_loop_ternary_store`, `reject_enum_loop_copy_store`,
+  `reject_union_loop_tag_copy`, `reject_enum_loop_member_local`,
+  `reject_enum_loop_member_call`, `reject_enum_loop_body_const`,
+  `reject_enum_loop_ternary_narrowed`, `reject_enum_loop_ternary_tracked`,
+  `reject_enum_loop_ternary_self`). A test against a member, a local of a
+  member type or such a call narrows as outside a loop
+  (`reject_enum_loop_const_test`, `reject_union_loop_const_test`). A `for`
+  update runs after the body and before the next test, and is followed
+  there (`tests/cases/enum_loop_for_update`;
+  `reject_enum_loop_for_update_store`, `reject_enum_loop_for_update_cond`). A
+  store of any other value, a field or a method call for one, holds the whole
+  declared type. Where the loop holds a shape the fixpoint does not follow, a
+  local or path holds, after it and throughout it, every member stored
+  anywhere in it, which may be more than `tsc` knows ("Accepted here, refused
+  by `tsc`", below).
 - A tag compared with an enum variable narrows on the side where they are
   equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
   `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
@@ -1047,19 +1060,22 @@ wanted is the existing refusal of its position (`reject_union_into_init`,
 stored where a larger one is declared narrows it in `tsc`, as a variant
 does, and is NL2534 too (`reject_union_narrow_subunion`).
 
-**Accepted here, refused by `tsc`.** A loop whose body holds one of three
-shapes is not followed to a fixpoint (above); the variables it writes hold
-every member stored anywhere in it, so a comparison `tsc` refuses as TS2367
-may compile here. Each is pinned as it stands, with the expected `tsc` error
-written at the comparison, so the case fails on either side once the gap
-closes (`tests/cases/enum_loop_join_gap`):
+**Accepted here, refused by `tsc`.** The loop pass (above) reads less than
+`tsc` in the shapes below, and these are all of them: a variable holds every
+member stored anywhere in the loop, or its whole declared type, so a
+comparison `tsc` refuses as TS2367 may compile here. Each is pinned as it
+stands, with the expected `tsc` error written at the comparison, so the case
+fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
 
 - **A path.** A tag or enum held by a field, `h.k`, is joined over the whole
   loop, not followed through it.
 - **A store inside an expression.** An assignment that is an argument,
-  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, the inner
-  store of a chain, `k = j = Kind.C`, or a `for` header's update,
-  `for (; i < n; j = Kind.C)`, rather than a statement of its own.
+  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, or the
+  inner store of a chain, `k = j = Kind.C`, rather than a statement of its
+  own.
+- **A value the pass cannot read.** A store of a field, `j = g.b`, of a
+  method call, `j = g.pick()`, or of a `let` the loop declares, holds the
+  whole declared type, though the field or method is typed with one member.
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 

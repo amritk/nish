@@ -78,11 +78,20 @@ export class LoopFlow {
   full: i32[]
   /** Per local, its variants without `null`. */
   allv: i32[]
+  /**
+   * Per local, the value of each member of the enum it holds, or of its tag
+   * enum for a union: the bits `flowKnown` answers in.
+   */
+  domain: i32[][]
   /** The names a declaration in the loop binds, which shadow the variables outside it. */
   declared: string[]
+  /** The names the loop declares more than once. */
+  redeclared: string[]
+  /** The `const` declarations in the loop that have an initializer. */
+  consts: Node[]
   /** The head of a `while`, `for` or `for...of`, and the entry of a `do`'s body, once the pass is done. */
   entry: i32[]
-  /** A `do`'s body's end and continues, which its condition reads. */
+  /** The body's end and continues: what a `do`'s condition and a `for`'s update read. */
   join: i32[]
   after: i32[]
   breaks: i32[]
@@ -112,7 +121,10 @@ export class LoopFlow {
     this.members = []
     this.full = []
     this.allv = []
+    this.domain = []
     this.declared = []
+    this.redeclared = []
+    this.consts = []
     this.entry = []
     this.join = []
     this.after = []

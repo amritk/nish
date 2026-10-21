@@ -1,8 +1,9 @@
 // The loop accept-gap (docs/LANGUAGE.md, "Accepted here, refused by tsc"):
 // the loop pre-pass follows a local variable stored by a plain `x = v`
 // statement, of a union of at most 29 tagged variants or an enum of at most
-// 29 members. Each shape below is outside that, so after the loop the
-// variable or path holds every member the body wrote anywhere in it, each
+// 29 members, where it can read `v` before the body is checked. Each shape
+// below is outside that, so after the loop the variable or path holds every
+// member the body wrote anywhere in it, or its whole declared type, each
 // comparison compiles here, and each is TS2367 to `tsc`. The expected errors
 // keep `tsc` quiet and fail once it accepts them; once a shape is followed,
 // its function is refused here and moves to a `reject_` case.
@@ -47,6 +48,13 @@ enum Wide {
 
 class H {
   k: Kind = Kind.A;
+}
+
+class G {
+  readonly b: Kind.B = Kind.B;
+  pick(): Kind.B {
+    return Kind.B;
+  }
 }
 
 const keep = (k: Kind): Kind => k;
@@ -102,14 +110,40 @@ const chainStore = (n: i32): boolean => {
   return j === Kind.B;
 };
 
-const forUpdateStore = (n: i32): boolean => {
+const fieldStore = (g: G, n: i32): boolean => {
   let j: Kind = Kind.A;
-  for (let i = 0; i < n; j = Kind.C) {
-    j = Kind.B;
+  let i = 0;
+  while (i < n) {
+    j = g.b;
     i++;
   }
-  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.C`, a `for` header's update is not followed
-  return j === Kind.B;
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a field's type is not read
+  return j === Kind.C;
+};
+
+const methodStore = (g: G, n: i32): boolean => {
+  let j: Kind = Kind.A;
+  let i = 0;
+  while (i < n) {
+    j = g.pick();
+    i++;
+  }
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a method's return type is not read
+  return j === Kind.C;
+};
+
+const bodyLetStore = (n: i32): boolean => {
+  let j: Kind = Kind.A;
+  let i = 0;
+  while (i < n) {
+    let t: Kind = Kind.B;
+    j = t;
+    t = Kind.B;
+    keep(t);
+    i++;
+  }
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a `let` the loop declares is not read
+  return j === Kind.C;
 };
 
 const wideLoop = (n: i32): boolean => {
@@ -130,6 +164,8 @@ export const main = (): void => {
   console.log(argumentStore(2));
   console.log(initializerStore(2));
   console.log(chainStore(2));
-  console.log(forUpdateStore(2));
+  console.log(fieldStore(new G(), 2));
+  console.log(methodStore(new G(), 2));
+  console.log(bodyLetStore(2));
   console.log(wideLoop(2));
 };

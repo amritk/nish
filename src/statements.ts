@@ -106,7 +106,7 @@ import { caseValue } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
-import { flowBegin, flowDoCondition, flowEnd, flowHead, flowNoteBack, flowNoteBreak } from "./loop-flow"
+import { flowBegin, flowDoCondition, flowEnd, flowForUpdate, flowHead, flowNoteBack, flowNoteBreak } from "./loop-flow"
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const terminatorName = (stmt: Node): string => {
@@ -608,10 +608,6 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (condition.kind !== N_EMPTY) {
     checkCondition(ctx, condition, outer)
   }
-  const update = stmt.children[2]
-  if (update.kind !== N_EMPTY) {
-    checkExpression(ctx, update, outer, -1)
-  }
   const body = outer.child()
   if (condition.kind !== N_EMPTY) {
     narrow(ctx, condition, body, true)
@@ -621,6 +617,14 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     flowNoteBack(ctx, body)
   }
   const broke = ctx.popLoop()
+  // The update runs after the body, on what its end and its continues leave,
+  // so a store there reaches the next iteration's head, not this body.
+  const update = stmt.children[2]
+  if (update.kind !== N_EMPTY) {
+    const tail = outer.child()
+    flowForUpdate(ctx, flow, tail)
+    checkExpression(ctx, update, tail, -1)
+  }
   scope.adopt(held)
   flowEnd(ctx, flow, scope)
   return condition.kind === N_EMPTY && !broke
