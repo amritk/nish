@@ -111,6 +111,7 @@ import {
   flowDoCondition,
   flowEnd,
   flowForUpdate,
+  flowUpdated,
   flowHead,
   flowNoteBack,
   flowNoteBreak,
@@ -620,11 +621,15 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (condition.kind !== N_EMPTY) {
     narrow(ctx, condition, body, true)
   }
+  // A body that is one statement, not a block, leaves `errored` set when it
+  // is refused; the update is checked after it, but is no part of it.
+  const headErrored = ctx.errored
   ctx.pushLoop(LOOP_ITERATION)
   if (!checkStatement(ctx, stmt.children[3], body)) {
     flowNoteBack(ctx, body)
   }
   const broke = ctx.popLoop()
+  ctx.errored = headErrored
   // The update runs after the body, on what its end and its continues leave,
   // so a store there reaches the next iteration's head, not this body.
   const update = stmt.children[2]
@@ -632,6 +637,7 @@ const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     const tail = outer.child()
     flowForUpdate(ctx, flow, tail)
     checkExpression(ctx, update, tail, -1)
+    flowUpdated(ctx, flow, tail)
   }
   scope.adopt(held)
   flowEnd(ctx, flow, scope)

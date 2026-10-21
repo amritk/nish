@@ -80,6 +80,7 @@ import {
   N_WITH,
   Node,
 } from "./nodes"
+import { StructInfo } from "./program"
 import { Scope } from "./symbols"
 
 /** The bit a nullable union variable's `null` takes, above every variant's. */
@@ -516,25 +517,53 @@ const flowTestedRead = (node: Node): Node => {
   return read
 }
 
+/** The bit of variable `k`'s domain for `type` when it is a member of the enum `k` reads, or 0. */
+const flowMemberBit = (ctx: CheckContext, f: LoopFlow, k: i32, type: i32): i32 => {
+  if (!ctx.table.isEnumMemberType(type) || ctx.table.enumBase(type) !== flowWant(ctx, f, k)) {
+    return 0
+  }
+  return flowDomainBit(f, k, ctx.table.memberValue(type))
+}
+
+/**
+ * The class or interface `node` is declared as, whatever the loop does, or
+ * `null`: `this`, a local or parameter the loop does not redeclare, and a
+ * field of one of those. A class's fields and methods are typed up front, so
+ * a member-typed one reads as that member, as the checker reads it.
+ */
+const flowStructOf = (ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): StructInfo | null => {
+  if (depth > 8) {
+    return null
+  }
+  const bare = unwrapParens(node)
+  let type = -1
+  if (bare.kind === N_THIS || bare.kind === N_IDENT) {
+    const name = bare.kind === N_THIS ? "this" : bare.text
+    const local = f.declared.indexOf(name) >= 0 ? null : f.scope.lookup(name)
+    type = local === null ? -1 : local.type
+  } else if (bare.kind === N_MEMBER && !isOptionalChain(bare)) {
+    const owner = flowStructOf(ctx, f, bare.children[0], depth + 1)
+    const field = owner === null ? null : owner.field(bare.text)
+    type = field === null ? -1 : field.type
+  }
+  if (type < 0 || !ctx.table.isStruct(type)) {
+    return null
+  }
+  return ctx.program.struct(ctx.table.nameOf(type))
+}
+
 /**
  * The members `node` holds in state `s`, as bits of variable `k`'s domain,
  * where the pass can read before the body is checked what the checker's
  * `memberSetOf` will answer: a member; a ternary of two known arms, each read
- * on its side of the condition; a chained `=`'s right side; a local or a
- * function of a member type; a `const` the loop declares once, by its
- * initializer. Not `firm`, also what a tracked enum variable or a tracked
- * union's tag holds in `s`, which the checker reads no wider. 0 is unknown:
- * a field, a method call, a `let` declared in the loop.
+ * on its side of the condition; a chained `=`'s right side; a local, a
+ * function, a field or a method of a member type; a `const` the loop
+ * declares once, by its initializer; what a tracked enum variable or a
+ * tracked union's tag holds in `s`, which the checker reads no wider. 0 is
+ * unknown: a `let` declared in the loop, a tracked variable that may hold
+ * anything, whose read the checker records no members for.
  */
-const flowKnown = (
-  ctx: CheckContext,
-  f: LoopFlow,
-  k: i32,
-  node: Node,
-  s: i32[],
-  firm: boolean,
-  depth: i32
-): i32 => {
+const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[], depth: i32): i32 => {
   const bare = unwrapParens(node)
   const want = flowWant(ctx, f, k)
   if (depth > 8 || want < 0) {
@@ -545,26 +574,18 @@ const flowKnown = (
   }
   if (bare.kind === N_CONDITIONAL) {
     const cond = bare.children[0]
-    const whenTrue = flowKnown(ctx, f, k, bare.children[1], flowCond(ctx, f, cond, s, true), firm, depth + 1)
-    const whenFalse = flowKnown(
-      ctx,
-      f,
-      k,
-      bare.children[2],
-      flowCond(ctx, f, cond, s, false),
-      firm,
-      depth + 1
-    )
+    const whenTrue = flowKnown(ctx, f, k, bare.children[1], flowCond(ctx, f, cond, s, true), depth + 1)
+    const whenFalse = flowKnown(ctx, f, k, bare.children[2], flowCond(ctx, f, cond, s, false), depth + 1)
     return whenTrue !== 0 && whenFalse !== 0 ? whenTrue | whenFalse : 0
   }
   if (bare.kind === N_BINARY && bare.text === "=") {
-    return flowKnown(ctx, f, k, bare.children[1], s, firm, depth + 1)
+    return flowKnown(ctx, f, k, bare.children[1], s, depth + 1)
   }
   if (bare.kind === N_IDENT) {
     const name = bare.text
     const j = flowIndex(f, name)
     if (j >= 0) {
-      if (firm || j >= s.length || !f.enums[j] || f.locals[j].type !== want) {
+      if (j >= s.length || !f.enums[j] || f.locals[j].type !== want || s[j] === f.full[j]) {
         return 0
       }
       return flowDomainOf(f, k, j, s[j])
@@ -574,7 +595,7 @@ const flowKnown = (
       if (decl === null || f.scope.lookup(name) !== null) {
         return 0
       }
-      return flowKnown(ctx, f, k, decl.children[2], f.full, firm, depth + 1)
+      return flowKnown(ctx, f, k, decl.children[2], f.full, depth + 1)
     }
     const local = f.scope.lookup(name)
     if (local !== null && ctx.table.isEnumMemberType(local.type) && ctx.table.enumBase(local.type) === want) {
@@ -597,23 +618,36 @@ const flowKnown = (
     }
     return 0
   }
-  if (!firm && bare.kind === N_MEMBER && !isOptionalChain(bare) && bare.children[0].kind === N_IDENT) {
+  if (bare.kind === N_CALL && bare.children[0].kind === N_MEMBER && !isOptionalChain(bare.children[0])) {
+    const access = bare.children[0]
+    const info = flowStructOf(ctx, f, access.children[0], 0)
+    const method = info === null ? null : info.method(access.text)
+    return method === null ? 0 : flowMemberBit(ctx, f, k, method.returnType)
+  }
+  if (bare.kind !== N_MEMBER || isOptionalChain(bare)) {
+    return 0
+  }
+  if (bare.children[0].kind === N_IDENT) {
     const j = flowIndex(f, bare.children[0].text)
-    if (j >= 0 && j < s.length && !f.enums[j] && (s[j] & FLOW_NULL) === 0) {
+    if (j >= 0 && j < s.length && !f.enums[j] && (s[j] & FLOW_NULL) === 0 && s[j] !== f.full[j]) {
       const base = ctx.table.stripNull(f.locals[j].type)
       if (bare.text === ctx.table.tagNameOf(base) && ctx.table.tagEnumOf(base) === want) {
         return flowDomainOf(f, k, j, s[j])
       }
     }
   }
-  return 0
+  const info = flowStructOf(ctx, f, bare.children[0], 0)
+  const field = info === null ? null : info.field(bare.text)
+  return field === null ? 0 : flowMemberBit(ctx, f, k, field.type)
 }
 
 /**
  * `s` with variable `k` narrowed by `k === other` coming out `same`, as the
  * checker's `narrowHeld` and `narrowToTags` narrow it: to the members `other`
- * holds, or for one member also to the others. Only a `firm` reading narrows,
- * one the checker's own set for `other` is sure to equal.
+ * holds, or for one member also to the others. What the pass reads `other`
+ * to hold is never less than the checker's set for it, so keeping those
+ * members keeps no fewer; dropping them is left to one member, which the
+ * checker's set then is too.
  */
 const flowNarrowTo = (
   ctx: CheckContext,
@@ -623,7 +657,7 @@ const flowNarrowTo = (
   s: i32[],
   same: boolean
 ): i32[] => {
-  const known = flowKnown(ctx, f, k, other, s, true, 0)
+  const known = flowKnown(ctx, f, k, other, s, 0)
   if (known === 0) {
     return s
   }
@@ -755,7 +789,7 @@ const flowCond = (ctx: CheckContext, f: LoopFlow, cond: Node, s: i32[], whenTrue
  * which is also what a copy of a variable that holds nothing leaves.
  */
 const flowValueBits = (ctx: CheckContext, f: LoopFlow, k: i32, value: Node, s: i32[]): i32 => {
-  const known = flowKnown(ctx, f, k, value, s, false, 0)
+  const known = flowKnown(ctx, f, k, value, s, 0)
   return known === 0 ? f.full[k] : flowToSpace(f, k, known)
 }
 
@@ -1215,6 +1249,19 @@ export const flowForUpdate = (ctx: CheckContext, f: LoopFlow, scope: Scope): voi
     flowFail(ctx, f, "a state at the end of the body")
   }
   flowImpose(ctx, f, scope, flowMeet(f.join, f.widened))
+}
+
+/**
+ * A `for`'s update, read in `scope`: what it leaves goes back to the head,
+ * so it must lie within what the pass imposed there.
+ */
+export const flowUpdated = (ctx: CheckContext, f: LoopFlow, scope: Scope): void => {
+  if (!f.active || flowDead(flowMeet(f.join, f.widened)) || ctx.sink.count() > f.errors) {
+    return
+  }
+  if (!flowWithin(flowRead(ctx, f, scope), f.imposed)) {
+    flowFail(ctx, f, "a state after the update")
+  }
 }
 
 /** After the loop, once the checker has put back its widening: narrow `scope` to what leaves the loop. */
