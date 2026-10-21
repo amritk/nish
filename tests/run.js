@@ -8569,11 +8569,12 @@ runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
 // from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
 // store per limb rather than as a memset. Each array's stores share an SROA base
 // (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
-// four for t; deleting `wipe(g)` or `wipe(t)` removes its group.
+// four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+// `crypto`, `wipe` and `crypto_p256` filters all run it.
 {
   const name =
     "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
-  if (!only || name.includes(only)) {
+  if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
     if (!has("opt")) {
       skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
     } else {
