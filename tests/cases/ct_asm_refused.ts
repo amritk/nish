@@ -11,6 +11,7 @@
 // ct-check: tailLeak secret=secret expect=load via=leakyRow
 // ct-check: secretDivide secret=secret expect=latency
 // ct-check: leakyBaseRead secret=digit expect=load
+// ct-check: leakyDivstep secret=zeta,f0,g0 expect=branch
 
 import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul } from "nish:unsafe";
 
@@ -85,4 +86,44 @@ export const leakyBaseRead = (out: u32[], table: u32[], c: i32, digit: u32): voi
   for (let i: i32 = 0; i < 16; i++) {
     uncheckedSet(out, i, uncheckedGet(table, wrappingAdd(at, i)));
   }
+};
+
+// The divstep std/crypto/p256.ts's p256Divsteps30 replaces with masks: one step
+// that tests g's low bit and zeta's sign with an `if`, the variable-time form of
+// the safegcd step. Which way it goes is a bit of the nonce's inverse in the
+// making, and the time it takes says which.
+export const leakyDivstep = (zeta: u32, f0: u32, g0: u32, t: u32[]): u32 => {
+  let z: u32 = zeta;
+  let f: u32 = f0;
+  let g: u32 = g0;
+  let u: u32 = uncheckedGet(t, 0);
+  let v: u32 = uncheckedGet(t, 1);
+  let q: u32 = uncheckedGet(t, 2);
+  let r: u32 = uncheckedGet(t, 3);
+  if ((g & 1) !== 0) {
+    if (toI32(z) < 0) {
+      const tf: u32 = f;
+      const tu: u32 = u;
+      const tv: u32 = v;
+      f = g;
+      u = q;
+      v = r;
+      g = g - tf;
+      q = q - tu;
+      r = r - tv;
+      z = 0 - z - 2;
+    } else {
+      g = g + f;
+      q = q + u;
+      r = r + v;
+      z = z - 1;
+    }
+  } else {
+    z = z - 1;
+  }
+  uncheckedSet(t, 0, u << 1);
+  uncheckedSet(t, 1, v << 1);
+  uncheckedSet(t, 2, q);
+  uncheckedSet(t, 3, r);
+  return z ^ f ^ (g >> 1);
 };
