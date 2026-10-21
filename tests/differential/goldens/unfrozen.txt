@@ -132,6 +132,10 @@ cases/ct_asm_x25519 added after R6: no rewriter to freeze it with
 cases/ct_eq_u32 added after R6: no rewriter to freeze it with
 cases/ct_select_u32 added after R6: no rewriter to freeze it with
 cases/ct_u64 added after R6: no rewriter to freeze it with
+cases/ctor_empty_init_basic added after R6: no rewriter to freeze it with
+cases/ctor_empty_init_param added after R6: no rewriter to freeze it with
+cases/ctor_empty_init_reads added after R6: no rewriter to freeze it with
+cases/ctor_empty_init_tag added after R6: no rewriter to freeze it with
 cases/dbg_fnarg_arrow added after R6: no rewriter to freeze it with
 cases/dbg_map_get added after R6: no rewriter to freeze it with
 cases/dbg_map_iter added after R6: no rewriter to freeze it with

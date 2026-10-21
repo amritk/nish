@@ -22079,4 +22079,35 @@ if (!only || "c-symbols".includes(only)) {
   }
 }
 
+// ---- #740: a constructor's prologue writes `this` ------------------------------------
+// The field initialisers are stored outside the written body, so an empty
+// constructor's `this` is written, while a method that only reads it, and an
+// empty constructor with nothing to store, keep `readonly`. The golden pins the
+// whole text; these name the three attributes the fix is about.
+if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
+  const ll = fs.readFileSync(path.join(casesDir, "ctor_empty_init_basic.ll"), "utf8")
+  const thisOf = (fn) => {
+    const line = ll.split("\n").find((l) => l.startsWith("define ") && l.includes(`@${fn}(`))
+    return line === undefined ? null : line.slice(line.indexOf("("), line.indexOf("%this"))
+  }
+  const ctor = thisOf("Dn.constructor")
+  check(
+    "#740: an empty constructor with field initialisers does not mark `this` readonly",
+    ctor !== null && !ctor.includes("readonly"),
+    ctor
+  )
+  const method = thisOf("Dn.scaled")
+  check(
+    "#740: a method that only reads `this` keeps it readonly",
+    method !== null && method.includes("readonly"),
+    method
+  )
+  const bare = thisOf("Bare.constructor")
+  check(
+    "#740: an empty constructor with no initialiser keeps `this` readonly",
+    bare !== null && bare.includes("readonly"),
+    bare
+  )
+}
+
 summarise()
