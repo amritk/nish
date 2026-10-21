@@ -144,6 +144,7 @@ cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with
 cases/entry_shebang added after R6: no rewriter to freeze it with
 cases/enum_loop_for_update added after R6: no rewriter to freeze it with
+cases/enum_loop_held_several added after R6: no rewriter to freeze it with
 cases/enum_loop_join_gap added after R6: no rewriter to freeze it with
 cases/enum_narrowing added after R6: no rewriter to freeze it with
 cases/export_memory_native added after R6: no rewriter to freeze it with
