@@ -42,7 +42,15 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import {
+  budgetLabel,
+  HTTP1_SERVER_START_BYTES,
+  HTTP1_TLS_SERVER_START_BYTES,
+  HTTP2_TLS_SERVER_START_BYTES,
+  HTTP3_SERVER_START_BYTES,
+  RUNTIME_BUDGETS,
+  TLS_TCP_START_BYTES,
+} from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -6148,42 +6156,45 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
 // used to pass, and none of 50 with the host turning the calls off.
 // #732 tracks the Node bug and when the host can drop the flag.
-if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
-  const agreeDir = path.join(buildDir, "p256-agree")
-  const programDir = path.join(agreeDir, "crypto_p256_agree")
-  fs.rmSync(agreeDir, { recursive: true, force: true })
-  fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
+/**
+ * Builds `tests/link/<program>`'s `main` (from `source`) beside a copy of
+ * std/crypto/p256.ts with the program's `seam.ts.in` appended, as `./p256`,
+ * natively and as a `--profile wasi` module under Node, and checks that each
+ * prints its expected.out: `label` names the checks, `dir` the scratch, and
+ * `extra` the directories of `tests/link` copied beside it.
+ */
+const p256SeamProgram = ({ label, dir, program, source, extra, nativeName }) => {
+  const seamDir = path.join(buildDir, dir)
+  const programDir = path.join(seamDir, program)
+  fs.rmSync(seamDir, { recursive: true, force: true })
+  fs.mkdirSync(path.join(seamDir, "crypto_p256"), { recursive: true })
   fs.mkdirSync(programDir, { recursive: true })
-  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
-    recursive: true,
-  })
-  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
-  fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
+  for (const name of extra) {
+    fs.cpSync(path.join(linkDir, name), path.join(seamDir, name), { recursive: true })
+  }
+  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(seamDir, "crypto_p256", "hex.ts"))
+  fs.copyFileSync(path.join(linkDir, program, source), path.join(programDir, "main.ts"))
   fs.writeFileSync(
     path.join(programDir, "p256.ts"),
     fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
-      fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "seam.ts.in"), "utf8")
+      fs.readFileSync(path.join(linkDir, program, "seam.ts.in"), "utf8")
   )
-  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, program, "expected.out"), "utf8")
   const entry = path.join(programDir, "main.ts")
   if (only !== "wasi") {
-    const exe = path.join(agreeDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
+    const exe = path.join(seamDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe], {
       cwd: root,
       encoding: "utf8",
     })
     const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
-    check(
-      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
-      built.status === 0 && ran.status === 0 && ran.stdout === want,
-      shown(ran)
-    )
+    check(nativeName, built.status === 0 && ran.status === 0 && ran.stdout === want, shown(ran))
   }
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasm = path.join(agreeDir, "app.wasm")
+    const wasm = path.join(seamDir, "app.wasm")
     const built = spawnSync(
       NISH,
-      [entry, "-o", path.join(agreeDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
+      [entry, "-o", path.join(seamDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
     const ran =
@@ -6194,15 +6205,46 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
           })
         : built
     check(
-      `p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
+      `${label}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )
   } else {
     skip(
-      `skipped: p256 agree: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_agree is not run`
+      `skipped: ${label}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program} is not run`
     )
   }
+}
+if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 agree",
+    dir: "p256-agree",
+    program: "crypto_p256_agree",
+    source: "agree.ts",
+    extra: ["crypto_wycheproof"],
+    nativeName:
+      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
+  })
+}
+
+// #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
+// and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
+// `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
+// 10,000 scalars. Neither inversion is exported, so the program reaches them
+// through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
+// std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
+// Its expected.out ends in a checksum of every inverse. Natively, and as a
+// `--profile wasi` module under Node.
+if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 inverse",
+    dir: "p256-inverse",
+    program: "crypto_p256_inverse",
+    source: "inverse.ts",
+    extra: [],
+    nativeName:
+      "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+  })
 }
 
 // The comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs
@@ -6317,6 +6359,86 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
       "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
       `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
+// `TlsTcpServer` and `Http1TlsServer` build a slot's TLS state, and the
+// latter its connection, on the first accept into it too, and so does
+// `Http2TlsServer` past slot 0.
+// `tests/link/net_tls_record_tcp/startup.ts`,
+// `tests/link/net_http1_server/tls-startup.ts` and
+// `tests/link/net_http2_tls/startup.ts` build pools of 16,384 slots on no
+// socket and print the bytes they took and whether they fit one chunk, which
+// the ceilings `TLS_TCP_START_BYTES`, `HTTP1_TLS_SERVER_START_BYTES` and
+// `HTTP2_TLS_SERVER_START_BYTES` hold.
+for (const [unit, program, name, ceiling, ceilingName] of [
+  ["net_tls_record_tcp", "startup.ts", "TlsTcpServer", TLS_TCP_START_BYTES, "TLS_TCP_START_BYTES"],
+  [
+    "net_http1_server",
+    "tls-startup.ts",
+    "Http1TlsServer",
+    HTTP1_TLS_SERVER_START_BYTES,
+    "HTTP1_TLS_SERVER_START_BYTES",
+  ],
+  [
+    "net_http2_tls",
+    "startup.ts",
+    "Http2TlsServer",
+    HTTP2_TLS_SERVER_START_BYTES,
+    "HTTP2_TLS_SERVER_START_BYTES",
+  ],
+]) {
+  if (only && !unit.includes(only) && !"runtime-budget".includes(only)) {
+    continue
+  }
+  const dir = path.join(buildDir, "link", `${unit}.${program.replace(".ts", "")}`)
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", unit, program), "-o", dir + path.sep, "--link", exe],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  if (check(`${unit}: ${program} links`, built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, chunk] = String(run.stdout).trim().split(" ")
+    check(
+      `${unit}: a 16,384-slot ${name} takes at most ${ceilingName} before its first connection`,
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= ceiling,
+      `ceiling ${ceiling}\n${shown(run)}`
+    )
+  }
+}
+
+// `Http3Server` builds a slot's QUIC and HTTP/3 connections and its address on
+// the first Initial accepted into it, so what a pool costs before its first
+// connection is its per-slot tables. `tests/link/net_http3_server/startup.ts`
+// builds a pool of 65,536 slots on no socket and prints the arena bytes it
+// took, which the ceiling `HTTP3_SERVER_START_BYTES` in
+// `tests/runtime-budgets.js` holds, and whether they fit in one chunk, without
+// which `Arena.used()` measures nothing.
+if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only)) {
+  const dir = path.join(buildDir, "link", "net_http3_server.startup")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "net_http3_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    check(
+      "net_http3_server: a 65,536-slot Http3Server takes at most HTTP3_SERVER_START_BYTES before its first connection",
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP3_SERVER_START_BYTES,
+      `ceiling ${HTTP3_SERVER_START_BYTES}\n${shown(run)}`
     )
   }
 }
@@ -8489,6 +8611,19 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       held.ok && heldPlain.ok && volatileSet.test(held.text) && !volatileSet.test(heldPlain.text),
       `held:\n${held.text}\n--- plain:\n${heldPlain.text}`
     )
+    // A `Secret` bound with no annotation (#613) is one whose struct the module
+    // defines through `secret`'s inferred result alone: its wipe is the same
+    // volatile memset, where the twin's `fill(0)` of the same bytes is deleted.
+    const inferred = optimisedMain("secret_wipe_o2_inferred")
+    const inferredPlain = optimisedMain("secret_wipe_o2_inferred_plain")
+    const inferredPlainStores = inferredPlain.ok
+      ? (inferredPlain.text.match(/\bstore\b|@llvm\.memset/g) || []).length
+      : -1
+    check(
+      "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
+      inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
+      `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
   }
 }
 
@@ -8496,6 +8631,53 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // roots in the area files of `tests/wipes/` (`tests/wipes/index.js` says what a
 // group is and how a root's wipes are counted).
 runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
+
+// The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
+// `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
+// from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
+// store per limb rather than as a memset. Each array's stores share an SROA base
+// (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
+// four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+// `crypto`, `wipe` and `crypto_p256` filters all run it.
+{
+  const name =
+    "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+  if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
+    if (!has("opt")) {
+      skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+    } else {
+      const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnSync(NISH, [path.join(root, "tests/link/crypto_p256/main.ts"), "-o", `${dir}/`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const o =
+        c.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
+              encoding: "utf8",
+            })
+          : c
+      const body =
+        o.status === 0
+          ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+          : ""
+      const groups = new Map()
+      for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
+        groups.set(m[1], (groups.get(m[1]) ?? 0) + 1)
+      }
+      const sizes = [...groups.values()].sort((x, y) => y - x)
+      let detail = `volatile i32 zero stores by array: ${JSON.stringify([...groups])}`
+      if (o.status !== 0) {
+        detail = o.stderr
+      } else if (body === "") {
+        detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+      }
+      check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+    }
+  }
+}
 
 // `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
 // `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
@@ -8786,6 +8968,28 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       ]
         .filter((line) => line.length > 0)
         .join("\n")
+    )
+
+    // ct_asm_p256's `p256Divsteps30` is the module's thirty-step loop written out, as a
+    // rolled loop is a back-edge the reading refuses. Each of its blocks must be the
+    // module's loop body, line for line, or the check reads a function the signer no
+    // longer runs. (The matrix updates are written out at literal indices, so their
+    // text differs; the fixture's `.out` holds them to the module's inverses.)
+    const moduleSource = fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8")
+    const fixtureSource = fs.readFileSync(path.join(casesDir, "ct_asm_p256.ts"), "utf8")
+    const loopBody = moduleSource.match(
+      /\nconst p256Divsteps30 = [^\n]*\n[\s\S]*?\n {2}for \(let i: i32 = 0; i < 30; i\+\+\) \{\n([\s\S]*?)\n {2}\}\n/
+    )?.[1]
+    const unrolled =
+      fixtureSource.match(/\nexport const p256Divsteps30 = [^\n]*\n([\s\S]*?)\n\}\n/)?.[1] ?? ""
+    const blocks = [...unrolled.matchAll(/\n {2}\{\n([\s\S]*?)\n {2}\}(?=\n)/g)].map((m) => m[1])
+    const stray = blocks.filter((b) => b !== loopBody)
+    check(
+      "ct_asm: ct_asm_p256's p256Divsteps30 is thirty copies of std/crypto/p256.ts's divstep loop body",
+      loopBody !== undefined && blocks.length === 30 && stray.length === 0,
+      loopBody === undefined
+        ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
+        : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
     )
   }
 }
@@ -11346,6 +11550,79 @@ if (!only) {
       "wasm profile links Math.min/Math.max of f64 and f32, and they drop a NaN as minnum does natively",
       mr !== null && String(mr.stdout).trim() === "0 9 1 1 2 NaN -1 -3 1.5 0.25 2",
       String(mc.stderr) + String(ml.stderr) + (mr ? String(mr.stdout) + String(mr.stderr) : "")
+    )
+  }
+}
+
+// ---- #643: a function named `memory` in a wasm module -----------------------------
+// wasm-ld exports a wasm module's linear memory as `memory`, so a function of that
+// name makes a module Node refuses to compile. The compiler refuses one (NL3038) when
+// it knows the build is wasm (`reject_export_wasm_memory*`), but IR compiled for the
+// host with `-o` alone reaches build.sh's wasm and wasi profiles without telling it,
+// so build.sh reads the IR and refuses an exported `@memory` with exit 2. An
+// `internal` one is no export, and still links.
+if (!only || "wasm-memory".includes(only)) {
+  const memDir = path.join(buildDir, "wasm-memory")
+  fs.rmSync(memDir, { recursive: true, force: true })
+  fs.mkdirSync(memDir, { recursive: true })
+  const exportedLl = path.join(memDir, "exported.ll")
+  const exported = spawnSync(NISH, [path.join(casesDir, "export_memory_native.ts"), "-o", exportedLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check("wasm memory: a native -o compile keeps an exported `memory`", exported.status === 0, exported.stderr)
+  for (const profile of ["wasm", "wasi"]) {
+    const r = spawnSync(
+      "bash",
+      ["scripts/build.sh", exportedLl, "-o", path.join(memDir, `refused-${profile}`), "--profile", profile],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `wasm memory: build.sh --profile ${profile} refuses host IR defining an exported @memory with exit 2`,
+      r.status === 2 &&
+        r.stderr.includes("defines a function named `memory`") &&
+        r.stderr.includes(`the ${profile} profile's module exports its linear memory under`),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+  // Without `--no-strict-exports` a `memory` nobody exported is internal, so
+  // it is no second `memory` export (`reject_export_wasm_memory_no_strict`).
+  const privateTs = path.join(memDir, "private.ts")
+  fs.writeFileSync(
+    privateTs,
+    "const memory = (n: i32): i32 => n + 1\nexport const bump = (n: i32): i32 => memory(n)\n"
+  )
+  const wasm32 = spawnSync(
+    NISH,
+    [privateTs, "-o", path.join(memDir, "private-wasm32.ll"), "--target", "wasm32"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "wasm memory: a --target wasm32 compile keeps a `memory` nobody exported",
+    wasm32.status === 0,
+    `${wasm32.status}: ${wasm32.stderr}`
+  )
+  if (has("wasm-ld")) {
+    const privateLl = path.join(memDir, "private.ll")
+    const c = spawnSync(NISH, [privateTs, "-o", privateLl], { cwd: root, encoding: "utf8" })
+    const l =
+      c.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", privateLl, "-o", path.join(memDir, "private.wasm"), "--profile", "wasm"],
+            {
+              cwd: root,
+              encoding: "utf8",
+            }
+          )
+        : c
+    check(
+      "wasm memory: build.sh --profile wasm links host IR whose @memory is internal",
+      l.status === 0,
+      `${l.status}: ${l.stderr}`
     )
   }
 }
@@ -15569,6 +15846,150 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         subset.stdout.includes("unchanged"),
       `${subset.stdout}${subset.stderr}`
     )
+  }
+}
+
+// ---- crypto-bench: the crypto twins ------------------------------------------------
+// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
+// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
+// every program to print the checksums its expected.txt pins, and proves the
+// portable columns portable. Each family must report every kernel size matched,
+// found by listing the directories, so a new family is checked without an edit
+// here. A missing toolchain is the runner's note and a column of —, not a
+// failure; so is a family that needs a loopback socket the machine refuses, and
+// a portable column this host cannot prove. Those notes and unproved lines are
+// printed under the check on a pass too, so a green run says what it left out.
+if (!only || "crypto-bench".includes(only)) {
+  if (HAS_CLANG) {
+    const families = fs
+      .readdirSync(path.join(root, "bench", "crypto"))
+      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
+      .sort()
+    const proved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .portableProof !== undefined
+    )
+    const v = spawnSync(
+      "node",
+      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    // The runner accounts for every column of every family it validated: a
+    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
+    // (the family's own word) or `<family> did not run <id>:` (this machine's
+    // reason). The test takes that account rather than probing toolchains
+    // itself, which disagreed with the runner on a host whose Go was older
+    // than go.mod or whose cargo could not fetch. The column list is the
+    // runner's own `crypto: columns …` line; without it the check fails.
+    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
+    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
+    const unaccounted = validated.flatMap((f) => {
+      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
+      return COLUMNS.filter(
+        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
+      ).map((id) => `${f} ${id}`)
+    })
+    // GitHub's x86-64 Linux runner has every twin's toolchain and the
+    // extensions their portable builds give up, so there a column this machine
+    // did not run, or an `unproved` line, means a gate failed open: every twin
+    // must run and the OpenSSL and Go proofs must be measured ones.
+    const strict =
+      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
+    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
+    check(
+      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
+      v.status === 0 &&
+        families.length > 0 &&
+        COLUMNS.length > 0 &&
+        families.every((f) =>
+          new RegExp(
+            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
+            "m"
+          ).test(v.stdout)
+        ) &&
+        unaccounted.length === 0 &&
+        proved.every((f) =>
+          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
+            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
+          )
+        ) &&
+        (!strict ||
+          (validated.length === families.length &&
+            !/ did not run /.test(v.stdout) &&
+            proved.every((f) =>
+              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ))),
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+    )
+    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
+        console.log(`      ${line}`)
+      }
+    }
+    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
+    // compiler it was given reaches the child, and the child's status comes
+    // back. A wrapper answers --version from the compiler under test and fails
+    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    const wrapDir = path.join(buildDir, "crypto-bench")
+    const wrapper = path.join(wrapDir, "nish-wrapper")
+    const wrapLog = path.join(wrapDir, "wrapper.log")
+    fs.mkdirSync(wrapDir, { recursive: true })
+    fs.rmSync(wrapLog, { force: true })
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
+      { mode: 0o755 }
+    )
+    const deleg = spawnSync(
+      "node",
+      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
+      deleg.status === 1 && forwarded.includes(path.join("bench", "crypto", "hash", "main.ts")),
+      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
+    )
+    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
+    // only, one run, into a copy of the file.
+    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
+    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- crypto:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+  } else {
+    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
   }
 }
 
