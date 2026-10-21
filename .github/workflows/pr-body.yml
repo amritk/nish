@@ -15,12 +15,17 @@ name: PR body
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
+  # The merge queue waits on every required check, this one included, so it
+  # has to report there. The queue has no pull request in its event; what it
+  # merges was checked on the pull request itself, so the step is skipped and
+  # the job reports success.
+  merge_group:
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-body-${{ github.event.pull_request.number }}
+  group: pr-body-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -39,6 +44,7 @@ jobs:
       # would splice it into the script. A pull request with no description
       # sets it to the empty string, which passes.
       - name: Check the body
+        if: github.event_name == 'pull_request'
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: node scripts/check-pr-body.mjs

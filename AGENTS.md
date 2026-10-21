@@ -254,8 +254,9 @@ it is not there yet:
   generated files with the repo's own tooling rather than by hand. **Expect it
   on the self-goldens:** `tests/self/goldens/checked/` holds one dump per
   module, so a `src/` commit on `main` conflicts with an open pull request that
-  changes the same module, and `main` can move faster than one CI run. Merge `main` in (never rebase), regenerate with
-  `node tests/self/goldens.js --update` after `npm run build`, re-check that a
+  changes the same module, and `main` can move faster than one CI run. Merge `main` in (never rebase) and regenerate with
+  `npm run sync-main`, which merges, runs both golden `--update`s and
+  stages them without committing, then read the staged diff, re-check that a
   new diagnostic still has the next free code in `src/codes.ts`, run
   `npm run check` and `node tests/run.js self` plus your change's own prefix,
   and push; CI is the full gate. A pure merge of `main` carries nothing else.

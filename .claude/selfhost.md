@@ -306,6 +306,7 @@ node tests/self/goldens.js                  # verify all of them, ~2.5 min
 node tests/self/goldens.js checked --verbose
 npm run test:update                         # regenerate, with the .ll goldens
 node tests/self/goldens.js --update         # regenerate these alone
+npm run sync-main                           # merge origin/main, regenerate, stage
 ```
 
 They were written by stage1 while stage0 still agreed with it byte for byte,

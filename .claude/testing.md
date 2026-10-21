@@ -475,6 +475,10 @@ change the same module conflict in its file. Resolve that by merging `main` and
 running `node tests/self/goldens.js --update`, never by hand, and run it after
 any merge of `main` that touched `src/` or `std/`: a module's dump can move
 when a module it imports changes, without a textual conflict.
+`npm run sync-main` (`scripts/sync-main.mjs`) is that whole sequence: it
+merges `origin/main`, drops the conflicted files under `tests/self/goldens/`,
+runs both `--update`s and stages the result for you to read, stopping on any
+conflict it cannot regenerate — the frozen store below among them.
 
 `tests/differential/goldens/` is the third: the JavaScript every whole program
 rewrites to, which the WP13 oracle compares against Node. It is the one golden
