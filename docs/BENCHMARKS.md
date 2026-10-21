@@ -521,6 +521,73 @@ Checksum `serialize 18100868296888812225 452530`, the same from every implementa
 Noise band, Nish against its byte-identical copy: 1.1% on the minimums (0.0% on the medians). A ratio within it is no difference.
 <!-- json-compare:end -->
 
+<!-- techempower:begin -->
+## TechEmpower json and plaintext
+
+Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every contestant started afresh and warmed for 1 s before each count), and copied here from the report it writes to `build/tfb/results.md`. `bench/run.mjs` carries this section over between its `techempower` markers when it rewrites the file. The entry is [bench/techempower/](../bench/techempower/README.md): one process, one thread, one `pollWait` loop on `Http1Server`. The other rows are the HTTP twins of [bench/http-twins/](../bench/http-twins/README.md), each run as its own `serve <port>`. `entry-copy` is a second build of the same `main.ts` that `cmp` finds byte-identical, so the gap between `entry` and `entry-copy` is the noise band every other difference is read against. `entry-nodelay0` is `entry` started with its `nodelay` argument 0, so its accepted sockets keep Nagle on. A cell marked `*` had non-2xx answers or socket errors in at least one round; `n/a` is a cell no round gave a figure for.
+
+| | |
+| --- | --- |
+| Date | 2026-10-21 |
+| nish | nish 0.18.0 (commit 5ee6e7c), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores |
+| OS | linux 6.18.44-fc-v139 (x64) |
+| Client | wrk 4.1.0, `-t 3`, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | server on CPU 0, wrk on CPUs 1-3. **Client-shared**: wrk and the server share one 4-core machine, so three cores drive one server core, and a server faster than wrk can drive shows wrk's ceiling |
+| Limits | `ulimit -n` 20000, `net.core.somaxconn` 4096; no concurrency was clamped |
+| Command | `npm run build && bash bench/http-twins/build.sh && bash bench/techempower/run.sh --nodelay-compare` |
+
+### /plaintext, 16 requests pipelined per write (req/s, median (min) of 3 rounds of 10 s)
+
+| contestant | 256 | 1024 | 4096 | 16384 |
+| --- | ---: | ---: | ---: | ---: |
+| entry | 324166 (319907) | 324456 (324285) | 306716 (296701) | 290467 (284270)* |
+| entry-copy | 320784 (316919) | 328966 (309659) | 308748 (303939) | 291601 (290158)* |
+| entry-nodelay0 | 317747 (312271) | 322970 (318831) | 303926 (303679) | 291348 (290808)* |
+| node-http | 29737 (29520)* | 29450 (29265)* | 29925 (29106)* | 26138 (24751)* |
+| uws | 411621 (405082) | 377199 (359682) | 369473 (347216) | 357901 (295125)* |
+| bun | 53993 (52627) | 54195 (54139) | 49886 (49713) | 39482 (38656)* |
+| bun-elysia | 50428 (49401) | 50386 (47146) | 46937 (46735)* | 38568 (38178)* |
+| bun-hono | 37604 (36408) | 36286 (35885) | 35372 (34773)* | 29819 (29547)* |
+| go-nethttp | 29988 (29907) | 30094 (29444) | 28472 (28105) | 23476 (22629)* |
+| go-fasthttp | 380231 (373654) | 362980 (352041) | 351528 (329322) | 264089 (243905) |
+| rust-hyper | 92857 (85787) | 95238 (89832) | 83175 (82831) | 73213 (70509)* |
+| rust-actix | 11147 (11137) | 9984 (9926)* | 5632 (5234)* | n/a |
+| nginx | 45752 (44803) | 44026 (41499)* | 40947 (38162)* | 35030 (32098)* |
+
+Noise band, the entry against its byte-identical copy (medians): 256 connections: 1.0%, 1024 connections: 1.4%, 4096 connections: 0.7%, 16384 connections: 0.4%.
+
+### /json, one request at a time (req/s, median (min) of 3 rounds of 10 s)
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 62677 (59149) | 72154 (66485) | 82974 (78773) | 87850 (82665) | 89032 (88021) | 80449 (70347) |
+| entry-copy | 61788 (61021) | 70884 (67521) | 80291 (79190) | 87979 (82959) | 88850 (76368) | 75596 (55806) |
+| entry-nodelay0 | 62789 (57984) | 71644 (71376) | 81762 (77200) | 81259 (79262) | 81718 (68711) | 83571 (52003) |
+| node-http | 21051 (20350) | 21369 (20080) | 20733 (19417) | 18293 (18112) | 17583 (17384) | 17413 (16445) |
+| uws | 55513 (54228) | 63101 (60259) | 73301 (72606) | 76345 (73065) | 67375 (62743) | 70785 (66658) |
+| bun | 34751 (34672) | 37962 (37266) | 42414 (41711) | 41895 (38471) | 35382 (34501) | 32606 (31723) |
+| bun-elysia | 34554 (33326) | 38334 (37002) | 41400 (40724) | 41835 (40572) | 36276 (31920) | 31982 (31845) |
+| bun-hono | 28308 (28000) | 30410 (29293) | 30219 (29872) | 30276 (30013) | 27538 (26989) | 25092 (23765) |
+| go-nethttp | 25932 (25363) | 26472 (26460) | 25951 (24978) | 23351 (21753) | 21748 (20729) | 21274 (20467) |
+| go-fasthttp | 43493 (43064) | 48007 (46893) | 48959 (48237) | 43228 (41587) | 39086 (38392) | 37435 (36700) |
+| rust-hyper | 51113 (50772) | 56249 (56148) | 63765 (61338) | 60668 (59596) | 53256 (53150) | 51512 (49381) |
+| rust-actix | 10442 (10417) | 10283 (9701) | 10257 (9928) | 10003 (9846) | 10126 (10083) | 10024 (9986) |
+| nginx | 47409 (44830) | 53393 (52078) | 59472 (58763) | 58394 (58388) | 53957 (53930) | 53881 (52525) |
+
+Noise band, the entry against its byte-identical copy (medians): 16 connections: 1.4%, 32 connections: 1.8%, 64 connections: 3.2%, 128 connections: 0.1%, 256 connections: 0.2%, 512 connections: 6.0%.
+
+What the rows say, read against that band:
+
+- The twins answer `/json` with `{"message":"Hello, World!","n":<n>}`: 8 bytes more than the entry's `{"message":"Hello, World!"}`, and a counter. The entry serializes its body with a `JsonWriter` on every request, as TFB requires; the twins vary in how they build theirs.
+- One core of the entry serves `/plaintext` at medians of 290,467 to 324,456 req/s across every concurrency: below `uws` everywhere, below `go-fasthttp` from 256 to 4096 connections, and above every other twin. At 16384 `go-fasthttp` falls to 264,089, 9.1% under the entry's 290,467 and outside that level's 0.4% band.
+- On `/json` the entry leads every twin at every concurrency by more than the band. Its narrowest lead is over `uws` at 16 connections, 62,677 against 55,513 (11.4%, where the band is 1.4%); the widest band, 6.0% at 512, is under its 12.0% lead there (80,449 against 70,785).
+- At 16384 connections wrk reported read errors (connections reset) against every Nish build: the entry in two of its three rounds (250 and 2,452), the copy in two (2,916 and 1,517), and `entry-nodelay0` in two (2,075 and 4,418). Several twins had read errors or timeouts there too, and the `*` marks them.
+- `rust-actix` answers about 10,000 req/s up to 1024 connections, falls to 5,632 at 4096 with timeouts in every round, and has no figure at 16384: in all three rounds wrk reported 0.00 req/s and no socket errors, so the cell is `n/a`. An earlier run of this section recorded that cell as 0, which was the failed measurement rather than a rate. Run alone, the twin shows 6.4 ms of latency per request too, so its figures are its own, reported as measured.
+- `TCP_NODELAY` (WP39 E2, `tcpListenFlags` flag 2) is the entry's default. Against `entry-nodelay0` it is faster outside the band at four levels (`/plaintext` 256 connections by 2.0% against a 1.0% band, and 4096 by 0.9% against 0.7%; `/json` 128 by 7.5% against 0.1%, and 256 by 8.2% against 0.2%) and within the band at the other six, slower outside it at none. So the flag stays on.
+- The benchmarked build is `5ee6e7c`. The head adds only the listener's pause when an accept runs out of descriptors, which this run never reached: with `ulimit -n` at 20000, no accept failed for want of one.
+<!-- techempower:end -->
+
 <!-- tls-handshake:begin -->
 ## TLS handshake
 
