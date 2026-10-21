@@ -131,4 +131,8 @@ PASS  an ACK of the packets sent around it is read
 PASS  an ACK that takes in the skipped number is PROTOCOL_VIOLATION, an optimistic ACK
 PASS  an ACK of two ranges, neither taking in the skipped number, is read
 PASS  an ACK that takes in the skipped number in its second range is PROTOCOL_VIOLATION too
-quic lifecycle: 133 passed, 0 failed, 0 skipped
+PASS  two numbers skipped on one connection are both remembered, and an ACK of the packets around them is read
+PASS  an ACK that takes in the older skipped number and not the newer is PROTOCOL_VIOLATION
+PASS  reset forgets the skipped numbers and zeroes the counts, and the limits are AES-GCM's again
+PASS  on the reused slot the next connection sends the number the last one skipped, and an ACK of it is read
+quic lifecycle: 137 passed, 0 failed, 0 skipped
