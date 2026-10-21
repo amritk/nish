@@ -962,9 +962,10 @@ and no `pollModify`. A slot borrows its output buffer only while it writes, so
 an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
 a slot's connection on the first accept into it and keeps it for the next, so
 a pool sized for 16,384 connections costs some 16 KiB until they come;
-`bench/http.mjs` load-tests that loop on one core. `Http2TlsServer` and
-`Http3Server` build a slot the same way, on the first connection accepted
-into it, so a pool's size is a ceiling rather than memory taken at start-up.
+`bench/http.mjs` load-tests that loop on one core. `TlsTcpServer`,
+`Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
+way, on the first connection accepted into it, so a pool's size is a ceiling
+rather than memory taken at start-up.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
