@@ -435,6 +435,24 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58368
 export const HTTP3_SERVER_START_BYTES = 17501696
 
 /**
+ * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
+ * the arena before its first connection, linked by `tests/run.js` from
+ * `tests/link/net_http2_tls/startup.ts` on the default `Http2Config`.
+ *
+ * Measured **58,560 bytes** on 2026-10-21 with clang 18 on linux-x64:
+ * `TLS_TCP_START_BYTES`'s pool, the shared `Http2Pools` and `HttpDate`, and slot 0's
+ * connection, which the constructor still builds so that a bad `Http2Config` is
+ * refused there; every other slot's is built on the first accept into it. Built
+ * eagerly, as at `c8a00d6`, the interop server's HTTP/2 pool on 1,024 slots was 27.7 MB
+ * resident at listening with the lazy TLS pool against 11.7 MB now, 23 kB a slot
+ * against 7 kB (`bench/pool-rss.mjs --per-pool`, three interleaved rounds of three
+ * runs, head against a byte-identical copy of itself within 0.1 MB). The budget is
+ * the next 256-byte boundary above the measurement: the 64 bytes of headroom are
+ * intended, and one more slot's connection built eagerly costs far more than they hold.
+ */
+export const HTTP2_TLS_SERVER_START_BYTES = 58624
+
+/**
  * Every unit and configuration the gate measures: the source compiled with
  * `clang -Oz <flags> -c`, the ceiling on the sum of its `.text*` sections, and the
  * name of the constant that holds the ceiling, which a failure tells the reader to
