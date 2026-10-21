@@ -384,6 +384,57 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
 export const HTTP1_SERVER_START_BYTES = 16896
 
 /**
+ * Ceiling on what `new TlsTcpServer(config, listener, 16384)` takes from the arena
+ * before its first connection -- not a `.text` budget: `tests/run.js` links
+ * `tests/link/net_tls_record_tcp/startup.ts`, which builds that pool on the test
+ * configuration and prints the bytes.
+ *
+ * Measured **41,640 bytes** on 2026-10-20 with clang 18 on linux-x64: the
+ * record-sized read scratch, the P-256 signer and the empty record pools, with no
+ * slot's handshake state or server random built. Each slot's are built on the first
+ * accept into it. Built eagerly, as every slot was before, the interop server's
+ * HTTP/2 pool on 1,024 slots was 78.2 MB resident at listening against 27.8 MB now
+ * (`bench/pool-rss.mjs --per-pool`, three runs each, base and head each against a
+ * byte-identical copy of itself within 0.1 MB). The budget is the next 256-byte
+ * boundary above the measurement: the 88 bytes of headroom are intended, and a slot
+ * built eagerly again costs far more than they hold.
+ */
+export const TLS_TCP_START_BYTES = 41728
+
+/**
+ * Ceiling on what `new Http1TlsServer(tlsConfig, config, listener, 16384)` takes from
+ * the arena before its first connection, linked by `tests/run.js` from
+ * `tests/link/net_http1_server/tls-startup.ts` on the default `Http1Config`.
+ *
+ * Measured **58,296 bytes** on 2026-10-20 with clang 18 on linux-x64:
+ * `TLS_TCP_START_BYTES`'s pool and the HTTP/1.1 read scratch, `Date` and empty output
+ * pool, with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
+ * resident at listening against 4.6 MB now, and 18.1 MB against 4.6 MB at 256 slots
+ * (measured as `TLS_TCP_START_BYTES` says). The budget is the next 256-byte boundary
+ * above the measurement: the 72 bytes of headroom are intended, and one slot's
+ * connection built eagerly again costs far more than they hold.
+ */
+export const HTTP1_TLS_SERVER_START_BYTES = 58368
+
+/**
+ * Ceiling on what `new Http3Server(quicConfig, config, fd, 65536, entropy)` takes from
+ * the arena before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http3_server/startup.ts`,
+ * which builds that pool, the most slots a server takes, on the test configuration
+ * and prints the bytes.
+ *
+ * Measured **17,501,520 bytes** on 2026-10-20 with clang 18 on linux-x64, about 267
+ * bytes a slot: the fixed per-slot tables, some 232 bytes a slot (the connection ID
+ * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
+ * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
+ * bookkeeping, with no slot's connections built. Each slot's QUIC and HTTP/3
+ * connections and address are built on the first Initial accepted into it, 111,424
+ * arena bytes on the same configuration. The budget is the next 256-byte boundary
+ * above the measurement, as every ceiling here was set.
+ */
+export const HTTP3_SERVER_START_BYTES = 17501696
+
+/**
  * Every unit and configuration the gate measures: the source compiled with
  * `clang -Oz <flags> -c`, the ceiling on the sum of its `.text*` sections, and the
  * name of the constant that holds the ceiling, which a failure tells the reader to

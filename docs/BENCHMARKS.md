@@ -520,3 +520,9 @@ Checksum `serialize 18100868296888812225 452530`, the same from every implementa
 
 Noise band, Nish against its byte-identical copy: 1.1% on the minimums (0.0% on the medians). A ratio within it is no difference.
 <!-- json-compare:end -->
+
+<!-- tls-handshake:begin -->
+## TLS handshake
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline.
+<!-- tls-handshake:end -->
