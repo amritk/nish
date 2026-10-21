@@ -91,6 +91,7 @@ import {
   N_NULL,
   N_NUMBER,
   N_OBJECT,
+  N_PARAM,
   N_PAREN,
   N_PROPERTY,
   N_RETURN,
@@ -104,6 +105,7 @@ import {
   N_TYPE_NULL,
   N_TYPE_REF,
   N_UNARY,
+  N_VAR,
   N_VAR_DECL,
   N_WHILE,
   Node,
@@ -113,7 +115,7 @@ import { isOptionalChain, unwrapParens } from "./emit-util"
 import { FieldInfo, FunctionSig, StructInfo, TemplateInfo } from "./program"
 import { coercesTo } from "./structs"
 import { isUndefined, isUndefinedType, undefinedForbidden } from "./validator"
-import { Local, STORAGE_PARAM, Scope } from "./symbols"
+import { Local, NARROWED_NONE, STORAGE_LOCAL, STORAGE_PARAM, Scope, sourceLocal } from "./symbols"
 import {
   intBits,
   isFloat,
@@ -240,8 +242,18 @@ export const checkExpression = (ctx: CheckContext, expr: Node, scope: Scope, wan
   }
   ctx.program.memberSets[expr.id] = -1
   const computed = computeType(ctx, expr, scope, inner)
+  if (expr.kind === N_MEMBER || expr.kind === N_INDEX) {
+    const path = pathVariable(ctx, expr, scope, computed, false)
+    const held = path === null ? -1 : scope.heldBy(path)
+    if (namesMembers(held)) {
+      ctx.program.memberSets[expr.id] = held
+    }
+  }
   if (refuseInferredTag(ctx, expr, want)) {
     return T_ERROR
+  }
+  if (expr.kind === N_CONDITIONAL && ctx.program.memberSets[expr.id] === -1) {
+    joinArmMembers(ctx, expr)
   }
   if (ctx.table.isMaybe(computed) && !welcome && expr.kind !== N_PAREN) {
     ctx.program.nodeTypes[expr.id] = T_ERROR
@@ -378,29 +390,52 @@ export const memberSlotMessage = (ctx: CheckContext, member: i32, got: string): 
 }
 
 /**
- * A union's tag read where its type would be inferred: TypeScript gives it
- * the union of the variants' tags, `Kind.Circle | Kind.Square`, which Nish
- * has no type for, and reading it as the whole enum would accept a later
- * comparison TypeScript refuses.
+ * A union's tag, or an enum variable a test narrowed to some of its members,
+ * read where its type would be inferred: TypeScript gives it the union of
+ * those members, `Kind.Circle | Kind.Square`, which Nish has no type for, and
+ * reading it as the whole enum would accept a later comparison TypeScript
+ * refuses.
  */
 const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean => {
-  const union = ctx.program.memberSets[expr.id]
-  if (!ctx.table.isUnion(union) || (want !== WANT_MAYBE && want !== WANT_RANGE && want !== WANT_INFERRED)) {
+  const set = ctx.program.memberSets[expr.id]
+  const union = ctx.table.isUnion(set)
+  if (
+    (!union && set >= MEMBERS_NONE) ||
+    (want !== WANT_MAYBE && want !== WANT_RANGE && want !== WANT_INFERRED)
+  ) {
     return false
   }
-  const kind = ctx.table.typeName(ctx.table.tagEnumOf(union))
+  const members = memberSetOf(ctx, expr)
+  const kind = ctx.table.typeName(ctx.table.enumBase(members[0]))
+  const what = union ? "The tag `" : "The enum variable `"
   ctx.program.nodeTypes[expr.id] = T_ERROR
   ctx.error(
     expr,
-    `The tag \`${ctx.textOf(expr)}\` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type this version does not have, so annotate it as \`${kind}\``
+    `${what}${ctx.textOf(expr)}\` cannot give a type to what it initialises: TypeScript would infer \`${memberSetName(ctx, members)}\`, a type this version does not have, so annotate it as \`${kind}\``
   )
   return true
 }
 
 /**
+ * What an enum variable holds once tests excluded every member (`Scope.hold`),
+ * which TypeScript types `never` and compares with anything. Not a set any
+ * read records, so `memberSetOf` reads it as unknown.
+ */
+export const MEMBERS_NONE: i32 = -2
+
+/** Whether `set`, as `memberSets` and `Scope.hold` record one, names members. */
+const namesMembers = (set: i32): boolean => set >= 0 || set < MEMBERS_NONE
+
+/** `members`, two or more of one enum, as an id `memberSets` can record (`CheckedProgram.memberLists`). */
+const memberListId = (ctx: CheckContext, members: i32[]): i32 => {
+  ctx.program.memberLists.push(members)
+  return MEMBERS_NONE - ctx.program.memberLists.length
+}
+
+/**
  * The enum members `node` can hold, as member types, where they are known to
- * be fewer than its enum's: a member constant, a read of a member type, or a
- * union's tag. Empty for any other node.
+ * be fewer than its enum's: a member constant, a read of a member type, a
+ * union's tag, or an enum variable a test narrowed. Empty for any other node.
  */
 export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
   const bare = unwrapParens(node)
@@ -410,7 +445,15 @@ export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
     members.push(ctx.table.enumMemberOf(type, ctx.program.nodeEnumValues[bare.id], bare.text))
     return members
   }
-  const set = ctx.program.memberSets[bare.id]
+  return membersOfSet(ctx, ctx.program.memberSets[bare.id])
+}
+
+/** The members a `memberSets` id names: a list, a member type, a union's tags, or none. */
+const membersOfSet = (ctx: CheckContext, set: i32): i32[] => {
+  if (set < MEMBERS_NONE) {
+    return ctx.program.memberLists[MEMBERS_NONE - 1 - set]
+  }
+  const members: i32[] = []
   if (ctx.table.isEnumMemberType(set)) {
     members.push(set)
   } else if (ctx.table.isUnion(set)) {
@@ -419,6 +462,79 @@ export const memberSetOf = (ctx: CheckContext, node: Node): i32[] => {
     }
   }
   return members
+}
+
+/**
+ * A ternary holds what either arm holds, as TypeScript joins them, so a local
+ * that `c ? Kind.A : Kind.B` initialises or is assigned holds one of the two
+ * and a later comparison with `Kind.C` is refused. Recorded after the ternary's
+ * own read was checked, so an unannotated `const` it initialises is the enum
+ * holding those members rather than a refused `Kind.A | Kind.B`.
+ */
+const joinArmMembers = (ctx: CheckContext, expr: Node): void => {
+  const whenTrue = memberSetOf(ctx, expr.children[1])
+  const whenFalse = memberSetOf(ctx, expr.children[2])
+  if (
+    whenTrue.length === 0 ||
+    whenFalse.length === 0 ||
+    ctx.table.enumBase(whenTrue[0]) !== ctx.table.enumBase(whenFalse[0])
+  ) {
+    return
+  }
+  const joined: i32[] = []
+  for (const member of whenTrue) {
+    joined.push(member)
+  }
+  for (const member of whenFalse) {
+    let seen = false
+    for (const had of joined) {
+      if (ctx.table.memberValue(had) === ctx.table.memberValue(member)) {
+        seen = true
+      }
+    }
+    if (!seen) {
+      joined.push(member)
+    }
+  }
+  ctx.program.memberSets[expr.id] = joined.length === 1 ? joined[0] : memberListId(ctx, joined)
+}
+
+/**
+ * The members `node` can hold as one id, the way `memberSets` records them:
+ * a member type, a union whose tag it reads, or -1 when they are not known.
+ */
+const memberSetId = (ctx: CheckContext, node: Node): i32 => {
+  const members = memberSetOf(ctx, node)
+  if (members.length === 1) {
+    return members[0]
+  }
+  return members.length === 0 ? -1 : ctx.program.memberSets[unwrapParens(node).id]
+}
+
+/**
+ * Record what the enum variable `local` holds once `value` is stored in it,
+ * when its members are known (`Scope.hold`). The caller has dropped what it
+ * held before.
+ */
+export const holdMembers = (ctx: CheckContext, scope: Scope, local: Local, value: Node): void => {
+  if (!ctx.table.isEnum(local.type)) {
+    return
+  }
+  const set = memberSetId(ctx, value)
+  if (namesMembers(set)) {
+    scope.hold(local, set)
+  }
+}
+
+/**
+ * The `=` expression `expr` holds what its value does, as TypeScript types
+ * it: `k = j = Kind.B` stores `Kind.B` in `k` as in `j`.
+ */
+const carryMembers = (ctx: CheckContext, expr: Node): void => {
+  const set = memberSetId(ctx, expr.children[1])
+  if (namesMembers(set)) {
+    ctx.program.memberSets[expr.id] = set
+  }
 }
 
 /**
@@ -760,6 +876,13 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const local = scope.lookup(expr.text)
   if (local !== null) {
     ctx.program.nodeLocals[expr.id] = local
+    if (scope.exhausted(local)) {
+      return ctx.errorType(expr, exhaustedMessage(expr.text))
+    }
+    const held = scope.heldBy(local)
+    if (namesMembers(held)) {
+      ctx.program.memberSets[expr.id] = held
+    }
     return scope.typeOf(local) // the declared type, or the narrowed one inside `if (p !== null)`
   }
   // WP29: inside an arrow argument, a name of the function around it — which
@@ -770,6 +893,12 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return T_ERROR
     }
     ctx.program.nodeLocals[expr.id] = captured
+    // A `const` holds at the call what it held when it was declared.
+    const outer = captured.captureOf
+    const held = outer === null ? -1 : ctx.arrowOuterScopes[0].heldBy(outer)
+    if (namesMembers(held)) {
+      ctx.program.memberSets[expr.id] = held
+    }
     return captured.type
   }
   // WP29: a compile-time function parameter names a callee, not a value.
@@ -963,6 +1092,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
       return ctx.errorType(target, `Cannot assign to \`${local.name}\` because it is a ${what}`)
     }
     scope.clearNarrowing(local)
+    clearPaths(ctx, target, scope)
   }
   return type
 }
@@ -972,7 +1102,7 @@ const checkIncrement = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
  * `isAssignment` over *token kinds*; this one reads the operator text a
  * `N_BINARY` node carries, which is what the checker has.
  */
-const writesLeft = (op: string): boolean =>
+export const writesLeft = (op: string): boolean =>
   op === "=" || (op.length > 1 && op.endsWith("=") && !yieldsBool(op))
 
 /**
@@ -1802,6 +1932,10 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
     narrow(ctx, cond.children[1], scope, whenTrue)
     return
   }
+  if (op === "&&" || op === "||") {
+    narrowEither(ctx, cond, scope, whenTrue)
+    return
+  }
   if (op !== "===" && op !== "!==") {
     return
   }
@@ -1812,6 +1946,7 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   const rightAbsent = right.kind === N_NULL || isUndefinedValue(right, scope)
   const leftAbsent = left.kind === N_NULL || isUndefinedValue(left, scope)
   if (!rightAbsent && !leftAbsent) {
+    narrowTag(ctx, cond, scope, whenTrue)
     return
   }
   const variable = rightAbsent ? left : right
@@ -1838,6 +1973,640 @@ const narrowBinary = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   if (narrows) {
     scope.narrow(local, present)
   }
+}
+
+/**
+ * `s.kind === Kind.Circle`, either way round, and `!==`: a test of a union
+ * variable's tag against one member narrows the variable to the variants
+ * that carry it where the test holds, and to the rest where it does not, as
+ * TypeScript does. Against a value that may be one of several members, an
+ * enum variable `k` holding `Kind.A | Kind.B`, only the side where they are
+ * equal narrows: there the tag is one of `k`'s members, and where they differ
+ * it may still be any. Narrowed to one variant, `s` is that class, and `s.kind`
+ * is its one member, so a later comparison the first one decided is the
+ * disjoint comparison `checkEquality` already refuses.
+ */
+const narrowTag = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
+  const leftTag = tagVariable(ctx, cond.children[0], scope)
+  const local = leftTag !== null ? leftTag : tagVariable(ctx, cond.children[1], scope)
+  if (local === null) {
+    narrowEnumTest(ctx, cond, scope, whenTrue)
+    return
+  }
+  const other = leftTag !== null ? cond.children[1] : cond.children[0]
+  const members = memberSetOf(ctx, other)
+  const keep = cond.text === "===" ? whenTrue : !whenTrue
+  if (members.length === 1 || (members.length > 1 && keep)) {
+    narrowToTags(ctx, scope, local, members, keep)
+  }
+}
+
+/**
+ * `k === Kind.A`, either way round, and `!==`, where `k` is an enum variable:
+ * the test narrows the members `k` can hold where it holds and where it does
+ * not, as TypeScript does, so a later comparison the first one decided is the
+ * disjoint comparison `checkEquality` refuses.
+ */
+const narrowEnumTest = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
+  const leftVar = enumVariable(ctx, cond.children[0], scope)
+  const local = leftVar !== null ? leftVar : enumVariable(ctx, cond.children[1], scope)
+  if (local === null) {
+    return
+  }
+  const members = memberSetOf(ctx, leftVar !== null ? cond.children[1] : cond.children[0])
+  const keep = cond.text === "===" ? whenTrue : !whenTrue
+  if (members.length === 1 || (members.length > 1 && keep)) {
+    narrowHeld(ctx, scope, local, members, keep)
+  }
+}
+
+/**
+ * What a test reads through `(e)` and an assignment: `(t = next()).kind`
+ * tests `t`, whose new value the assignment answers, as TypeScript narrows it.
+ * A compound assignment does not count.
+ */
+const testedRead = (node: Node): Node => {
+  let read = unwrapParens(node)
+  while (read.kind === N_BINARY && read.text === "=") {
+    read = unwrapParens(read.children[0])
+  }
+  return read
+}
+
+/** The local or parameter `node` names when it is declared as an enum, or `null`. */
+export const enumVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
+  const read = testedRead(node)
+  if (read.kind !== N_IDENT) {
+    // A path stands for a variable of its own, which starts out holding what
+    // the read does: a union's tag, the tags of the union's variants.
+    const path = pathVariable(ctx, read, scope, ctx.program.nodeTypes[read.id], true)
+    const set = ctx.program.memberSets[read.id]
+    if (path !== null && scope.heldBy(path) === -1 && namesMembers(set)) {
+      scope.hold(path, set)
+    }
+    return path
+  }
+  const local = scope.lookup(read.text)
+  return local !== null && ctx.table.isEnum(local.type) ? local : null
+}
+
+/**
+ * The key of the property path `node` reads, from the variable it starts at:
+ * `@.s.kind` for `h.s.kind`, `@[0].kind` for `xs[0].kind`, `@` for the
+ * variable itself. `""` when `node` is no such path: an optional chain, an
+ * index `indexKey` keys nothing, a call.
+ */
+const pathKey = (ctx: CheckContext, node: Node, scope: Scope): string => {
+  const read = unwrapParens(node)
+  if (read.kind === N_IDENT || read.kind === N_THIS) {
+    return "@"
+  }
+  if ((read.flags & FLAG_OPTIONAL) !== 0) {
+    return ""
+  }
+  let base = ""
+  if (read.kind === N_MEMBER) {
+    base = pathKey(ctx, read.children[0], scope)
+    return base === "" ? "" : `${base}.${read.text}`
+  }
+  if (read.kind !== N_INDEX) {
+    return ""
+  }
+  const index = indexKey(ctx, read.children[1], scope)
+  if (index === "") {
+    return ""
+  }
+  base = pathKey(ctx, read.children[0], scope)
+  return base === "" ? "" : `${base}[${index}]`
+}
+
+/**
+ * What the index `index` of a property path is keyed as, as TypeScript keys
+ * an element access it narrows: a number literal as its value, so `xs[0x1]`
+ * is `xs[1]`, and a name as the variable it denotes when that variable holds
+ * one value while it is in scope (`Local.pathIndex`) — the number a `const`
+ * is initialised with, so `xs[i]` is `xs[0]` after `const i = 0`, and for a
+ * parameter, any other `const` or a `let` its block never assigns, the
+ * variable itself. A module constant is keyed the same way: by the number it
+ * is initialised with, so `xs[IDX]` is `xs[0]` after `const IDX: i32 = 0`,
+ * and otherwise by the constant itself. `""` for anything else: a `let` that
+ * is assigned, a name in parentheses, any other expression.
+ */
+const indexKey = (ctx: CheckContext, index: Node, scope: Scope): string => {
+  if (index.kind === N_NUMBER) {
+    return numberKey(index.text)
+  }
+  if (index.kind !== N_IDENT) {
+    return ""
+  }
+  const local = sourceLocal(scope.lookup(index.text))
+  if (local === null) {
+    const constant = ctx.program.constant(index.text)
+    if (constant === null) {
+      return ""
+    }
+    const literal = numberLiteralName(constant.decl.children[2])
+    return literal !== "" ? literal : `#${constant.name}@${constant.origin.path}`
+  }
+  if (local.pathIndex === "" && !local.mutable) {
+    giveIndexKey(ctx, local)
+  }
+  return local.pathIndex
+}
+
+/**
+ * The name TypeScript gives the literal type of the initialiser `node` when
+ * it keys an index by a `const` holding it: a number, signed or in
+ * parentheses, as its value, so `-1` is `"-1"` and `-0` is `"0"`, and a
+ * `const` whose own type is such a literal (`Local.literalKey`) as that
+ * literal. `""` for anything else.
+ */
+export const literalIndexName = (node: Node, scope: Scope): string => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_IDENT) {
+    return numberLiteralName(read)
+  }
+  const local = sourceLocal(scope.lookup(read.text))
+  return local === null ? "" : local.literalKey
+}
+
+/** `literalIndexName` for a number literal, alone or under a unary `-` or `+`; `""` for anything else. */
+const numberLiteralName = (node: Node): string => {
+  const read = unwrapParens(node)
+  if (read.kind === N_NUMBER) {
+    return numberKey(read.text)
+  }
+  if (
+    read.kind !== N_UNARY ||
+    (read.text !== "-" && read.text !== "+") ||
+    read.children[0].kind !== N_NUMBER
+  ) {
+    return ""
+  }
+  const value = numberKey(read.children[0].text)
+  return read.text === "+" || value === "0" ? value : `-${value}`
+}
+
+/** A number literal's text as an index key: an integer as its value, so `0x1`, `1` and `1e0` are one key. */
+const numberKey = (text: string): string => (text.indexOf(".") >= 0 ? text : `${parseIntegerLiteral(text)}`)
+
+/** Key every index through `local` by the variable itself (`Local.pathIndex`). */
+export const giveIndexKey = (ctx: CheckContext, local: Local): void => {
+  local.pathIndex = `$${ctx.pathIndexCount}`
+  ctx.pathIndexCount = ctx.pathIndexCount + 1
+}
+
+/**
+ * Whether anything in `node` assigns or steps the variable `name` denotes
+ * where `node` stands, a closure's body included: a block, a `for` head or a
+ * function that declares `name` again holds another variable, and is passed
+ * over.
+ */
+export const assignsVariable = (node: Node, name: string): boolean => {
+  let target: Node | null = null
+  if (node.kind === N_BINARY && writesLeft(node.text)) {
+    target = unwrapParens(node.children[0])
+  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    target = unwrapParens(node.children[0])
+  }
+  if (target !== null && target.kind === N_IDENT && target.text === name) {
+    return true
+  }
+  for (const child of node.children) {
+    if (bindsName(child, name)) {
+      return false
+    }
+  }
+  for (const child of node.children) {
+    if (assignsVariable(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** Whether `node` declares `name`: a parameter, a declarator, or a `let`, `const` or parameter list holding one. */
+const bindsName = (node: Node, name: string): boolean => {
+  if (node.kind === N_PARAM || node.kind === N_VAR_DECL) {
+    return node.children[0].kind === N_IDENT && node.children[0].text === name
+  }
+  if (node.kind === N_VAR) {
+    return bindsName(node.children[0], name)
+  }
+  if (node.kind !== N_LIST) {
+    return false
+  }
+  for (const child of node.children) {
+    if ((child.kind === N_PARAM || child.kind === N_VAR_DECL) && bindsName(child, name)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The variable a property path starts at: a local, a parameter, `this` as `ctx.thisRoot`, or `null`. */
+const pathRoot = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
+  let read = unwrapParens(node)
+  while (read.kind === N_MEMBER || read.kind === N_INDEX) {
+    read = unwrapParens(read.children[0])
+  }
+  if (read.kind === N_THIS) {
+    return ctx.thisRoot
+  }
+  return read.kind === N_IDENT ? scope.lookup(read.text) : null
+}
+
+/**
+ * The variable the property path `node` stands for when it reads an enum —
+ * `h.k`, `this.k`, `h.s.kind`, `xs[0].kind` — made on its first test
+ * (`create`), so that a test narrows the members the path holds as it does a
+ * local's, and a later comparison the first one decided is refused, as
+ * TypeScript refuses it (TS2367). An assignment to the path, to a path it
+ * extends or to the variable it starts at drops what it held (`clearPaths`);
+ * a call does not, as in TypeScript. `null` for anything else.
+ */
+const pathVariable = (
+  ctx: CheckContext,
+  node: Node,
+  scope: Scope,
+  type: i32,
+  create: boolean
+): Local | null => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_MEMBER && read.kind !== N_INDEX) {
+    return null
+  }
+  if (!ctx.table.isEnum(type)) {
+    return null
+  }
+  const key = pathKey(ctx, read, scope)
+  if (key === "") {
+    return null
+  }
+  const root = pathRoot(ctx, read, scope)
+  if (root === null) {
+    return null
+  }
+  let i = 0
+  while (i < ctx.pathLocals.length) {
+    if (ctx.pathRoots[i] === root && ctx.pathKeys[i] === key && ctx.pathLocals[i].type === type) {
+      return ctx.pathLocals[i]
+    }
+    i = i + 1
+  }
+  if (!create) {
+    return null
+  }
+  const local = new Local(key, type, true, STORAGE_LOCAL)
+  ctx.pathLocals.push(local)
+  ctx.pathRoots.push(root)
+  ctx.pathKeys.push(key)
+  return local
+}
+
+/**
+ * Drop what every path through `target` held: `target` was assigned, so a
+ * path it is, a path that extends it, and — for a variable — every path that
+ * starts at it no longer holds what a test proved. A target that is no path
+ * clears every path from its variable.
+ */
+const clearPaths = (ctx: CheckContext, target: Node, scope: Scope): void => {
+  const covered: Local[] = []
+  pathsCovered(ctx, target, scope, covered)
+  for (const path of covered) {
+    scope.clearNarrowing(path)
+  }
+}
+
+/**
+ * Append to `into` every path a store to `target` overwrites: the path itself,
+ * any path through it, and, for a store to the root, every path from that
+ * root, and for a store to a variable an index is keyed by, every path
+ * through that index. A store through an index `indexKey` keys nothing,
+ * `xs[j] = v`, overwrites no path, as in TypeScript.
+ */
+const pathsCovered = (ctx: CheckContext, target: Node, scope: Scope, into: Local[]): void => {
+  const root = pathRoot(ctx, target, scope)
+  if (root === null) {
+    return
+  }
+  const prefix = pathKey(ctx, target, scope)
+  if (prefix === "") {
+    return
+  }
+  let through = ""
+  const named = unwrapParens(target)
+  if (named.kind === N_IDENT && root.pathIndex.startsWith("$")) {
+    through = `[${root.pathIndex}]`
+  }
+  let i = 0
+  while (i < ctx.pathLocals.length) {
+    const key = ctx.pathKeys[i]
+    const covered =
+      prefix === "@" || key === prefix || key.startsWith(`${prefix}.`) || key.startsWith(`${prefix}[`)
+    if ((ctx.pathRoots[i] === root && covered) || (through !== "" && key.indexOf(through) >= 0)) {
+      addLocals(into, [ctx.pathLocals[i]])
+    }
+    i = i + 1
+  }
+}
+
+/** Every member of the enum `enumType` as member types, one per value; none when this module cannot name it. */
+export const enumMembersOf = (ctx: CheckContext, enumType: i32): i32[] => {
+  const members: i32[] = []
+  for (const info of ctx.program.enumList) {
+    if (info.type === enumType && members.length === 0) {
+      const seen: i32[] = []
+      for (const value of info.memberValues) {
+        if (seen.indexOf(value) < 0) {
+          seen.push(value)
+          members.push(ctx.table.enumMemberOf(info.type, value, info.memberNameOf(value)))
+        }
+      }
+    }
+  }
+  return members
+}
+
+/** The members the enum variable `local` can hold here: what tests left, or every member of its enum. */
+export const heldMembers = (ctx: CheckContext, scope: Scope, local: Local): i32[] => {
+  const held = scope.heldBy(local)
+  if (held === MEMBERS_NONE) {
+    return []
+  }
+  return namesMembers(held) ? membersOfSet(ctx, held) : enumMembersOf(ctx, local.type)
+}
+
+/**
+ * Narrow the enum variable `local` to the members it may still hold that are
+ * among `members` (`keep`), or to those that are not. One member left is also
+ * its type, `Kind.A`, which a `let` inferred from it takes, as TypeScript's
+ * does; none left is `MEMBERS_NONE`, which compares with anything, as `never`.
+ */
+export const narrowHeld = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  members: i32[],
+  keep: boolean
+): void => {
+  const current = heldMembers(ctx, scope, local)
+  const kept: i32[] = []
+  for (const member of current) {
+    let named = false
+    for (const test of members) {
+      if (ctx.table.memberValue(test) === ctx.table.memberValue(member)) {
+        named = true
+      }
+    }
+    if (named === keep) {
+      kept.push(member)
+    }
+  }
+  if (current.length === 0 || kept.length === current.length) {
+    return
+  }
+  holdKept(ctx, scope, local, kept)
+}
+
+/** Record that the enum variable `local` holds one of `kept`, fewer members than it could before. */
+export const holdKept = (ctx: CheckContext, scope: Scope, local: Local, kept: i32[]): void => {
+  if (kept.length === 1) {
+    scope.hold(local, kept[0])
+    scope.narrow(local, kept[0])
+    return
+  }
+  // A member type an earlier test narrowed it to no longer holds.
+  scope.narrow(local, local.type)
+  scope.hold(local, kept.length === 0 ? MEMBERS_NONE : memberListId(ctx, kept))
+}
+
+/** A union variable read where tag tests excluded every variant. */
+const exhaustedMessage = (name: string): string =>
+  `\`${name}\` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types \`never\` and this version has no type for`
+
+/**
+ * The variable whose tag `node` reads — `s` in `s.kind`, where `s` is a
+ * local, a parameter or `this`'s name for a union — or `null`.
+ */
+export const tagVariable = (ctx: CheckContext, node: Node, scope: Scope): Local | null => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
+    return null
+  }
+  const receiver = testedRead(read.children[0])
+  if (receiver.kind !== N_IDENT) {
+    return null
+  }
+  const local = scope.lookup(receiver.text)
+  if (local === null || scope.exhausted(local)) {
+    return null
+  }
+  const union = ctx.table.stripNull(local.type)
+  if (!ctx.table.isUnion(union) || read.text !== ctx.table.tagNameOf(union)) {
+    return null
+  }
+  const type = scope.typeOf(local)
+  return ctx.table.isUnion(type) || ctx.table.hasVariant(union, type) ? local : null
+}
+
+/**
+ * Narrow the union variable `local` to the variants it may still be whose
+ * tag is among `members` (`keep`), or to those whose tag is not: one variant
+ * reads as its class, several as the union of them, none as `NARROWED_NONE`.
+ * A variable already narrowed to one variant is that variant alone.
+ */
+export const narrowToTags = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  members: i32[],
+  keep: boolean
+): void => {
+  const union = ctx.table.stripNull(local.type)
+  const current = scope.typeOf(local)
+  const variants = ctx.table.variantsOf(union)
+  const tags = ctx.table.tagsOf(union)
+  const keptVariants: i32[] = []
+  const keptTags: i32[] = []
+  let possible = 0
+  let i = 0
+  while (i < variants.length && i < tags.length) {
+    const variant = variants[i]
+    const tag = tags[i]
+    const left = ctx.table.isUnion(current) ? ctx.table.hasVariant(current, variant) : current === variant
+    if (left) {
+      possible = possible + 1
+      let named = false
+      for (const member of members) {
+        if (ctx.table.memberValue(member) === ctx.table.memberValue(tag)) {
+          named = true
+        }
+      }
+      if (named === keep) {
+        keptVariants.push(variant)
+        keptTags.push(tag)
+      }
+    }
+    i = i + 1
+  }
+  if (keptVariants.length === possible) {
+    return
+  }
+  narrowToVariants(ctx, scope, local, keptVariants, keptTags)
+}
+
+/** Narrow the union variable `local` to `kept`, variants of its union in its order, with their tags. */
+export const narrowToVariants = (
+  ctx: CheckContext,
+  scope: Scope,
+  local: Local,
+  keptVariants: i32[],
+  keptTags: i32[]
+): void => {
+  const union = ctx.table.stripNull(local.type)
+  if (keptVariants.length === 0) {
+    scope.narrow(local, NARROWED_NONE)
+  } else if (keptVariants.length === 1) {
+    scope.narrow(local, keptVariants[0])
+  } else {
+    scope.narrow(
+      local,
+      ctx.table.unionOf(keptVariants, keptTags, ctx.table.tagEnumOf(union), ctx.table.tagNameOf(union))
+    )
+  }
+}
+
+/**
+ * The true side of `a || b`, and the false side of `a && b`: either `a`'s
+ * side holds, or `a`'s other side and then `b`'s. A union variable is
+ * narrowed to the variants either side leaves it, an enum variable to the
+ * members either side leaves it, as TypeScript joins them, so
+ * `k === Kind.A || k === Kind.B` leaves `k` one of the two and a later
+ * `k === Kind.C` is the disjoint comparison `checkEquality` refuses. A
+ * variable one side does not narrow keeps what it held before.
+ */
+const narrowEither = (ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void => {
+  const first = scope.child()
+  narrow(ctx, cond.children[0], first, whenTrue)
+  const second = scope.child()
+  narrow(ctx, cond.children[0], second, !whenTrue)
+  clearNarrowingsAssignedIn(ctx, cond.children[1], second)
+  narrow(ctx, cond.children[1], second, whenTrue)
+  const tested: Local[] = []
+  addLocals(tested, first.narrowedVars)
+  addLocals(tested, first.heldVars)
+  addLocals(tested, second.narrowedVars)
+  addLocals(tested, second.heldVars)
+  for (const local of tested) {
+    if (ctx.table.isEnum(local.type)) {
+      joinHeld(ctx, scope, local, first, second)
+    } else {
+      joinVariants(ctx, scope, local, first, second)
+    }
+  }
+}
+
+/** Append to `into` each of `locals` it does not already have. */
+export const addLocals = (into: Local[], locals: Local[]): void => {
+  for (const local of locals) {
+    let seen = false
+    for (const had of into) {
+      if (had === local) {
+        seen = true
+      }
+    }
+    if (!seen) {
+      into.push(local)
+    }
+  }
+}
+
+/** Narrow the enum variable `local` to the members `first` or `second` leaves it, when fewer than it holds. */
+const joinHeld = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
+  const current = heldMembers(ctx, scope, local)
+  const fromFirst = heldMembers(ctx, first, local)
+  const fromSecond = heldMembers(ctx, second, local)
+  const kept: i32[] = []
+  for (const member of current) {
+    let named = false
+    for (const other of fromFirst) {
+      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+        named = true
+      }
+    }
+    for (const other of fromSecond) {
+      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+        named = true
+      }
+    }
+    if (named) {
+      kept.push(member)
+    }
+  }
+  if (current.length === 0 || kept.length === current.length) {
+    return
+  }
+  holdKept(ctx, scope, local, kept)
+}
+
+/**
+ * The variants of `union` a variable of type `type` may be: `type` itself
+ * when it is one, a narrowed union's variants, or none when `type` is not
+ * made of them (`union | null`).
+ */
+const variantsIn = (ctx: CheckContext, union: i32, type: i32): i32[] => {
+  const variants: i32[] = []
+  if (ctx.table.isUnion(type)) {
+    for (const variant of ctx.table.variantsOf(type)) {
+      variants.push(variant)
+    }
+  } else if (ctx.table.hasVariant(union, type)) {
+    variants.push(type)
+  }
+  return variants
+}
+
+/** Narrow the union variable `local` to the variants `first` or `second` leaves it, when fewer than it may be. */
+const joinVariants = (ctx: CheckContext, scope: Scope, local: Local, first: Scope, second: Scope): void => {
+  const union = ctx.table.stripNull(local.type)
+  if (!ctx.table.isUnion(union) || scope.exhausted(local)) {
+    return
+  }
+  // A side that excluded every variant adds none to the join.
+  const firstNone = first.exhausted(local)
+  const secondNone = second.exhausted(local)
+  const fromFirst: i32[] = firstNone ? [] : variantsIn(ctx, union, first.typeOf(local))
+  const fromSecond: i32[] = secondNone ? [] : variantsIn(ctx, union, second.typeOf(local))
+  // A side that does not leave the variable a set of variants leaves it
+  // whatever it was declared, and so does the join.
+  if ((fromFirst.length === 0 && !firstNone) || (fromSecond.length === 0 && !secondNone)) {
+    return
+  }
+  const variants = ctx.table.variantsOf(union)
+  const tags = ctx.table.tagsOf(union)
+  const keptVariants: i32[] = []
+  const keptTags: i32[] = []
+  let i = 0
+  while (i < variants.length && i < tags.length) {
+    const variant = variants[i]
+    const tag = tags[i]
+    if (fromFirst.indexOf(variant) >= 0 || fromSecond.indexOf(variant) >= 0) {
+      keptVariants.push(variant)
+      keptTags.push(tag)
+    }
+    i = i + 1
+  }
+  const current = variantsIn(ctx, union, scope.typeOf(local))
+  if (current.length > 0 && keptVariants.length === current.length) {
+    return
+  }
+  if (keptVariants.length === variants.length) {
+    // Both sides read the tag, so neither leaves it `null`.
+    scope.narrow(local, union)
+    return
+  }
+  narrowToVariants(ctx, scope, local, keptVariants, keptTags)
 }
 
 // ---- `V | undefined` (WP32) ---------------------------------------------------------
@@ -2217,11 +2986,20 @@ export const resolveMaybeAnnotation = (ctx: CheckContext, annotation: Node): i32
 
 const checkAssignment = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
   const target = expr.children[0]
-  if (target.kind === N_MEMBER) {
-    return checkMemberAssignment(ctx, expr, scope)
-  }
-  if (target.kind === N_INDEX) {
-    return checkIndexAssignment(ctx, expr, scope)
+  if (target.kind === N_MEMBER || target.kind === N_INDEX) {
+    const stored =
+      target.kind === N_MEMBER
+        ? checkMemberAssignment(ctx, expr, scope)
+        : checkIndexAssignment(ctx, expr, scope)
+    clearPaths(ctx, target, scope)
+    const path = pathVariable(ctx, target, scope, stored, expr.text === "=")
+    if (path !== null && expr.text === "=") {
+      holdMembers(ctx, scope, path, expr.children[1])
+    }
+    if (expr.text === "=") {
+      carryMembers(ctx, expr)
+    }
+    return stored
   }
   if (target.kind !== N_IDENT) {
     return ctx.errorType(target, "Only simple variables can be assigned")
@@ -2264,7 +3042,10 @@ export const assignInto = (
     const rhs = checkExpression(ctx, value, scope, slot)
     if (local !== null) {
       scope.clearNarrowing(local)
+      clearPaths(ctx, expr.children[0], scope)
+      holdMembers(ctx, scope, local, value)
     }
+    carryMembers(ctx, expr)
     if (rhs !== T_ERROR && slot !== T_ERROR && !ctx.table.assignable(rhs, slot)) {
       const got = ctx.table.typeName(rhs)
       return ctx.errorType(value, `Cannot assign ${got} to ${ctx.table.typeName(slot)} ${what} \`${name}\``)
@@ -2286,6 +3067,7 @@ export const assignInto = (
     const bits = checkExpression(ctx, value, scope, operand)
     if (local !== null) {
       scope.clearNarrowing(local)
+      clearPaths(ctx, expr.children[0], scope)
     }
     // The target is read and written without being checked as an expression,
     // so its range is recorded on it here for `rangedStoreOf` to find.
@@ -2318,6 +3100,7 @@ export const assignInto = (
   )
   if (local !== null) {
     scope.clearNarrowing(local)
+    clearPaths(ctx, expr.children[0], scope)
   }
   if (target === T_ERROR || rhs === T_ERROR || slot === T_ERROR) {
     return slot
@@ -2589,16 +3372,17 @@ const checkDirectCall = (
  */
 export const clearNarrowingsAssignedIn = (ctx: CheckContext, node: Node, scope: Scope): void => {
   if (node.kind === N_BINARY && writesLeft(node.text)) {
-    clearTarget(node.children[0], scope)
+    clearTarget(ctx, node.children[0], scope)
   } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
-    clearTarget(node.children[0], scope)
+    clearTarget(ctx, node.children[0], scope)
   }
   for (const child of node.children) {
     clearNarrowingsAssignedIn(ctx, child, scope)
   }
 }
 
-const clearTarget = (target: Node, scope: Scope): void => {
+const clearTarget = (ctx: CheckContext, target: Node, scope: Scope): void => {
+  clearPaths(ctx, target, scope)
   if (target.kind !== N_IDENT) {
     return
   }
@@ -2606,4 +3390,190 @@ const clearTarget = (target: Node, scope: Scope): void => {
   if (local !== null) {
     scope.clearNarrowing(local)
   }
+}
+
+/** Append to `into` every local `node` assigns, as `clearNarrowingsAssignedIn` finds them. */
+export const localsAssignedIn = (ctx: CheckContext, node: Node, scope: Scope, into: Local[]): void => {
+  let target: Node | null = null
+  if (node.kind === N_BINARY && writesLeft(node.text)) {
+    target = node.children[0]
+  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    target = node.children[0]
+  }
+  if (target !== null && target.kind === N_IDENT) {
+    const local = scope.lookup(target.text)
+    if (local !== null) {
+      addLocals(into, [local])
+    }
+  }
+  if (target !== null) {
+    pathsCovered(ctx, target, scope, into)
+  }
+  for (const child of node.children) {
+    localsAssignedIn(ctx, child, scope, into)
+  }
+}
+
+/**
+ * Record in `into` what each of `locals` reads as in `from`: its narrowing,
+ * whether it has none left, and the members it holds. `into` may be a scope
+ * of its own, standing for one point of the program, or the scope those
+ * readings are to hold in again.
+ */
+export const captureNarrowings = (locals: Local[], from: Scope, into: Scope): void => {
+  for (const local of locals) {
+    into.narrow(local, from.exhausted(local) ? NARROWED_NONE : from.typeOf(local))
+    into.hold(local, from.heldBy(local))
+  }
+}
+
+/**
+ * After an `if` both of whose arms fall through, each of `locals` — the
+ * variables an arm assigns — is what either arm left it, as TypeScript joins
+ * them: `first` and `second` are what the arms ended with
+ * (`captureNarrowings`), and `scope` has dropped what it held before.
+ */
+export const joinArms = (
+  ctx: CheckContext,
+  locals: Local[],
+  scope: Scope,
+  first: Scope,
+  second: Scope
+): void => {
+  for (const local of locals) {
+    scope.clearNarrowing(local)
+    if (ctx.table.isEnum(local.type)) {
+      joinHeld(ctx, scope, local, first, second)
+    } else {
+      joinVariants(ctx, scope, local, first, second)
+    }
+  }
+}
+
+/**
+ * The members `value` holds, read from the source before it is checked: an
+ * enum's member, `Kind.A`, either arm of a ternary of them, or what an
+ * assignment stores. Empty when that is not known.
+ */
+const writtenMembers = (ctx: CheckContext, value: Node, scope: Scope): i32[] => {
+  const bare = unwrapParens(value)
+  const members: i32[] = []
+  if (bare.kind === N_MEMBER && !isOptionalChain(bare)) {
+    const receiver = bare.children[0]
+    if (receiver.kind !== N_IDENT || scope.lookup(receiver.text) !== null) {
+      return members
+    }
+    const info = ctx.program.enumNamed(receiver.text)
+    if (info !== null && info.hasMember(bare.text)) {
+      const at = info.memberValue(bare.text)
+      members.push(ctx.table.enumMemberOf(info.type, at, info.memberNameOf(at)))
+    }
+    return members
+  }
+  if (bare.kind === N_CONDITIONAL) {
+    const whenTrue = writtenMembers(ctx, bare.children[1], scope)
+    const whenFalse = writtenMembers(ctx, bare.children[2], scope)
+    if (whenTrue.length > 0 && whenFalse.length > 0) {
+      for (const member of whenTrue) {
+        members.push(member)
+      }
+      for (const member of whenFalse) {
+        members.push(member)
+      }
+    }
+    return members
+  }
+  if (bare.kind === N_BINARY && bare.text === "=") {
+    return writtenMembers(ctx, bare.children[1], scope)
+  }
+  return members
+}
+
+/** Whether `local`'s stores in `node` each write members `writtenMembers` reads, adding them to `into`. */
+const collectWritten = (ctx: CheckContext, node: Node, local: Local, scope: Scope, into: i32[]): boolean => {
+  let target: Node | null = null
+  let stored: Node | null = null
+  if (node.kind === N_BINARY && writesLeft(node.text)) {
+    target = node.children[0]
+    stored = node.text === "=" ? node.children[1] : null
+  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    target = node.children[0]
+  }
+  let named: Local | null = null
+  if (target !== null && target.kind === N_IDENT) {
+    named = scope.lookup(target.text)
+  }
+  if (target !== null && !(named !== null && named === local)) {
+    // A store through a path names it only when it is that path: one to a
+    // prefix or the root writes a value this cannot read.
+    const covered: Local[] = []
+    pathsCovered(ctx, target, scope, covered)
+    if (covered.indexOf(local) >= 0) {
+      if (pathKey(ctx, target, scope) !== local.name) {
+        return false
+      }
+      named = local
+    }
+  }
+  if (named !== null && named === local) {
+    let members: i32[] = []
+    if (stored !== null) {
+      members = writtenMembers(ctx, stored, scope)
+    }
+    if (members.length === 0) {
+      return false
+    }
+    for (const member of members) {
+      into.push(member)
+    }
+  }
+  for (const child of node.children) {
+    if (!collectWritten(ctx, child, local, scope, into)) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * What each enum variable `node` — a loop or a `switch` — assigns may hold
+ * anywhere in it and after it: what it held before, or any member a store in
+ * it writes. TypeScript follows each path and may know fewer; this is every
+ * value the variable can have, so a comparison refused against it is one
+ * TypeScript refuses too. Read before `node` is checked, and taken on with
+ * `Scope.adopt` once its stores have dropped what the variable held; a
+ * variable a store of anything else assigns is left out.
+ */
+export const heldAcross = (ctx: CheckContext, node: Node, scope: Scope): Scope => {
+  const held = new Scope(null)
+  const assigned: Local[] = []
+  localsAssignedIn(ctx, node, scope, assigned)
+  for (const local of assigned) {
+    const written: i32[] = []
+    if (ctx.table.isEnum(local.type) && collectWritten(ctx, node, local, scope, written)) {
+      const kept: i32[] = []
+      for (const member of enumMembersOf(ctx, local.type)) {
+        let named = false
+        for (const other of heldMembers(ctx, scope, local)) {
+          if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+            named = true
+          }
+        }
+        for (const other of written) {
+          if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+            named = true
+          }
+        }
+        if (named) {
+          kept.push(member)
+        }
+      }
+      if (kept.length === 1) {
+        held.hold(local, kept[0])
+      } else if (kept.length > 1) {
+        held.hold(local, memberListId(ctx, kept))
+      }
+    }
+  }
+  return held
 }
