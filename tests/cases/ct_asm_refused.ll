@@ -392,6 +392,149 @@ ovf.fail:
   unreachable
 }
 
+define noundef i32 @leakyDivstep(i32 noundef %zeta, i32 noundef %f0, i32 noundef %g0, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %t) #1 {
+entry:
+  %z.addr = alloca i32, align 4
+  %f.addr = alloca i32, align 4
+  %g.addr = alloca i32, align 4
+  %u.addr = alloca i32, align 4
+  %v.addr = alloca i32, align 4
+  %q.addr = alloca i32, align 4
+  %r.addr = alloca i32, align 4
+  %tf.addr = alloca i32, align 4
+  %tu.addr = alloca i32, align 4
+  %tv.addr = alloca i32, align 4
+  store i32 %zeta, i32* %z.addr, align 4
+  store i32 %f0, i32* %f.addr, align 4
+  store i32 %g0, i32* %g.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %1 = load i8*, i8** %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = bitcast i8* %1 to i32*
+  %3 = getelementptr inbounds i32, i32* %2, i64 0
+  %4 = load i32, i32* %3, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %4, i32* %u.addr, align 4
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 1
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %9, i32* %v.addr, align 4
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %12 = bitcast i8* %11 to i32*
+  %13 = getelementptr inbounds i32, i32* %12, i64 2
+  %14 = load i32, i32* %13, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %14, i32* %q.addr, align 4
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %16 = load i8*, i8** %15, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %17 = bitcast i8* %16 to i32*
+  %18 = getelementptr inbounds i32, i32* %17, i64 3
+  %19 = load i32, i32* %18, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store i32 %19, i32* %r.addr, align 4
+  %20 = load i32, i32* %g.addr, align 4
+  %21 = and i32 %20, 1
+  %22 = icmp ne i32 %21, 0
+  br i1 %22, label %if.then, label %if.else
+
+if.then:
+  %23 = load i32, i32* %z.addr, align 4
+  %24 = icmp slt i32 %23, 0
+  br i1 %24, label %if.then.1, label %if.else.1
+
+if.then.1:
+  %25 = load i32, i32* %f.addr, align 4
+  store i32 %25, i32* %tf.addr, align 4
+  %26 = load i32, i32* %u.addr, align 4
+  store i32 %26, i32* %tu.addr, align 4
+  %27 = load i32, i32* %v.addr, align 4
+  store i32 %27, i32* %tv.addr, align 4
+  %28 = load i32, i32* %g.addr, align 4
+  store i32 %28, i32* %f.addr, align 4
+  %29 = load i32, i32* %q.addr, align 4
+  store i32 %29, i32* %u.addr, align 4
+  %30 = load i32, i32* %r.addr, align 4
+  store i32 %30, i32* %v.addr, align 4
+  %31 = load i32, i32* %g.addr, align 4
+  %32 = load i32, i32* %tf.addr, align 4
+  %33 = sub i32 %31, %32
+  store i32 %33, i32* %g.addr, align 4
+  %34 = load i32, i32* %q.addr, align 4
+  %35 = load i32, i32* %tu.addr, align 4
+  %36 = sub i32 %34, %35
+  store i32 %36, i32* %q.addr, align 4
+  %37 = load i32, i32* %r.addr, align 4
+  %38 = load i32, i32* %tv.addr, align 4
+  %39 = sub i32 %37, %38
+  store i32 %39, i32* %r.addr, align 4
+  %40 = load i32, i32* %z.addr, align 4
+  %41 = sub i32 0, %40
+  %42 = sub i32 %41, 2
+  store i32 %42, i32* %z.addr, align 4
+  br label %if.end.1
+
+if.else.1:
+  %43 = load i32, i32* %g.addr, align 4
+  %44 = load i32, i32* %f.addr, align 4
+  %45 = add i32 %43, %44
+  store i32 %45, i32* %g.addr, align 4
+  %46 = load i32, i32* %q.addr, align 4
+  %47 = load i32, i32* %u.addr, align 4
+  %48 = add i32 %46, %47
+  store i32 %48, i32* %q.addr, align 4
+  %49 = load i32, i32* %r.addr, align 4
+  %50 = load i32, i32* %v.addr, align 4
+  %51 = add i32 %49, %50
+  store i32 %51, i32* %r.addr, align 4
+  %52 = load i32, i32* %z.addr, align 4
+  %53 = sub i32 %52, 1
+  store i32 %53, i32* %z.addr, align 4
+  br label %if.end.1
+
+if.end.1:
+  br label %if.end
+
+if.else:
+  %54 = load i32, i32* %z.addr, align 4
+  %55 = sub i32 %54, 1
+  store i32 %55, i32* %z.addr, align 4
+  br label %if.end
+
+if.end:
+  %56 = load i32, i32* %u.addr, align 4
+  %57 = shl i32 %56, 1
+  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %59 = load i8*, i8** %58, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %60 = bitcast i8* %59 to i32*
+  %61 = getelementptr inbounds i32, i32* %60, i64 0
+  store i32 %57, i32* %61, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %62 = load i32, i32* %v.addr, align 4
+  %63 = shl i32 %62, 1
+  %64 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %65 = load i8*, i8** %64, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %66 = bitcast i8* %65 to i32*
+  %67 = getelementptr inbounds i32, i32* %66, i64 1
+  store i32 %63, i32* %67, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %68 = load i32, i32* %q.addr, align 4
+  %69 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %70 = load i8*, i8** %69, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %71 = bitcast i8* %70 to i32*
+  %72 = getelementptr inbounds i32, i32* %71, i64 2
+  store i32 %68, i32* %72, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %73 = load i32, i32* %r.addr, align 4
+  %74 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %75 = load i8*, i8** %74, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %76 = bitcast i8* %75 to i32*
+  %77 = getelementptr inbounds i32, i32* %76, i64 3
+  store i32 %73, i32* %77, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %78 = load i32, i32* %z.addr, align 4
+  %79 = load i32, i32* %f.addr, align 4
+  %80 = xor i32 %78, %79
+  %81 = load i32, i32* %g.addr, align 4
+  %82 = lshr i32 %81, 1
+  %83 = xor i32 %80, %82
+  ret i32 %83
+}
+
 attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind }

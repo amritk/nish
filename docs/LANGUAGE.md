@@ -4412,6 +4412,24 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `const z = c ? { v: 7 } : null` is still
   `Object literal needs a contextual class or interface type`
   (`reject_obj_lit_nullable_context`).
+- A **class with methods** is made only by `new`. Natively a literal would
+  take the class's layout and its methods, but under Node it is a plain
+  object, and a call on it throws, so wherever a context above types a
+  literal as such a class it is
+  `` `Counter` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new Counter(...)` ``
+  (NL2556; `tests/cases/reject_class_literal_decl`, `…_return`,
+  `…_arrow_body`, `…_call_arg`, `…_method_arg`, `…_new_arg`,
+  `…_array_elem`, `…_push`, `…_index_assign`, `…_map_set`,
+  `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`, `…_alias`,
+  `…_coalesce`, `…_coalesce_chain`, `…_coalesce_field`, `…_coalesce_call`,
+  `…_coalesce_map`, `…_coalesce_optional`, `…_coalesce_ternary`,
+  `…_equality`, `…_index_of`, `…_math_max`, `…_fn_param`, `…_unary`,
+  `…_compound_bitwise`, `…_compound_arith`, `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
+  `…_imported`). A generic method counts as a method; a constructor does
+  not. A class with fields alone, and an interface, still take a literal
+  (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
+  their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
+  keeps NL2545.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -8220,7 +8238,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`) |
+| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
@@ -8293,6 +8311,20 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   (`tests/link/caps_policy_deny_unsafe`) — and never allowed: the import is
   the opt-in, so an allowlist does not refuse it and `--allow unsafe` is a
   usage error.
+- `unsafe` travels like every other capability — to each caller, however far
+  up, and to the module and package above it, including a dependency that
+  imports `nish:unsafe` when the entry package does not — and keeps a program
+  deterministic ("capabilities: `unsafe` reaches a caller two frames up, with
+  the whole chain as its witness", "capabilities: a dependency that imports
+  `nish:unsafe` gives `unsafe` to its package and to the entry that calls
+  it"). The deprecated `--wrapping` and `--unchecked-indexing` carry no
+  `unsafe`, so `--deny unsafe` passes them: they reach only the entry package
+  and each compile that passes one prints its deprecation note (NL9014).
+  `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+  which `nish --fix` rewrites into `uncheckedGet` and `uncheckedSet` calls
+  that do carry it; `--wrapping` has no fixer, and its note names the
+  `nish:unsafe` exports to write instead ("capabilities: `--wrapping` and
+  `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them").
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
@@ -9749,6 +9781,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
 | an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
 | an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
+| an object literal typed as a class with methods | `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` `` | `reject_class_literal_*`, `nl2556_class_literal` |
 | more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
 | a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
 | `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |

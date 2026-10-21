@@ -1,0 +1,152 @@
+split /search?q=1 -> 7
+split /plain -> -1
+split ? -> 0
+split /a?b?c -> 2
+split /frag#x?y -> 7
+split window -> -1 3
+default cap 100 is URL_DEFAULT_MAX_PAIRS true
+pairs a&b= -> [a!] [b=] end 0 again 0 failed 0
+pairs a=b=c -> [a=b=c] end 0 again 0 failed 0
+pairs &&a&&b=1&& -> [a!] [b=1] end 0 again 0 failed 0
+pairs  -> end 0 again 0 failed 0
+pairs & -> end 0 again 0 failed 0
+pairs =&=x -> [=] [=x] end 0 again 0 failed 0
+pairs k=1&k=2&k=3 -> [k=1] [k=2] [k=3] end 0 again 0 failed 0
+cap3 a&b&c -> [a!] [b!] [c!] end 0 again 0 failed 0
+cap3 a&&b&c& -> [a!] [b!] [c!] end 0 again 0 failed 0
+cap3 a&b&c&d -> [a!] [b!] [c!] end -4 again -4 failed -4
+cap-1  -> end 0 again 0 failed 0
+cap-1 a -> end -4 again -4 failed -4
+reset -4 1 1 0
+cap100 100 failed 0
+cap101 100 failed -4
+find name -> x has true
+find name -> y has true
+find name ->  has false
+find name end 0
+find a b -> 1 1
+find %zz -> 0
+find nam -> 0
+find ab -> 0
+find name over na -> 0
+find past cap -> -4
+strict a+b%20c -> 5 at -1 612b622063
+form a+b%20c -> 5 at -1 6120622063
+hex %4a%4A%7e%7E%ff -> 5 at -1 4a4a7e7eff
+strict %zz -> -1 at 0 -
+strict ab%4 -> -1 at 2 -
+strict ab% -> -1 at 2 -
+strict a%g1 -> -1 at 1 -
+strict %00 -> -2 at 0 -
+nul %00 -> 1 at -1 00
+lenient %zz%4% -> 6 at -1 257a7a253425
+lenient %%41 -> 2 at -1 2541
+lenient %00 -> -2 at 0 -
+all a+%zz%00%41 -> 7 at -1 6120257a7a0041
+strict %:1 -> -1 at 0 -
+strict %@1 -> -1 at 0 -
+strict %`1 -> -1 at 0 -
+strict %G1 -> -1 at 0 -
+lenient %:1%@1%`1%G1 -> 12 at -1 253a31254031256031254731
+empty  -> 0 at -1 
+utf8 %E2%82%AC%C3 -> 4 at -1 e282acc3
+space small -> -3 at 2 6162
+space exact -> 3 616241
+space at 2 -> 3 0000616241
+space at 3 -> -3
+space at end -> 0
+window -> 1 41
+window cut 1 -> -1 at 2 lenient 1 25 segment -1 lenient 1 25
+window cut 2 -> -1 at 2 lenient 2 2534 segment -1 lenient 2 2534
+window query -> 1 value 2 -1 lenient 2 2534
+window find kA -> 0
+window find kA whole -> 1
+path /a%2Fb/c -> [a/b] [c] count 2 again false
+path / -> [] count 1 again false
+path  -> count 0 again false
+path /a//b/ -> [a] [] [b] [] count 4 again false
+path a+b/c%20d -> [a+b] [c d] count 2 again false
+path /x%zz/y -> [err -1] [y] count 2 again false
+path window 2 8 XX/a%2Fb/cYY -> [a/b] [c] count 2 again false
+path window 1 5 /ab/cd -> [ab] [cd] count 2 again false
+path window 2 3 x/a/b/y -> [a] [b] count 2 again false
+urlDecode "cafA+x!"
+urlDecode cafe 5
+multibyte -> 13 636166c3a920e282acf09f9880
+urlDecode "a b"
+urlDecode null
+urlDecode "%zz"
+urlDecode null
+urlDecode null
+urlDecode null
+urlDecode ""
+utf8 %C2%80 -> c280
+utf8 %DF%BF -> dfbf
+utf8 %C1%BF -> null
+utf8 %E0%A0%80 -> e0a080
+utf8 %E0%9F%BF -> null
+utf8 %E0%80%AF -> null
+utf8 %E2%82%AC -> e282ac
+utf8 %ED%9F%BF -> ed9fbf
+utf8 %ED%A0%80 -> null
+utf8 %EF%BF%BF -> efbfbf
+utf8 %F0%90%80%80 -> f0908080
+utf8 %F0%8F%BF%BF -> null
+utf8 %F0%9F%98%80 -> f09f9880
+utf8 %F4%8F%BF%BF -> f48fbfbf
+utf8 %F4%90%80%80 -> null
+utf8 %F5%80%80%80 -> null
+utf8 %E1%80%BF -> e180bf
+utf8 %E1%80%C0 -> null
+utf8 %E3%80%BF -> e380bf
+utf8 %E3%80%C0 -> null
+utf8 %E4%80%BF -> e480bf
+utf8 %E4%80%C0 -> null
+utf8 %E5%80%BF -> e580bf
+utf8 %E5%80%C0 -> null
+utf8 %E6%80%BF -> e680bf
+utf8 %E6%80%C0 -> null
+utf8 %E7%80%BF -> e780bf
+utf8 %E7%80%C0 -> null
+utf8 %E8%80%BF -> e880bf
+utf8 %E8%80%C0 -> null
+utf8 %E9%80%BF -> e980bf
+utf8 %E9%80%C0 -> null
+utf8 %EA%80%BF -> ea80bf
+utf8 %EA%80%C0 -> null
+utf8 %EB%80%BF -> eb80bf
+utf8 %EB%80%C0 -> null
+utf8 %EC%80%BF -> ec80bf
+utf8 %EC%80%C0 -> null
+utf8 %EE%80%BF -> ee80bf
+utf8 %EE%80%C0 -> null
+utf8 %F1%80%BF%80 -> f180bf80
+utf8 %F1%80%C0%80 -> null
+utf8 %F2%80%BF%80 -> f280bf80
+utf8 %F2%80%C0%80 -> null
+utf8 %F3%80%BF%80 -> f380bf80
+utf8 %F3%80%C0%80 -> null
+utf8 %E2%41%AC -> null
+utf8 %E2%82%41 -> null
+utf8 %F0%9F%41%80 -> null
+utf8 %F0%9F%98%41 -> null
+utf8 %C3 -> null
+utf8 %E2%82 -> null
+utf8 %F0%9F%98 -> null
+utf8 a%C3%A9%E2 -> null
+raw c3 -> null
+raw e282 -> null
+raw f09f98 -> null
+raw 61c3a9 -> 61c3a9
+get "J Doe"
+get ""
+get null
+get null
+get null
+get null
+get f09f9880
+get null
+get null
+get "a b+c"
+get null
+get null

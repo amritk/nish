@@ -3498,6 +3498,20 @@ class FactCollector {
   }
 }
 
+/** `sig` is a constructor whose prologue stores at least one field initialiser. */
+const initialisesFields = (sig: FunctionSig): boolean => {
+  const owner = sig.owner
+  if (sig.role !== ROLE_CONSTRUCTOR || owner === null) {
+    return false
+  }
+  for (const field of owner.fields) {
+    if (field.initializer !== null) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * Per-function facts from one walk of the body. `memory` (round 2, see
  * `analyzeFunctions`) tells the collectors which allocations are allocas and
@@ -3637,6 +3651,19 @@ const collectFacts = (
   if (body !== null) {
     collector.findPrivateArrays(body)
     collector.visit(body)
+  }
+  // A constructor's prologue stores the field initialisers, a variant's tag
+  // among them, into `this` before the body runs (`emitConstructorPrologue`),
+  // and the walk above sees only the body. Without these writes a constructor
+  // whose body never stores a field had a `readonly` `this`, and `-O2` deleted
+  // the stores (#740). Like `this.f = v` in the body, they initialise the
+  // fresh object, so they are not a shared write (`initialisesThis`).
+  if (initialisesFields(sig)) {
+    facts.effect = EFFECT_WRITE
+    const self = facts.pointerParam("this")
+    if (self !== null) {
+      self.writesThrough = true
+    }
   }
   // WP31 §9: the prologue that checks a host's arguments may take the panic
   // tail (`emitParamRangeChecks`). Its callers keep the tail they recorded for

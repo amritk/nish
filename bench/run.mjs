@@ -44,12 +44,12 @@
 //
 // The data-parallel kernels (bench/par-*.ts) are one Nish binary each, run
 // twice, as the loop (`seq`) and as the parallel form (`par`), and the two runs
-// must print the same checksum. Four of them also have Rust twins
+// must print the same checksum. Five of them also have Rust twins
 // (`std::thread::scope`, and Rayon through cargo) and Go twins (goroutines and
 // a sync.WaitGroup), timed against the Nish `par` run in interleaved rounds,
 // each beside a byte-identical copy of itself for the noise band; every twin
 // must print Nish's checksum. They run with the rest, or when `--only` names
-// one (`par` names all six), and are left out of --instructions: see
+// one (`par` names all of them), and are left out of --instructions: see
 // bench/README.md.
 //
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs
@@ -148,6 +148,11 @@ const PARALLEL = [
   {
     name: "par-histogram",
     what: "4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock",
+    twins: true,
+  },
+  {
+    name: "par-histogram-atomic",
+    what: "par-histogram with an `AtomicI32` per bin, one `add` per value: contended atomics, no lock",
     twins: true,
   },
   {
@@ -1614,7 +1619,7 @@ const partialNote =
 if (parallelRows.length > 0) {
   lines.push("## Data parallelism (ms, min / median)", "")
   lines.push(
-    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores, par-histogram as a scope of four tasks sharing a \`Mutex\`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par-*.ts\`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.${partialNote}`,
+    `Each kernel is one Nish binary, run as the loop a program writes without \`nish/threads\` (\`seq\`) and as \`parallelMapInto\` (\`par\`) on all ${os.cpus().length} logical cores, par-histogram as a scope of four tasks sharing a \`Mutex\` and par-histogram-atomic as the same scope sharing an \`AtomicI32\` per bin; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in \`bench/par-*.ts\`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool.${partialNote}`,
     ""
   )
   lines.push(
@@ -1646,7 +1651,7 @@ if (twins !== null) {
   const n = twins.passes
   lines.push(TWINS_HEADING, "")
   lines.push(
-    `Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish \`par\` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on \`std::thread::scope\` (\`bench/par-<kernel>.rs\`) and on Rayon's pool (\`bench/par-<kernel>-rayon.rs\`), the Go twins on goroutines and a \`sync.WaitGroup\` (\`bench/par-<kernel>.go\`). The map twins cut the array into one contiguous chunk per thread, the first on the calling thread, as Nish's partitioner did until it began cutting up to eight pieces per thread that the threads claim as they finish ([Scheduling a divided region](#scheduling-a-divided-region)); Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's \`Mutex\`, Rust's \`std::sync::Mutex\` and Go's \`sync.Mutex\`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one \`add\` per bin, is \`examples/histogram-atomic.ts\` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).`,
+    `Five of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish \`par\` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on \`std::thread::scope\` (\`bench/par-<kernel>.rs\`) and on Rayon's pool (\`bench/par-<kernel>-rayon.rs\`), the Go twins on goroutines and a \`sync.WaitGroup\` (\`bench/par-<kernel>.go\`). The map twins cut the array into one contiguous chunk per thread, the first on the calling thread, as Nish's partitioner did until it began cutting up to eight pieces per thread that the threads claim as they finish ([Scheduling a divided region](#scheduling-a-divided-region)); Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's \`Mutex\`, Rust's \`std::sync::Mutex\` and Go's \`sync.Mutex\`, kept deliberately as a comparison of a contended lock. par-histogram-atomic bins the same values into an \`AtomicI32\` per bin, one sequentially consistent add per value in every language, Nish's \`add\`, Rust's \`AtomicI32::fetch_add\` with \`SeqCst\` and Go's \`atomic.Int32.Add\`: the same contention on sixteen bins without the lock. The version that avoids the contention, a local tally and one \`add\` per bin, is \`examples/histogram-atomic.ts\` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).`,
     "",
     `**The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (\`nish_panic_overflow\` and \`nish_panic_index\` are reached from par-histogram's \`binStream\`, for one). The Rust twins build as \`--release\` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's \`--profile speed\` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.`,
     "",
