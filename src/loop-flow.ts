@@ -16,13 +16,14 @@
  *
  * where `update` is a `for`'s update, which the checker reads after the body,
  * and nothing for any other loop; for a `do`, whose body runs first, the
- * condition reads the body's end and continues. Every union or enum variable the loop names is tracked,
- * written or only tested: an `if` or a `switch` on it narrows its arms here as
- * the checker narrows them. The pass is coarser than the checker everywhere it
- * differs — a store it cannot read (a field, a method call, a `let` the
- * loop declares) leaves the variable whatever it was declared, and a test
- * narrows only against a value whose members it knows as surely as the
- * checker's `memberSetOf` (`flowKnown`) — and gives a loop up whole
+ * condition reads the body's end and continues. Every union or enum variable
+ * the loop names is tracked, written or only tested: an `if` or a `switch` on
+ * it narrows its arms here as the checker narrows them. The pass is coarser
+ * than the checker everywhere it differs — a store it cannot read (a field
+ * read through an element or a call, a `let` the loop declares) leaves the
+ * variable whatever it was declared, and a test narrows only against a value
+ * whose members it knows as surely as the checker's `memberSetOf`
+ * (`flowKnown`) — and gives a loop up whole
  * (`status` "bail") on a form it does not model: a `try`, a label, a
  * destructuring, unreachable code. A variable written through a path, a
  * compound assignment or a closure it leaves untracked, to the checker's own
@@ -539,12 +540,14 @@ const flowStructOf = (ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): S
   let type = -1
   if (bare.kind === N_THIS || bare.kind === N_IDENT) {
     const name = bare.kind === N_THIS ? "this" : bare.text
-    const local = f.declared.indexOf(name) >= 0 ? null : f.scope.lookup(name)
-    type = local === null ? -1 : local.type
+    const local = f.scope.lookup(name)
+    type = local === null || f.declared.indexOf(name) >= 0 ? -1 : local.type
   } else if (bare.kind === N_MEMBER && !isOptionalChain(bare)) {
     const owner = flowStructOf(ctx, f, bare.children[0], depth + 1)
-    const field = owner === null ? null : owner.field(bare.text)
-    type = field === null ? -1 : field.type
+    if (owner !== null) {
+      const field = owner.field(bare.text)
+      type = field === null ? -1 : field.type
+    }
   }
   if (type < 0 || !ctx.table.isStruct(type)) {
     return null
@@ -621,7 +624,10 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
   if (bare.kind === N_CALL && bare.children[0].kind === N_MEMBER && !isOptionalChain(bare.children[0])) {
     const access = bare.children[0]
     const info = flowStructOf(ctx, f, access.children[0], 0)
-    const method = info === null ? null : info.method(access.text)
+    if (info === null) {
+      return 0
+    }
+    const method = info.method(access.text)
     return method === null ? 0 : flowMemberBit(ctx, f, k, method.returnType)
   }
   if (bare.kind !== N_MEMBER || isOptionalChain(bare)) {
@@ -637,7 +643,10 @@ const flowKnown = (ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
     }
   }
   const info = flowStructOf(ctx, f, bare.children[0], 0)
-  const field = info === null ? null : info.field(bare.text)
+  if (info === null) {
+    return 0
+  }
+  const field = info.field(bare.text)
   return field === null ? 0 : flowMemberBit(ctx, f, k, field.type)
 }
 

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1092 programs, 141049 dump lines.
+# 1092 programs, 141036 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -14791,85 +14791,72 @@ struct H (class) size=4 align=4
   field k: Kind index=0 offset=0 initialized
 struct G (class) size=4 align=4
   field b: Kind.B index=0 offset=0 readonly initialized
-  method pick -> @G.pick
-function G.pick(this: G): Kind.B -> @G.pick [method]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=4 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
 function keep(k: Kind): Kind -> @keep
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
   stackSites=0 stackLocals=0
 function pathLoop(h: H, n: i32): boolean -> @pathLoop
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 63:3
+  sharedWrite: 60:3
   pointer h: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 64:7 i: i32 (let)
+  local 61:7 i: i32 (let)
 function argumentStore(n: i32): boolean -> @argumentStore
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: keep
   stackSites=0 stackLocals=0
-  local 75:7 j: Kind (let)
-  local 76:7 i: i32 (let)
-  callee 79:5 keep -> @keep
+  local 72:7 j: Kind (let)
+  local 73:7 i: i32 (let)
+  callee 76:5 keep -> @keep
 function initializerStore(n: i32): boolean -> @initializerStore
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: keep
   stackSites=0 stackLocals=0
-  local 87:7 j: Kind (let)
-  local 88:7 i: i32 (let)
-  local 91:11 t: Kind (const)
-  callee 92:5 keep -> @keep
+  local 84:7 j: Kind (let)
+  local 85:7 i: i32 (let)
+  local 88:11 t: Kind (const)
+  callee 89:5 keep -> @keep
 function chainStore(n: i32): boolean -> @chainStore
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: keep
   stackSites=0 stackLocals=0
-  local 100:7 j: Kind (let)
-  local 101:7 k: Kind (let)
-  local 102:7 i: i32 (let)
-  callee 108:3 keep -> @keep
-function fieldStore(g: G, n: i32): boolean -> @fieldStore
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer g: size=4 writesThrough=false captured=false
+  local 97:7 j: Kind (let)
+  local 98:7 k: Kind (let)
+  local 99:7 i: i32 (let)
+  callee 105:3 keep -> @keep
+function elementFieldStore(gs: G[], n: i32): boolean -> @elementFieldStore
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer gs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 114:7 j: Kind (let)
-  local 115:7 i: i32 (let)
-function methodStore(g: G, n: i32): boolean -> @methodStore
-  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: G.pick
-  pointer g: size=4 writesThrough=false captured=false passedTo=G.pick#0
-  stackSites=0 stackLocals=0
-  local 125:7 j: Kind (let)
-  local 126:7 i: i32 (let)
-  callee 128:9 G.pick -> @G.pick
+  local 111:7 j: Kind (let)
+  local 112:7 i: i32 (let)
 function bodyLetStore(n: i32): boolean -> @bodyLetStore
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: keep
   stackSites=0 stackLocals=0
-  local 136:7 j: Kind (let)
-  local 137:7 i: i32 (let)
-  local 139:9 t: Kind (let)
-  callee 142:5 keep -> @keep
+  local 122:7 j: Kind (let)
+  local 123:7 i: i32 (let)
+  local 125:9 t: Kind (let)
+  callee 128:5 keep -> @keep
 function wideLoop(n: i32): boolean -> @wideLoop
   facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-  local 150:7 w: Wide (let)
-  local 151:7 i: i32 (let)
+  local 136:7 w: Wide (let)
+  local 137:7 i: i32 (let)
 function main(): void -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: argumentStore bodyLetStore chainStore fieldStore initializerStore methodStore nish_print pathLoop wideLoop
-  stackSites=3 stackLocals=1
-  local 162:9 h: H (const)
-  callee 163:15 pathLoop -> @pathLoop
-  callee 164:15 argumentStore -> @argumentStore
-  callee 165:15 initializerStore -> @initializerStore
-  callee 166:15 chainStore -> @chainStore
-  callee 167:15 fieldStore -> @fieldStore
-  callee 168:15 methodStore -> @methodStore
-  callee 169:15 bodyLetStore -> @bodyLetStore
-  callee 170:15 wideLoop -> @wideLoop
+  calls: argumentStore bodyLetStore chainStore elementFieldStore initializerStore nish_alloc_struct nish_print pathLoop wideLoop
+  stackSites=2 stackLocals=1
+  local 148:9 h: H (const)
+  callee 149:15 pathLoop -> @pathLoop
+  callee 150:15 argumentStore -> @argumentStore
+  callee 151:15 initializerStore -> @initializerStore
+  callee 152:15 chainStore -> @chainStore
+  callee 153:15 elementFieldStore -> @elementFieldStore
+  callee 154:15 bodyLetStore -> @bodyLetStore
+  callee 155:15 wideLoop -> @wideLoop
 program tests/cases/enum_member_type.ts
 module tests/cases/enum_member_type.ts (entry)
 struct ScalarNode (interface) size=8 align=4

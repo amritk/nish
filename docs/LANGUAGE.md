@@ -854,8 +854,9 @@ const area = (s: Shape): i32 => {
   (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). A loop is
   followed to a fixpoint, as `tsc` follows it: the head of a `while`, `for`
   or `do` holds what reaches it before the loop, at the end of an iteration
-  and at a `continue` (through its update, for a `for`), joined until it no longer changes; after a `while` or
-  `for` comes the head with its condition false, joined with every `break`,
+  and at a `continue` (through its update, for a `for`), joined until it no
+  longer changes; after a `while` or `for` comes the head with its condition
+  false, joined with every `break`,
   after a `do` the end of the body and its `continue`s with the condition
   false, and after a `for...of` the head and the `break`s. A loop inside the
   body and a `switch` inside it are followed the same way, an `if` or a
@@ -875,24 +876,30 @@ const area = (s: Shape): i32 => {
   `reject_union_loop_tested_while`, `reject_union_loop_null_tested`). A
   store holds what its value holds where the value is one of: a member; a
   local of a member type, `const m: Kind.B`; a call of a function that
-  returns a member type; a `const` the loop declares once, read by its
-  initializer; another enum variable; a union's tag; or a ternary of two
-  of these, each arm read on its side of the condition
+  returns a member type; a field of a member type, or a call of a method
+  that returns one, read through `this`, a local or parameter or a field of
+  one; a `const` the loop declares once, read by its initializer; another
+  enum variable; a union's tag; or a ternary of two of these, each arm read
+  on its side of the condition
   (`reject_enum_loop_ternary_store`, `reject_enum_loop_copy_store`,
   `reject_union_loop_tag_copy`, `reject_enum_loop_member_local`,
-  `reject_enum_loop_member_call`, `reject_enum_loop_body_const`,
+  `reject_enum_loop_member_call`, `reject_enum_loop_field_store`,
+  `reject_enum_loop_method_store`, `reject_enum_loop_body_const`,
   `reject_enum_loop_ternary_narrowed`, `reject_enum_loop_ternary_tracked`,
   `reject_enum_loop_ternary_self`). A test against a member, a local of a
-  member type or such a call narrows as outside a loop
-  (`reject_enum_loop_const_test`, `reject_union_loop_const_test`). A `for`
+  member type or such a call narrows as outside a loop, and so does a test
+  against another enum variable, by the members it holds there
+  (`reject_enum_loop_const_test`, `reject_union_loop_const_test`,
+  `reject_enum_loop_held_operand`). A `for`
   update runs after the body and before the next test, and is followed
   there (`tests/cases/enum_loop_for_update`;
-  `reject_enum_loop_for_update_store`, `reject_enum_loop_for_update_cond`). A
-  store of any other value, a field or a method call for one, holds the whole
-  declared type. Where the loop holds a shape the fixpoint does not follow, a
-  local or path holds, after it and throughout it, every member stored
-  anywhere in it, which may be more than `tsc` knows ("Accepted here, refused
-  by `tsc`", below).
+  `reject_enum_loop_for_update_store`, `reject_enum_loop_for_update_cond`),
+  and is checked when the body is one refused statement, so both errors are
+  reported (`reject_for_update_after_body`). A store of any other value holds
+  the whole declared type. Where the loop holds a shape the fixpoint does not
+  follow, a local or path holds, after it and throughout it, every member
+  stored anywhere in it, which may be more than `tsc` knows ("Accepted here,
+  refused by `tsc`", below).
 - A tag compared with an enum variable narrows on the side where they are
   equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
   `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
@@ -1073,9 +1080,10 @@ fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
   `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, or the
   inner store of a chain, `k = j = Kind.C`, rather than a statement of its
   own.
-- **A value the pass cannot read.** A store of a field, `j = g.b`, of a
-  method call, `j = g.pick()`, or of a `let` the loop declares, holds the
-  whole declared type, though the field or method is typed with one member.
+- **A value the pass cannot read.** A store of a field or a method call
+  read through anything but `this`, a local, a parameter or a field of one,
+  `j = gs[0].b`, or of a `let` the loop declares, holds the whole declared
+  type, though the field, method or `let` is typed with one member.
 - **A wide type.** A union of more than 29 variants or an enum of more than
   29 members.
 

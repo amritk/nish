@@ -52,9 +52,6 @@ class H {
 
 class G {
   readonly b: Kind.B = Kind.B;
-  pick(): Kind.B {
-    return Kind.B;
-  }
 }
 
 const keep = (k: Kind): Kind => k;
@@ -110,25 +107,14 @@ const chainStore = (n: i32): boolean => {
   return j === Kind.B;
 };
 
-const fieldStore = (g: G, n: i32): boolean => {
+const elementFieldStore = (gs: G[], n: i32): boolean => {
   let j: Kind = Kind.A;
   let i = 0;
   while (i < n) {
-    j = g.b;
+    j = gs[0].b;
     i++;
   }
-  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a field's type is not read
-  return j === Kind.C;
-};
-
-const methodStore = (g: G, n: i32): boolean => {
-  let j: Kind = Kind.A;
-  let i = 0;
-  while (i < n) {
-    j = g.pick();
-    i++;
-  }
-  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a method's return type is not read
+  // @ts-expect-error TS2367: `j` is `Kind.A | Kind.B`, a field read through an element is not read
   return j === Kind.C;
 };
 
@@ -164,8 +150,7 @@ export const main = (): void => {
   console.log(argumentStore(2));
   console.log(initializerStore(2));
   console.log(chainStore(2));
-  console.log(fieldStore(new G(), 2));
-  console.log(methodStore(new G(), 2));
+  console.log(elementFieldStore([new G()], 2));
   console.log(bodyLetStore(2));
   console.log(wideLoop(2));
 };

@@ -1726,11 +1726,11 @@ export const main = (): i32 => {
   loop only tests included, and an `if` or `switch` inside the loop narrowing
   as it does outside; a `for` update is read after the body. A loop holding
   a path (`h.k`), a store inside an expression (an argument, an initializer,
-  a chain's inner `=`), a store of a field, a method call or a `let` the
-  loop declares, or a type of more than 29 members falls back to every
-  member the body stored anywhere or the whole type, which accepts a few
-  comparisons `tsc` refuses (TS2367; LANGUAGE.md, "Accepted here, refused
-  by `tsc`").
+  a chain's inner `=`), a store of a field or method call read through an
+  element or a call (`gs[0].b`) or of a `let` the loop declares, or a type
+  of more than 29 members falls back to every member the body stored
+  anywhere or the whole type, which accepts a few comparisons `tsc` refuses
+  (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`

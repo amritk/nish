@@ -305,7 +305,8 @@ const settled = (n: i32): boolean => {
 
 A loop that holds a field path such as `h.k`, an assignment written inside
 another expression (an argument, an initializer, the inner `=` of
-`k = j = Kind.C`), a store of a field, a method call or a `let` the loop
+`k = j = Kind.C`), a store of a field or method call read through an array
+element or a call's result (`gs[0].b`), a store of a `let` the loop
 declares, or a type of more than 29 members is read more loosely: there the
 local holds every member the body stores anywhere, or the whole enum, so a
 few comparisons TypeScript refuses still compile. The language reference lists
