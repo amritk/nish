@@ -56,7 +56,8 @@ bytes and vanishes at 1 MiB; the family's footnote says so.
 every TLS stack negotiates first. AES-NI and PCLMULQDQ carry that kernel, and
 `portableProofFlags` names both, so OpenSSL's proof is held only on a CPU that
 has them. Every twin keeps the default 1.2 minimum ratio. On this family's
-reference machine (AES-NI, PCLMULQDQ, AVX2, AVX-512F), each portable column
-takes about seven times its assembly column there: OpenSSL 7.0x, Go purego
-7.5x, Rust soft 5.8x. ChaCha20-Poly1305 loses less, since its portable code is
-plain 32-bit arithmetic: about 1.2x for OpenSSL, 2.1x for Go and 1.7x for Rust.
+reference machine (AES-NI, PCLMULQDQ, AVX2, AVX-512F), at that case, OpenSSL
+portable takes 7.1x the time of OpenSSL, Go purego 7.3x that of Go, and Rust
+soft 6.2x that of Rust. ChaCha20-Poly1305 loses much less, since its portable
+code is plain 32-bit arithmetic: at 16 KiB, OpenSSL's scalar assembly is within
+1.1x of its SIMD path, Go purego takes 2.2x and Rust soft 1.9x.
