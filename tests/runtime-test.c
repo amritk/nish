@@ -750,6 +750,10 @@ static void test_net(void) {
   struct sockaddr_in from;
   socklen_t n = sizeof from;
   assert(getsockname(client, (struct sockaddr *)&from, &n) == 0);
+  // Darwin's connect() can return before the listener's queue holds the
+  // connection, and a non-blocking accept then answers -11: wait for it.
+  struct pollfd queued = {fd, POLLIN, 0};
+  assert(poll(&queued, 1, 5000) == 1);
 
   int32_t conn = nish_tcp_accept(fd, &peer);
   assert(conn >= 0);
@@ -839,6 +843,8 @@ static void test_tcp_nodelay(void) {
     to.sin_port = htons((uint16_t)nish_net_local_port(fd));
     to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     assert(client >= 0 && connect(client, (struct sockaddr *)&to, sizeof to) == 0);
+    struct pollfd queued = {fd, POLLIN, 0};
+    assert(poll(&queued, 1, 5000) == 1);
     int on = late;
     assert(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof on) == 0);
     int32_t conn = nish_tcp_accept(fd, &peer);

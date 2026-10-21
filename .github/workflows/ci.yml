@@ -947,6 +947,16 @@ jobs:
         timeout-minutes: 5
         run: bash scripts/fetch-seed.sh
 
+      # Linux routes all of 127.0.0.0/8 to lo; Darwin's lo0 carries 127.0.0.1
+      # alone, and net_relay's loopback.ts opens sessions from 127.0.0.2 and
+      # 127.0.0.3 to test the relay's per-address cap. Without the aliases those
+      # binds fail and seven relay checks read a refusal that never happened. The
+      # step comes before the unit tests so their failure cannot skip it.
+      - name: Alias 127.0.0.2 and 127.0.0.3 on lo0
+        run: |
+          sudo ifconfig lo0 alias 127.0.0.2 up
+          sudo ifconfig lo0 alias 127.0.0.3 up
+
       # The full RUNTIME_C list with -std=c11 -Wall -Wextra -Werror -O2, run,
       # then the same with -DNISH_THREADS=1 -pthread: the two checks in
       # tests/run.js's `runtime_test` block, which a failure's detail prints
@@ -958,15 +968,6 @@ jobs:
           node tests/run.js runtime_test | tee "$RUNNER_TEMP/runtime-test.log"
           grep -E '^PASS  runtime\.c, runtime-os\.c, .* pass the runtime unit test$' "$RUNNER_TEMP/runtime-test.log"
           grep -E '^PASS  runtime\.c -DNISH_THREADS: ' "$RUNNER_TEMP/runtime-test.log"
-
-      # Linux routes all of 127.0.0.0/8 to lo; Darwin's lo0 carries 127.0.0.1
-      # alone, and net_relay's loopback.ts opens sessions from 127.0.0.2 and
-      # 127.0.0.3 to test the relay's per-address cap. Without the aliases those
-      # binds fail and seven relay checks read a refusal that never happened.
-      - name: Alias 127.0.0.2 and 127.0.0.3 on lo0
-        run: |
-          sudo ifconfig lo0 alias 127.0.0.2 up
-          sudo ifconfig lo0 alias 127.0.0.3 up
 
       # Every net_ section runs on a mac, so the step needs checks that passed
       # and no SKIP line: a filter that matches nothing, or a section skipped
