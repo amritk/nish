@@ -138615,7 +138615,7 @@ import pollWait from "nish:net" -> builtin pollWait
 import tcpListenFlags from "nish:net" -> builtin tcpListenFlags
 import signalFd from "nish:process" -> builtin signalFd
 import TfbServer from "./server" -> struct TfbServer
-const NODELAY_FLAG: i32 = 0
+const NODELAY_FLAG: i32 = 2
 const SIGNAL: i32 = -2
 const READY: i32 = 256
 function arg(k: i32, fallback: string): string -> @arg
@@ -138628,22 +138628,22 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_tcp_listen_flags
   calls: TfbServer.constructor TfbServer.dispatch arg llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_poll_add nish_poll_create nish_poll_wait nish_print nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_tcp_listen_flags
   stackSites=1 stackLocals=1
-  local 27:9 port: i32 (const)
-  callee 27:30 arg -> @arg
-  local 28:9 nodelay: boolean (const)
-  callee 28:28 arg -> @arg
-  local 29:9 host: string (const)
-  callee 29:24 arg -> @arg
-  local 30:9 slots: i32 (const)
-  callee 30:31 arg -> @arg
-  local 31:9 listener: i32 (const)
-  local 36:9 loop: i32 (const)
-  local 37:9 tfb: TfbServer (const)
-  callee 37:26 new TfbServer -> @TfbServer.constructor
-  local 39:9 ready: i32[] (const)
-  local 42:11 n: i32 (const)
-  local 43:14 k: i32 (let)
-  callee 47:7 TfbServer.dispatch -> @TfbServer.dispatch
+  local 24:9 port: i32 (const)
+  callee 24:30 arg -> @arg
+  local 25:9 nodelay: boolean (const)
+  callee 25:28 arg -> @arg
+  local 26:9 host: string (const)
+  callee 26:24 arg -> @arg
+  local 27:9 slots: i32 (const)
+  callee 27:31 arg -> @arg
+  local 28:9 listener: i32 (const)
+  local 33:9 loop: i32 (const)
+  local 34:9 tfb: TfbServer (const)
+  callee 34:26 new TfbServer -> @TfbServer.constructor
+  local 36:9 ready: i32[] (const)
+  local 39:11 n: i32 (const)
+  local 40:14 k: i32 (let)
+  callee 44:7 TfbServer.dispatch -> @TfbServer.dispatch
 module bench/techempower/server.ts
 import pollAdd from "nish:net" -> builtin pollAdd
 import pollModify from "nish:net" -> builtin pollModify

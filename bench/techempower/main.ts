@@ -10,11 +10,8 @@ import { pollAdd, pollCreate, pollWait, tcpListenFlags } from "nish:net"
 import { signalFd } from "nish:process"
 import { TfbServer } from "./server"
 
-/**
- * The `tcpListenFlags` bit the `nodelay` argument sets. It is 0 until
- * `TCP_NODELAY` is a flag of `tcpListenFlags` (WP39 E2), when it becomes 2.
- */
-const NODELAY_FLAG: i32 = 0
+/** The `tcpListenFlags` bit the `nodelay` argument sets: `TCP_NODELAY` on every accepted socket. */
+const NODELAY_FLAG: i32 = 2
 /** The signal descriptor's token in the loop: SIGINT or SIGTERM ends the program. */
 const SIGNAL: i32 = -2
 /** How many ready descriptors one `pollWait` answers, as token and event pairs. */
