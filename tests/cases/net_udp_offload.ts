@@ -8,7 +8,8 @@
 // and 0 there. ECN: the bits a send asks for arrive in `meta[1]`. Loopback
 // coalesces only what left as one GSO send, which is why the sender here is
 // Nish and not Node, whose `dgram` has no segmentation. No `.out`: it needs
-// the port, and elsewhere than Linux these calls answer -95.
+// the port. Elsewhere than Linux these calls answer -95, and the program
+// prints each answer, then sends Node one plain datagram, which still goes.
 import { netAddress, netClose, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 
 const WOULD_BLOCK: i32 = -11;
@@ -46,7 +47,17 @@ export const main = (): number => {
   const to: u8[] = new Array<u8>(18);
   const sender = udpBind("127.0.0.1", 0, 0);
   netAddress(to, "127.0.0.1", node);
-  console.log(`gso sent ${udpSendTo(sender, data, 0, TOTAL, to, SEGMENT, 0)}`);
+  const gso = udpSendTo(sender, data, 0, TOTAL, to, SEGMENT, 0);
+  console.log(`gso sent ${gso}`);
+  if (gso === -95) {
+    const refused = udpBind("127.0.0.1", 0, 2);
+    console.log(`gro bind ${refused}`);
+    for (const ecn of [1, 2, 3]) {
+      console.log(`ecn ${ecn} sent ${udpSendTo(sender, data, 0, 16, to, 0, ecn)}`);
+    }
+    console.log(`plain sent ${udpSendTo(sender, data, 0, 16, to, 0, 0)}`);
+    return netClose(sender);
+  }
 
   const buf: u8[] = new Array<u8>(65536);
   const from: u8[] = new Array<u8>(18);

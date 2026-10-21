@@ -276,6 +276,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "isascii" ||
   name === "isdigit" ||
   name === "kevent" ||
+  name === "kill" ||
   name === "kqueue" ||
   name === "labs" ||
   name === "lchown" ||

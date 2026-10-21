@@ -368,6 +368,28 @@ int32_t nish_spawn(const nish_array *argv);
  * implementation in runtime-os.c backs both spawn builtins, which is what keeps
  * the argument vector, the wait and the signal convention written once. */
 int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_str *err);
+/* `spawn(argv)` (WP34 N12): start element 0 of `argv` as `nish_spawn` does and
+ * answer the child's pid at once, without waiting, or a negative errno:
+ * -EINVAL for an empty `argv` or an argument holding a NUL, `posix_spawnp`'s
+ * own error otherwise, and -ENOSYS under WASI. The child is reaped by
+ * `nish_wait_pid`. */
+int32_t nish_spawn_child(const nish_array *argv);
+/* `kill(pid, sig)`: send `sig` to `pid` and answer 0, or a negative errno. Only
+ * 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are sent; any other signal, and
+ * a pid of 0 or below, is -EINVAL. -ESRCH when no process has the pid, -EPERM
+ * when it is another user's. Any process of this uid may be signalled, not
+ * only a child. */
+int32_t nish_kill(int32_t pid, int32_t sig);
+/* `waitPid(pid, flags)`: a fresh `i32[]` of two, `[pid, status]`. `pid` is a
+ * child's or -1 for any; flag 1 is WNOHANG and any other bit is -EINVAL, as is
+ * a pid that is neither -1 nor positive. The status is `nish_spawn`'s: the exit
+ * code, or `128 + n` for signal `n`. `[0, 0]` is a WNOHANG wait with a child
+ * left and none exited; a failure is `[-errno, 0]` (-ECHILD: no child; -EINTR:
+ * a signal interrupted the wait). In the arena. */
+nish_array *nish_wait_pid(int32_t pid, int32_t flags);
+/* `totalMemory()`: bytes of physical memory (Linux: `_SC_PHYS_PAGES` times the
+ * page size; Darwin: `hw.memsize`), or -1 where the host does not say. */
+int64_t nish_total_memory(void);
 
 /* ---- The environment (WP19 R1) ------------------------------------------
  * `getenv(name)`: the value of environment variable `name`, copied into the
@@ -565,10 +587,14 @@ void nish_panic_overflow(uint32_t op);
  *     first (`nish_cross_keep`, below), and the compiler rewinds the caller's
  *     arena after its chunks as the pool rewinds a worker's. */
 typedef void (*nish_par_body)(int64_t lo, int64_t hi, void *ctx);
-/* The CPUs a region may divide over: the fewest of those online, those the
- * affinity mask allows, the cgroup v2 `cpu.max` quota rounded up, and
- * `NISH_NUM_THREADS` when it is set to a positive number. Read once. */
+/* The CPUs a region may divide over: `nish_cpu_online()` under `--threads`,
+ * read once, and 1 in a sequential build. */
 int64_t nish_cpu_count(void);
+/* `availableParallelism()` (WP34 N12), in every build: the fewest of the CPUs
+ * online, those the affinity mask allows, the cgroup v2 `cpu.max` quota
+ * rounded up, and `NISH_NUM_THREADS` when it is set to a positive number. At
+ * least 1; 1 under WASI. Read each call (runtime-os.c). */
+int64_t nish_cpu_online(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 /* Keeps every later region and join on threads created and joined per call,
  * as before the pool existed, so no parked worker outlives the code it would

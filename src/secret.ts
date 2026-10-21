@@ -82,6 +82,7 @@ import {
   STRUCT_CLASS,
   StructInfo,
   StructTemplateInfo,
+  SWITCH_COVERED,
   TemplateInfo,
   capturedReads,
 } from "./program"
@@ -479,10 +480,14 @@ const paramReturnMessage = (name: string): string =>
   "second name for that key in the caller, one of the two wiped by nobody or both read once it is wiped. " +
   "Return a value computed from it inside `expose`, or a new `secret(...)` made from one"
 
-/** A read of a local after `secret(x)` moved it. */
-const movedMessage = (name: string): string =>
-  `\`${name}\` was moved into a \`Secret\` by \`secret(${name})\` and cannot be read again: the ` +
-  "plain array would be key material outside the `Secret`'s rules"
+/** A read of a local of `type` after `secret(x)` moved it, naming what it holds: an array, or its class or interface. */
+const movedMessage = (table: TypeTable, name: string, type: i32): string => {
+  const shape = table.isStruct(type) ? `\`${table.typeName(type)}\`` : "array"
+  return (
+    `\`${name}\` was moved into a \`Secret\` by \`secret(${name})\` and cannot be read again: the plain ${shape}` +
+    " would be key material outside the `Secret`'s rules"
+  )
+}
 
 /** A read of a `Secret` local after `const j = k` or `j = k` moved what it held. */
 const movedOutMessage = (name: string): string =>
@@ -1064,7 +1069,9 @@ class SecretFlow {
     this.targets.pop()
     const out = target.breaks
     mergeInto(out, fall)
-    if (!hasDefault) {
+    // A value no label names goes past every clause, unless the checker found
+    // the labels name every tag of a union discriminant (`switchCoverage`).
+    if (!hasDefault && this.ctx.program.switchCoverage[stmt.id] !== SWITCH_COVERED) {
       mergeInto(out, entry)
     }
     assign(state, out)
@@ -1257,7 +1264,9 @@ class SecretFlow {
     if (moved >= 0 && state.moved[moved] && local !== null) {
       this.error(
         node,
-        this.ctx.table.isSecret(local.type) ? movedOutMessage(local.name) : movedMessage(local.name)
+        this.ctx.table.isSecret(local.type)
+          ? movedOutMessage(local.name)
+          : movedMessage(this.ctx.table, local.name, local.type)
       )
       return
     }
@@ -1442,7 +1451,7 @@ class SecretFlow {
       const moved = this.movableIndex(local)
       if (moved >= 0) {
         if (state.moved[moved] && local !== null) {
-          this.error(named, movedMessage(local.name))
+          this.error(named, movedMessage(this.ctx.table, local.name, local.type))
         }
         state.moved[moved] = true
       }

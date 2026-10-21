@@ -10,7 +10,7 @@
 // time.
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
-import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
+import { quicPushStream } from "nish/net/quic-frame";
 import { QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
@@ -21,7 +21,7 @@ import { bytesOf, fromHex } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
-import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcPushAppAck, qcReadFlight, qcShort } from "../net_quic_conn/client";
 import { NqMeter, nqMeteredDrain, nqMeteredReceive } from "../net_quic_stream/arena";
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, H3Limits, h3Config, h3Cat, h3ClientSettings, h3Frame, h3Hello, h3Pattern, h3QuicConfig, h3Section, h3Varint } from "./peer";
 
@@ -69,7 +69,7 @@ const h3MeteredServe = (s: ArenaServer, m: NqMeter): void => {
 const h3MeteredPacket = (s: ArenaServer, c: QcClient, payload: u8[], m: NqMeter): void => {
   const all: u8[] = [];
   if (c.largestApp >= n64(0)) {
-    quicPushAck(all, [n64(0), c.largestApp], n32(1), n64(0));
+    qcPushAppAck(all, c);
   }
   for (const b of payload) {
     all.push(b);

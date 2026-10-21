@@ -34,6 +34,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
+import https from "node:https"
 import dgram from "node:dgram"
 import net from "node:net"
 import os from "node:os"
@@ -42,7 +43,15 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import {
+  budgetLabel,
+  HTTP1_SERVER_START_BYTES,
+  HTTP1_TLS_SERVER_START_BYTES,
+  HTTP2_TLS_SERVER_START_BYTES,
+  HTTP3_SERVER_START_BYTES,
+  RUNTIME_BUDGETS,
+  TLS_TCP_START_BYTES,
+} from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -50,6 +59,7 @@ import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
+import { urlFuzzVerdict } from "./link/std_url/verdict.js"
 import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
@@ -1171,8 +1181,11 @@ const buildCaseIn = (dir, name) => {
 const runCaseUnderPrelude = (name, args) =>
   runUnderPrelude(path.join(casesDir, `${name}.ts`), [name, ...args])
 
-/** `entry` run under `runtime/nish.mjs`, its `main` answering the exit status; `args` follow `-e`'s script. */
-const runUnderPrelude = (entry, args, exported = "main") =>
+/**
+ * `entry` run under `runtime/nish.mjs`, its `main` answering the exit status;
+ * `args` follow `-e`'s script and `options` join `spawnSync`'s.
+ */
+const runUnderPrelude = (entry, args, exported = "main", options = {}) =>
   spawnSync(
     "node",
     [
@@ -1184,7 +1197,7 @@ const runUnderPrelude = (entry, args, exported = "main") =>
       `const m = await import(${JSON.stringify(entry)}); process.exit(m.${exported}());`,
       ...args,
     ],
-    { cwd: root, encoding: "utf8" }
+    { cwd: root, encoding: "utf8", ...options }
   )
 
 /** A spawned run's status and both streams, for a failed check's message. */
@@ -1358,6 +1371,82 @@ if (!only || "os_host".includes(only)) {
     loud.status !== 0 && loud.stderr.includes("signalFd has no synchronous reading under Node"),
     shown(loud)
   )
+
+  // WP34 N12: the core count and the memory size, natively and under the prelude.
+  // Natively the count is the smallest of the online cores, the affinity mask and
+  // the cgroup quota, so it is at most Node's `os.availableParallelism()` (the
+  // mask alone); a positive NISH_NUM_THREADS caps it on both sides. The memory
+  // size is the kernel's, the number `os.totalmem()` reads.
+  const cpuExe = buildCaseIn(osDir, "os_cpu")
+  const memoryExe = buildCaseIn(osDir, "os_memory")
+  const nodeCores = os.availableParallelism()
+  for (const [side, cpu, memory] of [
+    ["natively", (args, env) => spawnSync(cpuExe, args, { cwd: root, encoding: "utf8", env }), (args) => osNative(memoryExe, args)],
+    [
+      "under the prelude",
+      (args, env) => {
+        const saved = process.env.NISH_NUM_THREADS
+        process.env.NISH_NUM_THREADS = env.NISH_NUM_THREADS ?? ""
+        const r = runCaseUnderPrelude("os_cpu", args)
+        process.env.NISH_NUM_THREADS = saved ?? ""
+        if (saved === undefined) {
+          delete process.env.NISH_NUM_THREADS
+        }
+        return r
+      },
+      (args) => runCaseUnderPrelude("os_memory", args),
+    ],
+  ]) {
+    if (cpuExe === null || memoryExe === null) {
+      break
+    }
+    const unset = { ...process.env }
+    delete unset.NISH_NUM_THREADS
+    const free = cpu(["print"], unset)
+    const cores = Number(linesOf(free)[1])
+    check(
+      `os_cpu: availableParallelism() ${side} is at least 1 and at most Node's ${nodeCores}`,
+      free.status === 0 && linesOf(free)[0] === "true" && Number.isInteger(cores) && cores >= 1 && cores <= nodeCores,
+      shown(free)
+    )
+    const capped = cpu(["print"], { ...unset, NISH_NUM_THREADS: "1" })
+    check(
+      `os_cpu: availableParallelism() ${side} is 1 under NISH_NUM_THREADS=1`,
+      capped.status === 0 && linesOf(capped).join(" ") === "true 1",
+      shown(capped)
+    )
+    const m = memory(["print"])
+    check(
+      `os_memory: totalMemory() ${side} is Node's os.totalmem(), ${os.totalmem()}`,
+      m.status === 0 && linesOf(m).join(" ") === `true ${os.totalmem()}`,
+      shown(m)
+    )
+  }
+
+  // spawn, kill and waitPid under the prelude. A child is reaped by the event
+  // loop, which a synchronous wait never returns to, so `spawn` and `waitPid`
+  // fail loudly rather than answering; `kill` has a synchronous reading and
+  // answers what runtime-os.c answers, -3 for a pid no process has and -22 for a
+  // signal outside 0, 2, 9 and 15.
+  const loudSpawn = runCaseUnderPrelude("os_spawn", [])
+  check(
+    "os_spawn: under the prelude spawn fails loudly rather than answering",
+    loudSpawn.status !== 0 && loudSpawn.stderr.includes("`spawn` has no synchronous reading under Node"),
+    shown(loudSpawn)
+  )
+  const reaper = path.join(osDir, "reaper.ts")
+  fs.writeFileSync(
+    reaper,
+    "export const main = (): number => {\n  console.log(kill(2147483647, 0));\n  console.log(kill(1, 7));\n  console.log(kill(-1, 15));\n  console.log(waitPid(-1, 1)[0]);\n  return 0;\n};\n"
+  )
+  const reaped = runUnderPrelude(reaper, [])
+  check(
+    "waitPid: under the prelude kill answers -3 and -22, and waitPid then fails loudly rather than answering",
+    reaped.status !== 0 &&
+      reaped.stdout === "-3\n-22\n-22\n" &&
+      reaped.stderr.includes("`waitPid` has no synchronous reading under Node"),
+    shown(reaped)
+  )
 }
 
 // A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is
@@ -1482,54 +1571,14 @@ if (!only || "net_tcp".includes(only)) {
 
   // Section GC keeps runtime-net.c out of a program that calls none of it. The
   // link is the speed profile's `--gc-sections` without its LTO, so no call is
-  // inlined away, and the linker itself names every section it drops; the echo,
-  // which calls six of the eight, is the control that shows a kept one is not
-  // named and that the flag reports at all.
-  if (process.platform !== "linux") {
-    skip(`net_tcp section GC: measured with GNU-style --gc-sections, and this host is ${process.platform}`)
-  } else {
+  // inlined away (`-dead_strip`, its Darwin counterpart, there), and `nm` names
+  // the functions the program still defines; the echo, which calls six of the
+  // eight, is the control that shows a kept one is still there and that the
+  // link drops anything at all.
+  {
     // The runtime objects are built once for both links, with the sections split
     // so that each function can be dropped on its own.
     const rt = runtimeObjects(["-ffunction-sections", "-fdata-sections"])
-    const collected = (name, ll) => {
-      const cc =
-        rt.error === null
-          ? spawnSync(
-              "clang",
-              [
-                "-Wno-override-module",
-                "-O2",
-                "-ffunction-sections",
-                "-fdata-sections",
-                "-Wl,--gc-sections",
-                "-Wl,--print-gc-sections",
-                ll,
-                ...rt.objects,
-                "-lm",
-                "-o",
-                path.join(netDir, `${name}.gc`),
-              ],
-              { cwd: root, encoding: "utf8" }
-            )
-          : { status: 1, stderr: rt.error }
-      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll|connect)_\w+)/g)].map(
-        (m) => m[1]
-      )
-      return { ok: cc.status === 0, removed, why: String(cc.stderr) }
-    }
-    const quietLl = path.join(netDir, "net_quiet.ll")
-    const quietTs = path.join(netDir, "net_quiet.ts")
-    fs.writeFileSync(
-      quietTs,
-      'export const main = (): number => {\n  console.log("no sockets");\n  return 0;\n};\n'
-    )
-    const compiled = spawnSync(NISH, [quietTs, "-o", quietLl], { cwd: root, encoding: "utf8" })
-    const none =
-      compiled.status === 0
-        ? collected("net_quiet", quietLl)
-        : { ok: false, removed: [], why: compiled.stderr }
-    // The echo's IR is the one `buildCaseIn` wrote above.
-    const echo = collected("net_tcp_echo", path.join(netDir, "net_tcp_echo.ll"))
     const exported = [
       "nish_net_address",
       "nish_net_local_port",
@@ -1558,6 +1607,56 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_read",
       "nish_net_write",
     ]
+    const collected = (name, ll) => {
+      const cc =
+        rt.error === null
+          ? spawnSync(
+              "clang",
+              [
+                "-Wno-override-module",
+                "-O2",
+                "-ffunction-sections",
+                "-fdata-sections",
+                process.platform === "darwin" ? "-Wl,-dead_strip" : "-Wl,--gc-sections",
+                ll,
+                ...rt.objects,
+                "-lm",
+                "-o",
+                path.join(netDir, `${name}.gc`),
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : { status: 1, stderr: rt.error }
+      // Mach-O prefixes every C symbol with an underscore.
+      const nm =
+        cc.status === 0
+          ? spawnSync(
+              ["llvm-nm", "llvm-nm-18"].find(has) ?? "llvm-nm",
+              ["-g", path.join(netDir, `${name}.gc`)],
+              { encoding: "utf8" }
+            )
+          : null
+      const defined = new Set(
+        [...String(nm?.stdout ?? "").matchAll(/ T _?(nish_(?:net|tcp|udp|poll|connect)_\w+)$/gm)].map(
+          (m) => m[1]
+        )
+      )
+      const removed = exported.filter((f) => !defined.has(f))
+      return { ok: cc.status === 0 && nm?.status === 0, removed, why: `${cc.stderr}${nm?.stderr ?? ""}` }
+    }
+    const quietLl = path.join(netDir, "net_quiet.ll")
+    const quietTs = path.join(netDir, "net_quiet.ts")
+    fs.writeFileSync(
+      quietTs,
+      'export const main = (): number => {\n  console.log("no sockets");\n  return 0;\n};\n'
+    )
+    const compiled = spawnSync(NISH, [quietTs, "-o", quietLl], { cwd: root, encoding: "utf8" })
+    const none =
+      compiled.status === 0
+        ? collected("net_quiet", quietLl)
+        : { ok: false, removed: [], why: compiled.stderr }
+    // The echo's IR is the one `buildCaseIn` wrote above.
+    const echo = collected("net_tcp_echo", path.join(netDir, "net_tcp_echo.ll"))
     check(
       "net_tcp: section GC drops every function of runtime-net.c from a program that calls none, and keeps the ones the echo calls",
       none.ok &&
@@ -1631,7 +1730,8 @@ if (!only || "net_tcp_connect".includes(only)) {
 // Linux has: Node counts the datagrams one segmented send becomes, and the
 // program reports what one GRO receive returned and the ECN bits that arrived.
 // Elsewhere those calls answer -95, which is the documented behaviour rather
-// than a gap, so the check says so and passes instead of skipping.
+// than a gap, so the check there requires each -95, and that none of those
+// calls put a datagram on the wire while a plain send still does.
 if (!only || "net_udp".includes(only)) {
   const netDir = path.join(buildDir, "net-udp")
   fs.rmSync(netDir, { recursive: true, force: true })
@@ -1702,14 +1802,32 @@ if (!only || "net_udp".includes(only)) {
   )
 
   if (process.platform !== "linux") {
-    console.log(
-      `      net_udp_offload does not apply on ${process.platform}: UDP_SEGMENT, UDP_GRO and the ECN control messages are Linux's, and the runtime answers -95 for them here (docs/LANGUAGE.md)`
-    )
-    check(
-      `net_udp_offload: not applicable on ${process.platform}, where GSO, GRO and ECN answer -95`,
-      true,
-      ""
-    )
+    // UDP_SEGMENT, UDP_GRO and the ECN control messages are Linux's, and the
+    // runtime answers -95 for them here (docs/LANGUAGE.md): the program prints
+    // each answer, and only its last, plain send reaches Node.
+    const offloadExe = buildCaseIn(netDir, "net_udp_offload")
+    if (offloadExe !== null) {
+      const socket = dgram.createSocket("udp4")
+      const arrived = []
+      socket.on("message", (message) => arrived.push(message))
+      await new Promise((resolve) => socket.bind(0, "127.0.0.1", resolve))
+      const r = await runWithPort(offloadExe, [String(socket.address().port)], async () => [])
+      // Darwin's loopback delivers asynchronously; give the plain datagram time to land.
+      for (let wait = 0; wait < 40 && arrived.length === 0; wait++) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      socket.close()
+      const answers =
+        "gso sent -95\ngro bind -95\necn 1 sent -95\necn 2 sent -95\necn 3 sent -95\nplain sent 16\n"
+      const pattern = Buffer.from(Array.from({ length: 16 }, (_, i) => i))
+      check(
+        `net_udp_offload: on ${process.platform} GSO, the GRO bind and every ECN mark answer -95 and send nothing, and a plain udpSendTo still arrives`,
+        r.code === 0 && r.out === answers && arrived.length === 1 && arrived[0].equals(pattern),
+        `${r.timedOut ? "timed out after 10 s\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+          `datagrams: ${JSON.stringify(arrived.map((m) => m.length))}\n` +
+          `stdout: ${JSON.stringify(r.out)}\nwant: ${JSON.stringify(answers)}\nstderr: ${r.err}`
+      )
+    }
   } else {
     const offloadExe = buildCaseIn(netDir, "net_udp_offload")
     if (offloadExe !== null) {
@@ -1777,8 +1895,8 @@ if (!only || "net_udp".includes(only)) {
 // datagram to itself with each ECN value over each family, `IP_TOS` and then
 // `IPV6_TCLASS`, and reads the mark back from `meta[1]`. A host whose `::1`
 // cannot be listened on cannot run any of that, so the check prints why and
-// passes, the way `net_udp_offload` does off Linux, rather than counting a skip:
-// the dual-stack path is not missing there, it is the documented fallback.
+// passes rather than counting a skip: the dual-stack path is not missing
+// there, it is the documented fallback.
 if (!only || "net_dual_stack".includes(only)) {
   const netDir = path.join(buildDir, "net-dual")
   fs.rmSync(netDir, { recursive: true, force: true })
@@ -1955,18 +2073,20 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
-// ---- `nish/net/tls-tcp`, against openssl s_client and curl (WP34 T2) -------------
+// ---- `nish/net/tls-tcp`, against openssl s_client and Node's TLS (WP34 T2) -------
 //
 // What the Nish client in `tests/link/net_tls_record_tcp` cannot say: that a
 // TLS 1.3 stack somebody else wrote completes a handshake with the carrier and
 // moves data both ways. The same program run as `serve 4` listens, prints its
 // port and serves four connections, one at a time: openssl s_client under each
 // of the three suites — the first sending `K`, a KeyUpdate asking for one
-// back, before its line — each echoed, and curl's GET, answered over the ALPN
-// protocol it negotiates. Every client must exit 0 with what it sent back, and
-// the server must print one line per connection with the suite, ALPN and SNI
-// it negotiated. Both tools are on CI's runners, so a missing one is a failure
-// here rather than a skip.
+// back, before its line — each echoed, and an HTTPS GET from Node, answered over
+// the ALPN protocol it negotiates. Every client must finish with what it sent
+// back, and the server must print one line per connection with the suite, ALPN
+// and SNI it negotiated. The GET is Node's rather than curl's because it pins
+// its suite, and macOS's curl, built on LibreSSL 3.3, has no `--tls13-ciphers`;
+// Node carries its own OpenSSL on every platform. openssl is on CI's runners,
+// so a missing one is a failure here rather than a skip.
 if (!only || "net_tls_tcp".includes(only)) {
   const tlsDir = path.join(buildDir, "net-tls")
   fs.rmSync(tlsDir, { recursive: true, force: true })
@@ -1983,16 +2103,11 @@ if (!only || "net_tls_tcp".includes(only)) {
     ],
     { cwd: root, encoding: "utf8" }
   )
-  // The two third-party clients, by name; `has` asks the PATH for each.
-  const [openssl, curl] = ["openssl", "curl"]
-  const tools = [openssl, curl].filter((tool) => !has(tool))
+  // The third-party client, by name; `has` asks the PATH for it.
+  const openssl = "openssl"
   if (
     check("net_tls_tcp: the server links", built.status === 0, String(built.stderr)) &&
-    check(
-      "net_tls_tcp: openssl and curl are on PATH (CI's runners have both)",
-      tools.length === 0,
-      `missing: ${tools.join(", ")}`
-    )
+    check("net_tls_tcp: openssl is on PATH (CI's runners have it)", has(openssl), "missing: openssl")
   ) {
     const server = spawn(exe, ["serve", "4"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
     let served = ""
@@ -2101,32 +2216,58 @@ if (!only || "net_tls_tcp".includes(only)) {
         `exit ${r.code} signal ${r.signal}, every step reached: ${r.reached}\n${r.all.slice(-1500)}`
       )
     }
-    const curled =
+    // The suite is pinned, not preferred: `ciphers` naming one TLS 1.3 suite is
+    // all the client offers, so a server that picked another would fail the
+    // handshake rather than pass the check. The server's certificate is
+    // self-signed, as it was under curl's `-k`.
+    /** @type {{ error: string, status: number, suite: string, alpn: string | false, body: string }} */
+    const got =
       port > 0
-        ? spawnSync(
-            curl,
-            [
-              "-sk",
-              "--tlsv1.3",
-              "--tls13-ciphers",
-              "TLS_AES_256_GCM_SHA384",
-              "--max-time",
-              "15",
-              "--resolve",
-              `localhost:${port}:127.0.0.1`,
-              `https://localhost:${port}/`,
-            ],
-            { encoding: "utf8" }
-          )
-        : { status: null, stdout: "", stderr: "no port" }
+        ? await new Promise((resolve) => {
+            const out = { error: "", status: 0, suite: "", alpn: false, body: "" }
+            const req = https.get(
+              {
+                host: "127.0.0.1",
+                port,
+                path: "/",
+                servername: "localhost",
+                rejectUnauthorized: false,
+                minVersion: "TLSv1.3",
+                maxVersion: "TLSv1.3",
+                ciphers: "TLS_AES_256_GCM_SHA384",
+                // biome-ignore lint/style/useNamingConvention: Node's own option name
+                ALPNProtocols: ["http/1.1"],
+                agent: false,
+                timeout: 15000,
+              },
+              (res) => {
+                out.status = res.statusCode ?? 0
+                out.suite = res.socket.getCipher().standardName
+                out.alpn = res.socket.alpnProtocol
+                res.setEncoding("utf8")
+                res.on("data", (chunk) => {
+                  out.body += chunk
+                })
+                res.on("end", () => resolve(out))
+                res.on("error", (e) => resolve({ ...out, error: e.message }))
+              }
+            )
+            req.on("timeout", () => req.destroy(new Error("timed out")))
+            req.on("error", (e) => resolve({ ...out, error: e.message }))
+          })
+        : { error: "no port", status: 0, suite: "", alpn: false, body: "" }
     check(
-      "net_tls_tcp: curl --tlsv1.3 GETs the page over the server, and exits 0",
-      curled.status === 0 && curled.stdout === "hello from nish/net/tls-tcp\n",
-      `exit ${curled.status}\nstdout: ${JSON.stringify(curled.stdout)}\nstderr: ${curled.stderr}`
+      "net_tls_tcp: an HTTPS GET pinned to TLS_AES_256_GCM_SHA384 negotiates that suite and http/1.1, and reads the page",
+      got.error === "" &&
+        got.status === 200 &&
+        got.suite === "TLS_AES_256_GCM_SHA384" &&
+        got.alpn === "http/1.1" &&
+        got.body === "hello from nish/net/tls-tcp\n",
+      JSON.stringify(got)
     )
     const ended = await serverDone
     // 4865, 4867 and 4866 are TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256
-    // and TLS_AES_256_GCM_SHA384; each s_client sent close_notify, and curl,
+    // and TLS_AES_256_GCM_SHA384; each s_client sent close_notify, and the GET,
     // which reads to the end of the answer, closed after the server did.
     const want =
       "closed: suite 4865 alpn - sni localhost sent 0 received -1 client-closed true\n" +
@@ -6148,42 +6289,45 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
 // used to pass, and none of 50 with the host turning the calls off.
 // #732 tracks the Node bug and when the host can drop the flag.
-if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
-  const agreeDir = path.join(buildDir, "p256-agree")
-  const programDir = path.join(agreeDir, "crypto_p256_agree")
-  fs.rmSync(agreeDir, { recursive: true, force: true })
-  fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
+/**
+ * Builds `tests/link/<program>`'s `main` (from `source`) beside a copy of
+ * std/crypto/p256.ts with the program's `seam.ts.in` appended, as `./p256`,
+ * natively and as a `--profile wasi` module under Node, and checks that each
+ * prints its expected.out: `label` names the checks, `dir` the scratch, and
+ * `extra` the directories of `tests/link` copied beside it.
+ */
+const p256SeamProgram = ({ label, dir, program, source, extra, nativeName }) => {
+  const seamDir = path.join(buildDir, dir)
+  const programDir = path.join(seamDir, program)
+  fs.rmSync(seamDir, { recursive: true, force: true })
+  fs.mkdirSync(path.join(seamDir, "crypto_p256"), { recursive: true })
   fs.mkdirSync(programDir, { recursive: true })
-  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
-    recursive: true,
-  })
-  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
-  fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
+  for (const name of extra) {
+    fs.cpSync(path.join(linkDir, name), path.join(seamDir, name), { recursive: true })
+  }
+  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(seamDir, "crypto_p256", "hex.ts"))
+  fs.copyFileSync(path.join(linkDir, program, source), path.join(programDir, "main.ts"))
   fs.writeFileSync(
     path.join(programDir, "p256.ts"),
     fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
-      fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "seam.ts.in"), "utf8")
+      fs.readFileSync(path.join(linkDir, program, "seam.ts.in"), "utf8")
   )
-  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, program, "expected.out"), "utf8")
   const entry = path.join(programDir, "main.ts")
   if (only !== "wasi") {
-    const exe = path.join(agreeDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
+    const exe = path.join(seamDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe], {
       cwd: root,
       encoding: "utf8",
     })
     const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
-    check(
-      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
-      built.status === 0 && ran.status === 0 && ran.stdout === want,
-      shown(ran)
-    )
+    check(nativeName, built.status === 0 && ran.status === 0 && ran.stdout === want, shown(ran))
   }
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasm = path.join(agreeDir, "app.wasm")
+    const wasm = path.join(seamDir, "app.wasm")
     const built = spawnSync(
       NISH,
-      [entry, "-o", path.join(agreeDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
+      [entry, "-o", path.join(seamDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
     const ran =
@@ -6194,15 +6338,46 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
           })
         : built
     check(
-      `p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
+      `${label}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )
   } else {
     skip(
-      `skipped: p256 agree: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_agree is not run`
+      `skipped: ${label}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program} is not run`
     )
   }
+}
+if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 agree",
+    dir: "p256-agree",
+    program: "crypto_p256_agree",
+    source: "agree.ts",
+    extra: ["crypto_wycheproof"],
+    nativeName:
+      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
+  })
+}
+
+// #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
+// and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
+// `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
+// 10,000 scalars. Neither inversion is exported, so the program reaches them
+// through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
+// std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
+// Its expected.out ends in a checksum of every inverse. Natively, and as a
+// `--profile wasi` module under Node.
+if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 inverse",
+    dir: "p256-inverse",
+    program: "crypto_p256_inverse",
+    source: "inverse.ts",
+    extra: [],
+    nativeName:
+      "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+  })
 }
 
 // The comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs
@@ -6317,6 +6492,86 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
       "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
       `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
+// `TlsTcpServer` and `Http1TlsServer` build a slot's TLS state, and the
+// latter its connection, on the first accept into it too, and so does
+// `Http2TlsServer` past slot 0.
+// `tests/link/net_tls_record_tcp/startup.ts`,
+// `tests/link/net_http1_server/tls-startup.ts` and
+// `tests/link/net_http2_tls/startup.ts` build pools of 16,384 slots on no
+// socket and print the bytes they took and whether they fit one chunk, which
+// the ceilings `TLS_TCP_START_BYTES`, `HTTP1_TLS_SERVER_START_BYTES` and
+// `HTTP2_TLS_SERVER_START_BYTES` hold.
+for (const [unit, program, name, ceiling, ceilingName] of [
+  ["net_tls_record_tcp", "startup.ts", "TlsTcpServer", TLS_TCP_START_BYTES, "TLS_TCP_START_BYTES"],
+  [
+    "net_http1_server",
+    "tls-startup.ts",
+    "Http1TlsServer",
+    HTTP1_TLS_SERVER_START_BYTES,
+    "HTTP1_TLS_SERVER_START_BYTES",
+  ],
+  [
+    "net_http2_tls",
+    "startup.ts",
+    "Http2TlsServer",
+    HTTP2_TLS_SERVER_START_BYTES,
+    "HTTP2_TLS_SERVER_START_BYTES",
+  ],
+]) {
+  if (only && !unit.includes(only) && !"runtime-budget".includes(only)) {
+    continue
+  }
+  const dir = path.join(buildDir, "link", `${unit}.${program.replace(".ts", "")}`)
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", unit, program), "-o", dir + path.sep, "--link", exe],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  if (check(`${unit}: ${program} links`, built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, chunk] = String(run.stdout).trim().split(" ")
+    check(
+      `${unit}: a 16,384-slot ${name} takes at most ${ceilingName} before its first connection`,
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= ceiling,
+      `ceiling ${ceiling}\n${shown(run)}`
+    )
+  }
+}
+
+// `Http3Server` builds a slot's QUIC and HTTP/3 connections and its address on
+// the first Initial accepted into it, so what a pool costs before its first
+// connection is its per-slot tables. `tests/link/net_http3_server/startup.ts`
+// builds a pool of 65,536 slots on no socket and prints the arena bytes it
+// took, which the ceiling `HTTP3_SERVER_START_BYTES` in
+// `tests/runtime-budgets.js` holds, and whether they fit in one chunk, without
+// which `Arena.used()` measures nothing.
+if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only)) {
+  const dir = path.join(buildDir, "link", "net_http3_server.startup")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "net_http3_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    check(
+      "net_http3_server: a 65,536-slot Http3Server takes at most HTTP3_SERVER_START_BYTES before its first connection",
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP3_SERVER_START_BYTES,
+      `ceiling ${HTTP3_SERVER_START_BYTES}\n${shown(run)}`
     )
   }
 }
@@ -7387,6 +7642,102 @@ if (!only || "std_json_tokenizer".includes(only)) {
     )
   } else {
     skip("skipped: link/std_json_tokenizer: no clang, so node.ts is not built natively")
+  }
+}
+
+// `nish/net/url` under the Node prelude, and against Node's own decoders. The
+// link loop runs `std_url` and its four refusals natively; here the same
+// programs run under `runtime/nish.mjs` and print the same bytes, `alloc.ts`
+// reads a target 10,000 times without moving the arena, and `fuzz.ts`'s 3,000
+// seeded inputs are held to `decodeURIComponent`, `URLSearchParams` and the
+// strict rule's regex, natively and under Node. Six programs beside them pass
+// a window or an `at` outside its array, and each panics with its message on
+// both sides.
+if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
+  for (const name of ["std_url", "std_url_escape", "std_url_pairs", "std_url_space", "std_url_window"]) {
+    const dir = path.join(linkDir, name)
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const errFile = path.join(dir, "expected.stderr")
+    const err = fs.existsSync(errFile) ? fs.readFileSync(errFile, "utf8") : null
+    check(
+      `link/${name}: under the Node prelude it exits ${code} and prints expected.out${err === null ? "" : " and expected.stderr"}`,
+      run.status === code && run.stdout === out && (err === null || run.stderr === err),
+      shown(run)
+    )
+  }
+  const urlDir = path.join(linkDir, "std_url")
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_alloc") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_url: 10,000 targets split, decoded and searched leave Arena.used() where it was",
+      run.status === 0 &&
+        /^rounds 10000 failures 0 kept 0 control seen checksum [1-9][0-9]*\n$/.test(run.stdout),
+      shown(run)
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so alloc.ts is not built")
+  }
+  for (const [file, message] of [
+    ["panic-decode-window", "percentDecode: the window is outside the array"],
+    ["panic-decode-at", "percentDecode: at is outside out"],
+    ["panic-start-window", "urlQueryStart: the window is outside the array"],
+    ["panic-segments-window", "UrlPathSegments: the window is outside the array"],
+    ["panic-decode-negative-len", "percentDecode: the window is outside the array"],
+    ["panic-decode-negative-at", "percentDecode: at is outside out"],
+  ]) {
+    const entry = path.join(urlDir, `${file}.ts`)
+    const fromNode = runUnderPrelude(entry, [])
+    check(
+      `link/std_url: ${file}.ts under the Node prelude exits 1 with "${message}"`,
+      fromNode.status === 1 && fromNode.stdout === "" && fromNode.stderr === `${message}\n`,
+      shown(fromNode)
+    )
+    if (HAS_CLANG) {
+      const outDir = path.join(buildDir, `std_url_${file}`) + path.sep
+      const exe = path.join(outDir, "app")
+      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+      const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+      check(
+        `link/std_url: ${file}.ts built natively exits 1 with "${message}"`,
+        native.status === 1 && native.stdout === "" && native.stderr === `${message}\n`,
+        shown(native)
+      )
+    } else {
+      skip(`skipped: link/std_url: no clang, so ${file}.ts is not built natively`)
+    }
+  }
+  const fuzzEntry = path.join(urlDir, "fuzz.ts")
+  const fuzzNode = runUnderPrelude(fuzzEntry, [], "main", { maxBuffer: 1 << 24 })
+  const fromNode = urlFuzzVerdict(fuzzNode.stdout ?? "")
+  check(
+    "link/std_url: 3,000 seeded inputs under Node decode as decodeURIComponent, URLSearchParams and the strict rule say",
+    fuzzNode.status === 0 && fromNode.cases === 3000 && fromNode.bad.length === 0,
+    `${fromNode.cases} cases\n${fromNode.bad.slice(0, 5).join("\n")}\n${shown({ ...fuzzNode, stdout: "" })}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_fuzz") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8", maxBuffer: 1 << 24 }) : built
+    const fromNative = urlFuzzVerdict(native.stdout ?? "")
+    check(
+      "link/std_url: the same 3,000 inputs, built natively, print the Node run's lines byte for byte",
+      native.status === 0 &&
+        fromNative.cases === 3000 &&
+        fromNative.bad.length === 0 &&
+        native.stdout === fuzzNode.stdout,
+      `${fromNative.cases} cases\n${fromNative.bad.slice(0, 5).join("\n")}\n${shown({ ...native, stdout: "" })}`
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so fuzz.ts is not built natively")
   }
 }
 
@@ -8489,6 +8840,19 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       held.ok && heldPlain.ok && volatileSet.test(held.text) && !volatileSet.test(heldPlain.text),
       `held:\n${held.text}\n--- plain:\n${heldPlain.text}`
     )
+    // A `Secret` bound with no annotation (#613) is one whose struct the module
+    // defines through `secret`'s inferred result alone: its wipe is the same
+    // volatile memset, where the twin's `fill(0)` of the same bytes is deleted.
+    const inferred = optimisedMain("secret_wipe_o2_inferred")
+    const inferredPlain = optimisedMain("secret_wipe_o2_inferred_plain")
+    const inferredPlainStores = inferredPlain.ok
+      ? (inferredPlain.text.match(/\bstore\b|@llvm\.memset/g) || []).length
+      : -1
+    check(
+      "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
+      inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
+      `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
   }
 }
 
@@ -8496,6 +8860,53 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // roots in the area files of `tests/wipes/` (`tests/wipes/index.js` says what a
 // group is and how a root's wipes are counted).
 runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
+
+// The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
+// `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
+// from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
+// store per limb rather than as a memset. Each array's stores share an SROA base
+// (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
+// four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+// `crypto`, `wipe` and `crypto_p256` filters all run it.
+{
+  const name =
+    "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+  if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
+    if (!has("opt")) {
+      skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+    } else {
+      const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnSync(NISH, [path.join(root, "tests/link/crypto_p256/main.ts"), "-o", `${dir}/`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const o =
+        c.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
+              encoding: "utf8",
+            })
+          : c
+      const body =
+        o.status === 0
+          ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+          : ""
+      const groups = new Map()
+      for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
+        groups.set(m[1], (groups.get(m[1]) ?? 0) + 1)
+      }
+      const sizes = [...groups.values()].sort((x, y) => y - x)
+      let detail = `volatile i32 zero stores by array: ${JSON.stringify([...groups])}`
+      if (o.status !== 0) {
+        detail = o.stderr
+      } else if (body === "") {
+        detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+      }
+      check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+    }
+  }
+}
 
 // `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
 // `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
@@ -8786,6 +9197,28 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       ]
         .filter((line) => line.length > 0)
         .join("\n")
+    )
+
+    // ct_asm_p256's `p256Divsteps30` is the module's thirty-step loop written out, as a
+    // rolled loop is a back-edge the reading refuses. Each of its blocks must be the
+    // module's loop body, line for line, or the check reads a function the signer no
+    // longer runs. (The matrix updates are written out at literal indices, so their
+    // text differs; the fixture's `.out` holds them to the module's inverses.)
+    const moduleSource = fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8")
+    const fixtureSource = fs.readFileSync(path.join(casesDir, "ct_asm_p256.ts"), "utf8")
+    const loopBody = moduleSource.match(
+      /\nconst p256Divsteps30 = [^\n]*\n[\s\S]*?\n {2}for \(let i: i32 = 0; i < 30; i\+\+\) \{\n([\s\S]*?)\n {2}\}\n/
+    )?.[1]
+    const unrolled =
+      fixtureSource.match(/\nexport const p256Divsteps30 = [^\n]*\n([\s\S]*?)\n\}\n/)?.[1] ?? ""
+    const blocks = [...unrolled.matchAll(/\n {2}\{\n([\s\S]*?)\n {2}\}(?=\n)/g)].map((m) => m[1])
+    const stray = blocks.filter((b) => b !== loopBody)
+    check(
+      "ct_asm: ct_asm_p256's p256Divsteps30 is thirty copies of std/crypto/p256.ts's divstep loop body",
+      loopBody !== undefined && blocks.length === 30 && stray.length === 0,
+      loopBody === undefined
+        ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
+        : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
     )
   }
 }
@@ -11050,7 +11483,9 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
 // prebuilt objects, deliberately: what they assert *is* that the two
 // translation units "compile warning-free together", so compiling them is the
 // check and a cached object would skip it. Two links is what that costs.
-if (!only) {
+// They run under `node tests/run.js runtime_test` on their own, which is how
+// CI's `runtime-net (macos-latest)` job runs runtime-net.c's Darwin branch.
+if (!only || "runtime_test".includes(only)) {
   const rt = spawnSync(
     "clang",
     [
@@ -11066,10 +11501,12 @@ if (!only) {
     ],
     { cwd: root }
   )
+  const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
     "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
-    rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
-    String(rt.stderr)
+    rtRun !== null && rtRun.status === 0,
+    String(rt.stderr) +
+      (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
   )
 
   // WP20 T0: the same file again with -DNISH_THREADS, which is the build where
@@ -11085,7 +11522,9 @@ if (!only) {
     rtThreadsRun !== null && rtThreadsRun.status === 0,
     String(rtThreads.stderr) + (rtThreadsRun ? String(rtThreadsRun.stdout) + String(rtThreadsRun.stderr) : "")
   )
+}
 
+if (!only) {
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
   const preludeLl = path.join(buildDir, "prelude.ll")
@@ -15566,7 +16005,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-histogram-atomic=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
       "--no-rayon",
       "--twin-runs",
       "1",
@@ -15610,7 +16049,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         parRun.status === 0 &&
           twinsAt > parText.indexOf(parHeading) &&
           parText.split(twinsHeading).length === 2 &&
-          ["par-compute", "par-nbody", "par-regions", "par-histogram"].every((k) =>
+          ["par-compute", "par-nbody", "par-regions", "par-histogram", "par-histogram-atomic"].every((k) =>
             twinsTable.includes(`| ${k} |`)
           ) &&
           twinsTable.includes("every binary below printed the Nish `par` run's output"),
@@ -15642,6 +16081,150 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         subset.stdout.includes("unchanged"),
       `${subset.stdout}${subset.stderr}`
     )
+  }
+}
+
+// ---- crypto-bench: the crypto twins ------------------------------------------------
+// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
+// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
+// every program to print the checksums its expected.txt pins, and proves the
+// portable columns portable. Each family must report every kernel size matched,
+// found by listing the directories, so a new family is checked without an edit
+// here. A missing toolchain is the runner's note and a column of —, not a
+// failure; so is a family that needs a loopback socket the machine refuses, and
+// a portable column this host cannot prove. Those notes and unproved lines are
+// printed under the check on a pass too, so a green run says what it left out.
+if (!only || "crypto-bench".includes(only)) {
+  if (HAS_CLANG) {
+    const families = fs
+      .readdirSync(path.join(root, "bench", "crypto"))
+      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
+      .sort()
+    const proved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .portableProof !== undefined
+    )
+    const v = spawnSync(
+      "node",
+      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    // The runner accounts for every column of every family it validated: a
+    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
+    // (the family's own word) or `<family> did not run <id>:` (this machine's
+    // reason). The test takes that account rather than probing toolchains
+    // itself, which disagreed with the runner on a host whose Go was older
+    // than go.mod or whose cargo could not fetch. The column list is the
+    // runner's own `crypto: columns …` line; without it the check fails.
+    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
+    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
+    const unaccounted = validated.flatMap((f) => {
+      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
+      return COLUMNS.filter(
+        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
+      ).map((id) => `${f} ${id}`)
+    })
+    // GitHub's x86-64 Linux runner has every twin's toolchain and the
+    // extensions their portable builds give up, so there a column this machine
+    // did not run, or an `unproved` line, means a gate failed open: every twin
+    // must run and the OpenSSL and Go proofs must be measured ones.
+    const strict =
+      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
+    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
+    check(
+      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
+      v.status === 0 &&
+        families.length > 0 &&
+        COLUMNS.length > 0 &&
+        families.every((f) =>
+          new RegExp(
+            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
+            "m"
+          ).test(v.stdout)
+        ) &&
+        unaccounted.length === 0 &&
+        proved.every((f) =>
+          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
+            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
+          )
+        ) &&
+        (!strict ||
+          (validated.length === families.length &&
+            !/ did not run /.test(v.stdout) &&
+            proved.every((f) =>
+              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ))),
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+    )
+    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
+        console.log(`      ${line}`)
+      }
+    }
+    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
+    // compiler it was given reaches the child, and the child's status comes
+    // back. A wrapper answers --version from the compiler under test and fails
+    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    const wrapDir = path.join(buildDir, "crypto-bench")
+    const wrapper = path.join(wrapDir, "nish-wrapper")
+    const wrapLog = path.join(wrapDir, "wrapper.log")
+    fs.mkdirSync(wrapDir, { recursive: true })
+    fs.rmSync(wrapLog, { force: true })
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
+      { mode: 0o755 }
+    )
+    const deleg = spawnSync(
+      "node",
+      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
+      deleg.status === 1 && forwarded.includes(path.join("bench", "crypto", "hash", "main.ts")),
+      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
+    )
+    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
+    // only, one run, into a copy of the file.
+    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
+    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- crypto:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+  } else {
+    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
   }
 }
 
@@ -21359,17 +21942,31 @@ if (!only || "differential".includes(only)) {
 if (linkSpecimens.size > 0) {
   for (const [key, spec] of linkSpecimens) {
     const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`
+    // Both links write one path and are moved aside after: ld64's LC_UUID, and
+    // the ad-hoc signature's page hash over it, differ between two output paths
+    // (docs/wp10-ci.md, "What ld64 varies, measured"), so two names would give
+    // two binaries however equal the code. scripts/bootstrap.sh does the same.
     const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`)
-    const bySource = spawnSync("clang", [...spec.fromSource, "-o", `${stem}.src`], { cwd: root })
-    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", `${stem}.obj`], { cwd: root })
+    const [src, obj] = [`${stem}.src`, `${stem}.obj`]
+    const linkAt = (args, dest) => {
+      const r = spawnSync("clang", [...args, "-o", stem], { cwd: root })
+      if (r.status === 0) {
+        fs.renameSync(stem, dest)
+      }
+      return r
+    }
+    const bySource = linkAt(spec.fromSource, src)
+    const byObjects = linkAt(spec.fromObjects, obj)
     const linked = bySource.status === 0 && byObjects.status === 0
-    const same = linked && fs.readFileSync(`${stem}.src`).equals(fs.readFileSync(`${stem}.obj`))
+    const [a, b] = linked ? [fs.readFileSync(src), fs.readFileSync(obj)] : []
+    const same = linked && a.equals(b)
+    const firstDiff = linked && !same ? a.findIndex((byte, i) => byte !== b[i]) : -1
     check(
       `runtime objects: linking ${path.basename(spec.ll)} against ${label} gives the bytes the sources do`,
       same,
       linked
-        ? `${fs.statSync(`${stem}.src`).size} bytes from the sources, ` +
-            `${fs.statSync(`${stem}.obj`).size} from the objects; the two links were\n` +
+        ? `${a.length} bytes from the sources, ${b.length} from the objects, ` +
+            `first differing at offset ${firstDiff}; the two links were\n` +
             `  clang ${spec.fromSource.join(" ")}\n  clang ${spec.fromObjects.join(" ")}`
         : String(bySource.stderr) + String(byObjects.stderr)
     )
@@ -21729,6 +22326,187 @@ if (!only || "c-symbols".includes(only)) {
       }
     }
   }
+}
+
+// ---- #432: the `unsafe` capability, reported ----------------------------------------
+// A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
+// the bit travels through callers, modules and packages like every other: here
+// read off `--emit-capabilities` for a direct call, a call two frames up, a
+// module with no unsafe call, each of the six exports, and a dependency that
+// imports `nish:unsafe` when the entry package does not. The deprecated
+// `--wrapping` and `--unchecked-indexing` carry no `unsafe`: each prints its
+// deprecation on every compile, on the command line that would pass the
+// policy too (docs/wp35-capabilities.md §1).
+if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
+  const unsafeDir = path.join(buildDir, "caps-unsafe")
+  fs.rmSync(unsafeDir, { recursive: true, force: true })
+  const program = {
+    "leaf.ts":
+      'import { uncheckedGet } from "nish:unsafe";\n\n' +
+      "export const first = (xs: i32[]): i32 => (xs.length > 0 ? uncheckedGet(xs, 0) : 0);\n",
+    "mid.ts":
+      'import { first } from "./leaf";\n\nexport const firstTwice = (xs: i32[]): i32 => first(xs) + first(xs);\n',
+    "pure.ts":
+      "export const sum = (xs: i32[]): i32 => {\n  let s = 0;\n  for (const x of xs) {\n    s = s + x;\n  }\n  return s;\n};\n",
+    "main.ts":
+      'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
+    "each.ts":
+      "import { readCString, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      '"nish:unsafe";\n\n' +
+      "declare function cbuf(): CPtr | null;\n\n" +
+      "export const get = (xs: i32[]): i32 => uncheckedGet(xs, 0);\n" +
+      "export const set = (xs: i32[]): void => {\n  uncheckedSet(xs, 0, 1);\n};\n" +
+      "export const add = (a: i32): i32 => wrappingAdd(a, 1);\n" +
+      "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
+      "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
+      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+    "node_modules/pkg_fast/package.json":
+      '{ "name": "pkg_fast", "version": "1.0.0", "exports": { ".": { "nish": "./src/index.ts" } } }\n',
+    "node_modules/pkg_fast/src/index.ts":
+      'import { wrappingMul } from "nish:unsafe";\n\n' +
+      "const mix = (h: i32): i32 => wrappingMul(h, 31);\n\n" +
+      "export const hash = (xs: i32[]): i32 => {\n  let h = 7;\n  for (const x of xs) {\n    h = mix(h) ^ x;\n  }\n  return h;\n};\n",
+    "dep.ts":
+      'import { hash } from "pkg_fast";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => (hash([1, 2]) & 0) + sum([1]);\n",
+    "flags.ts":
+      "export const main = (): i32 => {\n  const xs: i32[] = [1, 2];\n  let i = 0;\n  i = i + 1;\n" +
+      "  return xs[i] * 2147483647;\n};\n",
+  }
+  for (const [file, text] of Object.entries(program)) {
+    fs.mkdirSync(path.dirname(path.join(unsafeDir, file)), { recursive: true })
+    fs.writeFileSync(path.join(unsafeDir, file), text)
+  }
+  /** Compile `entry` in the program's directory; the report parsed, or null with the run beside it. */
+  const unsafeReport = (entry, extra = []) => {
+    const stem = path.basename(entry, ".ts")
+    const json = path.join(unsafeDir, `${stem}.caps.json`)
+    const r = spawnSync(
+      NISH,
+      [
+        entry,
+        "-o",
+        `${path.join(unsafeDir, `${stem}.ir`)}${path.sep}`,
+        "--emit-capabilities",
+        json,
+        ...extra,
+      ],
+      { cwd: unsafeDir, encoding: "utf8" }
+    )
+    return {
+      r,
+      report: r.status === 0 && fs.existsSync(json) ? JSON.parse(fs.readFileSync(json, "utf8")) : null,
+    }
+  }
+  const moduleOf = (report, file) =>
+    report?.packages.flatMap((p) => p.modules).find((m) => m.path === file) ?? null
+  const fnOf = (report, file, name) => moduleOf(report, file)?.functions.find((f) => f.name === name) ?? null
+  const chainOf = (fn) => (fn?.witnesses.unsafe ?? []).map((w) => `${w.function}->${w.calls}`).join(" ")
+
+  const direct = unsafeReport("main.ts", ["--capabilities"])
+  check(
+    "capabilities: a direct `uncheckedGet` call carries `unsafe`, its witness the call itself",
+    JSON.stringify(fnOf(direct.report, "leaf.ts", "first")?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(direct.report, "leaf.ts", "first")) === "first->uncheckedGet",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` reaches a caller two frames up, with the whole chain as its witness",
+    chainOf(fnOf(direct.report, "main.ts", "main")) ===
+      "main->firstTwice firstTwice->first first->uncheckedGet" &&
+      JSON.stringify(moduleOf(direct.report, "mid.ts")?.capabilities) === '["unsafe"]' &&
+      JSON.stringify(direct.report?.capabilities) === '["unsafe"]',
+    shown(direct.r)
+  )
+  check(
+    "capabilities: a module with no `nish:unsafe` call carries no `unsafe`",
+    JSON.stringify(moduleOf(direct.report, "pure.ts")?.capabilities) === "[]",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` keeps a program deterministic, and `--capabilities` names it",
+    direct.report?.deterministic === true && direct.r.stderr.includes("capabilities: unsafe (deterministic)"),
+    shown(direct.r)
+  )
+
+  const each = unsafeReport("each.ts")
+  const exportsSeen = [
+    ["get", "uncheckedGet"],
+    ["set", "uncheckedSet"],
+    ["add", "wrappingAdd"],
+    ["sub", "wrappingSub"],
+    ["mul", "wrappingMul"],
+    ["str", "readCString"],
+  ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
+  check(
+    "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 6,
+    `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
+  )
+
+  const dep = unsafeReport("dep.ts")
+  const depPackage = dep.report?.packages.find((p) => p.name === "pkg_fast")
+  check(
+    "capabilities: a dependency that imports `nish:unsafe` gives `unsafe` to its package and to the entry that calls it",
+    JSON.stringify(depPackage?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(dep.report, "dep.ts", "main")) === "main->hash hash->mix mix->wrappingMul" &&
+      JSON.stringify(moduleOf(dep.report, "pure.ts")?.capabilities) === "[]",
+    shown(dep.r)
+  )
+  const depDenied = spawnSync(
+    NISH,
+    ["dep.ts", "-o", `${path.join(unsafeDir, "dep-denied.ir")}${path.sep}`, "--deny", "unsafe"],
+    { cwd: unsafeDir, encoding: "utf8" }
+  )
+  check(
+    "capabilities: `--deny unsafe` refuses an `unsafe` reached only through a dependency, naming the chain into it",
+    depDenied.status === 1 &&
+      depDenied.stderr.includes("`main` reaches `unsafe`, which the capability policy does not grant") &&
+      depDenied.stderr.includes("node_modules/pkg_fast/src/index.ts:3:30 calls wrappingMul"),
+    shown(depDenied)
+  )
+
+  const flags = unsafeReport("flags.ts", ["--wrapping", "--unchecked-indexing", "--deny", "unsafe"])
+  check(
+    "capabilities: `--wrapping` and `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them",
+    flags.r.status === 0 &&
+      JSON.stringify(flags.report?.capabilities) === "[]" &&
+      flags.r.stderr.includes("--wrapping is deprecated") &&
+      flags.r.stderr.includes("--unchecked-indexing is deprecated"),
+    shown(flags.r)
+  )
+}
+
+// ---- #740: a constructor's prologue writes `this` ------------------------------------
+// The field initialisers are stored outside the written body, so an empty
+// constructor's `this` is written, while a method that only reads it, and an
+// empty constructor with nothing to store, keep `readonly`. The golden pins the
+// whole text; these name the three attributes the fix is about.
+if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
+  const ll = fs.readFileSync(path.join(casesDir, "ctor_empty_init_basic.ll"), "utf8")
+  const thisOf = (fn) => {
+    const line = ll.split("\n").find((l) => l.startsWith("define ") && l.includes(`@${fn}(`))
+    return line === undefined ? null : line.slice(line.indexOf("("), line.indexOf("%this"))
+  }
+  const ctor = thisOf("Dn.constructor")
+  check(
+    "#740: an empty constructor with field initialisers does not mark `this` readonly",
+    ctor !== null && !ctor.includes("readonly"),
+    ctor
+  )
+  const method = thisOf("Dn.scaled")
+  check(
+    "#740: a method that only reads `this` keeps it readonly",
+    method !== null && method.includes("readonly"),
+    method
+  )
+  const bare = thisOf("Bare.constructor")
+  check(
+    "#740: an empty constructor with no initialiser keeps `this` readonly",
+    bare !== null && bare.includes("readonly"),
+    bare
+  )
 }
 
 summarise()

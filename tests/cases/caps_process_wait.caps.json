@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "entry": "caps_process_wait.ts",
+  "deterministic": false,
+  "capabilities": ["process.spawn"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["process.spawn"],
+      "modules": [
+        {
+          "path": "caps_process_wait.ts",
+          "capabilities": ["process.spawn"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["process.spawn"],
+              "witnesses": {
+                "process.spawn": [
+                  { "function": "main", "at": "caps_process_wait.ts:11:20", "calls": "spawn" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_process_wait.ts:11:3", "allowed": true },
+                { "kind": "call", "at": "caps_process_wait.ts:11:15", "callee": "stop", "via": "index" },
+                { "kind": "oom", "at": "caps_process_wait.ts:11:26", "allowed": true }
+              ]
+            },
+            {
+              "name": "stop",
+              "exported": true,
+              "capabilities": ["process.spawn"],
+              "witnesses": {
+                "process.spawn": [
+                  { "function": "stop", "at": "caps_process_wait.ts:6:3", "calls": "kill" }
+                ]
+              },
+              "panics": [
+                { "kind": "index", "at": "caps_process_wait.ts:7:10", "proven": false },
+                { "kind": "oom", "at": "caps_process_wait.ts:7:10", "allowed": true }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

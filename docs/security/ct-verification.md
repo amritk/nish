@@ -98,7 +98,7 @@ those gaps was hiding a leak in code checked today.
 ## Seeded violations
 
 `tests/cases/ct_asm_refused` now holds one function for each rule, and
-`tests/run.js` checks each on x86-64, on x86-64 at `x86-64-v3` and on aarch64 (24 checks):
+`tests/run.js` checks each on x86-64, on x86-64 at `x86-64-v3` and on aarch64 (30 checks):
 
 | function | rule | expected kind | what it compiles to |
 | --- | --- | --- | --- |
@@ -110,6 +110,8 @@ those gaps was hiding a leak in code checked today.
 | `callsLeak` | leak inside a followed call | `load` via `leakyRow` | four `callq leakyRow` / `bl leakyRow` |
 | `tailLeak` | leak inside a followed tail call | `load` via `leakyRow` | `jmp leakyRow@PLT` / `b leakyRow` |
 | `secretDivide` | variable-latency instruction | `latency` | `divl %esi` / `udiv w0, w0, w8` |
+| `leakyBaseRead` | P-256 comb entry read at the digit's offset | `load` | `movl (%rcx,%rsi,4), %esi` / `ldr w11, [x9, w11, sxtw #2]` |
+| `leakyDivstep` | P-256 safegcd divstep that tests g's low bit with an `if` | `branch` | `testb $1, %dl` then `je` / `tbz w2, #0` |
 
 `via=leakyRow` is new: a violation found outside the named callee is reported
 as `load outside leakyRow`, so if LLVM ever inlines `leakyRow` the two checks
@@ -403,13 +405,20 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
 - **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FiatSelectznz`,
   `p256FiatScalarAdd`, `p256FieldInvert`, `p256ScalarInvert`,
   `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
+  `p256ScalarInverse` with its safegcd helpers `p256ToSigned30`,
+  `p256FromSigned30`, `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`,
+  `p256AddOrder30` and `p256Normalize30`,
   `p256SubBorrow`, `p256Below`, `p256ReduceOnce`, `p256AffineX`,
   `p256EncodePoint`, `p256DigestScalar`, `p256NonceKey`, `p256SignScalar`,
   `p256PublicKey`, `p256Sign`, `p256SignSha256`. (The field and scalar
   multiplies, add, subtract and conditional move, the point doubling and
   addition, the table move and select, and one window step are read as copies
   or reshaped copies, as are the comb's digit, fifteen-entry select, mixed
-  addition, masked keep and one comb step.) `p256Verify` handles only public data.
+  addition, masked keep and one comb step, and safegcd's thirty divsteps and
+  its two matrix updates: `ct_asm_p256`'s `p256Divsteps30`, the module's
+  divstep loop unrolled thirty times, which `tests/run.js` holds to the
+  module's loop body text, and `p256UpdateDe30` and `p256UpdateFg30` with
+  their limb loops unrolled.) `p256Verify` handles only public data.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
 
@@ -507,7 +516,7 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 
 | property | pinned by |
 | --- | --- |
-| Every rule the assembly check enforces refuses a real violation, on both targets | `ct_asm: ct_asm_refused <fn> on x86-64 / x86-64 at x86-64-v3 / aarch64` (24 checks in `npm test`) |
+| Every rule the assembly check enforces refuses a real violation, on both targets | `ct_asm: ct_asm_refused <fn> on x86-64 / x86-64 at x86-64-v3 / aarch64` (30 checks in `npm test`) |
 | No seed can be deleted, or its `expect=`/`via=` loosened, silently | `SEEDED` in `tests/ct-asm.js`, checked when the module loads |
 | A followed call's leak is found inside the callee, not in inlined code | `via=leakyRow` on `callsLeak` and `tailLeak`; `CALL_CORNERS` `leakVia` / `leakElsewhere` |
 | A chain of calls deeper than `CALL_DEPTH` is refused, not followed for ever | `CALL_CORNERS` `deep` |

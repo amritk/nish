@@ -82,8 +82,20 @@ const RUNTIME_TEXT_BUDGET = 3684
  * clang 18 on linux-x64, leaving 143. It is that small because it reads nothing itself:
  * it hands the bytes `nish_read_file_or_null` already put in the arena to a fresh array
  * header, so there is one read path and one `S_ISDIR` guard for both builtins.
+ *
+ * It measured **1,530 bytes** at the head WP34 N12 started from, 6 under the ceiling.
+ * **Raised to 2,560 by WP34 N12**, measured **2,383 bytes** on 2026-10-20 with clang
+ * 18.1.3 on linux-x64, 853 more, in two parts. 276 are the new process builtins: `spawn`
+ * (`nish_spawn_child`, 9, and the start factored out of `nish_spawn_impl`, 31 more for
+ * its errno answers), `kill` (53), `waitPid` (134) and `totalMemory` (49), as
+ * `-ffunction-sections` sizes them. The other 577 are not new: they are the CPU count
+ * (`nish_cpu_online`, the affinity mask, the cgroup v2 quota and `NISH_NUM_THREADS`)
+ * moved here from runtime-parallel.c, whose `--threads` row fell by 575, because
+ * `availableParallelism` reads it in a build without `--threads` and that build of
+ * runtime-parallel.c compiles none of it. The two files together grew by 278. The
+ * budget is the next 256-byte boundary above the measurement, leaving 177.
  */
-const RUNTIME_OS_TEXT_BUDGET = 1536
+const RUNTIME_OS_TEXT_BUDGET = 2560
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
@@ -224,8 +236,15 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * median from 846 ms to 792 ms (15 interleaved rounds; the copy band 834-846), the
  * slowest thread no longer holding the join a quarter of each region. The fallback's
  * row above is unchanged at 610 bytes: none of it is compiled there.
+ *
+ * **Lowered to 2,560 by WP34 N12**, measured **2,522 bytes** on 2026-10-20 with clang
+ * 18.1.3 on linux-x64, 575 fewer: the CPU count's reading (the affinity mask, the cgroup
+ * v2 quota and `NISH_NUM_THREADS`) moved to runtime-os.c as `nish_cpu_online`, which
+ * `availableParallelism` calls in every build, and `nish_cpu_count` here keeps only its
+ * cache and the call. The ceiling comes down with it, to the next 256-byte boundary
+ * above the measurement, so the room the move freed is not left for something else.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 3328
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2560
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
@@ -382,6 +401,75 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  * next 256-byte boundary above the measurement, as every ceiling here was set.
  */
 export const HTTP1_SERVER_START_BYTES = 16896
+
+/**
+ * Ceiling on what `new TlsTcpServer(config, listener, 16384)` takes from the arena
+ * before its first connection -- not a `.text` budget: `tests/run.js` links
+ * `tests/link/net_tls_record_tcp/startup.ts`, which builds that pool on the test
+ * configuration and prints the bytes.
+ *
+ * Measured **41,640 bytes** on 2026-10-20 with clang 18 on linux-x64: the
+ * record-sized read scratch, the P-256 signer and the empty record pools, with no
+ * slot's handshake state or server random built. Each slot's are built on the first
+ * accept into it. Built eagerly, as every slot was before, the interop server's
+ * HTTP/2 pool on 1,024 slots was 78.2 MB resident at listening against 27.8 MB now
+ * (`bench/pool-rss.mjs --per-pool`, three runs each, base and head each against a
+ * byte-identical copy of itself within 0.1 MB). The budget is the next 256-byte
+ * boundary above the measurement: the 88 bytes of headroom are intended, and a slot
+ * built eagerly again costs far more than they hold.
+ */
+export const TLS_TCP_START_BYTES = 41728
+
+/**
+ * Ceiling on what `new Http1TlsServer(tlsConfig, config, listener, 16384)` takes from
+ * the arena before its first connection, linked by `tests/run.js` from
+ * `tests/link/net_http1_server/tls-startup.ts` on the default `Http1Config`.
+ *
+ * Measured **58,296 bytes** on 2026-10-20 with clang 18 on linux-x64:
+ * `TLS_TCP_START_BYTES`'s pool and the HTTP/1.1 read scratch, `Date` and empty output
+ * pool, with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
+ * resident at listening against 4.6 MB now, and 18.1 MB against 4.6 MB at 256 slots
+ * (measured as `TLS_TCP_START_BYTES` says). The budget is the next 256-byte boundary
+ * above the measurement: the 72 bytes of headroom are intended, and one slot's
+ * connection built eagerly again costs far more than they hold.
+ */
+export const HTTP1_TLS_SERVER_START_BYTES = 58368
+
+/**
+ * Ceiling on what `new Http3Server(quicConfig, config, fd, 65536, entropy)` takes from
+ * the arena before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http3_server/startup.ts`,
+ * which builds that pool, the most slots a server takes, on the test configuration
+ * and prints the bytes.
+ *
+ * Measured **17,501,520 bytes** on 2026-10-20 with clang 18 on linux-x64, about 267
+ * bytes a slot: the fixed per-slot tables, some 232 bytes a slot (the connection ID
+ * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
+ * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
+ * bookkeeping, with no slot's connections built. Each slot's QUIC and HTTP/3
+ * connections and address are built on the first Initial accepted into it, 111,424
+ * arena bytes on the same configuration. The budget is the next 256-byte boundary
+ * above the measurement, as every ceiling here was set.
+ */
+export const HTTP3_SERVER_START_BYTES = 17501696
+
+/**
+ * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
+ * the arena before its first connection, linked by `tests/run.js` from
+ * `tests/link/net_http2_tls/startup.ts` on the default `Http2Config`.
+ *
+ * Measured **58,560 bytes** on 2026-10-21 with clang 18 on linux-x64:
+ * `TLS_TCP_START_BYTES`'s pool, the shared `Http2Pools` and `HttpDate`, and slot 0's
+ * connection, which the constructor still builds so that a bad `Http2Config` is
+ * refused there; every other slot's is built on the first accept into it. Built
+ * eagerly, as at `c8a00d6`, the interop server's HTTP/2 pool on 1,024 slots was 27.7 MB
+ * resident at listening with the lazy TLS pool against 11.7 MB now, 23 kB a slot
+ * against 7 kB (`bench/pool-rss.mjs --per-pool`, three interleaved rounds of three
+ * runs, head against a byte-identical copy of itself within 0.1 MB). The budget is
+ * the next 256-byte boundary above the measurement: the 64 bytes of headroom are
+ * intended, and one more slot's connection built eagerly costs far more than they hold.
+ */
+export const HTTP2_TLS_SERVER_START_BYTES = 58624
 
 /**
  * Every unit and configuration the gate measures: the source compiled with

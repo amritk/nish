@@ -21,7 +21,7 @@ import {
   StructInstantiation,
   TemplateInfo,
 } from "./program"
-import { Scope } from "./symbols"
+import { Local, STORAGE_PARAM, Scope } from "./symbols"
 import { T_ERROR, T_F64, T_I32, TypeTable } from "./types"
 
 /** `number` is `i32` by default and `f64` under `--number-mode f64`. */
@@ -30,6 +30,114 @@ export const NUMBER_MODE_F64: i32 = 1
 
 export const LOOP_ITERATION: i32 = 0
 export const LOOP_SWITCH: i32 = 1
+
+/**
+ * A `switch` being checked: the variables a clause assigns, read before the
+ * clauses are, and what they read as at each way out to the statement after
+ * it — a `break`, the last clause falling out of the bottom, and a value no
+ * label matches — so they are joined over exactly those.
+ */
+export class SwitchFrame {
+  locals: Local[]
+  exits: Scope[]
+  /** The scope the `switch` itself is in, where a clause's own scopes end. */
+  outer: Scope
+  /** Every variable a clause's tests narrowed on the way to one of `exits`. */
+  tested: Local[]
+
+  constructor(locals: Local[], outer: Scope) {
+    this.locals = locals
+    this.exits = []
+    this.outer = outer
+    this.tested = []
+  }
+}
+
+/**
+ * One loop's dataflow pre-pass (`src/loop-flow.ts`): the union and enum
+ * variables the loop assigns, and what each may hold at the loop's head, at
+ * a `do`'s condition and after the loop, as bit sets — a union's variants in
+ * its order with `FLOW_NULL` for `null`, an enum's members in declaration
+ * order. An empty set list is a point no path reaches. The checker records
+ * what its own walk of the body found at each `break` and `continue`, and
+ * the pre-pass compares the two once the body is checked.
+ */
+export class LoopFlow {
+  stmt: Node
+  /** `while`, `do`, `for` or `for-of`, for the trace. */
+  kind: string
+  /** The scope the loop is checked in, where its names are looked up. */
+  scope: Scope
+  locals: Local[]
+  enums: boolean[]
+  /** Per local, the tag value of each variant, or the value of each member, one per bit. */
+  values: i32[][]
+  /** Per local, the variant or the member type each bit stands for. */
+  members: i32[][]
+  /** Per local, every bit it may hold: its variants or members, and `null` when it is nullable. */
+  full: i32[]
+  /** Per local, its variants without `null`. */
+  allv: i32[]
+  /**
+   * Per local, the value of each member of the enum it holds, or of its tag
+   * enum for a union: the bits `flowKnown` answers in.
+   */
+  domain: i32[][]
+  /** The names a declaration in the loop binds, which shadow the variables outside it. */
+  declared: string[]
+  /** The names the loop declares more than once. */
+  redeclared: string[]
+  /** The `const` declarations in the loop that have an initializer. */
+  consts: Node[]
+  /** The head of a `while`, `for` or `for...of`, and the entry of a `do`'s body, once the pass is done. */
+  entry: i32[]
+  /** The body's end and continues: what a `do`'s condition and a `for`'s update read. */
+  join: i32[]
+  after: i32[]
+  breaks: i32[]
+  conts: i32[]
+  /** What the checker's own widening left each local at the head, before the pre-pass narrowed it. */
+  widened: i32[]
+  /** What the head was narrowed to: `entry` within `widened`. */
+  imposed: i32[]
+  /** What the checker found at the end of the body and at each `continue`. */
+  realBack: i32[]
+  /** What the checker found at each `break`. */
+  realBreaks: i32[]
+  status: string
+  /** The diagnostics already reported when the loop began. */
+  errors: i32
+  /** Whether the pre-pass ran to its end over this loop: a loop it gave up on changes nothing. */
+  active: boolean
+
+  constructor(stmt: Node, kind: string, scope: Scope, errors: i32) {
+    this.active = false
+    this.stmt = stmt
+    this.kind = kind
+    this.scope = scope
+    this.locals = []
+    this.enums = []
+    this.values = []
+    this.members = []
+    this.full = []
+    this.allv = []
+    this.domain = []
+    this.declared = []
+    this.redeclared = []
+    this.consts = []
+    this.entry = []
+    this.join = []
+    this.after = []
+    this.breaks = []
+    this.conts = []
+    this.widened = []
+    this.imposed = []
+    this.realBack = []
+    this.realBreaks = []
+    this.errors = errors
+    this.status = "none"
+  }
+}
 
 export class CheckContext {
   /** Shared by every module of one compilation, so a type id means one thing. */
@@ -96,6 +204,19 @@ export class CheckContext {
   arrowOuterScopes: Scope[]
   arrowOuterFunctions: FunctionBindings[]
   /**
+   * A property path an enum test reads — `h.k`, `this.k`, `xs[0].kind` — and
+   * the variable each stands for, so a test narrows what the path holds as it
+   * would a local's (`pathVariable` in `src/expressions.ts`): `pathLocals[i]`
+   * is the path `pathKeys[i]` written from the variable `pathRoots[i]`, and
+   * `thisRoot` stands for `this`.
+   */
+  pathLocals: Local[]
+  pathRoots: Local[]
+  pathKeys: string[]
+  thisRoot: Local
+  /** How many variables have been given a `$n` index key (`Local.pathIndex`). */
+  pathIndexCount: i32
+  /**
    * WP29: parallel to `arrowOuterScopes`, each arrow being checked, its own
    * parameter scope, and whether it may read its function's `const` locals:
    * an arrow passed to a data-parallel form may (`captureOuter` in
@@ -148,6 +269,10 @@ export class CheckContext {
    */
   loopKinds: i32[]
   loopBreaks: boolean[]
+  /** The `switch`es enclosing the statement being checked, innermost last. */
+  switchFrames: SwitchFrame[]
+  /** The loops enclosing the statement being checked, innermost last, each with its pre-pass. */
+  flowFrames: LoopFlow[]
   /**
    * The expression of the statement being checked, when it is an expression
    * statement. `console.log` and the other `void` builtins may only appear
@@ -201,6 +326,8 @@ export class CheckContext {
     this.current = null
     this.loopKinds = []
     this.loopBreaks = []
+    this.switchFrames = []
+    this.flowFrames = []
     this.statementExpression = null
     this.forOfWalk = null
     this.errored = false
@@ -208,6 +335,11 @@ export class CheckContext {
     this.functionBindings = new FunctionBindings()
     this.arrowOuterScopes = []
     this.arrowOuterFunctions = []
+    this.pathLocals = []
+    this.pathRoots = []
+    this.pathKeys = []
+    this.thisRoot = new Local("this", T_ERROR, false, STORAGE_PARAM)
+    this.pathIndexCount = 0
     this.arrowFns = []
     this.arrowScopes = []
     this.arrowCaptures = []

@@ -161,10 +161,10 @@ export class H2Loop {
         crypto.getRandomValues(this.randomBuffer);
         crypto.getRandomValues(this.keyBuffer);
       }
-      const before: i64 = Arena.used();
+      const before: i64 = Arena.mark();
       const slot: i32 = this.server.accept(this.randomBuffer, this.keyBuffer);
       if (slot >= 0) {
-        this.acceptGrowth = Arena.used() - before;
+        this.acceptGrowth = Arena.mark() - before;
         this.acceptSlot = slot;
         this.accepted = this.accepted + 1;
         pollAdd(this.loop, this.server.fd(slot), 1, slot);
@@ -178,7 +178,7 @@ export class H2Loop {
 
   /** A connection's descriptor is ready: drive it, take its events, then re-arm it or close it. */
   serve(slot: i32, events: i32): void {
-    const before: i64 = Arena.used();
+    const before: i64 = Arena.mark();
     let wants: i32 = (events & 5) !== 0 ? this.server.readable(slot) : this.server.writable(slot);
     if ((wants & TLS_RECORD_SIGN) !== 0) {
       const key: Secret<u8[]> = secret(leafPrivate());
@@ -192,7 +192,7 @@ export class H2Loop {
     }
     wants = this.server.flush(slot);
     if (this.measuring) {
-      this.growth = this.growth + (Arena.used() - before);
+      this.growth = this.growth + (Arena.mark() - before);
     }
     if (!this.server.holds(slot)) {
       return;

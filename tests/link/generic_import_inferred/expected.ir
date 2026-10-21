@@ -1,0 +1,6 @@
+%struct.Box$i32 = type { i32 }
+%struct.Box$str = type { i8* }
+declare void @Box$i32.constructor(
+declare noundef i32 @Box$i32.get(
+define void @Box$i32.constructor(
+define noundef nonnull align 8 dereferenceable(4) %struct.Box$i32* @box$i32(i32 noundef %value)
