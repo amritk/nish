@@ -1,0 +1,25 @@
+{
+  "title": "TLS 1.3 and QUIC handshakes",
+  "kernels": [
+    { "name": "tls13", "sizes": [32], "unit": "op/s", "validateSize": 4 },
+    { "name": "quic", "sizes": [32], "unit": "op/s", "validateSize": 4 }
+  ],
+  "twins": {
+    "openssl": {
+      "portable": "OpenSSL's P-256 and X25519 assembly runs whatever OPENSSL_ia32cap says: masking every bit it reads moves a handshake by under 10% (README.md), so no mask makes a column that proves anything",
+      "lacks": { "quic": "OpenSSL 3.0 has no QUIC server" }
+    },
+    "go": { "portable": { "tags": ["purego"] } },
+    "rust": {
+      "portable": "ring picks its assembly at run time and has no feature or cfg that turns it off"
+    },
+    "node": {
+      "portable": "node:tls is OpenSSL's libssl with its assembly, and Node has no switch that turns it off",
+      "lacks": { "quic": "Node has no stable QUIC" }
+    }
+  },
+  "notes": [
+    "Every QUIC column runs in memory, with no socket: Nish and Rust (quinn-proto) hand each datagram to the other endpoint, and Go runs quic-go over a pair of in-memory net.PacketConns.",
+    "Node's server sends OpenSSL's default two TLS 1.3 tickets, which node:tls cannot turn off; every other twin sends none, and nothing resumes."
+  ]
+}
