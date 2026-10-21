@@ -131,8 +131,11 @@ because `Http1Server` stores into the slot's parser and output, which outlive
 the pass. None is needed either, since a warmed pass allocates nothing, and
 `tests/link/tfb_entry` pins every server call over 200 requests to leave
 `Arena.used()` where it was instead. The
-reference entries are the HTTP twins (`bench/http-twins/`). The nodelay
-comparison waits for E2.
+reference entries are the HTTP twins (`bench/http-twins/`). With E2 in, the
+entry sets `TCP_NODELAY` by default, and `run.sh --nodelay-compare` measures it
+against the same build with the flag off: the flag is never slower outside the
+noise band and faster outside it at four levels, so it stays on
+([BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext)).
 
 **Follow-up.** Multi-core: one entry process per core on one `SO_REUSEPORT`
 port, through #719's prefork supervisor (`std/net/prefork.ts`) once it lands.
