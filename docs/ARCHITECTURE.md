@@ -218,7 +218,7 @@ own source until the seed compiles it, which is the next release.
    writes a missing golden), an `llvm-as` pass, a native round trip (`.out`,
    using `tests/driver.c`'s `test()` or an `export const main`), at least one
    `reject_*` case, and `.args` for flags. A new positive case moves the
-   generated `tests/self/goldens/checked.txt`, which is rewritten with
+   generated `tests/self/goldens/checked/<module>.txt` files, rewritten with
    `node tests/self/goldens.js --update` and never by hand; a case the last
    release compiles differently, or refuses, needs its `DECLARED` entry in
    `tests/nish-cmp.js`. A new builtin touches more files than this list

@@ -2,6 +2,7 @@
 // mode and by `tests/link/net_quic_lifecycle_f64` under `--number-mode f64`.
 import { Suite } from "nish/testing";
 import { keyChecks } from "./keys";
+import { limitChecks } from "./limits";
 import { listenerChecks } from "./listener";
 import { timerChecks } from "./timers";
 
@@ -11,5 +12,6 @@ export const quicLifecycleChecks = (): i32 => {
   listenerChecks(t);
   timerChecks(t);
   keyChecks(t);
+  limitChecks(t);
   return t.done();
 };

@@ -219,7 +219,7 @@ compatible only when their types are identical.
 | `enum K` | a **distinct** type represented as `i32` | never interchangeable with `i32` |
 | `K.M` | an enum member type: the one member `K.M`, as `i32` | holds only that member; a read is a `K` |
 | `T \| null` | `T` a class, interface, array, or string | a scalar can never be nullable |
-| `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read |
+| `A \| B` of tagged variants | a pointer to the variant; its first field is the tag | [Discriminated unions](#discriminated-unions); only the tag is read until a test of it narrows |
 | `Result<T, E>` | the only way to report failure | `E` may not be `void` |
 | `void` | return type only | |
 
@@ -1678,12 +1678,16 @@ const pick = (round: boolean): Shape => (round ? new Circle() : new Square());
 export const main = (): i32 => {
   const shapes: Shape[] = [pick(true), new Square()];
   let circles = 0;
+  let area = 0;
   for (const s of shapes) {
     if (s.kind === Kind.Circle) {
-      circles = circles + 1;
+      circles = circles + 1; // `s` is a `Circle` here
+      area = area + 3 * s.r * s.r;
+    } else {
+      area = area + s.side * s.side; // and a `Square` here
     }
   }
-  return circles === 1 ? 0 : 1;
+  return circles === 1 && area === 43 ? 0 : 1;
 };
 ```
 
@@ -1692,7 +1696,8 @@ export const main = (): i32 => {
   Kind.Circle`. All variants of a union take their tags from one enum, under
   one field name, with different members; a union names at least two. Each
   broken rule has its code (NL2522–NL2527); a tag that is not `readonly` is
-  NL2535. Any other union is still NL1053.
+  NL2535, one typed as the whole enum (`readonly kind: Kind`) NL2559. Any
+  other union is still NL1053.
 - A union is a local, parameter, field, return, array element, or nullable
   (`Shape | null`). An alias may name another union, which is flattened. A
   variant, or a smaller union, converts into it wherever the union is
@@ -1700,17 +1705,71 @@ export const main = (): i32 => {
   ternary arm or `??` default whose other side is the union. A class that
   implements an interface variant converts to that interface first. A union
   crosses modules but not a sidecar (NL4009).
-- **The tag is the only member** (NL2528 for anything else, even a field every
-  variant has). It reads as the enum: `const k: Kind = s.kind` — annotate it,
-  `const k = s.kind` is NL2530. Compare `k` only with the variants' members:
-  `tsc` narrows it to those, so `k === Kind.C` with no `C` variant is TS2367
-  there and compiles here. A union is read-only, even for a field every
-  variant has (NL2529). Comparing the tag with a member no variant has is
-  NL2531, a `case` for one NL2532.
-- **Not yet:** narrowing by `if`/`switch`. Until it lands, a second test of a
-  tag already ruled out (`if (s.kind === Kind.A) { return }` then
-  `s.kind === Kind.A`) compiles here and is TS2367 in `tsc`: do not write
-  one. The same holds for a `const k: Kind = s.kind` from the start.
+- **Test the tag to read a variant.** Before a test, the tag is the only
+  member (NL2528 for anything else, even a field every variant has). A test of
+  a local's or parameter's tag narrows it as `tsc` does: `if`/`else`, a
+  ternary, `&&`, `||`, `!==`, an early `return`/`break`/`continue`, each
+  `case` of a `switch (s.kind)`, and composed with `s !== null &&`. Two or
+  more variants left still give only the tag; an assignment drops the
+  narrowing. Where `a || b` held (or `a && b` failed), the variable is what
+  either side proved, `Circle | Square` after two tag tests. A test reads
+  through an assignment: `(t = next()).kind === Kind.Square` narrows `t`. Past an `if`, the
+  variable is what the arms that fall through left it (an `else if` chain
+  that returns leaves the variant no test named), including what a test nested
+  in each arm proved: two arms that each return when `s.kind === Kind.A` leave
+  `s` not a `VA`; a `switch`'s exits join the same way. A path does not narrow the
+  union (`h.s.kind` then `h.s.r` is NL2558): copy it into a local and test
+  that. The tag read through a path (`h.k`, `this.k`, `h.s.kind`,
+  `xs[0].kind`, `xs[i].kind`) does stay narrowed for later comparisons, until a store to
+  the path, a prefix of it or its root. An index `i` is part of the path when
+  it holds one value: a parameter, a `const` (`const i = 0` makes `xs[i]` the
+  path `xs[0]`, and so does `const j = i` after it), a module constant
+  (`const IDX: i32 = 0` makes `xs[IDX]` the path `xs[0]`), or a `let` nothing
+  assigns; through a `let` that is assigned
+  or stepped, `xs[i]` is not narrowed, and `xs[j] = t` drops nothing. A read where every variant was excluded is
+  NL2557.
+- The tag reads as the enum: `const k: Kind = s.kind` — annotate it,
+  `const k = s.kind` is NL2530. `k` holds only the variants' members. A
+  union is read-only, even for a field every variant has (NL2529). Comparing
+  the tag (or such a `k`) with a member it cannot hold — one no variant has,
+  or one a test already excluded — is NL2531, a `case` for one NL2532.
+- A `switch` whose subject reads a variant's tag field (`s.kind`,
+  `h.shape.kind`, `xs[i].kind`, the receiver typed as the union) and whose
+  labels name every variant, with no `default`, is complete: if every
+  clause returns, it ends a function that returns a value, and its unmatched
+  case is `unreachable` in the IR. A statement after it is unreachable code
+  when every clause returns; a clause's `break` reaches it.
+  With a variant unnamed it is the missing-return error, as TS2366. A
+  `switch (k)` on an enum variable (a parameter, or `const k: Kind = s.kind`,
+  `let` or `const`), or on an enum field assigned from a tag
+  (`b.k = s.kind`), is never complete, whatever its labels
+  (C may pass an enum any `i32`): give it a `default` or return after it.
+  A path's tag a test narrowed (`h.s.kind` after
+  `if (h.s.kind === Kind.A) return`) needs every tag of the whole union; a
+  narrowed union local is complete with the variants left to it.
+- An enum variable, a parameter `k: Kind` as much as such a tag local, narrows
+  on `k === Kind.A` / `!==` in the same forms as a union, `switch (k)`
+  included: after `if (k === Kind.A) return`, `k === Kind.A` is NL2531.
+  Narrowed to one member, `let j = k` is a `Kind.A`; to several,
+  `const j = k` is NL2530 (annotate it `Kind`). `s.kind === k` narrows `s`
+  to the variants of `k`'s members where they are equal. An enum local an
+  `if`, ternary, loop or `switch` stores into holds, after it, what it held
+  or any member stored; after a `switch`, what its exits left (each `break`,
+  the last clause's end, and the unmatched case when there is no `default`);
+  after a loop, what its condition leaves false at the head, joined until it
+  no longer changes, and each `break`, as `tsc` reads it — a variable the
+  loop only tests included, and an `if` or `switch` inside the loop narrowing
+  as it does outside; a `for` update is read after the body. A loop holding
+  a path (`h.k`), a store inside an expression (an argument, an initializer,
+  a chain's inner `=`), a store of a field or method call read through an
+  element, a call or a receiver the loop declares (`gs[0].b`,
+  `makeG().b`), of a `let` the loop declares or of a `const` it declares
+  from a tracked variable (a swap's `const t: Kind = a`), a ternary arm
+  reading the stored variable where it holds no member
+  (`k = k === Kind.A ? Kind.B : k`), or a type of more than 29 members
+  falls back to every member the body stored
+  anywhere or the whole type, which accepts a few comparisons `tsc` refuses
+  (TS2367; LANGUAGE.md, "Accepted here, refused by `tsc`").
 - **Refused by design:** union type arguments (`Box<Shape>`,
   `Map<K, Shape>`, `Result<Shape, E>`, a generic call binding `T` to a
   union: NL2533), unions as `Map`/`Set` keys, covariant arrays (`Circle[]`
@@ -2066,6 +2125,20 @@ most 65,536 bytes a call, from the kernel's CSPRNG; more panics),
 path cannot be stat'd, so test `m !== m`), and `signalFd()` / `readSignal(fd)`:
 call `signalFd()` once at the top of `main`, then `readSignal(fd)` blocks until
 SIGTERM or SIGINT and answers 15 or 2. None of them exists on a wasm target.
+
+**Children and the machine.** `spawn(argv)` starts a child like `spawnSync` but
+answers its pid (`i32`) at once, without waiting; `kill(pid, sig)` sends 0, 2,
+9 or 15 and answers 0 (any other signal is `-22`); `waitPid(pid, flags)` answers
+`[pid, status]` as an `i32[]` — pid `-1` is any child, flag `1` does not block,
+`[0, 0]` means none has exited yet, and the status is the exit code or 128 plus
+the signal. Each answers a **negative errno** on failure (`[-10, 0]`: no child
+left), so test `pid > 0` before passing a pid on: `-1` (EPERM) handed to
+`waitPid` means any child. After `signalFd()` a blocking `waitPid` restarts
+through SIGTERM, so a supervisor reaps with flag `1` on a `pollWait` tick that
+also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
+a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
+`totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
+the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
 
 **Sockets** (`nish:net`, or the same names as globals). `tcpListen(host, port,
 backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
@@ -2446,6 +2519,21 @@ bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
 never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
 `tests/link/std_text_index_of_any` is its program.)
+
+**Decode a URL or read a query** — there is no `decodeURIComponent` and no
+`URLSearchParams`: `nish/net/url` has both readings. `urlDecode(s, flags)` and
+`urlQueryGet(target, name)` answer a `string | null`; the byte API
+(`percentDecode`, `UrlPathSegments`, `UrlQuery`, `urlQueryFind`) reads a
+window of a `u8[]` and allocates nothing. Decoding is strict by default — a
+malformed escape or `%00` is refused, `+` is kept — and `URL_DECODE_FORM`,
+`URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL` add `URLSearchParams`'s
+repairs, short of its U+FFFD for invalid UTF-8. `percentDecode` answers the
+length or a negative `URL_DECODE_ERR_*` code — test it before reading `out`,
+since a peer's `%zz` makes it negative and `urlQueryStart` answers -1 for no
+`?` — and `percentDecodeErrorAt` the offset an error is at; a query yields at
+most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
+program, and the user guide's [standard-library
+page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
 
 **Shared behaviour over several shapes** — there is no inheritance and no
 dispatch. Give each class the interface's fields **first**, `implements` it,

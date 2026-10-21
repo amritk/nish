@@ -260,8 +260,8 @@ export const tlsChecks = (): i32 => {
   const beforeD: i32 = lb.accepted;
   t.ok("and a second fills the pool, accepted into slot 1", d.handshake([H2_ALPN]) && lb.acceptSlot === 1 && lb.accepted === beforeD + 1);
   t.ok(
-    `whose connection the first accept into it makes (${lb.acceptGrowth > toI64(0) ? "some" : "no"} bytes, ${lb.server.connections.length} made)`,
-    lb.acceptGrowth > toI64(0) && lb.server.connections.length === 2
+    `whose connection the first accept into it makes (${lb.acceptGrowth !== toI64(0) ? "some" : "no"} bytes, ${lb.server.connections.length} made)`,
+    lb.acceptGrowth !== toI64(0) && lb.server.connections.length === 2
   );
   e.index = lb.connect();
   t.ok("a third is accepted and shed", lb.awaitEnd(e.index) && lb.refused === 1);

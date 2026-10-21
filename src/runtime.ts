@@ -471,6 +471,32 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // WP34 N12. `nish_spawn` without its wait: the child runs arbitrary code
+    // beside this one (`EFFECT_WRITE`) and the vector is captured, as above,
+    // but nothing waits, so `willreturn` holds here where it does not there.
+    this.add(
+      plain(
+        "nish_spawn_child",
+        "declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8)",
+        EFFECT_WRITE
+      )
+    )
+    // One `kill(2)`. A signal is external state, so the call writes, and two
+    // of them never fold into one; a program that signals itself with 9 or 15
+    // never sees the call return, so no `willreturn`.
+    this.add(
+      mayNotReturn("nish_kill", "declare noundef i32 @nish_kill(i32 noundef, i32 noundef)", EFFECT_WRITE)
+    )
+    // A fresh two-element `i32[]` per call, so `noalias` and `nonnull`. Without
+    // `WNOHANG` the call waits for a child that may never exit, so no
+    // `willreturn`; it reaps the child, which no later call can undo.
+    this.add(
+      mayNotReturn(
+        "nish_wait_pid",
+        "declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
     // A fresh `string[]` per call, so `noalias`, and null when the directory
     // cannot be read, so no `nonnull`. `EFFECT_WRITE` because it allocates (the
     // arena moves) and because the directory is not memory LLVM tracks: two
@@ -1013,6 +1039,19 @@ export class RuntimeTable {
     this.addWrites(
       WRITES_NOTHING,
       plain("nish_cpu_count", "declare noundef i64 @nish_cpu_count()", EFFECT_WRITE)
+    )
+    // WP34 N12, runtime-os.c: the reading `nish_cpu_count` caches, made on
+    // every call so that `availableParallelism` sees an affinity mask or a
+    // cgroup quota changed since, and the bytes of physical memory. Each reads
+    // the host and stores nothing a program can observe; `EFFECT_WRITE` keeps
+    // two reads apart for `nish_monotonic_nanos`'s reason.
+    this.addWrites(
+      WRITES_NOTHING,
+      plain("nish_cpu_online", "declare noundef i64 @nish_cpu_online()", EFFECT_WRITE)
+    )
+    this.addWrites(
+      WRITES_NOTHING,
+      plain("nish_total_memory", "declare noundef i64 @nish_total_memory()", EFFECT_WRITE)
     )
     // WP38 S5: AES-GCM on the CPU's AES instructions, runtime-aes.c
     // (`src/kernels.ts`). `nish_aes_hw` is `nish_str_index_of_any`'s resolver

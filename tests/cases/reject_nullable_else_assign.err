@@ -1,0 +1,1 @@
+Cannot read property `v` of `P | null`; check for null first: `if (p !== null) { ... }` narrows `P | null` to `P`

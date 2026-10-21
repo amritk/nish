@@ -58,55 +58,60 @@ Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String buildi
 
 ## Data parallelism (ms, min / median)
 
-Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-20, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at 15a1a97, the base of the branch it was measured on (branch commit 6a87ce2, which a squash merge does not keep), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
+Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex` and par-histogram-atomic as the same scope sharing an `AtomicI32` per bin; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-20, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at b1bf78f, the base of the branch it was measured on (branch commit 7636c33, which a squash merge does not keep), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
 
 | Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| par-compute | 64 square roots per element, 2^21 elements (f64) | 875 / 939 | 228 / 239 | 3.83x | 33,968 / 34,480 |
-| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 173 / 191 | 58.0 / 65.8 | 2.97x | 33,960 / 34,472 |
-| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 174 / 180 | 56.3 / 59.9 | 3.09x | 1,588 / 1,844 |
-| par-short | an 8-element map called 2^20 times, each call fed by the last | 58.4 / 58.9 | 61.4 / 65.2 | 0.95x | 1,320 / 1,320 |
-| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 554 / 632 | 56.3 / 58.0 | 9.83x | 2,216 / 2,728 |
-| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 27.4 / 31.3 | 159 / 193 | 0.17x | 1,320 / 1,576 |
-| par-heavy | 16 integer scramble rounds per element, 2^22 elements, 40 calls; the order-sensitive fold runs on one thread | 2209 / 2299 | 758 / 789 | 2.91x | 34,068 / 34,476 |
-| par-heavy-fold | par-heavy with a fold that vectorises: the same map, a smaller undivided part | 2027 / 2063 | 621 / 636 | 3.26x | 34,068 / 34,472 |
-| par-heavy4 | par-heavy with 64 scramble rounds: four times the divided work, the same fold | 11013 / 11423 | 3217 / 3307 | 3.42x | 34,076 / 34,476 |
-| par-scale | `x * k` over 2^22 elements, 40 calls: a memory-bound map | 343 / 359 | 272 / 293 | 1.26x | 34,072 / 34,476 |
-| par-single | one `x * 3` map over 2^25 elements: a single large region | 220 / 228 | 202 / 204 | 1.09x | 263,332 / 263,844 |
+| par-compute | 64 square roots per element, 2^21 elements (f64) | 963 / 964 | 273 / 291 | 3.53x | 33,964 / 34,476 |
+| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 202 / 210 | 59.2 / 61.3 | 3.41x | 33,956 / 34,468 |
+| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 187 / 190 | 63.1 / 64.9 | 2.96x | 1,584 / 1,836 |
+| par-short | an 8-element map called 2^20 times, each call fed by the last | 63.1 / 64.0 | 67.2 / 71.2 | 0.94x | 1,316 / 1,316 |
+| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 631 / 673 | 65.6 / 68.3 | 9.61x | 2,212 / 2,724 |
+| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 29.5 / 31.9 | 123 / 168 | 0.24x | 1,316 / 1,572 |
+| par-histogram-atomic | par-histogram with an `AtomicI32` per bin, one `add` per value: contended atomics, no lock | 26.1 / 30.0 | 114 / 120 | 0.23x | 1,316 / 1,572 |
+| par-heavy | 16 integer scramble rounds per element, 2^22 elements, 40 calls; the order-sensitive fold runs on one thread | 2646 / 2805 | 900 / 919 | 2.94x | 34,068 / 34,472 |
+| par-heavy-fold | par-heavy with a fold that vectorises: the same map, a smaller undivided part | 2437 / 2478 | 753 / 780 | 3.24x | 34,072 / 34,468 |
+| par-heavy4 | par-heavy with 64 scramble rounds: four times the divided work, the same fold | 12896 / 13097 | 3882 / 4001 | 3.32x | 34,072 / 34,468 |
+| par-scale | `x * k` over 2^22 elements, 40 calls: a memory-bound map | 384 / 387 | 296 / 309 | 1.30x | 34,064 / 34,468 |
+| par-single | one `x * 3` map over 2^25 elements: a single large region | 251 / 263 | 228 / 261 | 1.10x | 263,328 / 263,840 |
 
 ## Data parallelism against Rust and Go (ms, min / median)
 
-Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map twins cut the array into one contiguous chunk per thread, the first on the calling thread, as Nish's partitioner did until it began cutting up to eight pieces per thread that the threads claim as they finish ([Scheduling a divided region](#scheduling-a-divided-region)); Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one `add` per bin, is `examples/histogram-atomic.ts` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).
+Five of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map twins cut the array into one contiguous chunk per thread, the first on the calling thread, as Nish's partitioner did until it began cutting up to eight pieces per thread that the threads claim as they finish ([Scheduling a divided region](#scheduling-a-divided-region)); Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, kept deliberately as a comparison of a contended lock. par-histogram-atomic bins the same values into an `AtomicI32` per bin, one sequentially consistent add per value in every language, Nish's `add`, Rust's `AtomicI32::fetch_add` with `SeqCst` and Go's `atomic.Int32.Add`: the same contention on sixteen bins without the lock. The version that avoids the contention, a local tally and one `add` per bin, is `examples/histogram-atomic.ts` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).
 
 **The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (`nish_panic_overflow` and `nish_panic_index` are reached from par-histogram's `binStream`, for one). The Rust twins build as `--release` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's `--profile speed` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.
 
 **How it is timed.** Every binary divides over 4 threads, the count Nish's runtime chooses on this machine: `NISH_NUM_THREADS`, `RAYON_NUM_THREADS`, `GOMAXPROCS` and `PAR_THREADS` (read by the scope twins) are all set to it. The comparison is run 3 time(s), minutes apart, each run 11 interleaved rounds after 1 warm-up: in each round every binary and a byte-identical copy of it run once, in an order rotated by one per round. The times below are process wall time, min / median in ms over every round of every run. In each run, and separately for the minimum and the median, Nish is divided by the fastest other column on that statistic, and the band is the larger of the gaps between Nish and its copy and between that column and its copy. A ratio reads as faster or slower only outside the band, and within 0.5% of its edge as at the edge. The reading takes every run together: runs that fall on both sides of the band make no claim. The Nish column is the `par` run of the table above, timed again here beside seven other binaries rather than in that table's alternation with its loop, so the two tables' Nish figures differ by about as much as this machine moves between runs: compare within a table, not across.
 
-Measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 4 threads, linux 6.18.44-fc-v114, by `node bench/run.mjs --only par` at `main` at a1a5bf8a, the base of the branch it was measured on (branch commit e5f7d943, which a squash merge does not keep, and whose `std/threads.ts` differs from the one merged with it only in a comment of `mapRange`). nish 0.18.0; rustc 1.97.0 (2d8144b78 2026-07-07); Rayon 1.12.0, built by cargo with the same profile; go version go1.24.7 linux/amd64.
+Measured on 2026-10-20, on Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores, 4 threads, linux 6.18.44-fc-v139, by `node bench/run.mjs --only par` at `main` at b1bf78f, the base of the branch it was measured on (branch commit 7636c33, which a squash merge does not keep). nish 0.18.0; rustc 1.97.0 (2d8144b78 2026-07-07); Rayon 1.12.0, built by cargo with the same profile; go version go1.24.7 linux/amd64.
 
 | Kernel | Nish | Rust `thread::scope` | Rust Rayon | Go | Nish / fastest, min, over 3 run(s) | Nish / fastest, median | Reading, min | Reading, median |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| par-compute | 235 / 265 | 230 / 256 | 230 / 247 | 235 / 250 | 1.016x to 1.041x | 1.052x to 1.074x | slower outside the band in 1 of 3 runs, within it or at its edge in the rest; within 1.10x in all 3 runs | slower outside the band in all 3 runs; within 1.10x in all 3 runs |
-| par-nbody | 47.4 / 60.2 | 49.4 / 61.3 | 47.9 / 54.9 | 116 / 126 | 0.959x to 1.057x | 1.089x to 1.140x | noisy, machine-dependent; no claim (slower outside the band in 1 of 3 runs, faster in 1 of 3 runs); Nish ahead in 1 of 3 runs, behind in 2 of 3 runs; within 1.10x in all 3 runs | slower outside the band in all 3 runs; **past 1.10x in 2 of 3 runs** |
-| par-regions | 59.1 / 81.6 | 128 / 158 | 75.3 / 94.8 | 310 / 404 | 0.771x to 0.874x | 0.735x to 0.979x | faster outside the band in all 3 runs; within 1.10x in all 3 runs | faster outside the band in 2 of 3 runs, within it or at its edge in the rest; within 1.10x in all 3 runs |
-| par-histogram | 96.7 / 187 | 259 / 352 | 290 / 373 | 142 / 209 | 0.490x to 0.967x | 0.809x to 1.025x | faster outside the band in 1 of 3 runs, within it or at its edge in the rest; within 1.10x in all 3 runs | faster outside the band in 1 of 3 runs, within it or at its edge in the rest; Nish ahead in 2 of 3 runs, behind in 1 of 3 runs; within 1.10x in all 3 runs |
+| par-compute | 260 / 287 | 250 / 277 | 247 / 267 | 247 / 277 | 1.044x to 1.058x | 1.050x to 1.106x | slower outside the band in all 3 runs; within 1.10x in all 3 runs | slower outside the band in all 3 runs; **past 1.10x in 1 of 3 runs** |
+| par-nbody | 63.1 / 66.4 | 55.1 / 63.6 | 54.9 / 58.8 | 126 / 135 | 1.149x to 1.170x | 1.113x to 1.171x | slower outside the band in all 3 runs; **past 1.10x in all 3 runs** | slower outside the band in all 3 runs; **past 1.10x in all 3 runs** |
+| par-regions | 61.4 / 74.5 | 139 / 172 | 80.0 / 99.2 | 348 / 447 | 0.767x to 0.808x | 0.717x to 0.776x | faster outside the band in all 3 runs; within 1.10x in all 3 runs | faster outside the band in all 3 runs; within 1.10x in all 3 runs |
+| par-histogram | 116 / 177 | 308 / 373 | 291 / 392 | 194 / 217 | 0.593x to 0.670x | 0.765x to 0.864x | faster outside the band in all 3 runs; within 1.10x in all 3 runs | faster outside the band in 2 of 3 runs, within it or at its edge in the rest; within 1.10x in all 3 runs |
+| par-histogram-atomic | 101 / 129 | 61.3 / 69.2 | 59.5 / 71.0 | 93.3 / 106 | 1.586x to 1.950x | 1.811x to 1.956x | slower outside the band in all 3 runs; **past 1.10x in all 3 runs** | slower outside the band in all 3 runs; **past 1.10x in all 3 runs** |
 
 Each run on its own: the fastest other column on each statistic, Nish over it, and that row's band.
 
 | Kernel | Run | Fastest, min | Nish / it | Band | Fastest, median | Nish / it | Band |
 | --- | ---: | --- | ---: | ---: | --- | ---: | ---: |
-| par-compute | 1 | Rust Rayon | 1.041x | 3.4% | Go | 1.074x | 5.0% |
-| par-compute | 2 | Rust `thread::scope` | 1.021x | 2.1% | Rust `thread::scope` | 1.074x | 2.5% |
-| par-compute | 3 | Rust `thread::scope` | 1.016x | 2.6% | Rust Rayon | 1.052x | 2.8% |
-| par-nbody | 1 | Rust `thread::scope` | 0.959x | 2.9% | Rust Rayon | 1.117x | 3.7% |
-| par-nbody | 2 | Rust Rayon | 1.020x | 2.1% | Rust Rayon | 1.089x | 3.4% |
-| par-nbody | 3 | Rust Rayon | 1.057x | 3.9% | Rust Rayon | 1.140x | 7.6% |
-| par-regions | 1 | Rust Rayon | 0.785x | 4.4% | Rust Rayon | 0.735x | 20.8% |
-| par-regions | 2 | Rust Rayon | 0.771x | 11.2% | Rust Rayon | 0.979x | 11.6% |
-| par-regions | 3 | Rust Rayon | 0.874x | 9.8% | Rust Rayon | 0.823x | 3.9% |
-| par-histogram | 1 | Go | 0.967x | 14.1% | Go | 1.025x | 10.1% |
-| par-histogram | 2 | Go | 0.490x | 29.7% | Go | 0.809x | 5.9% |
-| par-histogram | 3 | Go | 0.767x | 51.1% | Go | 0.921x | 19.7% |
+| par-compute | 1 | Go | 1.044x | 1.2% | Rust Rayon | 1.106x | 3.7% |
+| par-compute | 2 | Go | 1.058x | 3.7% | Rust Rayon | 1.050x | 1.7% |
+| par-compute | 3 | Rust Rayon | 1.050x | 3.8% | Rust Rayon | 1.085x | 0.7% |
+| par-nbody | 1 | Rust `thread::scope` | 1.170x | 10.0% | Rust Rayon | 1.171x | 2.5% |
+| par-nbody | 2 | Rust Rayon | 1.149x | 1.2% | Rust Rayon | 1.113x | 1.2% |
+| par-nbody | 3 | Rust Rayon | 1.157x | 1.8% | Rust Rayon | 1.130x | 1.0% |
+| par-regions | 1 | Rust Rayon | 0.767x | 4.7% | Rust Rayon | 0.717x | 4.6% |
+| par-regions | 2 | Rust Rayon | 0.808x | 4.2% | Rust Rayon | 0.776x | 6.2% |
+| par-regions | 3 | Rust Rayon | 0.780x | 8.7% | Rust Rayon | 0.756x | 4.9% |
+| par-histogram | 1 | Go | 0.670x | 12.0% | Go | 0.765x | 2.0% |
+| par-histogram | 2 | Go | 0.645x | 13.5% | Go | 0.864x | 14.7% |
+| par-histogram | 3 | Go | 0.593x | 15.0% | Go | 0.821x | 3.4% |
+| par-histogram-atomic | 1 | Rust Rayon | 1.950x | 10.5% | Rust `thread::scope` | 1.899x | 9.1% |
+| par-histogram-atomic | 2 | Rust Rayon | 1.586x | 12.8% | Rust `thread::scope` | 1.811x | 4.8% |
+| par-histogram-atomic | 3 | Rust `thread::scope` | 1.811x | 3.7% | Rust `thread::scope` | 1.956x | 4.3% |
 
 Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021`, without `target-cpu=native` or LTO; Nish's `--profile speed` has no `-march` either. Go: `go build -trimpath -ldflags=-s -w`. bench/README.md says what each kernel measures and, where Nish loses, what has been measured of why.
 
@@ -146,6 +151,15 @@ The Checksums and Commands sections below are written by a full run, which `--on
   rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021 build/bench/src/par-histogram.rs -o build/bench/par-histogram-rust
   cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
   go build -trimpath -ldflags=-s -w -o build/bench/par-histogram-go build/bench/src/par-histogram.go
+  ```
+
+- **par-histogram-atomic**: `56760 3200000`
+
+  ```
+  nish build/bench/src/par-histogram-atomic.ts --link build/bench/par-histogram-atomic --profile speed
+  rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols --edition 2021 build/bench/src/par-histogram-atomic.rs -o build/bench/par-histogram-atomic-rust
+  cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
+  go build -trimpath -ldflags=-s -w -o build/bench/par-histogram-atomic-go build/bench/src/par-histogram-atomic.go
   ```
 
 ## Scheduling a divided region
@@ -591,5 +605,5 @@ What the rows say, read against that band:
 <!-- tls-handshake:begin -->
 ## TLS handshake
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline.
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline and [its result](wp34-hosting-cs.md#k5-p-256-the-inversion--the-result).
 <!-- tls-handshake:end -->

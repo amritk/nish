@@ -1,0 +1,1 @@
+`s` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for

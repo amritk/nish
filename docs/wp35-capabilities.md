@@ -34,6 +34,21 @@ between runs, or each is a constant of the build. A program is
 deterministic, since a chosen status is computed from the input and a run
 nobody signals is the same run every time.
 
+`unsafe` is not a capability of the world but the one way a program gives up a
+check, and it travels like the others: a function that calls a `nish:unsafe`
+export carries it, and so does every caller, module and package above it,
+including a dependency that imports `nish:unsafe` when the entry package does
+not (#432). It keeps a program deterministic. The deprecated `--wrapping` and
+`--unchecked-indexing` carry no `unsafe`, although they too give up a check
+the source does not show: they reach only the entry package, each compile that
+passes one prints its deprecation note (NL9014), and they sit on the same
+command line that passes `--deny unsafe`, so a policy has nothing to learn
+from the bit that the compile does not already print. They are on their way
+out. `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+and `nish --fix` rewrites those into `uncheckedGet` and `uncheckedSet` calls,
+which do carry it; `--wrapping` has no fixer, and its note names the
+`nish:unsafe` exports to write instead.
+
 ## 2. The audit
 
 Every builtin the checker accepts has exactly one row in `builtinCapability`
@@ -49,7 +64,7 @@ labelled apart.
 | --- | --- |
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` |
+| `process.spawn` | `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid` |
 | `net` | every `nish:net` export: `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` |
 | `env` | `getenv`, `geteuid` |
 | `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` |
@@ -57,10 +72,10 @@ labelled apart.
 | `signal` | `signalFd`, `readSignal` |
 | `exit` | `process.exit` (and `exit` from `nish:process`) |
 | `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
-| `unsafe` | the five `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`); wired by WP36 |
-| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `String.fromBytes`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
+| `unsafe` | the six `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`); wired by WP36, reported since #432 |
+| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `String.fromBytes`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch`, and the host facts `availableParallelism`, `totalMemory` |
 
-Three rows deserve their reason:
+Four rows deserve their reason:
 
 - **`Math.random` is `entropy`**, although it is a pseudo-random generator:
   runtime.c's `nish_random` seeds it from `time(0)` and `getpid()` on first
@@ -70,6 +85,13 @@ Three rows deserve their reason:
 - **`spawnSyncTo` is `process.spawn`**, not also `fs.write`, for the same
   reason: the child it starts can write anything anyway, so `process.spawn`
   already says more than `fs.write` would.
+- **`availableParallelism` and `totalMemory` are none**, although each asks
+  the host: how many cores and bytes the machine has is a fact about it, as
+  `process.platform` is, which a program reads to size itself and not to reach
+  anything. `kill` and `waitPid` are `process.spawn`: `kill` reaches any process
+  of the program's user, as kill(1) does, not only the children `spawn`
+  starts, and `waitPid` reaps those children, so both reach other processes
+  the way starting one does.
 
 **Unlabelled is a bug, and it is executable.** `builtinCapability` answers a
 capability's index, `CAP_NONE` (-1, the deliberate none) or `CAP_UNLABELLED`

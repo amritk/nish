@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "entry": "caps_host.ts",
+  "deterministic": true,
+  "capabilities": [],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": [],
+      "modules": [
+        {
+          "path": "caps_host.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
