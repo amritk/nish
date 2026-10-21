@@ -333,16 +333,25 @@ const loadFamily = (name) => {
       lacks: t.lacks ?? {},
     }
   }
+  // One case, or a list of them tried in order: a twin is proved by the first
+  // case whose ratio reaches its minimum.
   let proof = null
   if (spec.portableProof !== undefined) {
-    const m = /^([a-z0-9-]+)@(\d+)$/.exec(String(spec.portableProof))
-    if (m === null || !names.has(m[1])) {
-      fail(`${where}: \`portableProof\` must be "<kernel>@<size>" naming one of its kernels`)
+    const cases = Array.isArray(spec.portableProof) ? spec.portableProof : [spec.portableProof]
+    if (cases.length === 0 || new Set(cases.map(String)).size !== cases.length) {
+      fail(`${where}: \`portableProof\` must be one "<kernel>@<size>", or a non-empty list of distinct ones`)
     }
-    proof = { kernel: m[1], size: Number(m[2]) }
-    if (!kernels.find((k) => k.name === proof.kernel).sizes.includes(proof.size)) {
-      fail(`${where}: \`portableProof\`'s size must be one of ${proof.kernel}'s sizes`)
-    }
+    proof = cases.map((c) => {
+      const m = /^([a-z0-9-]+)@(\d+)$/.exec(String(c))
+      if (m === null || !names.has(m[1])) {
+        fail(`${where}: \`portableProof\` must be "<kernel>@<size>" naming one of its kernels`)
+      }
+      const at = { kernel: m[1], size: Number(m[2]) }
+      if (!kernels.find((k) => k.name === at.kernel).sizes.includes(at.size)) {
+        fail(`${where}: \`portableProof\`'s size must be one of ${at.kernel}'s sizes`)
+      }
+      return at
+    })
   }
   // One number for every portable column, or one per twin.
   const ratioSpec = spec.portableMinRatio ?? PORTABLE_MIN_RATIO
@@ -386,7 +395,7 @@ const loadFamily = (name) => {
       !(isStringList(proofFlags) && proofFlags.length > 0 && proofFlags.every((f) => cleared.includes(f)))
     ) {
       fail(
-        `${where}: \`portableProofFlags\` lists the /proc/cpuinfo flags whose loss slows ${proof.kernel}, each one OPENSSL_ia32cap clears (${cleared.join(", ")})`
+        `${where}: \`portableProofFlags\` lists the /proc/cpuinfo flags whose loss slows ${proof.map((c) => c.kernel).join(" or ")}, each one OPENSSL_ia32cap clears (${cleared.join(", ")})`
       )
     }
   } else if (proofFlags !== undefined) {
@@ -1059,19 +1068,24 @@ if (opts.validate) {
     // The portable proof: each portable column must be measurably slower than
     // its twin's default one, so the mask, tag or flag really took the
     // assembly away. A twin whose ratio is null is measured and reported only.
+    // The cases are tried in order and the first that reaches the minimum
+    // proves the column: which assembly a mask takes away, and so how much it
+    // costs, depends on the CPU.
     if (family.proof !== null && (!opts.only || opts.only.has(family.name))) {
-      const { kernel, size } = family.proof
       for (const twin of Object.keys(PORTABLE_IDS)) {
         const fast = variants.find((v) => v.id === twin)
         const slow = variants.find((v) => v.id === PORTABLE_IDS[twin])
         const t = family.twins[twin]
+        const cases = family.proof.filter(
+          ({ kernel }) => t.lacks?.[kernel] === undefined && t.portable?.lacks?.[kernel] === undefined
+        )
+        const first = family.proof[0].kernel
         let why = null
         if (t.absent !== undefined || t.portable.absent !== undefined) {
           why = "the family has no such column"
-        } else if (t.lacks[kernel] !== undefined) {
-          why = `${twin} lacks ${kernel}`
-        } else if (t.portable.lacks[kernel] !== undefined) {
-          why = `${PORTABLE_IDS[twin]} lacks ${kernel}`
+        } else if (cases.length === 0) {
+          why =
+            t.lacks[first] !== undefined ? `${twin} lacks ${first}` : `${PORTABLE_IDS[twin]} lacks ${first}`
         } else if (fast === undefined || slow === undefined) {
           why = `this machine built no ${fast === undefined ? twin : PORTABLE_IDS[twin]}`
         } else {
@@ -1089,30 +1103,42 @@ if (opts.validate) {
           mismatches++
           continue
         }
-        // The fastest round of each: a shared machine's noise only ever adds time.
-        // A short ratio is measured once more, longer, before it counts.
-        const iterations = calibrate(fast, kernel, size, TARGET_NS / 2)
-        const measure = (rounds) => {
-          const { times } = interleave([fast, slow], kernel, size, iterations, rounds)
-          return Math.min(...times.get(slow.id)) / Math.min(...times.get(fast.id))
-        }
-        let ratio = measure(5)
-        if (need === null) {
+        for (const [i, { kernel, size }] of cases.entries()) {
+          // The fastest round of each: a shared machine's noise only ever adds time.
+          // A short ratio is measured once more, longer, before it counts.
+          const iterations = calibrate(fast, kernel, size, TARGET_NS / 2)
+          const measure = (rounds) => {
+            const { times } = interleave([fast, slow], kernel, size, iterations, rounds)
+            return Math.min(...times.get(slow.id)) / Math.min(...times.get(fast.id))
+          }
+          let ratio = measure(5)
+          if (need === null) {
+            console.log(
+              `portable ${family.name} ${slow.id}: other bytes than ${fast.id}; ${times3(ratio)} its time at ${kernel}@${size} (reported, not gated)`
+            )
+            break
+          }
+          if (ratio < need) {
+            console.log(
+              `retry ${family.name} ${slow.id}: ${times3(ratio)} at ${kernel}@${size} on the first measurement`
+            )
+            ratio = measure(11)
+          }
+          const next = cases[i + 1]
+          if (ratio < need && next !== undefined) {
+            console.log(
+              `short ${family.name} ${slow.id}: ${times3(ratio)} the time of ${fast.id} at ${kernel}@${size} (needs ${times3(need)}); trying ${next.kernel}@${next.size}`
+            )
+            continue
+          }
+          const verdict = ratio >= need ? "portable" : "NOT PORTABLE"
           console.log(
-            `portable ${family.name} ${slow.id}: other bytes than ${fast.id}; ${times3(ratio)} its time at ${kernel}@${size} (reported, not gated)`
+            `${verdict} ${family.name} ${slow.id}: ${times3(ratio)} the time of ${fast.id} at ${kernel}@${size} (needs ${times3(need)})`
           )
-          continue
-        }
-        if (ratio < need) {
-          console.log(`retry ${family.name} ${slow.id}: ${times3(ratio)} on the first measurement`)
-          ratio = measure(11)
-        }
-        const verdict = ratio >= need ? "portable" : "NOT PORTABLE"
-        console.log(
-          `${verdict} ${family.name} ${slow.id}: ${times3(ratio)} the time of ${fast.id} at ${kernel}@${size} (needs ${times3(need)})`
-        )
-        if (ratio < need) {
-          mismatches++
+          if (ratio < need) {
+            mismatches++
+          }
+          break
         }
       }
     }

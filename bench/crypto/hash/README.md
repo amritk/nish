@@ -41,11 +41,15 @@ state would skip two of the five compressions a 64-byte HMAC costs.
 | Rust soft | `--cfg sha2_backend="soft"` | `sha2`'s SHA-NI (SHA-256) and AVX2 (SHA-512) backends; what is left is its portable Rust compress function. |
 | Node | — | `node:crypto` is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off. |
 
-`portableProof` is `sha512@1048576`, because SHA-512 is the kernel whose
-assembly every twin uses on a CPU without SHA extensions. On this family's
-reference machine (no `sha_ni`), OpenSSL portable takes about 1.4x the time of
-OpenSSL, and Go purego about 2.6x the time of Go. RustCrypto's AVX2 SHA-512 is
-only about 10% faster than its soft path there, too close to the noise to
-gate on. Rust's ratio is therefore `null`: its proof is that the soft binary's
-bytes differ from the default one's, and the ratio is printed. On a CPU with
-SHA-NI, the SHA-256 rows show the larger gap.
+`portableProof` is `["sha256@1048576", "sha512@1048576"]`: SHA-256 first,
+SHA-512 if SHA-256 falls short. On a CPU with SHA-NI, OpenSSL's SHA-256 runs
+on the SHA instructions the mask clears, and the masked run takes about 4x the
+time. SHA-512 has no SHA-NI path, so there the mask only takes OpenSSL from
+its AVX2 assembly to its scalar one: about 1.4x on this family's reference
+machine (no `sha_ni`), but 1.17x to 1.19x on GitHub's runners, under the 1.2
+minimum, which failed CI on pull requests that did not touch the family. On a
+CPU without SHA-NI, SHA-512 is the fallback. Go purego takes about 2.6x the time of Go at SHA-512 and about 6.8x at
+SHA-256 on a SHA-NI machine. RustCrypto's AVX2 SHA-512 is only about 10%
+faster than its soft path, too close to the noise to gate on. Rust's ratio is
+therefore `null`: its proof is that the soft binary's bytes differ from the
+default one's, and the ratio is printed.

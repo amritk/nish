@@ -179,7 +179,7 @@ cannot fall back to a default.
 | `title` | string | The heading of the family's table. |
 | `kernels` | array, not empty | One entry per kernel; the fields are below. |
 | `twins` | object | All four twins, `openssl`, `go`, `rust` and `node`, each either an object (below) or a string saying why the family has none, which the table's footnotes print. |
-| `portableProof` | `"<kernel>@<size>"`, optional | The case `--validate` times to prove each portable column is portable. |
+| `portableProof` | `"<kernel>@<size>"`, or a non-empty list of distinct ones, optional | The case `--validate` times to prove each portable column is portable; a list is tried in order, and the first case that reaches the ratio proves the twin. |
 | `portableProofFlags` | array of `/proc/cpuinfo` flags; required with `portableProof` and an `OPENSSL_ia32cap` mask | The extensions whose loss slows the proof kernel under OpenSSL, each one the mask clears. OpenSSL's proof is held only on a CPU that has one of them. |
 | `portableMinRatio` | number above 1, or an object, optional | How much slower a portable column must be than its default one at `portableProof`; the default is 1.2. An object sets it per twin (`openssl`, `go` and `rust`; a twin it leaves out keeps 1.2). A twin's value of `null` measures and reports the ratio without gating on it. Only valid with `portableProof`. |
 | `notes` | array of strings, optional | Footnotes printed under the family's table after the generated ones, for anything about its columns a reader needs and no other field says. |
@@ -231,9 +231,17 @@ with both a default column and a portable one, `--validate` does two things:
    compares their fastest rounds: noise on a shared machine only ever adds
    time. The portable column must take at least `portableMinRatio` times as
    long. A short result is measured once more over 11 rounds (12) before it counts
-   as `NOT PORTABLE`.
+   as short.
 
-`portableProof`'s size must be one of that kernel's `sizes`. A column the proof
+When `portableProof` is a list, a short case prints `short <family> <column>:
+… trying <next case>` and the next case is timed the same way; the first case
+that reaches the ratio proves the twin, and only the last one's short result
+counts as `NOT PORTABLE`. The cases a twin or its portable build `lacks` are
+skipped. A list is for a mask whose cost depends on the CPU: which assembly
+OpenSSL picks, and so what the mask takes away, changes with the extensions
+the CPU has.
+
+Each case's size must be one of its kernel's `sizes`. A column the proof
 cannot reach prints `portable <family> <column>: unproved (<why>)` rather than
 passing silently or failing. That is a column this machine did not build, a
 twin or a portable build that `lacks` the kernel, or a host with nothing for the
@@ -247,8 +255,9 @@ portable build to give up:
   family's clears SSSE3, which SHA-256 uses and SHA-512 does not), so a flag it
   clears is not enough. On a CPU with none of the listed flags the masked and
   the unmasked run take the same path, and a ratio would fail a column that is
-  portable. The hash family lists `avx`, `avx2` and `bmi2`, the extensions
-  OpenSSL's SHA-512 paths beyond its scalar one need.
+  portable. The hash family lists `ssse3`, `avx`, `avx2`, `bmi2` and
+  `sha_ni`, the extensions OpenSSL's SHA-256 and SHA-512 paths beyond their
+  scalar ones need.
 
 On GitHub Actions on x86-64 Linux, `tests/run.js`'s `crypto-bench` check
 also requires every family to be validated, no `did not run` line, and the
