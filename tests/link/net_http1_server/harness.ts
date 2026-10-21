@@ -303,6 +303,7 @@ export class H1Loop {
     netAddress(addr, "127.0.0.1", tls ? this.tlsPort : this.plainPort);
     const index: i32 = toI32(this.peers.length);
     const peer = new Peer(CLIENTS + index);
+    const taken: i32 = this.accepted + this.refused;
     peer.fd = tcpConnect(addr);
     this.peers.push(peer);
     if (peer.fd < 0) {
@@ -322,6 +323,19 @@ export class H1Loop {
       return -1;
     }
     pollModify(this.loop, peer.fd, 1, peer.token);
+    // A connect completes when the client has the SYN-ACK, and Darwin can
+    // report that before the listener is readable, so a check made on the
+    // return would see no slot yet: the loop runs on until the server has
+    // taken the connection, accepted or shed.
+    rounds = 0;
+    while (this.accepted + this.refused === taken && rounds < 100 && this.failure === "") {
+      this.step(toI32(-1));
+      rounds = rounds + 1;
+    }
+    if (this.accepted + this.refused === taken) {
+      this.fail("connect: the server never took the connection");
+      return -1;
+    }
     return index;
   }
 

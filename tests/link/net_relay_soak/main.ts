@@ -50,7 +50,8 @@ const SOAK_WAVE: i32 = 16;
  * where everything the relay and its C runtime allocate lives. The rest is
  * its code and its libraries, which the kernel faults in and drops as it
  * likes; the report carries both parts, so a failure's figures name which one
- * moved.
+ * moved. Darwin does not split the set, and there both read the whole of it
+ * (`SOAK_STATM`).
  *
  * What each run can see outside the arena: `npm test`'s 2,000 sessions span
  * four intervals of 500. A steady leak of about 2 bytes a session or more

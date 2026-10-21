@@ -42,6 +42,7 @@ import {
   qcHello,
   qcInitial,
   qcParams,
+  qcPushAppAck,
   qcReadFlight,
   qcReceive,
   qcShort,
@@ -54,6 +55,13 @@ export const rcAck = (low: i64, high: i64, delay: i64): u8[] => {
   const out: u8[] = [];
   const ranges: i64[] = [low, high];
   quicPushAck(out, ranges, n32(1), delay);
+  return out;
+};
+
+/** An ACK frame for every 1-RTT packet the client has received, and no other. */
+const rcAckReceived = (c: QcClient): u8[] => {
+  const out: u8[] = [];
+  qcPushAppAck(out, c);
   return out;
 };
 
@@ -116,11 +124,11 @@ const rcLastPayload = (c: QcClient): u8[] => {
   return none;
 };
 
-/** A connected pair whose client opened stream 0 and acknowledged everything the server sent. */
+/** A connected pair whose client opened stream 0 and acknowledged everything it received. */
 const rcOpened = (conn: QuicConnection): QcClient => {
   const c: QcClient = qcConnected(conn, n64(65536));
   qcExchange(conn, c, qcShort(c, qcStream(n64(0), n64(0), "open", false)));
-  qcExchange(conn, c, qcShort(c, rcAck(n64(0), c.largestApp, n64(0))));
+  qcExchange(conn, c, qcShort(c, rcAckReceived(c)));
   return c;
 };
 
@@ -185,7 +193,7 @@ const rcPacketThreshold = (t: Suite): void => {
     "the stream keeps its sent bytes while a packet in flight carries them",
     stream !== null && stream.sendBase === n64(0) && stream.sendEnd === n64(24)
   );
-  qcExchange(conn, c, qcShort(c, rcAck(n64(0), c.largestApp, n64(0))));
+  qcExchange(conn, c, qcShort(c, rcAckReceived(c)));
   t.ok(
     "once every one is acknowledged it lets them go, and their room in the buffer",
     stream !== null && stream.sendBase === n64(24) && stream.room() === toI64(16384)
@@ -377,7 +385,7 @@ const rcWindow = (t: Suite): void => {
   t.ok("which stays queued", stream !== null && stream.sendEnd - stream.sendNext > n64(0));
   qcExchange(conn, c, qcShort(c, fromHex("01")));
   t.eqStr("a PING from the client is still acknowledged: an ACK is not held back", rcStreamIn(rcLastPayload(c)), "none");
-  qcExchange(conn, c, qcShort(c, rcAck(n64(0), c.largestApp, n64(0))));
+  qcExchange(conn, c, qcShort(c, rcAckReceived(c)));
   t.ok("the client's ACK opens the window, and the next data goes", rcStreamIn(rcLastPayload(c)) !== "none");
 };
 

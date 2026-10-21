@@ -159,6 +159,11 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "lstatOwnerModeSync" ||
     name === "geteuid" ||
     name === "isExecutableSync" ||
+    name === "spawn" ||
+    name === "kill" ||
+    name === "waitPid" ||
+    name === "availableParallelism" ||
+    name === "totalMemory" ||
     isNetExport(name) ||
     isUnsafeExport(name)
   )
@@ -1020,6 +1025,36 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       refuseOnWasm(ctx, call, name)
     }
     return T_I64
+  }
+  // WP34 N12. `spawnSync` without its wait, and the two calls that let a
+  // supervisor manage the children it starts. Each is `i32` in either number
+  // mode, as `signalFd` is, because a pid, a signal and a flag word are; an
+  // `f64` is refused rather than converted. `waitPid` answers `[pid, status]`
+  // as an `i32[]`: the language has no tuple, and a class would need a
+  // declaration no program wrote. runtime-os.c answers -ENOSYS for all three
+  // on wasi, so they are refused there rather than lowered to a call that
+  // cannot succeed.
+  if (name === "spawn") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
+    }
+    return T_I32
+  }
+  if (name === "kill" || name === "waitPid") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_I32)
+      checkArgumentType(ctx, args.children[1], scope, name, T_I32)
+    }
+    return name === "kill" ? T_I32 : ctx.table.arrayOf(T_I32)
+  }
+  // WP34 N12. The CPUs this process may use, at least 1, and the bytes of
+  // physical memory, or -1. Neither reaches anything a wasm32 build could
+  // answer for the host it runs on, so both are refused there too.
+  if (name === "availableParallelism" || name === "totalMemory") {
+    if (checkBuiltinArity(ctx, call, name, args, 0)) {
+      refuseOnWasm(ctx, call, name)
+    }
+    return name === "totalMemory" ? T_I64 : T_I32
   }
   if (isNetExport(name)) {
     return checkNet(ctx, call, scope, name)

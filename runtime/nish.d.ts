@@ -278,6 +278,28 @@ declare function spawnSync(argv: string[]): number;
  * either path is refused, as `writeFileSync` refuses one, and the answer is -1.
  */
 declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
+/**
+ * Start `argv[0]` through `PATH` without waiting: the child's pid, or a
+ * negative errno. The child is the program's until `waitPid` reaps it. No
+ * reading under Node, which throws.
+ */
+declare function spawn(argv: string[]): i32;
+/**
+ * Send `sig` to `pid`: 0, or a negative errno (-3 when no such process). `sig`
+ * is 0, 2, 9 or 15, and anything else, like a `pid` of 0 or below, is -22.
+ */
+declare function kill(pid: i32, sig: i32): i32;
+/**
+ * Wait for the child `pid`, or any child for -1: `[pid, status]`, the status
+ * as `spawnSync` answers it. Flag 1 is WNOHANG, under which `[0, 0]` means a
+ * child remains and none has exited; a failure is `[-errno, 0]`, `[-10, 0]`
+ * with no child to wait for. No reading under Node, which throws.
+ */
+declare function waitPid(pid: i32, flags: i32): i32[];
+/** How many CPUs the program may use: at least 1, with or without `--threads`. */
+declare function availableParallelism(): i32;
+/** Bytes of physical memory, or -1 when the host does not say. */
+declare function totalMemory(): i64;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
 declare function getenv(name: string): string | null;
 /**
@@ -414,6 +436,16 @@ declare module "nish:process" {
    * at either path is refused, and the answer is -1.
    */
   export function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
+  /** Start a child without waiting: its pid, or a negative errno. */
+  export function spawn(argv: string[]): i32;
+  /** Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22. */
+  export function kill(pid: i32, sig: i32): i32;
+  /** `[pid, status]` for a child that exited, `[0, 0]` under WNOHANG (flag 1) with none, or `[-errno, 0]`. */
+  export function waitPid(pid: i32, flags: i32): i32[];
+  /** How many CPUs the program may use, at least 1. */
+  export function availableParallelism(): i32;
+  /** Bytes of physical memory, or -1. */
+  export function totalMemory(): i64;
   /**
    * A monotonic clock in nanoseconds. The origin is arbitrary, so only the
    * difference between two reads is meaningful.

@@ -1,0 +1,1 @@
+`reap` writes memory its caller can see in the runtime's `nish_wait_pid`, and `spawn` runs it beside the scope's other tasks

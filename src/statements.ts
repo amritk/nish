@@ -14,30 +14,44 @@
 
 import { LANGUAGE } from "./branding"
 import {
+  addLocals,
+  assignsVariable,
+  captureNarrowings,
   checkCondition,
   checkExpression,
   clearNarrowingsAssignedIn,
+  enumVariable,
+  giveIndexKey,
+  heldAcross,
+  holdMembers,
+  joinArms,
+  literalIndexName,
+  localsAssignedIn,
   memberSetName,
   memberSetOf,
   membersDisjoint,
+  membersOfSet,
   narrow,
+  narrowHeld,
+  narrowToTags,
   refuseExpressionForm,
   refuseNarrowingStore,
   resolveMaybeAnnotation,
+  tagVariable,
   unproven,
   WANT_INFERRED,
   WANT_MAYBE,
 } from "./expressions"
 import { isMaybeAnnotation } from "./validator"
 import { syntaxKindName } from "./checker"
-import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context"
+import { CheckContext, LOOP_ITERATION, LOOP_SWITCH, SwitchFrame } from "./context"
 import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { isChannelClass, isIteratorMethod } from "./parallel"
-import { FunctionSig } from "./program"
+import { FunctionSig, SWITCH_COVERED, SWITCH_OPEN } from "./program"
 import { recordGuardFusion } from "./fusion"
-import { builtinNameOf, unwrapParens } from "./emit-util"
+import { builtinNameOf, isOptionalChain, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
@@ -76,6 +90,7 @@ import {
   N_IF,
   N_INDEX_SIGNATURE,
   N_INTERFACE,
+  N_MEMBER,
   N_METHOD,
   N_MODULE_CONST,
   N_PARAM,
@@ -92,6 +107,16 @@ import { caseValue } from "./constants"
 import { annotationSpelling, elementSpelling, isFreshArrayExpression, typedArraySpelling } from "./arrays"
 import { Local, STORAGE_LOCAL, Scope, TypeOrigin } from "./symbols"
 import { isInteger, T_ERROR, T_VOID } from "./types"
+import {
+  flowBegin,
+  flowDoCondition,
+  flowEnd,
+  flowForUpdate,
+  flowHead,
+  flowNoteBack,
+  flowNoteBreak,
+  flowUpdated,
+} from "./loop-flow"
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const terminatorName = (stmt: Node): string => {
@@ -109,15 +134,32 @@ const terminatorName = (stmt: Node): string => {
     case N_IF:
       return "an `if` whose branches all return"
     case N_SWITCH:
-      return "a `switch` whose clauses all return"
+      // With no `default`, a `switch` ends the path only by covering every
+      // variant of a union, which a program written before that rule kept a
+      // trailing `return` for: say that the line can go.
+      for (const clause of stmt.children[1].children) {
+        if (clause.kind === N_DEFAULT) {
+          return "a `switch` whose clauses all return"
+        }
+      }
+      return "a `switch` that covers every variant of its union: every path leaves inside it, so the code after it can be deleted"
     default:
       return "an infinite loop"
   }
 }
 
 /** A statement list in its own scope; true when the list terminates the path. */
-const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean =>
-  checkStatements(ctx, block.children, scope.child())
+/**
+ * A block's end is the only way past it, so what its statements proved and
+ * stored about the variables outside it holds after it: an arm of an `if`
+ * ends where its block does.
+ */
+const checkBlock = (ctx: CheckContext, block: Node, scope: Scope): boolean => {
+  const inner = scope.child()
+  const terminates = checkStatements(ctx, block.children, inner)
+  scope.adopt(inner)
+  return terminates
+}
 
 /** A statement list in `scope`; the caller decides whether that is a new one. */
 export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope): boolean => {
@@ -146,6 +188,9 @@ export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope):
     if (checkStatement(ctx, stmt, scope)) {
       terminator = stmt
     }
+    if (stmt.kind === N_VAR) {
+      keySteadyVariables(ctx, stmt.children[0], stmts)
+    }
   }
   // A list that ran has recovered from everything inside it — that is what
   // per-statement recovery means — so the flag does not escape it. The early
@@ -155,6 +200,30 @@ export const checkStatements = (ctx: CheckContext, stmts: Node[], scope: Scope):
   // whose condition failed) must be skipped too.
   ctx.errored = false
   return terminator !== null
+}
+
+/**
+ * Key an index through each `let` of `list` that nothing in `within` assigns
+ * by the variable itself (`Local.pathIndex`), as TypeScript narrows `xs[i]`
+ * through a `let` its block never assigns, a closure's body included. A `let`
+ * of the module is not one of them: its list never comes here.
+ */
+const keySteadyVariables = (ctx: CheckContext, list: Node, within: Node[]): void => {
+  for (const decl of list.children) {
+    const local = ctx.program.nodeLocals[decl.id]
+    if (local === null || !local.mutable || local.pathIndex !== "") {
+      continue
+    }
+    let written = false
+    for (const node of within) {
+      if (assignsVariable(node, local.name)) {
+        written = true
+      }
+    }
+    if (!written) {
+      giveIndexKey(ctx, local)
+    }
+  }
 }
 
 const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
@@ -193,9 +262,9 @@ const checkStatement = (ctx: CheckContext, stmt: Node, scope: Scope): boolean =>
     case N_SWITCH:
       return checkSwitch(ctx, stmt, scope)
     case N_BREAK:
-      return checkBreak(ctx, stmt)
+      return checkBreak(ctx, stmt, scope)
     case N_CONTINUE:
-      return checkContinue(ctx, stmt)
+      return checkContinue(ctx, stmt, scope)
     case N_THROW:
       checkExpression(ctx, stmt.children[0], scope, -1)
       return true
@@ -308,6 +377,17 @@ const checkVariableList = (ctx: CheckContext, list: Node, scope: Scope): void =>
     const local = ctx.program.nodeLocals[decl.id]
     if (local !== null) {
       local.typedArray = typedArray
+      // `xs[i]` is `xs[0]` after `const i = 0`, annotated or not, as it is to
+      // TypeScript; only an unannotated one has the literal type that keys
+      // `xs[j]` the same after `const j = i`.
+      const literal = mutable ? "" : literalIndexName(initializer, scope)
+      if (literal !== "") {
+        local.pathIndex = literal
+        local.literalKey = annotation.kind === N_EMPTY ? literal : ""
+      }
+      if (initializer.kind !== N_EMPTY) {
+        holdMembers(ctx, scope, local, initializer)
+      }
     }
     if (local !== null && !mutable && ctx.table.isArray(ctx.table.stripNull(type))) {
       local.fresh = allocatesArray(ctx, initializer)
@@ -355,84 +435,231 @@ const declareLocal = (
 
 const checkIf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   checkCondition(ctx, stmt.children[0], scope)
+  const otherwise = stmt.children[2]
+  // What the arms assign reads, after the `if`, as what the arms that fall
+  // through left it: an arm's store drops the narrowing from the whole chain,
+  // so what held before is kept aside and put back once the arms are checked.
+  const assigned: Local[] = []
+  localsAssignedIn(ctx, stmt.children[1], scope, assigned)
+  localsAssignedIn(ctx, otherwise, scope, assigned)
+  const before = new Scope(null)
+  captureNarrowings(assigned, scope, before)
   const thenScope = scope.child()
   narrow(ctx, stmt.children[0], thenScope, true)
   const thenTerminates = checkStatement(ctx, stmt.children[1], thenScope)
   recordGuardFusion(ctx, stmt) // WP32 S5: `if (!s.has(x)) { s.add(x); ... }` is one probe
-  const otherwise = stmt.children[2]
+  const thenEnd = new Scope(null)
+  captureNarrowings(assigned, thenScope, thenEnd)
+  captureNarrowings(assigned, before, scope)
+  const elseScope = scope.child()
+  narrow(ctx, stmt.children[0], elseScope, false)
   if (otherwise.kind === N_EMPTY) {
     // `if (p === null) return;` leaves `p` narrowed for everything after it.
     if (thenTerminates) {
       narrow(ctx, stmt.children[0], scope, false)
+    } else {
+      const all = lateAssigned(ctx, stmt, scope, assigned, thenScope, thenEnd)
+      const elseEnd = new Scope(null)
+      captureNarrowings(all, elseScope, elseEnd)
+      joinArms(ctx, all, scope, thenEnd, elseEnd)
+      joinTested(ctx, testedIn(thenScope, elseScope, all), [thenScope, elseScope], scope)
     }
     return false
   }
-  const elseScope = scope.child()
-  narrow(ctx, stmt.children[0], elseScope, false)
   const elseTerminates = checkStatement(ctx, otherwise, elseScope)
+  const all = lateAssigned(ctx, stmt, scope, assigned, thenScope, thenEnd)
+  const elseEnd = new Scope(null)
+  captureNarrowings(all, elseScope, elseEnd)
+  // Only one arm falls through, so what holds after the `if` is what holds at
+  // the end of that arm: the test's side of it, less what the arm assigned —
+  // `if (p === null) { return; } else { p = q; }` leaves `p` nullable — and
+  // plus what it proved, as an `else if` whose own branch leaves does.
   if (thenTerminates && !elseTerminates) {
-    narrow(ctx, stmt.children[0], scope, false)
+    scope.adopt(elseScope)
+    takeArm(all, elseEnd, scope)
   } else if (elseTerminates && !thenTerminates) {
-    narrow(ctx, stmt.children[0], scope, true)
+    scope.adopt(thenScope)
+    takeArm(all, thenEnd, scope)
+  } else if (!thenTerminates && !elseTerminates) {
+    joinArms(ctx, all, scope, thenEnd, elseEnd)
+    joinTested(ctx, testedIn(thenScope, elseScope, all), [thenScope, elseScope], scope)
   }
   return thenTerminates && elseTerminates
 }
 
+/**
+ * The variables `first` or `second` narrowed by a test of their own, an arm's
+ * condition or a statement in it, other than those in `assigned`.
+ */
+const testedIn = (first: Scope, second: Scope, assigned: Local[]): Local[] => {
+  const seen: Local[] = []
+  addLocals(seen, first.narrowedVars)
+  addLocals(seen, first.heldVars)
+  addLocals(seen, second.narrowedVars)
+  addLocals(seen, second.heldVars)
+  const tested: Local[] = []
+  for (const local of seen) {
+    if (assigned.indexOf(local) < 0) {
+      tested.push(local)
+    }
+  }
+  return tested
+}
+
+/**
+ * Each of `locals`, which no arm assigns but some arm's test narrowed, is
+ * after the statement what any of the ways out, `ends`, left it, as
+ * TypeScript joins it: `if (c) { if (k === Kind.A) { return; } } else { if
+ * (k === Kind.A) { return; } }` leaves `k` not `Kind.A`. Every end starts from
+ * what held before, so the join is never wider than that; it is taken apart
+ * from `scope`, so what an outer scope proved is not dropped, and kept only
+ * where it narrows.
+ */
+const joinTested = (ctx: CheckContext, locals: Local[], ends: Scope[], scope: Scope): void => {
+  for (const local of locals) {
+    let joined = ends[0]
+    let i = 1
+    while (i < ends.length) {
+      const next = new Scope(null)
+      joinArms(ctx, [local], next, joined, ends[i])
+      joined = next
+      i = i + 1
+    }
+    if (joined.narrowingIndex(local) >= 0 || joined.heldBy(local) >= 0) {
+      captureNarrowings([local], joined, scope)
+    }
+  }
+}
+
+/**
+ * Every local the arms of `stmt` assign, read again once they are checked: a
+ * path such as `h.k` has a variable only from its first mention, so one first
+ * named inside an arm is missing from `assigned`, read before the arms. What
+ * the then-arm left such a path is recorded in `thenEnd` now; it had no
+ * narrowing before the `if`, so nothing of it needs putting back.
+ */
+const lateAssigned = (
+  ctx: CheckContext,
+  stmt: Node,
+  scope: Scope,
+  assigned: Local[],
+  thenScope: Scope,
+  thenEnd: Scope
+): Local[] => {
+  const all: Local[] = []
+  addLocals(all, assigned)
+  localsAssignedIn(ctx, stmt.children[1], scope, all)
+  localsAssignedIn(ctx, stmt.children[2], scope, all)
+  const late: Local[] = []
+  for (let i = assigned.length; i < all.length; i++) {
+    late.push(all[i])
+  }
+  captureNarrowings(late, thenScope, thenEnd)
+  return all
+}
+
+/** What each of `locals` reads as in `scope` is what the one arm that falls through, `end`, left it. */
+const takeArm = (locals: Local[], end: Scope, scope: Scope): void => {
+  for (const local of locals) {
+    scope.clearNarrowing(local)
+  }
+  captureNarrowings(locals, end, scope)
+}
+
 const checkWhile = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const flow = flowBegin(ctx, stmt, scope, "while")
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
+  flowHead(ctx, flow, scope, scope)
   checkCondition(ctx, stmt.children[0], scope)
   const body = scope.child()
   narrow(ctx, stmt.children[0], body, true)
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[1], body)
+  if (!checkStatement(ctx, stmt.children[1], body)) {
+    flowNoteBack(ctx, body)
+  }
   const broke = ctx.popLoop()
+  scope.adopt(held)
+  flowEnd(ctx, flow, scope)
   // `while (true)` that nothing breaks out of never falls through, which is
   // what lets a function end with one and still return on every path.
   return stmt.children[0].kind === N_TRUE && !broke
 }
 
 const checkDo = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const flow = flowBegin(ctx, stmt, scope, "do")
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
+  flowHead(ctx, flow, scope, scope)
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[0], scope.child())
+  const inner = scope.child()
+  if (!checkStatement(ctx, stmt.children[0], inner)) {
+    flowNoteBack(ctx, inner)
+  }
   const broke = ctx.popLoop()
+  scope.adopt(held)
+  flowDoCondition(ctx, flow, scope)
   checkCondition(ctx, stmt.children[1], scope)
+  flowEnd(ctx, flow, scope)
   return stmt.children[1].kind === N_TRUE && !broke
 }
 
 const checkFor = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
+  const flow = flowBegin(ctx, stmt, scope, "for")
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
   // The initializer's variables live in a scope of their own, so `i` is not
   // visible after the loop and two `for` loops may both declare one.
   const outer = scope.child()
   const initializer = stmt.children[0]
   if (initializer.kind === N_VAR) {
     checkVariableList(ctx, initializer, outer)
+    keySteadyVariables(ctx, initializer.children[0], [stmt.children[1], stmt.children[2], stmt.children[3]])
   } else if (initializer.kind !== N_EMPTY) {
     checkExpression(ctx, initializer, outer, -1)
   }
+  flowHead(ctx, flow, scope, outer)
   const condition = stmt.children[1]
   if (condition.kind !== N_EMPTY) {
     checkCondition(ctx, condition, outer)
-  }
-  const update = stmt.children[2]
-  if (update.kind !== N_EMPTY) {
-    checkExpression(ctx, update, outer, -1)
   }
   const body = outer.child()
   if (condition.kind !== N_EMPTY) {
     narrow(ctx, condition, body, true)
   }
+  // A body that is one statement, not a block, leaves `errored` set when it
+  // is refused; the update is checked after it, but is no part of it.
+  const headErrored = ctx.errored
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[3], body)
+  if (!checkStatement(ctx, stmt.children[3], body)) {
+    flowNoteBack(ctx, body)
+  }
   const broke = ctx.popLoop()
+  ctx.errored = headErrored
+  // The update runs after the body, on what its end and its continues leave,
+  // so a store there reaches the next iteration's head, not this body.
+  const update = stmt.children[2]
+  if (update.kind !== N_EMPTY) {
+    const tail = outer.child()
+    flowForUpdate(ctx, flow, tail)
+    checkExpression(ctx, update, tail, -1)
+    flowUpdated(ctx, flow, tail)
+  }
+  scope.adopt(held)
+  flowEnd(ctx, flow, scope)
   return condition.kind === N_EMPTY && !broke
 }
 
 const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // `for await` and a head that is not a declaration never get here: pass 1
   // refuses them (`refuseUnsupportedForms`), so the head is a VAR.
+  const flow = flowBegin(ctx, stmt, scope, "for-of")
+  const held = heldAcross(ctx, stmt, scope)
   clearNarrowingsAssignedIn(ctx, stmt, scope)
+  scope.adopt(held)
   // The head, before the iterable, in stage0's order (stage0's `src/checker/arrays.ts`).
   // The parser reads `for (const x = 0, y = 1 of a)` and `for (const x: i32 of
   // a)` without complaint, because the grammar it uses for the head is the
@@ -488,9 +715,16 @@ const checkForOf = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (local !== null) {
     local.typedArray = elementSpelling(typedArraySpelling(ctx, stmt.children[1], scope))
   }
+  keySteadyVariables(ctx, list, [stmt.children[2]])
+  flowHead(ctx, flow, scope, outer)
   ctx.pushLoop(LOOP_ITERATION)
-  checkStatement(ctx, stmt.children[2], outer.child())
+  const inner = outer.child()
+  if (!checkStatement(ctx, stmt.children[2], inner)) {
+    flowNoteBack(ctx, inner)
+  }
   ctx.popLoop()
+  scope.adopt(held)
+  flowEnd(ctx, flow, scope)
   return false
 }
 
@@ -895,6 +1129,19 @@ const checkCollectionWalk = (ctx: CheckContext, stmt: Node, iterable: i32): bool
  */
 const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const discriminant = checkExpression(ctx, stmt.children[0], scope, -1)
+  // What a clause assigns holds, after the `switch`, what one of the ways
+  // out of it left it (`SwitchFrame`).
+  const assigned: Local[] = []
+  localsAssignedIn(ctx, stmt.children[1], scope, assigned)
+  ctx.switchFrames.push(new SwitchFrame(assigned, scope))
+  // A clause's store drops the narrowing from the whole chain, so what held
+  // before the `switch` is kept aside and put back before each clause and
+  // before the case no label matches, as `checkIf` does between its arms.
+  const kept: Local[] = []
+  addLocals(kept, assigned)
+  addLocals(kept, ctx.pathLocals)
+  const before = new Scope(null)
+  captureNarrowings(kept, scope, before)
   // WP23: an enum is an `i32` in the jump table and a type of its own to the
   // checker, so it switches exactly as an integer does — and a `case` label of
   // any other type is caught below, which is what stops `case 1:` standing in
@@ -908,9 +1155,28 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   const clauses = stmt.children[1].children
   const members = memberSetOf(ctx, stmt.children[0])
   const seen: i64[] = []
+  // `switch (s.kind)` on a union variable narrows each clause to the variants
+  // its labels name, as `===` does, and `switch (k)` on an enum variable to
+  // the members, so every label is checked before any body.
+  const tagged = tagVariable(ctx, stmt.children[0], scope)
+  const held: Local | null = tagged === null ? enumVariable(ctx, stmt.children[0], scope) : null
+  if (tagged !== null || held !== null) {
+    for (const clause of clauses) {
+      if (clause.kind !== N_DEFAULT) {
+        checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
+      }
+    }
+  }
   let hasDefault = false
   let lastTerminates = false
-  ctx.pushLoop(LOOP_SWITCH)
+  let broke = false
+  // The labels of the run of empty clauses that falls into the next body.
+  let group: i32[] = []
+  let groupDefault = false
+  // What reaches the statement after the `switch`: the labels of each body
+  // that breaks or falls out of the bottom, and whether a `default` does.
+  const reaching: i32[] = []
+  let defaultReaches = false
   let i = 0
   while (i < clauses.length) {
     const clause = clauses[i]
@@ -920,8 +1186,14 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
         ctx.error(clause, "`switch` has more than one `default` clause")
       }
       hasDefault = true
+      groupDefault = true
     } else {
-      checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
+      if (tagged === null && held === null) {
+        checkCaseLabel(ctx, clause, scope, discriminant, members, seen)
+      }
+      for (const member of memberSetOf(ctx, clause.children[0])) {
+        group.push(member)
+      }
     }
     for (const statement of body.children) {
       if (statement.kind === N_VAR) {
@@ -931,7 +1203,29 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
         )
       }
     }
-    const terminates = body.children.length > 0 ? checkStatements(ctx, body.children, scope.child()) : false
+    let terminates = false
+    if (body.children.length > 0 || i === clauses.length - 1) {
+      captureNarrowings(kept, before, scope)
+      const clauseScope = scope.child()
+      if (tagged !== null || held !== null) {
+        narrowClause(ctx, clauseScope, tagged, held, clauses, group, groupDefault)
+      }
+      ctx.pushLoop(LOOP_SWITCH)
+      terminates = body.children.length > 0 ? checkStatements(ctx, body.children, clauseScope) : false
+      const clauseBroke = ctx.popLoop()
+      broke = broke || clauseBroke
+      if (i === clauses.length - 1 && !terminates) {
+        snapshotExit(ctx, clauseScope)
+      }
+      if (clauseBroke || (i === clauses.length - 1 && !terminates)) {
+        for (const member of group) {
+          reaching.push(member)
+        }
+        defaultReaches = defaultReaches || groupDefault
+      }
+      group = []
+      groupDefault = false
+    }
     if (body.children.length > 0 && !terminates && i < clauses.length - 1) {
       ctx.error(
         body.children[body.children.length - 1],
@@ -943,11 +1237,193 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
     lastTerminates = terminates
     i = i + 1
   }
-  const broke = ctx.popLoop()
+  // A value no label names falls past every clause, as it was before the
+  // `switch`, unless the labels name every value it can have.
+  captureNarrowings(kept, before, scope)
+  let covered = false
+  if (!hasDefault) {
+    const unmatched = scope.child()
+    if (tagged !== null || held !== null) {
+      narrowClause(ctx, unmatched, tagged, held, clauses, [], true)
+    }
+    if (tagged !== null) {
+      covered = switchCovered(ctx, unmatched, tagged, members, clauses)
+    } else {
+      const union = unionTagRead(ctx, stmt.children[0])
+      covered =
+        union >= 0 &&
+        withoutMembers(ctx, membersOfSet(ctx, union), labelledMembers(ctx, clauses)).length === 0
+    }
+    if (!covered) {
+      snapshotExit(ctx, unmatched)
+    }
+  }
+  const coverage = ctx.program.switchCoverage[stmt.id]
+  ctx.program.switchCoverage[stmt.id] = covered && coverage !== SWITCH_OPEN ? SWITCH_COVERED : SWITCH_OPEN
+  const frame = ctx.switchFrames[ctx.switchFrames.length - 1]
+  ctx.switchFrames.pop()
+  if (tagged !== null || held !== null) {
+    narrowAfterSwitch(ctx, scope, tagged, held, clauses, reaching, hasDefault ? defaultReaches : true)
+  }
+  const steered: Local[] = []
+  if (tagged !== null) {
+    steered.push(tagged)
+  }
+  if (held !== null) {
+    steered.push(held)
+  }
+  joinExits(ctx, stmt, scope, frame, steered)
   // Anything no clause names reaches the statement after the `switch` unless
-  // a `default` catches it, and so does a `break` or a last clause that falls
-  // out of the bottom.
-  return hasDefault && !broke && lastTerminates
+  // a `default` catches it, or the discriminant is a union's tag and the
+  // labels name every tag it can hold; a `break` or a last clause that falls
+  // out of the bottom reaches it too.
+  return (hasDefault || covered) && !broke && lastTerminates
+}
+
+/**
+ * The union whose tag `node` reads, or `-1`: a read of the tag field of a
+ * value whose static type is a union —
+ * `s.kind` on a local, a field, an element or a call's result — so its value
+ * is one of the union's tags: a variant's tag is a `readonly` field written
+ * only with its own member, and a union value never crosses the interop
+ * boundary. What the read *is* decides, never what a path was narrowed or
+ * assigned to hold: a plain enum field assigned from a tag (`b.k = s.kind`)
+ * can be overwritten through an alias or a call the checker does not follow,
+ * and a plain enum can arrive from C holding any `i32`. The labels must name
+ * every tag of the whole union, since a path a test narrowed can be
+ * reassigned behind the checker's back too.
+ */
+const unionTagRead = (ctx: CheckContext, node: Node): i32 => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
+    return -1
+  }
+  const receiver = ctx.program.nodeTypes[unwrapParens(read.children[0]).id]
+  return ctx.table.isUnion(receiver) && read.text === ctx.table.tagNameOf(receiver) ? receiver : -1
+}
+
+/**
+ * Whether no tag of the union variable `tagged` escapes the labels of
+ * `clauses`: they name every member it can be, or `unmatched`, narrowed by
+ * none of them matching, leaves it no variant.
+ */
+const switchCovered = (
+  ctx: CheckContext,
+  unmatched: Scope,
+  tagged: Local,
+  members: i32[],
+  clauses: Node[]
+): boolean => {
+  if (members.length > 0 && withoutMembers(ctx, members, labelledMembers(ctx, clauses)).length === 0) {
+    return true
+  }
+  return unmatched.exhausted(tagged)
+}
+
+/** Every member a `case` label of `clauses` names. */
+const labelledMembers = (ctx: CheckContext, clauses: Node[]): i32[] => {
+  const all: i32[] = []
+  for (const clause of clauses) {
+    if (clause.kind !== N_DEFAULT) {
+      for (const member of memberSetOf(ctx, clause.children[0])) {
+        all.push(member)
+      }
+    }
+  }
+  return all
+}
+
+/** `members` without the values `drop` holds. */
+const withoutMembers = (ctx: CheckContext, members: i32[], drop: i32[]): i32[] => {
+  const left: i32[] = []
+  for (const member of members) {
+    let dropped = false
+    for (const other of drop) {
+      if (ctx.table.memberValue(other) === ctx.table.memberValue(member)) {
+        dropped = true
+      }
+    }
+    if (!dropped) {
+      left.push(member)
+    }
+  }
+  return left
+}
+
+/**
+ * Narrow `tagged`, the union variable of `switch (s.kind)`, or else `held`,
+ * the enum variable of `switch (k)`, to the variants or members `members`
+ * names (`keep`), or to those it does not.
+ */
+const narrowSwitched = (
+  ctx: CheckContext,
+  scope: Scope,
+  tagged: Local | null,
+  held: Local | null,
+  members: i32[],
+  keep: boolean
+): void => {
+  if (tagged !== null) {
+    narrowToTags(ctx, scope, tagged, members, keep)
+  } else if (held !== null) {
+    narrowHeld(ctx, scope, held, members, keep)
+  }
+}
+
+/**
+ * Narrow a clause body of a `switch` to the variants or members its group of
+ * labels names; a group with `default` is every one no other label names.
+ */
+const narrowClause = (
+  ctx: CheckContext,
+  clauseScope: Scope,
+  tagged: Local | null,
+  held: Local | null,
+  clauses: Node[],
+  group: i32[],
+  groupDefault: boolean
+): void => {
+  if (groupDefault) {
+    narrowSwitched(
+      ctx,
+      clauseScope,
+      tagged,
+      held,
+      withoutMembers(ctx, labelledMembers(ctx, clauses), group),
+      false
+    )
+  } else {
+    narrowSwitched(ctx, clauseScope, tagged, held, group, true)
+  }
+}
+
+/**
+ * Narrow `s` after `switch (s.kind)`, or `k` after `switch (k)`, to the
+ * variants or members that can reach the next statement: those of a body that
+ * breaks or falls out of the bottom, and, when no `default` catches them or a
+ * reaching one does, those no label names.
+ */
+const narrowAfterSwitch = (
+  ctx: CheckContext,
+  scope: Scope,
+  tagged: Local | null,
+  held: Local | null,
+  clauses: Node[],
+  reaching: i32[],
+  unlabelledReach: boolean
+): void => {
+  if (unlabelledReach) {
+    narrowSwitched(
+      ctx,
+      scope,
+      tagged,
+      held,
+      withoutMembers(ctx, labelledMembers(ctx, clauses), reaching),
+      false
+    )
+  } else {
+    narrowSwitched(ctx, scope, tagged, held, reaching, true)
+  }
 }
 
 /**
@@ -999,16 +1475,98 @@ const checkCaseLabel = (
   ctx.program.nodeCaseValues[clause.id] = value.value
 }
 
-const checkBreak = (ctx: CheckContext, stmt: Node): boolean => {
+const checkBreak = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   if (ctx.loopKinds.length === 0) {
     ctx.error(stmt, "`break` outside of a loop or `switch`")
     return true
   }
   ctx.loopBreaks[ctx.loopBreaks.length - 1] = true
+  if (ctx.loopKinds[ctx.loopKinds.length - 1] === LOOP_SWITCH) {
+    snapshotExit(ctx, scope)
+  } else if (stmt.text === "") {
+    flowNoteBreak(ctx, scope)
+  }
   return true
 }
 
-const checkContinue = (ctx: CheckContext, stmt: Node): boolean => {
+/**
+ * Record, for the innermost `switch`, what its assigned variables and every
+ * path read as in `scope`, one way out of it. A path first named later is
+ * missing here, which reads as having no narrowing, as it had none.
+ */
+const snapshotExit = (ctx: CheckContext, scope: Scope): void => {
+  if (ctx.switchFrames.length === 0) {
+    return
+  }
+  const frame = ctx.switchFrames[ctx.switchFrames.length - 1]
+  // The clause's own scopes, up to the `switch`'s, hold what its tests narrowed.
+  let at = scope
+  while (at !== frame.outer) {
+    addLocals(frame.tested, at.narrowedVars)
+    addLocals(frame.tested, at.heldVars)
+    const up = at.parent
+    if (up === null) {
+      break
+    }
+    at = up
+  }
+  const exit = new Scope(null)
+  captureNarrowings(frame.locals, scope, exit)
+  captureNarrowings(ctx.pathLocals, scope, exit)
+  captureNarrowings(frame.tested, scope, exit)
+  frame.exits.push(exit)
+}
+
+/**
+ * After a `switch`, each variable a clause assigns is what one of the ways
+ * out of it left it, joined as an `if`'s arms are, and so is each variable that
+ * only a clause's tests narrowed; the switch's own discriminant is left to the
+ * clause join. The clauses are read again
+ * for the paths first named inside one. With no way out, nothing after the
+ * `switch` runs.
+ */
+const joinExits = (
+  ctx: CheckContext,
+  stmt: Node,
+  scope: Scope,
+  frame: SwitchFrame,
+  steered: Local[]
+): void => {
+  if (frame.exits.length === 0) {
+    return
+  }
+  const after: Local[] = []
+  addLocals(after, frame.locals)
+  localsAssignedIn(ctx, stmt.children[1], scope, after)
+  let joined = frame.exits[0]
+  let i = 1
+  while (i < frame.exits.length) {
+    const next = new Scope(null)
+    joinArms(ctx, after, next, joined, frame.exits[i])
+    joined = next
+    i = i + 1
+  }
+  takeArm(after, joined, scope)
+  // A variable only a test narrowed: an exit recorded before a later clause
+  // tested it reads as it did before the `switch`, as that clause left it. The
+  // discriminant's variable, `steered`, is `narrowAfterSwitch`'s.
+  const tested: Local[] = []
+  for (const local of frame.tested) {
+    if (after.indexOf(local) < 0 && steered.indexOf(local) < 0) {
+      tested.push(local)
+    }
+  }
+  for (const exit of frame.exits) {
+    for (const local of tested) {
+      if (exit.narrowingIndex(local) < 0) {
+        captureNarrowings([local], scope, exit)
+      }
+    }
+  }
+  joinTested(ctx, tested, frame.exits, scope)
+}
+
+const checkContinue = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // A `switch` on the stack is a `break` target only: `continue` inside one
   // belongs to the enclosing loop, as it does in JavaScript.
   let inLoop = false
@@ -1019,6 +1577,8 @@ const checkContinue = (ctx: CheckContext, stmt: Node): boolean => {
   }
   if (!inLoop) {
     ctx.error(stmt, "`continue` outside of a loop")
+  } else if (stmt.text === "") {
+    flowNoteBack(ctx, scope)
   }
   return true
 }

@@ -1,0 +1,1 @@
+`stop` writes memory its caller can see in the runtime's `nish_kill`, and `spawn` runs it beside the scope's other tasks

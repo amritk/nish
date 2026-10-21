@@ -15,7 +15,6 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
-  quicPushAck,
   quicPutDatagram,
 } from "nish/net/quic-frame";
 import {
@@ -32,7 +31,7 @@ import {
 import { bytesOf, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { cat } from "../net_tls_common/client";
-import { QcClient, qcDrain, qcShort } from "../net_quic_conn/client";
+import { QcClient, qcDrain, qcPushAppAck, qcShort } from "../net_quic_conn/client";
 import { qcFind } from "../net_quic_conn/common";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
 import { NqLimits, NqPair, nqAck, nqConfig, nqPair, nqSend, nqText } from "../net_quic_stream/common";
@@ -217,10 +216,7 @@ const recoveryChecks = (t: Suite): void => {
 /** An ACK frame of every 1-RTT packet the client has had, or nothing before the first. */
 const ackAll = (c: QcClient): u8[] => {
   const out: u8[] = [];
-  if (c.largestApp >= n64(0)) {
-    const ranges: i64[] = [n64(0), c.largestApp];
-    quicPushAck(out, ranges, n32(1), n64(0));
-  }
+  qcPushAppAck(out, c);
   return out;
 };
 

@@ -1,1 +1,1 @@
-The tag `s.kind` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type this version does not have, so annotate it as `Kind`
+The tag `s.kind` cannot give a type to what it initialises: TypeScript would infer `Kind.Circle | Kind.Square`, a type this version does not have, so annotate it as `Kind`
