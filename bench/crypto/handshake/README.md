@@ -58,8 +58,14 @@ imported, not copied. Those imports are:
 - the QUIC client's packets and keys, from `net_quic_conn` and `net_quic_common`.
 
 `main.ts` adds the ordering a benchmark needs, the CertificateVerify check
-against the leaf parsed out of the server's Certificate, and the echo. Nothing
-is copied, so no source comment names an origin.
+against the leaf parsed out of the server's Certificate, and the echo. One
+constant is copied: CertificateVerify's server context, `SERVER_CONTEXT_HEX`,
+because `net_tls_common/client.ts` keeps its `SPACES_AND_CONTEXT_HEX` private.
+A comment beside the copy names it.
+
+The OpenSSL, Go, Rust and Node twins paste the leaf's certificate and key as
+hex. The one source of those bytes is `tests/link/net_tls_common/server.ts`;
+regenerating the leaf there means updating each twin's copy.
 
 Those tests use fixed randoms and fixed X25519 private keys: RFC 7748 §6.1's
 Alice for the client, and Bob for the server. QUIC's connection IDs come from

@@ -76,7 +76,10 @@ const INITIAL_DATAGRAM: i32 = 1200
 /** The credit the QUIC client gives the server's streams. */
 const CLIENT_CREDIT: i64 = 65536
 
-/** CertificateVerify's 64 spaces, its context string and the zero byte (RFC 8446 §4.4.3), as hex. */
+/**
+ * CertificateVerify's 64 spaces, its context string and the zero byte (RFC 8446 §4.4.3), as hex.
+ * Copied from tests/link/net_tls_common/client.ts's SPACES_AND_CONTEXT_HEX, which it does not export.
+ */
 const SERVER_CONTEXT_HEX: string =
   "20202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020544c5320312e332c2073657276657220436572746966696361746556657269667900"
 
@@ -132,10 +135,7 @@ const certificateVerifies = (session: Session, flight: u8[]): boolean => {
   }
   const derLength: i32 = (toI32(certificate[8]) << 16) | (toI32(certificate[9]) << 8) | toI32(certificate[10])
   const leaf: X509Certificate | null = x509ParseCertificate(range(certificate, derAt, derAt + derLength))
-  if (leaf === null) {
-    return false
-  }
-  if (!leaf.p256) {
+  if (leaf === null || !leaf.p256) {
     return false
   }
   const content: u8[] = cat([

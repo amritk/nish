@@ -240,16 +240,16 @@ fn quic_once(server: &Arc<ServerConfig>, client: &ClientConfig, msg: &[u8], out:
         c.endpoint.connect(now, client.clone(), s.addr, "localhost").unwrap_or_else(|_| fail("the connect")),
     );
     let mut buf = Vec::new();
-    let (mut sent, mut cstream, mut sstream) = (false, None, None);
+    let (mut cstream, mut sstream) = (None, None);
     let (mut echoed, mut echo, mut back) = (false, Vec::new(), Vec::new());
     for _ in 0..1000 {
         let moved = c.step(&mut s, now, &mut buf) | s.step(&mut c, now, &mut buf);
         let cc = &mut c.conn.as_mut().unwrap().1;
-        if !sent && !cc.is_handshaking() {
+        if cstream.is_none() && !cc.is_handshaking() {
             let id = cc.streams().open(Dir::Bi).unwrap_or_else(|| fail("opening a stream"));
             cc.send_stream(id).write(msg).unwrap_or_else(|_| fail("the write"));
             cc.send_stream(id).finish().unwrap_or_else(|_| fail("the finish"));
-            (sent, cstream) = (true, Some(id));
+            cstream = Some(id);
         }
         if let Some((_, sc)) = s.conn.as_mut() {
             if sstream.is_none() {

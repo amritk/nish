@@ -65,6 +65,7 @@ const readExactly = (socket, n) =>
       got += chunk.length
       if (got >= n) {
         socket.off("data", onData)
+        socket.off("error", reject)
         resolve(Buffer.concat(parts))
       }
     }
