@@ -768,6 +768,22 @@ export const main = (): i32 => {
 Printing a `Secret`, putting it in a template, or handing it to any builtin is
 a compile error.
 
+The type can be left off: `secret` answers a `Secret` of whatever it is given,
+and every rule below holds the same.
+
+```ts nish:ok
+import { expose, secret, wipe } from "nish:secret";
+
+const length = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const key = secret(new Array<u8>(32)); // a `Secret<u8[]>`
+  console.log(`${expose(key, length)} bytes`); // 32 bytes
+  wipe(key);
+  return 0;
+};
+```
+
 `secret(v)` takes a value nothing else holds: a literal, a call that makes a
 new array or record, or a local that is the only name for its value. A second
 name made before the move would read the key outside the `Secret`, and zeros
