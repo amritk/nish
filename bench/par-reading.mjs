@@ -99,7 +99,7 @@ export const spreadOf = (verdicts) => {
 /**
  * The cgroup v2 CPU quota of this process and of every cgroup above it, as a
  * whole number of CPUs rounded up, and `n` when it is lower or there is none:
- * the walk `nish_cgroup_cpus` in runtime/runtime-parallel.c makes, from the
+ * the walk `nish_cgroup_cpus` in runtime/runtime-os.c makes, from the
  * `0::` line of /proc/self/cgroup up to /sys/fs/cgroup, so that no twin is
  * handed more threads than Nish's runtime would take.
  */

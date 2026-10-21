@@ -998,6 +998,10 @@ nish_str *nish_getenv(const nish_str *);
 nish_str *nish_realpath(const nish_str *);
 int32_t nish_spawn(const nish_array *);
 int32_t nish_spawn_to(const nish_array *, const nish_str *, const nish_str *);
+int32_t nish_spawn_child(const nish_array *);
+int32_t nish_kill(int32_t, int32_t);
+nish_array *nish_wait_pid(int32_t, int32_t);
+int64_t nish_total_memory(void);
 double nish_stat_mtime(const nish_str *);
 void nish_random_fill(nish_array *);
 void nish_wipe(nish_array *);
@@ -1251,6 +1255,41 @@ static int32_t wipe_run(const char *how) {
 #endif
 
 static int wipe_failed;
+
+/* WP34 N12's `spawn`, `kill` and `waitPid` (docs/security/runtime.md, RT-19):
+   `kill` refuses a group, every process and a signal outside the four, before
+   any reaches `kill(2)`; `waitPid` refuses a group and an unknown flag; and a
+   child started without waiting is signalled and reaped with spawnSync's
+   status convention. */
+static void expect_wait(int32_t pid, int32_t flags, int32_t want0, int32_t want1, const char *what) {
+  const int32_t *w = (const int32_t *)nish_wait_pid(pid, flags)->data;
+  expect_i64(w[0], want0, what);
+  expect_i64(w[1], want1, what);
+}
+
+static void test_process(void) {
+  expect_i64(nish_kill(0, 0), -22, "kill of pid 0, the caller's process group");
+  expect_i64(nish_kill(-1, 15), -22, "kill of pid -1, every process");
+  expect_i64(nish_kill(-getpid(), 15), -22, "kill of a negative pid, a process group");
+  expect_i64(nish_kill(getpid(), 1), -22, "kill with SIGHUP, outside the four");
+  expect_i64(nish_kill(getpid(), 0), 0, "kill with 0 of this process");
+  expect_wait(0, 0, -22, 0, "waitPid of pid 0, a process group");
+  expect_wait(-2, 0, -22, 0, "waitPid of pid -2, a process group");
+  expect_wait(-1, 2, -22, 0, "waitPid with a flag other than WNOHANG");
+  expect_wait(-1, 1, -10, 0, "waitPid with no child");
+
+  nish_str *argv[2] = {lit("sleep"), lit("30")};
+  nish_array args = {2, 2, (char *)argv};
+  int32_t child = nish_spawn_child(&args);
+  assert(child > 0);
+  expect_wait(child, 1, 0, 0, "a WNOHANG wait while the child sleeps");
+  expect_i64(nish_kill(child, 15), 0, "SIGTERM to the child");
+  expect_wait(child, 0, child, 128 + 15, "the child reaped, 128 + SIGTERM");
+  expect_wait(-1, 1, -10, 0, "and then no child is left");
+  nish_array empty = {0, 0, NULL};
+  expect_i64(nish_spawn_child(&empty), -22, "spawn of an empty argv");
+  assert(nish_total_memory() > 0);
+}
 
 static void wipe_check(int ok, const char *what) {
   if (!ok) {
@@ -2113,6 +2152,7 @@ int main(void) {
   nish_free_arena();
   test_wipe();
   nish_free_arena();
+  test_process();
   test_guard_keep();
   test_cross_keep_rewind();
   nish_free_arena();

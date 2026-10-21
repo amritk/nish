@@ -20672,6 +20672,138 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end builtin-process -->
 
+### Children that run beside the parent
+
+`spawnSync` waits; `spawn` does not. It answers the child's pid, or a negative
+errno, so a caller checks `pid > 0` before it uses one: `-1` is `-EPERM`, and
+`waitPid(-1, …)` would wait for any child. `kill` sends signal 0, 2, 9 or 15
+and answers 0 or a negative errno, and `waitPid` answers a fresh `[pid,
+status]`, so its declaration is `noalias` and `nonnull`. Neither `kill` nor
+`waitPid` is `willreturn`: a blocking `waitPid` waits for a child that may
+never exit, and `kill` of the program's own pid with 9 or 15 never comes back.
+All three write state the caller can see, so a `scope()` task or a parallel
+body may not call them. `availableParallelism` and `totalMemory` are one call
+each that writes nothing, which is why they may.
+
+<!-- cookbook:begin builtin-process-children -->
+```ts
+// WP34 N12: a child that runs beside the parent. `spawn` answers the pid, or a
+// negative errno; `kill` and `waitPid` act on it; the two host facts size the
+// pool. `waitPid` without `WNOHANG` and `kill` of the program's own pid may not
+// return, so neither declaration carries `willreturn`; the host facts write
+// nothing, so a task or a parallel body may read them.
+export const supervise = (argv: string[]): i32 => {
+  const pid = spawn(argv)
+  if (pid <= 0) {
+    return pid
+  }
+  if (kill(pid, 0) !== 0) {
+    return -1
+  }
+  kill(pid, 15)
+  return waitPid(pid, 0)[1]
+}
+
+export const workers = (): i32 => availableParallelism()
+
+export const budget = (): i64 => totalMemory()
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #1
+declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #0
+declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #0
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare noundef i64 @nish_cpu_online() #1
+declare noundef i64 @nish_total_memory() #1
+
+define noundef i32 @supervise(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) %argv) #0 {
+entry:
+  %pid.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i32 @nish_spawn_child(%struct.nish_array* %argv)
+  store i32 %0, i32* %pid.addr, align 4
+  %1 = load i32, i32* %pid.addr, align 4
+  %2 = icmp sle i32 %1, 0
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = load i32, i32* %pid.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %3
+
+if.end:
+  %4 = load i32, i32* %pid.addr, align 4
+  %5 = call i32 @nish_kill(i32 %4, i32 0)
+  %6 = icmp ne i32 %5, 0
+  br i1 %6, label %if.then.1, label %if.end.1
+
+if.then.1:
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 -1
+
+if.end.1:
+  %7 = load i32, i32* %pid.addr, align 4
+  %8 = call i32 @nish_kill(i32 %7, i32 15)
+  %9 = load i32, i32* %pid.addr, align 4
+  %10 = call %struct.nish_array* @nish_wait_pid(i32 %9, i32 0)
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
+  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %13 = icmp ult i64 1, %12
+  br i1 %13, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 1, i64 %12)
+  unreachable
+
+bounds.ok:
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %16 = bitcast i8* %15 to i32*
+  %17 = getelementptr inbounds i32, i32* %16, i64 1
+  %18 = load i32, i32* %17, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %18
+}
+
+define noundef i32 @workers() #1 {
+entry:
+  %0 = call i64 @nish_cpu_online()
+  %1 = trunc i64 %0 to i32
+  ret i32 %1
+}
+
+define noundef i64 @budget() #1 {
+entry:
+  %0 = call i64 @nish_total_memory()
+  ret i64 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end builtin-process-children -->
+
 ### What machine this is
 
 `process.platform` and `process.arch` are one call each into the runtime,
@@ -21755,6 +21887,9 @@ declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #
 declare zeroext i1 @nish_is_dir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8) #3
 declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #2
+declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #3
+declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #3
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_monotonic_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -21813,6 +21948,8 @@ declare void @nish_cross_end(i8* noundef nonnull) #3
 declare void @nish_cross_adopt(i8* noundef, i8* noundef nonnull, i64 noundef) #3
 declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #3
 declare noundef i64 @nish_cpu_count() #2
+declare noundef i64 @nish_cpu_online() #2
+declare noundef i64 @nish_total_memory() #2
 declare i32 @nish_aes_hw() #8
 declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2

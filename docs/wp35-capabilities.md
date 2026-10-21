@@ -64,7 +64,7 @@ labelled apart.
 | --- | --- |
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` |
+| `process.spawn` | `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid` |
 | `net` | every `nish:net` export: `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` |
 | `env` | `getenv`, `geteuid` |
 | `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` |
@@ -73,9 +73,9 @@ labelled apart.
 | `exit` | `process.exit` (and `exit` from `nish:process`) |
 | `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
 | `unsafe` | the six `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`); wired by WP36, reported since #432 |
-| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `String.fromBytes`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch` |
+| none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `String.fromBytes`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch`, and the host facts `availableParallelism`, `totalMemory` |
 
-Three rows deserve their reason:
+Four rows deserve their reason:
 
 - **`Math.random` is `entropy`**, although it is a pseudo-random generator:
   runtime.c's `nish_random` seeds it from `time(0)` and `getpid()` on first
@@ -85,6 +85,13 @@ Three rows deserve their reason:
 - **`spawnSyncTo` is `process.spawn`**, not also `fs.write`, for the same
   reason: the child it starts can write anything anyway, so `process.spawn`
   already says more than `fs.write` would.
+- **`availableParallelism` and `totalMemory` are none**, although each asks
+  the host: how many cores and bytes the machine has is a fact about it, as
+  `process.platform` is, which a program reads to size itself and not to reach
+  anything. `kill` and `waitPid` are `process.spawn`: `kill` reaches any process
+  of the program's user, as kill(1) does, not only the children `spawn`
+  starts, and `waitPid` reaps those children, so both reach other processes
+  the way starting one does.
 
 **Unlabelled is a bug, and it is executable.** `builtinCapability` answers a
 capability's index, `CAP_NONE` (-1, the deliberate none) or `CAP_UNLABELLED`

@@ -20,6 +20,12 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 `nish:io`, `nish:net`) are part of the language rather than this library; see
 [Builtin modules](../../LANGUAGE.md#builtin-modules-nish).
 
+`nish:process` is where a program starts a child without waiting for it
+(`spawn`), signals it (`kill`) and reaps it (`waitPid`), and where it asks how
+many cores and bytes of memory the machine has (`availableParallelism`,
+`totalMemory`) to size a pool of workers; see
+[Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |

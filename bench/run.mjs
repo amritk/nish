@@ -1296,7 +1296,7 @@ const pct1 = (n) => `${(n * 100).toFixed(1)}%`
 /**
  * The threads Nish's runtime divides over on this machine: the CPUs this
  * process may run on, lowered by the cgroup v2 quota of its cgroup or any
- * above it (`nish_cpu_count` in runtime/runtime-parallel.c), and at most 64,
+ * above it (`nish_cpu_online` and `nish_cgroup_cpus` in runtime/runtime-os.c), and at most 64,
  * its 63 workers and the caller. Every twin is handed the same count, so no
  * column wins by using more threads than Nish does.
  */
