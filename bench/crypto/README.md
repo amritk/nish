@@ -33,14 +33,38 @@ A missing toolchain is a note, never a failure, and that twin's columns read
 —. The runner detects each twin as follows:
 
 - **OpenSSL:** `$CC` (default `clang`) must compile and link a program that
-  includes `<openssl/evp.h>` and `<openssl/ssl.h>` against `-lssl -lcrypto`.
+  includes `<openssl/evp.h>` and `<openssl/ssl.h>` against `-lssl -lcrypto`,
+  and the headers must be OpenSSL 3 or newer: the twins call its fetch API
+  (`EVP_MD_fetch`, `EVP_MAC`, `EVP_KDF`), which 1.1 lacks.
 - **Go:** `go` must be on `PATH`, or `GO=<path>` names it.
 - **Rust:** `cargo` must be on `PATH`.
 - **Node:** the Node running the script.
 
-A module or crate that does not download is also a note. A twin that builds and
-then prints a different checksum is a failure, and so is a twin that does not
-build.
+A module or crate that does not download is also a note, and so is a Go older
+than the `go` line of the family's `go.mod` or a `rustc` older than a crate
+needs. A twin that builds and then prints a different checksum is a failure,
+and so is a twin that does not build for any other reason.
+
+`--validate` accounts for every column of every family it checks, after the
+family's `<family>: N of N kernel size(s) match expected.txt` line:
+
+```
+hash: ran nish, openssl, openssl-portable, rust, rust-soft, node
+hash did not run go: Go 1.21.0 is older than the go 1.24 its go.mod asks for
+hash did not run go-purego: Go 1.21.0 is older than the go 1.24 its go.mod asks for
+```
+
+`<family>: ran` lists the columns at least one check ran. Each other column
+gets `<family> has no <column>: <why>`, the family's own word (a twin or
+portable build given as a string, every kernel `lacks` it, or no kernel with a
+Nish column), or `<family> did not run <column>: <why>`, this machine's reason
+(`--no-<twin>`, a missing or too-old toolchain, a download that failed). The
+runner is the one authority on what ran: `tests/run.js crypto-bench` reads
+these lines rather than probing the toolchains itself, and fails a column that
+has none of them.
+
+`--write-expected` refuses a family where no twin ran, since the checksums it
+would pin would then be Nish's alone, agreeing with nothing.
 
 ## The program contract
 
@@ -220,9 +244,10 @@ portable build to give up:
   OpenSSL's SHA-512 paths beyond its scalar one need.
 
 On GitHub Actions on x86-64 Linux, `tests/run.js`'s `crypto-bench` check
-requires the OpenSSL and Go proofs of every family with a `portableProof` to
-be proved lines, not `unproved`: the runner has the toolchains and the
-extensions, so an `unproved` there means the gate failed open.
+also requires every family to be validated, no `did not run` line, and the
+OpenSSL and Go proofs of every family with a `portableProof` to be proved
+lines, not `unproved`: the runner has the toolchains and the extensions, so a
+column left out there means the gate failed open.
 
 Neither run inherits an `OPENSSL_ia32cap` or `OPENSSL_armcap` from the caller's
 environment: the default column runs unmasked, and the portable one under the

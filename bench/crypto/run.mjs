@@ -466,26 +466,63 @@ const note = (text) => {
   console.error(`note: ${text}`)
 }
 
-/** A step that must work: a twin that does not build is a broken bench. */
-const build = (what, cmd, args, { cwd = root, env = process.env } = {}) => {
+/**
+ * The line of a step's stderr that names why it stopped: its last `error`
+ * line, since cargo follows one with notes and help, or else its last line.
+ */
+const stopLine = (r) => {
+  const lines = (r.stderr ?? "").trim().split("\n")
+  return lines.findLast((l) => /^error\b/.test(l)) ?? lines.pop()
+}
+
+/** Whether dotted version `a` is older than `b`, part by part. */
+const olderThan = (a, b) => {
+  const [x, y] = [a, b].map((v) => v.split(".").map(Number))
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) {
+      return (x[i] ?? 0) < (y[i] ?? 0)
+    }
+  }
+  return false
+}
+
+/**
+ * A step that must work: a twin that does not build is a broken bench. A
+ * failure whose stderr matches `tooOld` is a toolchain too old for the twin
+ * instead, and comes back as the matching line; otherwise the result is null.
+ */
+const build = (what, cmd, args, { cwd = root, env = process.env, tooOld = null } = {}) => {
   const r = spawnSync(cmd, args, { cwd, env, encoding: "utf8" })
   if (r.error !== undefined || r.status !== 0) {
+    const old = tooOld === null ? null : (r.stderr ?? "").split("\n").find((l) => tooOld.test(l))
+    if (old !== undefined && old !== null) {
+      return old.trim()
+    }
     console.error(`crypto: building ${what} failed (exit ${r.status})\n${r.error?.message ?? ""}${r.stderr}`)
     process.exit(1)
   }
+  return null
 }
 
 const probeDir = path.join(outRoot, "probe")
-/** Whether clang links a program against OpenSSL's libcrypto and libssl, headers included. */
-const opensslLinks = () => {
+/**
+ * Whether clang links a program against OpenSSL's libcrypto and libssl, headers
+ * included, given the C that goes before `main`.
+ */
+const opensslLinks = (head = "") => {
   fs.mkdirSync(probeDir, { recursive: true })
   const src = path.join(probeDir, "openssl.c")
-  fs.writeFileSync(src, "#include <openssl/evp.h>\n#include <openssl/ssl.h>\nint main(void) { return 0; }\n")
+  fs.writeFileSync(
+    src,
+    `#include <openssl/evp.h>\n#include <openssl/ssl.h>\n${head}int main(void) { return 0; }\n`
+  )
   const r = spawnSync(CC, [src, "-o", path.join(probeDir, "openssl"), "-lssl", "-lcrypto"], {
     encoding: "utf8",
   })
   return r.error === undefined && r.status === 0
 }
+/** The twins call OpenSSL 3's fetch API (EVP_MD_fetch, EVP_MAC, EVP_KDF), which 1.1 lacks. */
+const OPENSSL_3 = "#if OPENSSL_VERSION_NUMBER < 0x30000000L\n#error OpenSSL 3 or newer\n#endif\n"
 
 const tools = {
   nish: versionOf(nishc.cmd, [...nishc.prefix, "--version"]),
@@ -499,12 +536,17 @@ const tools = {
 if (tools.nish === null) {
   fail(`${nishc.cmd} --version did not run`)
 }
+let opensslWhy = `${CC} could not link against OpenSSL's headers and libraries`
 if (!opts.skip.has("openssl") && tools.cc !== null && opensslLinks()) {
-  tools.openssl = versionOf("openssl", ["version"]) ?? "OpenSSL (version unknown: no openssl command)"
+  if (opensslLinks(OPENSSL_3)) {
+    tools.openssl = versionOf("openssl", ["version"]) ?? "OpenSSL (version unknown: no openssl command)"
+  } else {
+    opensslWhy = "OpenSSL's headers are older than 3, whose fetch API the twins call"
+  }
 }
 /** Why a twin has no column on this machine when its toolchain is absent. */
 const absent = {
-  openssl: tools.openssl === null ? `${CC} could not link against OpenSSL's headers and libraries` : null,
+  openssl: tools.openssl === null ? opensslWhy : null,
   go: tools.go === null ? "no go toolchain" : null,
   rust: tools.cargo === null ? "no cargo" : null,
   node: null,
@@ -586,8 +628,39 @@ const CAP_MASKS = ["OPENSSL_ia32cap", "OPENSSL_armcap"]
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !CAP_MASKS.includes(k)))
 
 /**
+ * Why `id` has no column in `family` by the family's own word (no Nish kernel,
+ * an absent twin or portable build, or a lack of every kernel this run asked
+ * for), or null when the family has the column.
+ */
+const declaredAbsent = (family, id) => {
+  const kernels = family.kernels.filter((k) => wanted(family, k))
+  if (id === "nish") {
+    return kernels.some((k) => k.nish === true) ? null : "no kernel run has a Nish column"
+  }
+  const twin = TWINS.find((name) => name === id || PORTABLE_IDS[name] === id)
+  const t = family.twins[twin]
+  const portable = id !== twin
+  if (t.absent !== undefined) {
+    return t.absent
+  }
+  if (portable && t.portable.absent !== undefined) {
+    return t.portable.absent
+  }
+  const lacks = (k) => t.lacks[k.name] !== undefined || (portable && t.portable.lacks[k.name] !== undefined)
+  return kernels.every(lacks) ? `lacks ${kernels.map((k) => k.name).join(", ")}` : null
+}
+
+/**
+ * `family name -> id -> why` for each column the family has that this machine
+ * did not build: the runner's own account, which --validate prints and the
+ * table's footnotes repeat.
+ */
+const notBuilt = new Map()
+
+/**
  * Builds a family's programs into build/bench/crypto/<family>/ and returns
  * its variants, one per column it can fill: `{ id, twin, portable, cmd, args, env }`.
+ * Each column it cannot fill gets its reason in `notBuilt`.
  */
 const buildFamily = (family) => {
   const dir = path.join(outRoot, family.name)
@@ -596,6 +669,22 @@ const buildFamily = (family) => {
   const variants = []
   const add = (id, twin, portable, cmd, args, env = {}) =>
     variants.push({ id, twin, portable, cmd, args, env: { ...baseEnv, ...env } })
+  const why = new Map()
+  notBuilt.set(family.name, why)
+  /** Records why `twin`'s columns were not built, and notes it once. */
+  const unbuilt = (twin, reason) => {
+    for (const id of [twin, PORTABLE_IDS[twin]].filter(Boolean)) {
+      why.set(id, reason)
+    }
+    note(`${TWIN_LABELS[twin]}: ${family.name}: ${reason}; its columns read —`)
+  }
+  for (const twin of TWINS) {
+    if (missing[twin] !== null) {
+      for (const id of [twin, PORTABLE_IDS[twin]].filter(Boolean)) {
+        why.set(id, missing[twin])
+      }
+    }
+  }
 
   if (family.kernels.some((k) => k.nish === true)) {
     const exe = path.join(dir, "nish", "main")
@@ -647,9 +736,16 @@ const buildFamily = (family) => {
     fs.copyFileSync(path.join(libDir, "gen.go"), path.join(src, "gen.go"))
     // No toolchain download and no workspace from above: the module as committed.
     const env = { ...process.env, GOTOOLCHAIN: "local", GOWORK: "off", GOFLAGS: "-mod=readonly", ...t.env }
-    const fetched = spawnSync(GO, ["mod", "download"], { cwd: src, env, encoding: "utf8" })
-    if (fetched.status !== 0) {
-      note(`Go: ${family.name}'s modules did not download; its Go columns read —`)
+    const wants = /^go (\d+(?:\.\d+)*)$/m.exec(fs.readFileSync(path.join(src, "go.mod"), "utf8"))?.[1]
+    const has = /\bgo(\d+(?:\.\d+)*)/.exec(tools.go)?.[1]
+    const fetched =
+      wants !== undefined && has !== undefined && olderThan(has, wants)
+        ? null
+        : spawnSync(GO, ["mod", "download"], { cwd: src, env, encoding: "utf8" })
+    if (fetched === null) {
+      unbuilt("go", `Go ${has} is older than the go ${wants} its go.mod asks for`)
+    } else if (fetched.status !== 0) {
+      unbuilt("go", `its modules did not download (${stopLine(fetched)})`)
     } else {
       build(`${family.name} (Go)`, GO, ["build", "-trimpath", "-o", path.join(dir, "go-main"), "."], {
         cwd: src,
@@ -690,27 +786,34 @@ const buildFamily = (family) => {
       env,
       encoding: "utf8",
     })
+    // A crate whose rust-version is newer than this rustc is a toolchain too
+    // old, like a Go older than its go.mod; any other build failure is a bug.
+    const cargo = (what, target, extra) =>
+      build(what, "cargo", ["build", "--release", "--locked", "--quiet", "--target-dir", target], {
+        cwd: crate,
+        env: { ...env, ...extra },
+        tooOld: /requires rustc [\d.]+ or newer/,
+      })
+    const old = fetched.status === 0 ? cargo(`${family.name} (Rust)`, path.join(crate, "target"), {}) : null
     if (fetched.status !== 0) {
-      note(
-        `Rust: ${family.name}'s crates did not fetch (${fetched.stderr.trim().split("\n").pop()}); its Rust columns read —`
-      )
+      unbuilt("rust", `its crates did not fetch (${stopLine(fetched)})`)
+    } else if (old !== null) {
+      unbuilt("rust", `${tools.rustc} is too old (${old})`)
     } else {
-      const cargo = (what, target, extra) =>
-        build(what, "cargo", ["build", "--release", "--locked", "--quiet", "--target-dir", target], {
-          cwd: crate,
-          env: { ...env, ...extra },
-        })
-      cargo(`${family.name} (Rust)`, path.join(crate, "target"), {})
       add("rust", "rust", false, path.join(crate, "target", "release", bin), [], t.env)
       if (t.portable.absent === undefined) {
         // One flag per element, spaces and quotes kept, and a target directory
         // of its own so the two builds never share an artifact.
         const flags = { CARGO_ENCODED_RUSTFLAGS: (t.portable.rustflags ?? []).join("\x1f") }
-        cargo(`${family.name} (Rust portable)`, path.join(crate, "target-soft"), {
+        const softOld = cargo(`${family.name} (Rust portable)`, path.join(crate, "target-soft"), {
           ...flags,
           ...(t.portable.env ?? {}),
         })
-        add("rust-soft", "rust", true, path.join(crate, "target-soft", "release", bin), [], portableEnv(t))
+        if (softOld === null) {
+          add("rust-soft", "rust", true, path.join(crate, "target-soft", "release", bin), [], portableEnv(t))
+        } else {
+          why.set("rust-soft", `${tools.rustc} is too old (${softOld})`)
+        }
       }
     }
   }
@@ -817,6 +920,7 @@ if (opts.validate) {
       continue
     }
     const variants = buildFamily(family)
+    const ranHere = new Set()
     const expected = readExpected(family)
     // --write-expected replaces the lines it ran and keeps the rest, so
     // `--only <kernel>` does not drop the other kernels' checksums.
@@ -842,6 +946,7 @@ if (opts.validate) {
         }
         sums.set(v.id, r.checksum)
         seen.add(v.id)
+        ranHere.add(v.id)
       }
       const distinct = new Set(sums.values())
       if (opts.writeExpected) {
@@ -876,6 +981,26 @@ if (opts.validate) {
         mismatches++
       }
       kernelCount++
+    }
+    // Every column is accounted for: it ran, the family has none, or this
+    // machine did not build it, and the line says why. The runner is the
+    // authority here; tests/run.js reads these lines rather than probing.
+    const ids = COLUMNS.map(([id]) => id)
+    console.log(`${family.name}: ran ${ids.filter((id) => ranHere.has(id)).join(", ")}`)
+    for (const id of ids.filter((c) => !ranHere.has(c))) {
+      const declared = declaredAbsent(family, id)
+      if (declared !== null) {
+        console.log(`${family.name} has no ${id}: ${declared}`)
+      } else {
+        console.log(
+          `${family.name} did not run ${id}: ${notBuilt.get(family.name).get(id) ?? "no check of this run reached it"}`
+        )
+      }
+    }
+    // A checksum only Nish printed is pinned by nothing: a twin must agree first.
+    if (opts.writeExpected && ![...ranHere].some((id) => id !== "nish")) {
+      console.log(`crypto: --write-expected for ${family.name} needs a twin to agree with Nish, and none ran`)
+      mismatches++
     }
     if (opts.writeExpected && mismatches === 0) {
       const head =
@@ -1103,7 +1228,9 @@ for (const { family, variants, rows } of sections) {
       continue
     }
     if (!ids.has(twin)) {
-      why.push(`${TWIN_LABELS[twin]}: not on this machine (${missing[twin] ?? "see the run's notes"})`)
+      why.push(
+        `${TWIN_LABELS[twin]}: not on this machine (${missing[twin] ?? notBuilt.get(family.name)?.get(twin) ?? "see the run's notes"})`
+      )
     }
     for (const [kernel, reason] of Object.entries(t.lacks)) {
       why.push(`${TWIN_LABELS[twin]} has no ${kernel}: ${reason}`)

@@ -15598,37 +15598,24 @@ if (!only || "crypto-bench".includes(only)) {
       [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
       { cwd: root, encoding: "utf8" }
     )
-    // The variants that ran, as the runner names them. Nish and Node always
-    // run; each other twin must too when this machine has its toolchain, which
-    // the test finds for itself rather than taking the runner's word for it.
-    const ran = new Set(
-      (
-        /^crypto: checksums agree over \d+ kernel size\(s\) and \d+ variant\(s\): (.+)$/m.exec(
-          v.stdout
-        )?.[1] ?? ""
-      ).split(", ")
-    )
-    const probe = path.join(buildDir, "crypto-bench", "openssl-probe")
-    fs.mkdirSync(path.dirname(probe), { recursive: true })
-    fs.writeFileSync(
-      `${probe}.c`,
-      "#include <openssl/evp.h>\n#include <openssl/ssl.h>\nint main(void) { return 0; }\n"
-    )
-    const twinsHere = {
-      openssl: spawnSync("clang", [`${probe}.c`, "-o", probe, "-lssl", "-lcrypto"]).status === 0,
-      go: spawnSync(process.env.GO || "go", ["version"]).status === 0,
-      rust: has("cargo") && has("rustc"),
-    }
-    const mustRun = [
-      "nish",
-      "node",
-      ...(twinsHere.openssl ? ["openssl", "openssl-portable"] : []),
-      ...(twinsHere.go ? ["go", "go-purego"] : []),
-      ...(twinsHere.rust ? ["rust", "rust-soft"] : []),
-    ]
-    // GitHub's x86-64 Linux runner has OpenSSL, Go and the extensions their
-    // portable builds give up, so there an `unproved` line means a gate failed
-    // open: the OpenSSL and Go proofs must be measured ones.
+    // The runner accounts for every column of every family it validated: a
+    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
+    // (the family's own word) or `<family> did not run <id>:` (this machine's
+    // reason). The test takes that account rather than probing toolchains
+    // itself, which disagreed with the runner on a host whose Go was older
+    // than go.mod or whose cargo could not fetch.
+    const COLUMNS = ["nish", "openssl", "openssl-portable", "go", "go-purego", "rust", "rust-soft", "node"]
+    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
+    const unaccounted = validated.flatMap((f) => {
+      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
+      return COLUMNS.filter(
+        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
+      ).map((id) => `${f} ${id}`)
+    })
+    // GitHub's x86-64 Linux runner has every twin's toolchain and the
+    // extensions their portable builds give up, so there a column this machine
+    // did not run, or an `unproved` line, means a gate failed open: every twin
+    // must run and the OpenSSL and Go proofs must be measured ones.
     const strict =
       process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
     const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
@@ -15636,28 +15623,28 @@ if (!only || "crypto-bench".includes(only)) {
       `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
       v.status === 0 &&
         families.length > 0 &&
-        mustRun.every((id) => ran.has(id)) &&
         families.every((f) =>
           new RegExp(
             `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
             "m"
           ).test(v.stdout)
         ) &&
+        unaccounted.length === 0 &&
         proved.every((f) =>
           ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
             new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
           )
         ) &&
         (!strict ||
-          (twinsHere.openssl &&
-            twinsHere.go &&
+          (validated.length === families.length &&
+            !/ did not run /.test(v.stdout) &&
             proved.every((f) =>
               ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
             ))),
-      `toolchains here: ${JSON.stringify(twinsHere)}; must run: ${mustRun.join(", ")}; ran: ${[...ran].join(", ")}${strict ? "; strict: the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+      `unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
     )
     for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
-      if (line.startsWith("note: ") || / unproved \(/.test(line)) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
         console.log(`      ${line}`)
       }
     }
