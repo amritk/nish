@@ -1,0 +1,39 @@
+{
+  "title": "AES-GCM and ChaCha20-Poly1305",
+  "kernels": [
+    { "name": "aes128gcm-seal", "sizes": [64, 1350, 16384, 1048576], "unit": "MB/s" },
+    { "name": "aes128gcm-open", "sizes": [64, 1350, 16384, 1048576], "unit": "MB/s" },
+    { "name": "aes256gcm-seal", "sizes": [64, 1350, 16384, 1048576], "unit": "MB/s" },
+    { "name": "aes256gcm-open", "sizes": [64, 1350, 16384, 1048576], "unit": "MB/s" },
+    { "name": "chacha20poly1305-seal", "sizes": [64, 1350, 16384, 1048576], "unit": "MB/s" },
+    { "name": "chacha20poly1305-open", "sizes": [64, 1350, 16384, 1048576], "unit": "MB/s" }
+  ],
+  "twins": {
+    "openssl": {
+      "portable": { "env": { "OPENSSL_ia32cap": "~0x1240020200000000:~0x0000060000010020" } }
+    },
+    "go": { "portable": { "tags": ["purego"] } },
+    "rust": {
+      "portable": {
+        "rustflags": [
+          "--cfg",
+          "aes_backend=\"soft\"",
+          "--cfg",
+          "polyval_backend=\"soft\"",
+          "--cfg",
+          "chacha20_backend=\"soft\"",
+          "--cfg",
+          "poly1305_backend=\"soft\""
+        ]
+      }
+    },
+    "node": {
+      "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off"
+    }
+  },
+  "portableProof": "aes128gcm-seal@16384",
+  "portableProofFlags": ["aes", "pclmulqdq"],
+  "notes": [
+    "Node keys a cipher per message, since node:crypto holds no expanded key across nonces; the other twins key once, before the clock."
+  ]
+}
