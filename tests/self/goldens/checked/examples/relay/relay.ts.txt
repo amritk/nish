@@ -921,7 +921,7 @@ function Http3Connection.constructor(this: Http3Connection, config: Http3Config,
   calls: nish.BufferPool.constructor nish.Http3Connection.restart nish.Http3Settings.constructor nish.HttpFields.constructor nish.QpackDecoder.constructor nish.QpackEncoder.constructor nish.QuicDatagramQueue.capacity nish.http3CheckCap nish.httpFieldBytes nish.quicStreamGrowFree nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow nish_str_concat nish_str_from_i64
   pointer this: size=512 writesThrough=true captured=false passedTo=nish.Http3Connection.restart#0
   pointer config: size=20 writesThrough=true captured=true
-  pointer quic: size=528 writesThrough=true captured=true
+  pointer quic: size=584 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:11 buffer: i32 (const)
   callee +4:5 http3CheckCap -> @nish.http3CheckCap
@@ -2196,7 +2196,7 @@ function Http3Server.connection(this: Http3Server, slot: i32): Http3Connection -
   callee +0:5 HttpDate.current -> @nish.HttpDate.current
   callee +1:23 Http3Server.slotAt -> @nish.Http3Server.slotAt
 function Http3Server.quic(this: Http3Server, slot: i32): QuicConnection -> @nish.Http3Server.quic [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=528
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=584
   sharedWrite: via nish.Http3Server.slotAt
   escaping: slot
   calls: nish.Http3Server.slotAt nish_panic_index

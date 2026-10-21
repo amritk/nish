@@ -36,7 +36,7 @@ import { lcAllZero, lcCloseIn } from "./common";
  * keys, the secret the next generation is derived from, and the Key Phase
  * bit they go with.
  */
-class LcGeneration {
+export class LcGeneration {
   keys: QuicKeys | null;
   secret: u8[];
   phase: boolean = false;
@@ -49,7 +49,7 @@ class LcGeneration {
 }
 
 /** The generation after `g` (RFC 9001 §6.1), derived the way a client would. */
-const lcNext = (g: LcGeneration): LcGeneration => {
+export const lcNext = (g: LcGeneration): LcGeneration => {
   const none: u8[] = [];
   const keys: QuicKeys | null = g.keys;
   if (keys === null) {
@@ -63,7 +63,7 @@ const lcNext = (g: LcGeneration): LcGeneration => {
 };
 
 /** What the client made of one 1-RTT packet from the server: whether it opened, its Key Phase bit, its number and frames. */
-class LcOpened {
+export class LcOpened {
   payload: u8[];
   pn: i64 = -1;
   ok: boolean = false;
@@ -75,7 +75,7 @@ class LcOpened {
 }
 
 /** Opens the server's 1-RTT `datagram` with `g`'s keys. */
-const lcOpen = (c: QcClient, g: LcGeneration, datagram: u8[] | null): LcOpened => {
+export const lcOpen = (c: QcClient, g: LcGeneration, datagram: u8[] | null): LcOpened => {
   const out = new LcOpened();
   const keys: QuicKeys | null = g.keys;
   if (datagram === null || keys === null) {
@@ -91,7 +91,7 @@ const lcOpen = (c: QcClient, g: LcGeneration, datagram: u8[] | null): LcOpened =
 };
 
 /** Sends `payload` under `g` with packet number `pn`, and answers the client's next number past it. */
-const lcSend = (conn: QuicConnection, c: QcClient, g: LcGeneration, pn: i64, payload: u8[]): void => {
+export const lcSend = (conn: QuicConnection, c: QcClient, g: LcGeneration, pn: i64, payload: u8[]): void => {
   conn.receive(qcShortWith(c, g.keys, g.phase, pn, payload), c.now);
   if (pn >= c.appPn) {
     c.appPn = pn + n64(1);
@@ -110,7 +110,7 @@ const lcRead = (conn: QuicConnection): string => {
 };
 
 /** An ACK of the server's packet `pn` alone. */
-const lcAck = (pn: i64): u8[] => {
+export const lcAck = (pn: i64): u8[] => {
   const out: u8[] = [];
   quicPushAck(out, [pn, pn], n32(1), n64(0));
   return out;
