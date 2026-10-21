@@ -1776,6 +1776,31 @@ and their `.ll` goldens are byte-identical files.
   whose symbol carries the package, may have any of these names
   (`tests/link/export_c_symbol_allowed`). `main` is the entry's alone
   (`tests/link/main_in_import`), and emitted as `@nish_main`.
+- **A wasm module's function is not named `memory`.** `wasm-ld` exports the
+  module's linear memory as `memory`, and `scripts/build.sh --profile wasm`
+  links with `--export-all`, so in that module an exported function of that
+  name, or any function under `--no-strict-exports`, is a second export of
+  it, and Node refuses the module ("Duplicate export name 'memory'"). The
+  `wasi` command module exports only `memory` and `_start`, so the function
+  does not collide there; the name is reserved there too, so that a program
+  that builds for wasi also builds as a freestanding wasm module. On a wasm
+  `--target`, under `--profile wasi`, and in an `--emit-dts` compile, whose
+  loader is for the module `scripts/build.sh --profile wasm` links its IR
+  into, it is
+  `` `memory` is the name a wasm module exports its linear memory under: an exported function of the program's own package keeps its name as its symbol, so the module would export two things named `memory` and no host could load it; rename it ``
+  (NL3038; `tests/cases/reject_export_wasm_memory`,
+  `reject_export_wasm_memory_wasi`, `reject_export_wasm_memory_dts`,
+  `tests/link/export_wasm_memory_sibling`; with `--no-strict-exports`,
+  `reject_export_wasm_memory_no_strict`; without the flag a `memory` nobody
+  exported stays internal and compiles, "wasm memory: a --target wasm32
+  compile keeps a `memory` nobody exported" in `tests/run.js`). IR compiled for the host with `-o`
+  alone reaches build.sh without the compiler knowing the build is wasm, so
+  `build.sh --profile wasm` and `--profile wasi` refuse IR that defines an
+  exported `@memory` with exit 2 ("wasm memory: ..." in `tests/run.js`). A
+  native build has no linear memory to collide with and keeps the name
+  (`export_memory_native`, `tests/link/export_memory_native_sibling`). The
+  linker's other names, `_start`, `__heap_base`, `__data_end` and
+  `__indirect_function_table`, are already refused by the rule above.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
@@ -3399,7 +3424,15 @@ export const main = (): i32 => {
   around it, which releases only after the join, and an argument a task is
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
-  another). A panic ends the process and joins nothing (`throw` is refused by
+  another). Since the join comes first, spawning gives up no memory: a
+  function, a loop's pass or a `using a = arena()` block that hands a task an
+  array it made still gives that array back when it ends, after the join,
+  unless the task keeps it — answers it, or stores it where it outlives the
+  task — or the frame keeps it past its end by any other route
+  (`tests/link/thread_scope_reclaim`, whose peak resident memory
+  `tests/run.js` bounds at every thread count, and
+  `thread_scope_reclaim_escapes`, which reads each route after the memory is
+  reused). A panic ends the process and joins nothing (`throw` is refused by
   Phase 0, `reject_throw`).
 - **A scope is introduced by `using`, and `using` takes only a scope, a
   [`Mutex`'s lock](#a-lock-that-owns-its-data-mutext) or an
@@ -4379,6 +4412,24 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `const z = c ? { v: 7 } : null` is still
   `Object literal needs a contextual class or interface type`
   (`reject_obj_lit_nullable_context`).
+- A **class with methods** is made only by `new`. Natively a literal would
+  take the class's layout and its methods, but under Node it is a plain
+  object, and a call on it throws, so wherever a context above types a
+  literal as such a class it is
+  `` `Counter` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new Counter(...)` ``
+  (NL2556; `tests/cases/reject_class_literal_decl`, `…_return`,
+  `…_arrow_body`, `…_call_arg`, `…_method_arg`, `…_new_arg`,
+  `…_array_elem`, `…_push`, `…_index_assign`, `…_map_set`,
+  `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`, `…_alias`,
+  `…_coalesce`, `…_coalesce_chain`, `…_coalesce_field`, `…_coalesce_call`,
+  `…_coalesce_map`, `…_coalesce_optional`, `…_coalesce_ternary`,
+  `…_equality`, `…_index_of`, `…_math_max`, `…_fn_param`, `…_unary`,
+  `…_compound_bitwise`, `…_compound_arith`, `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
+  `…_imported`). A generic method counts as a method; a constructor does
+  not. A class with fields alone, and an interface, still take a literal
+  (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
+  their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
+  keeps NL2545.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -4711,15 +4762,54 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   inside a run): it has no length to hold the count to, so the
   `NULL, 0` call C allows is declared with a `CPtr | null` parameter. A `u8[]`
   result is refused by the return rule above (`reject_ffi_buffer_return`).
-- **A call to such a declaration is refused until the release that lowers it**:
-  `` a call to a declared C function that takes a `u8[]` is not lowered yet ``
-  (`reject_ffi_buffer_call`), whether the call names the function, goes
-  through a function parameter bound to it (`reject_ffi_buffer_call_param`),
-  or sits in a constructor (`reject_ffi_buffer_call_constructor`), a method
-  (`reject_ffi_buffer_call_method`) or a spawned arrow
-  (`reject_ffi_buffer_call_spawn`). That lowering passes the array's bytes and
-  panics when the count is larger than any buffer of its run
-  ([`docs/wp40-ffi-buffers-handles.md`](wp40-ffi-buffers-handles.md) §3a).
+- **A call passes the array's data block, and checks the count against every
+  buffer of its run first.** Each buffer is lowered to its data pointer, a
+  `uint8_t *` (`i8*` in the IR), and the count is compared, unsigned, with the
+  buffer's length before C runs. A count larger than one of them stops the
+  program with an `ffi-length` panic, `` `write`: argument 3 (n) counts more
+  bytes than argument 2 (buf) holds ``, exit 1 (`tests/cases/panics_ffi_length`,
+  and `panics_ffi_length_memcpy` for the shorter buffer of a run). The count is
+  a `u64`, so `toU64(0) - toU64(1)` is the largest count there is, and fails
+  (`panics_ffi_length_wrapped`). `--unchecked-indexing` does not remove the
+  check: C cannot check a count, so the boundary keeps it
+  (`panics_ffi_length_unchecked`).
+- **The pointer and the length are read after the last argument is
+  evaluated**, so C sees the array as it is at the call: an argument that
+  pushes or pops before it is seen (`tests/cases/ffi_buffer_late_load`,
+  `panics_ffi_length_shrink`, `panics_ffi_length_inline_pop`).
+- **One count is proved: `toU64(b.length)` of the buffer itself**, where `b`
+  is a `const` local or a parameter named alone and no later argument may
+  resize an array. Such a call carries no check and is not a panic site, so
+  `read(fd, buf, toU64(buf.length))` compiles under `--deny-panics`. A field
+  path, an alias of the buffer, another array's length and a literal are
+  checked (`tests/cases/ffi_buffer_count_proved`). `--deny-panics` refuses
+  any other count and names the one it accepts: `` pass `toU64(buf.length)`
+  of the buffer itself, which needs no check ``.
+- **C borrows the bytes for the call, and writes through a `u8[]`.** As with
+  a `string`, the pointer is lent for the length of the call and C may not
+  keep it, so a buffer made in the call's arena scope is released after it
+  (`tests/cases/ffi_buffer_read`). A `u8[]` argument is written by the call
+  and a `readonly u8[]` one is not, and the compiler records it as it records
+  a store. An exported function that hands its own `u8[]` parameter to such a
+  call writes that parameter: its header drops the `const`, the wasm glue
+  copies the bytes back, and its `define` loses `readonly`
+  (`tests/cases/ffi_buffer_export_written`). A task a scope spawns may not
+  reach such a call: C's body is unseen, so the call may write memory the
+  parent can see, and the task is refused with `` writes memory its caller
+  can see `` (`reject_ffi_buffer_call_spawn`, and
+  `reject_ffi_buffer_scope_race`, `reject_ffi_buffer_scope_field_race` and
+  `reject_ffi_buffer_scope_element_race` for a call reached through a
+  function).
+- **Every kind of call site lowers the same way**: a call by name, through a
+  function parameter bound to the declaration, in a constructor reached by
+  `new` and in a method (`tests/cases/ffi_buffer_call_sites`), and a call that
+  passes a buffer is refused by `--deny ffi` like any other foreign call.
+- **On wasm32 a `u64` count is wider than C's `size_t`.** The data pointer is
+  32 bits there and the length check is the same 64-bit compare, but a C
+  function whose count is a `size_t` takes 32 bits: declare its count `u64`
+  only on a target where `size_t` is 64 bits, until a later release gives the
+  count a target-width type. The freestanding `--profile wasm` link resolves
+  the declaration against the C the link is given.
 
 #### What a declaration cannot say
 
@@ -5549,7 +5639,11 @@ Three consequences, each of them a rule:
   `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
   that storage; index `ps` again afterwards rather than holding the element
   across it `` (`reject_arr_element_across_push`,
-  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `reject_arr_element_loop_push`). A second name for the element is one too:
+  `const q = p`, `q = p` (in a nested block as well, since `q` outlives it),
+  and either side of `c ? p : r` or `m ?? p` (`tests/cases/arr_ref_alias_*`);
+  a call's result is not, since a helper may return a copy
+  (`arr_ref_alias_clone`). A loop is checked as a whole, because a
   `push` at the bottom of the body reaches a reference taken at the top on the
   next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
   its own (`reject_arr_element_push_self`).
@@ -6176,10 +6270,10 @@ export const main = (): i32 => {
 | Export | Meaning | Test |
 | --- | --- | --- |
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
-| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*` |
+| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`, `secret_inferred`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*`, `reject_secret_inferred_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
 | `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
-| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
+| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`, `secret_wipe_o2_inferred`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
 
 `nish:secret` is the one builtin module with source behind it: `std/secret.ts`,
 loaded like a standard-library module, imported only by the builtin name
@@ -6189,6 +6283,21 @@ module that uses it, so it writes no `.ll` of its own. `runtime/nish.d.ts`
 declares it for `tsc`, with a private constructor and field so that `tsc`
 refuses `new Secret` and `s.value` too. Under Node (`runtime/nish.mjs`) a
 `Secret` is a plain wrapper and `wipe` zero-fills it.
+
+**A `Secret` local needs no annotation.** `const k = secret(v)` gives `k` the
+type `secret` answers, `Secret<T>` for the `T` that `v` is, and every rule
+below holds for it as for `const k: Secret<T> = secret(v)`: the payload's
+shape, the move and the second reference, each judged where `v` is written
+(`secret_inferred` binds an array literal, `new Array`, a call, a moved local,
+a ternary, a record and a class unannotated; `reject_secret_inferred_literal`,
+`_alias`, `_call`, `_field` and `_moved_class` are refused unannotated as
+annotated). The same holds for any generic an imported module declares:
+`const b = box(7)` holds the `Box<i32>` that `box` answers, whose layout comes
+with the call (`tests/link/generic_import_inferred`), with its methods even
+where the module already held `Box<i32>` as a type argument
+(`tests/link/generic_import_inferred_held`), and with those of every struct
+its fields reach, through an array, a nullable, a `Result` or a nested
+instance, in either order (`tests/link/generic_import_inferred_closure`).
 
 **What a `Secret` may hold.** One run of integers, so that `wipe` reaches every
 byte with one store: `` `Secret<string>` is not key material `` (NL2428,
@@ -6251,10 +6360,12 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
 - `secret(v)` takes a value nothing else holds, and moves it, because a
   second name for the bytes would read the key outside the `Secret`, and
   zeros once `wipe` has run. A local handed in is not read again (NL2445,
-  `reject_secret_moved`), and neither is the local in either arm of
-  `secret(c ? a : b)`. A parameter, a field or an element, whose owner keeps
-  the plain bytes, is refused (NL2447, `reject_secret_unmovable`). Everything
-  else is judged where it is written:
+  `reject_secret_moved`, whose message says the plain array, and
+  `reject_secret_inferred_moved_class` and `reject_secret_moved_interface`,
+  where it names the class or interface the plain value is), and neither is
+  the local in either arm of `secret(c ? a : b)`. A parameter, a field or an element,
+  whose owner keeps the plain bytes, is refused (NL2447,
+  `reject_secret_unmovable`). Everything else is judged where it is written:
   - an array or object literal, `null`, and a ternary of fresh values are
     fresh, and so is a `new` whose constructor keeps no `this`;
   - a call is fresh when its callee answers a fresh value, judged over the
@@ -6472,6 +6583,10 @@ volatile memory intrinsic, so the store survives every optimisation, inlining
 included: `tests/run.js` compiles `secret_wipe_o2`, whose wiped bytes nothing
 reads again, beside a twin that zeroes them with `fill(0)`, and after
 `opt -O2` the twin holds no store and the wipe holds one volatile zero per byte.
+`secret_wipe_o2_inferred` does the same for a `Secret` bound with no
+annotation, beside `secret_wipe_o2_inferred_plain` ("nish:secret: an inferred
+`Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the
+twin's fill(0) is deleted").
 Two things it does not reach, and says so: a buffer a `push` outgrew, which is
 no longer the array's, and a string, which is immutable and is not key material.
 
@@ -6723,7 +6838,7 @@ exported by `nish:process` as well as being a global.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `spawn(argv: string[]): i32` | start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does — the same vector, environment, streams and working directory — and answer the child's **pid** at once, **without waiting**. A failure is a **negative errno**: -22 (EINVAL) for an empty vector or an argument holding a NUL, and `posix_spawnp`'s own error otherwise, so a program that is not there is -2 (ENOENT). **Test `pid > 0` before handing the answer on**: a failure such as -1 (EPERM) passed to `waitPid` reads as "any child". The child is this process's until `waitPid` reaps it; one never reaped stays a zombie until the program exits, as it would in C | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
-| `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, so a number means the same signal on every host. A `pid` of 0 or below is -22 too, because `kill(2)` reads those as a process group or every process, which is not one process. -3 (ESRCH) when no process has the pid — a child already reaped included — and -1 (EPERM) when it is another user's. A positive pid may be any process of this user, not only a child ([RT-18](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
+| `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, so a number means the same signal on every host. A `pid` of 0 or below is -22 too, because `kill(2)` reads those as a process group or every process, which is not one process. -3 (ESRCH) when no process has the pid — a child already reaped included — and -1 (EPERM) when it is another user's. A positive pid may be any process of this user, not only a child ([RT-19](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
 | `waitPid(pid: i32, flags: i32): i32[]` | reap a child and answer a fresh two-element **`[pid, status]`**. `pid` is a child's, or **-1 for any child**; flag **1 is WNOHANG**. The status is `spawnSync`'s: the exit code, or **128 + n** when signal `n` ended it. `[0, 0]` is a WNOHANG wait with a child left and none exited. A failure puts the negative errno first: `[-10, 0]` (ECHILD) when there is no child to wait for, `[-4, 0]` (EINTR) when a signal interrupted the wait — though after `signalFd()` a blocking wait never sees it, because that handler is installed with `SA_RESTART` and the wait restarts, and `[-22, 0]` for any other flag bit or a pid that is neither -1 nor positive. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
 | `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number — which can lower the count and never raise it. It needs no `--threads`: a program asks it to decide how many workers to start | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
 | `totalMemory(): i64` | bytes of **physical memory** — `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on Darwin — or **-1** where the host does not say. The machine's, not a cgroup's limit | none | `os_memory`; `reject_os_memory_wasm` |
@@ -6789,7 +6904,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
-| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener that did not ask for it, or asked by one that does not, is `-98` | write | `net_tcp_reuseport`, `link/net_tcp_reuseport_spread`; `reject_net_reuseport_wasm` |
+| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flags add: `3` is both. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
@@ -7430,6 +7545,8 @@ const tally = (rows: string[]): i32 => {
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
   | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
+  | `s.spawn(...)` on a scope the same `using` declares ahead of `arena()`, `using s = scope(), a = arena()` | an argument is not older than the block: `s` is disposed after the arena, so it joins after the release | NL2427 | `reject_using_arena_spawn_declarator` |
+  | the same, ahead of the statement's last `arena()`, `using a = arena(), s = scope(), b = arena()` | an argument is not older than the block: `b` releases before `s` joins | NL2427 | `reject_using_arena_spawn_last` |
 
   A number, a `boolean` or an `enum` leaves the block freely, and so does a
   value older than it. The rule is the escape analysis's, so it is
@@ -7450,6 +7567,17 @@ const tally = (rows: string[]): i32 => {
   stops following, as it does for a loop that pushes arrays into an array, so
   the block refuses it as NL2424 and says what to write instead: run that map
   outside the block (`tests/cases/reject_using_arena_map_arrays`).
+- **A task filed on a scope the block declares may read what it allocated.**
+  That scope joins before the block releases, inner `using s = scope()` or
+  `using a = arena(), s = scope()` alike, so the block may hand its task an
+  array or an object it made (`tests/link/thread_scope_reclaim`). A scope
+  declared ahead of the statement's last `arena()` is not one: that arena
+  releases first (`reject_using_arena_spawn_last`). The task
+  is followed as any callee is: one that answers its argument into an older
+  destination stores it (NL2424, `tests/cases/reject_using_arena_spawn_relay`,
+  as `reject_using_arena_spawn_stores` for any array answer), and a
+  constructor that makes the argument and hands `this` out stores it too
+  (`reject_using_arena_spawn_constructor`).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
   theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
@@ -8167,7 +8295,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`) |
+| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,
@@ -8240,6 +8368,20 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   (`tests/link/caps_policy_deny_unsafe`) — and never allowed: the import is
   the opt-in, so an allowlist does not refuse it and `--allow unsafe` is a
   usage error.
+- `unsafe` travels like every other capability — to each caller, however far
+  up, and to the module and package above it, including a dependency that
+  imports `nish:unsafe` when the entry package does not — and keeps a program
+  deterministic ("capabilities: `unsafe` reaches a caller two frames up, with
+  the whole chain as its witness", "capabilities: a dependency that imports
+  `nish:unsafe` gives `unsafe` to its package and to the entry that calls
+  it"). The deprecated `--wrapping` and `--unchecked-indexing` carry no
+  `unsafe`, so `--deny unsafe` passes them: they reach only the entry package
+  and each compile that passes one prints its deprecation note (NL9014).
+  `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+  which `nish --fix` rewrites into `uncheckedGet` and `uncheckedSet` calls
+  that do carry it; `--wrapping` has no fixer, and its note names the
+  `nish:unsafe` exports to write instead ("capabilities: `--wrapping` and
+  `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them").
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
@@ -9280,6 +9422,7 @@ a function whose sites are all proven (or `oom`) has no panic path in its IR
 | `parallel-length` | a `parallelMapInto` call whose `dst` is shorter than its `src` | nothing yet: the check is `std/threads.ts`'s own (`tests/link/panics_parallel_length`) |
 | `ffi-nul` | a `string` argument to a [`declare function`](#calling-c) that holds a NUL byte, which C would read as the end of the string: `` `name`: argument N (param) holds a NUL byte, which C would read as the end of the string `` | a literal with no NUL in it, which is not checked and not a site; every other string is checked, and `string \| null` checks only the string (`tests/cases/panics_ffi_nul`) |
 | `ffi-null` | a `string` result of a [`declare function`](#calling-c) that is `NULL`: `` `name` returned NULL for a `string` result; declare it `string \| null` `` | nothing: a result declared `string \| null` reads `NULL` as `null` and is not a site (`tests/cases/panics_ffi_null`) |
+| `ffi-length` | a call to a [`declare function`](#a-u8-parameter-a-buffer-and-its-count) whose count is larger than a `u8[]` buffer of its run: `` `name`: argument N (count) counts more bytes than argument M (buf) holds ``, compared unsigned, so a count that wrapped below zero fails too | a count of `toU64(b.length)` where `b` is that buffer itself, a `const` local or a parameter named alone, and no later argument may resize an array (`tests/cases/ffi_buffer_count_proved`, `ffi_buffer_late_load`); every other count is checked (`tests/cases/panics_ffi_length`, `panics_ffi_length_wrapped`, `panics_ffi_length_shrink`). `--unchecked-indexing` leaves the check in (`panics_ffi_length_unchecked`) |
 | `call` | a call into a function that has a site that can panic, directly or through further calls | the callee having none (`tests/cases/panics_call`) |
 | `unchecked` | `uncheckedGet` and `uncheckedSet` from `nish:unsafe`: no check at all, so nothing panics, but an index out of range is undefined behaviour; `readCString`, whose pointer nothing proves is live and NUL-terminated | nothing, and nothing needs to: the call is the author's word that the index is in range, or that the pointer is, not a proof, and the `nish:unsafe` import its module must write is the opt-in to that word, so it is listed with `"allowed": true` and, like `oom`, never makes a function one that may panic (`tests/cases/deny_panics_unsafe`) |
 | `oom` | an arena allocation: the out-of-memory exit | nothing, and nothing needs to: it is listed with `"allowed": true` and never makes a function one that may panic (`tests/cases/panics_oom`) |
@@ -9695,6 +9838,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
 | an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
 | an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
+| an object literal typed as a class with methods | `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` `` | `reject_class_literal_*`, `nl2556_class_literal` |
 | more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
 | a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
 | `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |

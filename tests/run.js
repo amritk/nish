@@ -42,7 +42,15 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { BAND_EDGE, judge as judgeTwinRun, readAcross, sideOf } from "../bench/par-reading.mjs"
 import { parseCodesRegistry } from "../scripts/codes-registry.js"
-import { budgetLabel, HTTP1_SERVER_START_BYTES, RUNTIME_BUDGETS } from "./runtime-budgets.js"
+import {
+  budgetLabel,
+  HTTP1_SERVER_START_BYTES,
+  HTTP1_TLS_SERVER_START_BYTES,
+  HTTP2_TLS_SERVER_START_BYTES,
+  HTTP3_SERVER_START_BYTES,
+  RUNTIME_BUDGETS,
+  TLS_TCP_START_BYTES,
+} from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
@@ -50,9 +58,12 @@ import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
+import { urlFuzzVerdict } from "./link/std_url/verdict.js"
 import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
+import { runFfiBufferChecks } from "./ffi-buffer.js"
+import { runFfiStringChecks } from "./ffi-string.js"
 import {
   packageRootOf,
   selfCheckNotes,
@@ -1169,8 +1180,11 @@ const buildCaseIn = (dir, name) => {
 const runCaseUnderPrelude = (name, args) =>
   runUnderPrelude(path.join(casesDir, `${name}.ts`), [name, ...args])
 
-/** `entry` run under `runtime/nish.mjs`, its `main` answering the exit status; `args` follow `-e`'s script. */
-const runUnderPrelude = (entry, args, exported = "main") =>
+/**
+ * `entry` run under `runtime/nish.mjs`, its `main` answering the exit status;
+ * `args` follow `-e`'s script and `options` join `spawnSync`'s.
+ */
+const runUnderPrelude = (entry, args, exported = "main", options = {}) =>
   spawnSync(
     "node",
     [
@@ -1182,7 +1196,7 @@ const runUnderPrelude = (entry, args, exported = "main") =>
       `const m = await import(${JSON.stringify(entry)}); process.exit(m.${exported}());`,
       ...args,
     ],
-    { cwd: root, encoding: "utf8" }
+    { cwd: root, encoding: "utf8", ...options }
   )
 
 /** A spawned run's status and both streams, for a failed check's message. */
@@ -1690,7 +1704,8 @@ if (!only || "net_tcp_connect".includes(only)) {
   const loudFlags = runUnderPrelude(flagsEntry, [])
   check(
     "net_tcp_reuseport: under the prelude tcpListenFlags fails loudly rather than answering",
-    loudFlags.status !== 0 && loudFlags.stderr.includes("`tcpListenFlags` has no synchronous reading under Node"),
+    loudFlags.status !== 0 &&
+      loudFlags.stderr.includes("`tcpListenFlags` has no synchronous reading under Node"),
     shown(loudFlags)
   )
 }
@@ -4249,6 +4264,7 @@ const LINK_READ_LATER = [
   "std_json_typed",
   "std_json_value",
   "thread_channel_string_many",
+  "thread_scope_reclaim",
   "thread_task_release",
   "unsafe_flag_scope",
 ]
@@ -6220,42 +6236,45 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
 // used to pass, and none of 50 with the host turning the calls off.
 // #732 tracks the Node bug and when the host can drop the flag.
-if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
-  const agreeDir = path.join(buildDir, "p256-agree")
-  const programDir = path.join(agreeDir, "crypto_p256_agree")
-  fs.rmSync(agreeDir, { recursive: true, force: true })
-  fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
+/**
+ * Builds `tests/link/<program>`'s `main` (from `source`) beside a copy of
+ * std/crypto/p256.ts with the program's `seam.ts.in` appended, as `./p256`,
+ * natively and as a `--profile wasi` module under Node, and checks that each
+ * prints its expected.out: `label` names the checks, `dir` the scratch, and
+ * `extra` the directories of `tests/link` copied beside it.
+ */
+const p256SeamProgram = ({ label, dir, program, source, extra, nativeName }) => {
+  const seamDir = path.join(buildDir, dir)
+  const programDir = path.join(seamDir, program)
+  fs.rmSync(seamDir, { recursive: true, force: true })
+  fs.mkdirSync(path.join(seamDir, "crypto_p256"), { recursive: true })
   fs.mkdirSync(programDir, { recursive: true })
-  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
-    recursive: true,
-  })
-  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
-  fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
+  for (const name of extra) {
+    fs.cpSync(path.join(linkDir, name), path.join(seamDir, name), { recursive: true })
+  }
+  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(seamDir, "crypto_p256", "hex.ts"))
+  fs.copyFileSync(path.join(linkDir, program, source), path.join(programDir, "main.ts"))
   fs.writeFileSync(
     path.join(programDir, "p256.ts"),
     fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
-      fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "seam.ts.in"), "utf8")
+      fs.readFileSync(path.join(linkDir, program, "seam.ts.in"), "utf8")
   )
-  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, program, "expected.out"), "utf8")
   const entry = path.join(programDir, "main.ts")
   if (only !== "wasi") {
-    const exe = path.join(agreeDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
+    const exe = path.join(seamDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe], {
       cwd: root,
       encoding: "utf8",
     })
     const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
-    check(
-      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
-      built.status === 0 && ran.status === 0 && ran.stdout === want,
-      shown(ran)
-    )
+    check(nativeName, built.status === 0 && ran.status === 0 && ran.stdout === want, shown(ran))
   }
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasm = path.join(agreeDir, "app.wasm")
+    const wasm = path.join(seamDir, "app.wasm")
     const built = spawnSync(
       NISH,
-      [entry, "-o", path.join(agreeDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
+      [entry, "-o", path.join(seamDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
     const ran =
@@ -6266,15 +6285,46 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
           })
         : built
     check(
-      `p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
+      `${label}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )
   } else {
     skip(
-      `skipped: p256 agree: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_agree is not run`
+      `skipped: ${label}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program} is not run`
     )
   }
+}
+if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 agree",
+    dir: "p256-agree",
+    program: "crypto_p256_agree",
+    source: "agree.ts",
+    extra: ["crypto_wycheproof"],
+    nativeName:
+      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
+  })
+}
+
+// #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
+// and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
+// `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
+// 10,000 scalars. Neither inversion is exported, so the program reaches them
+// through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
+// std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
+// Its expected.out ends in a checksum of every inverse. Natively, and as a
+// `--profile wasi` module under Node.
+if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 inverse",
+    dir: "p256-inverse",
+    program: "crypto_p256_inverse",
+    source: "inverse.ts",
+    extra: [],
+    nativeName:
+      "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+  })
 }
 
 // The comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs
@@ -6389,6 +6439,86 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
       "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
       `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
+// `TlsTcpServer` and `Http1TlsServer` build a slot's TLS state, and the
+// latter its connection, on the first accept into it too, and so does
+// `Http2TlsServer` past slot 0.
+// `tests/link/net_tls_record_tcp/startup.ts`,
+// `tests/link/net_http1_server/tls-startup.ts` and
+// `tests/link/net_http2_tls/startup.ts` build pools of 16,384 slots on no
+// socket and print the bytes they took and whether they fit one chunk, which
+// the ceilings `TLS_TCP_START_BYTES`, `HTTP1_TLS_SERVER_START_BYTES` and
+// `HTTP2_TLS_SERVER_START_BYTES` hold.
+for (const [unit, program, name, ceiling, ceilingName] of [
+  ["net_tls_record_tcp", "startup.ts", "TlsTcpServer", TLS_TCP_START_BYTES, "TLS_TCP_START_BYTES"],
+  [
+    "net_http1_server",
+    "tls-startup.ts",
+    "Http1TlsServer",
+    HTTP1_TLS_SERVER_START_BYTES,
+    "HTTP1_TLS_SERVER_START_BYTES",
+  ],
+  [
+    "net_http2_tls",
+    "startup.ts",
+    "Http2TlsServer",
+    HTTP2_TLS_SERVER_START_BYTES,
+    "HTTP2_TLS_SERVER_START_BYTES",
+  ],
+]) {
+  if (only && !unit.includes(only) && !"runtime-budget".includes(only)) {
+    continue
+  }
+  const dir = path.join(buildDir, "link", `${unit}.${program.replace(".ts", "")}`)
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", unit, program), "-o", dir + path.sep, "--link", exe],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  if (check(`${unit}: ${program} links`, built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, chunk] = String(run.stdout).trim().split(" ")
+    check(
+      `${unit}: a 16,384-slot ${name} takes at most ${ceilingName} before its first connection`,
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= ceiling,
+      `ceiling ${ceiling}\n${shown(run)}`
+    )
+  }
+}
+
+// `Http3Server` builds a slot's QUIC and HTTP/3 connections and its address on
+// the first Initial accepted into it, so what a pool costs before its first
+// connection is its per-slot tables. `tests/link/net_http3_server/startup.ts`
+// builds a pool of 65,536 slots on no socket and prints the arena bytes it
+// took, which the ceiling `HTTP3_SERVER_START_BYTES` in
+// `tests/runtime-budgets.js` holds, and whether they fit in one chunk, without
+// which `Arena.used()` measures nothing.
+if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only)) {
+  const dir = path.join(buildDir, "link", "net_http3_server.startup")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "net_http3_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    { cwd: root, encoding: "utf8" }
+  )
+  if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    check(
+      "net_http3_server: a 65,536-slot Http3Server takes at most HTTP3_SERVER_START_BYTES before its first connection",
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP3_SERVER_START_BYTES,
+      `ceiling ${HTTP3_SERVER_START_BYTES}\n${shown(run)}`
     )
   }
 }
@@ -6513,6 +6643,43 @@ if (!only || "par_map_reclaim".includes(only)) {
       : "no such fixture"
     check(
       `link/par_map_reclaim: 8256 maps in returning frames, handed to a callee, below the grain, copied in and in a using block on ${threads} thread(s) peak under 64 MB`,
+      kb > 0 && kb < 64 * 1024,
+      run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
+    )
+  }
+}
+
+// A frame that spawns into a `using s = scope()` gives back what it made once
+// the scope has joined, as one that only runs a map does: a task's argument the
+// task keeps nowhere past the join no longer counts as captured. And inside
+// `using a = arena()`, a fresh array handed to a scope the block opens is
+// accepted rather than refused as stored into memory (NL2424).
+// `thread_scope_reclaim` runs 24 maps over 2^21 elements in returning frames
+// that also spawn into a scope, 24 more in loop passes that each declare their
+// own scope, and 24 fresh arrays of 2^21 spawned from a `using a = arena()`
+// block in main. It peaks at 18 MB on 1, 2 and 8 threads. Built by main at
+// 6948873, the first loop alone peaked at 206 MB on 1 and 8 threads and the
+// second at 206 MB, and main refused the block, so each would pass the 64 MB
+// bound on its own.
+if (!only || "thread_scope_reclaim".includes(only)) {
+  const fixture = linkTests.includes("thread_scope_reclaim")
+  const dir = path.join(buildDir, "link", "thread_scope_reclaim")
+  const exe = path.join(dir, "app")
+  const rssExe = path.join(dir, "rss")
+  const rc = has("clang")
+    ? spawnSync("clang", ["-O2", path.join(root, "bench", "rss.c"), "-o", rssExe], { encoding: "utf8" })
+    : null
+  for (const threads of ["1", "8"]) {
+    const run =
+      fixture && fs.existsSync(exe) && rc !== null && rc.status === 0
+        ? spawnSync(rssExe, [exe], { encoding: "utf8", env: { ...process.env, NISH_NUM_THREADS: threads } })
+        : null
+    const kb = run !== null && run.status === 0 ? Number(run.stdout.trim()) : -1
+    const missing = fixture
+      ? `no such binary: ${exe}\n${rc === null ? "no clang" : rc.stderr}`
+      : "no such fixture"
+    check(
+      `link/thread_scope_reclaim: 72 arrays spawned into scopes in returning frames, loop passes and a using arena block on ${threads} thread(s) peak under 64 MB`,
       kb > 0 && kb < 64 * 1024,
       run !== null ? `exit ${run.status}, peak ${kb} KB\n${run.stderr}` : missing
     )
@@ -6875,7 +7042,14 @@ if (!only || "par_alloc".includes(only)) {
 // `churn()`; and `par_map_reclaim_strings`, whose frames hand a string map's
 // result to a `string[]` callee that keeps it by a field, a return, a map's
 // body, a push, a `Map`, `new`, a constructor's `this`, a second declarator,
-// an alias, a relay or a `string[][]`, each read after `churn()`.
+// an alias, a relay or a `string[][]`, each read after `churn()`. And the
+// frames that spawn into a scope: `thread_scope_reclaim`, which gives back what
+// its frames, passes and `using` block spawned, and
+// `thread_scope_reclaim_escapes`, whose spawned arrays are stored into a field,
+// returned, pushed, put in a `Map`, passed to `new`, handed out by a
+// constructor's `this`, relayed, answered by the task, captured, spawned
+// through a second declarator, aliased, or spawned onto an outer scope from a
+// loop's passes, each read after `churn()`.
 for (const name of [
   "arena_using_exit_paths",
   "par_map",
@@ -6935,6 +7109,8 @@ for (const name of [
   "par_map_reclaim",
   "par_map_reclaim_escapes",
   "par_map_reclaim_strings",
+  "thread_scope_reclaim",
+  "thread_scope_reclaim_escapes",
   "mem_using_arena_map",
   "std_random",
 ]) {
@@ -7040,549 +7216,9 @@ if (!only || "c_symbol_private_libm".includes(only)) {
   )
 }
 
-// WP27 S3.1: a `string` handed to a `declare function` is borrowed as
-// `const char *`, and one that holds a NUL panics before the call (`ffi-nul`,
-// docs/wp27-ffi.md §8c). A literal with no NUL is proved and is no site;
-// anything else is a site in the function that makes the call, which
-// `--deny-panics` refuses and `--emit-panics` names through every caller --
-// a constructor reached by `new` included -- and the call is `ffi` under
-// `--deny ffi` whether it passes a string or a scalar. The last program puts
-// the call inside a `using` block and reads the string back through `this`
-// stored out of a constructor, the two other ways CLAUDE.md names for a value
-// to reach a rule from where its tests do not write it.
-if (!only || "ffi_string checks".includes(only)) {
-  const ffiDir = path.join(buildDir, "ffi-string")
-  fs.mkdirSync(ffiDir, { recursive: true })
-  const write = (name, text) => {
-    const file = path.join(ffiDir, name)
-    fs.writeFileSync(file, text)
-    return file
-  }
-  const compileFfi = (file, extra) =>
-    spawnSync(NISH, [file, "-o", path.join(ffiDir, `${path.basename(file, ".ts")}`) + path.sep, ...extra], {
-      cwd: root,
-      encoding: "utf8",
-    })
-  const sitesOf = (file) => {
-    const json = path.join(ffiDir, `${path.basename(file, ".ts")}.panics.json`)
-    const r = compileFfi(file, ["--emit-panics", json])
-    return { r, report: r.status === 0 ? JSON.parse(fs.readFileSync(json, "utf8")) : null }
-  }
-  const irOf = (file) => {
-    const ll = path.join(ffiDir, path.basename(file, ".ts"), `${path.basename(file, ".ts")}.ll`)
-    return fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : ""
-  }
-  const fnSites = (report, name) => (report?.functions ?? []).find((f) => f.name === name)?.panics ?? []
+runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
 
-  const literal = write(
-    "literal.ts",
-    'declare function puts(s: string): i32;\n\nexport const main = (): i32 => {\n  puts("hello");\n  return 0;\n};\n'
-  )
-  const lit = sitesOf(literal)
-  check(
-    'ffi_string: `puts("hello")` has no `ffi-nul` site and no NUL check in its IR',
-    lit.report !== null &&
-      fnSites(lit.report, "main").every((p) => p.kind !== "ffi-nul") &&
-      !irOf(literal).includes("@nish_str_index_of(") &&
-      /= getelementptr inbounds i8, i8\* bitcast \(\{ i64, \[6 x i8\] \}\* @\.str\.\d+ to i8\*\), i64 8\n\s+%\d+ = call i32 @puts\(/.test(
-        irOf(literal)
-      ),
-    lit.report === null ? shown(lit.r) : irOf(literal)
-  )
-  const litDeny = compileFfi(literal, ["--deny-panics"])
-  check("ffi_string: a NUL-free literal compiles under --deny-panics", litDeny.status === 0, shown(litDeny))
-  const litFfi = compileFfi(literal, ["--deny", "ffi"])
-  check(
-    "ffi_string: --deny ffi refuses a call that passes only a string",
-    litFfi.status === 1 && litFfi.stderr.includes("reaches `ffi`") && litFfi.stderr.includes("calls puts"),
-    shown(litFfi)
-  )
-
-  const ctor = write(
-    "ctor.ts",
-    [
-      "declare function strlen(s: string): u64;",
-      "",
-      "class Name {",
-      "  len: u64;",
-      "  constructor(s: string) {",
-      "    this.len = strlen(s);",
-      "  }",
-      "}",
-      "",
-      "export const main = (): i32 => {",
-      `  const n = new Name("ab" + \`\${toI32(Date.now()) % 10}\`);`,
-      '  console.log(n.len > 0 ? "some" : "none");',
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const ctorSites = sitesOf(ctor)
-  check(
-    "ffi_string: a constructor's string argument to C is an `ffi-nul` site, and `new` is a call site via it",
-    ctorSites.report !== null &&
-      fnSites(ctorSites.report, "Name.constructor").some((p) => p.kind === "ffi-nul" && p.proven === false) &&
-      fnSites(ctorSites.report, "main").some(
-        (p) => p.kind === "call" && p.callee === "Name.constructor" && p.via === "ffi-nul"
-      ),
-    ctorSites.report === null ? shown(ctorSites.r) : JSON.stringify(ctorSites.report)
-  )
-  const ctorDeny = compileFfi(ctor, ["--deny-panics"])
-  check(
-    "ffi_string: --deny-panics refuses a string that is not a literal, handed to C in a constructor",
-    ctorDeny.status === 1 && ctorDeny.stderr.includes("`ffi-nul` may panic here"),
-    shown(ctorDeny)
-  )
-  const ctorFfi = compileFfi(ctor, ["--deny", "ffi"])
-  check(
-    "ffi_string: --deny ffi refuses a string call reached from a constructor by `new`",
-    ctorFfi.status === 1 &&
-      ctorFfi.stderr.includes("calls Name.constructor") &&
-      ctorFfi.stderr.includes("calls strlen"),
-    shown(ctorFfi)
-  )
-
-  const reach = write(
-    "reach.ts",
-    [
-      'import { Mutex } from "nish/threads";',
-      "",
-      "declare function strlen(s: string): u64;",
-      "",
-      "class Counter {",
-      "  n: i32 = 0;",
-      "}",
-      "",
-      "class Holder {",
-      "  t: Tag | null = null;",
-      "}",
-      "",
-      "class Tag {",
-      "  label: string;",
-      "  constructor(h: Holder, s: string) {",
-      "    this.label = s;",
-      "    h.t = this;",
-      "  }",
-      "}",
-      "",
-      "export const main = (): i32 => {",
-      "  const m = new Mutex<Counter>(new Counter());",
-      `  const name: string = "n" + \`\${toI32(Date.now()) % 10}\`;`,
-      "  {",
-      "    using g = m.lock();",
-      "    g.value.n = toI32(strlen(name));",
-      "  }",
-      "  const h = new Holder();",
-      '  new Tag(h, name + "!");',
-      "  const t = h.t;",
-      "  if (t !== null) {",
-      '    console.log(strlen(t.label) > 0 ? "some" : "none");',
-      "  }",
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const reachSites = sitesOf(reach)
-  const reachLines = fnSites(reachSites.report, "main")
-    .filter((p) => p.kind === "ffi-nul" && p.proven === false)
-    .map((p) => p.line)
-    .join(",")
-  check(
-    "ffi_string: a string handed to C inside a `using` block, and one read through `this` stored out of a constructor, are each an `ffi-nul` site",
-    reachSites.report !== null && reachLines === "26,32",
-    reachSites.report === null ? shown(reachSites.r) : JSON.stringify(reachSites.report)
-  )
-  const reachFfi = compileFfi(reach, ["--deny", "ffi"])
-  check(
-    "ffi_string: --deny ffi refuses a string call inside a `using` block",
-    reachFfi.status === 1 && reachFfi.stderr.includes("calls strlen"),
-    shown(reachFfi)
-  )
-
-  // WP27 S3.2: a `string` result is copied out of C's `const char *` after the
-  // call, and `NULL` panics (`ffi-null`); `string | null` reads `NULL` as
-  // `null` and is no site. The second program reaches the copy through a
-  // constructor by `new`, inside a `using` block, and through `this` stored
-  // out of a constructor, then churns the arena before it prints each one, so
-  // a copy placed in a scope released too early prints other bytes.
-  const result = write(
-    "result.ts",
-    [
-      "declare function getenv(name: string): string;",
-      "declare function strchr(s: string, c: i32): string | null;",
-      "",
-      "export const main = (): i32 => {",
-      '  const a = getenv("HOME");',
-      '  const b = strchr("abc", 98);',
-      "  console.log(b === null ? a : b);",
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const resultSites = sitesOf(result)
-  const resultKinds = fnSites(resultSites.report, "main")
-    .map((p) => `${p.line}:${p.kind}`)
-    .join(",")
-  check(
-    "ffi_string: a `string` result is an `ffi-null` site and a `string | null` one is not, each an allowed `oom`",
-    resultKinds === "5:ffi-null,5:oom,6:oom",
-    resultSites.report === null ? shown(resultSites.r) : JSON.stringify(resultSites.report)
-  )
-  const resultDeny = compileFfi(result, ["--deny-panics"])
-  check(
-    "ffi_string: --deny-panics refuses a `string` result and names `string | null`",
-    resultDeny.status === 1 &&
-      resultDeny.stderr.includes("`ffi-null` may panic here") &&
-      resultDeny.stderr.includes("declare the result `string | null`"),
-    shown(resultDeny)
-  )
-  const nullable = write(
-    "nullable.ts",
-    [
-      "declare function getenv(name: string): string | null;",
-      "",
-      "export const main = (): i32 => {",
-      '  const a = getenv("HOME");',
-      '  console.log(a === null ? "unset" : "set");',
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const nullableDeny = compileFfi(nullable, ["--deny-panics"])
-  check(
-    "ffi_string: a `string | null` result compiles under --deny-panics, with no `ffi.null` block",
-    nullableDeny.status === 0 &&
-      irOf(nullable).includes("ffi.none:") &&
-      !irOf(nullable).includes("ffi.null:"),
-    `${shown(nullableDeny)}\n${irOf(nullable)}`
-  )
-
-  const kept = write(
-    "kept.ts",
-    [
-      'import { Mutex } from "nish/threads";',
-      "",
-      "declare function strerror(errnum: i32): string;",
-      "",
-      "class Counter {",
-      '  s: string = "";',
-      "}",
-      "",
-      "class Name {",
-      "  text: string;",
-      "  constructor(e: i32) {",
-      "    this.text = strerror(e);",
-      "  }",
-      "}",
-      "",
-      "class Holder {",
-      "  t: Tag | null = null;",
-      "}",
-      "",
-      "class Tag {",
-      "  constructor(h: Holder, e: i32) {",
-      "    h.t = this;",
-      "    this.label = strerror(e);",
-      "  }",
-      '  label: string = "";',
-      "}",
-      "",
-      "const churn = (n: i32): i32 => {",
-      "  const t: string[] = [];",
-      "  for (let i = 0; i < n; i++) {",
-      "    t.push(`${i}`);",
-      "  }",
-      '  return t.join("").length;',
-      "};",
-      "",
-      "export const main = (): i32 => {",
-      "  const m = new Mutex<Counter>(new Counter());",
-      "  const n = new Name(1);",
-      "  {",
-      "    using g = m.lock();",
-      "    g.value.s = strerror(2);",
-      "  }",
-      "  const h = new Holder();",
-      "  new Tag(h, 12);",
-      "  console.log(`${churn(4000) > 0}`);",
-      "  console.log(n.text);",
-      "  {",
-      "    using g = m.lock();",
-      "    console.log(g.value.s);",
-      "  }",
-      "  const t = h.t;",
-      '  console.log(t === null ? "none" : t.label);',
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const keptSites = sitesOf(kept)
-  check(
-    "ffi_string: a C string result in a constructor reached by `new` is an `ffi-null` site, and `new` a call site via it",
-    keptSites.report !== null &&
-      fnSites(keptSites.report, "Name.constructor").some(
-        (p) => p.kind === "ffi-null" && p.proven === false
-      ) &&
-      fnSites(keptSites.report, "Tag.constructor").some((p) => p.kind === "ffi-null" && p.proven === false) &&
-      fnSites(keptSites.report, "main").some(
-        (p) => p.kind === "call" && p.callee === "Name.constructor" && p.via === "ffi-null"
-      ) &&
-      fnSites(keptSites.report, "main").some(
-        (p) => p.kind === "call" && p.callee === "Tag.constructor" && p.via === "ffi-null"
-      ) &&
-      fnSites(keptSites.report, "main").filter((p) => p.kind === "ffi-null").length === 1,
-    keptSites.report === null ? shown(keptSites.r) : JSON.stringify(keptSites.report)
-  )
-  const keptExe = path.join(ffiDir, "kept.exe")
-  const keptBuilt = spawnSync(NISH, [kept, "-o", path.join(ffiDir, "kept") + path.sep, "--link", keptExe], {
-    cwd: root,
-    encoding: "utf8",
-  })
-  const keptRun = keptBuilt.status === 0 ? spawnSync(keptExe, [], { encoding: "utf8" }) : keptBuilt
-  check(
-    "ffi_string: C string results kept by a constructor, by a `using` block's guard and through `this` survive churn",
-    keptRun.status === 0 &&
-      keptRun.stdout === "true\nOperation not permitted\nNo such file or directory\nCannot allocate memory\n",
-    shown(keptRun)
-  )
-
-  // WP27 S3.3: `readCString` from `nish:unsafe` copies the bytes behind a
-  // `CPtr` into the arena. It is an allowed `unchecked` site, so it compiles
-  // under --deny-panics, and --deny unsafe and --deny ffi each refuse it; the
-  // literal `null` for a `CPtr | null` parameter is `i8* null` at the call.
-  // The second program keeps copies through a constructor reached by `new`,
-  // a `using` block's guard and `this` stored out of a constructor, then
-  // churns the arena before it prints each one.
-  const owned = write(
-    "owned.ts",
-    [
-      'import { readCString } from "nish:unsafe";',
-      "",
-      "declare function realpath(path: string, resolved: CPtr | null): CPtr | null;",
-      "declare function free(p: CPtr): void;",
-      "",
-      "export const main = (): i32 => {",
-      '  const p = realpath("/", null);',
-      "  if (p === null) {",
-      "    return 1;",
-      "  }",
-      "  const s = readCString(p);",
-      "  free(p);",
-      "  console.log(s);",
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const ownedSites = sitesOf(owned)
-  const ownedKinds = fnSites(ownedSites.report, "main")
-    .map((p) => `${p.line}:${p.kind}:${p.allowed}`)
-    .join(",")
-  check(
-    "ffi_owned_string: `readCString` is an allowed `unchecked` site and the copy's `oom`, and nothing else",
-    ownedKinds === "11:unchecked:true,11:oom:true",
-    ownedSites.report === null ? shown(ownedSites.r) : JSON.stringify(ownedSites.report)
-  )
-  check(
-    "ffi_owned_string: a literal `null` for a `CPtr | null` parameter is `i8* null`, and the copy is `@nish.ffi.str`",
-    /call i8\* @realpath\(i8\* %\d+, i8\* null\)/.test(irOf(owned)) &&
-      /call i8\* @nish\.ffi\.str\(i8\* %\d+\)/.test(irOf(owned)),
-    irOf(owned)
-  )
-  const ownedDenyPanics = compileFfi(owned, ["--deny-panics"])
-  check(
-    "ffi_owned_string: `readCString` compiles under --deny-panics",
-    ownedDenyPanics.status === 0,
-    shown(ownedDenyPanics)
-  )
-  const ownedUnsafe = compileFfi(owned, ["--deny", "unsafe"])
-  check(
-    "ffi_owned_string: --deny unsafe refuses `readCString` and names the call",
-    ownedUnsafe.status === 1 &&
-      ownedUnsafe.stderr.includes("reaches `unsafe`") &&
-      ownedUnsafe.stderr.includes("calls readCString"),
-    shown(ownedUnsafe)
-  )
-  const ownedFfi = compileFfi(owned, ["--deny", "ffi"])
-  check(
-    "ffi_owned_string: --deny ffi refuses a program that reads a C string",
-    ownedFfi.status === 1 &&
-      ownedFfi.stderr.includes("reaches `ffi`") &&
-      ownedFfi.stderr.includes("calls realpath"),
-    shown(ownedFfi)
-  )
-  const ownedChecked = spawnSync(NISH, [owned, "--emit-checked"], { cwd: root, encoding: "utf8" })
-  check(
-    "ffi_owned_string: --emit-checked records the `readCString` import and its call",
-    ownedChecked.status === 0 &&
-      ownedChecked.stdout.includes('unsafe import 1:10 readCString from "nish:unsafe"') &&
-      /unsafe call 11:13 readCString \(node \d+\)/.test(ownedChecked.stdout),
-    shown(ownedChecked)
-  )
-  const ownedKept = write(
-    "owned-kept.ts",
-    [
-      'import { Mutex } from "nish/threads";',
-      'import { readCString } from "nish:unsafe";',
-      "",
-      "declare function strdup(s: string): CPtr | null;",
-      "declare function free(p: CPtr): void;",
-      "",
-      "const copy = (s: string): string => {",
-      "  const p = strdup(s);",
-      "  if (p === null) {",
-      '    return "";',
-      "  }",
-      "  const r = readCString(p);",
-      "  free(p);",
-      "  return r;",
-      "};",
-      "",
-      "class Counter {",
-      '  s: string = "";',
-      "}",
-      "",
-      "class Name {",
-      "  text: string;",
-      "  constructor() {",
-      '    const p = strdup("from a constructor");',
-      '    this.text = p === null ? "" : readCString(p);',
-      "    if (p !== null) {",
-      "      free(p);",
-      "    }",
-      "  }",
-      "}",
-      "",
-      "class Holder {",
-      "  t: Tag | null = null;",
-      "}",
-      "",
-      "class Tag {",
-      "  constructor(h: Holder) {",
-      "    h.t = this;",
-      '    const p = strdup("through this");',
-      "    if (p !== null) {",
-      "      this.label = readCString(p);",
-      "      free(p);",
-      "    }",
-      "  }",
-      '  label: string = "";',
-      "}",
-      "",
-      "const churn = (n: i32): i32 => {",
-      "  const t: string[] = [];",
-      "  for (let i = 0; i < n; i++) {",
-      "    t.push(`${i}`);",
-      "  }",
-      '  return t.join("").length;',
-      "};",
-      "",
-      "export const main = (): i32 => {",
-      "  const m = new Mutex<Counter>(new Counter());",
-      "  const n = new Name();",
-      "  {",
-      "    using g = m.lock();",
-      '    const p = strdup("under a guard");',
-      "    if (p !== null) {",
-      "      g.value.s = readCString(p);",
-      "      free(p);",
-      "    }",
-      "  }",
-      "  const h = new Holder();",
-      "  new Tag(h);",
-      '  const c = copy("returned");',
-      "  console.log(`${churn(4000) > 0}`);",
-      "  console.log(n.text);",
-      "  {",
-      "    using g = m.lock();",
-      "    console.log(g.value.s);",
-      "  }",
-      "  const t = h.t;",
-      '  console.log(t === null ? "none" : t.label);',
-      "  console.log(c);",
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const ownedKeptExe = path.join(ffiDir, "owned-kept.exe")
-  const ownedKeptBuilt = spawnSync(
-    NISH,
-    [ownedKept, "-o", path.join(ffiDir, "owned-kept") + path.sep, "--link", ownedKeptExe],
-    { cwd: root, encoding: "utf8" }
-  )
-  const ownedKeptRun =
-    ownedKeptBuilt.status === 0 ? spawnSync(ownedKeptExe, [], { encoding: "utf8" }) : ownedKeptBuilt
-  check(
-    "ffi_owned_string: `readCString` copies kept by a constructor, by a `using` block's guard and through `this` survive churn",
-    ownedKeptRun.status === 0 &&
-      ownedKeptRun.stdout === "true\nfrom a constructor\nunder a guard\nthrough this\nreturned\n",
-    shown(ownedKeptRun)
-  )
-
-  // A `declare function` passed as a function parameter is called from the
-  // specialisation (`err<strerror>`), which holds the copy and the site.
-  const passed = write(
-    "passed.ts",
-    [
-      "declare function strerror(errnum: i32): string;",
-      "declare function getenv(name: string): string | null;",
-      "",
-      "function err(f: (n: i32) => string, n: i32): string {",
-      "  return f(n);",
-      "}",
-      "",
-      "function env(f: (name: string) => string | null, name: string): string {",
-      '  return f(name) ?? "unset";',
-      "}",
-      "",
-      "function churn(n: i32): i32 {",
-      "  const t: string[] = [];",
-      "  for (let i = 0; i < n; i++) {",
-      "    t.push(`${i}`);",
-      "  }",
-      '  return t.join("").length;',
-      "}",
-      "",
-      "export const main = (): i32 => {",
-      "  const a = err(strerror, 2);",
-      '  const b = env(getenv, "NISH_FFI_PASSED_UNSET");',
-      "  console.log(`${churn(4000) > 0}`);",
-      "  console.log(`${a}|${b}`);",
-      "  return 0;",
-      "};",
-      "",
-    ].join("\n")
-  )
-  const passedSites = sitesOf(passed)
-  check(
-    "ffi_string: a C string result through a function parameter is an `ffi-null` site in the specialisation",
-    passedSites.report !== null &&
-      fnSites(passedSites.report, "err<strerror>").some((p) => p.kind === "ffi-null" && p.proven === false) &&
-      !fnSites(passedSites.report, "env<getenv>").some((p) => p.kind === "ffi-null") &&
-      fnSites(passedSites.report, "main").some(
-        (p) => p.kind === "call" && p.callee === "err<strerror>" && p.via === "ffi-null"
-      ),
-    passedSites.report === null ? shown(passedSites.r) : JSON.stringify(passedSites.report)
-  )
-  const passedExe = path.join(ffiDir, "passed.exe")
-  const passedBuilt = spawnSync(
-    NISH,
-    [passed, "-o", path.join(ffiDir, "passed") + path.sep, "--link", passedExe],
-    { cwd: root, encoding: "utf8" }
-  )
-  const passedRun = passedBuilt.status === 0 ? spawnSync(passedExe, [], { encoding: "utf8" }) : passedBuilt
-  check(
-    "ffi_string: C string results through a function parameter are copied and survive churn",
-    passedRun.status === 0 && passedRun.stdout === "true\nNo such file or directory|unset\n",
-    shown(passedRun)
-  )
-}
+runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
 // length in its loop condition as well as after the call to `f`, so once `f`
@@ -7724,7 +7360,8 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `par_map_reclaim`, `par_map_reclaim_escapes` and `par_map_reclaim_strings`
 // free a map's result, and the blocks it adopted, with the frame or block that
 // ran it, and keep every result that escapes it, on a 32-bit target as on a
-// 64-bit one.
+// 64-bit one; `thread_scope_reclaim` and `thread_scope_reclaim_escapes` do
+// the same for what a frame spawns into its scope.
 // The escapes fixture grows its memory to some 120 MB, and Node 22 then
 // collects garbage inside the fast call of WASI's `fd_write`, whose frame walk
 // segfaults (`InnerPointerToCodeCache::GetCacheEntry`) after line 23 or 24
@@ -7749,6 +7386,8 @@ for (const name of [
   "par_map_reclaim",
   "par_map_reclaim_escapes",
   "par_map_reclaim_strings",
+  "thread_scope_reclaim",
+  "thread_scope_reclaim_escapes",
 ]) {
   if (only && !name.includes(only) && !"wasi".includes(only)) {
     continue
@@ -7950,6 +7589,102 @@ if (!only || "std_json_tokenizer".includes(only)) {
     )
   } else {
     skip("skipped: link/std_json_tokenizer: no clang, so node.ts is not built natively")
+  }
+}
+
+// `nish/net/url` under the Node prelude, and against Node's own decoders. The
+// link loop runs `std_url` and its four refusals natively; here the same
+// programs run under `runtime/nish.mjs` and print the same bytes, `alloc.ts`
+// reads a target 10,000 times without moving the arena, and `fuzz.ts`'s 3,000
+// seeded inputs are held to `decodeURIComponent`, `URLSearchParams` and the
+// strict rule's regex, natively and under Node. Six programs beside them pass
+// a window or an `at` outside its array, and each panics with its message on
+// both sides.
+if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
+  for (const name of ["std_url", "std_url_escape", "std_url_pairs", "std_url_space", "std_url_window"]) {
+    const dir = path.join(linkDir, name)
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const errFile = path.join(dir, "expected.stderr")
+    const err = fs.existsSync(errFile) ? fs.readFileSync(errFile, "utf8") : null
+    check(
+      `link/${name}: under the Node prelude it exits ${code} and prints expected.out${err === null ? "" : " and expected.stderr"}`,
+      run.status === code && run.stdout === out && (err === null || run.stderr === err),
+      shown(run)
+    )
+  }
+  const urlDir = path.join(linkDir, "std_url")
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_alloc") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_url: 10,000 targets split, decoded and searched leave Arena.used() where it was",
+      run.status === 0 &&
+        /^rounds 10000 failures 0 kept 0 control seen checksum [1-9][0-9]*\n$/.test(run.stdout),
+      shown(run)
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so alloc.ts is not built")
+  }
+  for (const [file, message] of [
+    ["panic-decode-window", "percentDecode: the window is outside the array"],
+    ["panic-decode-at", "percentDecode: at is outside out"],
+    ["panic-start-window", "urlQueryStart: the window is outside the array"],
+    ["panic-segments-window", "UrlPathSegments: the window is outside the array"],
+    ["panic-decode-negative-len", "percentDecode: the window is outside the array"],
+    ["panic-decode-negative-at", "percentDecode: at is outside out"],
+  ]) {
+    const entry = path.join(urlDir, `${file}.ts`)
+    const fromNode = runUnderPrelude(entry, [])
+    check(
+      `link/std_url: ${file}.ts under the Node prelude exits 1 with "${message}"`,
+      fromNode.status === 1 && fromNode.stdout === "" && fromNode.stderr === `${message}\n`,
+      shown(fromNode)
+    )
+    if (HAS_CLANG) {
+      const outDir = path.join(buildDir, `std_url_${file}`) + path.sep
+      const exe = path.join(outDir, "app")
+      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+      const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+      check(
+        `link/std_url: ${file}.ts built natively exits 1 with "${message}"`,
+        native.status === 1 && native.stdout === "" && native.stderr === `${message}\n`,
+        shown(native)
+      )
+    } else {
+      skip(`skipped: link/std_url: no clang, so ${file}.ts is not built natively`)
+    }
+  }
+  const fuzzEntry = path.join(urlDir, "fuzz.ts")
+  const fuzzNode = runUnderPrelude(fuzzEntry, [], "main", { maxBuffer: 1 << 24 })
+  const fromNode = urlFuzzVerdict(fuzzNode.stdout ?? "")
+  check(
+    "link/std_url: 3,000 seeded inputs under Node decode as decodeURIComponent, URLSearchParams and the strict rule say",
+    fuzzNode.status === 0 && fromNode.cases === 3000 && fromNode.bad.length === 0,
+    `${fromNode.cases} cases\n${fromNode.bad.slice(0, 5).join("\n")}\n${shown({ ...fuzzNode, stdout: "" })}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_fuzz") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8", maxBuffer: 1 << 24 }) : built
+    const fromNative = urlFuzzVerdict(native.stdout ?? "")
+    check(
+      "link/std_url: the same 3,000 inputs, built natively, print the Node run's lines byte for byte",
+      native.status === 0 &&
+        fromNative.cases === 3000 &&
+        fromNative.bad.length === 0 &&
+        native.stdout === fuzzNode.stdout,
+      `${fromNative.cases} cases\n${fromNative.bad.slice(0, 5).join("\n")}\n${shown({ ...native, stdout: "" })}`
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so fuzz.ts is not built natively")
   }
 }
 
@@ -9052,6 +8787,19 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       held.ok && heldPlain.ok && volatileSet.test(held.text) && !volatileSet.test(heldPlain.text),
       `held:\n${held.text}\n--- plain:\n${heldPlain.text}`
     )
+    // A `Secret` bound with no annotation (#613) is one whose struct the module
+    // defines through `secret`'s inferred result alone: its wipe is the same
+    // volatile memset, where the twin's `fill(0)` of the same bytes is deleted.
+    const inferred = optimisedMain("secret_wipe_o2_inferred")
+    const inferredPlain = optimisedMain("secret_wipe_o2_inferred_plain")
+    const inferredPlainStores = inferredPlain.ok
+      ? (inferredPlain.text.match(/\bstore\b|@llvm\.memset/g) || []).length
+      : -1
+    check(
+      "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
+      inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
+      `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
   }
 }
 
@@ -9059,6 +8807,53 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // roots in the area files of `tests/wipes/` (`tests/wipes/index.js` says what a
 // group is and how a root's wipes are counted).
 runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
+
+// The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
+// `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
+// from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
+// store per limb rather than as a memset. Each array's stores share an SROA base
+// (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
+// four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+// `crypto`, `wipe` and `crypto_p256` filters all run it.
+{
+  const name =
+    "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+  if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
+    if (!has("opt")) {
+      skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+    } else {
+      const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnSync(NISH, [path.join(root, "tests/link/crypto_p256/main.ts"), "-o", `${dir}/`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const o =
+        c.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
+              encoding: "utf8",
+            })
+          : c
+      const body =
+        o.status === 0
+          ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+          : ""
+      const groups = new Map()
+      for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
+        groups.set(m[1], (groups.get(m[1]) ?? 0) + 1)
+      }
+      const sizes = [...groups.values()].sort((x, y) => y - x)
+      let detail = `volatile i32 zero stores by array: ${JSON.stringify([...groups])}`
+      if (o.status !== 0) {
+        detail = o.stderr
+      } else if (body === "") {
+        detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+      }
+      check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+    }
+  }
+}
 
 // `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
 // `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
@@ -9349,6 +9144,28 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       ]
         .filter((line) => line.length > 0)
         .join("\n")
+    )
+
+    // ct_asm_p256's `p256Divsteps30` is the module's thirty-step loop written out, as a
+    // rolled loop is a back-edge the reading refuses. Each of its blocks must be the
+    // module's loop body, line for line, or the check reads a function the signer no
+    // longer runs. (The matrix updates are written out at literal indices, so their
+    // text differs; the fixture's `.out` holds them to the module's inverses.)
+    const moduleSource = fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8")
+    const fixtureSource = fs.readFileSync(path.join(casesDir, "ct_asm_p256.ts"), "utf8")
+    const loopBody = moduleSource.match(
+      /\nconst p256Divsteps30 = [^\n]*\n[\s\S]*?\n {2}for \(let i: i32 = 0; i < 30; i\+\+\) \{\n([\s\S]*?)\n {2}\}\n/
+    )?.[1]
+    const unrolled =
+      fixtureSource.match(/\nexport const p256Divsteps30 = [^\n]*\n([\s\S]*?)\n\}\n/)?.[1] ?? ""
+    const blocks = [...unrolled.matchAll(/\n {2}\{\n([\s\S]*?)\n {2}\}(?=\n)/g)].map((m) => m[1])
+    const stray = blocks.filter((b) => b !== loopBody)
+    check(
+      "ct_asm: ct_asm_p256's p256Divsteps30 is thirty copies of std/crypto/p256.ts's divstep loop body",
+      loopBody !== undefined && blocks.length === 30 && stray.length === 0,
+      loopBody === undefined
+        ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
+        : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
     )
   }
 }
@@ -11909,6 +11726,79 @@ if (!only) {
       "wasm profile links Math.min/Math.max of f64 and f32, and they drop a NaN as minnum does natively",
       mr !== null && String(mr.stdout).trim() === "0 9 1 1 2 NaN -1 -3 1.5 0.25 2",
       String(mc.stderr) + String(ml.stderr) + (mr ? String(mr.stdout) + String(mr.stderr) : "")
+    )
+  }
+}
+
+// ---- #643: a function named `memory` in a wasm module -----------------------------
+// wasm-ld exports a wasm module's linear memory as `memory`, so a function of that
+// name makes a module Node refuses to compile. The compiler refuses one (NL3038) when
+// it knows the build is wasm (`reject_export_wasm_memory*`), but IR compiled for the
+// host with `-o` alone reaches build.sh's wasm and wasi profiles without telling it,
+// so build.sh reads the IR and refuses an exported `@memory` with exit 2. An
+// `internal` one is no export, and still links.
+if (!only || "wasm-memory".includes(only)) {
+  const memDir = path.join(buildDir, "wasm-memory")
+  fs.rmSync(memDir, { recursive: true, force: true })
+  fs.mkdirSync(memDir, { recursive: true })
+  const exportedLl = path.join(memDir, "exported.ll")
+  const exported = spawnSync(NISH, [path.join(casesDir, "export_memory_native.ts"), "-o", exportedLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check("wasm memory: a native -o compile keeps an exported `memory`", exported.status === 0, exported.stderr)
+  for (const profile of ["wasm", "wasi"]) {
+    const r = spawnSync(
+      "bash",
+      ["scripts/build.sh", exportedLl, "-o", path.join(memDir, `refused-${profile}`), "--profile", profile],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `wasm memory: build.sh --profile ${profile} refuses host IR defining an exported @memory with exit 2`,
+      r.status === 2 &&
+        r.stderr.includes("defines a function named `memory`") &&
+        r.stderr.includes(`the ${profile} profile's module exports its linear memory under`),
+      `${r.status}: ${r.stderr}`
+    )
+  }
+  // Without `--no-strict-exports` a `memory` nobody exported is internal, so
+  // it is no second `memory` export (`reject_export_wasm_memory_no_strict`).
+  const privateTs = path.join(memDir, "private.ts")
+  fs.writeFileSync(
+    privateTs,
+    "const memory = (n: i32): i32 => n + 1\nexport const bump = (n: i32): i32 => memory(n)\n"
+  )
+  const wasm32 = spawnSync(
+    NISH,
+    [privateTs, "-o", path.join(memDir, "private-wasm32.ll"), "--target", "wasm32"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  check(
+    "wasm memory: a --target wasm32 compile keeps a `memory` nobody exported",
+    wasm32.status === 0,
+    `${wasm32.status}: ${wasm32.stderr}`
+  )
+  if (has("wasm-ld")) {
+    const privateLl = path.join(memDir, "private.ll")
+    const c = spawnSync(NISH, [privateTs, "-o", privateLl], { cwd: root, encoding: "utf8" })
+    const l =
+      c.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", privateLl, "-o", path.join(memDir, "private.wasm"), "--profile", "wasm"],
+            {
+              cwd: root,
+              encoding: "utf8",
+            }
+          )
+        : c
+    check(
+      "wasm memory: build.sh --profile wasm links host IR whose @memory is internal",
+      l.status === 0,
+      `${l.status}: ${l.stderr}`
     )
   }
 }
@@ -16056,7 +15946,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
       "--compiler",
       path.relative(root, NISH),
       "--n",
-      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
+      "par-compute=4096,par-alloc=4096,par-nbody=16,par-short=64,par-regions=2,par-histogram=2,par-histogram-atomic=2,par-heavy=4096,par-heavy-fold=4096,par-heavy4=4096,par-scale=4096,par-single=4096",
       "--no-rayon",
       "--twin-runs",
       "1",
@@ -16100,7 +15990,7 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         parRun.status === 0 &&
           twinsAt > parText.indexOf(parHeading) &&
           parText.split(twinsHeading).length === 2 &&
-          ["par-compute", "par-nbody", "par-regions", "par-histogram"].every((k) =>
+          ["par-compute", "par-nbody", "par-regions", "par-histogram", "par-histogram-atomic"].every((k) =>
             twinsTable.includes(`| ${k} |`)
           ) &&
           twinsTable.includes("every binary below printed the Nish `par` run's output"),
@@ -16132,6 +16022,150 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         subset.stdout.includes("unchanged"),
       `${subset.stdout}${subset.stderr}`
     )
+  }
+}
+
+// ---- crypto-bench: the crypto twins ------------------------------------------------
+// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
+// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
+// every program to print the checksums its expected.txt pins, and proves the
+// portable columns portable. Each family must report every kernel size matched,
+// found by listing the directories, so a new family is checked without an edit
+// here. A missing toolchain is the runner's note and a column of —, not a
+// failure; so is a family that needs a loopback socket the machine refuses, and
+// a portable column this host cannot prove. Those notes and unproved lines are
+// printed under the check on a pass too, so a green run says what it left out.
+if (!only || "crypto-bench".includes(only)) {
+  if (HAS_CLANG) {
+    const families = fs
+      .readdirSync(path.join(root, "bench", "crypto"))
+      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
+      .sort()
+    const proved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .portableProof !== undefined
+    )
+    const v = spawnSync(
+      "node",
+      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    // The runner accounts for every column of every family it validated: a
+    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
+    // (the family's own word) or `<family> did not run <id>:` (this machine's
+    // reason). The test takes that account rather than probing toolchains
+    // itself, which disagreed with the runner on a host whose Go was older
+    // than go.mod or whose cargo could not fetch. The column list is the
+    // runner's own `crypto: columns …` line; without it the check fails.
+    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
+    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
+    const unaccounted = validated.flatMap((f) => {
+      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
+      return COLUMNS.filter(
+        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
+      ).map((id) => `${f} ${id}`)
+    })
+    // GitHub's x86-64 Linux runner has every twin's toolchain and the
+    // extensions their portable builds give up, so there a column this machine
+    // did not run, or an `unproved` line, means a gate failed open: every twin
+    // must run and the OpenSSL and Go proofs must be measured ones.
+    const strict =
+      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
+    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
+    check(
+      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
+      v.status === 0 &&
+        families.length > 0 &&
+        COLUMNS.length > 0 &&
+        families.every((f) =>
+          new RegExp(
+            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
+            "m"
+          ).test(v.stdout)
+        ) &&
+        unaccounted.length === 0 &&
+        proved.every((f) =>
+          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
+            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
+          )
+        ) &&
+        (!strict ||
+          (validated.length === families.length &&
+            !/ did not run /.test(v.stdout) &&
+            proved.every((f) =>
+              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ))),
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+    )
+    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
+        console.log(`      ${line}`)
+      }
+    }
+    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
+    // compiler it was given reaches the child, and the child's status comes
+    // back. A wrapper answers --version from the compiler under test and fails
+    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    const wrapDir = path.join(buildDir, "crypto-bench")
+    const wrapper = path.join(wrapDir, "nish-wrapper")
+    const wrapLog = path.join(wrapDir, "wrapper.log")
+    fs.mkdirSync(wrapDir, { recursive: true })
+    fs.rmSync(wrapLog, { force: true })
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
+      { mode: 0o755 }
+    )
+    const deleg = spawnSync(
+      "node",
+      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
+      deleg.status === 1 && forwarded.includes(path.join("bench", "crypto", "hash", "main.ts")),
+      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
+    )
+    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
+    // only, one run, into a copy of the file.
+    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
+    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- crypto:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+  } else {
+    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
   }
 }
 
@@ -18019,6 +18053,19 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // The join-only rule's method negative hands a part back with
       // `parts.pop()` and keeps it as a `string`, because a popped part is the
       // read-back the rule has to refuse: the `pop` divergence above.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
+    ],
+    [
+      "ffi_buffer_late_load.ts",
+      // WP40 B1.2: the late load is pinned against a `pop` written inline in
+      // a later argument, which shrinks the buffer after its length was read
+      // for the count; its value is the argument, the `pop` divergence above.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
+    ],
+    [
+      "panics_ffi_length_inline_pop.ts",
+      // The same inline `pop`, where the check that reads the length again
+      // fails: the `pop` divergence above.
       "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
   ])
@@ -22206,6 +22253,187 @@ if (!only || "c-symbols".includes(only)) {
       }
     }
   }
+}
+
+// ---- #432: the `unsafe` capability, reported ----------------------------------------
+// A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
+// the bit travels through callers, modules and packages like every other: here
+// read off `--emit-capabilities` for a direct call, a call two frames up, a
+// module with no unsafe call, each of the six exports, and a dependency that
+// imports `nish:unsafe` when the entry package does not. The deprecated
+// `--wrapping` and `--unchecked-indexing` carry no `unsafe`: each prints its
+// deprecation on every compile, on the command line that would pass the
+// policy too (docs/wp35-capabilities.md §1).
+if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
+  const unsafeDir = path.join(buildDir, "caps-unsafe")
+  fs.rmSync(unsafeDir, { recursive: true, force: true })
+  const program = {
+    "leaf.ts":
+      'import { uncheckedGet } from "nish:unsafe";\n\n' +
+      "export const first = (xs: i32[]): i32 => (xs.length > 0 ? uncheckedGet(xs, 0) : 0);\n",
+    "mid.ts":
+      'import { first } from "./leaf";\n\nexport const firstTwice = (xs: i32[]): i32 => first(xs) + first(xs);\n',
+    "pure.ts":
+      "export const sum = (xs: i32[]): i32 => {\n  let s = 0;\n  for (const x of xs) {\n    s = s + x;\n  }\n  return s;\n};\n",
+    "main.ts":
+      'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
+    "each.ts":
+      "import { readCString, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      '"nish:unsafe";\n\n' +
+      "declare function cbuf(): CPtr | null;\n\n" +
+      "export const get = (xs: i32[]): i32 => uncheckedGet(xs, 0);\n" +
+      "export const set = (xs: i32[]): void => {\n  uncheckedSet(xs, 0, 1);\n};\n" +
+      "export const add = (a: i32): i32 => wrappingAdd(a, 1);\n" +
+      "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
+      "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
+      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+    "node_modules/pkg_fast/package.json":
+      '{ "name": "pkg_fast", "version": "1.0.0", "exports": { ".": { "nish": "./src/index.ts" } } }\n',
+    "node_modules/pkg_fast/src/index.ts":
+      'import { wrappingMul } from "nish:unsafe";\n\n' +
+      "const mix = (h: i32): i32 => wrappingMul(h, 31);\n\n" +
+      "export const hash = (xs: i32[]): i32 => {\n  let h = 7;\n  for (const x of xs) {\n    h = mix(h) ^ x;\n  }\n  return h;\n};\n",
+    "dep.ts":
+      'import { hash } from "pkg_fast";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => (hash([1, 2]) & 0) + sum([1]);\n",
+    "flags.ts":
+      "export const main = (): i32 => {\n  const xs: i32[] = [1, 2];\n  let i = 0;\n  i = i + 1;\n" +
+      "  return xs[i] * 2147483647;\n};\n",
+  }
+  for (const [file, text] of Object.entries(program)) {
+    fs.mkdirSync(path.dirname(path.join(unsafeDir, file)), { recursive: true })
+    fs.writeFileSync(path.join(unsafeDir, file), text)
+  }
+  /** Compile `entry` in the program's directory; the report parsed, or null with the run beside it. */
+  const unsafeReport = (entry, extra = []) => {
+    const stem = path.basename(entry, ".ts")
+    const json = path.join(unsafeDir, `${stem}.caps.json`)
+    const r = spawnSync(
+      NISH,
+      [
+        entry,
+        "-o",
+        `${path.join(unsafeDir, `${stem}.ir`)}${path.sep}`,
+        "--emit-capabilities",
+        json,
+        ...extra,
+      ],
+      { cwd: unsafeDir, encoding: "utf8" }
+    )
+    return {
+      r,
+      report: r.status === 0 && fs.existsSync(json) ? JSON.parse(fs.readFileSync(json, "utf8")) : null,
+    }
+  }
+  const moduleOf = (report, file) =>
+    report?.packages.flatMap((p) => p.modules).find((m) => m.path === file) ?? null
+  const fnOf = (report, file, name) => moduleOf(report, file)?.functions.find((f) => f.name === name) ?? null
+  const chainOf = (fn) => (fn?.witnesses.unsafe ?? []).map((w) => `${w.function}->${w.calls}`).join(" ")
+
+  const direct = unsafeReport("main.ts", ["--capabilities"])
+  check(
+    "capabilities: a direct `uncheckedGet` call carries `unsafe`, its witness the call itself",
+    JSON.stringify(fnOf(direct.report, "leaf.ts", "first")?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(direct.report, "leaf.ts", "first")) === "first->uncheckedGet",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` reaches a caller two frames up, with the whole chain as its witness",
+    chainOf(fnOf(direct.report, "main.ts", "main")) ===
+      "main->firstTwice firstTwice->first first->uncheckedGet" &&
+      JSON.stringify(moduleOf(direct.report, "mid.ts")?.capabilities) === '["unsafe"]' &&
+      JSON.stringify(direct.report?.capabilities) === '["unsafe"]',
+    shown(direct.r)
+  )
+  check(
+    "capabilities: a module with no `nish:unsafe` call carries no `unsafe`",
+    JSON.stringify(moduleOf(direct.report, "pure.ts")?.capabilities) === "[]",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` keeps a program deterministic, and `--capabilities` names it",
+    direct.report?.deterministic === true && direct.r.stderr.includes("capabilities: unsafe (deterministic)"),
+    shown(direct.r)
+  )
+
+  const each = unsafeReport("each.ts")
+  const exportsSeen = [
+    ["get", "uncheckedGet"],
+    ["set", "uncheckedSet"],
+    ["add", "wrappingAdd"],
+    ["sub", "wrappingSub"],
+    ["mul", "wrappingMul"],
+    ["str", "readCString"],
+  ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
+  check(
+    "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 6,
+    `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
+  )
+
+  const dep = unsafeReport("dep.ts")
+  const depPackage = dep.report?.packages.find((p) => p.name === "pkg_fast")
+  check(
+    "capabilities: a dependency that imports `nish:unsafe` gives `unsafe` to its package and to the entry that calls it",
+    JSON.stringify(depPackage?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(dep.report, "dep.ts", "main")) === "main->hash hash->mix mix->wrappingMul" &&
+      JSON.stringify(moduleOf(dep.report, "pure.ts")?.capabilities) === "[]",
+    shown(dep.r)
+  )
+  const depDenied = spawnSync(
+    NISH,
+    ["dep.ts", "-o", `${path.join(unsafeDir, "dep-denied.ir")}${path.sep}`, "--deny", "unsafe"],
+    { cwd: unsafeDir, encoding: "utf8" }
+  )
+  check(
+    "capabilities: `--deny unsafe` refuses an `unsafe` reached only through a dependency, naming the chain into it",
+    depDenied.status === 1 &&
+      depDenied.stderr.includes("`main` reaches `unsafe`, which the capability policy does not grant") &&
+      depDenied.stderr.includes("node_modules/pkg_fast/src/index.ts:3:30 calls wrappingMul"),
+    shown(depDenied)
+  )
+
+  const flags = unsafeReport("flags.ts", ["--wrapping", "--unchecked-indexing", "--deny", "unsafe"])
+  check(
+    "capabilities: `--wrapping` and `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them",
+    flags.r.status === 0 &&
+      JSON.stringify(flags.report?.capabilities) === "[]" &&
+      flags.r.stderr.includes("--wrapping is deprecated") &&
+      flags.r.stderr.includes("--unchecked-indexing is deprecated"),
+    shown(flags.r)
+  )
+}
+
+// ---- #740: a constructor's prologue writes `this` ------------------------------------
+// The field initialisers are stored outside the written body, so an empty
+// constructor's `this` is written, while a method that only reads it, and an
+// empty constructor with nothing to store, keep `readonly`. The golden pins the
+// whole text; these name the three attributes the fix is about.
+if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
+  const ll = fs.readFileSync(path.join(casesDir, "ctor_empty_init_basic.ll"), "utf8")
+  const thisOf = (fn) => {
+    const line = ll.split("\n").find((l) => l.startsWith("define ") && l.includes(`@${fn}(`))
+    return line === undefined ? null : line.slice(line.indexOf("("), line.indexOf("%this"))
+  }
+  const ctor = thisOf("Dn.constructor")
+  check(
+    "#740: an empty constructor with field initialisers does not mark `this` readonly",
+    ctor !== null && !ctor.includes("readonly"),
+    ctor
+  )
+  const method = thisOf("Dn.scaled")
+  check(
+    "#740: a method that only reads `this` keeps it readonly",
+    method !== null && method.includes("readonly"),
+    method
+  )
+  const bare = thisOf("Bare.constructor")
+  check(
+    "#740: an empty constructor with no initialiser keeps `this` readonly",
+    bare !== null && bare.includes("readonly"),
+    bare
+  )
 }
 
 summarise()

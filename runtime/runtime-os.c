@@ -321,7 +321,7 @@ int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv,
    on every host. A pid of 0 or below is -EINVAL too: `kill(2)` reads those as
    a process group or every process the user owns, which is not one process.
    A positive pid may be any process of this uid, not only a child: the same
-   reach `kill(1)` has (docs/security/runtime.md, RT-18). */
+   reach `kill(1)` has (docs/security/runtime.md, RT-19). */
 int32_t nish_kill(int32_t pid, int32_t sig) {
 #ifdef __wasi__
   (void)pid;

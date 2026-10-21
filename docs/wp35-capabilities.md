@@ -34,6 +34,21 @@ between runs, or each is a constant of the build. A program is
 deterministic, since a chosen status is computed from the input and a run
 nobody signals is the same run every time.
 
+`unsafe` is not a capability of the world but the one way a program gives up a
+check, and it travels like the others: a function that calls a `nish:unsafe`
+export carries it, and so does every caller, module and package above it,
+including a dependency that imports `nish:unsafe` when the entry package does
+not (#432). It keeps a program deterministic. The deprecated `--wrapping` and
+`--unchecked-indexing` carry no `unsafe`, although they too give up a check
+the source does not show: they reach only the entry package, each compile that
+passes one prints its deprecation note (NL9014), and they sit on the same
+command line that passes `--deny unsafe`, so a policy has nothing to learn
+from the bit that the compile does not already print. They are on their way
+out. `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+and `nish --fix` rewrites those into `uncheckedGet` and `uncheckedSet` calls,
+which do carry it; `--wrapping` has no fixer, and its note names the
+`nish:unsafe` exports to write instead.
+
 ## 2. The audit
 
 Every builtin the checker accepts has exactly one row in `builtinCapability`
@@ -57,7 +72,7 @@ labelled apart.
 | `signal` | `signalFd`, `readSignal` |
 | `exit` | `process.exit` (and `exit` from `nish:process`) |
 | `ffi` | any call to a `declare function` (no table row: it is the callee's kind) |
-| `unsafe` | the five `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`); wired by WP36 |
+| `unsafe` | the six `nish:unsafe` exports (`uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString`); wired by WP36, reported since #432 |
 | none | `toI32`, `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF32`, `toF64`, `f64ToBits`, `bitsToF64`, `ctSelect`, `ctEq`, `secureZero`, `parseInt`, `parseFloat`, `Number`, `Ok`, `Err`, `write`, `writeError`, `panic`, `console.log`, `console.error`, `String.fromCharCode`, `String.fromBytes`, `Math.sqrt`, `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`, `Math.sin`, `Math.cos`, `Math.exp`, `Math.log`, `Math.pow`, `Math.abs`, `Math.min`, `Math.max`, `Arena.reset`, `Arena.mark`, `Arena.release`, `Arena.used`, `arena`, and the properties `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch`, and the host facts `availableParallelism`, `totalMemory` |
 
 Four rows deserve their reason:
@@ -135,7 +150,8 @@ that. Wall time moved within its noise.
 ## 7. Out of scope
 
 - **Enforcement**: built as WP36's compile-time policy. Holding a running
-  process to the computed set (`--sandbox`) is WP37's, not yet written.
+  process to the computed set (`--sandbox`) is WP37's, proposed in
+  [wp37-os-sandbox.md](wp37-os-sandbox.md) and not built.
 - Argument-level precision (which path is read, which host is dialled),
   capability-typed handles, and taint.
 - Nondeterminism from thread scheduling or float reduction order.

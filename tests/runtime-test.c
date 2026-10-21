@@ -717,6 +717,7 @@ static void test_host_signal_threads(void) {
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 
 /* WP34 N5, runtime-net.c: what the Node-driven echo in tests/run.js cannot
@@ -796,7 +797,7 @@ static void test_tcp_reuseport(void) {
   expect_i64(nish_net_local_port(b), port, "a second flagged listener on the same port");
   expect_i64(nish_tcp_listen(loopback, port, 4), -98, "a plain listener on the shared port");
   expect_i64(nish_tcp_listen_flags(loopback, port, 4, 0), -98, "flag 0 on the shared port");
-  expect_i64(nish_tcp_listen_flags(loopback, 0, 4, 2), -22, "an unknown flag");
+  expect_i64(nish_tcp_listen_flags(loopback, 0, 4, 4), -22, "an unknown flag");
   expect_i64(nish_tcp_listen_flags(loopback, 0, 4, -1), -22, "a negative flags word");
   int32_t plain = nish_tcp_listen(loopback, 0, 4);
   assert(plain >= 0);
@@ -807,6 +808,40 @@ static void test_tcp_reuseport(void) {
   expect_i64(nish_net_close(plain), 0, "the plain listener closed");
   expect_i64(nish_net_close(b), 0, "the second listener closed");
   expect_i64(nish_net_close(a), 0, "the first listener closed");
+}
+
+/* `nish_tcp_accept` sets `TCP_NODELAY` on the connection itself whenever the
+   listener holds it. Linux copies the option to a connection whose handshake
+   finished after it was set, which would hide a missing set, so the listener
+   is given it here only once the client's blocking `connect` has completed
+   the handshake: the connection waiting in the queue then reads 0 until
+   accept sets it. */
+static void test_tcp_nodelay(void) {
+  char space[18];
+  nish_array peer = {18, 18, space};
+  const nish_str *loopback = nish_str_new("127.0.0.1", 9);
+  for (int late = 0; late < 2; late++) {
+    int32_t fd = nish_tcp_listen_flags(loopback, 0, 4, 0);
+    assert(fd >= 0);
+    int client = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in to = {0};
+    to.sin_family = AF_INET;
+    to.sin_port = htons((uint16_t)nish_net_local_port(fd));
+    to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    assert(client >= 0 && connect(client, (struct sockaddr *)&to, sizeof to) == 0);
+    int on = late;
+    assert(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof on) == 0);
+    int32_t conn = nish_tcp_accept(fd, &peer);
+    assert(conn >= 0);
+    on = -1;
+    socklen_t size = sizeof on;
+    assert(getsockopt(conn, IPPROTO_TCP, TCP_NODELAY, &on, &size) == 0);
+    expect_i64(on != 0, late, late ? "TCP_NODELAY set by accept from a listener given it after the handshake"
+                                   : "no TCP_NODELAY from a listener without it");
+    close(client);
+    expect_i64(nish_net_close(conn), 0, "the connection closed");
+    expect_i64(nish_net_close(fd), 0, "the listener closed");
+  }
 }
 
 /* The UDP half of runtime-net.c: a socket bound to 127.0.0.1 sends to itself,
@@ -1184,7 +1219,7 @@ static int32_t wipe_run(const char *how) {
 
 static int wipe_failed;
 
-/* WP34 N12's `spawn`, `kill` and `waitPid` (docs/security/runtime.md, RT-18):
+/* WP34 N12's `spawn`, `kill` and `waitPid` (docs/security/runtime.md, RT-19):
    `kill` refuses a group, every process and a signal outside the four, before
    any reaches `kill(2)`; `waitPid` refuses a group and an unknown flag; and a
    child started without waiting is signalled and reaped with spawnSync's
@@ -2072,6 +2107,7 @@ int main(void) {
   nish_free_arena();
   test_net();
   test_tcp_reuseport();
+  test_tcp_nodelay();
   test_udp();
   test_poll();
   nish_free_arena();

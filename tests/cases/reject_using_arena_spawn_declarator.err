@@ -1,0 +1,1 @@
+`s.spawn(size, ys, out, 0)` files a task on `s` inside the `using arena()` block at 13:5, and that scope is declared outside the block

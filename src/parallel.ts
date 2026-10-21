@@ -3738,10 +3738,13 @@ const isAtomicClass = (info: StructInfo | null): boolean => info !== null && inf
 const isAtomicType = (program: CheckedProgram, table: TypeTable, type: i32): boolean =>
   isAtomicClass(classLayoutOf(program, table, type))
 
+/** Whether `info` is a class `nish/threads` declares, an atomic included. */
+export const isThreadsStruct = (info: StructInfo): boolean => isAtomicClass(info) || isThreadsLayout(info)
+
 /** Whether `type` is a class `nish/threads` declares, an atomic included. */
 const isThreadsObjectType = (program: CheckedProgram, table: TypeTable, type: i32): boolean => {
   const info = classLayoutOf(program, table, type)
-  return info !== null && (isAtomicClass(info) || isThreadsLayout(info))
+  return info !== null && isThreadsStruct(info)
 }
 
 /** Whether `sig` is a method of an atomic, whose body the emitter writes. */

@@ -82,6 +82,14 @@ export const PANIC_FFI_NUL: i32 = 14
  * can see, and `string | null` is the declaration that has none.
  */
 export const PANIC_FFI_NULL: i32 = 15
+/**
+ * WP40 B1.2: a `u8[]` or `readonly u8[]` handed to a `declare function` is
+ * counted by the `u64` after its run, and a count larger than the array's
+ * length would let C read or write past it. Proven, with no check emitted, for
+ * a count spelled `toU64(b.length)` of the buffer itself
+ * (`foreignBufferCountProven` in `src/attributes.ts`).
+ */
+export const PANIC_FFI_LENGTH: i32 = 16
 
 /** The name a kind is written as in `--emit-panics`. */
 const panicKindName = (kind: i32): string => {
@@ -116,6 +124,8 @@ const panicKindName = (kind: i32): string => {
       return "ffi-nul"
     case PANIC_FFI_NULL:
       return "ffi-null"
+    case PANIC_FFI_LENGTH:
+      return "ffi-length"
     default:
       return "oom"
   }
@@ -782,6 +792,12 @@ const siteAdvice = (program: CheckedProgram, table: TypeTable, site: PanicSite):
       return (
         "a C function's `const char *` result may be NULL, which a `string` cannot hold: " +
         "declare the result `string | null` and narrow it with `!== null`, which needs no check"
+      )
+    case PANIC_FFI_LENGTH:
+      return (
+        "a C function reads or writes as many bytes of the buffer as the count says, so a count larger than " +
+        "the array's length panics before the call: pass `toU64(buf.length)` of the buffer itself, which " +
+        "needs no check"
       )
     default:
       // `oom` and `unchecked` are allowed (`isAllowed`) and never refused.

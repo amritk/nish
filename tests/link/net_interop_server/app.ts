@@ -29,6 +29,7 @@ import {
   WT_STREAM_END,
   WT_WRITABLE,
   WebTransport,
+  WebTransportConfig,
 } from "nish/net/webtransport";
 import { textAt } from "../net_http2/peer";
 import { range } from "../net_tls_record_common/bytes";
@@ -87,6 +88,7 @@ class InteropStream {
 /** The application over every slot of `server`. */
 export class InteropApp {
   server: Http3Server;
+  /** Each slot's `WebTransport`, bound by `wt` on the first ask for the slot: the slots asked for so far, 0 up. */
   wts: WebTransport[];
   files: InteropFiles;
   /** Each slot's stream entries, `perSlot` of them, by the QUIC stream slot. */
@@ -104,9 +106,9 @@ export class InteropApp {
   streamsEchoed: i32 = 0;
   sessions: i32 = 0;
 
-  constructor(server: Http3Server, wts: WebTransport[], files: InteropFiles) {
+  constructor(server: Http3Server, files: InteropFiles) {
     this.server = server;
-    this.wts = wts;
+    this.wts = [];
     this.files = files;
     this.perSlot = toI32(server.quic(toI32(0)).streams.slots.length);
     this.streams = [];
@@ -117,6 +119,20 @@ export class InteropApp {
     this.names = [httpFieldBytes("content-type"), httpFieldBytes("server")];
     this.textValues = [httpFieldBytes("text/plain"), httpFieldBytes("nish")];
     this.fileValues = [httpFieldBytes(files.type), httpFieldBytes("nish")];
+  }
+
+  /**
+   * `slot`'s `WebTransport`, bound here on the first ask for the slot, with
+   * every slot's before it: `Http3Server` builds a slot's connection on the
+   * first Initial accepted into it, slots 0 up, and `connection` would build
+   * one asked for before then, so binding them all at start-up would build
+   * every slot before the server listens.
+   */
+  wt(slot: i32): WebTransport {
+    while (toI32(this.wts.length) <= slot) {
+      this.wts.push(new WebTransport(new WebTransportConfig(), this.server.connection(toI32(this.wts.length))));
+    }
+    return this.wts[slot];
   }
 
   /** The entry of stream `id` in `slot`, or `null` for a stream the connection does not hold. */
@@ -153,7 +169,7 @@ export class InteropApp {
     if (quic.alpn === HQ_ALPN) {
       this.serveHq(slot, quic);
     } else {
-      this.serveH3(slot, this.wts[slot]);
+      this.serveH3(slot, this.wt(slot));
     }
   }
 
