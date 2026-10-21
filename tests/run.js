@@ -34,6 +34,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
+import https from "node:https"
 import dgram from "node:dgram"
 import net from "node:net"
 import os from "node:os"
@@ -1494,54 +1495,14 @@ if (!only || "net_tcp".includes(only)) {
 
   // Section GC keeps runtime-net.c out of a program that calls none of it. The
   // link is the speed profile's `--gc-sections` without its LTO, so no call is
-  // inlined away, and the linker itself names every section it drops; the echo,
-  // which calls six of the eight, is the control that shows a kept one is not
-  // named and that the flag reports at all.
-  if (process.platform !== "linux") {
-    skip(`net_tcp section GC: measured with GNU-style --gc-sections, and this host is ${process.platform}`)
-  } else {
+  // inlined away (`-dead_strip`, its Darwin counterpart, there), and `nm` names
+  // the functions the program still defines; the echo, which calls six of the
+  // eight, is the control that shows a kept one is still there and that the
+  // link drops anything at all.
+  {
     // The runtime objects are built once for both links, with the sections split
     // so that each function can be dropped on its own.
     const rt = runtimeObjects(["-ffunction-sections", "-fdata-sections"])
-    const collected = (name, ll) => {
-      const cc =
-        rt.error === null
-          ? spawnSync(
-              "clang",
-              [
-                "-Wno-override-module",
-                "-O2",
-                "-ffunction-sections",
-                "-fdata-sections",
-                "-Wl,--gc-sections",
-                "-Wl,--print-gc-sections",
-                ll,
-                ...rt.objects,
-                "-lm",
-                "-o",
-                path.join(netDir, `${name}.gc`),
-              ],
-              { cwd: root, encoding: "utf8" }
-            )
-          : { status: 1, stderr: rt.error }
-      const removed = [...String(cc.stderr).matchAll(/\.text\.(nish_(?:net|tcp|udp|poll|connect)_\w+)/g)].map(
-        (m) => m[1]
-      )
-      return { ok: cc.status === 0, removed, why: String(cc.stderr) }
-    }
-    const quietLl = path.join(netDir, "net_quiet.ll")
-    const quietTs = path.join(netDir, "net_quiet.ts")
-    fs.writeFileSync(
-      quietTs,
-      'export const main = (): number => {\n  console.log("no sockets");\n  return 0;\n};\n'
-    )
-    const compiled = spawnSync(NISH, [quietTs, "-o", quietLl], { cwd: root, encoding: "utf8" })
-    const none =
-      compiled.status === 0
-        ? collected("net_quiet", quietLl)
-        : { ok: false, removed: [], why: compiled.stderr }
-    // The echo's IR is the one `buildCaseIn` wrote above.
-    const echo = collected("net_tcp_echo", path.join(netDir, "net_tcp_echo.ll"))
     const exported = [
       "nish_net_address",
       "nish_net_local_port",
@@ -1570,6 +1531,56 @@ if (!only || "net_tcp".includes(only)) {
       "nish_net_read",
       "nish_net_write",
     ]
+    const collected = (name, ll) => {
+      const cc =
+        rt.error === null
+          ? spawnSync(
+              "clang",
+              [
+                "-Wno-override-module",
+                "-O2",
+                "-ffunction-sections",
+                "-fdata-sections",
+                process.platform === "darwin" ? "-Wl,-dead_strip" : "-Wl,--gc-sections",
+                ll,
+                ...rt.objects,
+                "-lm",
+                "-o",
+                path.join(netDir, `${name}.gc`),
+              ],
+              { cwd: root, encoding: "utf8" }
+            )
+          : { status: 1, stderr: rt.error }
+      // Mach-O prefixes every C symbol with an underscore.
+      const nm =
+        cc.status === 0
+          ? spawnSync(
+              ["llvm-nm", "llvm-nm-18"].find(has) ?? "llvm-nm",
+              ["-g", path.join(netDir, `${name}.gc`)],
+              { encoding: "utf8" }
+            )
+          : null
+      const defined = new Set(
+        [...String(nm?.stdout ?? "").matchAll(/ T _?(nish_(?:net|tcp|udp|poll|connect)_\w+)$/gm)].map(
+          (m) => m[1]
+        )
+      )
+      const removed = exported.filter((f) => !defined.has(f))
+      return { ok: cc.status === 0 && nm?.status === 0, removed, why: `${cc.stderr}${nm?.stderr ?? ""}` }
+    }
+    const quietLl = path.join(netDir, "net_quiet.ll")
+    const quietTs = path.join(netDir, "net_quiet.ts")
+    fs.writeFileSync(
+      quietTs,
+      'export const main = (): number => {\n  console.log("no sockets");\n  return 0;\n};\n'
+    )
+    const compiled = spawnSync(NISH, [quietTs, "-o", quietLl], { cwd: root, encoding: "utf8" })
+    const none =
+      compiled.status === 0
+        ? collected("net_quiet", quietLl)
+        : { ok: false, removed: [], why: compiled.stderr }
+    // The echo's IR is the one `buildCaseIn` wrote above.
+    const echo = collected("net_tcp_echo", path.join(netDir, "net_tcp_echo.ll"))
     check(
       "net_tcp: section GC drops every function of runtime-net.c from a program that calls none, and keeps the ones the echo calls",
       none.ok &&
@@ -1643,7 +1654,8 @@ if (!only || "net_tcp_connect".includes(only)) {
 // Linux has: Node counts the datagrams one segmented send becomes, and the
 // program reports what one GRO receive returned and the ECN bits that arrived.
 // Elsewhere those calls answer -95, which is the documented behaviour rather
-// than a gap, so the check says so and passes instead of skipping.
+// than a gap, so the check there requires each -95, and that none of those
+// calls put a datagram on the wire while a plain send still does.
 if (!only || "net_udp".includes(only)) {
   const netDir = path.join(buildDir, "net-udp")
   fs.rmSync(netDir, { recursive: true, force: true })
@@ -1714,14 +1726,32 @@ if (!only || "net_udp".includes(only)) {
   )
 
   if (process.platform !== "linux") {
-    console.log(
-      `      net_udp_offload does not apply on ${process.platform}: UDP_SEGMENT, UDP_GRO and the ECN control messages are Linux's, and the runtime answers -95 for them here (docs/LANGUAGE.md)`
-    )
-    check(
-      `net_udp_offload: not applicable on ${process.platform}, where GSO, GRO and ECN answer -95`,
-      true,
-      ""
-    )
+    // UDP_SEGMENT, UDP_GRO and the ECN control messages are Linux's, and the
+    // runtime answers -95 for them here (docs/LANGUAGE.md): the program prints
+    // each answer, and only its last, plain send reaches Node.
+    const offloadExe = buildCaseIn(netDir, "net_udp_offload")
+    if (offloadExe !== null) {
+      const socket = dgram.createSocket("udp4")
+      const arrived = []
+      socket.on("message", (message) => arrived.push(message))
+      await new Promise((resolve) => socket.bind(0, "127.0.0.1", resolve))
+      const r = await runWithPort(offloadExe, [String(socket.address().port)], async () => [])
+      // Darwin's loopback delivers asynchronously; give the plain datagram time to land.
+      for (let wait = 0; wait < 40 && arrived.length === 0; wait++) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      socket.close()
+      const answers =
+        "gso sent -95\ngro bind -95\necn 1 sent -95\necn 2 sent -95\necn 3 sent -95\nplain sent 16\n"
+      const pattern = Buffer.from(Array.from({ length: 16 }, (_, i) => i))
+      check(
+        `net_udp_offload: on ${process.platform} GSO, the GRO bind and every ECN mark answer -95 and send nothing, and a plain udpSendTo still arrives`,
+        r.code === 0 && r.out === answers && arrived.length === 1 && arrived[0].equals(pattern),
+        `${r.timedOut ? "timed out after 10 s\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+          `datagrams: ${JSON.stringify(arrived.map((m) => m.length))}\n` +
+          `stdout: ${JSON.stringify(r.out)}\nwant: ${JSON.stringify(answers)}\nstderr: ${r.err}`
+      )
+    }
   } else {
     const offloadExe = buildCaseIn(netDir, "net_udp_offload")
     if (offloadExe !== null) {
@@ -1789,8 +1819,8 @@ if (!only || "net_udp".includes(only)) {
 // datagram to itself with each ECN value over each family, `IP_TOS` and then
 // `IPV6_TCLASS`, and reads the mark back from `meta[1]`. A host whose `::1`
 // cannot be listened on cannot run any of that, so the check prints why and
-// passes, the way `net_udp_offload` does off Linux, rather than counting a skip:
-// the dual-stack path is not missing there, it is the documented fallback.
+// passes rather than counting a skip: the dual-stack path is not missing
+// there, it is the documented fallback.
 if (!only || "net_dual_stack".includes(only)) {
   const netDir = path.join(buildDir, "net-dual")
   fs.rmSync(netDir, { recursive: true, force: true })
@@ -1967,18 +1997,20 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
-// ---- `nish/net/tls-tcp`, against openssl s_client and curl (WP34 T2) -------------
+// ---- `nish/net/tls-tcp`, against openssl s_client and Node's TLS (WP34 T2) -------
 //
 // What the Nish client in `tests/link/net_tls_record_tcp` cannot say: that a
 // TLS 1.3 stack somebody else wrote completes a handshake with the carrier and
 // moves data both ways. The same program run as `serve 4` listens, prints its
 // port and serves four connections, one at a time: openssl s_client under each
 // of the three suites — the first sending `K`, a KeyUpdate asking for one
-// back, before its line — each echoed, and curl's GET, answered over the ALPN
-// protocol it negotiates. Every client must exit 0 with what it sent back, and
-// the server must print one line per connection with the suite, ALPN and SNI
-// it negotiated. Both tools are on CI's runners, so a missing one is a failure
-// here rather than a skip.
+// back, before its line — each echoed, and an HTTPS GET from Node, answered over
+// the ALPN protocol it negotiates. Every client must finish with what it sent
+// back, and the server must print one line per connection with the suite, ALPN
+// and SNI it negotiated. The GET is Node's rather than curl's because it pins
+// its suite, and macOS's curl, built on LibreSSL 3.3, has no `--tls13-ciphers`;
+// Node carries its own OpenSSL on every platform. openssl is on CI's runners,
+// so a missing one is a failure here rather than a skip.
 if (!only || "net_tls_tcp".includes(only)) {
   const tlsDir = path.join(buildDir, "net-tls")
   fs.rmSync(tlsDir, { recursive: true, force: true })
@@ -1995,16 +2027,11 @@ if (!only || "net_tls_tcp".includes(only)) {
     ],
     { cwd: root, encoding: "utf8" }
   )
-  // The two third-party clients, by name; `has` asks the PATH for each.
-  const [openssl, curl] = ["openssl", "curl"]
-  const tools = [openssl, curl].filter((tool) => !has(tool))
+  // The third-party client, by name; `has` asks the PATH for it.
+  const openssl = "openssl"
   if (
     check("net_tls_tcp: the server links", built.status === 0, String(built.stderr)) &&
-    check(
-      "net_tls_tcp: openssl and curl are on PATH (CI's runners have both)",
-      tools.length === 0,
-      `missing: ${tools.join(", ")}`
-    )
+    check("net_tls_tcp: openssl is on PATH (CI's runners have it)", has(openssl), "missing: openssl")
   ) {
     const server = spawn(exe, ["serve", "4"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] })
     let served = ""
@@ -2113,32 +2140,58 @@ if (!only || "net_tls_tcp".includes(only)) {
         `exit ${r.code} signal ${r.signal}, every step reached: ${r.reached}\n${r.all.slice(-1500)}`
       )
     }
-    const curled =
+    // The suite is pinned, not preferred: `ciphers` naming one TLS 1.3 suite is
+    // all the client offers, so a server that picked another would fail the
+    // handshake rather than pass the check. The server's certificate is
+    // self-signed, as it was under curl's `-k`.
+    /** @type {{ error: string, status: number, suite: string, alpn: string | false, body: string }} */
+    const got =
       port > 0
-        ? spawnSync(
-            curl,
-            [
-              "-sk",
-              "--tlsv1.3",
-              "--tls13-ciphers",
-              "TLS_AES_256_GCM_SHA384",
-              "--max-time",
-              "15",
-              "--resolve",
-              `localhost:${port}:127.0.0.1`,
-              `https://localhost:${port}/`,
-            ],
-            { encoding: "utf8" }
-          )
-        : { status: null, stdout: "", stderr: "no port" }
+        ? await new Promise((resolve) => {
+            const out = { error: "", status: 0, suite: "", alpn: false, body: "" }
+            const req = https.get(
+              {
+                host: "127.0.0.1",
+                port,
+                path: "/",
+                servername: "localhost",
+                rejectUnauthorized: false,
+                minVersion: "TLSv1.3",
+                maxVersion: "TLSv1.3",
+                ciphers: "TLS_AES_256_GCM_SHA384",
+                // biome-ignore lint/style/useNamingConvention: Node's own option name
+                ALPNProtocols: ["http/1.1"],
+                agent: false,
+                timeout: 15000,
+              },
+              (res) => {
+                out.status = res.statusCode ?? 0
+                out.suite = res.socket.getCipher().standardName
+                out.alpn = res.socket.alpnProtocol
+                res.setEncoding("utf8")
+                res.on("data", (chunk) => {
+                  out.body += chunk
+                })
+                res.on("end", () => resolve(out))
+                res.on("error", (e) => resolve({ ...out, error: e.message }))
+              }
+            )
+            req.on("timeout", () => req.destroy(new Error("timed out")))
+            req.on("error", (e) => resolve({ ...out, error: e.message }))
+          })
+        : { error: "no port", status: 0, suite: "", alpn: false, body: "" }
     check(
-      "net_tls_tcp: curl --tlsv1.3 GETs the page over the server, and exits 0",
-      curled.status === 0 && curled.stdout === "hello from nish/net/tls-tcp\n",
-      `exit ${curled.status}\nstdout: ${JSON.stringify(curled.stdout)}\nstderr: ${curled.stderr}`
+      "net_tls_tcp: an HTTPS GET pinned to TLS_AES_256_GCM_SHA384 negotiates that suite and http/1.1, and reads the page",
+      got.error === "" &&
+        got.status === 200 &&
+        got.suite === "TLS_AES_256_GCM_SHA384" &&
+        got.alpn === "http/1.1" &&
+        got.body === "hello from nish/net/tls-tcp\n",
+      JSON.stringify(got)
     )
     const ended = await serverDone
     // 4865, 4867 and 4866 are TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256
-    // and TLS_AES_256_GCM_SHA384; each s_client sent close_notify, and curl,
+    // and TLS_AES_256_GCM_SHA384; each s_client sent close_notify, and the GET,
     // which reads to the end of the answer, closed after the server did.
     const want =
       "closed: suite 4865 alpn - sni localhost sent 0 received -1 client-closed true\n" +
@@ -11354,7 +11407,9 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
 // prebuilt objects, deliberately: what they assert *is* that the two
 // translation units "compile warning-free together", so compiling them is the
 // check and a cached object would skip it. Two links is what that costs.
-if (!only) {
+// They run under `node tests/run.js runtime_test` on their own, which is how
+// CI's `runtime-net (macos-latest)` job runs runtime-net.c's Darwin branch.
+if (!only || "runtime_test".includes(only)) {
   const rt = spawnSync(
     "clang",
     [
@@ -11370,10 +11425,12 @@ if (!only) {
     ],
     { cwd: root }
   )
+  const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
     "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
-    rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
-    String(rt.stderr)
+    rtRun !== null && rtRun.status === 0,
+    String(rt.stderr) +
+      (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
   )
 
   // WP20 T0: the same file again with -DNISH_THREADS, which is the build where
@@ -11389,7 +11446,9 @@ if (!only) {
     rtThreadsRun !== null && rtThreadsRun.status === 0,
     String(rtThreads.stderr) + (rtThreadsRun ? String(rtThreadsRun.stdout) + String(rtThreadsRun.stderr) : "")
   )
+}
 
+if (!only) {
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
   const preludeLl = path.join(buildDir, "prelude.ll")
@@ -21807,17 +21866,31 @@ if (!only || "differential".includes(only)) {
 if (linkSpecimens.size > 0) {
   for (const [key, spec] of linkSpecimens) {
     const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`
+    // Both links write one path and are moved aside after: ld64's LC_UUID, and
+    // the ad-hoc signature's page hash over it, differ between two output paths
+    // (docs/wp10-ci.md, "What ld64 varies, measured"), so two names would give
+    // two binaries however equal the code. scripts/bootstrap.sh does the same.
     const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`)
-    const bySource = spawnSync("clang", [...spec.fromSource, "-o", `${stem}.src`], { cwd: root })
-    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", `${stem}.obj`], { cwd: root })
+    const [src, obj] = [`${stem}.src`, `${stem}.obj`]
+    const linkAt = (args, dest) => {
+      const r = spawnSync("clang", [...args, "-o", stem], { cwd: root })
+      if (r.status === 0) {
+        fs.renameSync(stem, dest)
+      }
+      return r
+    }
+    const bySource = linkAt(spec.fromSource, src)
+    const byObjects = linkAt(spec.fromObjects, obj)
     const linked = bySource.status === 0 && byObjects.status === 0
-    const same = linked && fs.readFileSync(`${stem}.src`).equals(fs.readFileSync(`${stem}.obj`))
+    const [a, b] = linked ? [fs.readFileSync(src), fs.readFileSync(obj)] : []
+    const same = linked && a.equals(b)
+    const firstDiff = linked && !same ? a.findIndex((byte, i) => byte !== b[i]) : -1
     check(
       `runtime objects: linking ${path.basename(spec.ll)} against ${label} gives the bytes the sources do`,
       same,
       linked
-        ? `${fs.statSync(`${stem}.src`).size} bytes from the sources, ` +
-            `${fs.statSync(`${stem}.obj`).size} from the objects; the two links were\n` +
+        ? `${a.length} bytes from the sources, ${b.length} from the objects, ` +
+            `first differing at offset ${firstDiff}; the two links were\n` +
             `  clang ${spec.fromSource.join(" ")}\n  clang ${spec.fromObjects.join(" ")}`
         : String(bySource.stderr) + String(byObjects.stderr)
     )

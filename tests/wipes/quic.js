@@ -57,8 +57,9 @@ export const wipeChecks = [
   // handshake traffic secrets it leaves to `TlsServer.wipeSecret`, which
   // `net_quic_wipes` reads back); and `topUpConnectionIds`, 51:
   // `deriveConnectionId`, 25, `quicConnResetTokenInto`, 25, and one wipe of
-  // its own. It was 136, when the 1-RTT keys came from `quicKeys` over the
-  // application secrets kept plain; they now come from the connection's
+  // its own; and `scheduleSkip`, 26, below. It was 151 before
+  // `scheduleSkip`, and 136 when the 1-RTT keys came from `quicKeys` over
+  // the application secrets kept plain; they now come from the connection's
   // `Secret` fields of each width, through `keysFrom`.
   //
   // The roots below pin the wipes the ones above do not reach.
@@ -67,15 +68,18 @@ export const wipeChecks = [
   // width, 1 each. It was 13: `updateWriteKeys` was 12. The stateless reset
   // token: `quicStatelessResetToken` 14, its HMAC output among them, and
   // `quicConnResetTokenInto` 25, the scratch HMAC's `wipe` and the tag;
-  // `deriveConnectionId` 25, the same for a connection ID. `begin` 2: both
+  // `deriveConnectionId` 25, the same for a connection ID. `scheduleSkip`
+  // 26: `deriveConnectionId`, 25, and the wipe of the scratch it draws the
+  // next skipped packet number from. `begin` 2: both
   // from the one wipe of the entropy once it is copied, which opt
   // duplicates. `establish` 29: the first ID's reset token once it is in the
   // transport parameters, and the ephemeral key once `TlsServer` has its own
   // copy, besides its derivation. `openPacket` 293: `openScoped`, 17
   // (`quicUnprotectHeader`, 3, `quicDecryptPayload`, 10, and
   // `receiveFrames`, 4), `establish`, 29, `applyPhase`, 22, the Initial
-  // level's `discard` on the first Handshake packet, 23, `afterTls`, 151, and
-  // `topUpConnectionIds`, 51. It was 268: `afterTls` was 136, 15 fewer,
+  // level's `discard` on the first Handshake packet, 23, `afterTls`, 177, and
+  // `topUpConnectionIds`, 51. It was 293 before `scheduleSkip`, 26 fewer
+  // through `afterTls`, and 268 before that: `afterTls` was 136, 15 fewer,
   // `applyPhase` 13, 9 fewer, and `establish` 28, without the wipe of the
   // ephemeral key.
   // `quicInitialSecretsInto` 1: the Initial secret once both directions' are
@@ -96,14 +100,15 @@ export const wipeChecks = [
       ["nish.QuicConnection.wipeAll", 88],
       ["nish.QuicConnection.release", 88],
       ["nish.QuicConnection.runClocks", 188],
-      ["nish.QuicConnection.afterTls", 151],
+      ["nish.QuicConnection.afterTls", 177],
       ["nish.QuicConnection.applyPhase", 22],
       ["nish.quicStatelessResetToken", 14],
       ["nish.quicConnResetTokenInto", 25],
       ["nish.QuicConnection.deriveConnectionId", 25],
+      ["nish.QuicConnection.scheduleSkip", 26],
       ["nish.QuicConnection.begin", 2],
       ["nish.QuicConnection.establish", 29],
-      ["nish.QuicConnection.openPacket", 293],
+      ["nish.QuicConnection.openPacket", 319],
       ["nish.quicInitialSecretsInto", 1],
       ["nish.QuicConnection.reset", 94],
     ],

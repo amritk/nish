@@ -5,8 +5,8 @@ const MS: i64 = 1000000
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_poll_create
-  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_address nish_net_close nish_net_local_port nish_net_shutdown nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_create nish_poll_modify nish_poll_remove nish_poll_wait nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to
-  stackSites=5 stackLocals=5
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_net_address nish_net_close nish_net_local_port nish_net_shutdown nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_create nish_poll_modify nish_poll_remove nish_poll_wait nish_print nish_str_concat nish_str_from_i32 nish_tcp_connect nish_tcp_listen nish_udp_bind nish_udp_send_to
+  stackSites=6 stackLocals=6
   local +0:9 loop: i32 (const)
   local +1:9 a: i32 (const)
   local +2:9 b: i32 (const)
@@ -17,3 +17,6 @@ function main(): i32 -> @nish_main [exported entry]
   local +12:9 waited: i64 (const)
   local +16:9 toA: u8[] (const)
   local +18:9 data: u8[] (const)
+  local +37:9 listener: i32 (const)
+  local +38:9 toL: u8[] (const)
+  local +40:9 c: i32 (const)
