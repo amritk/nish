@@ -118,8 +118,9 @@ same program in Rust and in Go:
 Each twin does the same work at the same size (its `bench:n` line follows
 `--n`) and must print the checksum the Nish `par` run prints, or the run fails.
 The map twins cut the array into one contiguous chunk per thread and run the
-first on the calling thread, which is how Nish's partitioner divides these
-kernels; the Rayon twins split as Rayon does. `par-regions`' scope twin starts
+first on the calling thread, as Nish's partitioner did before it cut up to
+eight pieces per thread for the threads to claim as they finish; the Rayon
+twins split as Rayon does. `par-regions`' scope twin starts
 its threads on every call, because a scope cannot outlive it; the Rayon twin
 and the Go twin are the ones with a pool to compare with Nish's workers. The
 histogram takes a lock per value in every language (`Mutex`,
@@ -486,6 +487,28 @@ run on macOS. So on any other host, or where valgrind is not on `PATH`, the chec
 is a counted skip that names the reason. CI's Linux job installs valgrind beside
 LLVM, so the check runs there on every push.
 
+## Crypto against other languages
+
+[`crypto/`](crypto/README.md) holds the crypto twins: each family, such as
+`crypto/hash/` (SHA-256, SHA-512, HMAC-SHA256, HKDF), is one program per
+language over the same inputs. The languages are Nish, OpenSSL's libcrypto in
+C, Go's standard library, RustCrypto and `node:crypto`, each with a portable
+column where the library can switch its assembly off. `crypto/run.mjs` checks
+that every program prints the family's pinned checksums and times them in
+interleaved rounds beside a copy of the Nish binary, the noise band. It writes
+the `crypto` block of docs/BENCHMARKS.md, which `bench/run.mjs` carries over
+when it rewrites the file.
+
+```bash
+node bench/crypto/run.mjs --validate               # what CI runs: every checksum, and the portable proof
+node bench/crypto/run.mjs --record                 # time every family; rewrite the crypto block
+node bench/crypto/run.mjs --only hash --out x.md   # time one family into a file of its own
+node bench/run.mjs --only crypto                   # --record, from this runner (no --no-rust or --no-go)
+```
+
+The two drivers below time Nish against itself only: they are baselines for
+one kernel's own work packages, not comparisons with other languages.
+
 ## AES-GCM
 
 `aes-gcm.ts` times the AEADs on the sizes a server seals and opens. AES-128-GCM
@@ -567,12 +590,25 @@ exact bytes, and to the `x-powered-by` header on `query`.
 round's order, it spawns the server pinned to CPU 0 and asks `GET /` every
 millisecond until one answers; it reports the median time from spawn to that
 first answer, the spread, and the RSS at that moment. It runs with the other
-scenarios when `--only` is not given, and needs no wrk. A Nish server's
-startup includes building its whole pool, so it moves with `--slots`. On the
-commit that adds it, on a shared four-vCPU VM and two rounds (eight starts a
-build), `nish` took 51.7 ms and 65.3 MB at 16,384 slots, with its byte-identical
-copy 3.8% away; at `--slots 1024` it took 7.4 ms and 5.8 MB (the copy 18.7%
-away), and Go's `net/http`, which allocates per connection, 9.6 ms and 7.4 MB.
+scenarios when `--only` is not given, and needs no wrk. On the commit that
+added the scenario, a Nish server built its whole pool before it listened, so
+its startup moved with `--slots`: 51.7 ms and 65.3 MB at 16,384 slots, 7.4 ms
+and 5.8 MB at 1,024, against 9.6 ms and 7.4 MB for Go's `net/http`, which
+allocates per connection. Now an `Http1Server` builds a slot's connection on
+the first accept into it, the way Go does, and its start-up is the read
+scratch and the slot bookkeeping. Five rounds, 20 starts a build, on a shared
+four-vCPU VM, the base being `std/net/http1-server.ts` before that change:
+
+| slots | base | base's copy | lazy slots | its copy |
+| ---: | ---: | ---: | ---: | ---: |
+| 16,384 | 36.2 ms, 65.3 MB | 36.2 ms, 65.3 MB | 4.7 ms, 2.6 MB | 4.6 ms, 2.6 MB |
+| 1,024 | 6.2 ms, 5.8 MB | | 5.3 ms, 1.8 MB | 5.0 ms, 1.8 MB |
+
+Under load, the peak RSS at 500 keep-alive connections fell from 65 MB to
+4 MB on `ping` and `query` and from 67 MB to 7 MB on `body`: the slots the
+connections never reached are never built. Throughput did not move outside the
+noise band. Over seven rounds, the two byte-identical copies differed by up to
+37% in a scenario, and the lazy build's medians fell inside that band.
 
 **Measured on the commit that adds this section.** x86-64, four-core Intel
 Xeon at 2.10 GHz (a virtual machine), Ubuntu clang 18.1.3, wrk 4.1.0, `-t3`.
@@ -713,8 +749,11 @@ With `Connection: close`, `nish` is above the next twin, uws, by 17.0% and
 20.8% (bands 6.7% and 3.1%). In those rows uws and bun also took the read
 errors of note 4.
 
-`nish`'s 65 MB is the 16,384-slot pool it builds at start-up (the table above
-gives 64 MB). It does not grow with the 8,000 idle connections. Every twin's
+`nish`'s 65 MB was the 16,384-slot pool it built at start-up when this table
+was measured (the table above gives 64 MB). It did not grow with the 8,000 idle
+connections. A pool now builds a slot's connection on the first accept into
+it, so the pool's share follows the connections it has held (see `startup`
+above). Every twin's
 peak grows with them, except nginx, which stays at 14 MB.
 
 **What was measured, header by header.** Every server sends a `Date` field:
@@ -739,6 +778,38 @@ full 10 s, rust-actix among them: it sets `keep_alive(KeepAlive::Os)` and a
 zero `client_request_timeout`. bun kept all 8,000 at 6.5 s, 8 s and 9.5 s, but
 only 755 at 10 s, when its default `idleTimeout` of 10 s closed the rest.
 Every timed round therefore ran with all 8,000 open on every server.
+
+**On `nish/net/router`.** `http1-server.ts` used to compare each request's
+target against its routes by hand. It now registers them on one
+`nish/net/router` `Router`, with the 342-route table of
+[`http-twins/`](http-twins/README.md#the-route-table), and switches on the
+index `match` returns. `old` is the hand-dispatching server at `main` before
+the change (142,960 bytes), and `nish` and `nish-copy` are two builds of the
+router server (158,192 bytes), byte-identical to a build of this file at
+`189685eb`. All are `--profile speed`, timed in the same interleaved rounds
+with `http.mjs --rounds 10 --duration 5` on 2026-10-20. The machine was the
+same kind of shared four-vCPU KVM VM, this time an Intel Xeon @ 2.10 GHz. The
+band is `nish-copy`'s median against `nish`'s:
+
+| scenario | old | nish | nish-copy | band |
+| --- | ---: | ---: | ---: | ---: |
+| plaintext keep-alive c=256 | 152,503<br>129,487–160,160 | 138,960<br>125,688–163,109 | 151,752<br>142,624–160,480 | +9.2% |
+| json keep-alive c=256 | 151,313<br>112,094–161,204 | 151,972<br>127,956–169,453 | 139,871<br>127,577–150,452 | −8.0% |
+| post-json keep-alive c=256 | 50,527<br>41,938–55,854 | 49,527<br>45,653–55,062 | 50,051<br>46,853–56,613 | +1.1% |
+| deep-route keep-alive c=256 | n/a | 140,405<br>110,905–157,388 | 128,958<br>93,781–152,177 | −8.2% |
+
+`nish` against `old` is −8.9% on plaintext and +0.4% on json, both inside
+those rows' bands of 9.2% and 8.0%: this run finds neither faster nor slower.
+On post-json it is −2.0%, outside that row's 1.1% band: by this run's own
+measure, the router server is 2.0% slower than the hand-dispatching one on
+post-json. The CPU columns lean the same way: user time per request is 1.52 µs
+against `old`'s 1.35 on plaintext and 9.86 against 9.50 on post-json, though
+`nish-copy`'s 1.49 and 9.82 show how far a byte-identical build moves. A
+five-round run at `c1507260` gave −2.9%, −5.7% and +4.7% on the same three
+rows, so the sign of a delta this size changes from run to run. The deep
+route, eight segments and three parameters deep in the table, runs at 140,405:
+101% of `nish`'s plaintext rate in the same rounds, with its answer built from
+the three parameters. `old` has no such route, so its cell is n/a.
 
 ## P-256
 
@@ -772,6 +843,46 @@ call, in microseconds and calls a second. `--check` runs all three at a 16th of
 the count, in one process, and fails if the checksum differs from the one
 pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
 must keep printing it.
+
+## TLS handshake
+
+`tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
+`tests/link/net_interop_server` run as `serve`, its own P-256 certificate,
+answering new connections on its h2 port. It is
+[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline)'s
+measure for the scalar inversion, where `bench/p256.mjs` times the signature on
+its own. It is not in this suite's tables. It needs `curl` with HTTP/2 and
+`taskset`.
+
+```bash
+npm run build
+node bench/tls-handshake.mjs --check                # three handshakes: TLS 1.3, X25519 and h2, and CPU read
+node bench/tls-handshake.mjs --runs 16              # this checkout's server against a copy of itself
+node bench/tls-handshake.mjs --baseline main        # also the server built from another rev, and its copy
+node bench/tls-handshake.mjs --json out.json        # every round's figures, for a script
+```
+
+The targets are the server built by this checkout, a byte-identical copy of
+it, and with `--baseline REV` the server built from REV in a worktree under
+`build/` by that tree's own `build/nish`, and a copy of that. A target is named
+by its commit's short hash, with `+dirty` when the checkout has uncommitted
+changes, and a `--baseline` that names a target already measured is refused,
+since rounds are pooled by name. Each round starts
+every target fresh, in an order rotated by one each round, pinned to CPU 0.
+After five warm-up handshakes it makes `--handshakes` new connections (600 by
+default), each one `curl --http2 --tlsv1.3 -k` process pinned to CPUs 1–3, so
+every handshake is a full one and none is resumed. Each must return the
+17-byte file over HTTP/2. The figure is the server's utime + stime over those
+connections, read from `/proc/<pid>/stat`, a handshake's share of it: the
+handshake, one request and its response. curl's own connect-to-handshake time
+is reported beside it but is mostly the client's.
+
+The report gives each target's minimum and median over the rounds, user and
+system CPU apart, and each copy against its own build: whatever separates a
+server from its copy is the machine, and a difference between builds reads as
+one only outside that band. It also prints the fewest clock ticks
+in any round (10 ms each) so their resolution can be read, and the handshake every server
+negotiated, which must be the same for all of them or the run stops.
 
 ## Pool memory
 

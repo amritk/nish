@@ -103,6 +103,14 @@ under any WASI host.
 `.node` addon costs about 30 ns and a call into wasm about 2 ns before any work
 is done, so pass whole buffers and let the loop run on the Nish side.
 
+**Do not name an exported function `memory`:** the module `build.sh
+--profile wasm` links exports its linear memory under that name, so a wasm
+`--target`, `--profile wasi` or `--emit-dts` compile refuses the function
+(NL3038), and `build.sh` refuses IR that defines one with the `wasm` or `wasi`
+profile. The wasi module does not export the function, but the name is
+reserved there too, so a program that builds for wasi also builds as a
+freestanding wasm module.
+
 ## C
 
 `--emit-header` writes a prototype for each exported function. It includes
@@ -257,9 +265,29 @@ The count is paired by position, so it is your word, not the compiler's proof.
 `fwrite(buf: readonly u8[], n: u64, one: u64, f: CPtr)` and call it with `1`
 as the third argument, so the one count is the whole size. A buffer with no
 `u64` after it, a count of another type, an `i32[]`, a `u8[] | null` and a
-`u8[]` result are each refused. For now a *call* to a function that takes a
-buffer is refused too, with NL2554: the declaration is checked, and the call
-waits for the release that passes the bytes and checks the count against them.
+`u8[]` result are each refused.
+
+A call passes the array's bytes, and checks the count against each buffer
+first: a count larger than the array stops the program before C runs, with
+`` `write`: argument 3 (n) counts more bytes than argument 2 (buf) holds ``
+and exit 1. Pass `toU64(buf.length)` of the buffer itself and the compiler
+proves the count, so the call carries no check and compiles under
+`--deny-panics`:
+
+```ts nish:ok
+declare function write(fd: i32, buf: readonly u8[], n: u64): i64;
+
+export const main = (): i32 => {
+  const bytes: u8[] = [104, 105, 10];
+  write(1, bytes, toU64(bytes.length));
+  return 0;
+};
+```
+
+C borrows the bytes for the length of the call, and may write a `u8[]` (not a
+`readonly u8[]`), so `read(fd, buf, toU64(buf.length))` fills `buf` in place.
+A task a scope spawns may not call such a function: C's body is unseen, so the
+call could write memory the parent is reading.
 
 The one exception is `CPtr`, an address that C owns. A declared function can
 take or return one, a local can hold one, and nothing else can: no field, no

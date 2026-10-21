@@ -163,8 +163,29 @@ not be sent are refused.
 kept for what the connection writes itself; a pool's slots borrow it from one
 `Http1OutputPool` while they write, below), a WebSocket message
 (`maxMessage`, 1 MiB) and the idle timeout (`idleTimeout`, 60 s, read by
-`expire`). The slots are the pool's size. A cap out of range panics when the
-connection is made (`net_http1_server_bad_config`). The input the connection
+`expire`). The slots are the pool's size. An `Http1Server` builds a slot's
+connection on the first accept into it and keeps it, so it never holds more
+than `size` connections, each within the caps above, and holds none it has
+not needed: a pool of 16,384 takes 16,688 bytes before its first connection
+(`HTTP1_SERVER_START_BYTES`, "net_http1_server: a 16,384-slot Http1Server
+takes at most HTTP1_SERVER_START_BYTES before its first connection"), and the
+connection past `size` busy slots is shed with `H1_POOL_FULL` without one
+being built. A slot never accepted into answers like a closed one
+(`net_http1_server`). `Http1TlsServer` does the same over a `TlsTcpServer`
+that does it too: a slot's `Http1Connection`, `TlsRecordServer` and server
+random are built on the first accept into it, so a pool of 16,384 takes
+58,296 bytes before its first connection (`HTTP1_TLS_SERVER_START_BYTES`, the
+templated "`${unit}: a 16,384-slot ${name} takes at most ${ceilingName}
+before its first connection`" run for `Http1TlsServer`), and the
+handshake is restarted with real randomness and the key on every accept, as
+it was (TLS record, "Slots built on the first accept"). A slot never built
+reads as a free one there too: its `connection`, `alpn` and `refused` answer a
+connection no slot holds, with no ALPN and not refused, never slot 0's
+("TLS: while slot 0 is open, a slot never built reads as a free one: not held,
+no descriptor, no ALPN, not refused, not slot 0's connection"). `readable`,
+`next` and `flush` act only on a slot `live` names, one `tls` holds with its
+connection built, so a slot accepted on `tls` directly reads as free. A cap out of range
+panics when the connection is made (`net_http1_server_bad_config`). The input the connection
 buffers is the largest of `chunkSize`, a header line and a request line, so
 any head the caps allow can be read.
 

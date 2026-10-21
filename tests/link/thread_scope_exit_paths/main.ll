@@ -205,115 +205,170 @@ for.cond:
   br i1 %11, label %for.body, label %for.end
 
 for.body:
-  %12 = call %struct.ThreadScope* @nish.scope()
-  store %struct.ThreadScope* %12, %struct.ThreadScope** %s.addr, align 8
-  %13 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
-  %14 = bitcast %struct.ThreadScope* %13 to i8*
-  %15 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
-  %16 = load i32, i32* %i.addr, align 4
-  %17 = add nsw i32 10, %16
-  %18 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %19 = load i32, i32* %i.addr, align 4
-  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %15, i32 %17, %struct.nish_array* %18, i32 %19)
+  %12 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %13 = load i8*, i8** %12, align 8
+  %14 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %15 = load i64, i64* %14, align 8
+  %16 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %16, %struct.ThreadScope** %s.addr, align 8
+  %17 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %18 = bitcast %struct.ThreadScope* %17 to i8*
+  %19 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %20 = load i32, i32* %i.addr, align 4
-  %21 = icmp eq i32 %20, 0
-  br i1 %21, label %if.then, label %if.end
+  %21 = add nsw i32 10, %20
+  %22 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %23 = load i32, i32* %i.addr, align 4
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %19, i32 %21, %struct.nish_array* %22, i32 %23)
+  %24 = load i32, i32* %i.addr, align 4
+  %25 = icmp eq i32 %24, 0
+  br i1 %25, label %if.then, label %if.end
 
 if.then:
-  call void @nish_scope_join(i8* %14)
+  call void @nish_scope_join(i8* %18)
+  %26 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %27 = load i8*, i8** %26, align 8
+  %28 = icmp eq i8* %27, %13
+  br i1 %28, label %pass.rewind, label %pass.free
+
+pass.rewind:
+  %29 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %15, i64* %29, align 8
+  br label %pass.done
+
+pass.free:
+  %30 = ptrtoint i8* %13 to i64
+  %31 = add i64 %30, %15
+  call void @nish_arena_release(i64 %31)
+  br label %pass.done
+
+pass.done:
   br label %for.inc
 
 if.end:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = icmp eq i32 %22, 1
-  br i1 %23, label %if.then.1, label %if.end.1
+  %32 = load i32, i32* %i.addr, align 4
+  %33 = icmp eq i32 %32, 1
+  br i1 %33, label %if.then.1, label %if.end.1
 
 if.then.1:
-  call void @nish_scope_join(i8* %14)
+  call void @nish_scope_join(i8* %18)
+  %34 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %35 = load i8*, i8** %34, align 8
+  %36 = icmp eq i8* %35, %13
+  br i1 %36, label %pass.rewind.1, label %pass.free.1
+
+pass.rewind.1:
+  %37 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %15, i64* %37, align 8
+  br label %pass.done.1
+
+pass.free.1:
+  %38 = ptrtoint i8* %13 to i64
+  %39 = add i64 %38, %15
+  call void @nish_arena_release(i64 %39)
+  br label %pass.done.1
+
+pass.done.1:
   br label %for.end
 
 if.end.1:
-  call void @nish_scope_join(i8* %14)
+  call void @nish_scope_join(i8* %18)
+  %40 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %41 = load i8*, i8** %40, align 8
+  %42 = icmp eq i8* %41, %13
+  br i1 %42, label %pass.rewind.2, label %pass.free.2
+
+pass.rewind.2:
+  %43 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %15, i64* %43, align 8
+  br label %pass.done.2
+
+pass.free.2:
+  %44 = ptrtoint i8* %13 to i64
+  %45 = add i64 %44, %15
+  call void @nish_arena_release(i64 %45)
+  br label %pass.done.2
+
+pass.done.2:
   br label %for.inc
 
 for.inc:
-  %24 = load i32, i32* %i.addr, align 4
-  %25 = add nsw i32 %24, 1
-  store i32 %25, i32* %i.addr, align 4
+  %46 = load i32, i32* %i.addr, align 4
+  %47 = add nsw i32 %46, 1
+  store i32 %47, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %26 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0
-  %28 = load i64, i64* %27, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %29 = icmp ult i64 0, %28
-  br i1 %29, label %bounds.ok, label %bounds.fail
+  %48 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %49 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %48, i64 0, i32 0
+  %50 = load i64, i64* %49, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %51 = icmp ult i64 0, %50
+  br i1 %51, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %28)
+  call void @nish_panic_index(i64 0, i64 %50)
   unreachable
 
 bounds.ok:
-  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 2
-  %31 = load i8*, i8** %30, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %32 = bitcast i8* %31 to i32*
-  %33 = getelementptr inbounds i32, i32* %32, i64 0
-  %34 = load i32, i32* %33, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %35 = call i8* @nish_str_from_i32(i32 %34)
-  %36 = call i8* @nish_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %37 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %38 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 0
-  %39 = load i64, i64* %38, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %40 = icmp ult i64 1, %39
-  br i1 %40, label %bounds.ok.1, label %bounds.fail.1
+  %52 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %48, i64 0, i32 2
+  %53 = load i8*, i8** %52, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %54 = bitcast i8* %53 to i32*
+  %55 = getelementptr inbounds i32, i32* %54, i64 0
+  %56 = load i32, i32* %55, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %57 = call i8* @nish_str_from_i32(i32 %56)
+  %58 = call i8* @nish_str_concat(i8* %57, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %59 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
+  %61 = load i64, i64* %60, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %62 = icmp ult i64 1, %61
+  br i1 %62, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @nish_panic_index(i64 1, i64 %39)
+  call void @nish_panic_index(i64 1, i64 %61)
   unreachable
 
 bounds.ok.1:
-  %41 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %37, i64 0, i32 2
-  %42 = load i8*, i8** %41, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %43 = bitcast i8* %42 to i32*
-  %44 = getelementptr inbounds i32, i32* %43, i64 1
-  %45 = load i32, i32* %44, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %46 = call i8* @nish_str_from_i32(i32 %45)
-  %47 = call i8* @nish_str_concat(i8* %36, i8* %46)
-  %48 = call i8* @nish_str_concat(i8* %47, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %49 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
-  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %49, i64 0, i32 0
-  %51 = load i64, i64* %50, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %52 = icmp ult i64 2, %51
-  br i1 %52, label %bounds.ok.2, label %bounds.fail.2
+  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 2
+  %64 = load i8*, i8** %63, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %65 = bitcast i8* %64 to i32*
+  %66 = getelementptr inbounds i32, i32* %65, i64 1
+  %67 = load i32, i32* %66, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %68 = call i8* @nish_str_from_i32(i32 %67)
+  %69 = call i8* @nish_str_concat(i8* %58, i8* %68)
+  %70 = call i8* @nish_str_concat(i8* %69, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %71 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %72 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %71, i64 0, i32 0
+  %73 = load i64, i64* %72, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %74 = icmp ult i64 2, %73
+  br i1 %74, label %bounds.ok.2, label %bounds.fail.2
 
 bounds.fail.2:
-  call void @nish_panic_index(i64 2, i64 %51)
+  call void @nish_panic_index(i64 2, i64 %73)
   unreachable
 
 bounds.ok.2:
-  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %49, i64 0, i32 2
-  %54 = load i8*, i8** %53, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %55 = bitcast i8* %54 to i32*
-  %56 = getelementptr inbounds i32, i32* %55, i64 2
-  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %58 = call i8* @nish_str_from_i32(i32 %57)
-  %59 = call i8* @nish_str_concat(i8* %48, i8* %58)
-  call void @nish_print(i8* %59)
-  %60 = call i8* @nish_alloc_struct(i64 24)
-  %61 = bitcast i8* %60 to %struct.nish_array*
-  %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %61, i64 0, i32 0
-  store i64 2, i64* %62, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %61, i64 0, i32 1
-  store i64 2, i64* %63, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %64 = call i8* @nish_alloc_struct(i64 8)
-  %65 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %61, i64 0, i32 2
-  store i8* %64, i8** %65, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %66 = bitcast i8* %64 to i32*
-  %67 = getelementptr inbounds i32, i32* %66, i64 0
-  store i32 0, i32* %67, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %68 = getelementptr inbounds i32, i32* %66, i64 1
-  store i32 0, i32* %68, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  store %struct.nish_array* %61, %struct.nish_array** %pair.addr, align 8
+  %75 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %71, i64 0, i32 2
+  %76 = load i8*, i8** %75, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %77 = bitcast i8* %76 to i32*
+  %78 = getelementptr inbounds i32, i32* %77, i64 2
+  %79 = load i32, i32* %78, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %80 = call i8* @nish_str_from_i32(i32 %79)
+  %81 = call i8* @nish_str_concat(i8* %70, i8* %80)
+  call void @nish_print(i8* %81)
+  %82 = call i8* @nish_alloc_struct(i64 24)
+  %83 = bitcast i8* %82 to %struct.nish_array*
+  %84 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %83, i64 0, i32 0
+  store i64 2, i64* %84, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %85 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %83, i64 0, i32 1
+  store i64 2, i64* %85, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %86 = call i8* @nish_alloc_struct(i64 8)
+  %87 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %83, i64 0, i32 2
+  store i8* %86, i8** %87, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %88 = bitcast i8* %86 to i32*
+  %89 = getelementptr inbounds i32, i32* %88, i64 0
+  store i32 0, i32* %89, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %90 = getelementptr inbounds i32, i32* %88, i64 1
+  store i32 0, i32* %90, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  store %struct.nish_array* %83, %struct.nish_array** %pair.addr, align 8
   store i32 0, i32* %n.addr, align 4
   br label %while.cond
 
@@ -321,34 +376,38 @@ while.cond:
   br i1 true, label %while.body, label %while.end
 
 while.body:
-  %69 = call %struct.ThreadScope* @nish.scope()
-  store %struct.ThreadScope* %69, %struct.ThreadScope** %s.addr.1, align 8
-  %70 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.1, align 8
-  %71 = bitcast %struct.ThreadScope* %70 to i8*
+  %91 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %92 = load i8*, i8** %91, align 8
+  %93 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %94 = load i64, i64* %93, align 8
+  %95 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %95, %struct.ThreadScope** %s.addr.1, align 8
+  %96 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.1, align 8
+  %97 = bitcast %struct.ThreadScope* %96 to i8*
   store i32 0, i32* %j.addr, align 4
   br label %for.cond.1
 
 for.cond.1:
-  %72 = load i32, i32* %j.addr, align 4
-  %73 = icmp slt i32 %72, 2
-  br i1 %73, label %for.body.1, label %for.end.1
+  %98 = load i32, i32* %j.addr, align 4
+  %99 = icmp slt i32 %98, 2
+  br i1 %99, label %for.body.1, label %for.end.1
 
 for.body.1:
-  %74 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.1, align 8
-  %75 = load i32, i32* %j.addr, align 4
-  %76 = load i32, i32* %n.addr, align 4
-  %77 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %75, i32 %76)
-  %78 = extractvalue { i32, i1 } %77, 0
-  %79 = extractvalue { i32, i1 } %77, 1
-  br i1 %79, label %ovf.fail, label %ovf.ok
+  %100 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr.1, align 8
+  %101 = load i32, i32* %j.addr, align 4
+  %102 = load i32, i32* %n.addr, align 4
+  %103 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %101, i32 %102)
+  %104 = extractvalue { i32, i1 } %103, 0
+  %105 = extractvalue { i32, i1 } %103, 1
+  br i1 %105, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  %80 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
-  %81 = load i32, i32* %j.addr, align 4
-  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %74, i32 %78, %struct.nish_array* %80, i32 %81)
-  %82 = load i32, i32* %j.addr, align 4
-  %83 = icmp eq i32 %82, 0
-  br i1 %83, label %if.then.2, label %if.end.2
+  %106 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
+  %107 = load i32, i32* %j.addr, align 4
+  call void @nish.ThreadScope.spawn$i32$i32$fn.6.triple(%struct.ThreadScope* %100, i32 %104, %struct.nish_array* %106, i32 %107)
+  %108 = load i32, i32* %j.addr, align 4
+  %109 = icmp eq i32 %108, 0
+  br i1 %109, label %if.then.2, label %if.end.2
 
 if.then.2:
   br label %for.inc.1
@@ -357,76 +416,110 @@ if.end.2:
   br label %for.inc.1
 
 for.inc.1:
-  %84 = load i32, i32* %j.addr, align 4
-  %85 = add nsw i32 %84, 1
-  store i32 %85, i32* %j.addr, align 4
+  %110 = load i32, i32* %j.addr, align 4
+  %111 = add nsw i32 %110, 1
+  store i32 %111, i32* %j.addr, align 4
   br label %for.cond.1
 
 for.end.1:
-  %86 = load i32, i32* %n.addr, align 4
-  %87 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %86, i32 1)
-  %88 = extractvalue { i32, i1 } %87, 0
-  %89 = extractvalue { i32, i1 } %87, 1
-  br i1 %89, label %ovf.fail, label %ovf.ok.1
+  %112 = load i32, i32* %n.addr, align 4
+  %113 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %112, i32 1)
+  %114 = extractvalue { i32, i1 } %113, 0
+  %115 = extractvalue { i32, i1 } %113, 1
+  br i1 %115, label %ovf.fail, label %ovf.ok.1
 
 ovf.ok.1:
-  store i32 %88, i32* %n.addr, align 4
-  %90 = load i32, i32* %n.addr, align 4
-  %91 = icmp eq i32 %90, 2
-  br i1 %91, label %if.then.3, label %if.end.3
+  store i32 %114, i32* %n.addr, align 4
+  %116 = load i32, i32* %n.addr, align 4
+  %117 = icmp eq i32 %116, 2
+  br i1 %117, label %if.then.3, label %if.end.3
 
 if.then.3:
-  call void @nish_scope_join(i8* %71)
+  call void @nish_scope_join(i8* %97)
+  %118 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %119 = load i8*, i8** %118, align 8
+  %120 = icmp eq i8* %119, %92
+  br i1 %120, label %pass.rewind.3, label %pass.free.3
+
+pass.rewind.3:
+  %121 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %94, i64* %121, align 8
+  br label %pass.done.3
+
+pass.free.3:
+  %122 = ptrtoint i8* %92 to i64
+  %123 = add i64 %122, %94
+  call void @nish_arena_release(i64 %123)
+  br label %pass.done.3
+
+pass.done.3:
   br label %while.end
 
 if.end.3:
-  call void @nish_scope_join(i8* %71)
+  call void @nish_scope_join(i8* %97)
+  %124 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %125 = load i8*, i8** %124, align 8
+  %126 = icmp eq i8* %125, %92
+  br i1 %126, label %pass.rewind.4, label %pass.free.4
+
+pass.rewind.4:
+  %127 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %94, i64* %127, align 8
+  br label %pass.done.4
+
+pass.free.4:
+  %128 = ptrtoint i8* %92 to i64
+  %129 = add i64 %128, %94
+  call void @nish_arena_release(i64 %129)
+  br label %pass.done.4
+
+pass.done.4:
   br label %while.cond
 
 while.end:
-  %92 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
-  %93 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %92, i64 0, i32 0
-  %94 = load i64, i64* %93, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %95 = icmp ult i64 0, %94
-  br i1 %95, label %bounds.ok.3, label %bounds.fail.3
+  %130 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
+  %131 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %130, i64 0, i32 0
+  %132 = load i64, i64* %131, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %133 = icmp ult i64 0, %132
+  br i1 %133, label %bounds.ok.3, label %bounds.fail.3
 
 bounds.fail.3:
-  call void @nish_panic_index(i64 0, i64 %94)
+  call void @nish_panic_index(i64 0, i64 %132)
   unreachable
 
 bounds.ok.3:
-  %96 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %92, i64 0, i32 2
-  %97 = load i8*, i8** %96, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %98 = bitcast i8* %97 to i32*
-  %99 = getelementptr inbounds i32, i32* %98, i64 0
-  %100 = load i32, i32* %99, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %101 = call i8* @nish_str_from_i32(i32 %100)
-  %102 = call i8* @nish_str_concat(i8* %101, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %103 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
-  %104 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %103, i64 0, i32 0
-  %105 = load i64, i64* %104, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %106 = icmp ult i64 1, %105
-  br i1 %106, label %bounds.ok.4, label %bounds.fail.4
+  %134 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %130, i64 0, i32 2
+  %135 = load i8*, i8** %134, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %136 = bitcast i8* %135 to i32*
+  %137 = getelementptr inbounds i32, i32* %136, i64 0
+  %138 = load i32, i32* %137, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %139 = call i8* @nish_str_from_i32(i32 %138)
+  %140 = call i8* @nish_str_concat(i8* %139, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %141 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
+  %142 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %141, i64 0, i32 0
+  %143 = load i64, i64* %142, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %144 = icmp ult i64 1, %143
+  br i1 %144, label %bounds.ok.4, label %bounds.fail.4
 
 bounds.fail.4:
-  call void @nish_panic_index(i64 1, i64 %105)
+  call void @nish_panic_index(i64 1, i64 %143)
   unreachable
 
 bounds.ok.4:
-  %107 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %103, i64 0, i32 2
-  %108 = load i8*, i8** %107, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %109 = bitcast i8* %108 to i32*
-  %110 = getelementptr inbounds i32, i32* %109, i64 1
-  %111 = load i32, i32* %110, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %112 = call i8* @nish_str_from_i32(i32 %111)
-  %113 = call i8* @nish_str_concat(i8* %102, i8* %112)
-  call void @nish_print(i8* %113)
-  %114 = call i32 @firstTriple(i32 5)
-  %115 = call i8* @nish_str_from_i32(i32 %114)
-  call void @nish_print(i8* %115)
-  %116 = call i32 @firstTriple(i32 0)
-  %117 = call i8* @nish_str_from_i32(i32 %116)
-  call void @nish_print(i8* %117)
+  %145 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %141, i64 0, i32 2
+  %146 = load i8*, i8** %145, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %147 = bitcast i8* %146 to i32*
+  %148 = getelementptr inbounds i32, i32* %147, i64 1
+  %149 = load i32, i32* %148, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %150 = call i8* @nish_str_from_i32(i32 %149)
+  %151 = call i8* @nish_str_concat(i8* %140, i8* %150)
+  call void @nish_print(i8* %151)
+  %152 = call i32 @firstTriple(i32 5)
+  %153 = call i8* @nish_str_from_i32(i32 %152)
+  call void @nish_print(i8* %153)
+  %154 = call i32 @firstTriple(i32 0)
+  %155 = call i8* @nish_str_from_i32(i32 %154)
+  call void @nish_print(i8* %155)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

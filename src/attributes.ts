@@ -166,10 +166,11 @@ import {
   RuntimeTable,
 } from "./runtime"
 import { Local, STORAGE_LOCAL, STORAGE_PARAM, sourceLocal } from "./symbols"
-import { checksOverflow } from "./bounds"
+import { checksOverflow, isBuiltinConversion } from "./bounds"
 import { isResultConstructorCall, resultMethodName } from "./emit-result"
 import { isResultConstructor, resultLayout } from "./result"
 import {
+  isForeignBuffer,
   isInteger,
   K_ARRAY,
   K_NULLABLE,
@@ -196,6 +197,7 @@ import {
   PANIC_CALL,
   PANIC_DIVIDE,
   PANIC_EXPECT,
+  PANIC_FFI_LENGTH,
   PANIC_FFI_NUL,
   PANIC_FFI_NULL,
   PANIC_INDEX,
@@ -224,6 +226,9 @@ export class AnalysisUnit {
 /** What a function does with one pointer-typed parameter: a struct (`this` included) or an array. */
 export class PointerParamFacts {
   name: string
+  /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
+  passedToCallees: string[]
+  passedToIndices: i32[]
   /** `sizeof` of the pointee, for `dereferenceable`; 0 when it is not emitted (arrays). */
   size: i32
   /** The alignment the pointer is guaranteed to have; see `pointerAlign`. */
@@ -260,9 +265,13 @@ export class PointerParamFacts {
    * the caller's own handed here may hold anything (`DIRT_CALL`).
    */
   polluted: boolean
-  /** Calls the pointer is passed to, by callee symbol and parameter index (0 is `this`). */
-  passedToCallees: string[]
-  passedToIndices: i32[]
+  /**
+   * A `string[]` parameter none of whose elements the function keeps past the
+   * call or hands back (`freeElementParams` in `src/escape.ts`), settled with
+   * the fresh-element fixpoint (`markFreshElements`). A caller's listing
+   * passed here is not handed on, so its frame may still release it.
+   */
+  elementsFree: boolean
 
   constructor(name: string, size: i32, align: i32) {
     this.name = name
@@ -277,6 +286,7 @@ export class PointerParamFacts {
     this.polluted = false
     this.passedToCallees = []
     this.passedToIndices = []
+    this.elementsFree = false
   }
 }
 
@@ -2873,6 +2883,28 @@ class FactCollector {
       }
       i = i + 1
     }
+    // WP40 B1.2: C writes into a `u8[]` it is handed, which is a store into
+    // the array's own slots here, and a count that may be larger than a
+    // buffer's length is held against it before the call
+    // (`emitForeignBuffers`).
+    let b = 0
+    while (b < args.length && b < callee.paramTypes.length) {
+      const buffer = args[b]
+      if (isForeignBuffer(this.table, callee.paramTypes[b])) {
+        if (!this.table.isReadonlyArray(callee.paramTypes[b])) {
+          this.noteSlotWrite(call, buffer)
+        }
+        const count = foreignBufferCount(this.table, callee, b)
+        const proven = foreignBufferCountProven(this.unit.program, this.table, call, b, count, this.known)
+        if (!proven) {
+          const tail: string[] = []
+          panicTailCallees(tail)
+          this.addCallees(tail)
+        }
+        this.noteSite(buffer, PANIC_FFI_LENGTH, proven, "")
+      }
+      b = b + 1
+    }
     // WP27 S3.2: a `string` result is copied out of C, and a `NULL` one that
     // is not declared `string | null` panics (`emitForeignStringResult`).
     if (this.table.stripNull(callee.returnType) === T_STRING) {
@@ -3555,11 +3587,26 @@ const collectFacts = (
   // the defaults would mark every caller of a C function `readnone willreturn`,
   // which miscompiles rather than pessimises. So a foreign function asserts the
   // worst of everything it cannot be seen to avoid, and the fixpoint carries
-  // that outward exactly as it carries any other impurity. `escaping` and the
-  // pointer facts stay empty: S1's boundary was scalars only, and the one
-  // pointer S3.1 lets in, a `string` argument, is borrowed for the call and
-  // never kept, by the rule `docs/wp27-ffi.md` §8b decides rather than proves.
+  // that outward exactly as it carries any other impurity. `escaping` stays
+  // empty: a `string` argument (S3.1) and a `u8[]` or `readonly u8[]` one
+  // (WP40 B1.2) are borrowed for the call and never kept, by the rule
+  // `docs/wp27-ffi.md` §8b decides rather than proves. A buffer is a pointer
+  // parameter, so the borrow is written as its facts: `captured` stays
+  // `false`, and a `u8[]` one is `writesThrough`, because C fills it. The
+  // call site records the same write on the caller's side (`noteSlotWrite`
+  // in `addCallee`); a `readonly u8[]` one is neither.
   if (sig.foreign()) {
+    let at = 0
+    let p = 0
+    while (p < sig.paramTypes.length) {
+      if (isPointerParam(table, sig.paramTypes[p])) {
+        if (isForeignBuffer(table, sig.paramTypes[p]) && !table.isReadonlyArray(sig.paramTypes[p])) {
+          facts.pointerParams[at].writesThrough = true
+        }
+        at = at + 1
+      }
+      p = p + 1
+    }
     facts.effect = EFFECT_WRITE
     facts.sharedWrite = true // no site and no callee to name: the body is C
     facts.writesPastParams = true
@@ -3893,7 +3940,8 @@ const analyzeInstanceEscapes = (
 
 /**
  * Record in `known` each function whose result now says it returns fresh
- * elements or fills a parameter; answer the new ones.
+ * elements, fills a parameter or keeps no element of one; answer the new
+ * ones.
  */
 const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: FactsTable): StringSet => {
   const added = new StringSet()
@@ -3907,6 +3955,15 @@ const markFreshElements = (escapes: EscapeSet, sigs: FunctionSig[], known: Facts
     if (result !== null && f !== null && result.fillsParam >= 0 && f.fillsParam < 0) {
       f.fillsParam = result.fillsParam
       added.add(sig.name)
+    }
+    if (result !== null && f !== null) {
+      for (const name of result.freeElementParams) {
+        const pointer = f.pointerParam(name)
+        if (pointer !== null && !pointer.elementsFree) {
+          pointer.elementsFree = true
+          added.add(sig.name)
+        }
+      }
     }
   }
   return added
@@ -5248,7 +5305,7 @@ const isCountedLoop = (
     if (program.nodeCallees[loop.id] !== null) {
       return false
     }
-    return !bodyMayExtend(unit, table, loop.children[2], known)
+    return !bodyMayExtend(unit.program, table, loop.children[2], known)
   }
   if (loop.kind !== N_FOR) {
     return false
@@ -5357,18 +5414,18 @@ export const stepOf = (expr: Node, name: string): i32 => {
  * was always meant: does anything this body reaches actually move a `len`?
  */
 const bodyMayExtend = (
-  unit: AnalysisUnit,
+  program: CheckedProgram,
   table: TypeTable,
   body: Node,
   known: FactsTable | null
 ): boolean => {
-  if (body.kind === N_THROW || isResizeCall(unit.program, table, body)) {
+  if (body.kind === N_THROW || isResizeCall(program, table, body)) {
     return true
   }
   // A `new` holds its class's constructor (CG-11), and a class with none
   // stores constants only.
   if (body.kind === N_CALL || body.kind === N_NEW) {
-    const callee = unit.program.nodeCallees[body.id]
+    const callee = program.nodeCallees[body.id]
     // An unresolved callee is a builtin, and no builtin but `push`/`pop`
     // reaches a user array's header; those two are above.
     if (callee !== null) {
@@ -5382,11 +5439,74 @@ const bodyMayExtend = (
     }
   }
   for (const child of body.children) {
-    if (bodyMayExtend(unit, table, child, known)) {
+    if (bodyMayExtend(program, table, child, known)) {
       return true
     }
   }
   return false
+}
+
+/**
+ * The parameter that counts buffer parameter `index` of the `declare function`
+ * `sig`: the `u64` that closes its run, the first parameter after it that is
+ * not a buffer (WP40 §3a; `checkForeignSignature` refuses every other shape).
+ */
+export const foreignBufferCount = (table: TypeTable, sig: FunctionSig, index: i32): i32 => {
+  let at = index + 1
+  while (at < sig.paramTypes.length && isForeignBuffer(table, sig.paramTypes[at])) {
+    at = at + 1
+  }
+  return at
+}
+
+/**
+ * Whether the `ffi-length` check of buffer argument `index` of the foreign
+ * call `call` is proven, so that neither the attribute pass records it as a
+ * panic nor the emitter writes it (WP40 B1.2, §3a). The count is spelled
+ * `toU64(x.length)` in the call, where `x` is the buffer argument itself, a
+ * `const` local or a parameter named alone, so the count is the length it was
+ * when the count ran; and no argument after the count can move an array's
+ * `len` (`bodyMayExtend`, with any receiver, since aliases are not tracked),
+ * so it is still that length when the emitter loads it after the last one.
+ *
+ * `known` is the fixpoint the callees' `resizesArray` is read from, and
+ * `null` -- round 1 -- proves nothing, as an unanalysed callee may resize.
+ */
+export const foreignBufferCountProven = (
+  program: CheckedProgram,
+  table: TypeTable,
+  call: Node,
+  index: i32,
+  count: i32,
+  known: FactsTable | null
+): boolean => {
+  const args = call.children[1].children
+  const buffer = args[index]
+  const local: Local | null = buffer.kind === N_IDENT ? program.nodeLocals[buffer.id] : null
+  if (
+    local === null ||
+    local.mutable ||
+    args[count].kind !== N_CALL ||
+    !isBuiltinConversion(program, args[count], "toU64")
+  ) {
+    return false
+  }
+  const access = args[count].children[1].children[0]
+  if (access.kind !== N_MEMBER || access.text !== "length" || access.children[0].kind !== N_IDENT) {
+    return false
+  }
+  const counted = program.nodeLocals[access.children[0].id]
+  if (counted === null || counted !== local) {
+    return false
+  }
+  let at = count + 1
+  while (at < args.length) {
+    if (bodyMayExtend(program, table, args[at], known)) {
+      return false
+    }
+    at = at + 1
+  }
+  return true
 }
 
 /**

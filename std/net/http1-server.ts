@@ -89,10 +89,14 @@
  * **Caps are start-up numbers**, all in `Http1Config`: the request target,
  * the header section and its field count, a request body, the chunk handed
  * over, the output buffer, a WebSocket message and the idle timeout; the
- * slots are the pool's size. Every buffer is allocated by the constructor or
- * grown to its cap on first use and kept, so a warmed slot serves request
- * after request with `Arena.used()` flat. Accepting a WebSocket allocates
- * (the accept key), once a connection.
+ * slots are the pool's size. `Http1Server` builds a slot's connection on the
+ * first accept into it and keeps it, so a pool sized for its peak costs at
+ * start-up only what does not depend on the size, and holds at most `size`
+ * connections once the peak has come; `Http1TlsServer` does the same for a
+ * slot's connection and, through `TlsTcpServer`, its TLS state. Every buffer
+ * is allocated with its slot or grown to its cap on first use and kept, so a
+ * warmed slot serves request after request with `Arena.used()` flat.
+ * Accepting a WebSocket allocates (the accept key), once a connection.
  *
  * **Output is borrowed.** The pools' slots share an `Http1OutputPool`: a
  * connection takes an `outputSize` buffer when it first needs room to write
@@ -1192,17 +1196,26 @@ export class Http1Connection {
  */
 export class Http1Server {
   config: Http1Config
+  /**
+   * The connections built so far, slot `k`'s at `k`: one per slot ever
+   * accepted into, and slot 0's once `connection` has asked for it.
+   */
   connections: Http1Connection[]
   /** The `Date` every slot's responses carry, formatted once a second for all of them. `date.pin` fixes its clock. */
   date: HttpDate
-  /** Each slot's descriptor, or -1 while it is free. */
+  /**
+   * Each slot's descriptor, or -1 while it is free, for the slots accepted
+   * into so far: its length is the high-water mark, and a slot past it has
+   * never been used.
+   */
   fds: i32[]
-  /** Each slot's interest as the loop last armed it, for `rearm`. */
+  /** Each used slot's interest as the loop last armed it, for `rearm`. */
   armed: i32[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
   /**
-   * The free slots, a stack whose top `accept` takes: finding one costs the
+   * The slots closed since they were used, a stack whose top `accept` takes
+   * before it builds a slot past the high-water mark: finding one costs the
    * same with every slot free as with all but one busy, where a scan of
    * `fds` walked the busy ones.
    */
@@ -1211,13 +1224,17 @@ export class Http1Server {
   scratch: u8[]
   /** The last accepted peer's address, in `nish:net`'s 18-byte form. */
   peer: u8[]
+  /** How many slots the pool may hold, which `size` answers. */
+  slots: i32 = 1
   /** The listening socket, which the program made with `tcpListen` and still owns. */
   listener: i32 = -1
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`.
-   * Every slot's buffers are allocated here but the output, which the slots
-   * borrow from `outputs` while they write.
+   * No slot is built here: a slot's connection and its buffers are
+   * allocated by the first `accept` into it and kept, so a pool sized for a
+   * peak costs at start-up only the read scratch, the shared `Date` and the
+   * output pool, and at most `size` connections once the peak has come.
    */
   constructor(config: Http1Config, listener: i32, size: i32) {
     this.config = config
@@ -1226,26 +1243,25 @@ export class Http1Server {
     this.fds = []
     this.armed = []
     this.free = []
+    this.slots = size < 1 ? 1 : size
     this.outputs = new Http1OutputPool(config.outputSize)
     this.date = new HttpDate()
-    const slots: i32 = size < 1 ? 1 : size
-    for (let k: i32 = 0; k < slots; k++) {
-      const conn: Http1Connection = new Http1Connection(config)
-      conn.pool = this.outputs
-      conn.date = this.date
-      this.connections.push(conn)
-      this.fds.push(H1_FREE)
-      this.armed.push(H1_WANT_READ)
-      // Pushed last first, so the first accepts take slots 0, 1, 2 ...
-      this.free.push(slots - 1 - k)
-    }
     this.scratch = new Array<u8>(config.chunkSize)
     this.peer = new Array<u8>(H1_ADDRESS_SIZE)
   }
 
-  /** How many slots the pool has. */
+  /** A new connection on this pool's outputs and `Date`, for the next slot built. */
+  build(): Http1Connection {
+    const conn: Http1Connection = new Http1Connection(this.config)
+    conn.pool = this.outputs
+    conn.date = this.date
+    this.connections.push(conn)
+    return conn
+  }
+
+  /** How many slots the pool has, built or not. */
   size(): i32 {
-    return toI32(this.fds.length)
+    return this.slots
   }
 
   /** How many slots hold a connection. */
@@ -1269,10 +1285,16 @@ export class Http1Server {
     return this.holds(slot) ? this.fds[slot] : -1
   }
 
-  /** The connection of `slot`; a slot out of range names the first. */
+  /**
+   * The connection of `slot`. A slot never accepted into, or out of range,
+   * names slot 0's connection, which this builds when no slot has been yet
+   * (the first `accept` then takes it, restarted).
+   */
   connection(slot: i32): Http1Connection {
-    const at: i32 = slot >= 0 && slot < toI32(this.connections.length) ? slot : H1_ZERO
-    return this.connections[at]
+    if (slot >= 0 && slot < toI32(this.connections.length)) {
+      return this.connections[slot]
+    }
+    return this.connections.length > 0 ? this.connections[0] : this.build()
   }
 
   /**
@@ -1286,25 +1308,28 @@ export class Http1Server {
     if (fd < 0) {
       return fd
     }
+    // A slot closed before is taken first, then the next never used, so the
+    // first accepts take slots 0, 1, 2 ... and a pool that never fills never
+    // builds its last slots.
+    let k: i32 = H1_POOL_FULL
     if (this.free.length > 0) {
-      const k: i32 = this.free[this.free.length - 1]
+      k = this.free[this.free.length - 1]
       this.free.pop()
-      if (
-        k >= 0 &&
-        k < toI32(this.fds.length) &&
-        k < toI32(this.connections.length) &&
-        k < toI32(this.armed.length)
-      ) {
-        this.fds[k] = fd
-        this.armed[k] = H1_WANT_READ
-        const conn: Http1Connection = this.connections[k]
-        conn.restart()
-        conn.lastActive = monotonicNanos()
-        return k
-      }
+    } else if (toI32(this.fds.length) < this.slots) {
+      k = toI32(this.fds.length)
+      this.fds.push(H1_FREE)
+      this.armed.push(H1_WANT_READ)
     }
-    netClose(fd)
-    return H1_POOL_FULL
+    if (k < 0 || k >= toI32(this.fds.length) || k >= toI32(this.armed.length)) {
+      netClose(fd)
+      return H1_POOL_FULL
+    }
+    const conn: Http1Connection = k < toI32(this.connections.length) ? this.connections[k] : this.build()
+    this.fds[k] = fd
+    this.armed[k] = H1_WANT_READ
+    conn.restart()
+    conn.lastActive = monotonicNanos()
+    return k
   }
 
   /**
@@ -1464,11 +1489,26 @@ export class Http1Server {
  * `Http1Connection` beside each slot of a `TlsTcpServer`, run the way
  * `nish/net/http2-tls` runs HTTP/2. A handshake that chose ALPN `http/1.1`,
  * or none (a client that does not send ALPN speaks HTTP/1.1), reaches its
- * connection; any other protocol is shut down with `close_notify`.
+ * connection; any other protocol is shut down with `close_notify`. A slot's
+ * connection is built on the first accept into it and kept, as
+ * `Http1Server`'s is.
  */
 export class Http1TlsServer {
+  config: Http1Config
   tls: TlsTcpServer
+  /**
+   * The connections built so far, slot `k`'s at `k`: one per slot ever
+   * accepted into. `connection` never adds to it; a slot never built reads
+   * `vacant` instead.
+   */
   connections: Http1Connection[]
+  /**
+   * What `connection` answers for every slot never built: one connection no
+   * slot holds and every such slot shares, so the slot never reads as
+   * another slot's live request. Its first read allocates it, once per
+   * server, and a caller must not change it.
+   */
+  vacant: Http1Connection | null = null
   /** The `Date` every slot's responses carry, as `Http1Server.date` is. */
   date: HttpDate
   /** Where TLS decrypts into before the connection takes the bytes. */
@@ -1476,22 +1516,42 @@ export class Http1TlsServer {
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
 
-  /** A pool of `size` slots, at least one, serving `config` over TLS under `tlsConfig` on `listener`. */
+  /**
+   * A pool of `size` slots, at least one, serving `config` over TLS under
+   * `tlsConfig` on `listener`. No slot is built here: the first `accept` into
+   * a slot builds its connection and, in `tls`, its handshake state, and
+   * keeps them, so a pool sized for a peak costs at start-up only the read
+   * scratches, the shared `Date` and the empty pools.
+   */
   constructor(tlsConfig: TlsServerConfig, config: Http1Config, listener: i32, size: i32) {
+    this.config = config
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
     this.connections = []
     this.outputs = new Http1OutputPool(config.outputSize)
     this.date = new HttpDate()
-    for (let k: i32 = 0; k < this.tls.size(); k++) {
-      const conn: Http1Connection = new Http1Connection(config)
-      conn.pool = this.outputs
-      conn.date = this.date
-      this.connections.push(conn)
-    }
     this.scratch = new Array<u8>(config.chunkSize)
   }
 
-  /** How many slots the pool has. */
+  /**
+   * A new connection on this pool's outputs and `Date`, for the next slot
+   * built. Called by `accept` alone, as `tls` builds slots: slot `k`'s
+   * connection must sit at index `k` of `connections`.
+   */
+  build(): Http1Connection {
+    const conn: Http1Connection = this.make()
+    this.connections.push(conn)
+    return conn
+  }
+
+  /** A connection on this pool's outputs and `Date` that no slot holds yet. */
+  make(): Http1Connection {
+    const conn: Http1Connection = new Http1Connection(this.config)
+    conn.pool = this.outputs
+    conn.date = this.date
+    return conn
+  }
+
+  /** How many slots the pool has, built or not. */
   size(): i32 {
     return this.tls.size()
   }
@@ -1511,10 +1571,32 @@ export class Http1TlsServer {
     return this.tls.fd(slot)
   }
 
-  /** The HTTP/1.1 connection of `slot`; a slot out of range names the first. */
+  /**
+   * Whether `slot` holds a connection and has its HTTP/1.1 connection built,
+   * as `Http2TlsServer.live` asks: a slot accepted on `tls` directly holds a
+   * TLS session and no `Http1Connection`, and reads as free here.
+   */
+  live(slot: i32): boolean {
+    return this.tls.holds(slot) && slot < toI32(this.connections.length)
+  }
+
+  /**
+   * The HTTP/1.1 connection of `slot`. A slot never accepted into answers
+   * `vacant`, as a free slot answers a connection that holds nothing, and
+   * builds no slot; a slot out of range names slot 0's.
+   */
   connection(slot: i32): Http1Connection {
-    const at: i32 = slot >= 0 && slot < toI32(this.connections.length) ? slot : H1_ZERO
-    return this.connections[at]
+    const index: i32 = slot >= 0 && slot < this.tls.size() ? slot : 0
+    if (index >= 0 && index < toI32(this.connections.length)) {
+      return this.connections[index]
+    }
+    const vacant: Http1Connection | null = this.vacant
+    if (vacant !== null) {
+      return vacant
+    }
+    const made: Http1Connection = this.make()
+    this.vacant = made
+    return made
   }
 
   /** The ALPN protocol `slot`'s handshake chose, or empty. */
@@ -1531,11 +1613,17 @@ export class Http1TlsServer {
   /**
    * Accepts the next waiting connection as `TlsTcpServer.accept` does, with
    * the caller's 32-byte server random and x25519 key, and gives it a fresh
-   * connection. Answers the slot, or what `TlsTcpServer.accept` answers.
+   * connection, building the slot's on its first accept. Answers the slot, or
+   * what `TlsTcpServer.accept` answers.
    */
   accept(serverRandom: u8[], ephemeralPrivate: u8[]): i32 {
     const slot: i32 = this.tls.accept(serverRandom, ephemeralPrivate)
-    if (slot >= 0 && slot < toI32(this.connections.length)) {
+    if (slot >= 0) {
+      // `tls` builds a slot past its high-water mark one at a time, so this
+      // builds at most the one connection, keeping slot `k`'s at `k`.
+      while (toI32(this.connections.length) <= slot) {
+        this.build()
+      }
       const conn: Http1Connection = this.connections[slot]
       conn.restart()
       conn.lastActive = monotonicNanos()
@@ -1545,7 +1633,7 @@ export class Http1TlsServer {
 
   /** The socket of `slot` is readable: TLS reads it, and what the connection has to send goes after. Answers the interest. */
   readable(slot: i32): i32 {
-    if (this.holds(slot)) {
+    if (this.live(slot)) {
       this.connections[slot].lastActive = monotonicNanos()
     }
     this.tls.readable(slot)
@@ -1570,7 +1658,7 @@ export class Http1TlsServer {
    * slot, or one whose ALPN was another protocol, answers `H1_ERROR`.
    */
   next(slot: i32): i32 {
-    if (!this.holds(slot) || this.refused(slot)) {
+    if (!this.live(slot) || this.refused(slot)) {
       return H1_ERROR
     }
     const conn: Http1Connection = this.connections[slot]
@@ -1603,7 +1691,7 @@ export class Http1TlsServer {
    * connection still holds bytes.
    */
   flush(slot: i32): i32 {
-    if (!this.holds(slot)) {
+    if (!this.live(slot)) {
       return TLS_RECORD_DONE
     }
     if (this.refused(slot)) {
@@ -1618,8 +1706,14 @@ export class Http1TlsServer {
     return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
   }
 
-  /** Writes what `slot`'s connection holds into TLS, as far as TLS takes it. */
+  /**
+   * Writes what `slot`'s connection holds into TLS, as far as TLS takes it;
+   * a slot never built has nothing to write.
+   */
   send(slot: i32): void {
+    if (slot < 0 || slot >= toI32(this.connections.length)) {
+      return
+    }
     const conn: Http1Connection = this.connections[slot]
     const pending: i32 = conn.outputEnd - conn.outputStart
     while (conn.wantsWrite()) {

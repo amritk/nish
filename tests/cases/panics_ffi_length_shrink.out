@@ -1,0 +1,4 @@
+`pwrite`: argument 3 (n) counts more bytes than argument 2 (buf) holds
+viaCall exit 1
+`pwrite`: argument 3 (n) counts more bytes than argument 2 (buf) holds
+viaNew exit 1

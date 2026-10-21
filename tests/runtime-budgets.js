@@ -214,8 +214,18 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * file had nothing to give: the bytes are the pool's, and dropping the 64 MB threshold
  * instead cost the bursts it was set for (586-700 ms against 440-466 ms on the 1.2
  * million strings).
+ *
+ * Raised to 3,328 by threads-followups' dynamic pieces, measured **3,097 bytes** on
+ * 2026-10-20 with clang 18.1.3 on linux-x64 (2,900 before them), 197 more: a divided
+ * region is cut into up to eight pieces a thread, which the threads claim one at a
+ * time off an atomic counter (`nish_par_run` 21 → 102 bytes, with `nish_par_piece` 49
+ * and `nish_par_run_lead` 21 new, `nish_parallel_range` 245 → 280), and a worker
+ * rewinds its arena between pieces. On bench/par-heavy.ts at four threads they took the
+ * median from 846 ms to 792 ms (15 interleaved rounds; the copy band 834-846), the
+ * slowest thread no longer holding the join a quarter of each region. The fallback's
+ * row above is unchanged at 610 bytes: none of it is compiled there.
  */
-const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2944
+const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 3328
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-cross.c`
  * -- the copies at a join (threads-complete's copy-at-join): `nish_cross_out` and
@@ -253,8 +263,16 @@ const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2944
  * start at 4 KB and double to 64 KB, each records what it used when its chunk ends, and
  * a join that kept under 64 KB in all copies its elements into the caller's arena and
  * frees the blocks rather than adopting them.
+ *
+ * The one-thread rewind measured **1,552 bytes** on 2026-10-20 with clang 18.1.3 on
+ * linux-x64, 108 more than the 1,444 it sat at, and the ceiling moves to 1,664.
+ * `nish_cross_keep` rewinds through `nish_rewind`, inlined (262 → 370): when an
+ * element's body grew a 64 KB chunk past a mark at the end of a full one, the chunk is
+ * kept, emptied, rather than freed, so a map at one thread stops doing a `malloc` and a
+ * `free` per element. 1M short strings at `NISH_NUM_THREADS=1` went from 72.8 ms to
+ * 54.9 ms, inside the loop's 56.4–57.6 ms band.
  */
-const RUNTIME_CROSS_TEXT_BUDGET = 1536
+const RUNTIME_CROSS_TEXT_BUDGET = 1664
 /**
  * Ceiling on the same file with `-DNISH_THREADS=1`: measured **1,235 bytes** on
  * 2026-10-16 with clang 18.1.3 on linux-x64, 65 more than the row above for the lock
@@ -268,8 +286,12 @@ const RUNTIME_CROSS_TEXT_BUDGET = 1536
  *
  * The copy-back join measured **1,508 bytes** on 2026-10-17 with clang 18.1.3 on
  * linux-x64, 231 more, and the ceiling moves to 1,536: the row above's change.
+ *
+ * The one-thread rewind measured **1,631 bytes** on 2026-10-20 with clang 18.1.3 on
+ * linux-x64, 118 more than the 1,513 it sat at, and the ceiling moves to 1,664: the row
+ * above's change (`nish_cross_keep` 264 → 382).
  */
-const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1536
+const RUNTIME_CROSS_THREADS_TEXT_BUDGET = 1664
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-host.c`
  * -- the wall clock, entropy, a file's modification time and the signal descriptor
@@ -344,6 +366,91 @@ const RUNTIME_SIMD_TEXT_BUDGET = 768
  * as every ceiling here was set.
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
+
+/**
+ * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
+ * before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http1_server/startup.ts`,
+ * which builds that pool on the default `Http1Config` and prints the bytes.
+ *
+ * Measured **16,688 bytes** on 2026-10-20 with clang 18 on linux-x64: the 16,384-byte
+ * read scratch every server keeps, and the pool's own bookkeeping, with no slot's
+ * connection built. Each connection is built on the first accept into its slot,
+ * 3,976 bytes on the same defaults. Built eagerly, as every slot was before, a
+ * 16,384-slot server was 65.3 MB resident at start-up against 2.6 MB now, and peaked
+ * at 65 MB against 4 MB under keep-alive c=500 (`bench/README.md`). The budget is the
+ * next 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+export const HTTP1_SERVER_START_BYTES = 16896
+
+/**
+ * Ceiling on what `new TlsTcpServer(config, listener, 16384)` takes from the arena
+ * before its first connection -- not a `.text` budget: `tests/run.js` links
+ * `tests/link/net_tls_record_tcp/startup.ts`, which builds that pool on the test
+ * configuration and prints the bytes.
+ *
+ * Measured **41,640 bytes** on 2026-10-20 with clang 18 on linux-x64: the
+ * record-sized read scratch, the P-256 signer and the empty record pools, with no
+ * slot's handshake state or server random built. Each slot's are built on the first
+ * accept into it. Built eagerly, as every slot was before, the interop server's
+ * HTTP/2 pool on 1,024 slots was 78.2 MB resident at listening against 27.8 MB now
+ * (`bench/pool-rss.mjs --per-pool`, three runs each, base and head each against a
+ * byte-identical copy of itself within 0.1 MB). The budget is the next 256-byte
+ * boundary above the measurement: the 88 bytes of headroom are intended, and a slot
+ * built eagerly again costs far more than they hold.
+ */
+export const TLS_TCP_START_BYTES = 41728
+
+/**
+ * Ceiling on what `new Http1TlsServer(tlsConfig, config, listener, 16384)` takes from
+ * the arena before its first connection, linked by `tests/run.js` from
+ * `tests/link/net_http1_server/tls-startup.ts` on the default `Http1Config`.
+ *
+ * Measured **58,296 bytes** on 2026-10-20 with clang 18 on linux-x64:
+ * `TLS_TCP_START_BYTES`'s pool and the HTTP/1.1 read scratch, `Date` and empty output
+ * pool, with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
+ * resident at listening against 4.6 MB now, and 18.1 MB against 4.6 MB at 256 slots
+ * (measured as `TLS_TCP_START_BYTES` says). The budget is the next 256-byte boundary
+ * above the measurement: the 72 bytes of headroom are intended, and one slot's
+ * connection built eagerly again costs far more than they hold.
+ */
+export const HTTP1_TLS_SERVER_START_BYTES = 58368
+
+/**
+ * Ceiling on what `new Http3Server(quicConfig, config, fd, 65536, entropy)` takes from
+ * the arena before its first connection -- not a `.text` budget, so not a row of
+ * `RUNTIME_BUDGETS`: `tests/run.js` links `tests/link/net_http3_server/startup.ts`,
+ * which builds that pool, the most slots a server takes, on the test configuration
+ * and prints the bytes.
+ *
+ * Measured **17,501,520 bytes** on 2026-10-20 with clang 18 on linux-x64, about 267
+ * bytes a slot: the fixed per-slot tables, some 232 bytes a slot (the connection ID
+ * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
+ * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
+ * bookkeeping, with no slot's connections built. Each slot's QUIC and HTTP/3
+ * connections and address are built on the first Initial accepted into it, 111,424
+ * arena bytes on the same configuration. The budget is the next 256-byte boundary
+ * above the measurement, as every ceiling here was set.
+ */
+export const HTTP3_SERVER_START_BYTES = 17501696
+
+/**
+ * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
+ * the arena before its first connection, linked by `tests/run.js` from
+ * `tests/link/net_http2_tls/startup.ts` on the default `Http2Config`.
+ *
+ * Measured **58,560 bytes** on 2026-10-21 with clang 18 on linux-x64:
+ * `TLS_TCP_START_BYTES`'s pool, the shared `Http2Pools` and `HttpDate`, and slot 0's
+ * connection, which the constructor still builds so that a bad `Http2Config` is
+ * refused there; every other slot's is built on the first accept into it. Built
+ * eagerly, as at `c8a00d6`, the interop server's HTTP/2 pool on 1,024 slots was 27.7 MB
+ * resident at listening with the lazy TLS pool against 11.7 MB now, 23 kB a slot
+ * against 7 kB (`bench/pool-rss.mjs --per-pool`, three interleaved rounds of three
+ * runs, head against a byte-identical copy of itself within 0.1 MB). The budget is
+ * the next 256-byte boundary above the measurement: the 64 bytes of headroom are
+ * intended, and one more slot's connection built eagerly costs far more than they hold.
+ */
+export const HTTP2_TLS_SERVER_START_BYTES = 58624
 
 /**
  * Every unit and configuration the gate measures: the source compiled with

@@ -65,7 +65,7 @@ import {
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
-import { channelCapacityMessage, isChannelClass, spawnFormFor } from "./parallel"
+import { channelCapacityMessage, isChannelClass, isThreadsStruct, spawnFormFor } from "./parallel"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
 import { Scope } from "./symbols"
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
@@ -674,6 +674,15 @@ const takesDeclaredContext = (value: Node): boolean => {
   return value.kind !== N_NUMBER && value.kind !== N_ARRAY
 }
 
+/** Whether `info` declares a method, generic or not: a constructor is not one. */
+const hasMethods = (info: StructInfo): boolean =>
+  info.methodSigs.length > 0 || info.methodTemplateList.length > 0
+
+/** NL2556: an object literal typed as a class with methods. */
+const classLiteralMessage = (name: string): string =>
+  `\`${name}\` has methods, so it is made only by \`new\`: an object literal would be a plain object under Node, ` +
+  `with none of the methods the class is used through. Write \`new ${name}(...)\``
+
 /** `{ x: 1, y: 2 }`, which needs a contextual class or interface type. */
 export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   if (want < 0 || !ctx.table.isStruct(ctx.table.stripNull(want))) {
@@ -690,6 +699,12 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
   // `nish:secret`: a holder's `Secret` field is set by its constructor alone.
   if (secretFieldOf(ctx.table, info) !== null) {
     return ctx.errorType(expr, holderLiteralMessage(info.name))
+  }
+  // Native lowering would give a literal the class's layout and its methods,
+  // but under Node it is a plain object and a call on it throws (#656). The
+  // `nish/threads` classes keep their own refusal, NL2515, from the scope pass.
+  if (info.kind === STRUCT_CLASS && hasMethods(info) && !isThreadsStruct(info)) {
+    return ctx.errorType(expr, classLiteralMessage(ctx.table.typeName(info.type)))
   }
   const seen: string[] = []
   for (const prop of expr.children) {

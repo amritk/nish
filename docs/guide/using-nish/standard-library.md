@@ -769,6 +769,22 @@ export const main = (): i32 => {
 Printing a `Secret`, putting it in a template, or handing it to any builtin is
 a compile error.
 
+The type can be left off: `secret` answers a `Secret` of whatever it is given,
+and every rule below holds the same.
+
+```ts nish:ok
+import { expose, secret, wipe } from "nish:secret";
+
+const length = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const key = secret(new Array<u8>(32)); // a `Secret<u8[]>`
+  console.log(`${expose(key, length)} bytes`); // 32 bytes
+  wipe(key);
+  return 0;
+};
+```
+
 `secret(v)` takes a value nothing else holds: a literal, a call that makes a
 new array or record, or a local that is the only name for its value. A second
 name made before the move would read the key outside the `Secret`, and zeros
@@ -960,8 +976,10 @@ that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
 its interest changed, so a keep-alive request costs one `recv` and one `send`
 and no `pollModify`. A slot borrows its output buffer only while it writes, so
-an idle connection costs a few KiB, not `outputSize`; `bench/http.mjs`
-load-tests that loop on one core.
+an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
+a slot's connection on the first accept into it and keeps it for the next, so
+a pool sized for 16,384 connections costs some 16 KiB until they come;
+`bench/http.mjs` load-tests that loop on one core.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)

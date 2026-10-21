@@ -157,7 +157,11 @@ PR adding a construct is not finished without all of them:
 4. `.args` for any flag the case depends on.
 5. Its `docs/LANGUAGE.md` rule, citing the case by name, a cookbook entry
    (`docs/cookbook/regen.sh`), and the user-guide page that teaches it
-   (`docs/README.md` → "Writing a guide page").
+   (`docs/README.md` → "Writing a guide page"). The guide rule is not
+   limited to constructs: any other change a user of Nish sees — a builtin
+   or `nish:` module, a `std/` module, a CLI flag or exit code, an install
+   step, a diagnostic a guide page shows — updates its guide page in the
+   same PR too, as [`CLAUDE.md`](../CLAUDE.md) states.
 6. One implementation, in `src/`. There is no second compiler to compare it
    with, so the golden and the native round trip are the proof, and
    `tests/nish-cmp.js` — the last release against this tree — reports every

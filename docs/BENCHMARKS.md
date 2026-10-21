@@ -58,20 +58,25 @@ Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String buildi
 
 ## Data parallelism (ms, min / median)
 
-Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-12, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at a1a5bf8a, the base of the branch it was measured on (branch commit e5f7d943, which a squash merge does not keep, and whose `std/threads.ts` differs from the one merged with it only in a comment of `mapRange`), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
+Each kernel is one Nish binary, run as the loop a program writes without `nish/threads` (`seq`) and as `parallelMapInto` (`par`) on all 4 logical cores, par-histogram as a scope of four tasks sharing a `Mutex`; the speedup is the loop's minimum over the map's. Both runs print the same checksum. The kernels are in `bench/par-*.ts`, and wp29 §8a reads the numbers. par-regions is what one divided region costs, and [wp20 §8e](wp20-threads.md#8e-what-a-region-costs-and-why-it-is-not-a-goroutine) has it before and after the worker pool. This table alone was measured on 2026-10-20, on Intel(R) Xeon(R) Processor @ 2.10GHz, at `main` at 15a1a97, the base of the branch it was measured on (branch commit 6a87ce2, which a squash merge does not keep), by `node bench/run.mjs --only par`; the rest of the file was measured on the machine in the header.
 
 | Kernel | What | Loop | `parallelMapInto` | Speedup | Peak RSS loop / map (KB) |
 | --- | --- | ---: | ---: | ---: | ---: |
-| par-compute | 64 square roots per element, 2^21 elements (f64) | 898 / 929 | 242 / 251 | 3.72x | 34,028 / 34,472 |
-| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 190 / 205 | 87.9 / 92.5 | 2.17x | 34,016 / 34,460 |
-| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 178 / 183 | 57.8 / 65.0 | 3.07x | 1,524 / 1,836 |
-| par-short | an 8-element map called 2^20 times, each call fed by the last | 58.8 / 65.7 | 62.2 / 68.0 | 0.95x | 1,252 / 1,252 |
-| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 586 / 649 | 65.9 / 84.7 | 8.90x | 2,212 / 2,596 |
-| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 29.4 / 32.7 | 97.1 / 122 | 0.30x | 1,256 / 1,632 |
+| par-compute | 64 square roots per element, 2^21 elements (f64) | 875 / 939 | 228 / 239 | 3.83x | 33,968 / 34,480 |
+| par-alloc | a string formatted and summed per element, 2^22 elements; the body allocates (NL9012) | 173 / 191 | 58.0 / 65.8 | 2.97x | 33,960 / 34,472 |
+| par-nbody | n-body partitioned: 1024 bodies, 16 steps, one map of 3n probes per step | 174 / 180 | 56.3 / 59.9 | 3.09x | 1,588 / 1,844 |
+| par-short | an 8-element map called 2^20 times, each call fed by the last | 58.4 / 58.9 | 61.4 / 65.2 | 0.95x | 1,320 / 1,320 |
+| par-regions | a 2^17-element map called 1,000 times, each call fed by the last: what a region costs | 554 / 632 | 56.3 / 58.0 | 9.83x | 2,216 / 2,728 |
+| par-histogram | 4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock | 27.4 / 31.3 | 159 / 193 | 0.17x | 1,320 / 1,576 |
+| par-heavy | 16 integer scramble rounds per element, 2^22 elements, 40 calls; the order-sensitive fold runs on one thread | 2209 / 2299 | 758 / 789 | 2.91x | 34,068 / 34,476 |
+| par-heavy-fold | par-heavy with a fold that vectorises: the same map, a smaller undivided part | 2027 / 2063 | 621 / 636 | 3.26x | 34,068 / 34,472 |
+| par-heavy4 | par-heavy with 64 scramble rounds: four times the divided work, the same fold | 11013 / 11423 | 3217 / 3307 | 3.42x | 34,076 / 34,476 |
+| par-scale | `x * k` over 2^22 elements, 40 calls: a memory-bound map | 343 / 359 | 272 / 293 | 1.26x | 34,072 / 34,476 |
+| par-single | one `x * 3` map over 2^25 elements: a single large region | 220 / 228 | 202 / 204 | 1.09x | 263,332 / 263,844 |
 
 ## Data parallelism against Rust and Go (ms, min / median)
 
-Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map kernels cut the array into one contiguous chunk per thread, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one `add` per bin, is `examples/histogram-atomic.ts` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).
+Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish `par` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on `std::thread::scope` (`bench/par-<kernel>.rs`) and on Rayon's pool (`bench/par-<kernel>-rayon.rs`), the Go twins on goroutines and a `sync.WaitGroup` (`bench/par-<kernel>.go`). The map twins cut the array into one contiguous chunk per thread, the first on the calling thread, as Nish's partitioner did until it began cutting up to eight pieces per thread that the threads claim as they finish ([Scheduling a divided region](#scheduling-a-divided-region)); Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's `Mutex`, Rust's `std::sync::Mutex` and Go's `sync.Mutex`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one `add` per bin, is `examples/histogram-atomic.ts` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).
 
 **The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (`nish_panic_overflow` and `nish_panic_index` are reached from par-histogram's `binStream`, for one). The Rust twins build as `--release` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's `--profile speed` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.
 
@@ -142,6 +147,27 @@ The Checksums and Commands sections below are written by a full run, which `--on
   cargo build --release --quiet --manifest-path build/bench/rayon/Cargo.toml
   go build -trimpath -ldflags=-s -w -o build/bench/par-histogram-go build/bench/src/par-histogram.go
   ```
+
+## Scheduling a divided region
+
+Measured on 2026-10-20 on the machine of the data-parallelism table above (Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores), every figure a median in ms over interleaved rounds in which each binary and a byte-identical copy of it ran once; the copy's gap is the noise band, and a difference inside it is no difference.
+
+`nish_parallel_range` used to cut a divided region into one contiguous chunk per thread. A thread that was preempted held every other thread at the join. It now cuts the range into up to eight pieces per thread, never smaller than the grain, and each thread claims the next piece with one relaxed `fetch_add` as it finishes the last; the calling thread runs the first. Eight is the flat middle of a sweep over par-heavy at four threads, nine rounds: 2 pieces per thread was slower and noisier (868, 766–1121), 4 to 32 lay within the copy band (805–822), and so did par-scale's memory-bound map (262–270).
+
+| Kernel | What | `main` | copy | this runtime | copy |
+| --- | --- | ---: | ---: | ---: | ---: |
+| par-heavy, 4 threads, 15 rounds | 16 scramble rounds per element, 2^22 elements, 40 calls | 846 | 834 | 792 | 771 |
+| par-scale, 4 threads | `x * k`, 2^22 elements, 40 calls: memory-bound | 277 | 266 | 270 | 260 |
+| par-single, 4 threads | one `x * 3` map over 2^25 elements | 213 | 209 | 213 | 207 |
+| par-alloc, 4 threads, 9 rounds | a string formatted per element, 2^22 elements: the body allocates | 88 | 79 | 52 | 51 |
+| 3 chunks above the grain | par-heavy at 600,000 elements, 300 calls: three chunks of the grain | 1053 | 1036 | 1071 | 1174 |
+| 8 chunks above the grain | par-heavy at 2^21 elements, 80 calls: eight chunks | 843 | 781 | 815 | 787 |
+
+par-heavy at one thread is 2172 (2108–2315), within main's band. Over that one-thread loop, on the medians of the same rounds, par-heavy goes from about 2.6x on `main` (2172 / 846) to about 2.7x (2172 / 792), about 6% faster at four threads and outside the copy band (846 / 834 against 792 / 771); the data-parallelism table above, on minima, has 2.91x. par-alloc, whose body allocates, is the largest gain: 79–88 ms on `main`, 51–52 here, and the gain is the pieces' own: the same runtime with the arena reset between pieces taken out measures 53, the same. par-histogram is a scope of tasks, not a divided region, and its contended lock spreads each binary over 89–258 ms; its medians, 223–229 on `main` and 199–206 here over 15 rounds, are no difference. The others are unchanged. A single 2^25 map is not slower than at efbbd8c8 (212 / 211) or on `main`, and workers touching their own pages first (first-touch) measured within the band, so it is not shipped.
+
+**par-heavy does not reach 3x, and the scheduler is not why.** Its checksum is an order-sensitive fold over the result, which runs on one thread, and so do the fill and the allocation before the map. Timed with zero scramble rounds, so that the map does nearly nothing, the program takes 252 with the fold and 75 without it: the fold is about 177 ms and the fill, the allocation and the near-empty map about 75, some 286 ms of the 2172 one-thread run (13%). By Amdahl the best four cores can do is (2172 − 286) / 4 + 286 ≈ 757 ms, a cap of about 2.9x; the program measures about 2.7x on these medians. Inside the region each thread was busy for 500–544 ms of an ideal 471 (87–93% busy efficiency), the region's wall time was 555–591 ms (80–85%), threads started within 1.6–5 ms of each other and finished within 30–60 ms, and each claimed 152–171 pieces.
+
+The fold, not the scheduler, explains `main`'s 2.6x. With the serial part made smaller or the divided part larger, the same map clears 3x on both runtimes: par-heavy-fold, whose fold vectorises, measures about 3.15x, and par-heavy4, with four times the scramble rounds and the same fold, about 3.4x.
 
 ## Map and Set (WP32)
 
@@ -494,3 +520,76 @@ Checksum `serialize 18100868296888812225 452530`, the same from every implementa
 
 Noise band, Nish against its byte-identical copy: 1.1% on the minimums (0.0% on the medians). A ratio within it is no difference.
 <!-- json-compare:end -->
+
+<!-- techempower:begin -->
+## TechEmpower json and plaintext
+
+Measured by `bash bench/techempower/run.sh` (3 interleaved rounds of 10 s, every contestant started afresh and warmed for 1 s before each count), and copied here from the report it writes to `build/tfb/results.md`. `bench/run.mjs` carries this section over between its `techempower` markers when it rewrites the file. The entry is [bench/techempower/](../bench/techempower/README.md): one process, one thread, one `pollWait` loop on `Http1Server`. The other rows are the HTTP twins of [bench/http-twins/](../bench/http-twins/README.md), each run as its own `serve <port>`. `entry-copy` is a second build of the same `main.ts` that `cmp` finds byte-identical, so the gap between `entry` and `entry-copy` is the noise band every other difference is read against. `entry-nodelay0` is `entry` started with its `nodelay` argument 0, so its accepted sockets keep Nagle on. A cell marked `*` had non-2xx answers or socket errors in at least one round; `n/a` is a cell no round gave a figure for.
+
+| | |
+| --- | --- |
+| Date | 2026-10-21 |
+| nish | nish 0.18.0 (commit 5ee6e7c), `--link --profile speed` |
+| CPU | Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores |
+| OS | linux 6.18.44-fc-v139 (x64) |
+| Client | wrk 4.1.0, `-t 3`, TFB's request headers, `--timeout 8`; `/plaintext` through `bench/techempower/pipeline.lua` 16 deep |
+| Pinning | server on CPU 0, wrk on CPUs 1-3. **Client-shared**: wrk and the server share one 4-core machine, so three cores drive one server core, and a server faster than wrk can drive shows wrk's ceiling |
+| Limits | `ulimit -n` 20000, `net.core.somaxconn` 4096; no concurrency was clamped |
+| Command | `npm run build && bash bench/http-twins/build.sh && bash bench/techempower/run.sh --nodelay-compare` |
+
+### /plaintext, 16 requests pipelined per write (req/s, median (min) of 3 rounds of 10 s)
+
+| contestant | 256 | 1024 | 4096 | 16384 |
+| --- | ---: | ---: | ---: | ---: |
+| entry | 324166 (319907) | 324456 (324285) | 306716 (296701) | 290467 (284270)* |
+| entry-copy | 320784 (316919) | 328966 (309659) | 308748 (303939) | 291601 (290158)* |
+| entry-nodelay0 | 317747 (312271) | 322970 (318831) | 303926 (303679) | 291348 (290808)* |
+| node-http | 29737 (29520)* | 29450 (29265)* | 29925 (29106)* | 26138 (24751)* |
+| uws | 411621 (405082) | 377199 (359682) | 369473 (347216) | 357901 (295125)* |
+| bun | 53993 (52627) | 54195 (54139) | 49886 (49713) | 39482 (38656)* |
+| bun-elysia | 50428 (49401) | 50386 (47146) | 46937 (46735)* | 38568 (38178)* |
+| bun-hono | 37604 (36408) | 36286 (35885) | 35372 (34773)* | 29819 (29547)* |
+| go-nethttp | 29988 (29907) | 30094 (29444) | 28472 (28105) | 23476 (22629)* |
+| go-fasthttp | 380231 (373654) | 362980 (352041) | 351528 (329322) | 264089 (243905) |
+| rust-hyper | 92857 (85787) | 95238 (89832) | 83175 (82831) | 73213 (70509)* |
+| rust-actix | 11147 (11137) | 9984 (9926)* | 5632 (5234)* | n/a |
+| nginx | 45752 (44803) | 44026 (41499)* | 40947 (38162)* | 35030 (32098)* |
+
+Noise band, the entry against its byte-identical copy (medians): 256 connections: 1.0%, 1024 connections: 1.4%, 4096 connections: 0.7%, 16384 connections: 0.4%.
+
+### /json, one request at a time (req/s, median (min) of 3 rounds of 10 s)
+
+| contestant | 16 | 32 | 64 | 128 | 256 | 512 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| entry | 62677 (59149) | 72154 (66485) | 82974 (78773) | 87850 (82665) | 89032 (88021) | 80449 (70347) |
+| entry-copy | 61788 (61021) | 70884 (67521) | 80291 (79190) | 87979 (82959) | 88850 (76368) | 75596 (55806) |
+| entry-nodelay0 | 62789 (57984) | 71644 (71376) | 81762 (77200) | 81259 (79262) | 81718 (68711) | 83571 (52003) |
+| node-http | 21051 (20350) | 21369 (20080) | 20733 (19417) | 18293 (18112) | 17583 (17384) | 17413 (16445) |
+| uws | 55513 (54228) | 63101 (60259) | 73301 (72606) | 76345 (73065) | 67375 (62743) | 70785 (66658) |
+| bun | 34751 (34672) | 37962 (37266) | 42414 (41711) | 41895 (38471) | 35382 (34501) | 32606 (31723) |
+| bun-elysia | 34554 (33326) | 38334 (37002) | 41400 (40724) | 41835 (40572) | 36276 (31920) | 31982 (31845) |
+| bun-hono | 28308 (28000) | 30410 (29293) | 30219 (29872) | 30276 (30013) | 27538 (26989) | 25092 (23765) |
+| go-nethttp | 25932 (25363) | 26472 (26460) | 25951 (24978) | 23351 (21753) | 21748 (20729) | 21274 (20467) |
+| go-fasthttp | 43493 (43064) | 48007 (46893) | 48959 (48237) | 43228 (41587) | 39086 (38392) | 37435 (36700) |
+| rust-hyper | 51113 (50772) | 56249 (56148) | 63765 (61338) | 60668 (59596) | 53256 (53150) | 51512 (49381) |
+| rust-actix | 10442 (10417) | 10283 (9701) | 10257 (9928) | 10003 (9846) | 10126 (10083) | 10024 (9986) |
+| nginx | 47409 (44830) | 53393 (52078) | 59472 (58763) | 58394 (58388) | 53957 (53930) | 53881 (52525) |
+
+Noise band, the entry against its byte-identical copy (medians): 16 connections: 1.4%, 32 connections: 1.8%, 64 connections: 3.2%, 128 connections: 0.1%, 256 connections: 0.2%, 512 connections: 6.0%.
+
+What the rows say, read against that band:
+
+- The twins answer `/json` with `{"message":"Hello, World!","n":<n>}`: 8 bytes more than the entry's `{"message":"Hello, World!"}`, and a counter. The entry serializes its body with a `JsonWriter` on every request, as TFB requires; the twins vary in how they build theirs.
+- One core of the entry serves `/plaintext` at medians of 290,467 to 324,456 req/s across every concurrency: below `uws` everywhere, below `go-fasthttp` from 256 to 4096 connections, and above every other twin. At 16384 `go-fasthttp` falls to 264,089, 9.1% under the entry's 290,467 and outside that level's 0.4% band.
+- On `/json` the entry leads every twin at every concurrency by more than the band. Its narrowest lead is over `uws` at 16 connections, 62,677 against 55,513 (11.4%, where the band is 1.4%); the widest band, 6.0% at 512, is under its 12.0% lead there (80,449 against 70,785).
+- At 16384 connections wrk reported read errors (connections reset) against every Nish build: the entry in two of its three rounds (250 and 2,452), the copy in two (2,916 and 1,517), and `entry-nodelay0` in two (2,075 and 4,418). Several twins had read errors or timeouts there too, and the `*` marks them.
+- `rust-actix` answers about 10,000 req/s up to 1024 connections, falls to 5,632 at 4096 with timeouts in every round, and has no figure at 16384: in all three rounds wrk reported 0.00 req/s and no socket errors, so the cell is `n/a`. An earlier run of this section recorded that cell as 0, which was the failed measurement rather than a rate. Run alone, the twin shows 6.4 ms of latency per request too, so its figures are its own, reported as measured.
+- `TCP_NODELAY` (WP39 E2, `tcpListenFlags` flag 2) is the entry's default. Against `entry-nodelay0` it is faster outside the band at four levels (`/plaintext` 256 connections by 2.0% against a 1.0% band, and 4096 by 0.9% against 0.7%; `/json` 128 by 7.5% against 0.1%, and 256 by 8.2% against 0.2%) and within the band at the other six, slower outside it at none. So the flag stays on.
+- The benchmarked build is `5ee6e7c`. The head adds only the listener's pause when an accept runs out of descriptors, which this run never reached: with `ulimit -n` at 20000, no accept failed for want of one.
+<!-- techempower:end -->
+
+<!-- tls-handshake:begin -->
+## TLS handshake
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline.
+<!-- tls-handshake:end -->

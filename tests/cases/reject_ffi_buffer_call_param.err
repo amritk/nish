@@ -1,1 +1,0 @@
-`f` takes the buffer `buf`, and a call to a declared C function that takes a `u8[]` is not lowered yet: the declaration is checked, and the call waits for the release that passes the bytes and checks the count

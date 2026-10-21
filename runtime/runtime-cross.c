@@ -167,6 +167,31 @@ void nish_cross_end(void *state) {
   nish_xfer_top = x->prev;
 }
 
+/* `nish_arena_release(mark)` for an element's rewind, but keeping the newest
+ * chunk when the body grew it past `mark`'s: a mark at the end of a full chunk
+ * would otherwise have every element's body malloc a fresh chunk and its
+ * release free it again. Only a 64 KB one is kept, emptied, in front of
+ * `mark`'s chunk, with those between freed; an older mark still finds its own
+ * chunk below it, and what `mark`'s chunk had left is given up once. A mark
+ * in no chunk below the newest leaves the arena as it was, as the release
+ * does. */
+static void nish_rewind(uint64_t mark) {
+  struct nish_arena *a = &nish_arena;
+  nish_xchunk *top = a->chunks;
+  char *buf = (char *)(top + 1);
+  if (mark && top && top->cap == 65536 && mark - (uintptr_t)buf > 65536) {
+    a->chunks = top->next;
+    nish_arena_release(mark);
+    if (a->buf != buf) {
+      top->next = a->chunks;
+      *a = (struct nish_arena){ buf, 0, 65536, top };
+    } else
+      a->chunks = top;
+    return;
+  }
+  nish_arena_release(mark);
+}
+
 /* A map's or a `parallelFrom`'s element, kept as its chunk loop rewinds the
  * arena to `mark`, the bump position before the body was called: everything
  * else the body bumped is dead once it has answered, so a chunk holds one
@@ -197,7 +222,7 @@ void *nish_cross_keep(void *v, uint64_t esize, uint64_t mark) {
       v = at;
     }
   }
-  nish_arena_release(mark);
+  nish_rewind(mark);
   return nish_cross_in(v, esize);
 }
 
@@ -264,7 +289,8 @@ void nish_cross_adopt(void *list, void *dst, uint64_t esize) {
  * `g.value = s` keeps `s` in memory the `Mutex` owns, since the task that
  * stores it may have made it in its arena: `nish_guard_keep` copies it into a
  * block of its own and answers the copy, and frees `old`, the string the slot
- * held, when it is a copy made here. A read that keeps the string past the
+ * held, when it is a copy made here; `g.value = null` into a `string | null`
+ * slot frees that copy and keeps nothing. A read that keeps the string past the
  * lock's block copies it into the reader's arena (the compiler calls
  * `nish_str_new`), so nothing outside the lock points at a block, and the
  * next store frees it. The copies are recorded in one set, `nish_kept`, which
@@ -322,14 +348,16 @@ static int nish_kept_take(uintptr_t p) {
   return 0;
 }
 
-/* `old` is null when the slot is a `string | null` that held none. */
+/* `old` is null when the slot is a `string | null` that held none, and `s`
+ * is null for a `null` stored into one: the slot's copy is freed and nothing
+ * is kept in its place, so the store answers null. */
 void *nish_guard_keep(void *old, const void *s) {
-  void *b = (void *)((uintptr_t)nish_cross_copy(s, 0) & ~(uintptr_t)1);
+  void *b = s ? (void *)((uintptr_t)nish_cross_copy(s, 0) & ~(uintptr_t)1) : 0;
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_lock(&nish_kept.mu);
 #endif
   int mine = old && nish_kept_take((uintptr_t)((nish_xchunk *)old - 1));
-  nish_kept_put((uintptr_t)((nish_xchunk *)b - 1));
+  if (b) nish_kept_put((uintptr_t)((nish_xchunk *)b - 1));
 #ifdef NISH_CROSS_LOCKED
   pthread_mutex_unlock(&nish_kept.mu);
 #endif

@@ -25,7 +25,8 @@ Targets, in priority order:
 2. **Rust-class output.** Sub-megabyte (in practice sub-100 KB) binaries,
    `-O3` loop/math speed, zero-cost abstractions, LTO and dead-stripping.
 3. **Zero-GC memory.** Arena/bump allocation by default, explicit reset,
-   optional reference counting only for objects that must outlive an arena.
+   optional reference counting only for objects that must outlive an arena
+   ([wp46](wp46-long-running-memory.md) weighs it against regions).
 4. **Node/npm interop in one direction only.** Nish exports `.wasm` /
    native addons that Node imports. Nish never embeds a JS engine.
 
@@ -89,7 +90,7 @@ Design rules that every WP must respect:
   | --- | ---: | ---: |
   | `runtime.c` | 3,684 (3,885 with `-DNISH_THREADS=1`) (2026-10-16) | 3,684 (3,885) |
   | `runtime-os.c` | 1,530 | 1,536 |
-  | `runtime-parallel.c` | 610 (2,900 threaded) (2026-10-17) | 768 (2,944) |
+  | `runtime-parallel.c` | 610 (3,097 threaded) (2026-10-20) | 768 (3,328) |
   | `runtime-cross.c` | 1,427 (1,508 threaded) (2026-10-17) | 1,536 (1,536) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
@@ -254,11 +255,14 @@ is its plan. [README.md](README.md) indexes them.
 | 34 | Hosting cs: the network stack | in progress | [wp34](wp34-hosting-cs.md) |
 | 35 | The capability report | landed | [wp35](wp35-capabilities.md) |
 | 36 | The capability policy | landed | [wp36](wp36-capability-policy.md) |
-| 37 | The OS sandbox | proposed; no note yet | — |
+| 37 | The OS sandbox | proposed; note written, not built | [wp37](wp37-os-sandbox.md) |
 | 38 | SIMD | accepted; S0 and S1's kernel and surface landed, S2's bar met but its flag unbuilt, S4 declined for now, S5 landed, `std/json` on the kernel pending #507, S3 unbuilt, S6 (the JSON tokenizer on vectors) proposed, S7 met by #561, S3a and S2's flag planned | [wp38](wp38-simd.md) |
 | 39 | The HTTP server: a TechEmpower entry, then a general-purpose server | proposed | [wp39](wp39-http-server.md) |
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
 | 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; stage 1, the router, built | [wp43](wp43-http-app-layer.md) |
+| 44 | Streaming file reads: a descriptor, a positional read, a size and a close | proposed; design only, open questions for the owner | [wp44](wp44-streaming-files.md) |
+| 45 | Name resolution for `nish:net`: a DNS stub resolver | proposed | [wp45](wp45-name-resolution.md) |
+| 46 | Memory for programs that do not exit: regions | proposed | [wp46](wp46-long-running-memory.md) |
 
 A package's plan said where its work would be done, which for everything up
 to WP19 was often stage0's `src/`, the TypeScript compiler R6 deleted. Each
@@ -420,8 +424,10 @@ major. Whether it happens at all is still wp22 §10's open question.
    `bench/instructions.json`.
 3. **WP37, the OS sandbox**: `--sandbox` has the native main wrapper confine
    the process with Landlock and seccomp to the capabilities the compiler
-   computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. WP35, the
-   capability report ([wp35-capabilities.md](wp35-capabilities.md)), and
+   computed, and accepts the `fs.read=<dir>` scopes WP36 refuses. Its note,
+   [wp37-os-sandbox.md](wp37-os-sandbox.md), is written and proposed, not
+   built. WP35, the capability report
+   ([wp35-capabilities.md](wp35-capabilities.md)), and
    WP36, the compile-time policy
    ([wp36-capability-policy.md](wp36-capability-policy.md)), are built.
 4. **WP39, the HTTP server** ([wp39-http-server.md](wp39-http-server.md)):

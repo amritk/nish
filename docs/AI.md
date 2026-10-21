@@ -1324,8 +1324,11 @@ export const main = (): i32 => {
   readonly u8[], n: u64)`). `readonly` is C's `const`. A run without its count
   is NL2549, a count that is not `u64` NL2550, `i32[]` NL2551, `u8[] | null`
   NL2552. Declare `fwrite` as `(buf: readonly u8[], n: u64, one: u64, f: CPtr)`
-  and pass `1` for `one`. A call to a buffer-taking declaration is refused for
-  now (NL2554): the call is not lowered yet.
+  and pass `1` for `one`. A call passes the data pointer and first checks the
+  count against every buffer of the run: a larger count is an `ffi-length`
+  panic, and only `toU64(buf.length)` of the buffer itself is proved. C
+  borrows the bytes for the call and may write a `u8[]`; a spawned task may
+  not make the call.
 
 ```ts nish:err NL2549
 declare function SHA256(d: readonly u8[], n: u64, md: u8[]): CPtr;
@@ -1529,6 +1532,27 @@ export const main = (): i32 => {
 The context reaches a nested literal and a `null`, and stops there: a numeric
 literal in a property keeps the mode's default type (above), and `[]` has no
 element type at all in that position.
+
+A class with methods is made only by `new`: a literal typed as one would be a
+plain object under Node, without the methods (NL2556). A class with fields
+alone, and an interface, still take a literal.
+
+```ts nish:err NL2556
+class Counter {
+  n: i32;
+  constructor(n: i32) {
+    this.n = n;
+  }
+  get(): i32 {
+    return this.n;
+  }
+}
+
+export const main = (): i32 => {
+  const c: Counter = { n: 5 }; // write `new Counter(5)`
+  return c.get();
+};
+```
 
 ### Type aliases and enums
 
@@ -1760,6 +1784,11 @@ export const main = (): i32 => {
   build alike. `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
   (NL3037). Name it `writeLine`, or leave it private: a private function with
   such a name gets a symbol ending in `$`.
+- **Nor, in a wasm build, `memory`**: a wasm `--target`, `--profile wasi` or
+  `--emit-dts` refuses it, because the `--profile wasm` module exports its
+  linear memory under that name; wasi reserves it too, so a program that
+  builds for wasi also builds as a freestanding wasm module. `` `memory` is the name a wasm module exports its linear memory under: an exported function of the program's own package keeps its name as its symbol, so the module would export two things named `memory` and no host could load it; rename it ``
+  (NL3038). A native build keeps it.
 
 ## Statements
 
@@ -2053,7 +2082,8 @@ the port big-endian); hosts are numeric literals, because there is no DNS.
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
-spreads the connections; any other bit is `-22`). UDP is
+spreads the connections), and flag 2 `TCP_NODELAY` on every socket `tcpAccept`
+takes from it; flags add, and any other bit is `-22`. UDP is
 `udpBind(host, port, flags)` (flag 1 `SO_REUSEPORT`, flag 2 GRO),
 `udpSendTo(fd, buf, off, len, to, segment, ecn)` and
 `udpRecvFrom(fd, buf, off, len, from, meta)`: a `segment` above 0 sends one

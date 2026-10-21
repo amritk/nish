@@ -128,6 +128,7 @@ import {
 import {
   addStringConstant,
   copyString,
+  emitForeignBuffers,
   emitForeignString,
   emitForeignStringResult,
   emitIndexOfAnyKernel,
@@ -199,7 +200,7 @@ import {
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { resolveTarget, targetHeader } from "./target"
-import { T_STRING, T_VOID, TypeTable } from "./types"
+import { isForeignBuffer, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
 /**
@@ -894,7 +895,10 @@ export class Emitter {
     const params: string[] = []
     let i = 0
     while (i < sig.paramNames.length) {
-      params.push(this.llvmAbi(sig.paramTypes[i], false))
+      // WP40 B1.2: C takes a buffer's bytes, not its header (`emitForeignBuffers`).
+      params.push(
+        isForeignBuffer(this.table, sig.paramTypes[i]) ? "i8*" : this.llvmAbi(sig.paramTypes[i], false)
+      )
       i = i + 1
     }
     return `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`
@@ -1278,6 +1282,11 @@ export class Emitter {
     }
     if (this.program.nodeNullTests[expr.id]) {
       emitChainTest(this, expr, result)
+      // A guarded read that is a `?.` receiver is copied past its test, where
+      // it is known not to be `null`; `guardedRead` left it uncopied.
+      if (this.copiesGuardedRead(expr)) {
+        result = copyString(this, result)
+      }
     }
     this.fn.setLocation(saved)
     return result
@@ -1388,14 +1397,23 @@ export class Emitter {
    * the next store through it frees, so the reader keeps a copy of its own.
    */
   guardedRead(expr: Node, value: string): string {
-    if (
-      expr.id === this.uncopied ||
-      this.typeOf(expr) !== T_STRING ||
-      !isGuardedAccess(this.program, this.table, expr)
-    ) {
+    if (this.program.nodeNullTests[expr.id] || !this.copiesGuardedRead(expr)) {
       return value
     }
     return copyString(this, value)
+  }
+
+  /**
+   * Whether `expr` reads a string through a guard that `guardedRead` copies. A
+   * `?.` receiver is copied only once its null test has passed, since the slot
+   * may be a `string | null` that holds none.
+   */
+  copiesGuardedRead(expr: Node): boolean {
+    return (
+      expr.id !== this.uncopied &&
+      this.typeOf(expr) === T_STRING &&
+      isGuardedAccess(this.program, this.table, expr)
+    )
   }
 
   /**
@@ -1573,6 +1591,9 @@ export class Emitter {
     const reclaim = keepSize >= 0 ? "" : this.beginReclaim(sig)
     const mark = keepSize >= 0 ? keepMark : reclaim
     const marker = tail ? "tail " : ""
+    if (sig.foreign()) {
+      emitForeignBuffers(this, expr, sig, operands, operandValues)
+    }
     const call = `${marker}call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`
     if (sig.returnType === T_VOID) {
       this.fn.emit(call)

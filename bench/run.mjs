@@ -7,8 +7,10 @@
 //     --runs N          timed runs per binary (default 5), after --warmup N (default 1)
 //     --only a,b        benchmark names to include (default: all); `awfy` names
 //                       the Are We Fast Yet ports in bench/awfy/, which run only
-//                       when named, and `maps` the WP32 map programs (see
-//                       bench/README.md)
+//                       when named, `maps` the WP32 map programs (see
+//                       bench/README.md), and `crypto` the crypto twins, run by
+//                       bench/crypto/run.mjs: --record (--validate when
+//                       validating, the section alone into --out when given)
 //     --n name=value    override a benchmark's size (the `bench:n` line in its
 //                       sources); `maps=<n>` sizes all the map programs at once
 //     --validate        build and compare checksums only: no timing, no docs written
@@ -148,6 +150,20 @@ const PARALLEL = [
     what: "4 tasks bin 50,000 values each into one `Mutex`, a lock per value, 16 rounds: a contended lock",
     twins: true,
   },
+  {
+    name: "par-heavy",
+    what: "16 integer scramble rounds per element, 2^22 elements, 40 calls; the order-sensitive fold runs on one thread",
+  },
+  {
+    name: "par-heavy-fold",
+    what: "par-heavy with a fold that vectorises: the same map, a smaller undivided part",
+  },
+  {
+    name: "par-heavy4",
+    what: "par-heavy with 64 scramble rounds: four times the divided work, the same fold",
+  },
+  { name: "par-scale", what: "`x * k` over 2^22 elements, 40 calls: a memory-bound map" },
+  { name: "par-single", what: "one `x * 3` map over 2^25 elements: a single large region" },
 ]
 const AWFY_KEPT = 20
 
@@ -808,6 +824,7 @@ const selected = BENCHMARKS.filter((b) => !opts.only || opts.only.has(b.name))
 const selectedParallel = PARALLEL.filter((b) => !opts.only || opts.only.has(b.name) || opts.only.has("par"))
 const known = (name) =>
   name === "awfy" ||
+  name === "crypto" ||
   name === "par" ||
   name === "maps" ||
   BENCHMARKS.some((b) => b.name === name) ||
@@ -819,6 +836,43 @@ if (opts.only) {
     if (!known(name)) {
       fail(`unknown benchmark \`${name}\``)
     }
+  }
+}
+
+// `--only crypto` hands the crypto twins to their own runner, which writes
+// docs/BENCHMARKS.md's crypto block; the rest of `--only` runs here after it.
+if (opts.only?.has("crypto")) {
+  const outGiven = opts.out !== path.join(root, "docs", "BENCHMARKS.md")
+  if (outGiven && !opts.validate && opts.only.size > 1) {
+    fail("--out with --only crypto writes the crypto section alone, so name crypto by itself")
+  }
+  let mode = ["--record"]
+  // --record rewrites the whole crypto section, so every twin it can build must run.
+  if (!opts.validate && !outGiven && !(opts.rust && opts.go)) {
+    fail(
+      "--only crypto records the whole crypto section, so it takes no --no-rust or --no-go; use --validate, or --out for a partial table"
+    )
+  }
+  if (opts.validate) {
+    mode = ["--validate"]
+  } else if (outGiven) {
+    mode = ["--out", opts.out]
+  }
+  const compiler = process.argv.indexOf("--compiler")
+  const child = spawnSync(
+    process.execPath,
+    [
+      path.join(root, "bench", "crypto", "run.mjs"),
+      ...mode,
+      ...(compiler >= 0 ? ["--compiler", path.resolve(process.argv[compiler + 1])] : []),
+      ...(opts.rust ? [] : ["--no-rust"]),
+      ...(opts.go ? [] : ["--no-go"]),
+    ],
+    { stdio: "inherit" }
+  )
+  opts.only.delete("crypto")
+  if (child.status !== 0 || opts.only.size === 0) {
+    process.exit(child.status ?? 1)
   }
 }
 
@@ -1592,7 +1646,7 @@ if (twins !== null) {
   const n = twins.passes
   lines.push(TWINS_HEADING, "")
   lines.push(
-    `Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish \`par\` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on \`std::thread::scope\` (\`bench/par-<kernel>.rs\`) and on Rayon's pool (\`bench/par-<kernel>-rayon.rs\`), the Go twins on goroutines and a \`sync.WaitGroup\` (\`bench/par-<kernel>.go\`). The map kernels cut the array into one contiguous chunk per thread, the first on the calling thread, which is how Nish's partitioner divides them at these sizes; Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's \`Mutex\`, Rust's \`std::sync::Mutex\` and Go's \`sync.Mutex\`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one \`add\` per bin, is \`examples/histogram-atomic.ts\` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).`,
+    `Four of the kernels above, each ported to Rust and to Go with the same work, the same sizes and the same checksum: every binary below printed the Nish \`par\` run's output (numeric tokens to 1e-9 relative; the n-body energies agree to the last bit). The Rust twins run on \`std::thread::scope\` (\`bench/par-<kernel>.rs\`) and on Rayon's pool (\`bench/par-<kernel>-rayon.rs\`), the Go twins on goroutines and a \`sync.WaitGroup\` (\`bench/par-<kernel>.go\`). The map twins cut the array into one contiguous chunk per thread, the first on the calling thread, as Nish's partitioner did until it began cutting up to eight pieces per thread that the threads claim as they finish ([Scheduling a divided region](#scheduling-a-divided-region)); Rayon splits adaptively. par-histogram takes the lock once per value in every language, Nish's \`Mutex\`, Rust's \`std::sync::Mutex\` and Go's \`sync.Mutex\`, kept deliberately as a comparison of a contended lock; the atomic version, a local tally and one \`add\` per bin, is \`examples/histogram-atomic.ts\` ([the threads guide's atomics section](guide/using-nish/threads.md#counting-without-a-lock-atomici32-and-atomici64)).`,
     "",
     `**The same work, not the same checks or the same build.** Nish builds with its default checks: every integer operation that can overflow and every index it cannot prove in range is checked (\`nish_panic_overflow\` and \`nish_panic_index\` are reached from par-histogram's \`binStream\`, for one). The Rust twins build as \`--release\` does, with bounds checks and without overflow checks; Go checks bounds and not overflow. And Nish's \`--profile speed\` links with LTO, where neither Rust build does, which gives Nish a small edge. In par-nbody each Nish probe reaches the bodies through class references, where the twins index a contiguous array of structs, which slightly favours Rust and Go.`,
     "",
