@@ -1,7 +1,7 @@
 /**
  * `nish/net/http2-tls` — HTTP/2 over TLS 1.3 on TCP: a pool of
- * `Http2Connection`s, one beside each slot of a `TlsTcpServer`, for a
- * program that owns its readiness loop.
+ * `Http2Connection`s over the slots of a `TlsTcpServer`, each made by the
+ * first accept into its slot, for a program that owns its readiness loop.
  *
  *     const listener = tcpListen("0.0.0.0", 8443, 128);
  *     const server = new Http2TlsServer(tlsConfig, new Http2Config(), listener, 64);

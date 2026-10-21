@@ -254,12 +254,19 @@ export const tlsChecks = (): i32 => {
   const c = new H2Client(lb);
   const d = new H2Client(lb);
   const e = new H2Client(lb);
+  // `acceptGrowth` is the last accept's alone, so each reading of it pins
+  // that the handshake took exactly one.
+  const beforeC: i32 = lb.accepted;
   t.ok("a client accepted again into slot 0", c.handshake([H2_ALPN]) && lb.acceptSlot === 0);
-  t.ok(`moves the arena not at all (${lb.acceptGrowth} bytes)`, lb.acceptGrowth === toI64(0) && lb.server.connections[0] === first);
+  t.ok(
+    `in one accept, which moves the arena not at all (${lb.accepted - beforeC} accept, ${lb.acceptGrowth} bytes)`,
+    lb.accepted === beforeC + 1 && lb.acceptGrowth === toI64(0) && lb.server.connections[0] === first
+  );
+  const beforeD: i32 = lb.accepted;
   t.ok("and a second fills the pool, accepted into slot 1", d.handshake([H2_ALPN]) && lb.acceptSlot === 1);
   t.ok(
-    `whose connection the first accept into it makes (${lb.acceptGrowth > toI64(0) ? "some" : "no"} bytes, ${lb.server.connections.length} made)`,
-    lb.acceptGrowth > toI64(0) && lb.server.connections.length === 2
+    `whose connection its one accept makes (${lb.accepted - beforeD} accept, ${lb.acceptGrowth > toI64(0) ? "some" : "no"} bytes, ${lb.server.connections.length} made)`,
+    lb.accepted === beforeD + 1 && lb.acceptGrowth > toI64(0) && lb.server.connections.length === 2
   );
   e.index = lb.connect();
   t.ok("a third is accepted and shed", lb.awaitEnd(e.index) && lb.refused === 1);

@@ -46,6 +46,7 @@ import {
   budgetLabel,
   HTTP1_SERVER_START_BYTES,
   HTTP1_TLS_SERVER_START_BYTES,
+  HTTP2_TLS_SERVER_START_BYTES,
   HTTP3_SERVER_START_BYTES,
   RUNTIME_BUDGETS,
   TLS_TCP_START_BYTES,
@@ -6328,13 +6329,14 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
   }
 }
 
-// `TlsTcpServer` and `Http1TlsServer` build a slot's TLS state, and the
-// latter its connection, on the first accept into it too.
-// `tests/link/net_tls_record_tcp/startup.ts` and
-// `tests/link/net_http1_server/tls-startup.ts` build pools of 16,384 slots on
-// no socket and print the bytes they took and whether they fit one chunk,
-// which the ceilings `TLS_TCP_START_BYTES` and `HTTP1_TLS_SERVER_START_BYTES`
-// hold.
+// `TlsTcpServer` builds a slot's TLS state on the first accept into it too,
+// and `Http1TlsServer` and `Http2TlsServer` the slot's connection beside it.
+// `tests/link/net_tls_record_tcp/startup.ts`,
+// `tests/link/net_http1_server/tls-startup.ts` and
+// `tests/link/net_http2_tls/startup.ts` build pools of 16,384 slots on no
+// socket and print the bytes they took and whether they fit one chunk, which
+// the ceilings `TLS_TCP_START_BYTES`, `HTTP1_TLS_SERVER_START_BYTES` and
+// `HTTP2_TLS_SERVER_START_BYTES` hold.
 for (const [unit, program, name, ceiling, ceilingName] of [
   ["net_tls_record_tcp", "startup.ts", "TlsTcpServer", TLS_TCP_START_BYTES, "TLS_TCP_START_BYTES"],
   [
@@ -6343,6 +6345,13 @@ for (const [unit, program, name, ceiling, ceilingName] of [
     "Http1TlsServer",
     HTTP1_TLS_SERVER_START_BYTES,
     "HTTP1_TLS_SERVER_START_BYTES",
+  ],
+  [
+    "net_http2_tls",
+    "startup.ts",
+    "Http2TlsServer",
+    HTTP2_TLS_SERVER_START_BYTES,
+    "HTTP2_TLS_SERVER_START_BYTES",
   ],
 ]) {
   if (only && !unit.includes(only) && !"runtime-budget".includes(only)) {

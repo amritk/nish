@@ -384,6 +384,24 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
 export const HTTP1_SERVER_START_BYTES = 16896
 
 /**
+ * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from
+ * the arena before its first connection, linked by `tests/run.js` from
+ * `tests/link/net_http2_tls/startup.ts` on the default `Http2Config`.
+ *
+ * Measured **58,560 bytes** on 2026-10-21 with clang 18 on linux-x64:
+ * `TLS_TCP_START_BYTES`'s pool, slot 0's `Http2Connection` (16,056 bytes, made by the
+ * constructor so a config RFC 9113 refuses panics there), the `HttpDate` and the empty
+ * frame-buffer pools, with no other slot's connection built. Each is built on the
+ * first accept into its slot. Built eagerly, as every slot was at c8a00d6, the
+ * interop server's HTTP/2 pool on 1,024 slots was 62.3 MB resident at listening
+ * against 11.7 MB now, 58 kB a slot against 7 kB, and 18.9 MB against 6.3 MB at 256
+ * slots (measured as `TLS_TCP_START_BYTES` says). The budget is the next 256-byte
+ * boundary above the measurement: the 64 bytes of headroom are intended, and one
+ * slot's connection built eagerly again costs far more than they hold.
+ */
+export const HTTP2_TLS_SERVER_START_BYTES = 58624
+
+/**
  * Ceiling on what `new TlsTcpServer(config, listener, 16384)` takes from the arena
  * before its first connection -- not a `.text` budget: `tests/run.js` links
  * `tests/link/net_tls_record_tcp/startup.ts`, which builds that pool on the test
