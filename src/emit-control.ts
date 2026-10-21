@@ -26,6 +26,7 @@ import {
 import { unwrapParens } from "./emit-util"
 import { IRBlock } from "./ir"
 import { FLAG_POSTFIX, N_CASE, N_EMPTY, N_TRUE, N_VAR, Node } from "./nodes"
+import { SWITCH_COVERED } from "./program"
 import { isFloat } from "./types"
 
 // ---- Branch helpers -----------------------------------------------------------
@@ -238,13 +239,19 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
     }
     i = i + 1
   }
-  const defaultBlock = defaultIndex < 0 ? endBlock : targetOf(bodies, endBlock, defaultIndex)
+  // A union's tag the labels name every value of has no default to take: the
+  // checker proved it (`switchCoverage`), so the edge goes to `unreachable`,
+  // which lets the last clause end the function and the backend drop the
+  // range check in front of a jump table.
+  const covered = defaultIndex < 0 && emitter.program.switchCoverage[stmt.id] === SWITCH_COVERED
+  const unmatched = covered ? fn.newBlock("sw.unreachable") : endBlock
+  const defaultBlock = defaultIndex < 0 ? unmatched : targetOf(bodies, endBlock, defaultIndex)
   fn.emit(`switch ${type} ${subject}, label %${defaultBlock.label} [\n${table.join("\n")}\n  ]`)
 
   // `sw.end` is reachable from the implicit default edge, from a `break`, and
   // from a last clause that falls out; an empty trailing clause is the same
   // edge as the second of those.
-  let reachesEnd = defaultIndex < 0 || defaultBlock === endBlock
+  let reachesEnd = defaultBlock === endBlock
   const target = new LoopTarget(endBlock, null)
   emitter.loops.push(target)
   i = 0
@@ -268,6 +275,10 @@ export const emitSwitch = (emitter: Emitter, stmt: Node): void => {
   emitter.loops.pop()
   if (target.hasBreak) {
     reachesEnd = true
+  }
+  if (covered) {
+    fn.placeBlock(unmatched)
+    fn.emit("unreachable")
   }
   if (reachesEnd) {
     fn.placeBlock(endBlock)

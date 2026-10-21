@@ -605,5 +605,5 @@ What the rows say, read against that band:
 <!-- tls-handshake:begin -->
 ## TLS handshake
 
-Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline.
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline and [its result](wp34-hosting-cs.md#k5-p-256-the-inversion--the-result).
 <!-- tls-handshake:end -->

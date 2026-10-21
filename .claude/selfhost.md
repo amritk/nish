@@ -302,7 +302,7 @@ something surprising.**
 ### The goldens
 
 ```bash
-node tests/self/goldens.js                  # verify all of them, ~13 s
+node tests/self/goldens.js                  # verify all of them, ~2.5 min
 node tests/self/goldens.js checked --verbose
 npm run test:update                         # regenerate, with the .ll goldens
 node tests/self/goldens.js --update         # regenerate these alone
@@ -317,9 +317,11 @@ reference was stage0's *checker* — the rewrite needs the static type of every
 expression and `src/` has no rewriter — so it cannot be rewritten at all, only
 checked for freshness (`node tests/differential/goldens.js --fresh`, and wp19
 §6 item 6 for what the freeze does not save). A corpus program with no frozen
-rewrite is named in a register rather than silently skipped. `src/`'s dump is
-stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
-— and the comparison still reads every byte of it.
+rewrite is named in a register rather than silently skipped. The checked dump
+is stored one file per module under `checked/`, each module once however many
+programs load it (the generator fails if two programs dump one module
+differently), and each body's positions counted from its first, so that two
+pull requests collide only when they change the same module.
 
 ## Habits that have paid off
 
