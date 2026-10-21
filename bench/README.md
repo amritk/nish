@@ -865,10 +865,13 @@ negotiated, which must be the same for all of them or the run stops.
 ## Pool memory
 
 The interop server (`tests/link/net_interop_server`, the runner's endpoint)
-builds a connection pool per carrier before it listens: QUIC for HTTP/3,
-HTTP/2, HTTPS/1.1 and plain HTTP/1.1, each `--slots` connections deep (1 to
-4096, 64 by default; the two HTTP/1.1 pools stop at 500, where `H1Loop`'s
-event tokens run out). Two scripts measure what that costs and what it serves:
+serves a connection pool per carrier: QUIC for HTTP/3, HTTP/2, HTTPS/1.1 and
+plain HTTP/1.1, each `--slots` connections deep (1 to 4096, 64 by default; the
+two HTTP/1.1 pools stop at 500, where `H1Loop`'s event tokens run out). Before
+it listens a pool sizes its tables from `--slots`, and a slot's connection is
+built on the first connection accepted into it, slots 0 up, with the
+interop server's `WebTransport` bound beside an HTTP/3 slot when that slot
+is first served as `h3`. Two scripts measure what that costs and what it serves:
 
 ```bash
 build/nish tests/link/net_interop_server/main.ts -o build/interop.ir/ --link build/interop

@@ -14,9 +14,9 @@
 //   flow-control window holds back never finishes, which is four of h2spec's
 //   cases.
 // - QUIC is one `Http3Server` on UDP, offering `h3` and `hq-interop`, with a
-//   `WebTransport` beside each slot's `Http3Connection`; `app.ts` answers
-//   them. Its handshakes sign with the key the caller holds, for the chain it
-//   was given.
+//   `WebTransport` bound beside a slot's `Http3Connection` when the slot is
+//   first served as `h3`; `app.ts` answers them. Its handshakes sign with the
+//   key the caller holds, for the chain it was given.
 // - With `watchSignals`, SIGTERM or SIGINT stops the loop: `docker stop`.
 import { Secret } from "nish:secret";
 import { netLocalPort, pollAdd, pollCreate, pollWait, udpBind } from "nish:net";
@@ -25,7 +25,6 @@ import { QUIC_CONN_STATIC_KEY_SIZE, QuicServerConfig } from "nish/net/quic";
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 import { H3_ALPN, Http3Config } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
-import { WebTransport, WebTransportConfig } from "nish/net/webtransport";
 import { H1_ALPN, Http1Server, Http1TlsServer } from "nish/net/http1-server";
 import { tcpConfig } from "../net_tls_common/server";
 import { testConfig } from "../net_http1_server/checks";
@@ -199,12 +198,8 @@ export class InteropServer {
       poolSlots(options, "h3"),
       randomBytes(QUIC_LISTENER_ENTROPY_SIZE)
     );
-    const wts: WebTransport[] = [];
-    for (let slot: i32 = 0; slot < this.h3.size(); slot++) {
-      wts.push(new WebTransport(new WebTransportConfig(), this.h3.connection(slot)));
-    }
     const files = new InteropFiles(options.www);
-    this.app = new InteropApp(this.h3, wts, files);
+    this.app = new InteropApp(this.h3, files);
     this.h1 = newH1Loop(options);
     this.h1.serving = true;
     this.h2 = new InteropH2(this.loop, "127.0.0.1", options.h2Port, chain, files, poolSlots(options, "h2"));

@@ -65,7 +65,7 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   around verification cannot follow through `exposeWith`. What the wipe cannot
   reach is the option's string (`--secret` or `CS_RELAY_SECRET`), immutable
   for the process's life.
-- **Memory.** Every table is made at start-up, and nothing a session does
+- **Memory.** Every table is sized at start-up, and nothing a session does
   keeps memory, its handshake included: N9's soak
   (`tests/link/net_relay_soak`) measured 100,000 sessions past a warm-up of
   500 with the arena at the same chunk and offset and the resident set the
@@ -74,9 +74,12 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   handshake's state, now in the slot), 10,983 before #512 (the
   CertificateVerify signature, now over scratch) and 1,727 before #515 (the
   QUIC listener's copy and parse of the first Initial, and its stateless
-  resets, now read in place and answered into scratch). The full-size
-  pool, 4,160 QUIC slots, is about 754 MB resident at start, about 181 KB a
-  slot. Measured one part at a time: the `QuicConnection` is 158 KB of it —
+  resets, now read in place and answered into scratch). A QUIC slot is
+  built on the first Initial accepted into it, slots 0 up, and its
+  `WebTransport` bound on the first event the relay serves from it, so the
+  full-size pool, 4,160 slots, is a ceiling: a slot once built is about
+  181 KB resident, about 754 MB were all of them built. Measured one part at
+  a time: the `QuicConnection` is 158 KB of it —
   about 90 KB fixed (its sent-packet rings, CRYPTO reassembly and three
   key spaces), about 44 KB of stream buffers (nine streams at 2,048 bytes
   each way) and about 24 KB of datagram rings (eight of 1,200 bytes each
@@ -84,9 +87,9 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   slot's `TlsServer`, about 31 KB, is made at its first handshake (#492).
   `relayQuicConfig` already asks for the smallest stream buffers a CONNECT
   fits, and the rest are `std/net` constants, so no smaller slot is on
-  offer. What a deployment can lower is the slot count: `RelayConfig`'s
-  `maxSessions` and `spareSlots`, start-up constants as main.rs's
-  `Limits` are, with no flag.
+  offer. What a deployment can lower is the slot count, the most a busy relay
+  builds: `RelayConfig`'s `maxSessions` and `spareSlots`, start-up constants
+  as main.rs's `Limits` are, with no flag.
 
 ## Where it differs from the Rust
 
