@@ -833,9 +833,18 @@ class RequestSite {
  * the module it came from. Neither direction touches `typeNames`: nobody may
  * write `Box$i32`, and `identity<Point>` does not put `Point` in scope in the
  * module that declares `identity`.
+ *
+ * A layout already held here is not new, and answers false, but a request with
+ * `symbols` still pushes it onto `reachableStructs` through
+ * `reachForeignSymbols`: a type argument may have registered it layout-only
+ * before a call answered it, and the methods that call brings are owed all the
+ * same (#613).
  */
 const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolean): boolean => {
   if (ctx.program.structs.has(info.name)) {
+    if (symbols) {
+      reachForeignSymbols(ctx, info.name)
+    }
     return false
   }
   if (symbols) {
@@ -845,7 +854,64 @@ const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolea
   return true
 }
 
-/** `reachForeignLayout` over `root` and everything its members reach, in `from`'s registry. */
+/**
+ * Give a layout this module already holds the `declare`s for its constructor
+ * and methods, when another module defines it.
+ *
+ * The first registration decides nothing about what comes later: a type
+ * argument going out registers `Box$i32` layout-only, and a call this module
+ * later makes to `box(9)` hands it a value whose methods it calls. Without the
+ * upgrade `b.get()` names a symbol nothing declares, and `llvm-as` refuses the
+ * module (#613). A struct this module defines itself is never upgraded, and one
+ * already in `reachableStructs` is not pushed twice.
+ */
+const reachForeignSymbols = (ctx: CheckContext, name: string): void => {
+  const program = ctx.program
+  let index = 0
+  while (index < program.structList.length && program.structList[index].name !== name) {
+    index = index + 1
+  }
+  if (index === program.structList.length || program.structList[index].origin === program.source) {
+    return
+  }
+  for (const reached of program.reachableStructs) {
+    if (reached === index) {
+      return
+    }
+  }
+  program.reachableStructs.push(index)
+}
+
+/**
+ * `reachForeignLayout` for `info`, queueing it on `pending` when its members
+ * have to be walked: when it is new here, or when a request with `symbols`
+ * meets a layout another module defines, which an earlier request may have
+ * registered layout-only along with every struct its fields reach (#613).
+ * `walked` stops the second walk at a cycle.
+ */
+const reachForeignMember = (
+  ctx: CheckContext,
+  info: StructInfo,
+  symbols: boolean,
+  walked: StringSet,
+  pending: StructInfo[]
+): void => {
+  if (!walked.add(info.name)) {
+    return
+  }
+  if (reachForeignLayout(ctx, info, symbols) || (symbols && info.origin !== ctx.program.source)) {
+    pending.push(info)
+  }
+}
+
+/**
+ * `reachForeignLayout` over `root` and everything its members reach, in `from`'s registry.
+ *
+ * What a module is owed does not depend on which request reached a layout
+ * first: a request with `symbols` reaches the whole closure, so `Wrap$i32`'s
+ * `Box$i32` gains its `declare`s although a type argument registered both
+ * layout-only before.
+ */
 const registerForeignLayouts = (
   ctx: CheckContext,
   root: StructInfo,
@@ -853,9 +919,8 @@ const registerForeignLayouts = (
   symbols: boolean
 ): void => {
   const pending: StructInfo[] = []
-  if (reachForeignLayout(ctx, root, symbols)) {
-    pending.push(root)
-  }
+  const walked = new StringSet()
+  reachForeignMember(ctx, root, symbols, walked, pending)
   // A cursor rather than `pop()`, and stage0's `src/` walks it the same way so the two
   // registries end up in the same order: `pop()` answers `T` in this language
   // and `T | undefined` in `lib.es5`, which is the one divergence
@@ -872,8 +937,8 @@ const registerForeignLayouts = (
     let i = 0
     while (i < names.size()) {
       const next = from.program.struct(names.at(i))
-      if (next !== null && reachForeignLayout(ctx, next, symbols)) {
-        pending.push(next)
+      if (next !== null) {
+        reachForeignMember(ctx, next, symbols, walked, pending)
       }
       i = i + 1
     }
@@ -1165,7 +1230,36 @@ const instantiate = (
   ) {
     useExternalInstance(ctx, sig)
   }
+  if (sig !== null && home !== ctx) {
+    adoptInstanceLayouts(ctx, home, sig)
+  }
   return sig
+}
+
+/**
+ * Register every layout `sig`'s instantiated signature names here (#613).
+ *
+ * `const b = box(7)` names `Box<i32>` nowhere in this module, so no annotation
+ * reaches `instantiateStruct`: the `Box$i32` the declaring module minted for
+ * `box`'s result arrives through the call alone, and this module holds a value
+ * of it all the same. It comes back with its constructor and methods, as an
+ * annotation's would (`symbols`), which a library copy's emitter skips
+ * declaring because it defines them (`Emitter.declareAll`).
+ */
+const adoptInstanceLayouts = (ctx: CheckContext, home: CheckContext, sig: FunctionSig): void => {
+  const names = new StringSet()
+  noteStructNames(ctx.table, sig.returnType, names)
+  for (const type of sig.paramTypes) {
+    noteStructNames(ctx.table, type, names)
+  }
+  let i = 0
+  while (i < names.size()) {
+    const info = home.program.struct(names.at(i))
+    if (info !== null) {
+      registerForeignLayouts(ctx, info, home, true)
+    }
+    i = i + 1
+  }
 }
 
 /**
