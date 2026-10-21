@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1095 programs, 159219 dump lines.
+# 1098 programs, 159278 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3645,6 +3645,68 @@ function main(): i32 -> @nish_main [exported entry]
   callee 20:15 total -> @total
   callee 21:15 label -> @label
   callee 25:15 total -> @total
+program tests/cases/arr_ref_alias_clone.ts
+module tests/cases/arr_ref_alias_clone.ts (entry)
+struct P (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function readX(p: P): i32 -> @readX
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer p: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function clone(p: P): P -> @clone
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=4
+  calls: nish_alloc_struct
+  pointer p: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: clone nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32 readX
+  stackSites=4 stackLocals=1
+  local 9:9 ps: P[] (const)
+  local 10:12 i: i32 (let)
+  local 13:9 c: P (const)
+  callee 13:13 clone -> @clone
+  local 15:12 i: i32 (let)
+  callee 18:18 readX -> @readX
+program tests/cases/arr_ref_alias_dead.ts
+module tests/cases/arr_ref_alias_dead.ts (entry)
+struct P (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function readX(p: P): i32 -> @readX
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer p: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_from_i32 readX
+  stackSites=3 stackLocals=1
+  local 8:9 ps: P[] (const)
+  local 9:12 i: i32 (let)
+  local 12:9 p: P (const)
+  local 13:9 q: P (const)
+  callee 14:18 readX -> @readX
+  local 15:12 i: i32 (let)
+  callee 19:18 readX -> @readX
+program tests/cases/arr_ref_alias_replace.ts
+module tests/cases/arr_ref_alias_replace.ts (entry)
+struct P (interface) size=4 align=4
+  field x: i32 index=0 offset=0
+function readX(p: P): i32 -> @readX
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer p: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: nish_alloc_struct nish_array_grow nish_panic_index nish_print nish_str_from_i32 readX
+  stackSites=2 stackLocals=0
+  local 7:9 ps: P[] (const)
+  local 8:12 i: i32 (let)
+  local 11:7 q: P (let)
+  local 13:12 i: i32 (let)
+  callee 16:18 readX -> @readX
 program tests/cases/arr_repeat_check.ts
 module tests/cases/arr_repeat_check.ts (entry)
 struct Perm (class) size=8 align=8
