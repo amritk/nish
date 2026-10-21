@@ -6984,13 +6984,15 @@ while (running) {
 ```
 
 **Darwin** is kqueue, with a filter per direction rather than a set of events,
-and the runtime builds epoll's answers from the filters, so the calls answer the
-same on both: `pollAdd` of a descriptor already watched is `-17`, `pollModify`
-and `pollRemove` of one not watched are `-2`, a descriptor added watching
-nothing holds a disabled read filter so the loop still knows it, and a
-descriptor both readable and writable is one pair, `3`, folded from its two
-filters' records. One difference stays: the `pollAdd` that answers `-17` leaves
-the descriptor under the token it gave rather than the old one. CI's
+and the runtime builds epoll's answers from the filters: `pollAdd` of a
+descriptor already watched is `-17`, `pollModify` and `pollRemove` of one not
+watched are `-2`, a descriptor added watching nothing holds a disabled read
+filter so the loop still knows it, and a descriptor both readable and writable
+is one pair, `3`, folded from its two filters' records. Two differences stay.
+The `pollAdd` that answers `-17` leaves the descriptor, both ways, under the
+token it gave rather than the old one. And a descriptor watching nothing is
+never reported: epoll still reports its hang-up or error as `4`, but a disabled
+filter reports nothing. CI's
 `runtime-net (macos-latest)` job runs `net_loop_calls` and `net_loop_two` on a
 mac, as it runs every `net_` section.
 

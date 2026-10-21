@@ -327,8 +327,14 @@ export class H1Loop {
     // report that before the listener is readable, so a check made on the
     // return would see no slot yet: the loop runs on until the server has
     // taken the connection, accepted or shed.
-    while (this.accepted + this.refused === taken && this.failure === "") {
+    rounds = 0;
+    while (this.accepted + this.refused === taken && rounds < 100 && this.failure === "") {
       this.step(toI32(-1));
+      rounds = rounds + 1;
+    }
+    if (this.accepted + this.refused === taken) {
+      this.fail("connect: the server never took the connection");
+      return -1;
     }
     return index;
   }

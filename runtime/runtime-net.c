@@ -518,9 +518,9 @@ static int nish_poll_change(int32_t loop, int32_t fd, int filter, int flags, int
    which answers ENOENT for a filter not there, and is EEXIST when either is;
    a modification or a removal deletes both, and is ENOENT when neither was
    there; a modification then adds the ones asked for, each carrying the token
-   in `udata`. A touch rewrites the filter's `udata`, so the add that answers
-   -17 leaves the descriptor watched for its old events under the token it
-   gave rather than the old one. */
+   in `udata`. A touch rewrites the filter's `udata`, and the add touches both
+   filters, so the add that answers -17 leaves the descriptor watched for its
+   old events, both ways, under the token it gave rather than the old one. */
 static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, int32_t token) {
   if ((uint32_t)events > 3) return -22;
 #if defined(__linux__)
@@ -533,8 +533,9 @@ static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, i
   int r, w;
   if (op == NISH_POLL_ADD) {
     r = nish_poll_change(loop, fd, EVFILT_READ, 0, token);
-    w = r == ENOENT ? nish_poll_change(loop, fd, EVFILT_WRITE, 0, token) : r;
+    w = nish_poll_change(loop, fd, EVFILT_WRITE, 0, token);
     if (r == 0 || w == 0) return -17;
+    if (r != ENOENT) return nish_net_err(r);
     if (w != ENOENT) return nish_net_err(w);
   } else {
     r = nish_poll_change(loop, fd, EVFILT_READ, EV_DELETE, 0);

@@ -1547,7 +1547,11 @@ if (!only || "net_tcp".includes(only)) {
       // Mach-O prefixes every C symbol with an underscore.
       const nm =
         cc.status === 0
-          ? spawnSync("llvm-nm", ["-g", path.join(netDir, `${name}.gc`)], { encoding: "utf8" })
+          ? spawnSync(
+              ["llvm-nm", "llvm-nm-18"].find(has) ?? "llvm-nm",
+              ["-g", path.join(netDir, `${name}.gc`)],
+              { encoding: "utf8" }
+            )
           : null
       const defined = new Set(
         [...String(nm?.stdout ?? "").matchAll(/ T _?(nish_(?:net|tcp|udp|poll|connect)_\w+)$/gm)].map(

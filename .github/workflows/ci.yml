@@ -141,10 +141,10 @@ jobs:
         #     build of the same inputs prints `alloc_smoke delta = 16`. The
         #     check names which mechanism caught it.
         #   * Both `runtime objects: linking <case> ... gives the bytes the
-        #     sources do` checks (#358). They compared two links made to two
-        #     output paths, and LC_UUID is what ld64 varies with the path
-        #     (docs/wp10-ci.md#what-ld64-varies-measured); both now link at one
-        #     path and move each binary aside, as scripts/bootstrap.sh does.
+        #     sources do` checks (#358). ld64 varies LC_UUID with the output
+        #     path (docs/wp10-ci.md#what-ld64-varies-measured), so both links
+        #     write one path and move each binary aside, as
+        #     scripts/bootstrap.sh does.
         #     The default runtime's is measured green on a mac by
         #     `runtime-net (macos-latest)`; the `--threads` one is the same loop.
         #
@@ -909,12 +909,12 @@ jobs:
   # `#ifdef __linux__` away from two event loops -- epoll on Linux, kqueue on
   # Darwin -- and two socket setups (MSG_NOSIGNAL against SO_NOSIGPIPE), with
   # errno translated to Linux's numbers so a Nish program reads one value on
-  # both. The `bootstrap` darwin rows compile that branch; until this job
-  # nothing ran it. It runs the two runtime unit tests (tests/runtime-test.c's
+  # both. The `bootstrap` darwin rows compile that branch; this job runs it:
+  # the two runtime unit tests (tests/runtime-test.c's
   # socket, UDP and poll tests, plain and with -DNISH_THREADS) and every `net_`
   # section natively on an AArch64 mac, through tests/run.js so the clang line
   # lives in one place. It is not the commented-out `test` row: that row is the
-  # whole suite and its six named checks, and this is the network runtime alone.
+  # whole suite and its four named checks, and this is the network runtime alone.
   runtime-net:
     name: runtime-net (macos-latest)
     runs-on: macos-latest
@@ -968,11 +968,16 @@ jobs:
           sudo ifconfig lo0 alias 127.0.0.2 up
           sudo ifconfig lo0 alias 127.0.0.3 up
 
+      # Every net_ section runs on a mac, so the step needs checks that passed
+      # and no SKIP line: a filter that matches nothing, or a section skipped
+      # for a missing tool, fails it rather than leaving it green.
       - name: The net_ sections, natively on Darwin
         if: ${{ !cancelled() }}
         run: |
           set -o pipefail
           node tests/run.js net_ | tee "$RUNNER_TEMP/net.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed\.$' "$RUNNER_TEMP/net.log"
+          if grep -E '^SKIP  ' "$RUNNER_TEMP/net.log"; then exit 1; fi
 
       # Every skip is named with its reason, so a green job that skipped its
       # sockets reads as what it is.

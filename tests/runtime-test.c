@@ -898,6 +898,27 @@ static void test_poll(void) {
     nish_net_close(fds[i]);
   }
 
+  /* A descriptor readable and writable at once is one pair, 3. A second add
+     of it answers -17; Linux keeps the first token, and Darwin moves both of
+     its filters to the token the second add gave (docs/LANGUAGE.md), so one
+     wait never reports it under two. */
+  int both[2];
+  assert(socketpair(AF_UNIX, SOCK_STREAM, 0, both) == 0);
+  assert(write(both[1], "x", 1) == 1);
+  expect_i64(nish_poll_add(loop, both[0], 3, 9), 0, "a socket watched both ways");
+  expect_i64(nish_poll_add(loop, both[0], 3, 1), -17, "a second add of it");
+#if defined(__linux__)
+  const int32_t kept = 9;
+#else
+  const int32_t kept = 1;
+#endif
+  expect_i64(nish_poll_wait(loop, &ready, 1000), 1, "ready both ways is one pair");
+  expect_i64(pairs[0], kept, "under one token");
+  expect_i64(pairs[1], 3, "readable and writable");
+  expect_i64(nish_poll_remove(loop, both[0]), 0, "the pair no longer watched");
+  close(both[0]);
+  close(both[1]);
+
   /* One SIGALRM 20 ms from now, into a ten-second wait on nothing: 0, and
      long before the timeout. A finite timeout, so a signal that arrived
      before the wait began costs ten seconds and a failure, never a hang. */
