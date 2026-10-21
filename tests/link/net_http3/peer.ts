@@ -8,7 +8,7 @@
 // from the STREAM, RESET_STREAM, STOP_SENDING and CONNECTION_CLOSE frames of
 // every packet the client opens. `loopback.ts` drives the same client over a
 // UDP socket instead.
-import { netAddress, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
+import { netAddress, pollAdd, pollCreate, pollWait, udpBind, udpRecvFrom, udpSendTo } from "nish:net";
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import {
@@ -290,6 +290,42 @@ export class H3AppStream {
   }
 }
 
+/** The milliseconds a round that read nothing waits for a datagram still on its way before the wire counts as quiet. */
+export const WIRE_QUIET_MS: i32 = 5;
+/** The milliseconds a rig waits for a datagram it has just sent to land before it reads. */
+export const WIRE_ARRIVAL_MS: i32 = 1000;
+
+/**
+ * The sockets of a loopback rig in one readiness loop. Loopback delivery is
+ * not part of the send on Darwin, as it is on Linux: a datagram can still be
+ * on its way when the send has returned, so a rig that read nothing waits on
+ * the sockets before it calls the wire quiet.
+ */
+export class WireWait {
+  loop: i32 = -1;
+  ready: i32[];
+
+  constructor() {
+    this.loop = pollCreate();
+    this.ready = new Array<i32>(16);
+  }
+
+  /** Adds `fd` to the loop. */
+  watch(fd: i32): void {
+    pollAdd(this.loop, fd, n32(1), fd);
+  }
+
+  /** Whether a watched socket is readable within `WIRE_QUIET_MS`. */
+  landed(): boolean {
+    return pollWait(this.loop, this.ready, WIRE_QUIET_MS) > 0;
+  }
+
+  /** Whether a watched socket is readable within `WIRE_ARRIVAL_MS`: for a read that must see what was just sent. */
+  arrived(): boolean {
+    return pollWait(this.loop, this.ready, WIRE_ARRIVAL_MS) > 0;
+  }
+}
+
 /**
  * The client's socket, when the peer talks to an `Http3Server` over UDP
  * instead of handing datagrams to a `QuicConnection` itself: every datagram
@@ -305,10 +341,14 @@ export class H3Wire {
   fd: i32 = -1;
   /** The server's slot the client's connection is in, once accepted. */
   slot: i32 = -1;
+  wait: WireWait;
 
   constructor(server: Http3Server, port: i32) {
     this.server = server;
     this.fd = udpBind("127.0.0.1", n32(0), n32(0));
+    this.wait = new WireWait();
+    this.wait.watch(server.fd);
+    this.wait.watch(this.fd);
     this.to = new Array<u8>(18);
     netAddress(this.to, "127.0.0.1", port);
     this.rx = new Array<u8>(65536);
@@ -673,6 +713,9 @@ export class H3Peer {
         n = udpRecvFrom(wire.fd, wire.rx, n32(0), n32(65536), wire.from, wire.meta);
       }
       this.absorb();
+      if (got === 0 && read === 0 && wire.wait.landed()) {
+        continue;
+      }
       if (got === 0 && read === 0) {
         const wait: i32 = server.timeout(this.c.now);
         if (wait < 0 || wait > 50) {

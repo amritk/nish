@@ -7321,17 +7321,19 @@ receiver, 1,200-byte datagrams: 459,000 a second at one per call, and
 always `0, 0`. A `meta[1]` of `0` is also what a datagram that really is not
 ECN-capable reads as, so a receive on Darwin cannot say ECN is unsupported: a
 program learns that from the `-95` a send with an `ecn` above `0` answers, and
-on Darwin it reads every arrival as Not-ECT. That branch is compiled by CI's Darwin rows and run by nothing.
-On Linux, where the suite runs, no UDP call answers `-95` (the code is pinned
-there by `tcpAccept` on a datagram socket instead, above), so the Darwin
-answers are a statement about the code, not about a test.
+on Darwin it reads every arrival as Not-ECT. CI's `runtime-net (macos-latest)`
+job runs that branch: the `net_` sections there take the `-95` a GSO send and a
+GRO bind answer, and fall back to one datagram a send (`net_loopback`,
+`net_relay`), and `net_udp_offload` requires the `-95` of GSO, the GRO bind and
+each ECN mark, with nothing sent by them while a plain send still arrives. On Linux no UDP call answers `-95`, and the code is pinned there
+by `tcpAccept` on a datagram socket instead, above.
 
 #### The readiness loop
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `pollCreate(): i32` | a loop: a descriptor, close-on-exec, that watches others — epoll on Linux, kqueue on Darwin | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm` |
-| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` — `1` readable, `2` writable, `3` both, `0` neither — and reports it under `token`, an `i32` of the program's choosing that comes back as it went in: `0`, `-17` for a descriptor the loop already watches (on Linux; kqueue adds it again), or `-22` for an event bit past `2` | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
+| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` — `1` readable, `2` writable, `3` both, `0` neither — and reports it under `token`, an `i32` of the program's choosing that comes back as it went in: `0`, `-17` for a descriptor the loop already watches, or `-22` for an event bit past `2` | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
 | `pollModify(loop: i32, fd: i32, events: i32, token: i32): i32` | new events or a new token for a descriptor the loop watches: `0`, or `-2` for one it does not | write | `net_loop_calls`, `net_loop_two` |
 | `pollRemove(loop: i32, fd: i32): i32` | stops watching `fd`: `0`, or `-2` for a descriptor the loop does not watch. Closing a descriptor stops the watching too | write | `net_loop_calls`, `net_loop_two` |
 | `pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32` | waits until a watched descriptor is ready or `timeoutMs` milliseconds pass, **forever for `-1`** (any negative number), and writes one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]` its events, `1` readable and `2` writable with **`4` added for a hang-up or an error**. It answers the count, at most `ready.length / 2` and at most 64, or **`0` on a timeout**. A `ready` shorter than 2 is `-22`. Not `willreturn`, because it can wait forever | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`, `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region` |
@@ -7377,14 +7379,21 @@ while (running) {
 }
 ```
 
-**Darwin** is kqueue, with a filter per direction rather than a set of events:
-`pollModify` there deletes the descriptor's filters and adds the ones asked
-for, so it adds a descriptor the loop did not watch rather than answer `-2`;
-`pollAdd` of a descriptor already watched adds it again rather than answer
-`-17`; a descriptor added watching nothing has no filter, so `pollRemove` of it
-answers `-2`; and a descriptor both readable and writable is two pairs with the
-same token, one per filter. That branch is compiled by CI's Darwin rows and run by
-nothing, as the rest of the Darwin network code is.
+**Darwin** is kqueue, with a filter per direction rather than a set of events,
+and the runtime builds epoll's answers from the filters: `pollAdd` of a
+descriptor already watched is `-17`, `pollModify` and `pollRemove` of one not
+watched are `-2`, a descriptor added watching nothing holds a disabled read
+filter so the loop still knows it, and a descriptor both readable and writable
+is one pair, `3`, folded from its two filters' records. Three differences
+stay. The `pollAdd` that answers `-17` leaves the descriptor, both ways, under
+the token it gave rather than the old one. A descriptor watching nothing is
+never reported: epoll still reports its hang-up or error as `4`, but a disabled
+filter reports nothing. And a peer's half-close is `1` on Linux but `5`, `1|4`,
+on Darwin: kqueue marks the read filter with end-of-file as soon as the FIN
+arrives, and the runtime reads end-of-file as `4`, where epoll sets its
+hang-up bit only once both directions are shut. CI's
+`runtime-net (macos-latest)` job runs `net_loop_calls` and `net_loop_two` on a
+mac, as it runs every `net_` section.
 
 #### Bounds
 

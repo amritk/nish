@@ -494,7 +494,12 @@ static void pool_alloc_body(int64_t lo, int64_t hi, void *ctx) {
 static long pool_peak_rss_kb(void) {
   struct rusage ru;
   getrusage(RUSAGE_SELF, &ru);
+#if defined(__APPLE__)
+  /* Darwin counts `ru_maxrss` in bytes, Linux in kilobytes. */
+  return ru.ru_maxrss / 1024;
+#else
   return ru.ru_maxrss;
+#endif
 }
 
 /* A scope's task: an index in, a square out, through `finish` on the caller. */
@@ -718,6 +723,7 @@ static void test_host_signal_threads(void) {
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 
 /* WP34 N5, runtime-net.c: what the Node-driven echo in tests/run.js cannot
@@ -744,6 +750,10 @@ static void test_net(void) {
   struct sockaddr_in from;
   socklen_t n = sizeof from;
   assert(getsockname(client, (struct sockaddr *)&from, &n) == 0);
+  // Darwin's connect() can return before the listener's queue holds the
+  // connection, and a non-blocking accept then answers -11: wait for it.
+  struct pollfd queued = {fd, POLLIN, 0};
+  assert(poll(&queued, 1, 5000) == 1);
 
   int32_t conn = nish_tcp_accept(fd, &peer);
   assert(conn >= 0);
@@ -756,6 +766,10 @@ static void test_net(void) {
   nish_array buf = {4, 4, bytes};
   expect_i64(nish_net_read(conn, &buf, 0, 4), -11, "a read with nothing waiting");
   assert(write(client, "abc", 3) == 3);
+  // Linux's loopback queues the bytes before write returns; Darwin's may not
+  // yet, so the non-blocking read waits until the socket is readable.
+  struct pollfd readable = {conn, POLLIN, 0};
+  assert(poll(&readable, 1, 5000) == 1);
   expect_i64(nish_net_read(conn, &buf, 1, 3), 3, "the three bytes the client sent");
   assert(memcmp(bytes, "pabc", 4) == 0);
   expect_i64(nish_net_write(conn, &buf, 0, 4), 4, "four bytes back");
@@ -829,6 +843,8 @@ static void test_tcp_nodelay(void) {
     to.sin_port = htons((uint16_t)nish_net_local_port(fd));
     to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     assert(client >= 0 && connect(client, (struct sockaddr *)&to, sizeof to) == 0);
+    struct pollfd queued = {fd, POLLIN, 0};
+    assert(poll(&queued, 1, 5000) == 1);
     int on = late;
     assert(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof on) == 0);
     int32_t conn = nish_tcp_accept(fd, &peer);
@@ -922,6 +938,27 @@ static void test_poll(void) {
     expect_i64(nish_poll_remove(loop, fds[i]), 0, "a socket no longer watched");
     nish_net_close(fds[i]);
   }
+
+  /* A descriptor readable and writable at once is one pair, 3. A second add
+     of it answers -17; Linux keeps the first token, and Darwin moves both of
+     its filters to the token the second add gave (docs/LANGUAGE.md), so one
+     wait never reports it under two. */
+  int both[2];
+  assert(socketpair(AF_UNIX, SOCK_STREAM, 0, both) == 0);
+  assert(write(both[1], "x", 1) == 1);
+  expect_i64(nish_poll_add(loop, both[0], 3, 9), 0, "a socket watched both ways");
+  expect_i64(nish_poll_add(loop, both[0], 3, 1), -17, "a second add of it");
+#if defined(__linux__)
+  const int32_t kept = 9;
+#else
+  const int32_t kept = 1;
+#endif
+  expect_i64(nish_poll_wait(loop, &ready, 1000), 1, "ready both ways is one pair");
+  expect_i64(pairs[0], kept, "under one token");
+  expect_i64(pairs[1], 3, "readable and writable");
+  expect_i64(nish_poll_remove(loop, both[0]), 0, "the pair no longer watched");
+  close(both[0]);
+  close(both[1]);
 
   /* One SIGALRM 20 ms from now, into a ten-second wait on nothing: 0, and
      long before the timeout. A finite timeout, so a signal that arrived

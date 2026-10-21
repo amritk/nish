@@ -15,8 +15,10 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare i64 @nish_monotonic_nanos() #1
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #1
 declare noundef i32 @nish_net_local_port(i32 noundef) #1
+declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #1
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #1
 declare noundef i32 @nish_net_close(i32 noundef) #0
+declare noundef i32 @nish_tcp_connect(%struct.nish_array* noundef nonnull align 8 nocapture readonly) #1
 declare noundef i32 @nish_udp_bind(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #1
 declare noundef i32 @nish_udp_send_to(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i32 noundef, i32 noundef) #0
 declare noundef i32 @nish_poll_create() #1
@@ -51,6 +53,11 @@ entry:
   %data.addr = alloca %struct.nish_array*, align 8
   %arr.hdr.4 = alloca %struct.nish_array, align 8
   %arr.data.4 = alloca [3 x i8], align 8
+  %listener.addr = alloca i32, align 4
+  %toL.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.5 = alloca %struct.nish_array, align 8
+  %arr.data.5 = alloca [18 x i8], align 8
+  %c.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @nish_poll_create()
   store i32 %0, i32* %loop.addr, align 4
@@ -321,92 +328,124 @@ bounds.ok.3:
   %158 = call i8* @nish_str_from_i32(i32 %157)
   %159 = call i8* @nish_str_concat(i8* %148, i8* %158)
   call void @nish_print(i8* %159)
-  %160 = load i32, i32* %a.addr, align 4
-  %161 = call i32 @nish_net_shutdown(i32 %160, i32 2)
-  %162 = load i32, i32* %loop.addr, align 4
-  %163 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
-  %164 = call i32 @nish_poll_wait(i32 %162, %struct.nish_array* %163, i32 0)
-  %165 = call i8* @nish_str_from_i32(i32 %164)
-  call void @nish_print(i8* %165)
-  %166 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
-  %167 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %166, i64 0, i32 0
-  %168 = load i64, i64* %167, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %169 = icmp ult i64 0, %168
-  br i1 %169, label %bounds.ok.4, label %bounds.fail.4
+  %160 = call i32 @nish_tcp_listen(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 0, i32 1)
+  store i32 %160, i32* %listener.addr, align 4
+  %161 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.5, i64 0, i32 0
+  store i64 18, i64* %161, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %162 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.5, i64 0, i32 1
+  store i64 18, i64* %162, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %163 = bitcast [18 x i8]* %arr.data.5 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %163, i8 0, i64 18, i1 false), !alias.scope !4, !noalias !3
+  %164 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.5, i64 0, i32 2
+  store i8* %163, i8** %164, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %arr.hdr.5, %struct.nish_array** %toL.addr, align 8
+  %165 = load %struct.nish_array*, %struct.nish_array** %toL.addr, align 8
+  %166 = load i32, i32* %listener.addr, align 4
+  %167 = call i32 @nish_net_local_port(i32 %166)
+  %168 = call i32 @nish_net_address(%struct.nish_array* %165, i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 %167)
+  %169 = load %struct.nish_array*, %struct.nish_array** %toL.addr, align 8
+  %170 = call i32 @nish_tcp_connect(%struct.nish_array* %169)
+  store i32 %170, i32* %c.addr, align 4
+  %171 = load i32, i32* %loop.addr, align 4
+  %172 = load i32, i32* %a.addr, align 4
+  %173 = call i32 @nish_poll_remove(i32 %171, i32 %172)
+  %174 = call i8* @nish_str_from_i32(i32 %173)
+  call void @nish_print(i8* %174)
+  %175 = load i32, i32* %loop.addr, align 4
+  %176 = load i32, i32* %c.addr, align 4
+  %177 = call i32 @nish_poll_add(i32 %175, i32 %176, i32 3, i32 9)
+  %178 = call i8* @nish_str_from_i32(i32 %177)
+  call void @nish_print(i8* %178)
+  %179 = load i32, i32* %c.addr, align 4
+  %180 = call i32 @nish_net_shutdown(i32 %179, i32 2)
+  %181 = load i32, i32* %loop.addr, align 4
+  %182 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
+  %183 = call i32 @nish_poll_wait(i32 %181, %struct.nish_array* %182, i32 0)
+  %184 = call i8* @nish_str_from_i32(i32 %183)
+  call void @nish_print(i8* %184)
+  %185 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
+  %186 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %185, i64 0, i32 0
+  %187 = load i64, i64* %186, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %188 = icmp ult i64 0, %187
+  br i1 %188, label %bounds.ok.4, label %bounds.fail.4
 
 bounds.fail.4:
-  call void @nish_panic_index(i64 0, i64 %168)
+  call void @nish_panic_index(i64 0, i64 %187)
   unreachable
 
 bounds.ok.4:
-  %170 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %166, i64 0, i32 2
-  %171 = load i8*, i8** %170, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %172 = bitcast i8* %171 to i32*
-  %173 = getelementptr inbounds i32, i32* %172, i64 0
-  %174 = load i32, i32* %173, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %175 = call i8* @nish_str_from_i32(i32 %174)
-  %176 = call i8* @nish_str_concat(i8* %175, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
-  %177 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
-  %178 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %177, i64 0, i32 0
-  %179 = load i64, i64* %178, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %180 = icmp ult i64 1, %179
-  br i1 %180, label %bounds.ok.5, label %bounds.fail.5
+  %189 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %185, i64 0, i32 2
+  %190 = load i8*, i8** %189, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %191 = bitcast i8* %190 to i32*
+  %192 = getelementptr inbounds i32, i32* %191, i64 0
+  %193 = load i32, i32* %192, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %194 = call i8* @nish_str_from_i32(i32 %193)
+  %195 = call i8* @nish_str_concat(i8* %194, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %196 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
+  %197 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %196, i64 0, i32 0
+  %198 = load i64, i64* %197, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %199 = icmp ult i64 1, %198
+  br i1 %199, label %bounds.ok.5, label %bounds.fail.5
 
 bounds.fail.5:
-  call void @nish_panic_index(i64 1, i64 %179)
+  call void @nish_panic_index(i64 1, i64 %198)
   unreachable
 
 bounds.ok.5:
-  %181 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %177, i64 0, i32 2
-  %182 = load i8*, i8** %181, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  %183 = bitcast i8* %182 to i32*
-  %184 = getelementptr inbounds i32, i32* %183, i64 1
-  %185 = load i32, i32* %184, align 4, !alias.scope !4, !noalias !3, !tbaa !14
-  %186 = call i8* @nish_str_from_i32(i32 %185)
-  %187 = call i8* @nish_str_concat(i8* %176, i8* %186)
-  call void @nish_print(i8* %187)
-  %188 = load i32, i32* %loop.addr, align 4
-  %189 = load i32, i32* %b.addr, align 4
-  %190 = call i32 @nish_poll_add(i32 %188, i32 %189, i32 4, i32 1)
-  %191 = call i8* @nish_str_from_i32(i32 %190)
-  call void @nish_print(i8* %191)
-  %192 = load i32, i32* %loop.addr, align 4
-  %193 = load %struct.nish_array*, %struct.nish_array** %none.addr, align 8
-  %194 = call i32 @nish_poll_wait(i32 %192, %struct.nish_array* %193, i32 0)
-  %195 = call i8* @nish_str_from_i32(i32 %194)
-  call void @nish_print(i8* %195)
-  %196 = load i32, i32* %loop.addr, align 4
-  %197 = load i32, i32* %a.addr, align 4
-  %198 = call i32 @nish_poll_add(i32 %196, i32 %197, i32 1, i32 1)
-  %199 = call i8* @nish_str_from_i32(i32 %198)
-  call void @nish_print(i8* %199)
-  %200 = load i32, i32* %loop.addr, align 4
-  %201 = load i32, i32* %b.addr, align 4
-  %202 = call i32 @nish_poll_remove(i32 %200, i32 %201)
-  %203 = call i8* @nish_str_from_i32(i32 %202)
-  call void @nish_print(i8* %203)
-  %204 = load i32, i32* %loop.addr, align 4
-  %205 = load i32, i32* %b.addr, align 4
-  %206 = call i32 @nish_poll_modify(i32 %204, i32 %205, i32 1, i32 1)
-  %207 = call i8* @nish_str_from_i32(i32 %206)
-  call void @nish_print(i8* %207)
-  %208 = load i32, i32* %a.addr, align 4
-  %209 = call i32 @nish_net_close(i32 %208)
-  %210 = load i32, i32* %b.addr, align 4
-  %211 = call i32 @nish_net_close(i32 %210)
-  %212 = load i32, i32* %loop.addr, align 4
-  %213 = call i32 @nish_net_close(i32 %212)
+  %200 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %196, i64 0, i32 2
+  %201 = load i8*, i8** %200, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %202 = bitcast i8* %201 to i32*
+  %203 = getelementptr inbounds i32, i32* %202, i64 1
+  %204 = load i32, i32* %203, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %205 = call i8* @nish_str_from_i32(i32 %204)
+  %206 = call i8* @nish_str_concat(i8* %195, i8* %205)
+  call void @nish_print(i8* %206)
+  %207 = load i32, i32* %loop.addr, align 4
+  %208 = load i32, i32* %b.addr, align 4
+  %209 = call i32 @nish_poll_add(i32 %207, i32 %208, i32 4, i32 1)
+  %210 = call i8* @nish_str_from_i32(i32 %209)
+  call void @nish_print(i8* %210)
+  %211 = load i32, i32* %loop.addr, align 4
+  %212 = load %struct.nish_array*, %struct.nish_array** %none.addr, align 8
+  %213 = call i32 @nish_poll_wait(i32 %211, %struct.nish_array* %212, i32 0)
   %214 = call i8* @nish_str_from_i32(i32 %213)
   call void @nish_print(i8* %214)
   %215 = load i32, i32* %loop.addr, align 4
-  %216 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
-  %217 = call i32 @nish_poll_wait(i32 %215, %struct.nish_array* %216, i32 0)
+  %216 = load i32, i32* %c.addr, align 4
+  %217 = call i32 @nish_poll_add(i32 %215, i32 %216, i32 1, i32 1)
   %218 = call i8* @nish_str_from_i32(i32 %217)
   call void @nish_print(i8* %218)
   %219 = load i32, i32* %loop.addr, align 4
-  %220 = call i32 @nish_poll_add(i32 %219, i32 0, i32 1, i32 1)
-  %221 = call i8* @nish_str_from_i32(i32 %220)
-  call void @nish_print(i8* %221)
+  %220 = load i32, i32* %b.addr, align 4
+  %221 = call i32 @nish_poll_remove(i32 %219, i32 %220)
+  %222 = call i8* @nish_str_from_i32(i32 %221)
+  call void @nish_print(i8* %222)
+  %223 = load i32, i32* %loop.addr, align 4
+  %224 = load i32, i32* %b.addr, align 4
+  %225 = call i32 @nish_poll_modify(i32 %223, i32 %224, i32 1, i32 1)
+  %226 = call i8* @nish_str_from_i32(i32 %225)
+  call void @nish_print(i8* %226)
+  %227 = load i32, i32* %a.addr, align 4
+  %228 = call i32 @nish_net_close(i32 %227)
+  %229 = load i32, i32* %b.addr, align 4
+  %230 = call i32 @nish_net_close(i32 %229)
+  %231 = load i32, i32* %c.addr, align 4
+  %232 = call i32 @nish_net_close(i32 %231)
+  %233 = load i32, i32* %listener.addr, align 4
+  %234 = call i32 @nish_net_close(i32 %233)
+  %235 = load i32, i32* %loop.addr, align 4
+  %236 = call i32 @nish_net_close(i32 %235)
+  %237 = call i8* @nish_str_from_i32(i32 %236)
+  call void @nish_print(i8* %237)
+  %238 = load i32, i32* %loop.addr, align 4
+  %239 = load %struct.nish_array*, %struct.nish_array** %ready.addr, align 8
+  %240 = call i32 @nish_poll_wait(i32 %238, %struct.nish_array* %239, i32 0)
+  %241 = call i8* @nish_str_from_i32(i32 %240)
+  call void @nish_print(i8* %241)
+  %242 = load i32, i32* %loop.addr, align 4
+  %243 = call i32 @nish_poll_add(i32 %242, i32 0, i32 1, i32 1)
+  %244 = call i8* @nish_str_from_i32(i32 %243)
+  call void @nish_print(i8* %244)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

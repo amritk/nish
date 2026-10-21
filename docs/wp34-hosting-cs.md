@@ -213,7 +213,8 @@ goes into the loop like any other descriptor (`net_loop_two`). The C is
 a ceiling of its own of 2,304. One finding changed the GSO/GRO acceptance: on
 loopback, GRO keeps a GSO super-packet whole but does not merge datagrams sent
 one by one, so the test pairs a Nish GSO sender with a Nish GRO receiver. The
-Darwin branch is compiled by CI's Darwin rows and run by nothing. `wasm` is out
+Darwin branch, where both answer `-95`, is run by CI's `runtime-net
+(macos-latest)` job (#358). `wasm` is out
 of scope, because a browser reaches the network through the host.
 
 ### N6. Constant time (S–M, builtins lane)
