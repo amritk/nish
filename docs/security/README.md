@@ -125,7 +125,7 @@ the record that found it. The notes below the table name each such finding.
     which wipes its hashers and output blocks before the call returns, and a
     slot the caller owns is the caller's to wipe. It is counted as a fixed Low.
     QUIC-6 (Low), RFC 9001 §6.6's AEAD limits, and QUIC-7 (Low), an
-    optimistic ACK, were closed by the AEAD-limits stage of #759: a write key
+    optimistic ACK, were closed by #784: a write key
     starts a key update at three quarters of its confidentiality limit and
     the connection closes with AEAD_LIMIT_REACHED at it when none can be made
     or past the integrity limit, and the server skips a 1-RTT packet number

@@ -181,10 +181,44 @@ const llSkips = (t: Suite): void => {
   );
 };
 
+/**
+ * An optimistic ACK that hides the skipped number below its first range: two
+ * ranges, `[skip + 3]` and `[skip - 1, skip + 1]`, read only when the second
+ * leaves the skip out.
+ */
+const llSkipLaterRange = (t: Suite): void => {
+  const conn: QuicConnection = qcServer(qcDefaultConfig());
+  const c: QcClient = llOpen(conn);
+  const read0 = new LcGeneration(c.appRead, c.appReadSecret, false);
+  const write0 = new LcGeneration(c.appWrite, c.appWriteSecret, false);
+  const skip: i64 = conn.application.nextPn;
+  conn.nextSkip = skip;
+  const first: LcOpened = lcOpen(c, read0, llTake(conn, c, "a"));
+  lcOpen(c, read0, llTake(conn, c, "b"));
+  const third: LcOpened = lcOpen(c, read0, llTake(conn, c, "c"));
+  const top: i64 = skip + n64(3);
+  const honest: u8[] = [];
+  quicPushAck(honest, [top, top, first.pn, first.pn], n32(2), n64(0));
+  lcSend(conn, c, write0, c.appPn, honest);
+  t.ok(
+    "an ACK of two ranges, neither taking in the skipped number, is read",
+    first.pn === skip + n64(1) && third.pn === top && conn.state === QUIC_STATE_CONNECTED
+  );
+  const lying: u8[] = [];
+  quicPushAck(lying, [top, top, skip - n64(1), first.pn], n32(2), n64(0));
+  lcSend(conn, c, write0, c.appPn, lying);
+  t.eqStr(
+    "an ACK that takes in the skipped number in its second range is PROTOCOL_VIOLATION too",
+    `${conn.state === QUIC_STATE_CLOSING} ${lcCloseIn([lcOpen(c, read0, conn.takeDatagram(c.now)).payload])}`,
+    `true ${QUIC_ERROR_PROTOCOL_VIOLATION} 2`
+  );
+};
+
 /** Every AEAD-limit and skipped-packet-number check. */
 export const limitChecks = (t: Suite): void => {
   llSuiteLimits(t);
   llConfidentiality(t);
   llIntegrity(t);
   llSkips(t);
+  llSkipLaterRange(t);
 };

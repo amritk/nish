@@ -395,7 +395,7 @@ export const QUIC_CONN_INTEGRITY_LIMIT_CHACHA: i64 = 68719476736
  * ACK of any of the last this many closes the connection as an optimistic
  * acknowledgement. One is skipped every `QUIC_CONN_SKIP_MIN` to
  * `QUIC_CONN_SKIP_MIN + QUIC_CONN_SKIP_SPREAD - 1` packets, so the ring
- * reaches back at least a thousand.
+ * reaches back at least 7 × 129 = 903 packets.
  */
 export const QUIC_CONN_SKIP_RING: i32 = 8
 export const QUIC_CONN_SKIP_MIN: i64 = 128
