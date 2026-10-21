@@ -15709,8 +15709,9 @@ if (!only || "crypto-bench".includes(only)) {
     // (the family's own word) or `<family> did not run <id>:` (this machine's
     // reason). The test takes that account rather than probing toolchains
     // itself, which disagreed with the runner on a host whose Go was older
-    // than go.mod or whose cargo could not fetch.
-    const COLUMNS = ["nish", "openssl", "openssl-portable", "go", "go-purego", "rust", "rust-soft", "node"]
+    // than go.mod or whose cargo could not fetch. The column list is the
+    // runner's own `crypto: columns …` line; without it the check fails.
+    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
     const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
     const unaccounted = validated.flatMap((f) => {
       const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
@@ -15729,6 +15730,7 @@ if (!only || "crypto-bench".includes(only)) {
       `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
       v.status === 0 &&
         families.length > 0 &&
+        COLUMNS.length > 0 &&
         families.every((f) =>
           new RegExp(
             `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
@@ -15747,7 +15749,7 @@ if (!only || "crypto-bench".includes(only)) {
             proved.every((f) =>
               ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
             ))),
-      `unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
     )
     for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
       if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {

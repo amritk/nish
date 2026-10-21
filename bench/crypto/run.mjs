@@ -504,6 +504,18 @@ const build = (what, cmd, args, { cwd = root, env = process.env, tooOld = null }
   return null
 }
 
+/**
+ * Exits 1 when a failed fetch's stderr names the twin's own manifest or
+ * lockfile (`own`): a stale or unparseable one is the twin's bug, not the
+ * host's, so it fails the run as a build that does not compile does.
+ */
+const ownFault = (what, r, own) => {
+  if (own.test(r.stderr ?? "")) {
+    console.error(`crypto: fetching ${what} failed (exit ${r.status})\n${r.error?.message ?? ""}${r.stderr}`)
+    process.exit(1)
+  }
+}
+
 const probeDir = path.join(outRoot, "probe")
 /**
  * Whether clang links a program against OpenSSL's libcrypto and libssl, headers
@@ -745,6 +757,7 @@ const buildFamily = (family) => {
     if (fetched === null) {
       unbuilt("go", `Go ${has} is older than the go ${wants} its go.mod asks for`)
     } else if (fetched.status !== 0) {
+      ownFault(`${family.name} (Go)`, fetched, /\bgo\.(?:mod|sum)\b/)
       unbuilt("go", `its modules did not download (${stopLine(fetched)})`)
     } else {
       build(`${family.name} (Go)`, GO, ["build", "-trimpath", "-o", path.join(dir, "go-main"), "."], {
@@ -786,16 +799,34 @@ const buildFamily = (family) => {
       env,
       encoding: "utf8",
     })
-    // A crate whose rust-version is newer than this rustc is a toolchain too
-    // old, like a Go older than its go.mod; any other build failure is a bug.
-    const cargo = (what, target, extra) =>
-      build(what, "cargo", ["build", "--release", "--locked", "--quiet", "--target-dir", target], {
-        cwd: crate,
-        env: { ...env, ...extra },
-        tooOld: /requires rustc [\d.]+ or newer/,
-      })
+    // A dependency whose rust-version is newer than this rustc is a toolchain
+    // too old, like a Go older than its go.mod. The twin's own rust-version, and
+    // any other build failure, is a bug. Cargo words the line `<crate>@<version>
+    // requires rustc <v>`, and before 1.80 `package \`<crate> v<version> …\`
+    // cannot be built because it requires rustc <v> or newer`.
+    const own = new RegExp(`(?:^\\s*|package \`)${bin}(?:@| v)`)
+    const cargo = (what, target, extra) => {
+      const old = build(
+        what,
+        "cargo",
+        ["build", "--release", "--locked", "--quiet", "--target-dir", target],
+        {
+          cwd: crate,
+          env: { ...env, ...extra },
+          tooOld: /requires rustc [\d.]+/,
+        }
+      )
+      if (old !== null && own.test(old)) {
+        console.error(
+          `crypto: building ${what} failed: its own rust-version is newer than ${tools.rustc} (${old})`
+        )
+        process.exit(1)
+      }
+      return old
+    }
     const old = fetched.status === 0 ? cargo(`${family.name} (Rust)`, path.join(crate, "target"), {}) : null
     if (fetched.status !== 0) {
+      ownFault(`${family.name} (Rust)`, fetched, /\bCargo\.(?:toml|lock)\b/)
       unbuilt("rust", `its crates did not fetch (${stopLine(fetched)})`)
     } else if (old !== null) {
       unbuilt("rust", `${tools.rustc} is too old (${old})`)
@@ -910,6 +941,10 @@ if (opts.validate) {
   let mismatches = 0
   let kernelCount = 0
   const seen = new Set()
+  // The column list the account below covers, so tests/run.js reads it from
+  // here rather than keeping a copy a new column could slip past.
+  const ids = COLUMNS.map(([id]) => id)
+  console.log(`crypto: columns ${ids.join(", ")}`)
   for (const family of families) {
     if (!family.kernels.some((k) => wanted(family, k))) {
       continue
@@ -985,7 +1020,6 @@ if (opts.validate) {
     // Every column is accounted for: it ran, the family has none, or this
     // machine did not build it, and the line says why. The runner is the
     // authority here; tests/run.js reads these lines rather than probing.
-    const ids = COLUMNS.map(([id]) => id)
     console.log(`${family.name}: ran ${ids.filter((id) => ranHere.has(id)).join(", ")}`)
     for (const id of ids.filter((c) => !ranHere.has(c))) {
       const declared = declaredAbsent(family, id)

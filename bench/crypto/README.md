@@ -43,12 +43,18 @@ A missing toolchain is a note, never a failure, and that twin's columns read
 A module or crate that does not download is also a note, and so is a Go older
 than the `go` line of the family's `go.mod` or a `rustc` older than a crate
 needs. A twin that builds and then prints a different checksum is a failure,
-and so is a twin that does not build for any other reason.
+and so is a twin that does not build for any other reason. A fetch that fails
+on the twin's own `go.mod`, `go.sum`, `Cargo.toml` or `Cargo.lock` (a stale
+lock file, a parse error, an unknown directive) is the twin's bug, not the
+host's, and exits 1; so does a crate whose own `rust-version` is newer than the
+host's `rustc`.
 
-`--validate` accounts for every column of every family it checks, after the
+`--validate` first prints `crypto: columns <id>, …`, every column it knows,
+and then accounts for each of them in every family it checks, after the
 family's `<family>: N of N kernel size(s) match expected.txt` line:
 
 ```
+crypto: columns nish, openssl, openssl-portable, go, go-purego, rust, rust-soft, node
 hash: ran nish, openssl, openssl-portable, rust, rust-soft, node
 hash did not run go: Go 1.21.0 is older than the go 1.24 its go.mod asks for
 hash did not run go-purego: Go 1.21.0 is older than the go 1.24 its go.mod asks for
@@ -60,8 +66,9 @@ portable build given as a string, every kernel `lacks` it, or no kernel with a
 Nish column), or `<family> did not run <column>: <why>`, this machine's reason
 (`--no-<twin>`, a missing or too-old toolchain, a download that failed). The
 runner is the one authority on what ran: `tests/run.js crypto-bench` reads
-these lines rather than probing the toolchains itself, and fails a column that
-has none of them.
+these lines rather than probing the toolchains itself, takes its column list
+from the `crypto: columns` line, and fails a column that has none of them, or a
+run that prints no column list.
 
 `--write-expected` refuses a family where no twin ran, since the checksums it
 would pin would then be Nish's alone, agreeing with nothing.
