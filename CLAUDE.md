@@ -116,10 +116,17 @@ them only with `node tests/self/goldens.js --update` (add
 `--seed build/seed/bin/nish` when `build/nish` is not built) and read the diff
 before committing it. On a conflict, merge `main` in and regenerate rather
 than resolving lines ([`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it),
-[`.claude/selfhost.md`](.claude/selfhost.md)). When another `src/` or `std/`
-pull request lands first, merge `main` and regenerate even if git reports no
-conflict, and merge only once CI is green on that head: the goldens and the
-`.ll` the two changes share move without a textual conflict (#549 after #547).
+[`.claude/selfhost.md`](.claude/selfhost.md)): `npm run sync-main` does all of
+it — fetches, merges, drops every conflicted golden under
+`tests/self/goldens/`, runs both `--update`s and stages what they wrote — and
+stops on any other conflict, the frozen `tests/differential/goldens/` store's
+included, for `-- --continue` once it is resolved. It never commits, so read the staged diff before `git
+commit --no-edit`. When another `src/` or `std/` pull request lands first,
+sync even if git reports no conflict, and merge only once CI is green on that
+head: the goldens and the `.ll` the two changes share move without a textual
+conflict (#549 after #547). Where the merge queue is on for `main`, it is what
+catches that pair: CI's `merge_group` run tests each pull request on top of
+the ones queued ahead of it.
 A new positive `tests/cases/*` is registered with `node
 tests/differential/goldens.js --update` in the same commit, or `differential:
 the frozen rewrites` fails (#548).

@@ -32,6 +32,7 @@
 #       docs/check-links.mjs over every Markdown file.
 #
 # Also reusable via `workflow_call`: release.yml runs it before packing a tag.
+# Runs on `merge_group` too, for the merge queue on main (see `on:` below).
 # To run the same steps locally see docs/wp10-ci.md.
 name: CI
 
@@ -43,10 +44,20 @@ name: CI
 # request, which puts them in different groups where neither cancels the
 # other. Tags keep their coverage: release.yml triggers on `v*` and reaches
 # this workflow through `workflow_call`.
+#
+# `merge_group` is the merge queue's run. A pull request's own run tests its
+# head merged with `main` as it was when the run started; two pull requests
+# green that way can still be red together, because the goldens and the `.ll`
+# they share move without a textual conflict (#549 after #547). The queue tests
+# each one on top of `main` plus everything queued ahead of it and merges only
+# what passed there, so `main` is never the first place the pair meets. The
+# queue itself is a ruleset setting on `main`; this trigger is what lets the
+# required checks report on its temporary `gh-readonly-queue/main/*` branches.
 on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
   workflow_call:
 
 permissions:
@@ -88,7 +99,9 @@ env:
 # within the half hour a run takes cancelled the one before it, and #396's and
 # #397's runs on main ended cancelled -- neither green nor red, and nothing
 # said which merge broke main if one had. So only a pull request's runs cancel;
-# main's queue up in the same group and each finishes.
+# main's queue up in the same group and each finishes. A merge-queue run has a
+# ref of its own per queued entry, so it shares a group with nothing and the
+# queue, not this setting, decides when it is superseded.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -923,9 +936,11 @@ jobs:
       # Skipped exactly where that disagreement is the release working: on
       # the Release PR, which carries the bump but cannot carry the entries,
       # and on a tag, where release.yml runs this workflow before publishing
-      # and a red here would stop the publish that fixes it.
+      # and a red here would stop the publish that fixes it. In the merge
+      # queue `head_ref` is empty, so the Release PR is known there by the
+      # subject of the commit the queue built for it.
       - name: Lockfile agrees with package.json
-        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.head_ref != 'release/next' }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.head_ref != 'release/next' && !startsWith(github.event.merge_group.head_commit.message, 'chore(release):') }}
         run: npm ls --package-lock-only --all > /dev/null
 
       - name: Lint (only when package.json defines a lint script)

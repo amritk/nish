@@ -16,6 +16,24 @@ runs are cancelled; a push to `main` never is, because each one is a merge and
 its run is the only record of whether `main` was green after it (the runs of #396
 and #397 ended cancelled before that rule).
 
+It also runs on `merge_group`, the merge queue's event, as do `pr-title.yml`
+and `pr-body.yml`. A pull request's own run tests its head merged with `main`
+as `main` stood when the run began, so two pull requests each green that way
+can be red together: the self-goldens and the `.ll` they share move without a
+textual conflict (#549 after #547). The queue runs CI on each one on top of
+`main` and everything queued ahead of it, on a temporary
+`gh-readonly-queue/main/*` branch, and merges only what passed there. The queue
+itself is switched on in `main`'s ruleset ("Require merge queue"), with the
+required checks this workflow and the two title and body checks report; those
+two skip their step in the queue, where there is no pull request in the event,
+and report success, since the title and body were checked on the pull request.
+`interop.yml` has no `merge_group` trigger: a queue run ignores path filters,
+so it would run the interop matrix on every merge. Its jobs therefore cannot be
+required checks once the queue is on. Before merging, an open pull request runs
+`npm run sync-main` (`scripts/sync-main.mjs`): it merges `origin/main`,
+regenerates `tests/self/goldens/` and the differential register, and stages
+them for review.
+
 | Job | Runner | What it does |
 | --- | --- | --- |
 | `test (ubuntu-latest, shard <i>/4)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard <i>/4` ([shards](#shards-and-time-limits)), then, in shard 1 only, the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
@@ -24,7 +42,7 @@ and #397 ended cancelled before that rule).
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
 | `runner (shard <i>/4)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a quarter of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, with `--shard <i>/4`. A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
-| `lint` | Ubuntu | `npm ls --package-lock-only` (skipped on tags and on `release/next`), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
+| `lint` | Ubuntu | `npm ls --package-lock-only` (skipped on tags, on `release/next` and on the Release PR's merge-queue run), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
 
 Every job that compiles anything compiles with `src/`, built from the seed:
 there is no other compiler in the repository. The jobs that compared two
