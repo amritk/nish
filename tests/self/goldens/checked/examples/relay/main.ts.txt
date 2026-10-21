@@ -71,7 +71,7 @@ function serveUntilPoll(relay: Relay, source: RelaySource, key: Secret<u8[]>, gr
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nowMs
   calls: Relay.step Relay.timeout nish_panic_overflow nowMs wallMs
-  pointer relay: size=416 writesThrough=true captured=false passedTo=Relay.timeout#0 Relay.step#0
+  pointer relay: size=424 writesThrough=true captured=false passedTo=Relay.timeout#0 Relay.step#0
   pointer source: size=32 writesThrough=false captured=false
   pointer key: size=8 writesThrough=false captured=false passedTo=Relay.step#3
   pointer grantKey: size=8 writesThrough=false captured=false passedTo=Relay.step#4

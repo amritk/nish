@@ -26,8 +26,9 @@
 // The startup scenario runs no wrk: it times how long each server takes from
 // being spawned to its first answer to GET /, polling once a millisecond, and
 // reads its resident set then. Interpreters count their own start-up, the Nish
-// server the slot pool it builds before it listens, and nginx's serve the
-// shell script that writes its configuration. --syscalls skips it.
+// server the per-slot arrays and free stack its pool sizes from the slot count
+// (a slot's connection is built on its first accept), and nginx's serve the shell script that writes its configuration. --syscalls
+// skips it.
 //
 // The server is pinned to CPU 0 and wrk to the others, so the server has one
 // core to itself, as the box in "max out a $12 server" did. `--cores 1,2,4`
