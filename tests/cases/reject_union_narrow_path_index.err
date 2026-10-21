@@ -1,0 +1,1 @@
+This `===` is always false: `xs[0].kind` is `Kind.Circle` and `Kind.Square` is `Kind.Square`, which share no member

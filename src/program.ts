@@ -217,6 +217,13 @@ export class FunctionSig {
   }
 }
 
+// What `CheckedProgram.switchCoverage` records of a `switch`.
+
+/** Every instantiation's labels name each tag its union discriminant can hold, and there is no `default`. */
+export const SWITCH_COVERED: i32 = 1
+/** Some instantiation's labels leave a value of the discriminant unnamed, or the switch has a `default`. */
+export const SWITCH_OPEN: i32 = 2
+
 // WP29 P1: what an instantiation is to the data-parallel lowering
 // (`src/parallel.ts` decides, `src/emit-parallel.ts` reads).
 
@@ -1448,12 +1455,19 @@ export class CheckedProgram {
   newTypeArguments: Node[]
   /**
    * The members an enum-typed read can hold, where that is fewer than its
-   * enum's: node id -> a union whose tag the node reads, or the member type
-   * a read of one was widened from; -1 for every other node. `===`, `!==` and `case`
+   * enum's: node id -> a union whose tag the node reads, the member type a
+   * read of one was widened from, or a list of `memberLists` (`memberListId`
+   * in `expressions.ts`); -1 for every other node. `===`, `!==` and `case`
    * compare these sets, because TypeScript refuses a comparison between two
    * that share no member (TS2367, TS2678).
    */
   memberSets: i32[]
+  /**
+   * The member sets no one type spells: what an enum variable holds once a
+   * test excluded some of its members, `Kind.B | Kind.C`. `memberSets` and
+   * `Scope.hold` name one by its index, encoded below -2.
+   */
+  memberLists: i32[][]
   /** `isCollections()`, decided once: the package and the path never change. */
   collectionsLibrary: boolean
   /** `isSecretLibrary()`, decided once, as `collectionsLibrary` is. */
@@ -1518,6 +1532,15 @@ export class CheckedProgram {
    * the module's and not an instantiation's.
    */
   nodeNullTests: boolean[]
+  /**
+   * A `switch` statement's node id -> whether its labels name every tag its
+   * union discriminant can hold, with no `default` (`SWITCH_COVERED`), or not
+   * (`SWITCH_OPEN`), or `0` before the checker reaches it. A generic's body is
+   * checked once per instantiation, and one that leaves a tag out marks the
+   * switch open for every instantiation: the emitter's `unreachable` default
+   * is written only where no instantiation can reach it.
+   */
+  switchCoverage: i32[]
   /**
    * A `substring` bound node id -> the same analysis placed it in
    * `[0, s.length]`. Keyed by the bound rather than by the call, because one
@@ -1653,16 +1676,19 @@ export class CheckedProgram {
     this.nodeEnumValues = new Array<i32>(nodeCount)
     this.nodeProvenIndex = new Array<boolean>(nodeCount)
     this.nodeNullTests = new Array<boolean>(nodeCount)
+    this.switchCoverage = new Array<i32>(nodeCount)
     this.nodeProvenClamp = new Array<boolean>(nodeCount)
     this.nodeProvenRange = new Array<boolean>(nodeCount)
     this.nodeProvenNoOverflow = new Array<boolean>(nodeCount)
     this.nodeDisjointCopy = new Array<boolean>(nodeCount)
     this.memberSets = new Array<i32>(nodeCount)
+    this.memberLists = []
     let i = 0
     while (i < nodeCount) {
       this.nodeTypes[i] = -1
       this.nodeCoercions[i] = -1
       this.memberSets[i] = -1
+      this.switchCoverage[i] = 0
       // `new Array<string>(n)` is refused — it would zero-fill with null
       // strings — so the empty name every node starts at is pushed instead.
       this.nodeBuiltins.push("")

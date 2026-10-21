@@ -20,6 +20,9 @@
 //     wordings register and the goldens, and the family prefix before its first
 //     underscore is how `.claude/testing.md` groups the suite. Renaming 3,000
 //     fixtures would move all of that for no reader's benefit.
+//   - The per-module checked goldens under `tests/self/goldens/checked/`, whose
+//     paths mirror the corpus module each one dumps
+//     (`tests/cases/add_plain.ts.txt`), fixture names and all.
 //   - A `node_modules` directory: package resolution looks for that name, so
 //     the cookbook's package example has to live under one.
 //
@@ -30,7 +33,13 @@
 // Not shipped in the npm package.
 import { execFileSync } from "node:child_process"
 
-const FIXTURE_ROOTS = ["tests/cases/", "tests/wordings/", "tests/link/", "tests/differential/corpus/"]
+const FIXTURE_ROOTS = [
+  "tests/cases/",
+  "tests/wordings/",
+  "tests/link/",
+  "tests/differential/corpus/",
+  "tests/self/goldens/checked/",
+]
 
 const KEBAB_PART = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const SHOUTED_DOCUMENT = /^[A-Z][A-Z0-9]*([_-][A-Za-z0-9]+)*(\.[a-z]+)?$/
