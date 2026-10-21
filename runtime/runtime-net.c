@@ -55,6 +55,7 @@ typedef int nish_net_unused;
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -189,10 +190,11 @@ int32_t nish_net_local_port(int32_t fd) {
    IPv4 host is an `AF_INET` socket; any other is `AF_INET6` with
    `IPV6_V6ONLY` off, so `::` hears both families. A stream gets
    `SO_REUSEADDR` and `arg` its backlog; a datagram socket's `arg` is
-   `udpBind`'s flags. `reuse` asks for `SO_REUSEPORT`. Every option is set
-   before the bind, which is where `SO_REUSEPORT` has to be, and where
-   `UDP_GRO` has to be for the first datagram to be coalesced. */
-static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int32_t arg, int reuse) {
+   `udpBind`'s flags. `opts` is a stream's `tcpListenFlags` word: bit 1 asks
+   for `SO_REUSEPORT`, bit 2 for `TCP_NODELAY`. Every option is set before the
+   bind, which is where `SO_REUSEPORT` has to be, and where `UDP_GRO` has to be
+   for the first datagram to be coalesced. */
+static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int32_t arg, int32_t opts) {
   unsigned char a[16];
   if ((uint32_t)port > 65535 || !nish_net_parse(host, a)) return -22;
   int v4 = memcmp(a, nish_mapped_prefix, 12) == 0;
@@ -210,9 +212,10 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
   /* Both families at once on an IPv6 socket; on an IPv4 one this fails with
      `ENOPROTOOPT` and changes nothing, which is cheaper than asking. */
   setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
-  int bad = reuse ? setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof one) : 0;
+  int bad = (opts & 1) ? setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof one) : 0;
   if (type == SOCK_STREAM) {
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    if (opts & 2) bad |= setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
   } else {
 #if defined(__linux__)
     if (arg & 2) bad |= setsockopt(fd, IPPROTO_UDP, UDP_GRO, &one, sizeof one);
@@ -241,10 +244,11 @@ int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
 
 /* `tcpListenFlags(host, port, backlog, flags)`: `tcpListen`'s socket, with
    `SO_REUSEPORT` for flag 1, so several listeners of one uid share the port
-   (Linux spreads new connections across them; Darwin hands them all to one).
-   Any other bit is -22. */
+   (Linux spreads new connections across them; Darwin hands them all to one),
+   and `TCP_NODELAY` for flag 2, which the listener carries so that
+   `tcpAccept` sets it on each connection it takes. Any other bit is -22. */
 int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags) {
-  if ((uint32_t)flags > 1) return -22;
+  if ((uint32_t)flags > 3) return -22;
   return nish_net_bound(host, port, SOCK_STREAM, backlog, flags);
 }
 
@@ -273,7 +277,18 @@ static void nish_net_put(nish_array *out, const nish_sockaddr *s, socklen_t n) {
 /* `tcpAccept(fd, peer)`: the next connection as a descriptor of its own,
    non-blocking and close-on-exec, with the peer's address written into
    `peer`; -11 when none is waiting. A `peer` shorter than 18 bytes is -22
-   before anything is accepted, so no connection is taken and lost. */
+   before anything is accepted, so no connection is taken and lost.
+
+   A listener opened with `tcpListenFlags` flag 2 holds `TCP_NODELAY`, and the
+   connection gets it here. Linux copies the option to an accepted socket,
+   but that is not a rule other systems keep, so it is read off the listener
+   and set on the connection everywhere. The listener is the record of the
+   flag, rather than a table beside the descriptors, so it holds for a
+   descriptor however the program came by it, and a closed listener's number
+   reused leaves nothing stale behind. A listener that cannot answer (not
+   TCP) has no Nagle to turn off; a connection on which the set fails is
+   closed and its failure answered, so a flag-2 listener never hands out a
+   socket without it. */
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   if (peer->len < NISH_ADDR_BYTES) return -22;
   nish_sockaddr s;
@@ -284,6 +299,14 @@ int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   int c = nish_net_setup(accept(fd, &s.sa, &n));
 #endif
   if (c < 0) return nish_net_fail();
+  int nodelay = 0;
+  socklen_t size = sizeof nodelay;
+  if (getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, &size) == 0 && nodelay != 0 &&
+      setsockopt(c, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof nodelay) != 0) {
+    int e = errno;
+    close(c);
+    return nish_net_err(e);
+  }
   nish_net_put(peer, &s, n);
   return c;
 }

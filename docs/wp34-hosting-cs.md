@@ -327,7 +327,7 @@ lists what each module exports and what is verified, and
 | **K2** | #332; Wycheproof (all 325 cases) and audit #372 | `nish/crypto/chacha20poly1305` (ChaCha20, Poly1305, the AEAD, RFC 9001 §5.4.4's header-protection mask) | The ChaCha20 rounds and the loops around both halves by disassembly: `ct_asm_chacha20poly1305` reads the Poly1305 block, its final reduction and the tag compare |
 | **K3** | #340, with Wycheproof `aes_gcm`; audit #372 | `nish/crypto/aes` (AES-128 and AES-256, bitsliced; GCM; RFC 9001 §5.4.3's header-protection mask) | AES-NI and PCLMULQDQ, and the ARMv8 AES and PMULL instructions, are done, as a runtime kernel rather than builtins: WP38 S5 sends the key schedule, the block, GCTR and GHASH to `runtime/runtime-aes.c` behind a run-time check, keeping the bitsliced code as the fallback, the wasm32 path and the Node reading ([wp38-simd.md](wp38-simd.md) §2.3). Left: the bitsliced fallback's key schedule, packing and block loops by disassembly (`ct_asm_aes` reads one round, one GHASH multiply and the tag compare); what the kernels leave in vector registers, which no wipe reaches (AEAD-4); choosing the path at build time (a `--cpu` flag, WP38 S2). AES-192 is out of scope |
 | **K4** | #289; ladder by disassembly #339; Wycheproof and audit #373 | `nish/crypto/x25519` | The 255-step ladder loop, the inversion and the encodings remain discipline (`ct_asm_x25519` reads the field operations, the swap and one ladder step) |
-| **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | Done: a fixed-base comb for `k·G` in signing and the public key (#663). Sign is about 3x faster, and P-256 fell from 70.0% to 43.9% of a handshake's server instructions, against `a22a056`. Against [the bar](#k5-p-256-the-baseline): sign's 3x is not met, because it is not shown outside the noise band (one sample met its re-based bar and one missed, both inside a 5.5% band; the lowest-minima reading is 3.04x, 0.8% short); P-256 under X25519 was missed, 1.9% above it; verify did not slow ([the result](#k5-p-256-the-result)). Left: the two inversions, `p256ScalarInvert` and the affine field inversion, which are 41.5% of the signature; 64-bit limbs; the verify path, which keeps the variable-base window. The 64-window loop, the table build, the inversions and the nonce derivation remain discipline, the window loop until it is read by disassembly (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations, one window step and the comb's step) (#628) |
+| **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | Done: a fixed-base comb for `k·G` in signing and the public key (#663). Sign is about 3x faster, and P-256 fell from 70.0% to 43.9% of a handshake's server instructions, against `a22a056`. Against [the bar](#k5-p-256-the-baseline): sign's 3x is not met, because it is not shown outside the noise band (one sample met its re-based bar and one missed, both inside a 5.5% band; the lowest-minima reading is 3.04x, 0.8% short); P-256 under X25519 was missed, 1.9% above it; verify did not slow ([the result](#k5-p-256-the-result)). The scalar inversion has a baseline and a bar, set before it is built ([the inversion](#k5-p-256-the-inversion--the-baseline), #758). Left: the two inversions, `p256ScalarInvert` and the affine field inversion, which are 41.5% of the signature; 64-bit limbs; the verify path, which keeps the variable-base window. The 64-window loop, the table build, the inversions and the nonce derivation remain discipline, the window loop until it is read by disassembly (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations, one window step and the comb's step) (#628) |
 | **K6** | #346; audit #376 | `nish/crypto/x509` (DER, PEM, a P-256 key from SEC1 or PKCS#8, a chain parsed, an ECDSA signature verified, the self-signed 1-to-14-day certificate minted, its SHA-256) | Chrome accepting the hash, which is A1's gate: since X509-9 ([`security/crypto-x509.md`](security/crypto-x509.md)) the minted certificate carries the critical basicConstraints and keyUsage that quiche's `CertificateView` needs before it compares a hash, and the live proof is S2's `chrome (minted certificate)` lane. It parses and does not validate: no path validation and no extensions read, which the relay's own `--cert` needs no more than |
 | **T1** | #407 | `nish/net/tls` (the server state machine), `nish/net/tls/codec`, `nish/net/tls/schedule` | Groups other than x25519; NewSessionTicket, 0-RTT and client authentication (§3 keeps them out); the wipes TLS-1 records (#430) |
 | **T2** | #437 | `nish/net/tls/record`, `nish/net/tls/record-server` (TLS over a byte stream, sans-IO), `nish/net/tls-tcp` (the TCP carrier: a slot pool on `nish:net`) | Chrome; a carrier idle timeout (TLS-4); `record_size_limit`; the client role (N13) |
@@ -693,6 +693,202 @@ on instructions. After them come 64-bit limbs, and the verify path, which still
 runs the variable-base window: verify is 17.4 M Ir a call. The module has no
 ECDH. The 64-window loop has not been read by disassembly. It is now verify's
 and the comb's reference, and is still discipline.
+
+#### K5: P-256, the inversion — the baseline
+
+The result above names the scalar inversion next: `p256ScalarInvert`, `k^-1`
+mod n by Fermat, 776,344 Ir of one signature. This is its baseline, taken
+before anything is built, and the bar it will be read against (#758, after
+#628). It adds a measure the earlier sections did not have, the server's CPU
+time for a whole handshake, because an inversion that is a quarter of the
+signature's instructions is a small part of the handshake's time, and the bar
+should say how small.
+
+**How it was measured.** On `main` at `c8a00d6`, with `bench/tls-handshake.mjs`
+added as it is merged here: what the script measures is unchanged since it
+was first committed (review only changed how it names targets), and it adds no
+`.ts` and nothing the server or `bench/p256.ts` is built
+from, so the tree measured is `c8a00d6`'s server, called `main` below. The
+bench names a target by the commit it was run on, so its own output for these
+runs carries the short hashes of the two commits that held the script, not
+`c8a00d6`. `build/nish` was built from it by the 0.18.0 seed. `a22a056`, the tree before the comb, was built by the same
+seed in a worktree of its own, as the result above built it, and that tree's
+`node bench/p256.mjs --check` built its `bench/p256.ts` and printed the pinned
+checksum, 1238268086. This machine is not the one the sections above ran on:
+an `Intel(R) Xeon(R) Processor @ 2.10GHz` (lscpu: family 6, model 207,
+stepping 2; 4 vCPUs under KVM), Linux 6.18.44, Ubuntu clang 18.1.3, valgrind
+3.22.0, curl 8.5.0 with OpenSSL 3.0.13. Every figure below was taken on it,
+`a22a056`'s included, so they compare with each other and not with the earlier
+sections' microseconds.
+
+**Server CPU a handshake.** `bench/tls-handshake.mjs` (new here,
+[bench/README.md](../bench/README.md#tls-handshake)) runs the interop server
+as `serve`, without `-g`, pinned to CPU 0, and makes 600 new connections to
+its h2 port a round, each one `curl --http2 --tlsv1.3 -k` process on CPUs 1–3
+fetching a 17-byte file: a full handshake and one response each, with no
+session resumed. The figure is the server's utime + stime over the 600, read
+from `/proc/<pid>/stat`, divided by 600. `node bench/tls-handshake.mjs --runs
+16 --baseline a22a056`, twice: four targets (`main`, a byte-identical copy of
+it, `a22a056`, a copy of that), every server started fresh each round, in
+sixteen rounds whose order rotates. Every handshake negotiated TLS 1.3,
+TLS_AES_256_GCM_SHA384, X25519, ALPN `h2`, and the server signed with
+`id-ecPublicKey`. In microseconds a handshake, minimum / median over the
+rounds:
+
+| Target | server CPU | user | system |
+| --- | ---: | ---: | ---: |
+| `main`, first sample | **2,033** / 2,092 | 1,317 / 1,417 | 600 / 675 |
+| its copy | 2,000 / 2,083 | 1,283 / 1,392 | 567 / 725 |
+| `a22a056`, first sample | 2,333 / 2,442 | 1,450 / 1,708 | 600 / 775 |
+| its copy | 2,350 / 2,500 | 1,550 / 1,692 | 683 / 750 |
+| `main`, second sample | **2,000** / 2,150 | 1,350 / 1,450 | 533 / 692 |
+| its copy | 2,000 / 2,150 | 1,233 / 1,433 | 667 / 783 |
+| `a22a056`, second sample | 2,283 / 2,500 | 1,517 / 1,733 | 633 / 817 |
+| its copy | 2,267 / 2,458 | 1,533 / 1,658 | 617 / 825 |
+
+The noise band, each copy against its own build, minimum / median, + slower:
+`main` −1.6% / −0.4% in the first sample and 0.0% / 0.0% in the second;
+`a22a056` +0.7% / +2.4% and −0.7% / −1.7%. The figures are whole clock ticks:
+the fewest in any round was 120, so one tick is 0.83% of a round, two ticks
+1.67%, and 2,000 and 2,033 µs are 120 and 122 ticks. `a22a056` took 14.8% /
+16.7% more CPU a handshake than `main` in the first sample and 14.2% / 16.3% in
+the second. That gap is not the comb's alone: the two trees differ by every
+commit between them, and `main`'s handshake also carries about 0.6M Ir outside
+P-256 that the earlier result's did not (below). The 1.86x by which the comb
+cut the handshake's instructions is the earlier machine's ratio, at `6e11fa6`;
+it was not re-taken here. curl's own connect-to-handshake time, which the bench prints beside
+these, was 3.3–4.0 ms, mostly the client's.
+
+**One real handshake.** The result's method, unchanged: the same server built
+with `-g`, under callgrind, zeroed once it had printed its ports and dumped
+after each `curl --http2 --tlsv1.3 -k` GET of a 17-byte file from its h2 port.
+Three handshakes came to 7,922,694, 7,762,606 and 7,859,378 Ir. P-256 was
+3,208,106, 3,208,117 and 3,208,117, and X25519 3,147,968 in each. The first,
+by the module each instruction's line is in (self cost):
+
+| Module | Ir | Share |
+| --- | ---: | ---: |
+| `std/crypto/p256.ts` | 3,208,106 | **40.5%** |
+| `std/crypto/x25519.ts` | 3,147,968 | 39.7% |
+| `std/crypto/sha512.ts` | 655,589 | 8.3% |
+| `std/net/tls*` | 100,175 | 1.3% |
+| `std/crypto/hmac.ts` and `hkdf.ts` | 42,421 | 0.5% |
+| The AEAD (`aes.ts` and `runtime-aes.c`) | 30,790 | 0.4% |
+| Everything else | 737,645 | 9.3% |
+| **All** | **7,922,694** | 100% |
+
+P-256 is still the largest module, 60,138 Ir above X25519, and in the second
+and third handshakes its lines are the result's 3,208,117 to the instruction. The handshake is larger than
+the result's 7,311,699 Ir in what is neither: `runtime/runtime.c`'s own lines
+were 441,944, 441,152 and 441,692 Ir in the three, and glibc's `memset`
+227,562 in the first and about 30,000 in the others. That growth, about 0.6M
+Ir (7,922,694 against 7,311,699), is outside P-256, and where it comes from was
+not measured: a commit between `6e11fa6` and `c8a00d6` is one candidate, and
+the machine is another, since this one is model 207 where the result's was 85,
+and glibc picks `memset`'s implementation by the CPU it runs on.
+
+Inside P-256, the first handshake, inclusive of what each calls:
+
+| Function | Calls | Ir | Share of the handshake | Share of the signature |
+| --- | ---: | ---: | ---: | ---: |
+| `TlsP256Signer.sign`, the whole signature | 1 | 3,211,367 | 40.5% | 100% |
+| `p256BaseMultWith`, `k·G` by the comb | 1 | 1,734,665 | 21.9% | 54.0% |
+| `p256ScalarInvert`, `k^-1` mod n by Fermat | 1 | **776,784** | 9.8% | 24.2% |
+| — `p256FiatScalarMul`, the multiply mod n it is made of | | 777,777 in all | | |
+| `p256AffineX` (`p256FieldInvert` is 552,948 of it) | 1 | 556,453 | 7.0% | 17.3% |
+| The rest: RFC 6979's HMAC, SHA-256 and the scalar arithmetic | | 143,465 | 1.8% | 4.5% |
+
+`p256ScalarInvert` was 776,784 Ir in the first handshake and **776,344** in the
+second and third, the result's figure. Its Ir does not depend on the
+nonce: the exponent, n − 2, is fixed.
+
+**The bench.** `node bench/p256.mjs --self --binary <a22a056> --binary <a
+byte-identical copy of it> --runs 16` on `main`, twice, as the result ran it.
+Every run printed the pinned checksums: public-key 1350825148, sign
+2157286632, verify 645947189. In microseconds a call, minimum / median:
+
+| Workload | `main` | its copy | `a22a056` | its copy |
+| --- | ---: | ---: | ---: | ---: |
+| `p256PublicKey`, first sample | 135.6 / 145.9 | 136.6 / 144.1 | 508.6 / 581.8 | 503.7 / 550.9 |
+| `p256PublicKey`, second sample | 135.2 / 141.8 | 135.6 / 143.7 | 504.1 / 532.7 | 508.5 / 548.4 |
+| `p256SignSha256`, first sample | **197.6** / 214.5 | 198.4 / 219.4 | **583.6** / 648.4 | 559.2 / 598.5 |
+| `p256SignSha256`, second sample | **188.0** / 204.8 | 186.8 / 215.8 | **563.7** / 609.6 | 574.2 / 602.5 |
+| `p256VerifySha256`, first sample | 1,055.9 / 1,140.2 | 1,028.4 / 1,156.3 | 1,044.5 / 1,110.0 | 1,029.9 / 1,096.3 |
+| `p256VerifySha256`, second sample | 988.0 / 1,058.0 | 1,030.8 / 1,062.7 | 1,028.5 / 1,068.7 | 1,046.5 / 1,070.7 |
+
+The noise band, each copy against its own build, minimum / median, + slower:
+
+| Workload | `main`, first | `main`, second | `a22a056`, first | `a22a056`, second |
+| --- | ---: | ---: | ---: | ---: |
+| `p256PublicKey` | +0.7% / −1.2% | +0.3% / +1.3% | −1.0% / −5.3% | +0.9% / +2.9% |
+| `p256SignSha256` | +0.4% / +2.3% | −0.6% / +5.4% | −4.2% / −7.7% | +1.9% / −1.2% |
+| `p256VerifySha256` | −2.6% / +1.4% | +4.3% / +0.4% | −1.4% / −1.2% | +1.8% / +0.2% |
+
+Sign on `main` is 2.95x faster than `a22a056`'s at the minimum in the first
+sample (583.6 / 197.6) and 3.00x in the second (563.7 / 188.0).
+
+**What the inversion is worth, projected.** Taking `p256ScalarInvert` from
+776,344 Ir to the bar's 77,634 below removes at least 698,710 Ir: 21.8% of the
+signature, and 8.8% to 9.0% of a handshake's Ir. If the signature's time moved
+with its instructions, sign would fall from 197.6 and 188.0 µs to about 155
+and 147, 3.8x faster than `a22a056`; and the handshake would shed about 43 µs
+of server CPU, 2.1% of 2,033 and 2,000 µs. Time has not tracked instructions in
+this module, as the result found, so these are a scale, not a forecast. On the
+handshake the scale is tight: the projected 2.1% is about two and a half clock
+ticks, where condition 4's fixed band below is 1.67%, two ticks. **The band is
+narrower than the projected change, but only by about half a tick**, so a real gain the size of the projection can
+land inside the band, and condition 4 below can be missed by an inversion that
+meets condition 1.
+
+**The bar, set before anything is built.** It is fixed here and not tuned
+later. Each later reading re-runs, on its own head and on one machine, the two
+commands above twice (`bench/tls-handshake.mjs --runs 16` with `--baseline
+c8a00d6`, and `bench/p256.mjs --self --runs 16` with `--binary` for
+`a22a056`, for `c8a00d6` and for a byte-identical copy of each) and the
+callgrind profile, by this section's method. `--self` copies only the head's
+own build; each `--binary` copy is made with `cp` beside its build and checked
+with `cmp` before the run. A sample is
+one run of each, and
+**a condition that asks for both samples is met only when each sample meets it
+on its own figures**; no sample is set aside and no figure is pooled across
+samples.
+
+1. **The scalar inversion is at or under 77,634 Ir** in one handshake's
+   profile: `p256ScalarInvert`, or whatever computes `k^-1` mod n, inclusive
+   of what it calls, in the second or third handshake. That is a tenth of
+   776,344.
+2. **P-256 is under X25519** in the same profile: `std/crypto/p256.ts`'s
+   self Ir below `std/crypto/x25519.ts`'s (3,147,968 here).
+3. **`p256SignSha256`'s minimum is at least 3x faster than `a22a056`'s,
+   outside the noise band at the minimum, in both samples.** In each sample
+   the new build's sign minimum must be at or under `a22a056`'s sign minimum
+   in that sample / 3 / 1.042, where `a22a056`'s minimum is the one the later
+   run re-measures in the same rounds, not this baseline's. The 4.2% is fixed here, from this baseline: the
+   largest absolute copy gap at the sign minimum over both builds and both
+   samples (`a22a056`'s −4.2%, first sample), so a copy that ran faster than
+   its build widens the band as much as one that ran slower, and a later
+   reading's own copy gaps do not move it. As a worked example, on this
+   baseline's figures that is
+   583.6 / 3 / 1.042 = 186.7 µs in the first sample and 563.7 / 3 / 1.042 =
+   180.3 µs in the second; `main` is 197.6 and 188.0 µs, and misses both.
+   **Verify is not slower**: in each sample, the new build's verify minimum
+   is not above `c8a00d6`'s, re-measured in the same rounds, by more than 4.3%, likewise fixed:
+   the largest absolute copy gap at the verify minimum here (`main`'s +4.3%,
+   second sample).
+4. **Server CPU a handshake is below this baseline's `main`, outside the
+   copy's band at the minimum, in both samples.** In each sample the new
+   build's minimum must be at or under `c8a00d6`'s minimum in that sample /
+   (1 + 2/120), 1.67%, where `c8a00d6`'s minimum is the one the later run
+   re-measures in the same rounds, not this baseline's. The band is fixed here, from this baseline: the larger of the
+   largest absolute copy gap at the minimum over both builds and both samples
+   (`main`'s −1.6%, first sample) and two ticks of the fewest-tick round
+   (2 / 120, the larger), so it never falls below the figures' own resolution. The formula
+   governs; as a worked example, on this baseline's figures it is 2,000 µs
+   (120 ticks) in the first sample and 1,966.7 µs (118 ticks) in the second.
+
+A missed condition is recorded as missed. Condition 1 is about instructions
+and decides whether the inversion was replaced; 3 and 4 are about time and say
+what it bought.
 
 ## 6. Decisions for the owner
 

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1077 programs, 140076 dump lines.
+# 1078 programs, 140107 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -48075,6 +48075,35 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=1 stackLocals=1
   local 7:9 out: u8[] (const)
   local 10:9 fd: i32 (const)
+program tests/cases/net_tcp_nodelay.ts
+module tests/cases/net_tcp_nodelay.ts (entry)
+import netAddress from "nish:net" -> builtin netAddress
+import netClose from "nish:net" -> builtin netClose
+import netLocalPort from "nish:net" -> builtin netLocalPort
+import pollAdd from "nish:net" -> builtin pollAdd
+import pollCreate from "nish:net" -> builtin pollCreate
+import pollWait from "nish:net" -> builtin pollWait
+import tcpAccept from "nish:net" -> builtin tcpAccept
+import tcpConnect from "nish:net" -> builtin tcpConnect
+import tcpListenFlags from "nish:net" -> builtin tcpListenFlags
+function accepted(flags: i32): i32 -> @accepted [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen_flags
+  calls: nish_net_address nish_net_close nish_net_local_port nish_poll_add nish_poll_create nish_poll_wait nish_tcp_accept nish_tcp_connect nish_tcp_listen_flags
+  stackSites=3 stackLocals=3
+  local 12:9 listener: i32 (const)
+  local 16:9 addr: u8[] (const)
+  local 18:9 client: i32 (const)
+  local 19:9 loop: i32 (const)
+  local 21:9 ready: i32[] (const)
+  local 22:9 peer: u8[] (const)
+  local 23:9 conn: i32 (const)
+function opened(flags: i32): i32 -> @opened [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen_flags
+  calls: nish_net_close nish_tcp_listen_flags
+  stackSites=0 stackLocals=0
+  local 32:9 fd: i32 (const)
 program tests/cases/net_tcp_reuseport.ts
 module tests/cases/net_tcp_reuseport.ts (entry)
 import netClose from "nish:net" -> builtin netClose
@@ -48086,9 +48115,9 @@ function main(): i32 -> @nish_main [exported entry]
   sharedWrite: via nish_tcp_listen_flags
   calls: nish_arena_mark nish_arena_release nish_net_close nish_net_local_port nish_print nish_str_from_i32 nish_tcp_listen nish_tcp_listen_flags
   stackSites=0 stackLocals=0
-  local 8:9 a: i32 (const)
-  local 9:9 port: i32 (const)
-  local 10:9 b: i32 (const)
+  local 9:9 a: i32 (const)
+  local 10:9 port: i32 (const)
+  local 11:9 b: i32 (const)
 program tests/cases/net_tcp_unchecked.ts
 module tests/cases/net_tcp_unchecked.ts (entry)
 function echoOnce(fd: i32, buf: u8[]): i32 -> @echoOnce [exported]
@@ -48255,41 +48284,44 @@ const SEGMENT: i32 = 1200
 const TOTAL: i32 = 4800
 function receive(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @receive
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 20:11
+  sharedWrite: 21:11
   calls: nish_panic_slice nish_udp_recv_from
   pointer buf: size=0 writesThrough=true captured=false
   pointer from: size=0 writesThrough=true captured=false
   pointer meta: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 20:7 n: i32 (let)
+  local 21:7 n: i32 (let)
 function intact(buf: u8[], n: i32): boolean -> @intact
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 32:12 i: i32 (let)
+  local 33:12 i: i32 (let)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_udp_bind
   calls: intact llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_net_address nish_net_close nish_net_local_port nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_udp_bind nish_udp_send_to receive
-  stackSites=5 stackLocals=3
-  local 41:9 node: i32 (const)
-  local 42:9 data: u8[] (const)
-  local 43:12 i: i32 (let)
-  local 46:9 to: u8[] (const)
-  local 47:9 sender: i32 (const)
-  local 51:9 buf: u8[] (const)
-  local 52:9 from: u8[] (const)
-  local 53:9 meta: i32[] (const)
-  local 54:9 gro: i32 (const)
-  local 55:9 plain: i32 (const)
-  local 56:14 fd: i32 (const)
-  local 59:11 n: i32 (const)
-  callee 59:15 receive -> @receive
-  callee 60:91 intact -> @intact
-  local 64:14 ecn: i32 (const)
-  local 67:9 n: i32 (let)
-  callee 67:13 receive -> @receive
-  callee 69:11 receive -> @receive
+  stackSites=6 stackLocals=3
+  local 42:9 node: i32 (const)
+  local 43:9 data: u8[] (const)
+  local 44:12 i: i32 (let)
+  local 47:9 to: u8[] (const)
+  local 48:9 sender: i32 (const)
+  local 50:9 gso: i32 (const)
+  local 53:11 refused: i32 (const)
+  local 55:16 ecn: i32 (const)
+  local 62:9 buf: u8[] (const)
+  local 63:9 from: u8[] (const)
+  local 64:9 meta: i32[] (const)
+  local 65:9 gro: i32 (const)
+  local 66:9 plain: i32 (const)
+  local 67:14 fd: i32 (const)
+  local 70:11 n: i32 (const)
+  callee 70:15 receive -> @receive
+  callee 71:91 intact -> @intact
+  local 75:14 ecn: i32 (const)
+  local 78:9 n: i32 (let)
+  callee 78:13 receive -> @receive
+  callee 80:11 receive -> @receive
 program tests/cases/net_udp_unchecked.ts
 module tests/cases/net_udp_unchecked.ts (entry)
 function echoOnce(fd: i32, buf: u8[], from: u8[], meta: i32[]): i32 -> @echoOnce [exported]
