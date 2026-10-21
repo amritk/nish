@@ -32,7 +32,6 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
-  quicPushAck,
   quicPushConnectionClose,
   quicPushStream,
   quicPutDatagram,
@@ -61,7 +60,7 @@ import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
 import { splitMessages } from "../net_tls_common/client";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
-import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
 import { LbMeter, lbBegin, lbEnd, lbLeafKey } from "./common";
 import { H3App, QuicApp, WtApp } from "./udp-apps";
 
@@ -621,7 +620,7 @@ export class UdpLoop {
     const cl: UdpClient = this.client;
     const all: u8[] = [];
     if (cl.c.largestApp >= 0) {
-      quicPushAck(all, [n64(0), cl.c.largestApp], n32(1), n64(0));
+      qcPushAppAck(all, cl.c);
       cl.acked = cl.c.largestApp;
     }
     for (const b of payload) {
