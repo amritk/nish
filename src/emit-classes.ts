@@ -253,9 +253,9 @@ export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
     return emitArrayLength(emitter, expr)
   }
   if (emitter.table.isUnion(receiver)) {
-    // The tag, the one member a union has: every variant's first field, so at
-    // offset 0 whichever variant it holds. No TBAA tag, because the access
-    // aliases each variant's own tag field.
+    // The tag, the one member read through the union itself: every variant's
+    // first field, so at offset 0 whichever variant it holds. No TBAA tag,
+    // because the access aliases each variant's own tag field.
     const union = emitter.emitExpression(expr.children[0])
     const ptr = emitter.fn.emitValue(
       `getelementptr inbounds %union.tagged, ${UNION_TYPE} ${union}, i32 0, i32 0`

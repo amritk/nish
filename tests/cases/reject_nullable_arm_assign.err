@@ -1,0 +1,1 @@
+Cannot read property `a` of `Box | null`; check for null first: `if (p !== null) { ... }` narrows `Box | null` to `Box`

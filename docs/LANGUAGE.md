@@ -730,7 +730,12 @@ and each has its own code:
   `reject_union_type`).
 - Its first field is of one enum member type: otherwise
   `` `Point` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as `readonly kind: Kind.Circle = Kind.Circle` ``
-  (NL2523, `reject_union_untagged`, `reject_paren_union_type`).
+  (NL2523, `reject_union_untagged`, `reject_paren_union_type`). A first
+  field typed with its whole enum, `readonly kind: Kind = Kind.A`, holds a tag
+  but types it as every variant's, so the union could not tell its variants
+  apart by it; that is NL2559, which names the member to write:
+  `` `First` cannot be a union variant: its tag `kind` has the whole enum `Kind` as its type, which every variant shares, so give it the one member it holds instead: `readonly kind: Kind.A = Kind.A` ``
+  (`reject_union_tag_whole_enum`).
 - The tag is `readonly`: otherwise
   `` `Circle` cannot be a union variant: its tag `kind` must be `readonly`, because the union tells its variants apart by it ``
   (NL2535, `reject_union_mutable_tag`).
@@ -753,11 +758,13 @@ arm or a `??` default whose other side is the union
 (`tests/cases/union_forms`). Equality on two unions compares the pointers, as
 on any object.
 
-**Reading.** The tag is the one member a union has (NL2528 for any other
-field or method, `reject_union_member_field`, `reject_union_method_call`,
-even when every variant has it). It reads as the enum, `Kind`, so it compares,
-switches and is passed as one. A union is read-only: a write through it is
-NL2529, even to a field every variant has (`reject_union_assign_tag`).
+**Reading.** The tag is the one member a union has until a test of the tag
+narrows it (below): any other field or method is
+`` `r` cannot be used on the union `Circle | Square`: a union has only its tag `kind` until a test of the tag narrows it to one variant ``
+(NL2528, `reject_union_member_field`, `reject_union_method_call`, even when
+every variant has it). It reads as the enum, `Kind`, so it compares, switches
+and is passed as one. A union is read-only: a write through it is NL2529, even
+to a field every variant has (`reject_union_assign_tag`).
 
 **Comparisons that cannot be true.** As in `tsc`, comparing the tag with a
 member no variant has is an error: `s.kind === Kind.Tri` when no variant is
@@ -765,17 +772,228 @@ tagged `Kind.Tri` is NL2531 (`reject_union_disjoint_compare`), and
 `case Kind.Tri:` in a `switch (s.kind)` is NL2532
 (`reject_union_disjoint_case`).
 
-**Accepted here, refused by TypeScript.** One gap runs the other way, and
-the next stage, narrowing by the tag, closes it. `tsc` narrows a union by a
-test of its tag, so after `if (u.kind === Kind.A) { return 1; }` it knows
-`u.kind` is not `Kind.A`, and a second `u.kind === Kind.A`, in a ternary, a
-nested ternary or another `if`, is TS2367. This version does not narrow, so
-it accepts that comparison and evaluates it, to `false`. The tag stored in
-a local first, `const k: Kind = u.kind`, carries the same gap, and wider:
-`tsc` narrows `k` on its declaration to the variants' members
-(`Kind.A | Kind.B` for a union of those two), so even a first
-`k === Kind.C`, or a `case Kind.C:` of a `switch (k)`, is TS2367 (TS2678)
-there and accepted here, for a member of `Kind` no variant has.
+**Narrowing.** A test of a variable's tag narrows the variable, as in `tsc`.
+Where `s.kind === Kind.Circle` holds, `s` reads as a `Circle`, so its fields
+and methods are there; where it fails, `s` is the union of the variants left,
+and when one variant is left it reads as that one
+(`tests/cases/union_narrowing`):
+
+```ts
+const area = (s: Shape): i32 => {
+  if (s.kind === Kind.Circle) {
+    return 3 * s.r * s.r;
+  }
+  return s.side * s.side;
+};
+```
+
+- The test narrows the branch it guards: the `then` and `else` of an `if`,
+  the arms of a ternary, the right side of `&&` (where it held) and of `||`
+  (where it failed), and the statements after an `if` whose branch always
+  leaves (`return`, `break`, `continue`, a `panic(...)`). `!==` narrows the other way
+  round, and the operands may be either way round, `Kind.Square === s.kind`.
+- Each `case Kind.X:` of a `switch (s.kind)` narrows `s` to its variant, and
+  `default` to the variants no `case` named. A `case` that a previous one falls
+  through into narrows nothing.
+- A null test composes with it: on `s: Shape | null`,
+  `s !== null && s.kind === Kind.Circle && s.r > 0` reads `s.r`.
+- Where an `||` held, either side may have made it hold, so the variable is
+  what either side proved: past `s.kind === Kind.Circle || s.kind ===
+  Kind.Square`, `s` is a `Circle | Square`, which has only its tag and whose
+  tag is not `Kind.Tri`. The same goes for the side of an `&&` where it
+  failed, for an enum variable, for any number of arms and for `===` mixed
+  with `!==`; an arm that tests something else leaves the variable as
+  declared (`tests/cases/union_narrowing_join`; `reject_union_narrow_or_if`,
+  `reject_union_narrow_or_ternary`, `reject_union_narrow_and_false`,
+  `reject_enum_narrow_or_if`, `reject_enum_narrow_or_ternary`,
+  `reject_enum_narrow_or_three`, `reject_enum_narrow_or_mixed`,
+  `reject_enum_narrow_and_false`).
+- The test may read the variable through an assignment, which answers the
+  value it stored: `(t = next()).kind === Kind.Square` narrows `t`, as
+  `(k = next()) === Kind.A` narrows an enum `k`
+  (`reject_union_narrow_test_assign`, `reject_union_narrow_or_assign`,
+  `reject_enum_narrow_assign`).
+- The variable is a parameter or a `let` or `const` local; a narrowed `const`
+  stays narrowed in a data-parallel arrow that reads it
+  (`tests/link/union_narrowing_capture`). An
+  assignment to it drops what the tests proved, as for a nullable
+  and a loop that assigns it drops it before its body
+  (`reject_union_narrow_dropped`, `reject_union_narrow_else_assign`,
+  `reject_union_narrow_loop_assign`).
+- What a test proved holds past the statement that made it as far as every
+  way out of it agrees, as in `tsc`. After an `if` with an `else`, the
+  variable is what the arms that fall through left it, joined; after an
+  `if` whose one arm falls through, what that arm left, so a chain of `else
+  if`s whose branches all return leaves the variant no test named and an arm
+  that assigns the variable leaves what it assigned
+  (`reject_union_narrow_else_if_chain`, `reject_union_narrow_arm_assign`,
+  `reject_nullable_arm_assign`). A block's early return narrows what follows
+  the block. An enum local that an `if`, a ternary, a loop or a `switch`
+  stores a member into holds, after it, what it held before or any member
+  stored (`reject_enum_held_if_join`, `reject_enum_held_else_join`,
+  `reject_enum_held_ternary`, `reject_enum_held_ternary_assign`,
+  `reject_enum_held_loop_join`, `reject_enum_held_switch_join`). The join
+  after an `if` covers every local and path either arm assigns, one first
+  assigned in the `else` included (`reject_union_narrow_path_if_join`,
+  `reject_union_narrow_path_if_test`), and every one a test inside either arm
+  narrowed, whether or not an arm assigns it: two arms that each leave when
+  `k === Kind.A` leave `k` not `Kind.A` past the `if`, joined with what held
+  before it (`tests/cases/union_narrowing_tested_join`;
+  `reject_enum_if_tested_join`, `reject_union_narrow_if_tested_join`,
+  `reject_union_narrow_path_tested_join`, `reject_union_narrow_nullable_tested_join`,
+  `reject_enum_else_if_tested_join`, `reject_enum_if_tested_outer`). A `switch` joins what each of its
+  exits leaves: every `break` out of it, the fall off its last clause and,
+  when no `default` covers every member, the case no clause matches; a
+  clause that returns is no exit (`tests/cases/union_narrowing_switch_join`;
+  `reject_union_narrow_path_switch`, `reject_union_narrow_path_switch_late`,
+  `reject_enum_switch_join`, `reject_enum_switch_unmatched`), a variable only
+  its clauses' tests narrowed included (`reject_enum_switch_tested_join`,
+  `reject_enum_switch_tag_tested_join`). What held
+  before the `switch` holds again at the start of each clause and in the
+  case no label matches, whatever an earlier clause stored
+  (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). A loop is
+  followed to a fixpoint, as `tsc` follows it: the head of a `while`, `for`
+  or `do` holds what reaches it before the loop, at the end of an iteration
+  and at a `continue` (through its update, for a `for`), joined until it no
+  longer changes; after a `while` or `for` comes the head with its condition
+  false, joined with every `break`,
+  after a `do` the end of the body and its `continue`s with the condition
+  false, and after a `for...of` the head and the `break`s. A loop inside the
+  body and a `switch` inside it are followed the same way, an `if` or a
+  `switch` narrowing its arms and clauses inside the loop as it does outside
+  one (`tests/cases/union_narrowing_loop_flow`,
+  `tests/cases/union_narrowing_loop_reads`; `reject_union_loop_while_join`,
+  `reject_union_loop_do_join`, `reject_union_loop_condition_reassigned`,
+  `reject_enum_loop_for_join`, `reject_enum_loop_do_join`,
+  `reject_enum_loop_top_of_body`, `reject_enum_loop_do_continue`,
+  `reject_enum_loop_break`, `reject_enum_loop_for_of`,
+  `reject_enum_loop_nested`, `reject_enum_loop_switch`,
+  `reject_enum_loop_switch_store`, `reject_enum_loop_switch_while`,
+  `reject_union_loop_switch`). A variable the loop only tests, never
+  writes, is followed too (`reject_enum_loop_tested_while`,
+  `reject_enum_loop_tested_do`, `reject_enum_loop_tested_break`,
+  `reject_enum_loop_tested_inner`, `reject_enum_loop_switch_tested`,
+  `reject_union_loop_tested_while`, `reject_union_loop_null_tested`). A
+  store holds what its value holds where the value is one of: a member; a
+  local of a member type, `const m: Kind.B`; a call of a function that
+  returns a member type; a field of a member type, or a call of a method
+  that returns one, read through `this`, a local or parameter or a field of
+  one, nullable or not; a `const` the loop declares once, read by its
+  initializer; another
+  enum variable; a union's tag; or a ternary of two of these, each arm read
+  on its side of the condition
+  (`reject_enum_loop_ternary_store`, `reject_enum_loop_copy_store`,
+  `reject_union_loop_tag_copy`, `reject_enum_loop_member_local`,
+  `reject_enum_loop_member_call`, `reject_enum_loop_field_store`,
+  `reject_enum_loop_method_store`, `reject_enum_loop_nullable_receiver`,
+  `reject_enum_loop_body_const`,
+  `reject_enum_loop_ternary_narrowed`, `reject_enum_loop_ternary_tracked`,
+  `reject_enum_loop_ternary_self`). A test against a member, a local of a
+  member type or such a call narrows as outside a loop, and so does a test
+  against another enum variable, by the members it holds there
+  (`reject_enum_loop_const_test`, `reject_union_loop_const_test`,
+  `reject_enum_loop_held_operand`, `reject_enum_loop_held_single`,
+  `reject_enum_loop_held_ternary`, `reject_union_loop_held_operand`;
+  `tests/cases/enum_loop_held_several`). A `for`
+  update runs after the body and before the next test, and is followed
+  there (`tests/cases/enum_loop_for_update`;
+  `reject_enum_loop_for_update_store`, `reject_enum_loop_for_update_cond`),
+  and is checked when the body is one refused statement, so both errors are
+  reported (`reject_for_update_after_body`). A store of any other value holds
+  the whole declared type. Where the loop holds a shape the fixpoint does not
+  follow, a local or path holds, after it and throughout it, every member
+  stored anywhere in it, which may be more than `tsc` knows ("Accepted here,
+  refused by `tsc`", below).
+- A tag compared with an enum variable narrows on the side where they are
+  equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
+  `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
+  `k`'s members. Where they differ, nothing is known, since `k` may hold
+  either, unless `k` holds one member, which is then left out
+  (`tests/cases/union_narrowing_arms`;
+  `reject_union_narrow_tag_variable`, `reject_enum_compare_variable`).
+- A tag tested through a path — a field `h.k`, `this.k`, a field of a field
+  `h.s.kind`, a literal index `xs[0].kind` — stays narrowed for the
+  comparisons after it, so a repeat test of a member already excluded is
+  NL2531, as `tsc`'s TS2367 is. A store to the path, to a prefix of it
+  (`h.s = t`, `xs[0] = t`) or to its root drops what it held, and the joins
+  above follow a path as they follow a variable; a call does not, as in
+  `tsc` (`tests/cases/union_narrowing_paths`;
+  `reject_union_narrow_path_field`, `reject_union_narrow_path_this`,
+  `reject_union_narrow_path_nested`, `reject_union_narrow_path_index`,
+  `reject_union_narrow_path_join`, `reject_union_narrow_path_loop`). An
+  index is part of the path when it names one element, as TypeScript 5.5
+  reads it: a number literal, a parameter, a `const` (`const i = 0` makes
+  `xs[i]` the path `xs[0]`, annotated or not, and so does `const j = i`
+  after an unannotated `const i = 0`, whose type is the literal `0`), a module
+  constant (`const IDX: i32 = 0` makes `xs[IDX]` the path `xs[0]` too, and
+  `const A: i32 = -1` and `const B: i32 = -1` make `xs[A]` and `xs[B]` one
+  path), or a `let` nothing in its block assigns, a closure's body included. A
+  `let` that is assigned or stepped (`i = 1`, `i++`), a parenthesised name or any
+  other expression keys no path, so `xs[i]` is not narrowed through it, and a
+  store through such an index (`xs[j] = t`) drops nothing, as in `tsc`
+  (`tests/cases/union_narrowing_index`, `union_narrowing_index_const`;
+  `reject_union_narrow_path_ident`, `reject_union_narrow_path_steady`,
+  `reject_union_narrow_path_const_index`,
+  `reject_union_narrow_path_index_store`,
+  `reject_union_narrow_path_const_chain`,
+  `reject_union_narrow_path_negative_index`,
+  `reject_union_narrow_path_negative_zero`,
+  `reject_union_narrow_path_module_index`,
+  `reject_union_narrow_path_module_literal`,
+  `reject_union_narrow_path_module_ident`,
+  `reject_union_narrow_path_module_negative`). The union read through the path is
+  not narrowed (below).
+- A union of two or more variants left still has only its tag
+  (`reject_union_narrow_none_if`, `reject_union_narrow_none_ternary`,
+  `reject_union_narrow_none_and`, `reject_union_narrow_none_or`,
+  `reject_union_narrow_none_fallthrough`), and a narrowed variant has only its
+  own fields (`reject_union_narrow_none_case`, `reject_union_narrow_none_null`,
+  `reject_union_narrow_none_reversed`).
+
+What a test excluded stays excluded, so a second test of a tag already ruled
+out is always false and NL2531, in an `if`, a ternary or an `&&`
+(`reject_union_narrow_second_if`, `reject_union_narrow_second_ternary`,
+`reject_union_narrow_second_and`), and so is its `case`, NL2532
+(`reject_union_narrow_dead_case`). An enum local holds what it was given: the
+tag stored in a local, `const k: Kind = s.kind`, holds only the variants'
+members, and a local given `Kind.Circle` holds only that member until it is
+assigned again, so `k === Kind.Tri` against a member it cannot hold is NL2531
+and `case Kind.Tri:` of a `switch (k)` NL2532, as `tsc`'s TS2367 and TS2678 are
+(`reject_union_tag_local_compare`, `reject_union_tag_local_case`,
+`reject_enum_held_const`, `reject_enum_held_let`, `reject_enum_held_reassign`,
+`reject_union_tag_held_capture`).
+
+A test of an enum variable against a member narrows what it holds in the same
+forms, as `tsc` narrows it: `k === Kind.A` and `k !== Kind.A`, either way
+round, in an `if` and its `else`, a ternary, `&&` and `||`, after an `if` whose
+branch always leaves, and each `case` and the `default` of a `switch (k)`. This
+holds for a parameter `k: Kind` as for the tag local `const k: Kind = s.kind`,
+and an assignment drops it as it drops a union's. So after
+`if (k === Kind.A) return`, `k === Kind.A` is NL2531 and `case Kind.A:` NL2532,
+as `tsc`'s TS2367 and TS2678 are (`tests/cases/enum_narrowing`;
+`reject_enum_narrow_else`, `reject_enum_narrow_early`,
+`reject_enum_narrow_ternary`, `reject_enum_narrow_and`,
+`reject_enum_narrow_or`, `reject_enum_narrow_switch`,
+`reject_enum_narrow_tag_local`). Narrowed to one member, the variable is that
+member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
+(`reject_enum_narrow_let_member`), as in `tsc`.
+
+A `switch` whose subject reads a union variant's tag field, with no
+`default` and labels that name every variant the tag can hold, is
+**complete**: no value reaches the case no label
+names, so when no `break` targets the `switch` and its last clause leaves, the
+`switch` terminates (see Termination) and can end a function that returns a
+value, as in `tsc`. Its unmatched case compiles to LLVM's `unreachable`. The
+tag may be read through a union variable, a field, an element or a call's
+result, `s.kind`, `h.shape.kind`, `shapes[i].kind`, and a variable that a test
+before the `switch` left fewer variants needs labels for those only
+(`tests/cases/union_switch`). With a variant unnamed, the `switch` does not
+terminate, and a function that returns a value and ends in it is the
+missing-return error, as `tsc --strict --noImplicitReturns`'s TS2366 is
+(`reject_union_switch_missing_case`, `reject_union_switch_missing_case_field`).
+Complete means the tag can hold nothing else: a variant's tag is `readonly`,
+written only with its own member, and a union never crosses the interop
+boundary, so no other `i32` reaches it.
 
 **Stricter than TypeScript.** Each of these programs is accepted by
 `tsc --strict` and refused here; each refusal is pinned:
@@ -790,8 +1008,7 @@ there and accepted here, for a member of `Kind` no variant has.
   `reject_union_narrow_element`, `reject_union_narrow_ternary`,
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
-  narrows nothing, and is accepted. Narrowing by `if` and `switch` on the
-  tag is not in this version either.
+  narrows nothing, and is accepted. A test of the tag does narrow (above).
 - **No union type arguments.** `Box<Shape>`, a generic function or method
   whose type parameter would bind to a union, `Map<K, Shape>` and
   `Result<Shape, E>` / `Result<T, Shape>` are NL2533
@@ -812,7 +1029,53 @@ there and accepted here, for a member of `Kind` no variant has.
   ternary, or the result of an arrow that binds a type parameter
   (`reject_union_tag_array`, `reject_union_tag_ternary`,
   `reject_union_tag_arrow`). An annotation as the enum, `const k: Kind =
-  s.kind`, is accepted, with the narrowing gap above.
+  s.kind`, is accepted, and the local holds the variants' members (above).
+  An enum variable narrowed to two or more members is the same: `const j = k`
+  after `if (k === Kind.A) return` is NL2530, since `tsc` would infer
+  `Kind.B | Kind.C` (`reject_enum_narrow_inferred_set`); annotate it as `Kind`.
+- **No narrowing of a union through a path.** `tsc` narrows a property
+  path, `h.s.kind === Kind.Circle` then `h.s.r`; this version narrows the
+  tag read through the path (above) but the union only in a variable, so a
+  read of a variant's member through the path is
+  `` `r` cannot be used on the union `Circle | Square | Tri` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that ``
+  (NL2558, `reject_union_narrow_path`).
+- **A complete `switch` reads the union's tag.** `tsc` treats a `switch`
+  whose labels name every member of an enum as complete, and so ends a
+  function in it; this version does so for a union's tag only (above). A
+  plain enum, `switch (k)` for `k: Kind`, can arrive from C holding any
+  `i32`, so a `switch` on a plain `Kind` local or field is never complete
+  (`reject_union_switch_enum`), nor is one on the tag copied into an enum
+  local, `const k: Kind = s.kind`, or a `let` one reassigned on another path
+  (`reject_union_switch_tag_local`, `reject_union_switch_tag_local_reassigned`).
+  A narrowed path needs every tag of the whole union: `switch (h.s.kind)`
+  after `if (h.s.kind === Kind.A) return` is complete only with `Kind.A`
+  labelled too, since a call between the test and the `switch` could have
+  reassigned `h.s` (`reject_union_switch_path_narrowed`); a narrowed union
+  local, which nothing reassigns unseen, is complete with the labels of the
+  variants left to it (`tests/cases/union_switch_narrowed`). Nor is a `switch`
+  complete on an enum field assigned from
+  a tag, `b.k = s.kind`, which a call, an alias, a method or `this` can
+  overwrite with any member (`reject_union_switch_enum_field_call` and its
+  siblings): what decides is the subject's static type, a union's tag field,
+  never what a path was assigned or narrowed to hold. End such a function
+  after the `switch`, or give it a `default` (`tests/cases/union_switch_flow`).
+- **No `never`.** Where the tests have excluded every variant, `tsc` types the
+  variable `never` and accepts a read of it; this version has no such type, so
+  the read is
+  `` `s` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for ``
+  (NL2557, `reject_union_narrow_exhausted`).
+- **No narrowing through a stored condition.** `tsc` narrows `s` where a
+  `const` holding a test of its tag is true, `const round = s.kind ===
+  Kind.Circle; if (round) { s.r }`; this version narrows on the test
+  itself only, so `s.r` there reads the union (NL2528,
+  `reject_union_narrow_aliased`). Test the tag in the condition.
+- **No field shared by every variant.** `tsc` reads a field every variant
+  declares through the union; this version reads only the tag before a test
+  narrows it (NL2528, `reject_union_member_field`).
+- **A tag of one member.** `tsc` accepts a variant whose tag is typed with its
+  whole enum, `readonly kind: Kind = Kind.A`, which then discriminates
+  nothing; this version asks for the member type (NL2559,
+  `reject_union_tag_whole_enum`).
 - **No covariant arrays.** A `Circle[]` is not a `Shape[]`, since a push
   through the wider type would put a `Square` among the circles; build the
   array as a `Shape[]` (`reject_union_covariant_array`).
@@ -845,6 +1108,38 @@ wanted is the existing refusal of its position (`reject_union_into_init`,
 `reject_union_ternary_other`, `reject_union_nullish_other`). A smaller union
 stored where a larger one is declared narrows it in `tsc`, as a variant
 does, and is NL2534 too (`reject_union_narrow_subunion`).
+
+**Accepted here, refused by `tsc`.** The loop pass (above) reads less than
+`tsc` in the shapes below, and these are all of them: a variable holds every
+member stored anywhere in the loop, or its whole declared type, so a
+comparison `tsc` refuses as TS2367 may compile here. Each is pinned as it
+stands, with the expected `tsc` error written at the comparison, so the case
+fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
+
+- **A path.** A tag or enum held by a field, `h.k`, is joined over the whole
+  loop, not followed through it.
+- **A store inside an expression.** An assignment that is an argument,
+  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, or the
+  inner store of a chain, `k = j = Kind.C`, rather than a statement of its
+  own.
+- **A value the pass cannot read.** A store of a field or a method call
+  read through anything but `this`, a local or parameter the loop does not
+  declare, or a field of one — an element, `j = gs[0].b` or
+  `j = gs[0].pick()`, a call's result, `j = makeG().b`, a receiver the loop
+  declares, `const g = new G(); j = g.b` — holds the whole declared type,
+  though the field or method is typed with one member. So does a store of a
+  `let` the loop declares, or of a `const` it declares from a tracked
+  variable, as the swap `const t: Kind = a; a = b; b = t;` does.
+- **An arm that holds nothing.** A ternary arm that reads the stored
+  variable where the condition leaves it no member, the `k` of
+  `k = k === Kind.A ? Kind.B : k` while `k` holds only `Kind.A`, reads as
+  the whole type, as the checker reads a variable narrowed to `never`, so
+  the store holds every member from then on.
+- **A wide type.** A union of more than 29 variants or an enum of more than
+  29 members.
+
+`try`, a labelled statement, destructuring and an arrow that captures a
+local are refused by Nish on their own, so no loop that compiles holds them.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
@@ -4999,8 +5294,12 @@ switch (node.kind) {
 - `break` inside a `switch` leaves the switch, not an enclosing loop;
   `continue` looks past the switch to the loop
   (`tests/cases/cf_switch_break`).
-- A `switch` terminates (see Termination) when it has a `default`, no `break`
-  targets it, and its last clause terminates.
+- A `switch` terminates (see Termination) when no `break` targets it, its
+  last clause terminates, and it has a `default` or is a complete `switch` on a
+  union's tag, whose labels name every variant
+  ([Discriminated unions](#discriminated-unions), `tests/cases/union_switch`).
+  A `switch` on an integer or a plain enum without a `default` never
+  terminates, whatever its labels (`reject_union_switch_enum`).
 
 ### `break` / `continue`
 
@@ -5040,8 +5339,8 @@ purposes, the current path: a non-`void` function may end with it
 
 A statement *terminates* when control cannot fall out of it: `return`,
 `break`, `continue`, `process.exit(...)`, `panic(...)`; an `if` whose branches
-both terminate; a `switch` with a `default`, no `break` aimed at it and a
-terminating last clause; a loop with no condition or the condition `true` and
+both terminate; a `switch` with a `default` or one complete on a union's tag,
+no `break` aimed at it and a terminating last clause; a loop with no condition or the condition `true` and
 no `break` aimed at it. Any other loop may run zero times and does not
 terminate. Rules (`src/statements.ts`, `checker.ts`):
 

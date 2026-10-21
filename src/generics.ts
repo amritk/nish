@@ -2214,6 +2214,7 @@ const liftArrow = (
   const savedErrored = ctx.errored
   const savedLoopKinds = ctx.loopKinds
   const savedLoopBreaks = ctx.loopBreaks
+  const savedFlowFrames = ctx.flowFrames
   const savedStatement = ctx.statementExpression
   const savedFunctions = ctx.functionBindings
   ctx.arrowOuterScopes.push(outer)
@@ -2228,11 +2229,13 @@ const liftArrow = (
   ctx.errored = false
   ctx.loopKinds = []
   ctx.loopBreaks = []
+  ctx.flowFrames = []
   ctx.statementExpression = null
   checkSignatureBody(ctx, fn, scope, returnType < 0)
   ctx.current = enclosing
   ctx.loopKinds = savedLoopKinds
   ctx.loopBreaks = savedLoopBreaks
+  ctx.flowFrames = savedFlowFrames
   ctx.statementExpression = savedStatement
   ctx.functionBindings = savedFunctions
   ctx.arrowOuterScopes.pop()

@@ -1,0 +1,1 @@
+`First` cannot be a union variant: its tag `kind` has the whole enum `Kind` as its type, which every variant shares, so give it the one member it holds instead: `readonly kind: Kind.A = Kind.A`

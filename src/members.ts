@@ -208,16 +208,26 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
 const checkUnionTag = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
   const tag = ctx.table.tagNameOf(receiver)
   if (expr.text !== tag) {
-    ctx.errorAtProperty(expr, unionMemberMessage(ctx, receiver, expr.text))
+    ctx.errorAtProperty(expr, unionMemberMessage(ctx, expr.children[0], receiver, expr.text))
     return T_ERROR
   }
   ctx.program.memberSets[expr.id] = receiver
   return ctx.table.tagEnumOf(receiver)
 }
 
-/** Every member of a union but its tag, read, written or called. */
-const unionMemberMessage = (ctx: CheckContext, union: i32, name: string): string =>
-  `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\`: its tag \`${ctx.table.tagNameOf(union)}\` is the one member a union has in this version`
+/**
+ * Every member of a union but its tag, read, written or called. A test of the
+ * tag narrows a variable and nothing else, so a union reached through a
+ * property path or an index keeps its tag alone however it was tested, which
+ * TypeScript would narrow: that message says to copy it into a local.
+ */
+const unionMemberMessage = (ctx: CheckContext, receiverExpr: Node, union: i32, name: string): string => {
+  const receiver = unwrapParens(receiverExpr)
+  if (receiver.kind === N_MEMBER || receiver.kind === N_INDEX) {
+    return `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that`
+  }
+  return `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\`: a union has only its tag \`${ctx.table.tagNameOf(union)}\` until a test of the tag narrows it to one variant`
+}
 
 /** `Kind.If`: the member's integer, recorded for the emitter, and the enum's type (WP23). */
 const checkEnumMember = (ctx: CheckContext, expr: Node, info: EnumInfo): i32 => {
@@ -334,7 +344,7 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     return T_ERROR
   }
   if (ctx.table.isUnion(receiver)) {
-    ctx.errorAtProperty(access, unionMemberMessage(ctx, receiver, access.text))
+    ctx.errorAtProperty(access, unionMemberMessage(ctx, receiverExpr, receiver, access.text))
     return T_ERROR
   }
   if (receiver === T_STRING) {
