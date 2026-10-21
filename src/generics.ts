@@ -833,6 +833,12 @@ class RequestSite {
  * the module it came from. Neither direction touches `typeNames`: nobody may
  * write `Box$i32`, and `identity<Point>` does not put `Point` in scope in the
  * module that declares `identity`.
+ *
+ * A layout already held here is not new, and answers false, but a request with
+ * `symbols` still pushes it onto `reachableStructs` through
+ * `reachForeignSymbols`: a type argument may have registered it layout-only
+ * before a call answered it, and the methods that call brings are owed all the
+ * same (#613).
  */
 const reachForeignLayout = (ctx: CheckContext, info: StructInfo, symbols: boolean): boolean => {
   if (ctx.program.structs.has(info.name)) {

@@ -6338,9 +6338,10 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
 - `secret(v)` takes a value nothing else holds, and moves it, because a
   second name for the bytes would read the key outside the `Secret`, and
   zeros once `wipe` has run. A local handed in is not read again (NL2445,
-  `reject_secret_moved`, and `reject_secret_inferred_moved_class`, where the
-  message names the class the plain value is), and neither is the local in
-  either arm of `secret(c ? a : b)`. A parameter, a field or an element,
+  `reject_secret_moved`, whose message says the plain array, and
+  `reject_secret_inferred_moved_class` and `reject_secret_moved_interface`,
+  where it names the class or interface the plain value is), and neither is
+  the local in either arm of `secret(c ? a : b)`. A parameter, a field or an element,
   whose owner keeps the plain bytes, is refused (NL2447,
   `reject_secret_unmovable`). Everything else is judged where it is written:
   - an array or object literal, `null`, and a ternary of fresh values are
