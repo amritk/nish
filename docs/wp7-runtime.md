@@ -176,9 +176,9 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | --- | --- | ---: | ---: |
 | `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,684 (`RUNTIME_TEXT_BUDGET`) | 3,684 (2026-10-16) |
 | `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,885 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,885 (2026-10-16) |
-| `runtime/runtime-os.c` | syscall wrappers: files, directories, subprocesses, `getenv`, the clock, `realpath`, platform | 1,536 (`RUNTIME_OS_TEXT_BUDGET`) | 1,530 |
+| `runtime/runtime-os.c` | syscall wrappers: files, directories, subprocesses (`spawnSync`, and `spawn`, `kill`, `waitPid`), `getenv`, the clock, `realpath`, platform, the CPU count and physical memory | 2,560 (`RUNTIME_OS_TEXT_BUDGET`) | 2,383 (2026-10-20) |
 | `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 610 (2026-10-16) |
-| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 3,328 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 3,097 (2026-10-20) |
+| `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,560 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,522 (2026-10-20) |
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
 | `runtime/runtime-net.c` | `nish:net` sockets, `SO_REUSEPORT` listeners, UDP, the readiness loop | 2,560 (`NET_TEXT_BUDGET`) | 2,335 (2026-10-20) |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
@@ -215,6 +215,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-20 | `tcpListenFlags` (`SO_REUSEPORT`): `runtime-net.c` 2,303 → 2,335 | net 2,560 |
 | 2026-10-20 | a divided region's pieces claimed dynamically (threads-followups): `runtime-parallel.c` threaded 2,900 → 3,097. Up to eight pieces a thread off an atomic counter, the arena rewound between them (`nish_par_run` 21 → 102, `nish_par_piece` 49 and `nish_par_run_lead` 21 new, `nish_parallel_range` 245 → 280); bench/par-heavy.ts at four threads 846 → 792 ms | parallel threads 3,328 |
 | 2026-10-20 | a map element's rewind keeps the chunk its body grew (threads-followups): `runtime-cross.c` 1,444 / 1,513 → 1,552 / 1,631, all of it `nish_cross_keep` (262 → 370) with `nish_rewind` inlined. A mark at the end of a full chunk had every element's body `malloc` a 64 KB chunk and the release `free` it; the newest 64 KB chunk is now kept, emptied, in front of the mark's. 1M short strings at one thread 72.8 → 54.9 ms, inside the loop's band; the file's other functions are the join's and the guard's, unchanged | cross 1,664 / 1,664 |
+| 2026-10-20 | WP34 N12's `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory`: `runtime-os.c` 1,530 → 2,383. The four process and memory builtins are 276 bytes (`nish_spawn_start` split from `spawnSync` +31, `nish_spawn_child` 9, `nish_kill` 53, `nish_wait_pid` 134, `nish_total_memory` 49); the other 577 is the CPU count's reading (sysconf, affinity, cgroup, `NISH_NUM_THREADS`), moved from `runtime-parallel.c` so that `availableParallelism` works without `--threads`. `runtime-parallel.c` threaded 3,097 → 2,522; the two files together grew by 278 | os 2,560, parallel threads 2,560 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same

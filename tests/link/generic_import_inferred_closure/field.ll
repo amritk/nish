@@ -1,0 +1,28 @@
+%struct.Wrap$i32 = type { %struct.Box$i32* }
+%struct.Box$i32 = type { i32 }
+
+declare noundef nonnull align 8 dereferenceable(8) %struct.Wrap$i32* @wrap$i32(i32 noundef) #0
+declare void @Wrap$i32.constructor(%struct.Wrap$i32* noundef nonnull noalias align 8 dereferenceable(8) nocapture, %struct.Box$i32* noundef nonnull align 8 dereferenceable(4)) #0
+declare void @Box$i32.constructor(%struct.Box$i32* noundef nonnull noalias align 8 dereferenceable(4) nocapture, i32 noundef) #0
+declare noundef i32 @Box$i32.get(%struct.Box$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture) #1
+
+define noundef i32 @viaField$$Wrap$i32(%struct.Wrap$i32* noundef nonnull readonly align 8 dereferenceable(8) nocapture %v) #0 {
+entry:
+  %w.addr = alloca %struct.Wrap$i32*, align 8
+  %0 = call %struct.Wrap$i32* @wrap$i32(i32 9)
+  store %struct.Wrap$i32* %0, %struct.Wrap$i32** %w.addr, align 8
+  %1 = load %struct.Wrap$i32*, %struct.Wrap$i32** %w.addr, align 8
+  %2 = getelementptr inbounds %struct.Wrap$i32, %struct.Wrap$i32* %1, i32 0, i32 0
+  %3 = load %struct.Box$i32*, %struct.Box$i32** %2, align 8, !tbaa !4
+  %4 = call i32 @Box$i32.get(%struct.Box$i32* %3)
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"Wrap$i32", !2, i64 0}
+!4 = !{!3, !2, i64 0}

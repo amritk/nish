@@ -213,7 +213,8 @@ goes into the loop like any other descriptor (`net_loop_two`). The C is
 a ceiling of its own of 2,304. One finding changed the GSO/GRO acceptance: on
 loopback, GRO keeps a GSO super-packet whole but does not merge datagrams sent
 one by one, so the test pairs a Nish GSO sender with a Nish GRO receiver. The
-Darwin branch is compiled by CI's Darwin rows and run by nothing. `wasm` is out
+Darwin branch, where both answer `-95`, is run by CI's `runtime-net
+(macos-latest)` job (#358). `wasm` is out
 of scope, because a browser reaches the network through the host.
 
 ### N6. Constant time (S–M, builtins lane)
@@ -326,7 +327,7 @@ lists what each module exports and what is verified, and
 | **K2** | #332; Wycheproof (all 325 cases) and audit #372 | `nish/crypto/chacha20poly1305` (ChaCha20, Poly1305, the AEAD, RFC 9001 §5.4.4's header-protection mask) | The ChaCha20 rounds and the loops around both halves by disassembly: `ct_asm_chacha20poly1305` reads the Poly1305 block, its final reduction and the tag compare |
 | **K3** | #340, with Wycheproof `aes_gcm`; audit #372 | `nish/crypto/aes` (AES-128 and AES-256, bitsliced; GCM; RFC 9001 §5.4.3's header-protection mask) | AES-NI and PCLMULQDQ, and the ARMv8 AES and PMULL instructions, are done, as a runtime kernel rather than builtins: WP38 S5 sends the key schedule, the block, GCTR and GHASH to `runtime/runtime-aes.c` behind a run-time check, keeping the bitsliced code as the fallback, the wasm32 path and the Node reading ([wp38-simd.md](wp38-simd.md) §2.3). Left: the bitsliced fallback's key schedule, packing and block loops by disassembly (`ct_asm_aes` reads one round, one GHASH multiply and the tag compare); what the kernels leave in vector registers, which no wipe reaches (AEAD-4); choosing the path at build time (a `--cpu` flag, WP38 S2). AES-192 is out of scope |
 | **K4** | #289; ladder by disassembly #339; Wycheproof and audit #373 | `nish/crypto/x25519` | The 255-step ladder loop, the inversion and the encodings remain discipline (`ct_asm_x25519` reads the field operations, the swap and one ladder step) |
-| **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | Done: a fixed-base comb for `k·G` in signing and the public key (#663). Sign is about 3x faster, and P-256 fell from 70.0% to 43.9% of a handshake's server instructions, against `a22a056`. Against [the bar](#k5-p-256-the-baseline): sign's 3x is not met, because it is not shown outside the noise band (one sample met its re-based bar and one missed, both inside a 5.5% band; the lowest-minima reading is 3.04x, 0.8% short); P-256 under X25519 was missed, 1.9% above it; verify did not slow ([the result](#k5-p-256-the-result)). The scalar inversion has a baseline and a bar, set before it is built ([the inversion](#k5-p-256-the-inversion--the-baseline), #758). Left: the two inversions, `p256ScalarInvert` and the affine field inversion, which are 41.5% of the signature; 64-bit limbs; the verify path, which keeps the variable-base window. The 64-window loop, the table build, the inversions and the nonce derivation remain discipline, the window loop until it is read by disassembly (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations, one window step and the comb's step) (#628) |
+| **K5** | #336; Wycheproof's DER cases through the library's own `x509DerSignatureRS` #361; audit #373 | `nish/crypto/p256` (ECDSA sign and verify, RFC 6979 nonces) | Done: a fixed-base comb for `k·G` in signing and the public key (#663). Sign is about 3x faster, and P-256 fell from 70.0% to 43.9% of a handshake's server instructions, against `a22a056`. Against [the bar](#k5-p-256-the-baseline): sign's 3x is not met, because it is not shown outside the noise band (one sample met its re-based bar and one missed, both inside a 5.5% band; the lowest-minima reading is 3.04x, 0.8% short); P-256 under X25519 was missed, 1.9% above it; verify did not slow ([the result](#k5-p-256-the-result)). The scalar inversion is done: a constant-time safegcd, `p256ScalarInverse`, replaced Fermat in signing (#780), from 776,344 to 33,620 Ir. It met all four conditions of [its bar](#k5-p-256-the-inversion--the-baseline) in both samples: sign 3.70x and 3.87x faster than `a22a056`, verify not slower, server CPU a handshake 2.8% and 2.7% under `c8a00d6` (the first sample's margin is inside `main`'s own copy gap of 2.9%), and P-256 now under X25519, which is the largest module ([the result](#k5-p-256-the-inversion--the-result), #758). Left: the field inversion, `p256FieldInvert`, still Fermat and 22.4% of the signature; 64-bit limbs; the verify path, which keeps the variable-base window. The 64-window loop, the table build, the field inversion and the nonce derivation remain discipline, the window loop until it is read by disassembly (`ct_asm_p256` reads fiat's field and scalar arithmetic, the table read, the point operations, one window step, the comb's step, and `p256ScalarInverse`'s divstep batch and updates, #780) (#628) |
 | **K6** | #346; audit #376 | `nish/crypto/x509` (DER, PEM, a P-256 key from SEC1 or PKCS#8, a chain parsed, an ECDSA signature verified, the self-signed 1-to-14-day certificate minted, its SHA-256) | Chrome accepting the hash, which is A1's gate: since X509-9 ([`security/crypto-x509.md`](security/crypto-x509.md)) the minted certificate carries the critical basicConstraints and keyUsage that quiche's `CertificateView` needs before it compares a hash, and the live proof is S2's `chrome (minted certificate)` lane. It parses and does not validate: no path validation and no extensions read, which the relay's own `--cert` needs no more than |
 | **T1** | #407 | `nish/net/tls` (the server state machine), `nish/net/tls/codec`, `nish/net/tls/schedule` | Groups other than x25519; NewSessionTicket, 0-RTT and client authentication (§3 keeps them out); the wipes TLS-1 records (#430) |
 | **T2** | #437 | `nish/net/tls/record`, `nish/net/tls/record-server` (TLS over a byte stream, sans-IO), `nish/net/tls-tcp` (the TCP carrier: a slot pool on `nish:net`) | Chrome; a carrier idle timeout (TLS-4); `record_size_limit`; the client role (N13) |
@@ -338,9 +339,9 @@ lists what each module exports and what is verified, and
 | **R1** (HTTP/3) | #470 | `nish/net/http3-frame` (RFC 9114's frames, stream types, SETTINGS and error codes, read and written in place), `nish/net/http3` (`Http3Connection` on Q4's streams: the control and QPACK streams, requests with bodies streamed both ways, trailers, GOAWAY, every connection and stream error, a 431 past the field-section cap, no push), `nish/net/http3-server` (the UDP carrier with ALPN `h3`: a slot pool behind a `QuicListener`, routing by a connection-ID index, a timer wheel, paced GSO flights) | Work that costs only CPU, accepted (H3-4 in [`security/http3.md`](security/http3.md)) |
 | **R2** | #471 | `nish/net/webtransport` (`WebTransport` over an `Http3Connection`: sessions by extended CONNECT with `:protocol` `webtransport`, HTTP datagrams with the quarter stream ID, unidirectional (0x54) and bidirectional (0x41) streams routed to their session both ways, streams that come before their session held and bounded, CLOSE_WEBTRANSPORT_SESSION and DRAIN_WEBTRANSPORT_SESSION, every cap fixed at start-up), and in `nish/net/http3` the seam: SETTINGS_ENABLE_CONNECT_PROTOCOL, SETTINGS_H3_DATAGRAM and draft-02's and draft-07's WebTransport settings, requests held until the client's SETTINGS, WebTransport streams held and handed over | A session's clock and rate caps, which are the program's (WT-3 and WT-4 in [`security/webtransport.md`](security/webtransport.md)) |
 | **Q1** | #404 | `nish/net/quic-packet` (varints, headers, packet numbers, Initial secrets, packet and header protection for the three suites, the key-update secret, the Retry integrity tag) | The wipes QUIC-1 records (#430). RFC 9001 prints no AES-256-GCM packet, so `net_quic_packet` checks one against Python's `cryptography` |
-| **Q2** | #441 (the connection: TLS over CRYPTO at three levels, transport parameters, ACKs, connection IDs, stream data), #444 (Version Negotiation, Retry, stateless reset, the idle timeout, key update both ways) | `nish/net/quic`, `quic-frame`, `quic-conn-params`, `quic-conn-ack`, `quic-conn-cid`, `quic-listener` | Proved against aioquic, each exchange replayed byte for byte from a Nish UDP client inside `npm test`, and by the quic-interop-runner against quic-go and ngtcp2 since #487. Loss recovery (Q3); full streams with flow control (Q4); the AEAD limits (QUIC-6); per-packet allocation (QUIC-3) and the key-update share of the arena (QUIC-4, capped); the wipes QUIC-2 and QUIC-5 record (#430) |
-| **Q3** | #466; the handshake flight's two probes and early resend (QUIC-8) | `nish/net/quic-recovery` (RFC 9002: sent-packet rings per space, the RTT estimate, loss by packet and time threshold, the probe timeout with backoff, NewReno, a pacer), used by `nish/net/quic` to send lost CRYPTO, STREAM and connection-ID frames again, and `nish/net/quic-listener`'s paced send | The interop runner's congestion cases; ECN; detecting an optimistic ACK (QUIC-7) |
-| **Q4** | #469 | `nish/net/quic-stream` (stream IDs, the §3 state machines, fixed buffers per stream, flow control both ways and at both levels, the limits, RESET_STREAM and STOP_SENDING), `nish/net/quic-datagram` (RFC 9221's rings), DATAGRAM frames and `max_datagram_frame_size` in `quic-frame` and `quic-conn-params`, `quic-listener`'s paced GSO flight and GRO receive, and `nish/net/quic` reading and writing every packet in place, a reusable slot (QUIC-3 closed) | The interop runner's transfer cases; the AEAD limits (QUIC-6). The handshake's own arena (88 KB a connection) went with N9's QUIC stage, which keeps the handshake's state in the slot: a connection through a reused slot now keeps 0 bytes (QUIC-3, `net_quic_memory`), and a handshake through the HTTP/3 carrier 0 bytes too, now that the caller's P-256 signature is made in scratch (#512) and `quic-listener` reads a datagram no slot owns in place and answers into scratch (H3-1 and H3-3 closed) |
+| **Q2** | #441 (the connection: TLS over CRYPTO at three levels, transport parameters, ACKs, connection IDs, stream data), #444 (Version Negotiation, Retry, stateless reset, the idle timeout, key update both ways) | `nish/net/quic`, `quic-frame`, `quic-conn-params`, `quic-conn-ack`, `quic-conn-cid`, `quic-listener` | Proved against aioquic, each exchange replayed byte for byte from a Nish UDP client inside `npm test`, and by the quic-interop-runner against quic-go and ngtcp2 since #487. Loss recovery (Q3); full streams with flow control (Q4); ~~the AEAD limits (QUIC-6)~~, closed by #784; per-packet allocation (QUIC-3) and the key-update share of the arena (QUIC-4, capped); the wipes QUIC-2 and QUIC-5 record (#430) |
+| **Q3** | #466; the handshake flight's two probes and early resend (QUIC-8) | `nish/net/quic-recovery` (RFC 9002: sent-packet rings per space, the RTT estimate, loss by packet and time threshold, the probe timeout with backoff, NewReno, a pacer), used by `nish/net/quic` to send lost CRYPTO, STREAM and connection-ID frames again, and `nish/net/quic-listener`'s paced send | The interop runner's congestion cases; ECN; ~~detecting an optimistic ACK (QUIC-7)~~, closed by #784 |
+| **Q4** | #469 | `nish/net/quic-stream` (stream IDs, the §3 state machines, fixed buffers per stream, flow control both ways and at both levels, the limits, RESET_STREAM and STOP_SENDING), `nish/net/quic-datagram` (RFC 9221's rings), DATAGRAM frames and `max_datagram_frame_size` in `quic-frame` and `quic-conn-params`, `quic-listener`'s paced GSO flight and GRO receive, and `nish/net/quic` reading and writing every packet in place, a reusable slot (QUIC-3 closed) | The interop runner's transfer cases; ~~the AEAD limits (QUIC-6)~~, closed by #784. The handshake's own arena (88 KB a connection) went with N9's QUIC stage, which keeps the handshake's state in the slot: a connection through a reused slot now keeps 0 bytes (QUIC-3, `net_quic_memory`), and a handshake through the HTTP/3 carrier 0 bytes too, now that the caller's P-256 signature is made in scratch (#512) and `quic-listener` reads a datagram no slot owns in place and answers into scratch (H3-1 and H3-3 closed) |
 | **A1** | #488 | `examples/relay/` (not a `std/` module): `frame` and `grant` ported from cs's `frame.rs` and `grant.rs` with their fixtures, a hand-written JSON reader for the grant (N11's phase-one case), the per-peer table, `Relay` (the session flow, both caps, the rate cap, the hello and idle timeouts, STATS, CLOSE with every code, one upstream socket per session, GSO and GRO with `--offload`) on `nish/net/http3-server` and `nish/net/webtransport`, the identity (a 13-day self-signed P-256 certificate and its hash file, or `--cert`/`--key` re-read every 60 s) and main.rs's command line and environment, with a clean stop on SIGINT and SIGTERM | **NAT rebinding**: the QUIC server does not follow a peer's address change, so a client whose NAT rebinds loses its session. DATA down is at most 1,164 bytes until QUIC sends packets past 1,200; no DNS, so a grant names an address: the cs port, `boot-check`'s wire pass and `bench:offload` |
 | **S2** (interop job) | #487 | No module: `.github/workflows/interop.yml` and `tests/interop/` run the quic-interop-runner (quic-go, ngtcp2), `h2spec`, `curl --http3` and `--http2`, and Chromium through Playwright over WebTransport against `tests/link/net_interop_server`, a server on every carrier from one loop whose smoke checks run in `npm test`; `h2spec` 146 of 146 | Autobahn's server cases for H1. Three `std/` defects were found here and fixed: the pacer's timer (#490), the minted certificate's extensions (#491), and a lost first flight resent one datagram per probe timeout (#514)
 
@@ -889,6 +890,172 @@ A missed condition is recorded as missed. Condition 1 is about instructions
 and decides whether the inversion was replaced; 3 and 4 are about time and say
 what it bought.
 
+#### K5: P-256, the inversion — the result
+
+#780 replaced the Fermat `p256ScalarInvert` in the signature with
+`p256ScalarInverse`, a constant-time safegcd (a port of libsecp256k1's
+`modinv32`); Fermat stays as the reference and for verify's public `s^-1`. This
+is the handshake re-profiled and re-timed on `main` after it, read against
+[the bar](#k5-p-256-the-inversion--the-baseline). Nothing was tuned.
+
+**How it was measured.** By the baseline's method, on `main` at `2a5912d`,
+`build/nish` built from it by the 0.18.0 seed. `c8a00d6` and `a22a056` were
+re-built by the same seed in worktrees of their own, each with its own `-g`
+server and its own `bench/p256` binary, and each tree's `node bench/p256.mjs
+--check` printed the pinned checksum, 1238268086. Each `--binary` copy was made
+with `cp` beside its build and checked with `cmp`. The benches name a target
+by the commit checked out, and a work-in-progress commit of this page, made
+on this pull request's branch while the first sample was running, is the
+label of the p256 runs and of the second handshake run; the first handshake
+run is labelled `2a5912d`. That commit changed this page alone, so every
+binary measured here was built from `2a5912d`'s tree, called `main` below.
+The machine is an `Intel(R) Xeon(R) Processor @ 2.80GHz` (lscpu: family 6,
+model 85, stepping 7; 4 vCPUs), Linux 6.18.44, Ubuntu clang 18.1.3, valgrind
+3.22.0, curl 8.5.0 with OpenSSL 3.0.13. It is not the baseline's model 207, so
+these microseconds compare with each other and not with the baseline's; the
+bar compares each build with `c8a00d6` and `a22a056` re-measured in the same
+rounds, which is why it re-measures them.
+
+**One real handshake.** Three handshakes came to 7,210,825, 7,056,481 and
+7,070,891 Ir on `main`. P-256 was 2,465,340, 2,465,352 and 2,465,352, and
+X25519 3,147,968 in each. `c8a00d6`, re-profiled here, came to 7,924,255,
+7,763,247 and 7,792,123, with P-256 at 3,208,106, 3,208,117 and 3,208,117: the
+baseline's figures to the instruction. The first handshake, by the module each
+instruction's line is in (self cost):
+
+| Module | `main` Ir | Share | `c8a00d6` Ir | Share |
+| --- | ---: | ---: | ---: | ---: |
+| `std/crypto/p256.ts` | 2,465,340 | **34.2%** | 3,208,106 | 40.5% |
+| `std/crypto/x25519.ts` | 3,147,968 | **43.7%** | 3,147,968 | 39.7% |
+| `std/crypto/sha512.ts` | 656,810 | 9.1% | 655,579 | 8.3% |
+| `std/net/tls*` | 103,393 | 1.4% | 100,085 | 1.3% |
+| `std/crypto/hmac.ts` and `hkdf.ts` | 43,094 | 0.6% | 42,422 | 0.5% |
+| The AEAD (`aes.ts` and `runtime-aes.c`) | 30,926 | 0.4% | 30,766 | 0.4% |
+| Everything else | 763,294 | 10.6% | 739,329 | 9.3% |
+| **All** | **7,210,825** | 100% | **7,924,255** | 100% |
+
+P-256 fell 742,765 Ir (3,208,117 − 2,465,352, second handshake), the
+inversion's own fall to within 41 Ir, and the handshake 9.0% (713,430 Ir in
+the first). "Everything else" is `runtime/runtime.c`'s own lines, about
+441,000 to 445,000 Ir in each handshake, and glibc's `memset`, 246,471 in the
+first and about 30,500 in the others, as on `c8a00d6`.
+
+Inside P-256 on `main`, the first handshake, inclusive of what each calls:
+
+| Function | Calls | Ir | Share of the handshake | Share of the signature |
+| --- | ---: | ---: | ---: | ---: |
+| `TlsP256Signer.sign`, the whole signature | 1 | 2,472,100 | 34.3% | 100% |
+| `p256BaseMultWith`, `k·G` by the comb | 1 | 1,734,665 | 24.1% | 70.2% |
+| `p256ScalarInverse`, `k^-1` mod n by safegcd | 1 | **34,057** | 0.5% | 1.4% |
+| `p256AffineX` (`p256FieldInvert` is 552,948 of it) | 1 | 556,453 | 7.7% | 22.5% |
+| The rest: RFC 6979's HMAC, SHA-256 and the scalar arithmetic | | 146,925 | 2.0% | 5.9% |
+
+`p256ScalarInverse` was 34,057 Ir in the first handshake and **33,620** in the
+second and third, against `p256ScalarInvert`'s 776,784 and 776,344 on
+`c8a00d6` re-profiled here. 1,813 of it is the one `p256FiatScalarMul` it
+calls. `k·G` and `p256AffineX` are the baseline's figures to the instruction;
+the signature fell from the baseline's 3,211,367 Ir on `c8a00d6` to
+2,472,100, 23.0%.
+
+**Server CPU a handshake.** `node bench/tls-handshake.mjs --runs 16
+--baseline c8a00d6 --baseline a22a056`, twice: six targets (`main`, `c8a00d6`,
+`a22a056` and a byte-identical copy of each), in sixteen rounds of 600
+handshakes whose order rotates. The bar's command has four, without
+`--baseline a22a056`; its two extra targets ran in the same rotation, and no
+condition reads their rows. Every handshake negotiated TLS 1.3,
+TLS_AES_256_GCM_SHA384, X25519, ALPN `h2`, and the server signed with
+`id-ecPublicKey`. In microseconds a handshake, minimum / median over the
+rounds:
+
+| Target | server CPU | user | system |
+| --- | ---: | ---: | ---: |
+| `main`, first sample | **2,317** / 2,425 | 1,650 / 1,833 | 533 / 600 |
+| its copy | 2,250 / 2,425 | 1,600 / 1,833 | 517 / 608 |
+| `c8a00d6`, first sample | **2,383** / 2,508 | 1,750 / 1,933 | 483 / 583 |
+| its copy | 2,383 / 2,475 | 1,750 / 1,900 | 483 / 583 |
+| `a22a056`, first sample | 2,900 / 3,058 | 2,333 / 2,467 | 450 / 567 |
+| its copy | 2,800 / 3,008 | 2,217 / 2,450 | 517 / 567 |
+| `main`, second sample | **2,433** / 2,517 | 1,867 / 1,925 | 433 / 575 |
+| its copy | 2,450 / 2,533 | 1,850 / 1,967 | 517 / 575 |
+| `c8a00d6`, second sample | **2,500** / 2,625 | 1,900 / 2,067 | 433 / 567 |
+| its copy | 2,517 / 2,600 | 1,933 / 2,033 | 467 / 575 |
+| `a22a056`, second sample | 3,000 / 3,158 | 2,383 / 2,525 | 533 / 667 |
+| its copy | 3,067 / 3,167 | 2,367 / 2,533 | 500 / 675 |
+
+The noise band, each copy against its own build, minimum / median, + slower:
+`main` −2.9% / 0.0% in the first sample and +0.7% / +0.6% in the second;
+`c8a00d6` 0.0% / −1.3% and +0.7% / −1.0%; `a22a056` −3.4% / −1.6% and
++2.2% / +0.3%. The fewest ticks in any round were 135 and 146, and a tick is
+16.7 µs a handshake: 2,317 and 2,383 µs are 139 and 143 ticks, 2,433 and
+2,500 µs are 146 and 150. `c8a00d6` took 2.9% / 3.4% more CPU a handshake than
+`main` in the first sample and 2.7% / 4.3% in the second; `a22a056` 25.2% /
+26.1% and 23.3% / 25.5%.
+
+**The bench.** `node bench/p256.mjs --self --runs 16` with `--binary` for
+`a22a056`, for `c8a00d6` and for a copy of each, twice. Every run printed the
+pinned checksums: public-key 1350825148, sign 2157286632, verify 645947189.
+In microseconds a call, minimum / median:
+
+| Workload | `main` | its copy | `c8a00d6` | its copy | `a22a056` | its copy |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `p256PublicKey`, first sample | 199.6 / 227.2 | 202.4 / 222.8 | 202.1 / 264.6 | 200.1 / 240.6 | 759.1 / 834.7 | 763.4 / 936.2 |
+| `p256PublicKey`, second sample | 200.8 / 230.6 | 201.3 / 242.3 | 199.8 / 226.2 | 202.6 / 283.8 | 769.8 / 911.5 | 732.0 / 878.8 |
+| `p256SignSha256`, first sample | **226.6** / 283.0 | 225.5 / 272.5 | 291.6 / 312.5 | 291.3 / 311.5 | **837.6** / 1,020.2 | 831.3 / 990.2 |
+| `p256SignSha256`, second sample | **219.4** / 251.0 | 221.9 / 299.0 | 298.7 / 349.2 | 279.8 / 351.4 | **848.8** / 939.8 | 828.8 / 995.1 |
+| `p256VerifySha256`, first sample | **1,506.3** / 1,626.2 | 1,501.9 / 1,744.7 | **1,514.6** / 1,688.0 | 1,503.6 / 1,767.4 | 1,494.9 / 1,809.3 | 1,488.7 / 1,701.8 |
+| `p256VerifySha256`, second sample | **1,540.2** / 1,758.6 | 1,505.6 / 1,746.9 | **1,558.2** / 1,944.1 | 1,498.7 / 1,852.2 | 1,483.1 / 1,910.9 | 1,507.6 / 1,753.7 |
+
+The noise band at the minimum, each copy against its own build, first /
+second sample, + slower: `main` +1.4% / +0.2% public-key, −0.5% / +1.1% sign,
+−0.3% / −2.3% verify; `c8a00d6` −1.0% / +1.4%, −0.1% / −6.3%, −0.7% / −3.8%;
+`a22a056` +0.6% / −4.9%, −0.8% / −2.4%, −0.4% / +1.7%. Sign on `main` is 3.70x
+faster than `a22a056`'s at the minimum in the first sample (837.6 / 226.6) and
+3.87x in the second (848.8 / 219.4), and 1.29x and 1.36x faster than
+`c8a00d6`'s (291.6 / 226.6, 298.7 / 219.4).
+
+**The bar, read.** Each condition by the formula the baseline fixed, on each
+sample's own figures:
+
+1. **The scalar inversion at or under 77,634 Ir: MET.** `p256ScalarInverse` is
+   33,620 Ir inclusive in the second and third handshakes; 33,620 ≤ 77,634.
+   It is 23.1x fewer than `p256ScalarInvert`'s 776,344 (776,344 / 33,620),
+   and 2.3x under the bar.
+2. **P-256's self Ir below X25519's: MET.** 2,465,352 < 3,147,968 in the
+   second and third handshakes (2,465,340 in the first), 682,616 Ir below.
+   **P-256 is no longer the largest module**: X25519 is, at 43.7% to 44.6% of
+   a handshake against P-256's 34.2% to 34.9% (#758's third criterion).
+3. **Sign at least 3x faster than `a22a056`, outside the 4.2% band, in both
+   samples: MET.** First sample: 837.6 / 3 / 1.042 = 267.9 µs, and `main` is
+   226.6 ≤ 267.9. Second: 848.8 / 3 / 1.042 = 271.5 µs, and `main` is 219.4 ≤
+   271.5. **Verify not more than 4.3% slower than `c8a00d6`: MET.** First:
+   1,514.6 × 1.043 = 1,579.7 µs, and `main` is 1,506.3, 0.5% under
+   `c8a00d6`. Second: 1,558.2 × 1.043 = 1,625.2 µs, and `main` is 1,540.2,
+   1.2% under.
+4. **Server CPU a handshake under `c8a00d6`'s / (1 + 2/120), in both samples:
+   MET.** First sample: 2,383 / 1.0167 = 2,343.9 µs, and `main` is 2,317 ≤
+   2,343.9, 2.8% under `c8a00d6`. Second: 2,500 / 1.0167 = 2,459.0 µs, and
+   `main` is 2,433 ≤ 2,459.0, 2.7% under. Each is four ticks under
+   `c8a00d6` (139 against 143, 146 against 150), where the band is two. The
+   band is the one the baseline fixed; this run's own copy gaps do not move
+   it, but they are read here: in the first sample `main`'s copy ran 2.9%
+   under `main` at the minimum, more than the 2.8% by which `main` beat
+   `c8a00d6`, so that sample's margin is inside its own copy's noise. The
+   second sample's copy gaps are 0.7% and 0.6%.
+
+All four are met. The handshake's 2.7% to 2.8% is above the baseline's
+projected 2.1%. It is 66 and 67 µs of server CPU, against sign's own fall in
+time of 65.0 µs in the first sample (291.6 − 226.6) and 79.3 µs in the
+second (298.7 − 219.4); with sign copy gaps of up to 6.3% in this run, these
+figures do not say how much of the fall reaches the handshake. The
+signature's time fell 22.3% and 26.5% at the minimum, for 23.0% fewer
+instructions (3,211,367 to 2,472,100), and that agreement is within the same
+noise.
+
+**What is left.** The field inversion, `p256FieldInvert` in `p256AffineX`, is
+now the largest piece of the signature after `k·G`: 552,948 Ir, 22.4% of it,
+still by Fermat. The other two are 64-bit limbs and the verify path, which
+keeps the variable-base window and did not move. X25519 is now the handshake's largest module, at 3,147,968 Ir.
+
 ## 6. Decisions for the owner
 
 | | Question | Recommendation |
@@ -928,7 +1095,7 @@ a named part of cs that cannot be written without it.
 | **N9.** Programs that do not exit: host-driven state and reclaiming per-match memory | the client core (host-driven); the game server (per match) | Design note first: [wp46](wp46-long-running-memory.md), proposed. It weighs regions, `using m = region()` (weighed and refused: `using` takes only `scope()`, `lock()` or `arena()`, NL2387), a safe `Arena.reset`, and reference counting, and recommends regions |
 | **N10.** `sort`, `toFixed`, and JavaScript's `String(x)` for `f64`; `split` | shader text, option parsers | `std` only |
 | **N11.** Typed JSON over a `std/json` tokenizer and writer | tokens, the match report, `/matches` | A1 needs a small hand-written case of this for the grant's payload, in phase one. **The writer is built** (#571): `JsonWriter` in `nish/json` writes any value into a caller-owned `u8[]`, allocating nothing per call except an `f64`'s digits (a temporary string the call gives back before it returns), byte for byte what `JSON.stringify` writes, and reports misuse and a full buffer through a sticky `JSON_WRITE_*` code (`tests/link/std_json_writer`, held to `JSON.stringify` under Node by `tests/run.js`; `bench/json-writer`). **The tokenizer is built** (#572): `nish/json-tokenizer` validates RFC 8259 JSON in a window of a `u8[]` with caller-owned buffers, enforced depth, string, number and total limits, and JSONTestSuite's `y_` and `n_` verdicts ([`docs/security/json.md`](security/json.md)). **Typed decoding is built** (#573), and N11 with it: `jsonDecode` and `jsonEncode` in `nish/json-typed` read one JSON object into a class and write it back, with code the compiler writes at each call from the class's fields, refusing unknown, duplicate, missing and mistyped fields with sticky codes and reusing a decoded object's storage ([`docs/LANGUAGE.md`](LANGUAGE.md#typed-json-nishjson-typed), `tests/link/std_json_typed`) |
-| **N12.** Non-blocking `spawn`, `kill` and `waitpid`; available parallelism and total memory | the master | runtime-os |
+| **N12.** Non-blocking `spawn`, `kill` and `waitpid`; available parallelism and total memory | the master | runtime-os. **Built**: `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory`, globals and `nish:process` exports, in `runtime/runtime-os.c` ([`docs/LANGUAGE.md`](LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory); `tests/cases/os_spawn`, `os_kill`, `os_wait`, `os_cpu`, `os_memory`) |
 | **N13.** The client role of T1, against the web PKI | the account service: Postgres over TLS, HTTPS to Resend | Replaces the old plan's FFI route. S1 makes the C library unnecessary |
 | **N14.** Discriminated unions | the protocol's message families | Optional. A class with an enum tag and nullable payloads works until then |
 

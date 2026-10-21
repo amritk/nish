@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 684
+export const RULE_COUNT: i32 = 688
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -241,6 +241,8 @@ const diagnosticRules = (): string[] => [
   "NL2349",
   " and cannot be the default of another `??`: the default stands in for a missing value, so it is a value; give this one a default of its own first, `a ?? (b ?? d)`",
   "NL2371",
+  "` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new ",
+  "NL2556",
   "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
   "NL2324",
   ", and that scope is declared outside the block: the task runs, and its answer is stored, when the scope joins, after the block has released what it allocated",
@@ -249,6 +251,8 @@ const diagnosticRules = (): string[] => [
   "NL2523",
   " cannot be passed as an argument: an iterator is not a value in this version, so pass the `Map` or `Set` itself and walk it in the callee with a `for...of`",
   "NL2373",
+  "` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for",
+  "NL2557",
   "` runs may reach no I/O, no clock, no entropy, no C, and no `panic` or exit whose message or status is computed, so that what it returns is all that leaves",
   "NL2448",
   "`, which belongs to the function it is written in: a data-parallel body reads a captured value and never writes it, because every thread reads the same one",
@@ -263,8 +267,6 @@ const diagnosticRules = (): string[] => [
   "NL2354",
   "` is set again while it may still hold a `Secret`: a `Secret` field is set once, in its class's constructor, and the key it held would be lost unwiped",
   "NL2543",
-  "` cannot give a type to what it initialises: TypeScript would infer one of its variants' tags, a type this version does not have, so annotate it as `",
-  "NL2530",
   "` function and is called only through an import of it, so that each module that gives up a check or defines a wrap says so at its top: add `import { ",
   "NL2456",
   "A `Secret` cannot be indexed or be an index: either reads key material outside `expose`, and an index that depends on a key is a cache-timing channel",
@@ -315,6 +317,8 @@ const diagnosticRules = (): string[] => [
   "NL2450",
   "` cannot be a union variant: a variant is a class or an interface that is not generic, because its tag is a field it declares itself",
   "NL2522",
+  "` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that",
+  "NL2558",
   "` cannot be handed a `Secret`: a builtin reaches the outside world or reads the bytes, and a `Secret` is read only through `expose`",
   "NL2432",
   "A `Secret` cannot be a condition: a branch taken on key material is a timing channel, and a `Secret` is read only through `expose`",
@@ -419,6 +423,8 @@ const diagnosticRules = (): string[] => [
   "NL2025",
   ": each field is renamed and made optional at most once, and no two fields share a key on the wire",
   "NL2497",
+  "` as its type, which every variant shares, so give it the one member it holds instead: `readonly ",
+  "NL2559",
   "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",
   "NL2157",
   ", and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it",
@@ -433,8 +439,6 @@ const diagnosticRules = (): string[] => [
   "NL3019",
   "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)",
   "NL2145",
-  ")` and cannot be read again: the plain array would be key material outside the `Secret`'s rules",
-  "NL2445",
   "`; a class or interface name is program-wide, so one program cannot have both (rename this one)",
   "NL3030",
   "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate",
@@ -597,6 +601,8 @@ const diagnosticRules = (): string[] => [
   "NL3025",
   ".isErr()`, or use `.orReturn()`, `.unwrapOr(v)` or `.expect(message)`",
   "NL2032",
+  "` cannot give a type to what it initialises: TypeScript would infer `",
+  "NL2530",
   ">` is an empty range: the lower bound is greater than the upper bound",
   "NL2381",
   "Only top-level function declarations are supported in Phase 1 (found ",
@@ -741,6 +747,8 @@ const diagnosticRules = (): string[] => [
   "NL2094",
   "Union variants must take their tags from one enum: `",
   "NL2524",
+  " would be key material outside the `Secret`'s rules",
+  "NL2445",
   "; there is no top-level code to build anything else",
   "NL2026",
   "); handle it here instead: `if (r.isErr()) { ... }`",
@@ -751,6 +759,8 @@ const diagnosticRules = (): string[] => [
   "NL2068",
   "` is the opt-in to it, so a policy can only deny it",
   "NL3034",
+  "` until a test of the tag narrows it to one variant",
+  "NL2528",
   "` zero-fills the array its workers write, which a `",
   "NL2521",
   "`: an unconstrained type parameter has no members; ",
@@ -805,8 +815,6 @@ const diagnosticRules = (): string[] => [
   "NL2082",
   "` is not part of the standard library (it has: ",
   "NL3011",
-  "` is the one member a union has in this version",
-  "NL2528",
   "`, and a data-parallel body cannot capture it: ",
   "NL2504",
   "`, which the capability policy does not grant (",

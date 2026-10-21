@@ -17,12 +17,17 @@ on:
     # `edited` matters as much as `opened`: a title is usually fixed rather
     # than a pull request reopened, and without it the red check never clears.
     types: [opened, edited, reopened, synchronize]
+  # The merge queue waits on every required check, this one included, so it
+  # has to report there. The queue has no pull request in its event; what it
+  # merges was checked on the pull request itself, so the step is skipped and
+  # the job reports success.
+  merge_group:
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-title-${{ github.event.pull_request.number }}
+  group: pr-title-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,6 +45,7 @@ jobs:
       # shell: a title is attacker-controlled text and `${{ }}` inside a `run:`
       # would splice it into the script.
       - name: Check the title
+        if: github.event_name == 'pull_request'
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: node scripts/changelog-gen.mjs --check-subject "$TITLE"

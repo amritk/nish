@@ -211,6 +211,13 @@ export const builtinCapability = (name: string): i32 => {
   ) {
     return CAP_NONE
   }
+  // WP34 N12: how many cores and how many bytes of memory the machine has are
+  // facts about the host, as its platform and architecture are, and a program
+  // reads them to size itself rather than to reach anything. So they take
+  // what `process.platform` and `process.arch` take.
+  if (name === "availableParallelism" || name === "totalMemory") {
+    return CAP_NONE
+  }
   // `nish:unsafe` reaches none of the world's capabilities: an unchecked
   // element access and a wrapping operation are memory and arithmetic. They
   // carry `unsafe` of their own, so that a policy can deny giving up a check.
@@ -235,6 +242,12 @@ export const builtinCapability = (name: string): i32 => {
   // The child can write anything, so `spawnSyncTo` writing its streams to
   // files needs no `fs.write` beside this.
   if (name === "spawnSync" || name === "spawnSyncTo") {
+    return CAP_PROCESS_SPAWN
+  }
+  // WP34 N12: `kill` signals any process this user owns, as kill(1) does,
+  // and `waitPid` reaps a child; both reach other processes the way starting
+  // one does, so they share `spawn`'s capability rather than taking their own.
+  if (name === "spawn" || name === "kill" || name === "waitPid") {
     return CAP_PROCESS_SPAWN
   }
   if (isNetExport(name)) {

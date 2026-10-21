@@ -1,0 +1,1 @@
+This `===` is always false: `xs[IDX]` is `Kind.B` and `Kind.A` is `Kind.A`, which share no member

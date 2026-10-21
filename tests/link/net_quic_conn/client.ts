@@ -28,7 +28,15 @@ import {
   quicShortHeader,
 } from "nish/net/quic-packet";
 import { quicKeysOf } from "../net_quic_common/keys";
-import { QUIC_FRAME_CRYPTO, QuicFrame, quicParseFrame, quicPushCrypto, quicPushPadding } from "nish/net/quic-frame";
+import {
+  QUIC_FRAME_CRYPTO,
+  QUIC_FRAME_MAX_ACK_RANGES,
+  QuicFrame,
+  quicParseFrame,
+  quicPushAck,
+  quicPushCrypto,
+  quicPushPadding,
+} from "nish/net/quic-frame";
 import { QuicTransportParameters } from "nish/net/quic-conn-params";
 import { QuicConnection } from "nish/net/quic";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
@@ -105,6 +113,12 @@ export class QcClient {
   cryptoHandshake: u8[];
   /** The plaintext payload of every 1-RTT packet the server sent, in order. */
   appPayloads: u8[][];
+  /**
+   * The 1-RTT packet numbers the client has opened, as `[smallest, largest]`
+   * pairs from the lowest up, not touching: a number the server skipped
+   * (RFC 9000 §21.4) is a gap, which `qcPushAppAck` leaves out.
+   */
+  appRanges: i64[];
   /** The plaintext payload of every Initial and Handshake packet, in order. */
   longPayloads: u8[][];
   /** Every datagram the server sent, as sent. */
@@ -121,6 +135,7 @@ export class QcClient {
     this.cryptoInitial = [];
     this.cryptoHandshake = [];
     this.appPayloads = [];
+    this.appRanges = [];
     this.longPayloads = [];
     this.datagrams = [];
     this.appWriteSecret = [];
@@ -280,6 +295,68 @@ const qcTakeCrypto = (stream: u8[], payload: u8[]): void => {
   }
 };
 
+/** Notes the 1-RTT packet number `pn` as opened in `c.appRanges`. */
+const qcNoteApp = (c: QcClient, pn: i64): void => {
+  const r: i64[] = c.appRanges;
+  const n: i32 = toI32(r.length);
+  if (n >= 2 && pn === r[n - 1] + n64(1)) {
+    r[n - 1] = pn;
+    return;
+  }
+  if (n === 0 || pn > r[n - 1] + n64(1)) {
+    r.push(pn);
+    r.push(pn);
+    return;
+  }
+  // Out of order: rebuild the pairs with `pn` taken in, merging those it joins.
+  const out: i64[] = [];
+  let placed: boolean = false;
+  for (let k: i32 = 0; k + 1 < n; k += 2) {
+    let lo: i64 = r[k];
+    let hi: i64 = r[k + 1];
+    if (!placed && pn < lo - n64(1)) {
+      out.push(pn);
+      out.push(pn);
+      placed = true;
+    } else if (!placed && pn <= hi + n64(1)) {
+      lo = pn < lo ? pn : lo;
+      hi = pn > hi ? pn : hi;
+      placed = true;
+    }
+    const m: i32 = toI32(out.length);
+    if (m >= 2 && lo <= out[m - 1] + n64(1)) {
+      out[m - 1] = hi > out[m - 1] ? hi : out[m - 1];
+    } else {
+      out.push(lo);
+      out.push(hi);
+    }
+  }
+  c.appRanges = out;
+};
+
+/**
+ * Appends an ACK of the 1-RTT packets the client has opened, the highest
+ * `QUIC_FRAME_MAX_ACK_RANGES` ranges of them, and no number it never had: an
+ * ACK of one the server skipped is an optimistic ACK, which closes the
+ * connection (RFC 9000 §21.4). Appends nothing before the first.
+ */
+export const qcPushAppAck = (out: u8[], c: QcClient): void => {
+  const n: i32 = toI32(c.appRanges.length);
+  let count: i32 = n / 2;
+  if (count > QUIC_FRAME_MAX_ACK_RANGES) {
+    count = QUIC_FRAME_MAX_ACK_RANGES;
+  }
+  const ranges: i64[] = [];
+  for (let k: i32 = 0; k < count; k++) {
+    const at: i32 = n - 2 - k * 2;
+    ranges.push(c.appRanges[at]);
+    ranges.push(c.appRanges[at + 1]);
+  }
+  if (count > 0) {
+    quicPushAck(out, ranges, count, n64(0));
+  }
+};
+
 /**
  * Opens every packet of a datagram the server sent, with the keys the client
  * holds for its type, and files what it carried. Answers how many opened.
@@ -318,6 +395,7 @@ export const qcReceive = (c: QcClient, datagram: u8[]): i32 => {
           qcTakeCrypto(c.cryptoHandshake, packet.payload);
         } else {
           c.largestApp = packet.packetNumber;
+          qcNoteApp(c, packet.packetNumber);
           c.appPayloads.push(packet.payload);
         }
       }

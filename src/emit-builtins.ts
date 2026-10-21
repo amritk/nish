@@ -770,6 +770,38 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     }
     return status
   }
+  // WP34 N12: the vector as `spawnSync` hands it over, and the pid or a
+  // negative errno back. The pid, the signal and the flags are `i32` in either
+  // number mode, so nothing is widened, and `waitPid`'s pair comes back as a
+  // fresh `i32[]` header that is the language's value as it is.
+  if (name === "spawn") {
+    emitter.declareType(ARRAY_TYPE)
+    const argv = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_spawn_child")}(${ARRAY_STRUCT}* ${argv})`
+    )
+  }
+  if (name === "kill" || name === "waitPid") {
+    const args = expr.children[1].children
+    const pid = emitter.emitExpression(args[0])
+    const second = emitter.emitExpression(args[1])
+    if (name === "kill") {
+      return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_kill")}(i32 ${pid}, i32 ${second})`)
+    }
+    emitter.declareType(ARRAY_TYPE)
+    return emitter.fn.emitValue(
+      `call ${ARRAY_STRUCT}* ${emitter.useRuntime("nish_wait_pid")}(i32 ${pid}, i32 ${second})`
+    )
+  }
+  // The runtime's `i64` count, which is at least 1 and at most the CPUs a
+  // host has, so the narrowing to the language's `i32` loses nothing.
+  if (name === "availableParallelism") {
+    const count = emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_cpu_online")}()`)
+    return emitter.fn.emitValue(`trunc i64 ${count} to i32`)
+  }
+  if (name === "totalMemory") {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_total_memory")}()`)
+  }
   // One call answering the array header, which may be null. The same shape as
   // `readFileSyncOrNull` one type up: the checker typed it `string[] | null` and
   // an ordinary null compare narrows it, so nothing here has to know that a
@@ -868,19 +900,19 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
 
 /** The other half of the pair above, in the same order. */
 /**
- * A call of the `spawnSync` or `spawnSyncTo` builtin (not of a user function
- * that happens to be called either, which wins the name as every identifier
- * builtin loses it). `attributes.ts` asks, because the argument escapes into
+ * A call of the `spawnSync`, `spawnSyncTo` or `spawn` builtin (not of a user
+ * function that happens to be called any of them, which wins the name as every
+ * identifier builtin loses it). `attributes.ts` asks, because the argument escapes into
  * the runtime: the spawn path copies each element's bytes pointer into an arena
- * vector that outlives the call. It answers for both names, because both reach
- * that same C.
+ * vector that outlives the call. It answers for all three names, because all
+ * three reach that same C.
  */
 export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
   if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
     return false
   }
-  return callee.text === "spawnSync" || callee.text === "spawnSyncTo"
+  return callee.text === "spawnSync" || callee.text === "spawnSyncTo" || callee.text === "spawn"
 }
 
 export const identifierBuiltinCallees = (
@@ -953,6 +985,26 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "spawnSyncTo") {
     out.push("nish_spawn_to")
+    return out
+  }
+  if (name === "spawn") {
+    out.push("nish_spawn_child")
+    return out
+  }
+  if (name === "kill") {
+    out.push("nish_kill")
+    return out
+  }
+  if (name === "waitPid") {
+    out.push("nish_wait_pid")
+    return out
+  }
+  if (name === "availableParallelism") {
+    out.push("nish_cpu_online")
+    return out
+  }
+  if (name === "totalMemory") {
+    out.push("nish_total_memory")
     return out
   }
   if (name === "readdirSync") {

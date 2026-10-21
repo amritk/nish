@@ -1,0 +1,1 @@
+`start` writes memory its caller can see in the runtime's `nish_spawn_child`, and `spawn` runs it beside the scope's other tasks

@@ -1,0 +1,1 @@
+`case Kind.Circle` can never match: the discriminant is `Kind.Square | Kind.Tri`

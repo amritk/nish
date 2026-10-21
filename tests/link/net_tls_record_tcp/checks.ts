@@ -20,7 +20,7 @@
 //      built, a closed slot taken again with its state kept; a pool of
 //      16,384 with no slot built.
 //
-// openssl s_client and curl drive the same server in `serve` mode from the
+// openssl s_client and Node's https drive the same server in `serve` mode from the
 // `net_tls_tcp` block of tests/run.js.
 import { Suite } from "nish/testing";
 import { Secret, secret, wipe } from "nish:secret";

@@ -494,7 +494,12 @@ static void pool_alloc_body(int64_t lo, int64_t hi, void *ctx) {
 static long pool_peak_rss_kb(void) {
   struct rusage ru;
   getrusage(RUSAGE_SELF, &ru);
+#if defined(__APPLE__)
+  /* Darwin counts `ru_maxrss` in bytes, Linux in kilobytes. */
+  return ru.ru_maxrss / 1024;
+#else
   return ru.ru_maxrss;
+#endif
 }
 
 /* A scope's task: an index in, a square out, through `finish` on the caller. */
@@ -718,6 +723,7 @@ static void test_host_signal_threads(void) {
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 
 /* WP34 N5, runtime-net.c: what the Node-driven echo in tests/run.js cannot
@@ -744,6 +750,10 @@ static void test_net(void) {
   struct sockaddr_in from;
   socklen_t n = sizeof from;
   assert(getsockname(client, (struct sockaddr *)&from, &n) == 0);
+  // Darwin's connect() can return before the listener's queue holds the
+  // connection, and a non-blocking accept then answers -11: wait for it.
+  struct pollfd queued = {fd, POLLIN, 0};
+  assert(poll(&queued, 1, 5000) == 1);
 
   int32_t conn = nish_tcp_accept(fd, &peer);
   assert(conn >= 0);
@@ -756,6 +766,10 @@ static void test_net(void) {
   nish_array buf = {4, 4, bytes};
   expect_i64(nish_net_read(conn, &buf, 0, 4), -11, "a read with nothing waiting");
   assert(write(client, "abc", 3) == 3);
+  // Linux's loopback queues the bytes before write returns; Darwin's may not
+  // yet, so the non-blocking read waits until the socket is readable.
+  struct pollfd readable = {conn, POLLIN, 0};
+  assert(poll(&readable, 1, 5000) == 1);
   expect_i64(nish_net_read(conn, &buf, 1, 3), 3, "the three bytes the client sent");
   assert(memcmp(bytes, "pabc", 4) == 0);
   expect_i64(nish_net_write(conn, &buf, 0, 4), 4, "four bytes back");
@@ -829,6 +843,8 @@ static void test_tcp_nodelay(void) {
     to.sin_port = htons((uint16_t)nish_net_local_port(fd));
     to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     assert(client >= 0 && connect(client, (struct sockaddr *)&to, sizeof to) == 0);
+    struct pollfd queued = {fd, POLLIN, 0};
+    assert(poll(&queued, 1, 5000) == 1);
     int on = late;
     assert(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof on) == 0);
     int32_t conn = nish_tcp_accept(fd, &peer);
@@ -923,6 +939,27 @@ static void test_poll(void) {
     nish_net_close(fds[i]);
   }
 
+  /* A descriptor readable and writable at once is one pair, 3. A second add
+     of it answers -17; Linux keeps the first token, and Darwin moves both of
+     its filters to the token the second add gave (docs/LANGUAGE.md), so one
+     wait never reports it under two. */
+  int both[2];
+  assert(socketpair(AF_UNIX, SOCK_STREAM, 0, both) == 0);
+  assert(write(both[1], "x", 1) == 1);
+  expect_i64(nish_poll_add(loop, both[0], 3, 9), 0, "a socket watched both ways");
+  expect_i64(nish_poll_add(loop, both[0], 3, 1), -17, "a second add of it");
+#if defined(__linux__)
+  const int32_t kept = 9;
+#else
+  const int32_t kept = 1;
+#endif
+  expect_i64(nish_poll_wait(loop, &ready, 1000), 1, "ready both ways is one pair");
+  expect_i64(pairs[0], kept, "under one token");
+  expect_i64(pairs[1], 3, "readable and writable");
+  expect_i64(nish_poll_remove(loop, both[0]), 0, "the pair no longer watched");
+  close(both[0]);
+  close(both[1]);
+
   /* One SIGALRM 20 ms from now, into a ten-second wait on nothing: 0, and
      long before the timeout. A finite timeout, so a signal that arrived
      before the wait began costs ten seconds and a failure, never a hang. */
@@ -961,6 +998,10 @@ nish_str *nish_getenv(const nish_str *);
 nish_str *nish_realpath(const nish_str *);
 int32_t nish_spawn(const nish_array *);
 int32_t nish_spawn_to(const nish_array *, const nish_str *, const nish_str *);
+int32_t nish_spawn_child(const nish_array *);
+int32_t nish_kill(int32_t, int32_t);
+nish_array *nish_wait_pid(int32_t, int32_t);
+int64_t nish_total_memory(void);
 double nish_stat_mtime(const nish_str *);
 void nish_random_fill(nish_array *);
 void nish_wipe(nish_array *);
@@ -1214,6 +1255,41 @@ static int32_t wipe_run(const char *how) {
 #endif
 
 static int wipe_failed;
+
+/* WP34 N12's `spawn`, `kill` and `waitPid` (docs/security/runtime.md, RT-19):
+   `kill` refuses a group, every process and a signal outside the four, before
+   any reaches `kill(2)`; `waitPid` refuses a group and an unknown flag; and a
+   child started without waiting is signalled and reaped with spawnSync's
+   status convention. */
+static void expect_wait(int32_t pid, int32_t flags, int32_t want0, int32_t want1, const char *what) {
+  const int32_t *w = (const int32_t *)nish_wait_pid(pid, flags)->data;
+  expect_i64(w[0], want0, what);
+  expect_i64(w[1], want1, what);
+}
+
+static void test_process(void) {
+  expect_i64(nish_kill(0, 0), -22, "kill of pid 0, the caller's process group");
+  expect_i64(nish_kill(-1, 15), -22, "kill of pid -1, every process");
+  expect_i64(nish_kill(-getpid(), 15), -22, "kill of a negative pid, a process group");
+  expect_i64(nish_kill(getpid(), 1), -22, "kill with SIGHUP, outside the four");
+  expect_i64(nish_kill(getpid(), 0), 0, "kill with 0 of this process");
+  expect_wait(0, 0, -22, 0, "waitPid of pid 0, a process group");
+  expect_wait(-2, 0, -22, 0, "waitPid of pid -2, a process group");
+  expect_wait(-1, 2, -22, 0, "waitPid with a flag other than WNOHANG");
+  expect_wait(-1, 1, -10, 0, "waitPid with no child");
+
+  nish_str *argv[2] = {lit("sleep"), lit("30")};
+  nish_array args = {2, 2, (char *)argv};
+  int32_t child = nish_spawn_child(&args);
+  assert(child > 0);
+  expect_wait(child, 1, 0, 0, "a WNOHANG wait while the child sleeps");
+  expect_i64(nish_kill(child, 15), 0, "SIGTERM to the child");
+  expect_wait(child, 0, child, 128 + 15, "the child reaped, 128 + SIGTERM");
+  expect_wait(-1, 1, -10, 0, "and then no child is left");
+  nish_array empty = {0, 0, NULL};
+  expect_i64(nish_spawn_child(&empty), -22, "spawn of an empty argv");
+  assert(nish_total_memory() > 0);
+}
 
 static void wipe_check(int ok, const char *what) {
   if (!ok) {
@@ -2076,6 +2152,7 @@ int main(void) {
   nish_free_arena();
   test_wipe();
   nish_free_arena();
+  test_process();
   test_guard_keep();
   test_cross_keep_rewind();
   nish_free_arena();
