@@ -1533,6 +1533,27 @@ The context reaches a nested literal and a `null`, and stops there: a numeric
 literal in a property keeps the mode's default type (above), and `[]` has no
 element type at all in that position.
 
+A class with methods is made only by `new`: a literal typed as one would be a
+plain object under Node, without the methods (NL2556). A class with fields
+alone, and an interface, still take a literal.
+
+```ts nish:err NL2556
+class Counter {
+  n: i32;
+  constructor(n: i32) {
+    this.n = n;
+  }
+  get(): i32 {
+    return this.n;
+  }
+}
+
+export const main = (): i32 => {
+  const c: Counter = { n: 5 }; // write `new Counter(5)`
+  return c.get();
+};
+```
+
 ### Type aliases and enums
 
 ```ts nish:ok

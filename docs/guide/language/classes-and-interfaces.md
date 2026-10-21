@@ -100,6 +100,32 @@ Behaviour that belongs to an interface is a top-level function that takes
 it, as `add` does here. An object literal has fields only: no methods, no
 spread, and no computed keys.
 
+A literal can also stand for a class without methods. A class
+with methods is different: it is made only by `new`. Compiled, a literal
+would get the class's methods, but under Node it is a plain object, and
+calling a method on it throws. So the compiler refuses it with NL2556:
+
+```ts nish:err NL2556
+class Counter {
+  n: i32;
+  constructor(n: i32) {
+    this.n = n;
+  }
+  get(): i32 {
+    return this.n;
+  }
+}
+
+export const main = (): i32 => {
+  const c: Counter = { n: 5 };
+  return c.get();
+};
+```
+
+The message names the remedy — `` `Counter` has methods, so it is made only
+by `new`: ... Write `new Counter(...)` `` — and the fix is
+`const c = new Counter(5)`.
+
 ## `implements`
 
 `class C implements I` says that `C`'s first fields are exactly `I`'s
