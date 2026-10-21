@@ -126,6 +126,7 @@ cases/cls_inline_array_local added after R6: no rewriter to freeze it with
 cases/cls_inline_array_order added after R6: no rewriter to freeze it with
 cases/cls_inline_array_passed added after R6: no rewriter to freeze it with
 cases/cls_inline_array_push added after R6: no rewriter to freeze it with
+cases/cls_literal_methodless added after R6: no rewriter to freeze it with
 cases/ct_asm_p256 added after R6: no rewriter to freeze it with
 cases/ct_asm_x25519 added after R6: no rewriter to freeze it with
 cases/ct_eq_u32 added after R6: no rewriter to freeze it with
@@ -393,8 +394,11 @@ cases/secret_field added after R6: no rewriter to freeze it with
 cases/secret_field_wipe_o2 added after R6: no rewriter to freeze it with
 cases/secret_field_wipe_o2_plain added after R6: no rewriter to freeze it with
 cases/secret_flow added after R6: no rewriter to freeze it with
+cases/secret_inferred added after R6: no rewriter to freeze it with
 cases/secret_wipe added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2 added after R6: no rewriter to freeze it with
+cases/secret_wipe_o2_inferred added after R6: no rewriter to freeze it with
+cases/secret_wipe_o2_inferred_plain added after R6: no rewriter to freeze it with
 cases/secret_wipe_o2_plain added after R6: no rewriter to freeze it with
 cases/set_i32 added after R6: no rewriter to freeze it with
 cases/set_iter added after R6: no rewriter to freeze it with

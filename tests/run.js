@@ -6156,42 +6156,45 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
 // crashed with no flag, 1 of 50 with the `--single-threaded-gc` this check
 // used to pass, and none of 50 with the host turning the calls off.
 // #732 tracks the Node bug and when the host can drop the flag.
-if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
-  const agreeDir = path.join(buildDir, "p256-agree")
-  const programDir = path.join(agreeDir, "crypto_p256_agree")
-  fs.rmSync(agreeDir, { recursive: true, force: true })
-  fs.mkdirSync(path.join(agreeDir, "crypto_p256"), { recursive: true })
+/**
+ * Builds `tests/link/<program>`'s `main` (from `source`) beside a copy of
+ * std/crypto/p256.ts with the program's `seam.ts.in` appended, as `./p256`,
+ * natively and as a `--profile wasi` module under Node, and checks that each
+ * prints its expected.out: `label` names the checks, `dir` the scratch, and
+ * `extra` the directories of `tests/link` copied beside it.
+ */
+const p256SeamProgram = ({ label, dir, program, source, extra, nativeName }) => {
+  const seamDir = path.join(buildDir, dir)
+  const programDir = path.join(seamDir, program)
+  fs.rmSync(seamDir, { recursive: true, force: true })
+  fs.mkdirSync(path.join(seamDir, "crypto_p256"), { recursive: true })
   fs.mkdirSync(programDir, { recursive: true })
-  fs.cpSync(path.join(linkDir, "crypto_wycheproof"), path.join(agreeDir, "crypto_wycheproof"), {
-    recursive: true,
-  })
-  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(agreeDir, "crypto_p256", "hex.ts"))
-  fs.copyFileSync(path.join(linkDir, "crypto_p256_agree", "agree.ts"), path.join(programDir, "main.ts"))
+  for (const name of extra) {
+    fs.cpSync(path.join(linkDir, name), path.join(seamDir, name), { recursive: true })
+  }
+  fs.copyFileSync(path.join(linkDir, "crypto_p256", "hex.ts"), path.join(seamDir, "crypto_p256", "hex.ts"))
+  fs.copyFileSync(path.join(linkDir, program, source), path.join(programDir, "main.ts"))
   fs.writeFileSync(
     path.join(programDir, "p256.ts"),
     fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8") +
-      fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "seam.ts.in"), "utf8")
+      fs.readFileSync(path.join(linkDir, program, "seam.ts.in"), "utf8")
   )
-  const want = fs.readFileSync(path.join(linkDir, "crypto_p256_agree", "expected.out"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, program, "expected.out"), "utf8")
   const entry = path.join(programDir, "main.ts")
   if (only !== "wasi") {
-    const exe = path.join(agreeDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(agreeDir, "native") + path.sep, "--link", exe], {
+    const exe = path.join(seamDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe], {
       cwd: root,
       encoding: "utf8",
     })
     const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
-    check(
-      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
-      built.status === 0 && ran.status === 0 && ran.stdout === want,
-      shown(ran)
-    )
+    check(nativeName, built.status === 0 && ran.status === 0 && ran.stdout === want, shown(ran))
   }
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const wasm = path.join(agreeDir, "app.wasm")
+    const wasm = path.join(seamDir, "app.wasm")
     const built = spawnSync(
       NISH,
-      [entry, "-o", path.join(agreeDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
+      [entry, "-o", path.join(seamDir, "wasi") + path.sep, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
     const ran =
@@ -6202,15 +6205,46 @@ if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.inc
           })
         : built
     check(
-      `p256 agree: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
+      `${label}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints the same expected.out under Node's WASI`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )
   } else {
     skip(
-      `skipped: p256 agree: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of crypto_p256_agree is not run`
+      `skipped: ${label}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program} is not run`
     )
   }
+}
+if (!only || ["p256 agree", "crypto_p256_agree", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 agree",
+    dir: "p256-agree",
+    program: "crypto_p256_agree",
+    source: "agree.ts",
+    extra: ["crypto_wycheproof"],
+    nativeName:
+      "p256 agree: the fixed-base comb and the variable-base window give the same bytes for every scalar of tests/link/crypto_p256_agree, natively",
+  })
+}
+
+// #758: the nonce's inverse by safegcd (`p256ScalarInverse`, which `p256Sign`
+// and `p256SignSha256Into` use) against Fermat's (`p256ScalarInvert`, which
+// `p256Verify` keeps), byte for byte, on the edges and a seeded corpus of
+// 10,000 scalars. Neither inversion is exported, so the program reaches them
+// through `tests/link/crypto_p256_inverse/seam.ts.in`, appended to a copy of
+// std/crypto/p256.ts beside it as `./p256`, as the "p256 agree" check does, through `p256SeamProgram`.
+// Its expected.out ends in a checksum of every inverse. Natively, and as a
+// `--profile wasi` module under Node.
+if (!only || ["p256 inverse", "crypto_p256_inverse", "wasi"].some((name) => name.includes(only))) {
+  p256SeamProgram({
+    label: "p256 inverse",
+    dir: "p256-inverse",
+    program: "crypto_p256_inverse",
+    source: "inverse.ts",
+    extra: [],
+    nativeName:
+      "p256 inverse: safegcd and Fermat give the same inverse for every scalar of tests/link/crypto_p256_inverse, natively",
+  })
 }
 
 // The comb table in std/crypto/p256.ts is what scripts/gen-p256-table.mjs
@@ -8577,6 +8611,19 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       held.ok && heldPlain.ok && volatileSet.test(held.text) && !volatileSet.test(heldPlain.text),
       `held:\n${held.text}\n--- plain:\n${heldPlain.text}`
     )
+    // A `Secret` bound with no annotation (#613) is one whose struct the module
+    // defines through `secret`'s inferred result alone: its wipe is the same
+    // volatile memset, where the twin's `fill(0)` of the same bytes is deleted.
+    const inferred = optimisedMain("secret_wipe_o2_inferred")
+    const inferredPlain = optimisedMain("secret_wipe_o2_inferred_plain")
+    const inferredPlainStores = inferredPlain.ok
+      ? (inferredPlain.text.match(/\bstore\b|@llvm\.memset/g) || []).length
+      : -1
+    check(
+      "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
+      inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
+      `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
   }
 }
 
@@ -8584,6 +8631,53 @@ if (!only || "secret wipe survives -O2".includes(only)) {
 // roots in the area files of `tests/wipes/` (`tests/wipes/index.js` says what a
 // group is and how a root's wipes are counted).
 runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
+
+// The two wipes of `p256ScalarInverse` (#758) that `tests/wipes/` cannot count:
+// `opt` promotes g, the signed-30 copy of the nonce, and t, the matrix derived
+// from it, to stack slots, and their wipes reach -O2 as one volatile `i32` zero
+// store per limb rather than as a memset. Each array's stores share an SROA base
+// (`%arr.data.N.sroa.*`), so the body must hold a group of nine for g and one of
+// four for t; deleting `wipe(g)` or `wipe(t)` removes its group. The `p256`,
+// `crypto`, `wipe` and `crypto_p256` filters all run it.
+{
+  const name =
+    "crypto: the wipes survive opt -O2 (p256ScalarInverse's g and t, nine and four volatile i32 zero stores)"
+  if (!only || [name, "crypto_p256"].some((selector) => selector.includes(only))) {
+    if (!has("opt")) {
+      skip("crypto: no opt to show p256ScalarInverse's promoted wipes survive -O2")
+    } else {
+      const dir = path.join(buildDir, "wipes-o2", "p256-scalar-inverse")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnSync(NISH, [path.join(root, "tests/link/crypto_p256/main.ts"), "-o", `${dir}/`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const o =
+        c.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
+              encoding: "utf8",
+            })
+          : c
+      const body =
+        o.status === 0
+          ? (o.stdout.match(/^define [^\n]*@"?nish\.p256ScalarInverse"?\([\s\S]*?\n\}/m) ?? [""])[0]
+          : ""
+      const groups = new Map()
+      for (const m of body.matchAll(/store volatile i32 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
+        groups.set(m[1], (groups.get(m[1]) ?? 0) + 1)
+      }
+      const sizes = [...groups.values()].sort((x, y) => y - x)
+      let detail = `volatile i32 zero stores by array: ${JSON.stringify([...groups])}`
+      if (o.status !== 0) {
+        detail = o.stderr
+      } else if (body === "") {
+        detail = "nish.p256ScalarInverse: not in the optimised p256.ll"
+      }
+      check(name, sizes.length === 2 && sizes[0] === 9 && sizes[1] === 4, detail)
+    }
+  }
+}
 
 // `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
 // `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
@@ -8874,6 +8968,28 @@ if (!only || "ct_asm constant time assembly".includes(only)) {
       ]
         .filter((line) => line.length > 0)
         .join("\n")
+    )
+
+    // ct_asm_p256's `p256Divsteps30` is the module's thirty-step loop written out, as a
+    // rolled loop is a back-edge the reading refuses. Each of its blocks must be the
+    // module's loop body, line for line, or the check reads a function the signer no
+    // longer runs. (The matrix updates are written out at literal indices, so their
+    // text differs; the fixture's `.out` holds them to the module's inverses.)
+    const moduleSource = fs.readFileSync(path.join(root, "std", "crypto", "p256.ts"), "utf8")
+    const fixtureSource = fs.readFileSync(path.join(casesDir, "ct_asm_p256.ts"), "utf8")
+    const loopBody = moduleSource.match(
+      /\nconst p256Divsteps30 = [^\n]*\n[\s\S]*?\n {2}for \(let i: i32 = 0; i < 30; i\+\+\) \{\n([\s\S]*?)\n {2}\}\n/
+    )?.[1]
+    const unrolled =
+      fixtureSource.match(/\nexport const p256Divsteps30 = [^\n]*\n([\s\S]*?)\n\}\n/)?.[1] ?? ""
+    const blocks = [...unrolled.matchAll(/\n {2}\{\n([\s\S]*?)\n {2}\}(?=\n)/g)].map((m) => m[1])
+    const stray = blocks.filter((b) => b !== loopBody)
+    check(
+      "ct_asm: ct_asm_p256's p256Divsteps30 is thirty copies of std/crypto/p256.ts's divstep loop body",
+      loopBody !== undefined && blocks.length === 30 && stray.length === 0,
+      loopBody === undefined
+        ? "no `for (let i: i32 = 0; i < 30; i++)` loop in std/crypto/p256.ts's p256Divsteps30"
+        : `${blocks.length} blocks, ${stray.length} unlike the module's loop body:\n${stray[0] ?? ""}\n--- module:\n${loopBody}`
     )
   }
 }

@@ -31,7 +31,8 @@ K6's certificates, in
 pure Nish (decision S1), each module imported by its own specifier. Every one
 is written from its specification, with two exceptions that keep their
 upstream notice: `crypto/aes.ts`'s `ghashMul32` is adapted from BearSSL, and
-`crypto/p256.ts`'s field and scalar arithmetic is ported from fiat-crypto
+`crypto/p256.ts`'s field and scalar arithmetic is ported from fiat-crypto and
+its nonce's safegcd inversion from libsecp256k1
 ([`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md)). Each reproduces its
 specification's published vectors in its `tests/link/crypto_*` programs. The
 performance gate compiles every module with no diagnostics under both
@@ -125,9 +126,11 @@ Three rules hold across the modules:
     window step of the scalar multiplication (four doublings, the table read
     and an addition); and the fixed-base comb that multiplies G for a public
     key or a signature: its digit, the fifteen-entry read of the precomputed
-    table, the mixed addition, the masked keep, and one whole comb step. The
-    check follows each call into the field functions. The 64-window and
-    4-row loops, the window's table build, the inversions, the encodings and
+    table, the mixed addition, the masked keep, and one whole comb step; and
+    the nonce's safegcd inversion: thirty divsteps, held to the module's loop
+    body, and both matrix updates. The check follows each call into the field
+    functions. The 64-window and 4-row loops, the window's table build, the
+    field inversion, safegcd's limb conversions, the encodings and
     RFC 6979's nonce derivation remain discipline.
 
   The SHA-2 hashes and HKDF are additions, rotations and xors that branch
