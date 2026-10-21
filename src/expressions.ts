@@ -421,7 +421,7 @@ const refuseInferredTag = (ctx: CheckContext, expr: Node, want: i32): boolean =>
  * which TypeScript types `never` and compares with anything. Not a set any
  * read records, so `memberSetOf` reads it as unknown.
  */
-export const MEMBERS_NONE: i32 = -2
+const MEMBERS_NONE: i32 = -2
 
 /** Whether `set`, as `memberSets` and `Scope.hold` record one, names members. */
 const namesMembers = (set: i32): boolean => set >= 0 || set < MEMBERS_NONE
