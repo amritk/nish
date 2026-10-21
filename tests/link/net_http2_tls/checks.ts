@@ -254,9 +254,11 @@ export const tlsChecks = (): i32 => {
   const c = new H2Client(lb);
   const d = new H2Client(lb);
   const e = new H2Client(lb);
-  t.ok("a client accepted again into slot 0", c.handshake([H2_ALPN]) && lb.acceptSlot === 0);
+  const beforeC: i32 = lb.accepted;
+  t.ok("a client accepted again into slot 0", c.handshake([H2_ALPN]) && lb.acceptSlot === 0 && lb.accepted === beforeC + 1);
   t.ok(`moves the arena not at all (${lb.acceptGrowth} bytes)`, lb.acceptGrowth === toI64(0) && lb.server.connections[0] === first);
-  t.ok("and a second fills the pool, accepted into slot 1", d.handshake([H2_ALPN]) && lb.acceptSlot === 1);
+  const beforeD: i32 = lb.accepted;
+  t.ok("and a second fills the pool, accepted into slot 1", d.handshake([H2_ALPN]) && lb.acceptSlot === 1 && lb.accepted === beforeD + 1);
   t.ok(
     `whose connection the first accept into it makes (${lb.acceptGrowth !== toI64(0) ? "some" : "no"} bytes, ${lb.server.connections.length} made)`,
     lb.acceptGrowth !== toI64(0) && lb.server.connections.length === 2
