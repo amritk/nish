@@ -58,11 +58,15 @@
  *
  * **Caps, fixed at start-up**: the slots, and inside each the QUIC
  * configuration's streams and buffers and the `Http3Config`'s field section,
- * body chunk and DATA frame. The constructor makes every slot's connections;
+ * body chunk and DATA frame. A slot's connections and address are built on
+ * the first Initial accepted into it and kept, so a pool sized for its peak
+ * costs at start-up only its per-slot tables (the index, the wheel, the
+ * queues), and holds at most `size` connections once the peak has come;
  * a datagram an established connection reads, and every datagram it sends,
  * allocates nothing; nor does a datagram no slot owns, which the listener
- * reads where it lies and answers into scratch made once, nor a handshake,
- * whose state is the slot's — `docs/security/http3.md` (H3-1, H3-3).
+ * reads where it lies and answers into scratch made once, nor a handshake
+ * into a slot built before, whose state is the slot's —
+ * `docs/security/http3.md` (H3-1, H3-3).
  *
  * **The Date.** Every response carries one `date` field (RFC 9110 §6.6.1)
  * from the pool's `HttpDate`, which formats the IMF-fixdate at most once a
@@ -85,6 +89,8 @@ import {
   QUIC_CONN_DATAGRAM_SIZE,
   QUIC_CONN_ENTROPY_SIZE,
   QUIC_CONN_LOCAL_CIDS,
+  QUIC_CONN_MAX_STREAM_DATA,
+  QUIC_CONN_MAX_STREAMS,
   QuicConnection,
   QuicServerConfig,
 } from "nish/net/quic"
@@ -413,9 +419,12 @@ export class Http3Wheel {
  */
 export class Http3Server {
   quicConfig: QuicServerConfig
+  /** The HTTP/3 configuration each slot's `Http3Connection` is built with. */
+  config: Http3Config
   listener: QuicListener
   /** What the listener answers into, made once: its reply and IDs are refilled in their own room. */
   answer: QuicListenerAnswer
+  /** The slots built so far, 0 up: each built on the first Initial accepted into it, or the first ask for it. */
   quics: QuicConnection[]
   conns: Http3Connection[]
   /**
@@ -443,7 +452,7 @@ export class Http3Server {
   /** The slots with datagrams for the program, a ring, and the slots with something to send, a stack. */
   readyRing: i32[]
   dirtyStack: i32[]
-  /** Free slots, a stack. */
+  /** Released slots, a stack: a slot never built is taken from `used` instead. */
   free: i32[]
   /** Per slot: 1 while on the ready ring, 2 while on the dirty stack. */
   queued: i32[]
@@ -456,6 +465,12 @@ export class Http3Server {
   readyCount: i32 = 0
   dirtyCount: i32 = 0
   freeCount: i32 = 0
+  /** How many slots the pool may hold, which `size` answers. */
+  slots: i32 = 1
+  /** The slots ever accepted into, 0 up: one past it has never held a connection, so is free without being on `free`. */
+  used: i32 = 0
+  /** Set by `stop`: a slot built after it is released as it is made, so it holds no keys. */
+  stopped: boolean = false
   /** What is left of the answer budget (see `answerRefilled`). */
   answerBudget: i32 = 0
   /** Counters for a log or a test, saturating: connections accepted, Initials dropped for want of a slot, datagrams past the answer budget, sends that failed. */
@@ -464,10 +479,12 @@ export class Http3Server {
   limited: i32 = 0
   sendErrors: i32 = 0
   /**
-   * The stream buffers every slot's connection borrows from, built from the
-   * first connection's stream table: `null` when its streams have none. Each
-   * pool makes a buffer only when a stream first needs one, so an idle
-   * server holds none (QUIC-3).
+   * The stream buffers every slot's connection borrows from, made by the
+   * constructor for the stream table `quicConfig` gives every slot: `null`
+   * when its streams have none. Each pool makes a buffer only when a stream
+   * first needs one, so an idle server holds none (QUIC-3). It is made even
+   * for a configuration `quicConnConfigFits` refuses; `build` shares it only
+   * with a connection whose stream buffers are its size.
    */
   streamPools: QuicStreamPools | null = null
   /** The `bodyChunk`-byte read buffers every slot's `Http3Connection` borrows, one at most each. */
@@ -480,7 +497,8 @@ export class Http3Server {
    * `quicConfig` on the UDP socket `fd`. `listenerEntropy` is the
    * listener's `QUIC_LISTENER_ENTROPY_SIZE` random bytes, whose first eight
    * also key the connection-ID index (wiped in the caller's array, as the
-   * listener does). Every slot's connections are made here. From here on
+   * listener does). No slot's connections are made here: each slot's are
+   * built on the first Initial accepted into it. From here on
    * `quicConfig`'s `statelessResetKey` and `retryTokenKey` are the server's:
    * `stop` wipes them, so the configuration is this server's alone.
    */
@@ -489,7 +507,9 @@ export class Http3Server {
       panic(`Http3Server: ${size} slots, outside 1 to 65536`)
     }
     this.quicConfig = quicConfig
+    this.config = config
     this.fd = fd
+    this.slots = size
     this.index = new Http3CidIndex(size, listenerEntropy)
     this.listener = new QuicListener(quicConfig, listenerEntropy)
     this.answer = new QuicListenerAnswer(QUIC_LISTENER_ANSWER_SIZE)
@@ -498,7 +518,7 @@ export class Http3Server {
     this.conns = []
     this.date = new HttpDate()
     // Formatted once now, so no slot ever sends the bytes before a first format.
-    const date: u8[] = this.date.current()
+    this.date.current()
     this.addresses = []
     this.entropy = new Array<u8>(QUIC_CONN_ENTROPY_SIZE)
     this.dataPool = new BufferPool("Http3Server.data", config.bodyChunk, size)
@@ -507,26 +527,26 @@ export class Http3Server {
     const none: u8[] = []
     quicStreamGrowFree(this.dataPool.free, size, none)
     quicStreamGrowFree(this.sectionPool.free, size, none)
-    for (let k: i32 = 0; k < size; k++) {
-      crypto.getRandomValues(this.entropy)
-      const quic = new QuicConnection(quicConfig, this.entropy)
-      this.quics.push(quic)
-      if (k === 0 && quic.streams.bufferSize > 0 && quic.streams.slots.length > 0) {
-        this.streamPools = new QuicStreamPools(
-          quic.streams.bufferSize,
-          toI32(quic.streams.slots.length),
-          size
-        )
-      }
-      const pools: QuicStreamPools | null = this.streamPools
-      if (pools !== null) {
-        quic.streams.share(pools)
-      }
-      const conn: Http3Connection = new Http3Connection(config, quic)
-      conn.share(this.dataPool, this.sectionPool)
-      conn.date = date
-      this.conns.push(conn)
-      this.addresses.push(new Array<u8>(H3_SERVER_ADDRESS))
+    // The stream table every slot's connection will have, read from the
+    // configuration as `QuicConnection` reads it: a shape outside its bounds
+    // gets no pools, and a connection whose configuration does not fit has no
+    // table to share them with.
+    const streamData: i64 = quicConfig.maxStreamData
+    const bidi: i64 = quicConfig.maxStreamsBidi
+    const uni: i64 = quicConfig.maxStreamsUni
+    const local: i64 = quicConfig.localStreams
+    if (
+      streamData >= 1 &&
+      streamData <= QUIC_CONN_MAX_STREAM_DATA &&
+      bidi >= 0 &&
+      bidi <= QUIC_CONN_MAX_STREAMS &&
+      uni >= 0 &&
+      uni <= QUIC_CONN_MAX_STREAMS &&
+      local >= 0 &&
+      local <= QUIC_CONN_MAX_STREAMS &&
+      bidi + uni + local > 0
+    ) {
+      this.streamPools = new QuicStreamPools(toI32(streamData), toI32(bidi + uni + local), size)
     }
     this.rx = new Array<u8>(H3_SERVER_RECEIVE_SIZE)
     this.tx = new Array<u8>(QUIC_LISTENER_FLIGHT_MAX * QUIC_CONN_DATAGRAM_SIZE)
@@ -538,22 +558,57 @@ export class Http3Server {
     this.state = new Array<i32>(size)
     this.readyRing = new Array<i32>(size)
     this.dirtyStack = new Array<i32>(size)
+    // Released slots only: one never used is taken at `used`.
     this.free = new Array<i32>(size)
     this.queued = new Array<i32>(size)
-    for (let k: i32 = size - 1; k >= 0; k--) {
-      this.free[this.freeCount] = k
-      this.freeCount = this.freeCount + 1
+  }
+
+  /**
+   * Builds the next slot, `quics.length`: its QUIC connection under fresh
+   * entropy, sharing `streamPools` when its stream table is the one they
+   * were made for, its HTTP/3 connection on the pool's buffers and `date`,
+   * and its address.
+   */
+  build(): void {
+    crypto.getRandomValues(this.entropy)
+    const quic = new QuicConnection(this.quicConfig, this.entropy)
+    this.quics.push(quic)
+    const pools: QuicStreamPools | null = this.streamPools
+    if (pools !== null && pools.data.size === quic.streams.bufferSize && quic.streams.slots.length > 0) {
+      quic.streams.share(pools)
+    }
+    const conn: Http3Connection = new Http3Connection(this.config, quic)
+    conn.share(this.dataPool, this.sectionPool)
+    conn.date = this.date.current()
+    this.conns.push(conn)
+    this.addresses.push(new Array<u8>(H3_SERVER_ADDRESS))
+    if (this.stopped) {
+      conn.release()
     }
   }
 
-  /** How many slots the pool has. */
+  /** `slot` when it is one of the pool's, built with every slot before it if it was not; 0 when it is out of range. */
+  slotAt(slot: i32): i32 {
+    const at: i32 = slot >= 0 && slot < this.slots ? slot : H3_SERVER_ZERO
+    while (toI32(this.quics.length) <= at) {
+      this.build()
+    }
+    return at
+  }
+
+  /** Whether every slot holds a connection: none released, and none left never used. */
+  full(): boolean {
+    return this.freeCount <= 0 && this.used >= this.slots
+  }
+
+  /** How many slots the pool has, built or not. */
   size(): i32 {
-    return toI32(this.quics.length)
+    return this.slots
   }
 
   /** How many slots hold a connection. */
   busy(): i32 {
-    return this.size() - this.freeCount
+    return this.used - this.freeCount
   }
 
   /** Whether `slot` holds a connection. */
@@ -561,17 +616,20 @@ export class Http3Server {
     return slot >= 0 && slot < toI32(this.state.length) && this.state[slot] === H3_SERVER_BUSY
   }
 
-  /** The HTTP/3 connection of `slot`, its `date` brought up to now; a slot out of range names the first. */
+  /**
+   * The HTTP/3 connection of `slot`, its `date` brought up to now; a slot out
+   * of range names the first. A slot not built yet is built here, with every
+   * slot before it, so a program that binds something to each slot's
+   * connection up front gets the one its slot keeps.
+   */
   connection(slot: i32): Http3Connection {
     this.date.current()
-    const at: i32 = slot >= 0 && slot < toI32(this.conns.length) ? slot : H3_SERVER_ZERO
-    return this.conns[at]
+    return this.conns[this.slotAt(slot)]
   }
 
-  /** The QUIC connection of `slot`; a slot out of range names the first. */
+  /** The QUIC connection of `slot`, built as `connection` builds it; a slot out of range names the first. */
   quic(slot: i32): QuicConnection {
-    const at: i32 = slot >= 0 && slot < toI32(this.quics.length) ? slot : H3_SERVER_ZERO
-    return this.quics[at]
+    return this.quics[this.slotAt(slot)]
   }
 
   /** Puts `slot` on the ready ring and the dirty stack, unless it is on them. */
@@ -691,11 +749,19 @@ export class Http3Server {
       }
       return
     }
-    if (this.freeCount <= 0) {
+    // A slot released before is taken first, then the next never used, so the
+    // first accepts take slots 0, 1, 2 ... and a pool that never fills never
+    // builds its last slots.
+    let slot: i32 = 0
+    if (this.freeCount > 0) {
+      this.freeCount = this.freeCount - 1
+      slot = this.free[this.freeCount]
+    } else if (this.used < this.slots) {
+      slot = this.slotAt(this.used)
+      this.used = this.used + 1
+    } else {
       return
     }
-    this.freeCount = this.freeCount - 1
-    const slot: i32 = this.free[this.freeCount]
     crypto.getRandomValues(this.entropy)
     const quic: QuicConnection = this.quics[slot]
     quic.reset(this.entropy)
@@ -742,7 +808,7 @@ export class Http3Server {
     if ((first & 0x30) !== 0 || toI32(buf[at + 5]) < 8) {
       return false
     }
-    if (this.freeCount <= 0) {
+    if (this.full()) {
       this.refused = h3Count(this.refused)
       return false
     }
@@ -946,10 +1012,11 @@ export class Http3Server {
   }
 
   /**
-   * Stops the server for good and wipes the keys it holds: every slot's
+   * Stops the server for good and wipes the keys it holds: every built slot's
    * connection is released (`QuicConnection.release`, which sends nothing),
-   * the listener is released, and the configuration's `statelessResetKey`
-   * and `retryTokenKey`, the index's salt, the connections' entropy scratch
+   * as is one built after, by `connection` or `quic`; the listener is
+   * released; and the configuration's `statelessResetKey` and
+   * `retryTokenKey`, the index's salt, the connections' entropy scratch
    * and the listener's last answer (a Retry's or a reset's token) are
    * zeroed. From then on every datagram is dropped and no connection is
    * accepted. The configuration's two keys are the server's once it is made
@@ -961,6 +1028,7 @@ export class Http3Server {
    * anyone can forge.
    */
   stop(): void {
+    this.stopped = true
     for (let slot: i32 = 0; slot < toI32(this.quics.length); slot++) {
       if (this.holds(slot)) {
         this.release(slot)
