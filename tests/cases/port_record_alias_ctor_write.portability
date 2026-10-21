@@ -1,0 +1,1 @@
+{"file":"tests/cases/port_record_alias_ctor_write.ts","line":19,"column":11,"endLine":19,"endColumn":12,"severity":"portability","code":"NL8003","message":"`p` is copied into the array here, and TypeScript stores the same object, so the later write `new Reset(ps)` (line 20) is not seen through `p`"}

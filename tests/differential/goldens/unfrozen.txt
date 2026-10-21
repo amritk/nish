@@ -373,6 +373,13 @@ cases/port_rec_push_never_written_quiet added after R6: no rewriter to freeze it
 cases/port_rec_push_then_write added after R6: no rewriter to freeze it with
 cases/port_rec_slot_store_dead_ref_quiet added after R6: no rewriter to freeze it with
 cases/port_rec_slot_store_live_ref added after R6: no rewriter to freeze it with
+cases/port_record_alias_const added after R6: no rewriter to freeze it with
+cases/port_record_alias_const_quiet added after R6: no rewriter to freeze it with
+cases/port_record_alias_ctor_write added after R6: no rewriter to freeze it with
+cases/port_record_alias_helper_bump added after R6: no rewriter to freeze it with
+cases/port_record_alias_helper_copy added after R6: no rewriter to freeze it with
+cases/port_record_alias_helper_read_quiet added after R6: no rewriter to freeze it with
+cases/port_record_alias_helper_write added after R6: no rewriter to freeze it with
 cases/port_str_ascii_literal_quiet added after R6: no rewriter to freeze it with
 cases/port_str_length_printed added after R6: no rewriter to freeze it with
 cases/port_str_needle_step_printed added after R6: no rewriter to freeze it with
