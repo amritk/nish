@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1113 programs, 160096 dump lines.
+# 1119 programs, 160397 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -57784,6 +57784,293 @@ function main(): void -> @nish_main [exported entry]
   callee 120:15 x -> @x
   callee 121:15 o2 -> @o2
   callee 122:15 ei2 -> @ei2
+program tests/cases/union_switch.ts
+module tests/cases/union_switch.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4
+  constructor -> @Square.constructor
+struct Tri (interface) size=8 align=4
+  field kind: Kind.Tri index=0 offset=0 readonly
+  field base: i32 index=1 offset=4
+struct Holder (class) size=8 align=8
+  field shape: Circle | Square | Tri index=0 offset=0
+  constructor -> @Holder.constructor
+function Circle.constructor(this: Circle, r: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: side
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Holder.constructor(this: Holder, shape: Circle | Square | Tri): void -> @Holder.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: shape
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function area(s: Circle | Square | Tri): i32 -> @area
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function named(h: Holder): string -> @named
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer h: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function corners(shapes: (Circle | Square | Tri)[], i: i32): i32 -> @corners
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer shapes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function rest(s: Circle | Square | Tri): i32 -> @rest
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function total(shapes: (Circle | Square | Tri)[]): i32 -> @total
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer shapes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 86:7 sum: i32 (let)
+  local 87:14 s: Circle | Square | Tri (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Circle.constructor Holder.constructor Square.constructor area corners named nish_alloc_struct nish_print nish_str_concat nish_str_from_i32 rest total
+  stackSites=3 stackLocals=1
+  local 104:9 t: Tri (const)
+  local 105:9 shapes: (Circle | Square | Tri)[] (const)
+  callee 105:28 new Circle -> @Circle.constructor
+  callee 105:43 new Square -> @Square.constructor
+  callee 106:18 area -> @area
+  callee 106:37 area -> @area
+  callee 106:56 area -> @area
+  callee 107:18 named -> @named
+  callee 107:24 new Holder -> @Holder.constructor
+  callee 107:50 named -> @named
+  callee 107:56 new Holder -> @Holder.constructor
+  callee 108:18 corners -> @corners
+  callee 108:40 corners -> @corners
+  callee 108:62 corners -> @corners
+  callee 109:18 rest -> @rest
+  callee 109:37 rest -> @rest
+  callee 109:56 rest -> @rest
+  callee 110:18 total -> @total
+program tests/cases/union_switch_flow.ts
+module tests/cases/union_switch_flow.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4 initialized
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4 initialized
+struct Box (class) size=4 align=4
+  field k: Kind index=0 offset=0 initialized
+function poison(b: Box): void -> @poison
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 29:3
+  pointer b: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function boxed(b: Box, s: Circle | Square): i32 -> @boxed
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 33:3
+  calls: poison
+  pointer b: size=4 writesThrough=true captured=false passedTo=poison#0
+  stackSites=0 stackLocals=0
+  callee 34:3 poison -> @poison
+function broken(s: Circle | Square): i32 -> @broken
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 46:7 n: i32 (let)
+function nested(s: Circle | Square, t: Circle | Square): i32 -> @nested
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function skipped(shapes: (Circle | Square)[]): i32 -> @skipped
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer shapes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 78:7 n: i32 (let)
+  local 79:14 s: Circle | Square (const)
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: boxed broken nested nish_alloc_struct nish_print nish_str_concat nish_str_from_i32 skipped
+  stackSites=2 stackLocals=1
+  local 93:9 shapes: (Circle | Square)[] (const)
+  callee 94:18 boxed -> @boxed
+  callee 94:49 broken -> @broken
+  callee 94:70 broken -> @broken
+  callee 95:18 nested -> @nested
+  callee 95:50 nested -> @nested
+  callee 96:18 skipped -> @skipped
+program tests/cases/union_switch_generic.ts
+module tests/cases/union_switch_generic.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4
+  constructor -> @Square.constructor
+struct Tri (interface) size=8 align=4
+  field kind: Kind.Tri index=0 offset=0 readonly
+  field base: i32 index=1 offset=4
+function Circle.constructor(this: Circle, r: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: side
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Circle.constructor Square.constructor apply$fn.16.nish_main$arrow0 nish_alloc_struct nish_panic_index nish_panic_overflow nish_print nish_str_from_i32 pick$i32 pick$str
+  stackSites=1 stackLocals=1
+  local 47:9 shapes: (Circle | Square | Tri)[] (const)
+  callee 47:28 new Circle -> @Circle.constructor
+  callee 47:43 new Square -> @Square.constructor
+  callee 47:58 new Circle -> @Circle.constructor
+  local 48:9 n: i32 (const)
+  callee 48:18 apply<(s) => ...> -> @apply$fn.16.nish_main$arrow0
+  callee 58:15 pick<i32> -> @pick$i32
+  callee 58:41 pick<string> -> @pick$str
+function (s) => ...(s: Circle | Square | Tri): i32 -> @nish_main$arrow0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function apply<(s) => ...>(s: Circle | Square | Tri, f: void): i32 -> @apply$fn.16.nish_main$arrow0 [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: s
+  calls: nish_main$arrow0
+  stackSites=0 stackLocals=0
+  callee 44:56 (s) => ... -> @nish_main$arrow0
+function pick<i32>(s: Circle | Square | Tri, a: i32, b: i32): i32 -> @pick$i32 [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b
+  stackSites=0 stackLocals=0
+function pick<string>(s: Circle | Square | Tri, a: string, b: string): string -> @pick$str [instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a b
+  stackSites=0 stackLocals=0
+program tests/cases/union_switch_narrowed.ts
+module tests/cases/union_switch_narrowed.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4 initialized
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4 initialized
+struct Tri (class) size=8 align=4
+  field kind: Kind.Tri index=0 offset=0 readonly initialized
+  field base: i32 index=1 offset=4 initialized
+function measure(s: Circle | Square | Tri): i32 -> @measure
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function main(): void -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: measure nish_alloc_struct nish_print nish_str_concat nish_str_from_i32
+  stackSites=1 stackLocals=1
+  local 40:9 shapes: (Circle | Square | Tri)[] (const)
+  callee 41:18 measure -> @measure
+  callee 41:40 measure -> @measure
+  callee 41:62 measure -> @measure
+program tests/cases/union_switch_secret.ts
+module tests/cases/union_switch_secret.ts (entry)
+import Secret from "nish:secret" -> generic class Secret
+import expose from "nish:secret" -> generic function expose
+import secret from "nish:secret" -> generic function secret
+import wipe from "nish:secret" -> generic function wipe
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4
+  constructor -> @Circle.constructor
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4
+  constructor -> @Square.constructor
+function Circle.constructor(this: Circle, r: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: r
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.constructor(this: Square, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: side
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function key(): u8[] -> @key
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function sum(k: u8[]): i32 -> @sum$
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer k: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 34:7 total: i32 (let)
+  local 35:12 i: i32 (let)
+function weigh(s: Circle | Square): i32 -> @weigh
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.wipe$$Secret$arr.u8
+  calls: key nish.expose$arr.u8$i32$fn.3.sum nish.secret$arr.u8 nish.wipe$$Secret$arr.u8 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local 42:9 k: Secret<u8[]> (const)
+  callee 42:27 secret<u8[]> -> @nish.secret$arr.u8
+  callee 42:34 key -> @key
+  local 43:7 out: i32 (let)
+  callee 46:13 expose<u8[], i32, sum> -> @nish.expose$arr.u8$i32$fn.3.sum
+  callee 47:7 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+  callee 50:13 expose<u8[], i32, sum> -> @nish.expose$arr.u8$i32$fn.3.sum
+  callee 51:7 wipe<Secret<u8[]>> -> @nish.wipe$$Secret$arr.u8
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish_print
+  calls: Circle.constructor Square.constructor nish_arena_mark nish_arena_release nish_print nish_str_from_i32 weigh
+  stackSites=2 stackLocals=0
+  callee 58:15 weigh -> @weigh
+  callee 58:21 new Circle -> @Circle.constructor
+  callee 59:15 weigh -> @weigh
+  callee 59:21 new Square -> @Square.constructor
+module std/secret.ts [package nish]
+struct Secret<u8[]> (class) size=8 align=8 exported
+  field value: u8[] index=0 offset=0
+  constructor -> @nish.Secret$arr.u8.constructor
+function Secret<u8[]>.constructor(this: Secret<u8[]>, value: u8[]): void -> @nish.Secret$arr.u8.constructor [exported constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: value
+  pointer this: size=8 writesThrough=true captured=false
+  pointer value: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function secret<u8[]>(value: u8[]): Secret<u8[]> -> @nish.secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=8
+  calls: nish.Secret$arr.u8.constructor nish_alloc_struct
+  pointer value: size=0 writesThrough=true captured=true passedTo=nish.Secret$arr.u8.constructor#1
+  stackSites=0 stackLocals=0
+  callee 46:51 new Secret<u8[]> -> @nish.Secret$arr.u8.constructor
+function expose<u8[], i32, sum>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.3.sum [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: sum$
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee 49:70 sum -> @sum$
+function wipe<Secret<u8[]>>(_target: Secret<u8[]>): void -> @nish.wipe$$Secret$arr.u8 [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via llvm.memset.p0i8.i64
+  calls: llvm.memset.p0i8.i64
+  pointer _target: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 program tests/cases/union_types.ts
 module tests/cases/union_types.ts (entry)
 struct Circle (class) size=8 align=4
@@ -100952,6 +101239,26 @@ function square(x: i64): i64 -> @square
 function low(x: i64): i32 -> @low
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+program docs/cookbook/union-switch.ts
+module docs/cookbook/union-switch.ts (entry)
+struct Circle (class) size=8 align=4
+  field kind: Kind.Circle index=0 offset=0 readonly initialized
+  field r: i32 index=1 offset=4 initialized
+struct Square (class) size=8 align=4
+  field kind: Kind.Square index=0 offset=0 readonly initialized
+  field side: i32 index=1 offset=4 initialized
+struct Tri (interface) size=8 align=4
+  field kind: Kind.Tri index=0 offset=0 readonly
+  field base: i32 index=1 offset=4
+function sides(s: Circle | Square | Tri): i32 -> @sides
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: sides
+  stackSites=1 stackLocals=1
+  local 36:9 t: Tri (const)
+  callee 37:10 sides -> @sides
 program docs/cookbook/unsafe-unchecked-get.ts
 module docs/cookbook/unsafe-unchecked-get.ts (entry)
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet

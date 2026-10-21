@@ -10588,6 +10588,116 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end decl-union-narrow -->
 
+A `switch` on the tag whose labels name every variant, with no `default`, is
+complete: the tag is a `readonly` field each variant writes with its own
+member, and a union never crosses the interop boundary, so the `switch`'s
+default edge goes to a block holding only `unreachable`, not to a block after
+the `switch`. Nothing is tested for it, the function needs no `ret` after the
+`switch`. A
+`switch` on a plain enum, which C can hand any `i32`, keeps its end block
+(`tests/cases/union_switch`, `reject_union_switch_enum`).
+
+<!-- cookbook:begin union-switch -->
+```ts
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle
+  r: i32 = 3
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square
+  side: i32 = 4
+}
+
+interface Tri {
+  readonly kind: Kind.Tri
+  base: i32
+}
+
+type Shape = Circle | Square | Tri
+
+const sides = (s: Shape): i32 => {
+  switch (s.kind) {
+    case Kind.Circle:
+      return 0
+    case Kind.Square:
+      return 4
+    case Kind.Tri:
+      return 3
+  }
+}
+
+export const main = (): i32 => {
+  const t: Tri = { kind: Kind.Tri, base: 2 }
+  return sides(t)
+}
+```
+
+```llvm
+%struct.Circle = type { i32, i32 }
+%struct.Square = type { i32, i32 }
+%struct.Tri = type { i32, i32 }
+%union.tagged = type { i32 }
+
+declare void @nish_free_arena() #2
+
+define internal noundef i32 @sides(%union.tagged* noundef %s) #0 {
+entry:
+  %0 = getelementptr inbounds %union.tagged, %union.tagged* %s, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  switch i32 %1, label %sw.unreachable [
+    i32 0, label %sw.case
+    i32 1, label %sw.case.1
+    i32 2, label %sw.case.2
+  ]
+
+sw.case:
+  ret i32 0
+
+sw.case.1:
+  ret i32 4
+
+sw.case.2:
+  ret i32 3
+
+sw.unreachable:
+  unreachable
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %t.addr = alloca %struct.Tri*, align 8
+  %Tri.obj = alloca %struct.Tri, align 8
+  %0 = getelementptr inbounds %struct.Tri, %struct.Tri* %Tri.obj, i32 0, i32 0
+  store i32 2, i32* %0, align 4
+  %1 = getelementptr inbounds %struct.Tri, %struct.Tri* %Tri.obj, i32 0, i32 1
+  store i32 2, i32* %1, align 4
+  store %struct.Tri* %Tri.obj, %struct.Tri** %t.addr, align 8
+  %2 = load %struct.Tri*, %struct.Tri** %t.addr, align 8
+  %3 = bitcast %struct.Tri* %2 to %union.tagged*
+  %4 = call i32 @sides(%union.tagged* %3)
+  ret i32 %4
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+```
+<!-- cookbook:end union-switch -->
+
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that

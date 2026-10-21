@@ -27,10 +27,10 @@ import {
   joinArms,
   literalIndexName,
   localsAssignedIn,
-  MEMBERS_NONE,
   memberSetName,
   memberSetOf,
   membersDisjoint,
+  membersOfSet,
   narrow,
   narrowHeld,
   narrowToTags,
@@ -49,9 +49,9 @@ import { refuseTypeForm, resolveType } from "./annotations"
 import { declaredOrigin, elementOrigin, isCollectionStruct, isMapOwner } from "./generics"
 import { structOf, walkReaderOf } from "./members"
 import { isChannelClass, isIteratorMethod } from "./parallel"
-import { FunctionSig } from "./program"
+import { FunctionSig, SWITCH_COVERED, SWITCH_OPEN } from "./program"
 import { recordGuardFusion } from "./fusion"
-import { builtinNameOf, unwrapParens } from "./emit-util"
+import { builtinNameOf, isOptionalChain, unwrapParens } from "./emit-util"
 import { terminatesControlFlow } from "./builtins"
 import { rejectDiscardedResult } from "./result"
 import {
@@ -90,6 +90,7 @@ import {
   N_IF,
   N_INDEX_SIGNATURE,
   N_INTERFACE,
+  N_MEMBER,
   N_METHOD,
   N_MODULE_CONST,
   N_PARAM,
@@ -133,7 +134,15 @@ const terminatorName = (stmt: Node): string => {
     case N_IF:
       return "an `if` whose branches all return"
     case N_SWITCH:
-      return "a `switch` whose clauses all return"
+      // With no `default`, a `switch` ends the path only by covering every
+      // variant of a union, which a program written before that rule kept a
+      // trailing `return` for: say that the line can go.
+      for (const clause of stmt.children[1].children) {
+        if (clause.kind === N_DEFAULT) {
+          return "a `switch` whose clauses all return"
+        }
+      }
+      return "a `switch` that covers every variant of its union: every path leaves inside it, so the code after it can be deleted"
     default:
       return "an infinite loop"
   }
@@ -1231,15 +1240,26 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   // A value no label names falls past every clause, as it was before the
   // `switch`, unless the labels name every value it can have.
   captureNarrowings(kept, before, scope)
+  let covered = false
   if (!hasDefault) {
     const unmatched = scope.child()
     if (tagged !== null || held !== null) {
       narrowClause(ctx, unmatched, tagged, held, clauses, [], true)
     }
-    if (!switchCovered(ctx, unmatched, tagged, held, members, clauses)) {
+    if (tagged !== null) {
+      covered = switchCovered(ctx, unmatched, tagged, members, clauses)
+    } else {
+      const union = unionTagRead(ctx, stmt.children[0])
+      covered =
+        union >= 0 &&
+        withoutMembers(ctx, membersOfSet(ctx, union), labelledMembers(ctx, clauses)).length === 0
+    }
+    if (!covered) {
       snapshotExit(ctx, unmatched)
     }
   }
+  const coverage = ctx.program.switchCoverage[stmt.id]
+  ctx.program.switchCoverage[stmt.id] = covered && coverage !== SWITCH_OPEN ? SWITCH_COVERED : SWITCH_OPEN
   const frame = ctx.switchFrames[ctx.switchFrames.length - 1]
   ctx.switchFrames.pop()
   if (tagged !== null || held !== null) {
@@ -1254,34 +1274,50 @@ const checkSwitch = (ctx: CheckContext, stmt: Node, scope: Scope): boolean => {
   }
   joinExits(ctx, stmt, scope, frame, steered)
   // Anything no clause names reaches the statement after the `switch` unless
-  // a `default` catches it, and so does a `break` or a last clause that falls
-  // out of the bottom.
-  return hasDefault && !broke && lastTerminates
+  // a `default` catches it, or the discriminant is a union's tag and the
+  // labels name every tag it can hold; a `break` or a last clause that falls
+  // out of the bottom reaches it too.
+  return (hasDefault || covered) && !broke && lastTerminates
 }
 
 /**
- * Whether no value of the discriminant escapes the labels of `clauses`:
- * they name every member it can be, or `unmatched`, narrowed by none of them
- * matching, leaves the switched variable nothing.
+ * The union whose tag `node` reads, or `-1`: a read of the tag field of a
+ * value whose static type is a union —
+ * `s.kind` on a local, a field, an element or a call's result — so its value
+ * is one of the union's tags: a variant's tag is a `readonly` field written
+ * only with its own member, and a union value never crosses the interop
+ * boundary. What the read *is* decides, never what a path was narrowed or
+ * assigned to hold: a plain enum field assigned from a tag (`b.k = s.kind`)
+ * can be overwritten through an alias or a call the checker does not follow,
+ * and a plain enum can arrive from C holding any `i32`. The labels must name
+ * every tag of the whole union, since a path a test narrowed can be
+ * reassigned behind the checker's back too.
+ */
+const unionTagRead = (ctx: CheckContext, node: Node): i32 => {
+  const read = unwrapParens(node)
+  if (read.kind !== N_MEMBER || isOptionalChain(read)) {
+    return -1
+  }
+  const receiver = ctx.program.nodeTypes[unwrapParens(read.children[0]).id]
+  return ctx.table.isUnion(receiver) && read.text === ctx.table.tagNameOf(receiver) ? receiver : -1
+}
+
+/**
+ * Whether no tag of the union variable `tagged` escapes the labels of
+ * `clauses`: they name every member it can be, or `unmatched`, narrowed by
+ * none of them matching, leaves it no variant.
  */
 const switchCovered = (
   ctx: CheckContext,
   unmatched: Scope,
-  tagged: Local | null,
-  held: Local | null,
+  tagged: Local,
   members: i32[],
   clauses: Node[]
 ): boolean => {
   if (members.length > 0 && withoutMembers(ctx, members, labelledMembers(ctx, clauses)).length === 0) {
     return true
   }
-  if (tagged !== null) {
-    return unmatched.exhausted(tagged)
-  }
-  if (held !== null) {
-    return unmatched.heldBy(held) === MEMBERS_NONE
-  }
-  return false
+  return unmatched.exhausted(tagged)
 }
 
 /** Every member a `case` label of `clauses` names. */
