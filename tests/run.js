@@ -1647,7 +1647,8 @@ if (!only || "net_tcp_connect".includes(only)) {
 // Linux has: Node counts the datagrams one segmented send becomes, and the
 // program reports what one GRO receive returned and the ECN bits that arrived.
 // Elsewhere those calls answer -95, which is the documented behaviour rather
-// than a gap, so the check says so and passes instead of skipping.
+// than a gap, so the check there requires each -95, and that none of those
+// calls put a datagram on the wire while a plain send still does.
 if (!only || "net_udp".includes(only)) {
   const netDir = path.join(buildDir, "net-udp")
   fs.rmSync(netDir, { recursive: true, force: true })
@@ -1718,14 +1719,32 @@ if (!only || "net_udp".includes(only)) {
   )
 
   if (process.platform !== "linux") {
-    console.log(
-      `      net_udp_offload does not apply on ${process.platform}: UDP_SEGMENT, UDP_GRO and the ECN control messages are Linux's, and the runtime answers -95 for them here (docs/LANGUAGE.md)`
-    )
-    check(
-      `net_udp_offload: not applicable on ${process.platform}, where GSO, GRO and ECN answer -95`,
-      true,
-      ""
-    )
+    // UDP_SEGMENT, UDP_GRO and the ECN control messages are Linux's, and the
+    // runtime answers -95 for them here (docs/LANGUAGE.md): the program prints
+    // each answer, and only its last, plain send reaches Node.
+    const offloadExe = buildCaseIn(netDir, "net_udp_offload")
+    if (offloadExe !== null) {
+      const socket = dgram.createSocket("udp4")
+      const arrived = []
+      socket.on("message", (message) => arrived.push(message))
+      await new Promise((resolve) => socket.bind(0, "127.0.0.1", resolve))
+      const r = await runWithPort(offloadExe, [String(socket.address().port)], async () => [])
+      // Darwin's loopback delivers asynchronously; give the plain datagram time to land.
+      for (let wait = 0; wait < 40 && arrived.length === 0; wait++) {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      socket.close()
+      const answers =
+        "gso sent -95\ngro bind -95\necn 1 sent -95\necn 2 sent -95\necn 3 sent -95\nplain sent 16\n"
+      const pattern = Buffer.from(Array.from({ length: 16 }, (_, i) => i))
+      check(
+        `net_udp_offload: on ${process.platform} GSO, the GRO bind and every ECN mark answer -95 and send nothing, and a plain udpSendTo still arrives`,
+        r.code === 0 && r.out === answers && arrived.length === 1 && arrived[0].equals(pattern),
+        `${r.timedOut ? "timed out after 10 s\n" : ""}exit ${r.code} signal ${r.signal}\n` +
+          `datagrams: ${JSON.stringify(arrived.map((m) => m.length))}\n` +
+          `stdout: ${JSON.stringify(r.out)}\nwant: ${JSON.stringify(answers)}\nstderr: ${r.err}`
+      )
+    }
   } else {
     const offloadExe = buildCaseIn(netDir, "net_udp_offload")
     if (offloadExe !== null) {
@@ -1793,8 +1812,8 @@ if (!only || "net_udp".includes(only)) {
 // datagram to itself with each ECN value over each family, `IP_TOS` and then
 // `IPV6_TCLASS`, and reads the mark back from `meta[1]`. A host whose `::1`
 // cannot be listened on cannot run any of that, so the check prints why and
-// passes, the way `net_udp_offload` does off Linux, rather than counting a skip:
-// the dual-stack path is not missing there, it is the documented fallback.
+// passes rather than counting a skip: the dual-stack path is not missing
+// there, it is the documented fallback.
 if (!only || "net_dual_stack".includes(only)) {
   const netDir = path.join(buildDir, "net-dual")
   fs.rmSync(netDir, { recursive: true, force: true })
