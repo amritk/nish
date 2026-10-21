@@ -20,6 +20,12 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 `nish:io`, `nish:net`) are part of the language rather than this library; see
 [Builtin modules](../../LANGUAGE.md#builtin-modules-nish).
 
+`nish:process` is where a program starts a child without waiting for it
+(`spawn`), signals it (`kill`) and reaps it (`waitPid`), and where it asks how
+many cores and bytes of memory the machine has (`availableParallelism`,
+`totalMemory`) to size a pool of workers; see
+[Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
@@ -36,6 +42,7 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509, base64url |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router |
+| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
 
 ## `nish/testing`
 
@@ -768,6 +775,22 @@ export const main = (): i32 => {
 Printing a `Secret`, putting it in a template, or handing it to any builtin is
 a compile error.
 
+The type can be left off: `secret` answers a `Secret` of whatever it is given,
+and every rule below holds the same.
+
+```ts nish:ok
+import { expose, secret, wipe } from "nish:secret";
+
+const length = (k: u8[]): i32 => toI32(k.length);
+
+export const main = (): i32 => {
+  const key = secret(new Array<u8>(32)); // a `Secret<u8[]>`
+  console.log(`${expose(key, length)} bytes`); // 32 bytes
+  wipe(key);
+  return 0;
+};
+```
+
 `secret(v)` takes a value nothing else holds: a literal, a call that makes a
 new array or record, or a local that is the only name for its value. A second
 name made before the move would read the key outside the `Secret`, and zeros
@@ -962,7 +985,12 @@ and no `pollModify`. A slot borrows its output buffer only while it writes, so
 an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
 a slot's connection on the first accept into it and keeps it for the next, so
 a pool sized for 16,384 connections costs some 16 KiB until they come;
-`bench/http.mjs` load-tests that loop on one core.
+`bench/http.mjs` load-tests that loop on one core. `TlsTcpServer`,
+`Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
+way, on the first connection accepted into it (an `Http2TlsServer` builds slot
+0 in its constructor), so a pool's size is a ceiling on its connections. What
+start-up still takes grows with it: the tables sized from the cap, such as an
+`Http3Server`'s connection-ID index, timer wheel and rings.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
@@ -1093,6 +1121,143 @@ export const main = (): i32 => {
 $ nish run request.ts
 GET /hello for example.com
 ```
+
+## `nish/net/url`
+
+A request target is a path and, after a `?`, a query of `key=value` pairs
+joined by `&`, both percent-encoded. `nish/net/url` reads them. For one value,
+`urlQueryGet(target, name)` answers it decoded, `""` for a key written without
+`=`, or null; `urlDecode(s, flags)` decodes a whole string. Both allocate their
+answer and answer null for anything malformed or not UTF-8.
+
+A server reads the bytes it received instead, and allocates nothing:
+`urlQueryStart` finds the `?`, `UrlPathSegments` splits the path on the raw
+`/`, and `UrlQuery` yields the pairs one `next()` at a time, as offsets into
+your array. `percentDecode` and `percentDecodePathSegment` decode one window
+into a buffer you own and answer how many bytes they wrote. An iterator is made
+once and `reset` for each request.
+
+```ts nish:ok
+import {
+  URL_DECODE_FORM,
+  URL_QUERY_PAIR,
+  UrlPathSegments,
+  UrlQuery,
+  UrlQueryLimits,
+  percentDecode,
+  percentDecodePathSegment,
+  urlDecode,
+  urlQueryFind,
+  urlQueryGet,
+  urlQueryStart,
+} from "nish/net/url";
+
+const bytesOf = (s: string): u8[] => {
+  const out: u8[] = new Array<u8>(toI32(s.length));
+  for (let i: i32 = 0; i < toI32(out.length); i++) {
+    out[i] = toU8(s.charCodeAt(i));
+  }
+  return out;
+};
+
+const route = (text: string, path: UrlPathSegments, query: UrlQuery): void => {
+  const target = bytesOf(text);
+  const len = toI32(target.length);
+  const out: u8[] = new Array<u8>(len);
+  const q = urlQueryStart(target, 0, len); // the `?`, or -1 when there is none
+  path.reset(target, 0, q < 0 ? len : q);
+  while (path.next()) {
+    const n = percentDecodePathSegment(target, path.start, path.length, out, 0, 0);
+    if (n < 0) {
+      console.log(`bad segment (${n})`); // a URL_DECODE_ERR_* code: answer 400
+      return;
+    }
+    console.log(`segment of ${n} bytes`); // files, a/b (one segment), c
+  }
+  if (q < 0) {
+    console.log("no query");
+    return;
+  }
+  query.reset(target, q + 1, len - q - 1);
+  const found = urlQueryFind(query, "name"); // URL_QUERY_PAIR, URL_QUERY_END, or an error code
+  if (found !== URL_QUERY_PAIR) {
+    console.log(`no name (${found})`);
+    return;
+  }
+  const n = percentDecode(target, query.valueStart, query.valueLength, out, 0, URL_DECODE_FORM);
+  if (n < 0) {
+    console.log(`bad name (${n})`); // `%zz`: never read out past a negative answer
+    return;
+  }
+  console.log(`name is ${String.fromBytes(out, 0, n)}`); // name is J Doe
+};
+
+export const main = (): i32 => {
+  // The string API: one call, an allocated answer, null on anything malformed.
+  const q0 = urlQueryGet("/search?q=a+b%21&page=2", "q");
+  if (q0 !== null) {
+    console.log(`q is ${q0}`); // q is a b!
+  }
+  console.log(`${urlDecode("100%", 0) === null}`); // true: a `%` without two hex digits is refused
+
+  // The byte API: offsets into the target, decoded into a buffer you own.
+  const path = new UrlPathSegments();
+  const query = new UrlQuery(new UrlQueryLimits()); // at most 100 pairs
+  route("/files/a%2Fb/c?name=J%20Doe&flag", path, query);
+  route("/files/readme", path, query);
+  route("/files/x?name=%zz", path, query);
+  route("/files/%zz", path, query);
+  return 0;
+};
+```
+
+```console
+$ nish run route.ts
+q is a b!
+true
+segment of 5 bytes
+segment of 3 bytes
+segment of 1 bytes
+name is J Doe
+segment of 5 bytes
+segment of 6 bytes
+no query
+segment of 5 bytes
+segment of 1 bytes
+bad name (-1)
+segment of 5 bytes
+bad segment (-1)
+```
+
+**Decoding is strict by default.** With flags 0, `percentDecode` answers
+`URL_DECODE_ERR_ESCAPE` for a `%` not followed by two hex digits and
+`URL_DECODE_ERR_NUL` for `%00`, and copies `+` as it is. Add the flags you
+want: `URL_DECODE_FORM` reads `+` as a space, as a form or a query does;
+`URL_DECODE_LENIENT` copies a malformed escape as it is; `URL_DECODE_ALLOW_NUL`
+decodes `%00` to a 0 byte. All three together decode as `URLSearchParams`
+does for valid UTF-8; where it replaces an invalid sequence with U+FFFD,
+`percentDecode` keeps the bytes. A buffer as long as the input is always big
+enough; one shorter than the decoded result answers `URL_DECODE_ERR_SPACE`,
+with the bytes before it written. Test every answer before you read `out`:
+a peer's `%zz` makes it negative, and `String.fromBytes(out, 0, n)` with a
+negative `n` panics. `percentDecodeErrorAt`, called with the same
+arguments, answers the offset of the byte an error is at, or -1.
+
+**A path is split before it is decoded**, so `%2F` stays inside its segment:
+`/a%2Fb/c` is the two segments `a/b` and `c`, never three. `+` is literal in a
+path.
+
+**A query yields at most 100 pairs.** Past `UrlQueryLimits.maxPairs`, `next()`
+answers `URL_QUERY_ERR_PAIRS`, and keeps answering it until `reset`, so a
+target of a hundred thousand `&`-joined pairs costs one bounded scan. Empty
+pairs (`a&&b`) are skipped and not counted. `urlQueryGet` uses the default cap,
+and answers null for a key past it.
+
+The byte API does not check that what it decodes is UTF-8: a value may be
+binary. The `name` you give `urlQueryFind` or `urlQueryGet` is ASCII: the
+native build compares it with the key's bytes and Node with its UTF-16 code
+units, so a non-ASCII name answers differently on the two. Nothing here looks
+for a `#`, which is never part of a request target.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports

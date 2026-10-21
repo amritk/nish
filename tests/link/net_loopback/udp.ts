@@ -32,7 +32,6 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
-  quicPushAck,
   quicPushConnectionClose,
   quicPushStream,
   quicPutDatagram,
@@ -61,7 +60,7 @@ import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
 import { splitMessages } from "../net_tls_common/client";
 import { fixedEntropy } from "../net_quic_conn_replay/server";
-import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
 import { LbMeter, lbBegin, lbEnd, lbLeafKey } from "./common";
 import { H3App, QuicApp, WtApp } from "./udp-apps";
 
@@ -73,6 +72,8 @@ export const CARRIER_WT: i32 = 2;
 /** The tokens of the two sockets. */
 const SERVER: i32 = 1;
 const CLIENT: i32 = 2;
+/** What `udpSendTo` answers for a `segment` where the system has no `UDP_SEGMENT`. */
+const NO_GSO: i32 = -95;
 
 /** The most stream bytes the client puts in one packet. */
 const CHUNK: i32 = 1000;
@@ -224,7 +225,12 @@ export class QuicEchoServer {
         break;
       }
       const segment: i32 = this.flight.count > 1 ? this.flight.segment : n32(0);
-      udpSendTo(this.fd, this.tx, n32(0), n, this.address, segment, n32(0));
+      if (udpSendTo(this.fd, this.tx, n32(0), n, this.address, segment, n32(0)) === NO_GSO) {
+        // No segmentation offload (Darwin): the flight a datagram at a time.
+        for (let at: i32 = 0; at < n; at += segment) {
+          udpSendTo(this.fd, this.tx, at, n - at < segment ? n - at : segment, this.address, n32(0), n32(0));
+        }
+      }
     }
     if (this.conn.closed()) {
       const n: i32 = this.conn.takeDatagramInto(this.tx, n32(0), now);
@@ -614,7 +620,7 @@ export class UdpLoop {
     const cl: UdpClient = this.client;
     const all: u8[] = [];
     if (cl.c.largestApp >= 0) {
-      quicPushAck(all, [n64(0), cl.c.largestApp], n32(1), n64(0));
+      qcPushAppAck(all, cl.c);
       cl.acked = cl.c.largestApp;
     }
     for (const b of payload) {

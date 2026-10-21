@@ -7,8 +7,10 @@
 //
 // The server (`tests/link/net_interop_server`, built with
 // `build/nish tests/link/net_interop_server/main.ts -o build/interop.ir/ --link build/interop`)
-// builds every pool before it prints its `ports` line, so that line is when
-// the cost is paid; the script then connects to each TCP port and sends the
+// sizes every pool's tables from `--slots` before it prints its `ports` line,
+// and builds a slot on the first connection accepted into it (the HTTP/2 and
+// HTTP/3 pools' slot 0 at start-up), so that line marks what a pool no client
+// has reached costs; the script then connects to each TCP port and sends the
 // QUIC port a packet of an unknown version, which only the running loop
 // answers (with Version Negotiation), and reads `VmRSS` and `VmHWM` from
 // `/proc/<pid>/status` before it kills the server.

@@ -742,6 +742,61 @@ export function spawnSyncTo(argv, out, err) {
 }
 
 /**
+ * `spawn(argv)` and `waitPid(pid, flags)` (WP34 N12) have no faithful reading
+ * under Node, for `signalFd`'s reason: Node reaps its children itself, on the
+ * event loop, and hands their status to an `exit` listener, so no synchronous
+ * function here can wait for one, and a child Node started is never there for
+ * a wait-less poll to find. Each throws, naming itself.
+ */
+function noProcessReading(name) {
+  throw new Error(
+    `\`${name}\` has no synchronous reading under Node: a child is reaped by the event loop, which a synchronous wait never returns to (docs/wp33-round-trip.md)`
+  );
+}
+
+export function spawn() {
+  return noProcessReading("spawn");
+}
+
+export function waitPid() {
+  return noProcessReading("waitPid");
+}
+
+/**
+ * `kill(pid, sig)`: 0, or a negative errno, as `runtime-os.c`'s `nish_kill`
+ * answers. Only 0, 2, 9 and 15 are sent and a pid of 0 or below is refused,
+ * both -22, before Node is asked; Node's error then names its errno, which
+ * `os.constants.errno` turns back into the number (-3 for no such process).
+ */
+export function kill(pid, sig) {
+  if (pid <= 0 || !(sig === 0 || sig === 2 || sig === 9 || sig === 15)) return -22;
+  try {
+    process.kill(pid, sig);
+    return 0;
+  } catch (e) {
+    return -(os.constants.errno[e.code] ?? 22);
+  }
+}
+
+/**
+ * `availableParallelism()`: Node's own count, which reads the affinity mask as
+ * the native one does, lowered by a positive `NISH_NUM_THREADS` the way the
+ * native count is. The native count also reads a cgroup v2 CPU quota, which
+ * Node does not, so inside a container with a quota the two may differ; both
+ * are at least 1.
+ */
+export function availableParallelism() {
+  const n = os.availableParallelism();
+  const want = /^[0-9]+$/.test(process.env.NISH_NUM_THREADS ?? "") ? Number(process.env.NISH_NUM_THREADS) : 0;
+  return want > 0 && want < n ? want : n;
+}
+
+/** `totalMemory()`: `os.totalmem()`, as a BigInt because an `i64` is held as one here. */
+export function totalMemory() {
+  return BigInt(os.totalmem());
+}
+
+/**
  * `monotonicNanos()`: `process.hrtime.bigint()`, a monotonic clock in
  * nanoseconds (`CLOCK_MONOTONIC` on every platform that has it, which is the
  * one `runtime-os.c` reads). The value is a BigInt because that is how an `i64`

@@ -123,8 +123,8 @@ const worse = (a: i32, b: i32): i32 => (a >= b ? a : b)
  * bumped, which is why neither is here.
  *
  * Adding an allocating builtin to `builtins.ts` and forgetting this predicate is
- * a use-after-free rather than a missed optimisation, so the three `mem_*_scope`
- * cases pin one each. stage0's `src/codegen/escape.ts` holds the same four names in a
+ * a use-after-free rather than a missed optimisation, so the `mem_*_scope`
+ * cases pin them (`mem_wait_pid_scope` for `waitPid`). stage0's `src/codegen/escape.ts` holds the same four names in a
  * `Set`; a module constant in this language is a scalar or a string, so the set
  * is a function here and the two are read side by side. `readCString` (WP27
  * S3.3) copies C's bytes into the arena at the call, as a `declare function`'s
@@ -137,6 +137,7 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "getenv" ||
   name === "readdirSync" ||
   name === "realpathSync" ||
+  name === "waitPid" ||
   name === "readCString"
 
 /**

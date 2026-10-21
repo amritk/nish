@@ -46,6 +46,7 @@ npm test                 # tests/run.js: goldens, llvm-as, native round trips, r
                          # layout, memory, interop, exit codes, packaging, bench checksums, differential
 node tests/run.js <sub>  # only cases whose name contains <sub>
 npm run test:update      # write missing .ll goldens
+npm run sync-main        # merge origin/main, regenerate the goldens, stage them
 npm run test:diff        # the full differential set, against the frozen rewrites under Node
 npm run lint             # file names + biome check, formatter disabled (.claude/linting.md)
 npm run format           # biome format --write

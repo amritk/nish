@@ -1,0 +1,54 @@
+// A `case` for a tag an earlier `if` returned on.
+enum Kind {
+  Circle,
+  Square,
+  Tri,
+}
+
+class Circle {
+  readonly kind: Kind.Circle = Kind.Circle;
+  r: i32;
+  constructor(r: i32) {
+    this.r = r;
+  }
+}
+
+class Square {
+  readonly kind: Kind.Square = Kind.Square;
+  side: i32;
+  constructor(side: i32) {
+    this.side = side;
+  }
+}
+
+interface Tri {
+  readonly kind: Kind.Tri;
+  base: i32;
+}
+
+type Shape = Circle | Square | Tri;
+
+const pick = (n: i32): Shape => {
+  if (n % 3 === 0) {
+    return new Circle(n);
+  }
+  if (n % 3 === 1) {
+    return new Square(n);
+  }
+  const t: Tri = { kind: Kind.Tri, base: n };
+  return t;
+};
+const f = (s: Shape): i32 => {
+  if (s.kind === Kind.Circle) {
+    return 1;
+  }
+  switch (s.kind) {
+    case Kind.Circle:
+      return 2;
+    default:
+      return 3;
+  }
+};
+export const main = (): void => {
+  console.log(f(pick(0)));
+};

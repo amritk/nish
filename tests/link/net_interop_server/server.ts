@@ -14,9 +14,9 @@
 //   flow-control window holds back never finishes, which is four of h2spec's
 //   cases.
 // - QUIC is one `Http3Server` on UDP, offering `h3` and `hq-interop`, with a
-//   `WebTransport` beside each slot's `Http3Connection`; `app.ts` answers
-//   them. Its handshakes sign with the key the caller holds, for the chain it
-//   was given.
+//   `WebTransport` bound beside a slot's `Http3Connection` when the slot is
+//   first served as `h3`; `app.ts` answers them. Its handshakes sign with the
+//   key the caller holds, for the chain it was given.
 // - With `watchSignals`, SIGTERM or SIGINT stops the loop: `docker stop`.
 import { Secret } from "nish:secret";
 import { netLocalPort, pollAdd, pollCreate, pollWait, udpBind } from "nish:net";
@@ -25,7 +25,6 @@ import { QUIC_CONN_STATIC_KEY_SIZE, QuicServerConfig } from "nish/net/quic";
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 import { H3_ALPN, Http3Config } from "nish/net/http3";
 import { Http3Server } from "nish/net/http3-server";
-import { WebTransport, WebTransportConfig } from "nish/net/webtransport";
 import { H1_ALPN, Http1Server, Http1TlsServer } from "nish/net/http1-server";
 import { tcpConfig } from "../net_tls_common/server";
 import { testConfig } from "../net_http1_server/checks";
@@ -58,10 +57,10 @@ export class InteropOptions {
    * lossy cases open one QUIC connection per file, and a connection whose
    * CONNECTION_CLOSE was lost keeps its slot until the idle timeout: with 8,
    * eight of those refused every new connection for the rest of the 30
-   * seconds. 64 covers the runner's 50. A QUIC slot is the costly one, some
-   * 12.2 MB resident against 278 KB for an HTTP/2 slot, 160 KB for an
-   * HTTPS/1.1 one and 4 KB for plain HTTP/1.1: 64 slots start at 809 MB
-   * resident and 256 at 3.2 GB (`bench/README.md`, "Pool memory").
+   * seconds. 64 covers the runner's 50. A slot is built on the first
+   * connection accepted into it, so `slots` is a ceiling: every pool at 64
+   * slots starts at 10.6 MB resident and at 1024 at 104 MB, most of it
+   * QUIC's tables (`bench/README.md`, "Pool memory").
    */
   slots: i32 = 64;
   /**
@@ -199,12 +198,8 @@ export class InteropServer {
       poolSlots(options, "h3"),
       randomBytes(QUIC_LISTENER_ENTROPY_SIZE)
     );
-    const wts: WebTransport[] = [];
-    for (let slot: i32 = 0; slot < this.h3.size(); slot++) {
-      wts.push(new WebTransport(new WebTransportConfig(), this.h3.connection(slot)));
-    }
     const files = new InteropFiles(options.www);
-    this.app = new InteropApp(this.h3, wts, files);
+    this.app = new InteropApp(this.h3, files);
     this.h1 = newH1Loop(options);
     this.h1.serving = true;
     this.h2 = new InteropH2(this.loop, "127.0.0.1", options.h2Port, chain, files, poolSlots(options, "h2"));

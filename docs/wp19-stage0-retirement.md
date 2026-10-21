@@ -277,7 +277,7 @@ boolean deadlocked the release that was meant to carry the asset.
 0.4.0 because its rows first had to run on their own hardware. That run settled
 Mach-O's `stage3 == stage2` (#114): `bootstrap.sh` had linked the two stages at
 different paths, so ld64 gave them different `LC_UUID`s. The macOS `test` row
-stays out for six named checks, none a compiler bug
+stays out for four named checks, none a compiler bug
 ([wp10-ci.md](wp10-ci.md#ci-matrix)).
 
 #### What the seeded run proves, and what it does not
