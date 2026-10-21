@@ -2492,6 +2492,21 @@ never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
 `tests/link/std_text_index_of_any` is its program.)
 
+**Decode a URL or read a query** — there is no `decodeURIComponent` and no
+`URLSearchParams`: `nish/net/url` has both readings. `urlDecode(s, flags)` and
+`urlQueryGet(target, name)` answer a `string | null`; the byte API
+(`percentDecode`, `UrlPathSegments`, `UrlQuery`, `urlQueryFind`) reads a
+window of a `u8[]` and allocates nothing. Decoding is strict by default — a
+malformed escape or `%00` is refused, `+` is kept — and `URL_DECODE_FORM`,
+`URL_DECODE_LENIENT` and `URL_DECODE_ALLOW_NUL` add `URLSearchParams`'s
+repairs, short of its U+FFFD for invalid UTF-8. `percentDecode` answers the
+length or a negative `URL_DECODE_ERR_*` code — test it before reading `out`,
+since a peer's `%zz` makes it negative and `urlQueryStart` answers -1 for no
+`?` — and `percentDecodeErrorAt` the offset an error is at; a query yields at
+most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
+program, and the user guide's [standard-library
+page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
+
 **Shared behaviour over several shapes** — there is no inheritance and no
 dispatch. Give each class the interface's fields **first**, `implements` it,
 and write a free function over the interface:

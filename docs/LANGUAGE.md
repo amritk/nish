@@ -8496,7 +8496,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`) |
+| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
 `process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
@@ -8569,6 +8569,20 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   (`tests/link/caps_policy_deny_unsafe`) — and never allowed: the import is
   the opt-in, so an allowlist does not refuse it and `--allow unsafe` is a
   usage error.
+- `unsafe` travels like every other capability — to each caller, however far
+  up, and to the module and package above it, including a dependency that
+  imports `nish:unsafe` when the entry package does not — and keeps a program
+  deterministic ("capabilities: `unsafe` reaches a caller two frames up, with
+  the whole chain as its witness", "capabilities: a dependency that imports
+  `nish:unsafe` gives `unsafe` to its package and to the entry that calls
+  it"). The deprecated `--wrapping` and `--unchecked-indexing` carry no
+  `unsafe`, so `--deny unsafe` passes them: they reach only the entry package
+  and each compile that passes one prints its deprecation note (NL9014).
+  `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+  which `nish --fix` rewrites into `uncheckedGet` and `uncheckedSet` calls
+  that do carry it; `--wrapping` has no fixer, and its note names the
+  `nish:unsafe` exports to write instead ("capabilities: `--wrapping` and
+  `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them").
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
