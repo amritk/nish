@@ -6,7 +6,7 @@ in `std/json.ts`. E4 is `httpDateWrite` in `std/net/http-fields.ts` and
 `HttpDate` in `std/net/http1-server.ts`. E5 is `bench/techempower/`, pinned by
 `tests/link/tfb_entry`, with its numbers in
 [BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext). E2
-(`TCP_NODELAY`) is in progress. E6 to E9 and Part B are not started. The
+(`TCP_NODELAY`) is flags 2 and 3 of `tcpListenFlags` (#770). E6 to E9 and Part B are not started. The
 anchors below are at `ce9d394`; §1 says where each row stands now.
 
 [WP34](wp34-hosting-cs.md) built a network stack for one program: cs's relay.
@@ -129,7 +129,8 @@ and `run.sh`, unsubmitted (D1).
 There is no pass arena: NL2424 refuses `using a = arena()` around a serve,
 because `Http1Server` stores into the slot's parser and output, which outlive
 the pass. None is needed either, since a warmed pass allocates nothing, and
-`tests/link/tfb_entry` pins `Arena.used()` flat over 200 requests instead. The
+`tests/link/tfb_entry` pins every server call over 200 requests to leave
+`Arena.used()` where it was instead. The
 reference entries are the HTTP twins (`bench/http-twins/`). The nodelay
 comparison waits for E2.
 
