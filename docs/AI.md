@@ -1763,6 +1763,11 @@ export const main = (): i32 => {
   build alike. `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
   (NL3037). Name it `writeLine`, or leave it private: a private function with
   such a name gets a symbol ending in `$`.
+- **Nor, in a wasm build, `memory`**: a wasm `--target`, `--profile wasi` or
+  `--emit-dts` refuses it, because the `--profile wasm` module exports its
+  linear memory under that name; wasi reserves it too, so a program that
+  builds for wasi also builds as a freestanding wasm module. `` `memory` is the name a wasm module exports its linear memory under: an exported function of the program's own package keeps its name as its symbol, so the module would export two things named `memory` and no host could load it; rename it ``
+  (NL3038). A native build keeps it.
 
 ## Statements
 
@@ -2056,7 +2061,8 @@ the port big-endian); hosts are numeric literals, because there is no DNS.
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
-spreads the connections; any other bit is `-22`). UDP is
+spreads the connections), and flag 2 `TCP_NODELAY` on every socket `tcpAccept`
+takes from it; flags add, and any other bit is `-22`. UDP is
 `udpBind(host, port, flags)` (flag 1 `SO_REUSEPORT`, flag 2 GRO),
 `udpSendTo(fd, buf, off, len, to, segment, ecn)` and
 `udpRecvFrom(fd, buf, off, len, from, meta)`: a `segment` above 0 sends one

@@ -584,3 +584,9 @@ What the rows say, read against that band:
 - `rust-actix` answers about 10,000 req/s throughout and 0 at 16384 connections; it shows 6.4 ms of latency per request when run alone too, so the figure is the twin's own, reported as measured.
 - `TCP_NODELAY` (WP39 E2) is not on `main` yet, so the entry's `nodelay` argument sets nothing. Once it is, `run.sh --nodelay-compare` adds `entry-nodelay0` to the same rounds, and the default is the one outside the band.
 <!-- techempower:end -->
+
+<!-- tls-handshake:begin -->
+## TLS handshake
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline.
+<!-- tls-handshake:end -->

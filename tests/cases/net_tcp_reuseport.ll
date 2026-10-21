@@ -63,7 +63,7 @@ land.end.1:
   %23 = call i32 @nish_tcp_listen_flags(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 %22, i32 4, i32 0)
   %24 = call i8* @nish_str_from_i32(i32 %23)
   call void @nish_print(i8* %24)
-  %25 = call i32 @nish_tcp_listen_flags(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 0, i32 4, i32 2)
+  %25 = call i32 @nish_tcp_listen_flags(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 0, i32 4, i32 6)
   %26 = call i8* @nish_str_from_i32(i32 %25)
   call void @nish_print(i8* %26)
   %27 = call i32 @nish_tcp_listen_flags(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i32 0, i32 4, i32 4)
