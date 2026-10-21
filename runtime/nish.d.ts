@@ -317,7 +317,7 @@ declare function netAddress(out: u8[], host: string, port: i32): i32;
 declare function netLocalPort(fd: i32): i32;
 /** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */
 declare function tcpListen(host: string, port: i32, backlog: i32): i32;
-/** `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1; any other bit is -22. */
+/** `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket for flag 2; any other bit is -22. */
 declare function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
 /** The next connection's descriptor, its address in `peer`; -11 when none waits. */
 declare function tcpAccept(fd: i32, peer: u8[]): i32;
@@ -438,7 +438,7 @@ declare module "nish:net" {
   export function netLocalPort(fd: i32): i32;
   /** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */
   export function tcpListen(host: string, port: i32, backlog: i32): i32;
-  /** `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1; any other bit is -22. */
+  /** `tcpListen`'s socket, with `SO_REUSEPORT` for flag 1 and `TCP_NODELAY` on each accepted socket for flag 2; any other bit is -22. */
   export function tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32;
   /** The next connection's descriptor, its address in `peer`; -11 when none waits. */
   export function tcpAccept(fd: i32, peer: u8[]): i32;
