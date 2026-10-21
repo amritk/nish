@@ -964,8 +964,10 @@ a slot's connection on the first accept into it and keeps it for the next, so
 a pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core. `TlsTcpServer`,
 `Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
-way, on the first connection accepted into it, so a pool's size is a ceiling
-rather than memory taken at start-up.
+way, on the first connection accepted into it (an `Http2TlsServer` builds slot
+0 in its constructor), so a pool's size is a ceiling on its connections. What
+start-up still takes grows with it: the tables sized from the cap, such as an
+`Http3Server`'s connection-ID index, timer wheel and rings.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)

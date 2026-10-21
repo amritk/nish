@@ -65,7 +65,8 @@ build/relay --port 4433 --secret "$(openssl rand -hex 32)" --cert-out /run/cs/re
   around verification cannot follow through `exposeWith`. What the wipe cannot
   reach is the option's string (`--secret` or `CS_RELAY_SECRET`), immutable
   for the process's life.
-- **Memory.** Every table is sized at start-up, and nothing a session does
+- **Memory.** Every table is sized from the caps at start-up, a slot's
+  connection is built on its first Initial, and nothing a session does
   keeps memory, its handshake included: N9's soak
   (`tests/link/net_relay_soak`) measured 100,000 sessions past a warm-up of
   500 with the arena at the same chunk and offset and the resident set the

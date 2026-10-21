@@ -43,9 +43,10 @@
  * every session, which the single loop makes safe. A slot's connections are
  * the Http3Server's, built on the first Initial accepted into the slot, and
  * its `WebTransport` is bound on the first event served from it (`wt`), so
- * the caps are ceilings and an idle relay holds no slot's connection. A datagram, a timer and a session's
- * whole life, its handshake included, keep nothing after warm-up
- * (`tests/link/net_relay_soak`: 0 bytes over 100,000 sessions).
+ * the caps are ceilings and an idle relay holds no slot's connection. A
+ * datagram, a timer and a session's whole life, its handshake included, keep
+ * nothing after warm-up (`tests/link/net_relay_soak`: 0 bytes over 100,000
+ * sessions).
  *
  * **Offload.** The client side is the carrier's: GRO on the socket, a GSO
  * flight a send. With `config.offload`, each upstream socket asks for GRO
