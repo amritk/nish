@@ -851,7 +851,8 @@ must keep printing it.
 answering new connections on its h2 port. It is
 [WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline)'s
 measure for the scalar inversion, where `bench/p256.mjs` times the signature on
-its own. It is not in this suite's tables. It needs `curl` with HTTP/2 and
+its own; [the result](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-result)
+reads both against the bar. It is not in this suite's tables. It needs `curl` with HTTP/2 and
 `taskset`.
 
 ```bash
