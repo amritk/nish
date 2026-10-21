@@ -1,0 +1,29 @@
+
+// ---- Test seam: appended by tests/run.js ("p256 inverse: ...") to a copy of ----
+// std/crypto/p256.ts and never part of the module itself. It exports the two
+// ways this file inverts a scalar mod n, so tests/link/crypto_p256_inverse can
+// hold them to each other without the module growing a public API for it.
+
+/** `k mod n`, inverted by `p256ScalarInverse` (safegcd) or `p256ScalarInvert` (Fermat), as 32 big-endian bytes. */
+const p256SeamInvertWith = (k: u8[], safegcd: boolean): u8[] => {
+  const plain: u32[] = p256Limbs()
+  const a: u32[] = p256Limbs()
+  p256LimbsFromBytes(plain, k, 0)
+  p256ReduceOnce(a, plain, p256Order())
+  p256FiatScalarMul(a, a, p256ScalarR2())
+  if (safegcd) {
+    p256ScalarInverse(a, a)
+  } else {
+    p256ScalarInvert(a, a)
+  }
+  p256FiatScalarMul(a, a, p256PlainOne())
+  const out: u8[] = new Array<u8>(32)
+  p256LimbsToBytes(out, 0, a)
+  return out
+}
+
+/** 1 / (k mod n) by safegcd, the signing paths' inversion. */
+export const p256SeamInverse = (k: u8[]): u8[] => p256SeamInvertWith(k, true)
+
+/** 1 / (k mod n) by Fermat, the reference. */
+export const p256SeamInvert = (k: u8[]): u8[] => p256SeamInvertWith(k, false)
