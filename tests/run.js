@@ -45,8 +45,11 @@ import { parseCodesRegistry } from "../scripts/codes-registry.js"
 import {
   budgetLabel,
   HTTP1_SERVER_START_BYTES,
+  HTTP1_TLS_SERVER_START_BYTES,
+  HTTP2_TLS_SERVER_START_BYTES,
   HTTP3_SERVER_START_BYTES,
   RUNTIME_BUDGETS,
+  TLS_TCP_START_BYTES,
 } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
 import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
@@ -6322,6 +6325,58 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
       "net_http1_server: a 16,384-slot Http1Server takes at most HTTP1_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP1_SERVER_START_BYTES,
       `ceiling ${HTTP1_SERVER_START_BYTES}\n${shown(run)}`
+    )
+  }
+}
+
+// `TlsTcpServer` and `Http1TlsServer` build a slot's TLS state, and the
+// latter its connection, on the first accept into it too, and so does
+// `Http2TlsServer` past slot 0.
+// `tests/link/net_tls_record_tcp/startup.ts`,
+// `tests/link/net_http1_server/tls-startup.ts` and
+// `tests/link/net_http2_tls/startup.ts` build pools of 16,384 slots on no
+// socket and print the bytes they took and whether they fit one chunk, which
+// the ceilings `TLS_TCP_START_BYTES`, `HTTP1_TLS_SERVER_START_BYTES` and
+// `HTTP2_TLS_SERVER_START_BYTES` hold.
+for (const [unit, program, name, ceiling, ceilingName] of [
+  ["net_tls_record_tcp", "startup.ts", "TlsTcpServer", TLS_TCP_START_BYTES, "TLS_TCP_START_BYTES"],
+  [
+    "net_http1_server",
+    "tls-startup.ts",
+    "Http1TlsServer",
+    HTTP1_TLS_SERVER_START_BYTES,
+    "HTTP1_TLS_SERVER_START_BYTES",
+  ],
+  [
+    "net_http2_tls",
+    "startup.ts",
+    "Http2TlsServer",
+    HTTP2_TLS_SERVER_START_BYTES,
+    "HTTP2_TLS_SERVER_START_BYTES",
+  ],
+]) {
+  if (only && !unit.includes(only) && !"runtime-budget".includes(only)) {
+    continue
+  }
+  const dir = path.join(buildDir, "link", `${unit}.${program.replace(".ts", "")}`)
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", unit, program), "-o", dir + path.sep, "--link", exe],
+    {
+      cwd: root,
+      encoding: "utf8",
+    }
+  )
+  if (check(`${unit}: ${program} links`, built.status === 0, shown(built))) {
+    const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
+    const [bytes, chunk] = String(run.stdout).trim().split(" ")
+    check(
+      `${unit}: a 16,384-slot ${name} takes at most ${ceilingName} before its first connection`,
+      run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= ceiling,
+      `ceiling ${ceiling}\n${shown(run)}`
     )
   }
 }
@@ -15675,6 +15730,150 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         subset.stdout.includes("unchanged"),
       `${subset.stdout}${subset.stderr}`
     )
+  }
+}
+
+// ---- crypto-bench: the crypto twins ------------------------------------------------
+// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
+// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
+// every program to print the checksums its expected.txt pins, and proves the
+// portable columns portable. Each family must report every kernel size matched,
+// found by listing the directories, so a new family is checked without an edit
+// here. A missing toolchain is the runner's note and a column of —, not a
+// failure; so is a family that needs a loopback socket the machine refuses, and
+// a portable column this host cannot prove. Those notes and unproved lines are
+// printed under the check on a pass too, so a green run says what it left out.
+if (!only || "crypto-bench".includes(only)) {
+  if (HAS_CLANG) {
+    const families = fs
+      .readdirSync(path.join(root, "bench", "crypto"))
+      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
+      .sort()
+    const proved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .portableProof !== undefined
+    )
+    const v = spawnSync(
+      "node",
+      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    // The runner accounts for every column of every family it validated: a
+    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
+    // (the family's own word) or `<family> did not run <id>:` (this machine's
+    // reason). The test takes that account rather than probing toolchains
+    // itself, which disagreed with the runner on a host whose Go was older
+    // than go.mod or whose cargo could not fetch. The column list is the
+    // runner's own `crypto: columns …` line; without it the check fails.
+    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
+    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
+    const unaccounted = validated.flatMap((f) => {
+      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
+      return COLUMNS.filter(
+        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
+      ).map((id) => `${f} ${id}`)
+    })
+    // GitHub's x86-64 Linux runner has every twin's toolchain and the
+    // extensions their portable builds give up, so there a column this machine
+    // did not run, or an `unproved` line, means a gate failed open: every twin
+    // must run and the OpenSSL and Go proofs must be measured ones.
+    const strict =
+      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
+    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
+    check(
+      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
+      v.status === 0 &&
+        families.length > 0 &&
+        COLUMNS.length > 0 &&
+        families.every((f) =>
+          new RegExp(
+            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
+            "m"
+          ).test(v.stdout)
+        ) &&
+        unaccounted.length === 0 &&
+        proved.every((f) =>
+          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
+            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
+          )
+        ) &&
+        (!strict ||
+          (validated.length === families.length &&
+            !/ did not run /.test(v.stdout) &&
+            proved.every((f) =>
+              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ))),
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+    )
+    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
+        console.log(`      ${line}`)
+      }
+    }
+    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
+    // compiler it was given reaches the child, and the child's status comes
+    // back. A wrapper answers --version from the compiler under test and fails
+    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    const wrapDir = path.join(buildDir, "crypto-bench")
+    const wrapper = path.join(wrapDir, "nish-wrapper")
+    const wrapLog = path.join(wrapDir, "wrapper.log")
+    fs.mkdirSync(wrapDir, { recursive: true })
+    fs.rmSync(wrapLog, { force: true })
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
+      { mode: 0o755 }
+    )
+    const deleg = spawnSync(
+      "node",
+      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
+      deleg.status === 1 && forwarded.includes(path.join("bench", "crypto", "hash", "main.ts")),
+      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
+    )
+    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
+    // only, one run, into a copy of the file.
+    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
+    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- crypto:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+  } else {
+    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
   }
 }
 
