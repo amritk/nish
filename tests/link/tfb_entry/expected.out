@@ -47,4 +47,15 @@ PASS  a pool asked for 0 slots: Content-Length is the body's length
 PASS  a pool asked for 0 slots: one Content-Length
 PASS  a pool asked for 0 slots: Server is present
 PASS  a pool asked for 0 slots: Date is an IMF-fixdate
-tfb entry: 49 passed, 0 failed, 0 skipped
+PASS  an unpaused loop waits without a timeout
+PASS  a paused one waits a bounded time
+PASS  and accepts nothing while paused
+PASS  unpaused, it waits without a timeout again
+PASS  and answers the connection that waited: status 200
+PASS  and answers the connection that waited: the body, byte for byte
+PASS  and answers the connection that waited: Content-Type
+PASS  and answers the connection that waited: Content-Length is the body's length
+PASS  and answers the connection that waited: one Content-Length
+PASS  and answers the connection that waited: Server is present
+PASS  and answers the connection that waited: Date is an IMF-fixdate
+tfb entry: 60 passed, 0 failed, 0 skipped

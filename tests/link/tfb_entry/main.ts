@@ -18,6 +18,9 @@
 //      that connection, and the server goes on serving a new one.
 //   7. A pool asked for 0 slots has one, as `Http1Server` clamps it, and
 //      answers on it.
+//   8. A paused listener, as one out of descriptors is, accepts nothing and
+//      bounds the loop's wait; unpaused, it accepts the connection that
+//      waited and answers it.
 //
 // Every wait is bounded: five seconds without a wake is a failure, never a hang.
 import {
@@ -546,5 +549,22 @@ export const main = (): i32 => {
     t.fail("the 0-slot loop", one.failure);
   }
   one.shutdown();
+
+  // --- 8. A paused listener waits, then accepts -------------------------------------------------
+  const held = new TfbLoop(4);
+  t.eqI32("an unpaused loop waits without a timeout", held.tfb.waitMs(), toI32(-1));
+  held.tfb.pause();
+  t.ok("a paused one waits a bounded time", held.tfb.waitMs() > 0);
+  const f: i32 = held.connect();
+  held.send(f, get("/json"));
+  held.settle();
+  t.eqI32("and accepts nothing while paused", toI32(held.peers[f].got.length), ZERO);
+  held.tfb.unpause();
+  t.eqI32("unpaused, it waits without a timeout again", held.tfb.waitMs(), toI32(-1));
+  verify(t, "and answers the connection that waited", held.response(f), json, "application/json");
+  if (held.failure !== "") {
+    t.fail("the paused loop", held.failure);
+  }
+  held.shutdown();
   return t.done();
 };

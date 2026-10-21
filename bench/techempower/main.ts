@@ -36,7 +36,9 @@ export const main = (): i32 => {
   const ready: i32[] = new Array<i32>(2 * READY)
   console.log(`listening ${port}`)
   while (true) {
-    const n: i32 = pollWait(loop, ready, -1)
+    const n: i32 = pollWait(loop, ready, tfb.waitMs())
+    // A paused listener is tried again after every wait, a timed-out one included.
+    tfb.unpause()
     for (let k: i32 = 0; k < n; k++) {
       if (ready[2 * k] === SIGNAL) {
         return 0

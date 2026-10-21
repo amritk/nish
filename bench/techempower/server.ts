@@ -49,6 +49,8 @@ const HEAD_OWED: i32 = -1
 /** `tcpAccept`'s failures that a closed connection cures: EMFILE and ENFILE. */
 const OUT_OF_FILES: i32 = -24
 const SYSTEM_OUT_OF_FILES: i32 = -23
+/** How long a loop with a paused listener waits before trying it again, in milliseconds. */
+const PAUSE_MS: i32 = 50
 
 const tfbBytes = (s: string): u8[] => {
   const out: u8[] = new Array<u8>(s.length)
@@ -81,7 +83,7 @@ export class TfbServer {
   owedAt: i32[]
   /** Per slot: the owed body's length. */
   owedLength: i32[]
-  /** Whether the listener is out of the loop until a connection closes, after EMFILE or ENFILE. */
+  /** Whether the listener is out of the loop, after EMFILE or ENFILE, until a connection closes or `PAUSE_MS` pass. */
   paused: boolean = false
 
   /** A pool of `slots`, at least one as `Http1Server` makes it, serving on `listener`, which this adds to `loop`. */
@@ -210,7 +212,8 @@ export class TfbServer {
    * Accepts every waiting connection into the loop; a full pool closes the
    * extra ones. Out of descriptors (EMFILE or ENFILE), the waiting connection
    * stays queued and the listener stays readable, so a level-triggered loop
-   * would spin on it: the listener leaves the loop until a slot closes.
+   * would spin on it: the listener leaves the loop until a slot closes or the
+   * loop's next wait, which `waitMs` bounds, ends.
    */
   acceptAll(): void {
     while (true) {
@@ -218,8 +221,7 @@ export class TfbServer {
       if (slot >= 0) {
         pollAdd(this.loop, this.server.fd(slot), H1_WANT_READ, slot)
       } else if (slot === OUT_OF_FILES || slot === SYSTEM_OUT_OF_FILES) {
-        pollModify(this.loop, this.listener, ZERO, TFB_LISTENER)
-        this.paused = true
+        this.pause()
         return
       } else if (slot !== H1_POOL_FULL) {
         return
@@ -227,13 +229,29 @@ export class TfbServer {
     }
   }
 
-  /** Closes `slot`, and puts a listener paused for want of descriptors back in the loop. */
-  close(slot: i32): void {
-    this.server.close(slot)
+  /** Takes the listener out of the loop until `unpause` puts it back. */
+  pause(): void {
+    pollModify(this.loop, this.listener, ZERO, TFB_LISTENER)
+    this.paused = true
+  }
+
+  /** Puts a paused listener back in the loop; a listener still out of descriptors pauses again on its next accept. */
+  unpause(): void {
     if (this.paused) {
       this.paused = false
       pollModify(this.loop, this.listener, H1_WANT_READ, TFB_LISTENER)
     }
+  }
+
+  /** The timeout for the loop's next `pollWait`: none, or `PAUSE_MS` while the listener is paused. */
+  waitMs(): i32 {
+    return this.paused ? PAUSE_MS : -1
+  }
+
+  /** Closes `slot`, and puts a listener paused for want of descriptors back in the loop. */
+  close(slot: i32): void {
+    this.server.close(slot)
+    this.unpause()
   }
 
   /** A slot's descriptor is ready: reads or writes it, answers its requests, then re-arms or closes it. */

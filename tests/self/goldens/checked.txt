@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 1079 programs, 156864 dump lines.
+# 1079 programs, 156888 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -138626,7 +138626,7 @@ function arg(k: i32, fallback: string): string -> @arg
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_tcp_listen_flags
-  calls: TfbServer.constructor TfbServer.dispatch arg llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_poll_add nish_poll_create nish_poll_wait nish_print nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_tcp_listen_flags
+  calls: TfbServer.constructor TfbServer.dispatch TfbServer.unpause TfbServer.waitMs arg llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_panic_overflow nish_parse_number nish_poll_add nish_poll_create nish_poll_wait nish_print nish_signal_fd nish_str_concat nish_str_eq nish_str_from_i32 nish_tcp_listen_flags
   stackSites=1 stackLocals=1
   local 24:9 port: i32 (const)
   callee 24:30 arg -> @arg
@@ -138642,8 +138642,10 @@ function main(): i32 -> @nish_main [exported entry]
   callee 34:26 new TfbServer -> @TfbServer.constructor
   local 36:9 ready: i32[] (const)
   local 39:11 n: i32 (const)
-  local 40:14 k: i32 (let)
-  callee 44:7 TfbServer.dispatch -> @TfbServer.dispatch
+  callee 39:42 TfbServer.waitMs -> @TfbServer.waitMs
+  callee 41:5 TfbServer.unpause -> @TfbServer.unpause
+  local 42:14 k: i32 (let)
+  callee 46:7 TfbServer.dispatch -> @TfbServer.dispatch
 module bench/techempower/server.ts
 import pollAdd from "nish:net" -> builtin pollAdd
 import pollModify from "nish:net" -> builtin pollModify
@@ -138671,6 +138673,7 @@ const OWES_NOT_FOUND: i32 = 3
 const HEAD_OWED: i32 = -1
 const OUT_OF_FILES: i32 = -24
 const SYSTEM_OUT_OF_FILES: i32 = -23
+const PAUSE_MS: i32 = 50
 struct TfbServer (class) size=120 align=8 exported
   field server: Http1Server index=0 offset=0
   field loop: i32 index=1 offset=8 initialized
@@ -138696,14 +138699,17 @@ struct TfbServer (class) size=120 align=8 exported
   method resume -> @TfbServer.resume
   method dispatch -> @TfbServer.dispatch
   method acceptAll -> @TfbServer.acceptAll
+  method pause -> @TfbServer.pause
+  method unpause -> @TfbServer.unpause
+  method waitMs -> @TfbServer.waitMs
   method close -> @TfbServer.close
   method serve -> @TfbServer.serve
 function tfbBytes(s: string): u8[] -> @tfbBytes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic
   stackSites=0 stackLocals=0
-  local 54:9 out: u8[] (const)
-  local 55:12 k: i32 (let)
+  local 56:9 out: u8[] (const)
+  local 57:12 k: i32 (let)
 function TfbServer.constructor(this: TfbServer, loop: i32, listener: i32, size: i32): void -> @TfbServer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish_poll_add
@@ -138711,42 +138717,42 @@ function TfbServer.constructor(this: TfbServer, loop: i32, listener: i32, size: 
   calls: nish.Http1Server.constructor nish.JsonWriter.constructor nish_alloc_struct nish_panic nish_poll_add tfbBytes
   pointer this: size=120 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 89:11 slots: i32 (const)
-  callee 92:19 new Http1Server -> @nish.Http1Server.constructor
-  callee 93:23 tfbBytes -> @tfbBytes
-  callee 93:43 tfbBytes -> @tfbBytes
-  callee 94:24 tfbBytes -> @tfbBytes
-  callee 94:42 tfbBytes -> @tfbBytes
+  local 91:11 slots: i32 (const)
+  callee 94:19 new Http1Server -> @nish.Http1Server.constructor
   callee 95:23 tfbBytes -> @tfbBytes
   callee 95:43 tfbBytes -> @tfbBytes
   callee 96:24 tfbBytes -> @tfbBytes
   callee 96:42 tfbBytes -> @tfbBytes
-  callee 97:22 tfbBytes -> @tfbBytes
-  callee 98:21 tfbBytes -> @tfbBytes
-  callee 100:19 new JsonWriter -> @nish.JsonWriter.constructor
+  callee 97:23 tfbBytes -> @tfbBytes
+  callee 97:43 tfbBytes -> @tfbBytes
+  callee 98:24 tfbBytes -> @tfbBytes
+  callee 98:42 tfbBytes -> @tfbBytes
+  callee 99:22 tfbBytes -> @tfbBytes
+  callee 100:21 tfbBytes -> @tfbBytes
+  callee 102:19 new JsonWriter -> @nish.JsonWriter.constructor
 function TfbServer.answer(this: TfbServer, slot: i32, conn: Http1Connection): void -> @TfbServer.answer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 109:5
+  sharedWrite: 111:5
   escaping: slot
   calls: TfbServer.resume TfbServer.tracks nish.Http1Parser.methodIs nish.Http1Parser.targetIs nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.key nish.JsonWriter.reset nish.JsonWriter.string nish_panic_index nish_panic_overflow
   pointer this: size=120 writesThrough=true captured=false passedTo=TfbServer.tracks#0 TfbServer.resume#0
   pointer conn: size=144 writesThrough=true captured=false passedTo=TfbServer.resume#2
   stackSites=0 stackLocals=0
-  local 110:11 p: Http1Parser (const)
-  local 111:11 get: boolean (const)
-  callee 111:26 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
-  local 112:9 owes: i32 (let)
-  local 113:9 length: i32 (let)
-  callee 114:16 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
-  callee 117:23 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
-  local 118:13 w: JsonWriter (const)
-  callee 119:7 JsonWriter.reset -> @nish.JsonWriter.reset
-  callee 120:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
-  callee 121:7 JsonWriter.key -> @nish.JsonWriter.key
-  callee 122:7 JsonWriter.string -> @nish.JsonWriter.string
-  callee 123:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
-  callee 128:9 TfbServer.tracks -> @TfbServer.tracks
-  callee 132:7 TfbServer.resume -> @TfbServer.resume
+  local 112:11 p: Http1Parser (const)
+  local 113:11 get: boolean (const)
+  callee 113:26 Http1Parser.methodIs -> @nish.Http1Parser.methodIs
+  local 114:9 owes: i32 (let)
+  local 115:9 length: i32 (let)
+  callee 116:16 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  callee 119:23 Http1Parser.targetIs -> @nish.Http1Parser.targetIs
+  local 120:13 w: JsonWriter (const)
+  callee 121:7 JsonWriter.reset -> @nish.JsonWriter.reset
+  callee 122:7 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee 123:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee 124:7 JsonWriter.string -> @nish.JsonWriter.string
+  callee 125:7 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  callee 130:9 TfbServer.tracks -> @TfbServer.tracks
+  callee 134:7 TfbServer.resume -> @TfbServer.resume
 function TfbServer.tracks(this: TfbServer, slot: i32): boolean -> @TfbServer.tracks [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=120 writesThrough=false captured=false
@@ -138757,26 +138763,26 @@ function TfbServer.body(this: TfbServer, owes: i32): u8[] -> @TfbServer.body [ex
   stackSites=0 stackLocals=0
 function TfbServer.resume(this: TfbServer, slot: i32, conn: Http1Connection): void -> @TfbServer.resume [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 183:9
+  sharedWrite: 185:9
   escaping: slot
   calls: TfbServer.body TfbServer.tracks nish.Http1Connection.end nish.Http1Connection.respond nish.Http1Connection.write nish_panic_index nish_panic_overflow
   pointer this: size=120 writesThrough=false captured=false passedTo=TfbServer.tracks#0 TfbServer.body#0
   pointer conn: size=144 writesThrough=true captured=false passedTo=nish.Http1Connection.respond#0 nish.Http1Connection.write#0 nish.Http1Connection.end#0
   stackSites=0 stackLocals=0
-  callee 160:10 TfbServer.tracks -> @TfbServer.tracks
-  local 163:11 owes: i32 (const)
-  local 167:11 json: boolean (const)
-  local 168:11 names: u8[][] (const)
-  local 169:11 values: u8[][] (const)
-  local 170:11 body: u8[] (const)
-  callee 170:24 TfbServer.body -> @TfbServer.body
-  local 171:11 length: i32 (const)
-  local 172:9 at: i32 (let)
-  local 174:13 r: i32 (const)
-  callee 174:22 Http1Connection.respond -> @nish.Http1Connection.respond
-  local 181:13 n: i32 (const)
-  callee 181:22 Http1Connection.write -> @nish.Http1Connection.write
-  callee 189:5 Http1Connection.end -> @nish.Http1Connection.end
+  callee 162:10 TfbServer.tracks -> @TfbServer.tracks
+  local 165:11 owes: i32 (const)
+  local 169:11 json: boolean (const)
+  local 170:11 names: u8[][] (const)
+  local 171:11 values: u8[][] (const)
+  local 172:11 body: u8[] (const)
+  callee 172:24 TfbServer.body -> @TfbServer.body
+  local 173:11 length: i32 (const)
+  local 174:9 at: i32 (let)
+  local 176:13 r: i32 (const)
+  callee 176:22 Http1Connection.respond -> @nish.Http1Connection.respond
+  local 183:13 n: i32 (const)
+  callee 183:22 Http1Connection.write -> @nish.Http1Connection.write
+  callee 191:5 Http1Connection.end -> @nish.Http1Connection.end
 function TfbServer.dispatch(this: TfbServer, token: i32, events: i32): void -> @TfbServer.dispatch [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TfbServer.acceptAll
@@ -138784,25 +138790,43 @@ function TfbServer.dispatch(this: TfbServer, token: i32, events: i32): void -> @
   calls: TfbServer.acceptAll TfbServer.serve
   pointer this: size=120 writesThrough=true captured=false passedTo=TfbServer.acceptAll#0 TfbServer.serve#0
   stackSites=0 stackLocals=0
-  callee 203:7 TfbServer.acceptAll -> @TfbServer.acceptAll
-  callee 205:7 TfbServer.serve -> @TfbServer.serve
+  callee 205:7 TfbServer.acceptAll -> @TfbServer.acceptAll
+  callee 207:7 TfbServer.serve -> @TfbServer.serve
 function TfbServer.acceptAll(this: TfbServer): void -> @TfbServer.acceptAll [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 222:9
-  calls: nish.Http1Server.accept nish.Http1Server.fd nish_poll_add nish_poll_modify
+  sharedWrite: via nish.Http1Server.accept
+  calls: TfbServer.pause nish.Http1Server.accept nish.Http1Server.fd nish_poll_add
+  pointer this: size=120 writesThrough=true captured=false passedTo=TfbServer.pause#0
+  stackSites=0 stackLocals=0
+  local 220:13 slot: i32 (const)
+  callee 220:25 Http1Server.accept -> @nish.Http1Server.accept
+  callee 222:28 Http1Server.fd -> @nish.Http1Server.fd
+  callee 224:9 TfbServer.pause -> @TfbServer.pause
+function TfbServer.pause(this: TfbServer): void -> @TfbServer.pause [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 235:5
+  calls: nish_poll_modify
   pointer this: size=120 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 217:13 slot: i32 (const)
-  callee 217:25 Http1Server.accept -> @nish.Http1Server.accept
-  callee 219:28 Http1Server.fd -> @nish.Http1Server.fd
+function TfbServer.unpause(this: TfbServer): void -> @TfbServer.unpause [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: 241:7
+  calls: nish_poll_modify
+  pointer this: size=120 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function TfbServer.waitMs(this: TfbServer): i32 -> @TfbServer.waitMs [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=120 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function TfbServer.close(this: TfbServer, slot: i32): void -> @TfbServer.close [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: 234:7
+  sharedWrite: via nish.Http1Server.close
   escaping: slot
-  calls: nish.Http1Server.close nish_poll_modify
-  pointer this: size=120 writesThrough=true captured=false
+  calls: TfbServer.unpause nish.Http1Server.close
+  pointer this: size=120 writesThrough=true captured=false passedTo=TfbServer.unpause#0
   stackSites=0 stackLocals=0
-  callee 232:5 Http1Server.close -> @nish.Http1Server.close
+  callee 253:5 Http1Server.close -> @nish.Http1Server.close
+  callee 254:5 TfbServer.unpause -> @TfbServer.unpause
 function TfbServer.serve(this: TfbServer, slot: i32, events: i32): void -> @TfbServer.serve [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http1Server.readable
@@ -138810,21 +138834,21 @@ function TfbServer.serve(this: TfbServer, slot: i32, events: i32): void -> @TfbS
   calls: TfbServer.answer TfbServer.close TfbServer.resume nish.Http1Server.connection nish.Http1Server.fd nish.Http1Server.flush nish.Http1Server.holds nish.Http1Server.next nish.Http1Server.readable nish.Http1Server.rearm nish.Http1Server.writable nish_poll_modify
   pointer this: size=120 writesThrough=true captured=false passedTo=TfbServer.answer#0 TfbServer.resume#0 TfbServer.close#0
   stackSites=0 stackLocals=0
-  callee 241:10 Http1Server.holds -> @nish.Http1Server.holds
-  callee 245:7 Http1Server.readable -> @nish.Http1Server.readable
-  callee 247:7 Http1Server.writable -> @nish.Http1Server.writable
-  local 249:11 conn: Http1Connection (const)
-  callee 249:35 Http1Server.connection -> @nish.Http1Server.connection
-  local 250:9 event: i32 (let)
-  callee 250:22 Http1Server.next -> @nish.Http1Server.next
-  callee 253:9 TfbServer.answer -> @TfbServer.answer
-  callee 255:9 TfbServer.resume -> @TfbServer.resume
-  callee 257:15 Http1Server.next -> @nish.Http1Server.next
-  local 259:11 wants: i32 (const)
-  callee 259:24 Http1Server.flush -> @nish.Http1Server.flush
-  callee 261:7 TfbServer.close -> @TfbServer.close
-  callee 264:9 Http1Server.rearm -> @nish.Http1Server.rearm
-  callee 265:29 Http1Server.fd -> @nish.Http1Server.fd
+  callee 259:10 Http1Server.holds -> @nish.Http1Server.holds
+  callee 263:7 Http1Server.readable -> @nish.Http1Server.readable
+  callee 265:7 Http1Server.writable -> @nish.Http1Server.writable
+  local 267:11 conn: Http1Connection (const)
+  callee 267:35 Http1Server.connection -> @nish.Http1Server.connection
+  local 268:9 event: i32 (let)
+  callee 268:22 Http1Server.next -> @nish.Http1Server.next
+  callee 271:9 TfbServer.answer -> @TfbServer.answer
+  callee 273:9 TfbServer.resume -> @TfbServer.resume
+  callee 275:15 Http1Server.next -> @nish.Http1Server.next
+  local 277:11 wants: i32 (const)
+  callee 277:24 Http1Server.flush -> @nish.Http1Server.flush
+  callee 279:7 TfbServer.close -> @TfbServer.close
+  callee 282:9 Http1Server.rearm -> @nish.Http1Server.rearm
+  callee 283:29 Http1Server.fd -> @nish.Http1Server.fd
 module std/net/http1-server.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import netClose from "nish:net" -> builtin netClose
