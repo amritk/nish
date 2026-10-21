@@ -58,6 +58,7 @@ import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
+import { urlFuzzVerdict } from "./link/std_url/verdict.js"
 import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
@@ -1179,8 +1180,11 @@ const buildCaseIn = (dir, name) => {
 const runCaseUnderPrelude = (name, args) =>
   runUnderPrelude(path.join(casesDir, `${name}.ts`), [name, ...args])
 
-/** `entry` run under `runtime/nish.mjs`, its `main` answering the exit status; `args` follow `-e`'s script. */
-const runUnderPrelude = (entry, args, exported = "main") =>
+/**
+ * `entry` run under `runtime/nish.mjs`, its `main` answering the exit status;
+ * `args` follow `-e`'s script and `options` join `spawnSync`'s.
+ */
+const runUnderPrelude = (entry, args, exported = "main", options = {}) =>
   spawnSync(
     "node",
     [
@@ -1192,7 +1196,7 @@ const runUnderPrelude = (entry, args, exported = "main") =>
       `const m = await import(${JSON.stringify(entry)}); process.exit(m.${exported}());`,
       ...args,
     ],
-    { cwd: root, encoding: "utf8" }
+    { cwd: root, encoding: "utf8", ...options }
   )
 
 /** A spawned run's status and both streams, for a failed check's message. */
@@ -7509,6 +7513,102 @@ if (!only || "std_json_tokenizer".includes(only)) {
     )
   } else {
     skip("skipped: link/std_json_tokenizer: no clang, so node.ts is not built natively")
+  }
+}
+
+// `nish/net/url` under the Node prelude, and against Node's own decoders. The
+// link loop runs `std_url` and its four refusals natively; here the same
+// programs run under `runtime/nish.mjs` and print the same bytes, `alloc.ts`
+// reads a target 10,000 times without moving the arena, and `fuzz.ts`'s 3,000
+// seeded inputs are held to `decodeURIComponent`, `URLSearchParams` and the
+// strict rule's regex, natively and under Node. Six programs beside them pass
+// a window or an `at` outside its array, and each panics with its message on
+// both sides.
+if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
+  for (const name of ["std_url", "std_url_escape", "std_url_pairs", "std_url_space", "std_url_window"]) {
+    const dir = path.join(linkDir, name)
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    const errFile = path.join(dir, "expected.stderr")
+    const err = fs.existsSync(errFile) ? fs.readFileSync(errFile, "utf8") : null
+    check(
+      `link/${name}: under the Node prelude it exits ${code} and prints expected.out${err === null ? "" : " and expected.stderr"}`,
+      run.status === code && run.stdout === out && (err === null || run.stderr === err),
+      shown(run)
+    )
+  }
+  const urlDir = path.join(linkDir, "std_url")
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_alloc") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check(
+      "link/std_url: 10,000 targets split, decoded and searched leave Arena.used() where it was",
+      run.status === 0 &&
+        /^rounds 10000 failures 0 kept 0 control seen checksum [1-9][0-9]*\n$/.test(run.stdout),
+      shown(run)
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so alloc.ts is not built")
+  }
+  for (const [file, message] of [
+    ["panic-decode-window", "percentDecode: the window is outside the array"],
+    ["panic-decode-at", "percentDecode: at is outside out"],
+    ["panic-start-window", "urlQueryStart: the window is outside the array"],
+    ["panic-segments-window", "UrlPathSegments: the window is outside the array"],
+    ["panic-decode-negative-len", "percentDecode: the window is outside the array"],
+    ["panic-decode-negative-at", "percentDecode: at is outside out"],
+  ]) {
+    const entry = path.join(urlDir, `${file}.ts`)
+    const fromNode = runUnderPrelude(entry, [])
+    check(
+      `link/std_url: ${file}.ts under the Node prelude exits 1 with "${message}"`,
+      fromNode.status === 1 && fromNode.stdout === "" && fromNode.stderr === `${message}\n`,
+      shown(fromNode)
+    )
+    if (HAS_CLANG) {
+      const outDir = path.join(buildDir, `std_url_${file}`) + path.sep
+      const exe = path.join(outDir, "app")
+      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+      const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+      check(
+        `link/std_url: ${file}.ts built natively exits 1 with "${message}"`,
+        native.status === 1 && native.stdout === "" && native.stderr === `${message}\n`,
+        shown(native)
+      )
+    } else {
+      skip(`skipped: link/std_url: no clang, so ${file}.ts is not built natively`)
+    }
+  }
+  const fuzzEntry = path.join(urlDir, "fuzz.ts")
+  const fuzzNode = runUnderPrelude(fuzzEntry, [], "main", { maxBuffer: 1 << 24 })
+  const fromNode = urlFuzzVerdict(fuzzNode.stdout ?? "")
+  check(
+    "link/std_url: 3,000 seeded inputs under Node decode as decodeURIComponent, URLSearchParams and the strict rule say",
+    fuzzNode.status === 0 && fromNode.cases === 3000 && fromNode.bad.length === 0,
+    `${fromNode.cases} cases\n${fromNode.bad.slice(0, 5).join("\n")}\n${shown({ ...fuzzNode, stdout: "" })}`
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_url_fuzz") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8", maxBuffer: 1 << 24 }) : built
+    const fromNative = urlFuzzVerdict(native.stdout ?? "")
+    check(
+      "link/std_url: the same 3,000 inputs, built natively, print the Node run's lines byte for byte",
+      native.status === 0 &&
+        fromNative.cases === 3000 &&
+        fromNative.bad.length === 0 &&
+        native.stdout === fuzzNode.stdout,
+      `${fromNative.cases} cases\n${fromNative.bad.slice(0, 5).join("\n")}\n${shown({ ...native, stdout: "" })}`
+    )
+  } else {
+    skip("skipped: link/std_url: no clang, so fuzz.ts is not built natively")
   }
 }
 
@@ -22077,6 +22177,187 @@ if (!only || "c-symbols".includes(only)) {
       }
     }
   }
+}
+
+// ---- #432: the `unsafe` capability, reported ----------------------------------------
+// A call to a `nish:unsafe` export carries `unsafe` (`builtinCapability`), and
+// the bit travels through callers, modules and packages like every other: here
+// read off `--emit-capabilities` for a direct call, a call two frames up, a
+// module with no unsafe call, each of the six exports, and a dependency that
+// imports `nish:unsafe` when the entry package does not. The deprecated
+// `--wrapping` and `--unchecked-indexing` carry no `unsafe`: each prints its
+// deprecation on every compile, on the command line that would pass the
+// policy too (docs/wp35-capabilities.md §1).
+if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
+  const unsafeDir = path.join(buildDir, "caps-unsafe")
+  fs.rmSync(unsafeDir, { recursive: true, force: true })
+  const program = {
+    "leaf.ts":
+      'import { uncheckedGet } from "nish:unsafe";\n\n' +
+      "export const first = (xs: i32[]): i32 => (xs.length > 0 ? uncheckedGet(xs, 0) : 0);\n",
+    "mid.ts":
+      'import { first } from "./leaf";\n\nexport const firstTwice = (xs: i32[]): i32 => first(xs) + first(xs);\n',
+    "pure.ts":
+      "export const sum = (xs: i32[]): i32 => {\n  let s = 0;\n  for (const x of xs) {\n    s = s + x;\n  }\n  return s;\n};\n",
+    "main.ts":
+      'import { firstTwice } from "./mid";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => firstTwice([3, 4]) + sum([1, 2]);\n",
+    "each.ts":
+      "import { readCString, uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from " +
+      '"nish:unsafe";\n\n' +
+      "declare function cbuf(): CPtr | null;\n\n" +
+      "export const get = (xs: i32[]): i32 => uncheckedGet(xs, 0);\n" +
+      "export const set = (xs: i32[]): void => {\n  uncheckedSet(xs, 0, 1);\n};\n" +
+      "export const add = (a: i32): i32 => wrappingAdd(a, 1);\n" +
+      "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
+      "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
+      'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+    "node_modules/pkg_fast/package.json":
+      '{ "name": "pkg_fast", "version": "1.0.0", "exports": { ".": { "nish": "./src/index.ts" } } }\n',
+    "node_modules/pkg_fast/src/index.ts":
+      'import { wrappingMul } from "nish:unsafe";\n\n' +
+      "const mix = (h: i32): i32 => wrappingMul(h, 31);\n\n" +
+      "export const hash = (xs: i32[]): i32 => {\n  let h = 7;\n  for (const x of xs) {\n    h = mix(h) ^ x;\n  }\n  return h;\n};\n",
+    "dep.ts":
+      'import { hash } from "pkg_fast";\nimport { sum } from "./pure";\n\n' +
+      "export const main = (): i32 => (hash([1, 2]) & 0) + sum([1]);\n",
+    "flags.ts":
+      "export const main = (): i32 => {\n  const xs: i32[] = [1, 2];\n  let i = 0;\n  i = i + 1;\n" +
+      "  return xs[i] * 2147483647;\n};\n",
+  }
+  for (const [file, text] of Object.entries(program)) {
+    fs.mkdirSync(path.dirname(path.join(unsafeDir, file)), { recursive: true })
+    fs.writeFileSync(path.join(unsafeDir, file), text)
+  }
+  /** Compile `entry` in the program's directory; the report parsed, or null with the run beside it. */
+  const unsafeReport = (entry, extra = []) => {
+    const stem = path.basename(entry, ".ts")
+    const json = path.join(unsafeDir, `${stem}.caps.json`)
+    const r = spawnSync(
+      NISH,
+      [
+        entry,
+        "-o",
+        `${path.join(unsafeDir, `${stem}.ir`)}${path.sep}`,
+        "--emit-capabilities",
+        json,
+        ...extra,
+      ],
+      { cwd: unsafeDir, encoding: "utf8" }
+    )
+    return {
+      r,
+      report: r.status === 0 && fs.existsSync(json) ? JSON.parse(fs.readFileSync(json, "utf8")) : null,
+    }
+  }
+  const moduleOf = (report, file) =>
+    report?.packages.flatMap((p) => p.modules).find((m) => m.path === file) ?? null
+  const fnOf = (report, file, name) => moduleOf(report, file)?.functions.find((f) => f.name === name) ?? null
+  const chainOf = (fn) => (fn?.witnesses.unsafe ?? []).map((w) => `${w.function}->${w.calls}`).join(" ")
+
+  const direct = unsafeReport("main.ts", ["--capabilities"])
+  check(
+    "capabilities: a direct `uncheckedGet` call carries `unsafe`, its witness the call itself",
+    JSON.stringify(fnOf(direct.report, "leaf.ts", "first")?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(direct.report, "leaf.ts", "first")) === "first->uncheckedGet",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` reaches a caller two frames up, with the whole chain as its witness",
+    chainOf(fnOf(direct.report, "main.ts", "main")) ===
+      "main->firstTwice firstTwice->first first->uncheckedGet" &&
+      JSON.stringify(moduleOf(direct.report, "mid.ts")?.capabilities) === '["unsafe"]' &&
+      JSON.stringify(direct.report?.capabilities) === '["unsafe"]',
+    shown(direct.r)
+  )
+  check(
+    "capabilities: a module with no `nish:unsafe` call carries no `unsafe`",
+    JSON.stringify(moduleOf(direct.report, "pure.ts")?.capabilities) === "[]",
+    shown(direct.r)
+  )
+  check(
+    "capabilities: `unsafe` keeps a program deterministic, and `--capabilities` names it",
+    direct.report?.deterministic === true && direct.r.stderr.includes("capabilities: unsafe (deterministic)"),
+    shown(direct.r)
+  )
+
+  const each = unsafeReport("each.ts")
+  const exportsSeen = [
+    ["get", "uncheckedGet"],
+    ["set", "uncheckedSet"],
+    ["add", "wrappingAdd"],
+    ["sub", "wrappingSub"],
+    ["mul", "wrappingMul"],
+    ["str", "readCString"],
+  ].filter(([fn, callee]) => chainOf(fnOf(each.report, "each.ts", fn)) === `${fn}->${callee}`)
+  check(
+    "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call",
+    exportsSeen.length === 6,
+    `${exportsSeen.map(([, callee]) => callee).join(", ")}\n${shown(each.r)}`
+  )
+
+  const dep = unsafeReport("dep.ts")
+  const depPackage = dep.report?.packages.find((p) => p.name === "pkg_fast")
+  check(
+    "capabilities: a dependency that imports `nish:unsafe` gives `unsafe` to its package and to the entry that calls it",
+    JSON.stringify(depPackage?.capabilities) === '["unsafe"]' &&
+      chainOf(fnOf(dep.report, "dep.ts", "main")) === "main->hash hash->mix mix->wrappingMul" &&
+      JSON.stringify(moduleOf(dep.report, "pure.ts")?.capabilities) === "[]",
+    shown(dep.r)
+  )
+  const depDenied = spawnSync(
+    NISH,
+    ["dep.ts", "-o", `${path.join(unsafeDir, "dep-denied.ir")}${path.sep}`, "--deny", "unsafe"],
+    { cwd: unsafeDir, encoding: "utf8" }
+  )
+  check(
+    "capabilities: `--deny unsafe` refuses an `unsafe` reached only through a dependency, naming the chain into it",
+    depDenied.status === 1 &&
+      depDenied.stderr.includes("`main` reaches `unsafe`, which the capability policy does not grant") &&
+      depDenied.stderr.includes("node_modules/pkg_fast/src/index.ts:3:30 calls wrappingMul"),
+    shown(depDenied)
+  )
+
+  const flags = unsafeReport("flags.ts", ["--wrapping", "--unchecked-indexing", "--deny", "unsafe"])
+  check(
+    "capabilities: `--wrapping` and `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them",
+    flags.r.status === 0 &&
+      JSON.stringify(flags.report?.capabilities) === "[]" &&
+      flags.r.stderr.includes("--wrapping is deprecated") &&
+      flags.r.stderr.includes("--unchecked-indexing is deprecated"),
+    shown(flags.r)
+  )
+}
+
+// ---- #740: a constructor's prologue writes `this` ------------------------------------
+// The field initialisers are stored outside the written body, so an empty
+// constructor's `this` is written, while a method that only reads it, and an
+// empty constructor with nothing to store, keep `readonly`. The golden pins the
+// whole text; these name the three attributes the fix is about.
+if (!only || "ctor_empty_init".includes(only) || "codegen".includes(only)) {
+  const ll = fs.readFileSync(path.join(casesDir, "ctor_empty_init_basic.ll"), "utf8")
+  const thisOf = (fn) => {
+    const line = ll.split("\n").find((l) => l.startsWith("define ") && l.includes(`@${fn}(`))
+    return line === undefined ? null : line.slice(line.indexOf("("), line.indexOf("%this"))
+  }
+  const ctor = thisOf("Dn.constructor")
+  check(
+    "#740: an empty constructor with field initialisers does not mark `this` readonly",
+    ctor !== null && !ctor.includes("readonly"),
+    ctor
+  )
+  const method = thisOf("Dn.scaled")
+  check(
+    "#740: a method that only reads `this` keeps it readonly",
+    method !== null && method.includes("readonly"),
+    method
+  )
+  const bare = thisOf("Bare.constructor")
+  check(
+    "#740: an empty constructor with no initialiser keeps `this` readonly",
+    bare !== null && bare.includes("readonly"),
+    bare
+  )
 }
 
 summarise()
