@@ -889,6 +889,34 @@ A missed condition is recorded as missed. Condition 1 is about instructions
 and decides whether the inversion was replaced; 3 and 4 are about time and say
 what it bought.
 
+#### K5: P-256, the inversion — the result
+
+Work in progress: the profile is in; the timings are running.
+
+`main` at `2a5912d`, after #780 replaced the Fermat `p256ScalarInvert` in the
+signature with the safegcd `p256ScalarInverse`. Profiled as the baseline was:
+Valgrind 3.22.0 Callgrind on `serve --www`, zeroed once the server printed its
+ports, dumped after each of three `curl --http2 --tlsv1.3 -k` GETs. Every
+handshake negotiated TLSv1.3, `TLS_AES_256_GCM_SHA384`, X25519, an
+`id-ecPublicKey` certificate and ALPN `h2`. `c8a00d6` and `a22a056` were
+re-profiled the same way; `c8a00d6` reproduces the baseline's 3,208,106 Ir of
+P-256.
+
+| Module | `main` Ir | Share | `c8a00d6` Ir | Share |
+| --- | ---: | ---: | ---: | ---: |
+| `std/crypto/p256.ts` | 2,465,340 | 34.2% | 3,208,106 | 40.5% |
+| `std/crypto/x25519.ts` | 3,147,968 | 43.7% | 3,147,968 | 39.7% |
+| `std/crypto/sha512.ts` | 656,810 | 9.1% | 655,579 | 8.3% |
+| `std/net/tls*` | 103,393 | 1.4% | 100,085 | 1.3% |
+| HMAC and HKDF | 43,094 | 0.6% | 42,422 | 0.5% |
+| AEAD | 30,926 | 0.4% | 30,766 | 0.4% |
+| Everything else | 763,294 | 10.6% | 739,329 | 9.3% |
+| The handshake | 7,210,825 | | 7,924,255 | |
+
+`p256ScalarInverse` is 33,620 Ir inclusive in the second and third handshakes
+(34,057 in the first), against `p256ScalarInvert`'s 776,344 on `c8a00d6`.
+Timings and the bar's verdicts follow.
+
 ## 6. Decisions for the owner
 
 | | Question | Recommendation |
