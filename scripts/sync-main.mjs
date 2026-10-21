@@ -115,6 +115,9 @@ if (real.length > 0) {
   )
 }
 
+// The index as the merge left it, so the stat below shows what regeneration
+// moved rather than everything `main` brought in.
+const merged = git("write-tree").trim()
 for (const [script, ...args] of GENERATORS) {
   process.stdout.write(`sync-main: node ${script} ${args.join(" ")}\n`)
   const r = run(process.execPath, [script, ...args])
@@ -130,8 +133,8 @@ for (const [script, ...args] of GENERATORS) {
 }
 
 git("add", "-A", "--", ...GENERATED)
-const stat = git("diff", "--cached", "--stat", "--", ...GENERATED)
-process.stdout.write(stat.length > 0 ? stat : "sync-main: the goldens did not move\n")
+const stat = git("diff", "--cached", "--stat", merged, "--", ...GENERATED)
+process.stdout.write(stat.length > 0 ? stat : "sync-main: regeneration moved no golden\n")
 if (merging()) {
   process.stdout.write("\nRead the staged diff, then finish the merge: git commit --no-edit\n")
 } else if (stat.length > 0) {
