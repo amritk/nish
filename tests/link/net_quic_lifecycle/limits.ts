@@ -25,6 +25,7 @@ import { n32, n64 } from "../net_quic_frame/typed";
 import { CLIENT_SCID, QcClient, qcConnect, qcCrypto, qcHello, qcInitial, qcParams, qcShortWith } from "../net_quic_conn/client";
 import { qcConnected, qcDefaultConfig, qcServer } from "../net_quic_conn/common";
 import { qcStream } from "../net_quic_conn/data";
+import { fixedEntropy } from "../net_quic_conn_replay/server";
 import { lcCloseIn } from "./common";
 import { LcGeneration, LcOpened, lcAck, lcNext, lcOpen, lcSend } from "./keys";
 
@@ -214,6 +215,75 @@ const llSkipLaterRange = (t: Suite): void => {
   );
 };
 
+/**
+ * The ring holds more than the last skip: two numbers skipped on one
+ * connection, `a` and `b = a + 2`, and an ACK that takes in only the older,
+ * `a`, is still refused.
+ */
+const llSkipRing = (t: Suite): void => {
+  const conn: QuicConnection = qcServer(qcDefaultConfig());
+  const c: QcClient = llOpen(conn);
+  const read0 = new LcGeneration(c.appRead, c.appReadSecret, false);
+  const write0 = new LcGeneration(c.appWrite, c.appWriteSecret, false);
+  const a: i64 = conn.application.nextPn;
+  conn.nextSkip = a;
+  const first: LcOpened = lcOpen(c, read0, llTake(conn, c, "a"));
+  const b: i64 = conn.application.nextPn;
+  conn.nextSkip = b;
+  const second: LcOpened = lcOpen(c, read0, llTake(conn, c, "b"));
+  const honest: u8[] = [];
+  quicPushAck(honest, [second.pn, second.pn, first.pn, first.pn], n32(2), n64(0));
+  lcSend(conn, c, write0, c.appPn, honest);
+  t.ok(
+    "two numbers skipped on one connection are both remembered, and an ACK of the packets around them is read",
+    b === a + n64(2) && first.pn === a + n64(1) && second.pn === a + n64(3) && conn.skipHead === 2 && conn.state === QUIC_STATE_CONNECTED
+  );
+  const lying: u8[] = [];
+  quicPushAck(lying, [second.pn, second.pn, a - n64(1), first.pn], n32(2), n64(0));
+  lcSend(conn, c, write0, c.appPn, lying);
+  t.eqStr(
+    "an ACK that takes in the older skipped number and not the newer is PROTOCOL_VIOLATION",
+    `${conn.state === QUIC_STATE_CLOSING} ${lcCloseIn([lcOpen(c, read0, conn.takeDatagram(c.now)).payload])}`,
+    `true ${QUIC_ERROR_PROTOCOL_VIOLATION} 2`
+  );
+};
+
+/**
+ * A reused slot (QUIC-3) starts its next connection with none of the last
+ * one's skips, counts or lowered limits: the next client's ACK of the
+ * number the last connection skipped is read.
+ */
+const llSlotReset = (t: Suite): void => {
+  const conn: QuicConnection = qcServer(qcDefaultConfig());
+  const c: QcClient = llOpen(conn);
+  conn.integrityLimit = n64(4);
+  conn.confidentialityLimit = n64(1000);
+  const skip: i64 = conn.application.nextPn;
+  conn.nextSkip = skip;
+  const opened: LcOpened = lcOpen(c, new LcGeneration(c.appRead, c.appReadSecret, false), llTake(conn, c, "a"));
+  conn.receive(llUnauthentic(c, c.appPn), c.now);
+  const before: boolean = opened.pn === skip + n64(1) && conn.authFailures === toI64(1) && conn.sealedUnderKey > toI64(0) && conn.skipHead === 1;
+  conn.reset(fixedEntropy());
+  t.ok(
+    "reset forgets the skipped numbers and zeroes the counts, and the limits are AES-GCM's again",
+    before &&
+      conn.authFailures === toI64(0) &&
+      conn.sealedUnderKey === toI64(0) &&
+      conn.nextSkip === toI64(-1) &&
+      conn.skipsDrawn === toI64(0) &&
+      conn.skipHead === 0 &&
+      conn.confidentialityLimit === QUIC_CONN_CONFIDENTIALITY_LIMIT &&
+      conn.integrityLimit === QUIC_CONN_INTEGRITY_LIMIT_GCM
+  );
+  const d: QcClient = llOpen(conn);
+  const again: LcOpened = lcOpen(d, new LcGeneration(d.appRead, d.appReadSecret, false), llTake(conn, d, "b"));
+  lcSend(conn, d, new LcGeneration(d.appWrite, d.appWriteSecret, false), d.appPn, llAckRange(n64(0), again.pn));
+  t.ok(
+    "on the reused slot the next connection sends the number the last one skipped, and an ACK of it is read",
+    again.ok && again.pn === skip && conn.skipsDrawn === toI64(1) && conn.state === QUIC_STATE_CONNECTED
+  );
+};
+
 /** Every AEAD-limit and skipped-packet-number check. */
 export const limitChecks = (t: Suite): void => {
   llSuiteLimits(t);
@@ -221,4 +291,6 @@ export const limitChecks = (t: Suite): void => {
   llIntegrity(t);
   llSkips(t);
   llSkipLaterRange(t);
+  llSkipRing(t);
+  llSlotReset(t);
 };
