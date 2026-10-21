@@ -1533,6 +1533,27 @@ The context reaches a nested literal and a `null`, and stops there: a numeric
 literal in a property keeps the mode's default type (above), and `[]` has no
 element type at all in that position.
 
+A class with methods is made only by `new`: a literal typed as one would be a
+plain object under Node, without the methods (NL2556). A class with fields
+alone, and an interface, still take a literal.
+
+```ts nish:err NL2556
+class Counter {
+  n: i32;
+  constructor(n: i32) {
+    this.n = n;
+  }
+  get(): i32 {
+    return this.n;
+  }
+}
+
+export const main = (): i32 => {
+  const c: Counter = { n: 5 }; // write `new Counter(5)`
+  return c.get();
+};
+```
+
 ### Type aliases and enums
 
 ```ts nish:ok
@@ -2061,7 +2082,8 @@ the port big-endian); hosts are numeric literals, because there is no DNS.
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
-spreads the connections; any other bit is `-22`). UDP is
+spreads the connections), and flag 2 `TCP_NODELAY` on every socket `tcpAccept`
+takes from it; flags add, and any other bit is `-22`. UDP is
 `udpBind(host, port, flags)` (flag 1 `SO_REUSEPORT`, flag 2 GRO),
 `udpSendTo(fd, buf, off, len, to, segment, ecn)` and
 `udpRecvFrom(fd, buf, off, len, from, meta)`: a `segment` above 0 sends one
