@@ -143,7 +143,12 @@ const certificateVerifies = (session: Session, flight: u8[]): boolean => {
     transcriptHash(H, cat([session.transcript, messages[0], certificate])),
   ])
   // CertificateVerify: header 4, scheme 2, length 2, then the DER signature.
-  const rs: u8[] | null = x509DerSignatureRS(range(messages[2], 8, toI32(messages[2].length)))
+  // The scheme is ecdsa_secp256r1_sha256 (0x0403), as every twin's client requires.
+  const verify: u8[] = messages[2]
+  if (toI32(verify.length) < 8 || toI32(verify[4]) !== 0x04 || toI32(verify[5]) !== 0x03) {
+    return false
+  }
+  const rs: u8[] | null = x509DerSignatureRS(range(verify, 8, toI32(verify.length)))
   return rs !== null && p256VerifySha256(leaf.publicKey, content, rs)
 }
 

@@ -86,8 +86,9 @@ impl ServerCertVerifier for NoChain {
     }
 }
 
-// Both sides pinned to TLS 1.3, TLS_AES_128_GCM_SHA256 and X25519, with no tickets.
-fn configs(alpn: &[u8]) -> (Arc<rustls::ServerConfig>, Arc<rustls::ClientConfig>) {
+// Both sides pinned to TLS 1.3, TLS_AES_128_GCM_SHA256 and X25519, with no
+// tickets, offering `alpn`: none on tls13, as no other twin offers one there.
+fn configs(alpn: &[&[u8]]) -> (Arc<rustls::ServerConfig>, Arc<rustls::ClientConfig>) {
     let provider = Arc::new(CryptoProvider {
         cipher_suites: vec![ring::cipher_suite::TLS13_AES_128_GCM_SHA256],
         kx_groups: vec![ring::kx_group::X25519],
@@ -99,14 +100,14 @@ fn configs(alpn: &[u8]) -> (Arc<rustls::ServerConfig>, Arc<rustls::ClientConfig>
         .and_then(|b| b.with_no_client_auth().with_single_cert(vec![CertificateDer::from(unhex(LEAF_CERTIFICATE))], key))
         .unwrap_or_else(|_| fail("loading the leaf"));
     server.send_tls13_tickets = 0;
-    server.alpn_protocols = vec![alpn.to_vec()];
+    server.alpn_protocols = alpn.iter().map(|a| a.to_vec()).collect();
     let mut client = rustls::ClientConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(&[&rustls::version::TLS13])
         .unwrap_or_else(|_| fail("configuring the client"))
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(NoChain(provider.signature_verification_algorithms)))
         .with_no_client_auth();
-    client.alpn_protocols = vec![alpn.to_vec()];
+    client.alpn_protocols = alpn.iter().map(|a| a.to_vec()).collect();
     (Arc::new(server), Arc::new(client))
 }
 
@@ -300,7 +301,8 @@ fn main() {
         eprintln!("rust: the size is at least 4 bytes");
         std::process::exit(2);
     }
-    let (server, client) = configs(b"nish-echo");
+    let alpn: &[&[u8]] = if kernel == "quic" { &[b"nish-echo"] } else { &[] };
+    let (server, client) = configs(alpn);
     let quic_server = Arc::new(ServerConfig::with_crypto(Arc::new(
         QuicServerConfig::try_from(server.clone()).unwrap_or_else(|_| fail("the QUIC server config")),
     )));

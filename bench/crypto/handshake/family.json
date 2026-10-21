@@ -7,7 +7,7 @@
   "twins": {
     "openssl": {
       "portable": "OpenSSL's P-256 and X25519 assembly runs whatever OPENSSL_ia32cap says: masking every bit it reads moves a handshake by under 10% (README.md), so no mask makes a column that proves anything",
-      "lacks": { "quic": "OpenSSL 3.0 has no QUIC server" }
+      "lacks": { "quic": "This twin drives OpenSSL 3.0's libssl, which has no QUIC server (that came in 3.5)" }
     },
     "go": { "portable": { "tags": ["purego"] } },
     "rust": {

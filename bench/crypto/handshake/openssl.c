@@ -5,7 +5,8 @@
  * SSL joined by a BIO pair, in memory, then sends the message and reads it
  * back. The contexts, the certificate and the key are loaded once, before the
  * clock starts; the SSL objects are new every iteration, so no session is
- * resumed. OpenSSL 3.0 has no QUIC server, so the quic kernel is absent.
+ * resumed. OpenSSL 3.0 has no QUIC server (that came in 3.5), so the quic kernel
+ * is absent.
  */
 #include <openssl/err.h>
 #include <openssl/obj_mac.h>

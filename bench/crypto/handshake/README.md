@@ -14,9 +14,12 @@ and the `family.json` schema.
 
 So every iteration folds `13 01 00 1d` followed by the echoed message. As in
 every family, iteration `i` XORs `i` into the first four message bytes, so
-the echo changes on every iteration and a twin that skipped the exchange
-would fold the wrong bytes. The unit is op/s: one op is one handshake plus its
-echo.
+the echo changes on every iteration and no optimiser can hoist the exchange
+out of the loop. The checksum alone does not prove a handshake ran: the folded
+bytes are known in advance, and Go and quinn fold the suite and group as
+constants (below). What proves it is each program's own code, which fails with
+exit 1 when a handshake or the echo does not complete. The unit is op/s: one
+op is one handshake plus its echo.
 
 The family runs at one size, 32 bytes, about the size of a small request. A
 handshake's cost hardly depends on it. `validateSize` is 4, the smallest legal
@@ -35,7 +38,7 @@ against the leaf's key. The server sends no session tickets, except Node's
 | File | Twin | tls13 | quic |
 | --- | --- | --- | --- |
 | `main.ts` | Nish | The server is `TlsRecordServer` from `nish/net/tls/record-server`. The client is tests/link's (below). | The server is `QuicConnection` from `nish/net/quic`. The client is tests/link's. |
-| `openssl.c` | OpenSSL 3 | Two `SSL`s over `BIO_new_bio_pair`, in memory. The contexts are built once; the `SSL`s are new each iteration. | — OpenSSL 3.0 has no QUIC server. |
+| `openssl.c` | OpenSSL 3 | Two `SSL`s over `BIO_new_bio_pair`, in memory. The contexts are built once; the `SSL`s are new each iteration. | — OpenSSL 3.0 has no QUIC server; that came in 3.5. |
 | `go/` | Go | `crypto/tls` over `net.Pipe`. | quic-go v0.59.0 over a pair of in-memory `net.PacketConn`s, with one `Transport` each, made once. |
 | `rust/` | rustls 0.23.46, ring provider | `ClientConnection` and `ServerConnection`, with the TLS bytes moved between them through buffers. | quinn-proto 0.11.19 (sans-I/O), with the datagrams handed from one `Endpoint` to the other. The endpoints are new each iteration. |
 | `node.mjs` | `node:tls` | `tls.connect` and a server `TLSSocket` over `stream.duplexPair`. | — Node has no stable QUIC. |
@@ -59,9 +62,26 @@ against the leaf parsed out of the server's Certificate, and the echo. Nothing
 is copied, so no source comment names an origin.
 
 Those tests use fixed randoms and fixed X25519 private keys: RFC 7748 §6.1's
-Alice for the client, and a constant for the server. Every Nish handshake
-still computes both public shares and both shared secrets. It skips only the
-draw from the RNG that every twin makes.
+Alice for the client, and Bob for the server. QUIC's connection IDs come from
+fixed entropy too. Every Nish handshake still computes both public shares,
+both shared secrets, the signature and its check. It skips the draw from the
+RNG that every twin makes, and its handshakes are byte-identical from one
+iteration to the next: nothing in `std/net` caches one today, but a cache
+keyed on the hello would make this column time nothing, and the checksum would
+not show it.
+
+### Per-iteration setup and teardown
+
+The twins keep the certificate and the key parsed across iterations. Nish's
+server takes its configuration from tests/link's helpers (`tcpConfig`,
+`qcDefaultConfig`), which decode the leaf's hex each time they are called, so `main.ts` decodes a
+few hundred bytes of hex per handshake. That is microseconds against a Nish
+handshake's 2 to 3 milliseconds.
+
+Teardown differs too. Go's `quic` calls `CloseWithError`, which sends a
+CONNECTION_CLOSE that the server's goroutine processes. Rust's `quic` closes
+the connection but delivers nothing more. Nish's `quic` drops both sides. No
+`tls13` column sends a close_notify.
 
 ### What each twin reads back
 
