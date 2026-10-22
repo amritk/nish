@@ -1,0 +1,1 @@
+`(x) => ...` reads `self`, and can reach a `i32[]` through `self.tab`, which could be the array `parallelMapInto` is writing

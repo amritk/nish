@@ -1,0 +1,1 @@
+main.ts:30:3: error: `(x) => ...` reads `ts`, and can reach a `i32[]` through `ts[i]`, which could be the array `parallelMapInto` is writing
