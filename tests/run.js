@@ -49,6 +49,7 @@ import {
   HTTP1_TLS_SERVER_START_BYTES,
   HTTP2_TLS_SERVER_START_BYTES,
   HTTP3_SERVER_START_BYTES,
+  HTTP3_SERVER_SLOT_BYTES,
   RUNTIME_BUDGETS,
   TLS_TCP_START_BYTES,
 } from "./runtime-budgets.js"
@@ -6553,8 +6554,9 @@ for (const [unit, program, name, ceiling, ceilingName] of [
 // connection is its per-slot tables. `tests/link/net_http3_server/startup.ts`
 // builds a pool of 65,536 slots on no socket and prints the arena bytes it
 // took, which the ceiling `HTTP3_SERVER_START_BYTES` in
-// `tests/runtime-budgets.js` holds, and whether they fit in one chunk, without
-// which `Arena.used()` measures nothing.
+// `tests/runtime-budgets.js` holds, then what the one slot `connection(0)`
+// builds took, which must equal `HTTP3_SERVER_SLOT_BYTES` exactly, and whether
+// they fit in one chunk, without which `Arena.used()` measures nothing.
 if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only)) {
   const dir = path.join(buildDir, "link", "net_http3_server.startup")
   fs.rmSync(dir, { recursive: true, force: true })
@@ -6567,11 +6569,16 @@ if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only
   )
   if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
     const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
-    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    const [bytes, slot, chunk] = String(run.stdout).trim().split(" ")
     check(
       "net_http3_server: a 65,536-slot Http3Server takes at most HTTP3_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP3_SERVER_START_BYTES,
       `ceiling ${HTTP3_SERVER_START_BYTES}\n${shown(run)}`
+    )
+    check(
+      "net_http3_server: building one Http3Server slot takes exactly HTTP3_SERVER_SLOT_BYTES",
+      run.status === 0 && chunk === "yes" && Number(slot) === HTTP3_SERVER_SLOT_BYTES,
+      `expected ${HTTP3_SERVER_SLOT_BYTES}\n${shown(run)}`
     )
   }
 }

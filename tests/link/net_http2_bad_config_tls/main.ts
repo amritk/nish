@@ -8,8 +8,9 @@
 //
 //     Http2Connection: maxFrameSize of 1024, outside 16384 to 16777215
 //
-// and exits 1, with no socket to accept on. The link harness compares stdout
-// and the exit code only, so the message is named here rather than pinned.
+// and exits 1, with no socket to accept on. `expected.stderr` pins that
+// message, so the panic is `Http2Connection`'s check on the cap, raised by the
+// constructor building slot 0, and not a later step's.
 import { Http2Config } from "nish/net/http2";
 import { H2_ALPN, Http2TlsServer } from "nish/net/http2-tls";
 import { tcpConfig } from "../net_tls_common/server";

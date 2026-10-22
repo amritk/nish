@@ -669,8 +669,10 @@ const leanHandshake = (l: Lean, limits: H3Limits, m: QmMeter): boolean => {
 /**
  * What building a slot costs, read across chunks with `QmMeter` over the
  * server's own calls only: the first Initial into a slot never built keeps
- * arena memory, the slot's connections and address (111,424 bytes on this
- * configuration, `startup.ts`); one into a slot released and kept keeps
+ * arena memory, the slot's connections and address (exactly
+ * `HTTP3_SERVER_SLOT_BYTES`, which `tests/run.js` pins from `startup.ts`;
+ * `QmMeter` undercounts past two chunks, so here it is only `> 0`); one
+ * into a slot released and kept keeps
  * none, so a re-accept builds nothing; and the next slot past the mark
  * costs again.
  */
