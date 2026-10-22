@@ -72,6 +72,7 @@ import {
   N_EMPTY,
   N_EXPR_STMT,
   N_CLASS,
+  N_CONSTRUCTOR,
   N_FIELD,
   FLAG_COMPUTED,
   FLAG_CONST,
@@ -1427,6 +1428,161 @@ const knownApart = (captured: Local, dst: Local | null): boolean => {
   return (isFreshConst(captured) && (isFreshConst(dst) || dstParam)) || (isFreshConst(dst) && capturedParam)
 }
 
+/** Whether `inner` lies within `outer`'s source span. */
+const dstSpans = (outer: Node, inner: Node): boolean => outer.start <= inner.start && inner.end <= outer.end
+
+/**
+ * The innermost function this module defines whose declaration holds `node`:
+ * the body a call is written in, which is where its destination is declared.
+ * `program.functions` also lists what the module imports, whose spans are
+ * offsets in another file and whose node ids collide with this module's, so
+ * a function of another file could hold the call's offset and name a binding
+ * whose id is `dst`'s; only functions defined here are candidates. The body
+ * found is then a tree of this module's source, whose ids index `nodeLocals`.
+ */
+const dstHostDecl = (program: CheckedProgram, node: Node): Node | null => {
+  let best: Node | null = null
+  for (const fn of program.functions) {
+    const decl = fn.decl
+    if (fn.definedIn(program.source) && dstSpans(decl, node) && (best === null || dstSpans(best, decl))) {
+      best = decl
+    }
+  }
+  return best
+}
+
+/** Every `N_VAR_DECL` and `N_PARAM` under `node` that binds `name`. */
+const dstBindings = (node: Node, name: string, out: Node[]): void => {
+  if (
+    (node.kind === N_VAR_DECL || node.kind === N_PARAM) &&
+    node.children[0].kind === N_IDENT &&
+    node.children[0].text === name
+  ) {
+    out.push(node)
+  }
+  for (const child of node.children) {
+    dstBindings(child, name, out)
+  }
+}
+
+/**
+ * Whether a use of `name` under `node` hands the array on — anything but the
+ * base of an index or a member, the iterable of a `for...of`, its own
+ * declaration or `skip` (the call's `dst`) — at a point a call ending at
+ * `before` comes after: earlier in the source, inside `loop` (a loop around
+ * the call that the declaration is not in, whose next pass comes after a use
+ * later in it), or in a function other than an arrow, which may run whenever
+ * it is called. The parser refuses a function, method or class written
+ * inside a function body, so no program reaches that last case yet; it holds
+ * the rule the day one can. Every name spelled `name` counts, which can only
+ * refuse more.
+ */
+const dstHandedOn = (
+  node: Node,
+  parent: Node | null,
+  name: string,
+  skip: Node,
+  before: i32,
+  loop: Node | null,
+  nested: boolean
+): boolean => {
+  if (node.kind === N_IDENT && node.text === name && node !== skip && parent !== null) {
+    const base =
+      ((parent.kind === N_INDEX || parent.kind === N_MEMBER) && parent.children[0] === node) ||
+      (parent.kind === N_FOR_OF && parent.children[1] === node) ||
+      ((parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === node)
+    if (!base && (nested || node.start < before || (loop !== null && dstSpans(loop, node)))) {
+      return true
+    }
+  }
+  const inner =
+    nested ||
+    (parent !== null &&
+      (node.kind === N_FUNCTION ||
+        node.kind === N_METHOD ||
+        node.kind === N_CONSTRUCTOR ||
+        node.kind === N_CLASS))
+  for (const child of node.children) {
+    if (dstHandedOn(child, node, name, skip, before, loop, inner)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The outermost loop under `node` around `call` whose span leaves out `decl`, or `null`. */
+const dstLoopAround = (node: Node, call: Node, decl: Node): Node | null => {
+  if (node === call || !dstSpans(node, call)) {
+    return null
+  }
+  if (
+    (node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO) &&
+    !dstSpans(node, decl)
+  ) {
+    return node
+  }
+  for (const child of node.children) {
+    const found = dstLoopAround(child, call, decl)
+    if (found !== null) {
+      return found
+    }
+  }
+  return null
+}
+
+/**
+ * #612: whether `dst`, the destination of `call`, is a fresh `const` that
+ * nothing can have reached by the time the call runs. It is declared once in
+ * the function that makes the call, and no use of it before the call — nor
+ * one later in a loop around the call, nor one in a nested function — stores
+ * it, passes it, returns it, aliases it, captures it or puts it in a literal.
+ * Its array was then made by its declaration and held by that name alone, so
+ * nothing a capture reaches can be it.
+ */
+const dstUnsharedAt = (program: CheckedProgram, call: Node, dst: Local): boolean => {
+  const body = dstHostDecl(program, call)
+  // No test reaches these: every statement is in a function (field
+  // initialisers are literals), and `recordParallelCall` records a `dst` only
+  // for an `N_CALL` with one.
+  if (body === null || call.kind !== N_CALL || call.children[1].children.length < 2) {
+    return false
+  }
+  const bindings: Node[] = []
+  dstBindings(body, dst.name, bindings)
+  const decl: Node | null = bindings.length === 1 ? bindings[0] : null
+  const declared: Local | null = decl === null ? null : program.nodeLocals[decl.id]
+  // The host is a function of the call's own module, so its one binding of
+  // `dst.name` is a node of this file; `declared === dst` ties that node to
+  // `dst` itself, and a table holding another `Local` there refuses the call,
+  // never admits it. A binding after the call is a different one.
+  if (decl === null || declared === null || declared !== dst || decl.start > call.start) {
+    return false
+  }
+  const skip = unwrapParens(call.children[1].children[1])
+  return !dstHandedOn(body, null, dst.name, skip, call.end, dstLoopAround(body, call, decl), false)
+}
+
+/**
+ * Whether every call of `sig` that writes `dst` finds it unshared
+ * (`dstUnsharedAt`): the destination is then apart from every capture of the body.
+ */
+const dstUnshared = (program: CheckedProgram, sig: FunctionSig, dst: Local | null): boolean => {
+  if (dst === null || !isFreshConst(dst)) {
+    return false
+  }
+  let found = false
+  for (const call of program.parallelCalls) {
+    const held = call.dst
+    if (call.sig === sig && held !== null && held === dst) {
+      if (!dstUnsharedAt(program, call.node, dst)) {
+        return false
+      }
+      found = true
+    }
+  }
+  return found
+}
+
 /**
  * A captured value through which the body could read `dst` while another
  * thread writes it: the capture's form of `reachesDstMessage`. A capture is a
@@ -1448,12 +1604,21 @@ export const captureReachesDstMessage = (
     return ""
   }
   const target = instance.typeArgs[1]
+  // Asked once, and only of a call whose capture would otherwise be refused.
+  let unshared = -1
   for (const captured of fn.captures) {
     const path = reachingPath(table, program, captured.type, target, captured.name, new StringSet())
     if (path.length === 0) {
       continue
     }
     if (path === captured.name && knownApart(captured, dstLocal)) {
+      continue
+    }
+    if (unshared < 0) {
+      unshared = dstUnshared(program, sig, dstLocal) ? 1 : 0
+    }
+    const source = sourceLocal(captured)
+    if (unshared === 1 && dstLocal !== null && source !== null && source !== dstLocal) {
       continue
     }
     return (

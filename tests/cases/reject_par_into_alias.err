@@ -1,0 +1,1 @@
+`(x) => ...` reads `e`, and can reach a `i32[]` through `e`, which could be the array `parallelMapInto` is writing

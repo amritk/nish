@@ -435,7 +435,13 @@ export class Http3Server {
   date: HttpDate
   index: Http3CidIndex
   wheel: Http3Wheel
-  /** Each slot's client address, as its first datagram came from. */
+  /**
+   * Each slot's client address, as its first datagram came from. Not
+   * validated until `quic(slot).addressValidated` is set (RFC 9000 §8.1): a
+   * Retry token the listener checked, with `retry` on, or a Handshake packet
+   * from the client. Before then it is the source of one UDP datagram, which
+   * anyone can forge, so a cap or an allow-list keyed on it waits for that.
+   */
   addresses: u8[][]
   /** What `receive` reads into, and where `flush` writes a flight. */
   rx: u8[]
