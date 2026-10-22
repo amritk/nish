@@ -462,9 +462,13 @@ export const HTTP3_SERVER_START_BYTES = 17501696
  * slot that costs a byte more or less fails, and this is moved with the change that
  * moved it.
  *
- * Measured **111,568 bytes** on 2026-10-22 with clang 18 on linux-x64.
+ * Measured **111,688 bytes** on 2026-10-22 with clang 18 on linux-x64. #474's ECN
+ * state added 120 of them: the four ECN counts of each of the three packet-number
+ * spaces (96), recovery's ECN state and the connection's `ecnMarking` and
+ * `datagramEcn` (24 with padding). Whether a packet was marked rides in its state
+ * byte, so the sent-packet rings grew by nothing.
  */
-export const HTTP3_SERVER_SLOT_BYTES = 111568
+export const HTTP3_SERVER_SLOT_BYTES = 111688
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

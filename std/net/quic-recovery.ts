@@ -137,6 +137,8 @@ const QUIC_RECOVERY_SENT: i32 = 1
 const QUIC_RECOVERY_ACKED: i32 = 2
 const QUIC_RECOVERY_LOST: i32 = 3
 const QUIC_RECOVERY_LOST_NOW: i32 = 4
+/** The bit of a slot's state byte that says its packet was sent marked ECT(0), kept beside the state so a slot costs no second byte. */
+const QUIC_RECOVERY_MARKED: i32 = 128
 
 /** The ECT(0) codepoint (RFC 3168), the only one this module asks a caller to mark with. */
 export const QUIC_RECOVERY_ECT0: i32 = 2
@@ -175,9 +177,8 @@ export class QuicSentPackets {
   /** When each packet was sent on the pacer's clock, in microseconds. */
   fineSent: i64[]
   size: i32[]
+  /** Each slot's state, with `QUIC_RECOVERY_MARKED` set if its packet was sent marked ECT(0). */
   state: u8[]
-  /** Whether each packet was sent marked ECT(0): 1 if it was. */
-  marked: u8[]
   /** The slots the last `onAck` acknowledged, `ackedCount` of them, oldest first. */
   acked: i32[]
   /** The slots the last `onAck` or `onTimeout` declared lost, `lostCount` of them, oldest first. */
@@ -213,7 +214,6 @@ export class QuicSentPackets {
     this.fineSent = new Array<i64>(capacity)
     this.size = new Array<i32>(capacity)
     this.state = new Array<u8>(capacity)
-    this.marked = new Array<u8>(capacity)
     this.acked = new Array<i32>(capacity)
     this.lost = new Array<i32>(capacity)
   }
@@ -228,13 +228,13 @@ export class QuicSentPackets {
     if (s < 0 || s >= toI32(this.state.length)) {
       return QUIC_RECOVERY_FREE
     }
-    return toI32(this.state[s])
+    return toI32(this.state[s]) & (QUIC_RECOVERY_MARKED - 1)
   }
 
   /** Sets slot `s`'s state. */
   setState(s: i32, value: i32): void {
     if (s >= 0 && s < toI32(this.state.length)) {
-      this.state[s] = toU8(value)
+      this.state[s] = toU8((toI32(this.state[s]) & QUIC_RECOVERY_MARKED) | value)
     }
   }
 
@@ -260,13 +260,13 @@ export class QuicSentPackets {
 
   /** Whether the packet in slot `s` was sent marked ECT(0). */
   markedAt(s: i32): boolean {
-    return s >= 0 && s < toI32(this.marked.length) && this.marked[s] !== toU8(0)
+    return s >= 0 && s < toI32(this.state.length) && (toI32(this.state[s]) & QUIC_RECOVERY_MARKED) !== 0
   }
 
   /** Sets whether the packet in slot `s` was sent marked ECT(0). */
   setMarked(s: i32, value: boolean): void {
-    if (s >= 0 && s < toI32(this.marked.length)) {
-      this.marked[s] = toU8(value ? 1 : 0)
+    if (s >= 0 && s < toI32(this.state.length)) {
+      this.state[s] = toU8(this.stateAt(s) | (value ? QUIC_RECOVERY_MARKED : 0))
     }
   }
 

@@ -2122,7 +2122,7 @@ function QuicConnection.packetsLost(this: QuicConnection, space: QuicConnSpace, 
   calls: nish.QuicConnection.requeue nish.QuicSentPackets.lostSlot
   pointer this: size=592 writesThrough=true captured=false passedTo=nish.QuicConnection.requeue#0
   pointer space: size=208 writesThrough=true captured=false passedTo=nish.QuicConnection.requeue#1
-  pointer sent: size=160 writesThrough=false captured=false passedTo=nish.QuicSentPackets.lostSlot#0
+  pointer sent: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.lostSlot#0
   stackSites=0 stackLocals=0
   local +0:14 k: i32 (let)
   callee +1:7 QuicConnection.requeue -> @nish.QuicConnection.requeue
@@ -7598,6 +7598,7 @@ const QUIC_RECOVERY_SENT: i32 = 1
 const QUIC_RECOVERY_ACKED: i32 = 2
 const QUIC_RECOVERY_LOST: i32 = 3
 const QUIC_RECOVERY_LOST_NOW: i32 = 4
+const QUIC_RECOVERY_MARKED: i32 = 128
 const QUIC_RECOVERY_ECT0: i32 = 2 [exported]
 const QUIC_RECOVERY_ECN_TESTING_PACKETS: i32 = 10 [exported]
 const QUIC_RECOVERY_ECN_TESTING: i32 = 0 [exported]
@@ -7606,30 +7607,29 @@ const QUIC_RECOVERY_ECN_CAPABLE: i32 = 2 [exported]
 const QUIC_RECOVERY_ECN_FAILED: i32 = 3 [exported]
 const QUIC_RECOVERY_MICROS: i64 = 1000
 const QUIC_RECOVERY_PACER_WINDOW: i64 = 4294967296
-struct QuicSentPackets (class) size=160 align=8 exported
+struct QuicSentPackets (class) size=152 align=8 exported
   field pn: i64[] index=0 offset=0
   field timeSent: i64[] index=1 offset=8
   field fineSent: i64[] index=2 offset=16
   field size: i32[] index=3 offset=24
   field state: u8[] index=4 offset=32
-  field marked: u8[] index=5 offset=40
-  field acked: i32[] index=6 offset=48
-  field lost: i32[] index=7 offset=56
-  field largestAcked: i64 index=8 offset=64 initialized
-  field lastPn: i64 index=9 offset=72 initialized
-  field lossTime: i64 index=10 offset=80 initialized
-  field lastAckEliciting: i64 index=11 offset=88 initialized
-  field bytesInFlight: i64 index=12 offset=96 initialized
-  field capacity: i32 index=13 offset=104 initialized
-  field head: i32 index=14 offset=108 initialized
-  field count: i32 index=15 offset=112 initialized
-  field inFlight: i32 index=16 offset=116 initialized
-  field ackedCount: i32 index=17 offset=120 initialized
-  field lostCount: i32 index=18 offset=124 initialized
-  field ectSent: i64 index=19 offset=128 initialized
-  field ect0: i64 index=20 offset=136 initialized
-  field ect1: i64 index=21 offset=144 initialized
-  field ce: i64 index=22 offset=152 initialized
+  field acked: i32[] index=5 offset=40
+  field lost: i32[] index=6 offset=48
+  field largestAcked: i64 index=7 offset=56 initialized
+  field lastPn: i64 index=8 offset=64 initialized
+  field lossTime: i64 index=9 offset=72 initialized
+  field lastAckEliciting: i64 index=10 offset=80 initialized
+  field bytesInFlight: i64 index=11 offset=88 initialized
+  field capacity: i32 index=12 offset=96 initialized
+  field head: i32 index=13 offset=100 initialized
+  field count: i32 index=14 offset=104 initialized
+  field inFlight: i32 index=15 offset=108 initialized
+  field ackedCount: i32 index=16 offset=112 initialized
+  field lostCount: i32 index=17 offset=116 initialized
+  field ectSent: i64 index=18 offset=120 initialized
+  field ect0: i64 index=19 offset=128 initialized
+  field ect1: i64 index=20 offset=136 initialized
+  field ce: i64 index=21 offset=144 initialized
   constructor -> @nish.QuicSentPackets.constructor
   method slot -> @nish.QuicSentPackets.slot
   method stateAt -> @nish.QuicSentPackets.stateAt
@@ -7721,98 +7721,100 @@ function QuicSentPackets.constructor(this: QuicSentPackets, capacity: i32): void
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: capacity
   calls: nish_panic
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=152 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.slot(this: QuicSentPackets, k: i32): i32 -> @nish.QuicSentPackets.slot [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div nish_panic_overflow
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.stateAt(this: QuicSentPackets, s: i32): i32 -> @nish.QuicSentPackets.stateAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.setState(this: QuicSentPackets, s: i32, value: i32): void -> @nish.QuicSentPackets.setState [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.pnAt(this: QuicSentPackets, s: i32): i64 -> @nish.QuicSentPackets.pnAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.timeAt(this: QuicSentPackets, s: i32): i64 -> @nish.QuicSentPackets.timeAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.fineAt(this: QuicSentPackets, s: i32): i64 -> @nish.QuicSentPackets.fineAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.sizeAt(this: QuicSentPackets, s: i32): i32 -> @nish.QuicSentPackets.sizeAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.markedAt(this: QuicSentPackets, s: i32): boolean -> @nish.QuicSentPackets.markedAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.setMarked(this: QuicSentPackets, s: i32, value: boolean): void -> @nish.QuicSentPackets.setMarked [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: s
-  pointer this: size=160 writesThrough=false captured=false
+  calls: nish.QuicSentPackets.stateAt
+  pointer this: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.stateAt#0
   stackSites=0 stackLocals=0
+  callee +0:28 QuicSentPackets.stateAt -> @nish.QuicSentPackets.stateAt
 function QuicSentPackets.ackedSlot(this: QuicSentPackets, k: i32): i32 -> @nish.QuicSentPackets.ackedSlot [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.lostSlot(this: QuicSentPackets, k: i32): i32 -> @nish.QuicSentPackets.lostSlot [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
-  pointer this: size=160 writesThrough=false captured=false
+  pointer this: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.inFlightAt(this: QuicSentPackets, s: i32): boolean -> @nish.QuicSentPackets.inFlightAt [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
   calls: nish.QuicSentPackets.stateAt
-  pointer this: size=160 writesThrough=false captured=false passedTo=nish.QuicSentPackets.stateAt#0
+  pointer this: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.stateAt#0
   stackSites=0 stackLocals=0
   callee +0:12 QuicSentPackets.stateAt -> @nish.QuicSentPackets.stateAt
 function QuicSentPackets.full(this: QuicSentPackets): boolean -> @nish.QuicSentPackets.full [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicSentPackets.compact
   calls: nish.QuicSentPackets.compact
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.compact#0
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.compact#0
   stackSites=0 stackLocals=0
   callee +0:5 QuicSentPackets.compact -> @nish.QuicSentPackets.compact
 function QuicSentPackets.compact(this: QuicSentPackets): void -> @nish.QuicSentPackets.compact [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.QuicSentPackets.setState nish.QuicSentPackets.stateAt nish_panic_div nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.setState#0
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.setState#0
   stackSites=0 stackLocals=0
   callee -2:30 QuicSentPackets.stateAt -> @nish.QuicSentPackets.stateAt
   callee -1:7 QuicSentPackets.setState -> @nish.QuicSentPackets.setState
 function QuicSentPackets.clearResults(this: QuicSentPackets): void -> @nish.QuicSentPackets.clearResults [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=160 writesThrough=true captured=false
+  pointer this: size=152 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function QuicSentPackets.settle(this: QuicSentPackets, s: i32, state: i32): void -> @nish.QuicSentPackets.settle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: s state
   calls: nish.QuicSentPackets.setState nish.QuicSentPackets.sizeAt nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.setState#0 nish.QuicSentPackets.sizeAt#0
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.setState#0 nish.QuicSentPackets.sizeAt#0
   stackSites=0 stackLocals=0
   callee -1:5 QuicSentPackets.setState -> @nish.QuicSentPackets.setState
   callee +1:53 QuicSentPackets.sizeAt -> @nish.QuicSentPackets.sizeAt
@@ -7821,14 +7823,14 @@ function QuicSentPackets.markLost(this: QuicSentPackets, s: i32): void -> @nish.
   sharedWrite: +0:7
   escaping: s
   calls: nish.QuicSentPackets.settle nish_panic_index nish_panic_overflow
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.settle#0
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.settle#0
   stackSites=0 stackLocals=0
   callee -2:5 QuicSentPackets.settle -> @nish.QuicSentPackets.settle
 function QuicSentPackets.clear(this: QuicSentPackets): void -> @nish.QuicSentPackets.clear [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.QuicSentPackets.clearResults
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.clearResults#0
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.clearResults#0
   stackSites=0 stackLocals=0
   local -1:14 s: i32 (let)
   callee +8:5 QuicSentPackets.clearResults -> @nish.QuicSentPackets.clearResults
@@ -7836,7 +7838,7 @@ function QuicSentPackets.reset(this: QuicSentPackets): void -> @nish.QuicSentPac
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.QuicSentPackets.clear
-  pointer this: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.clear#0
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.clear#0
   stackSites=0 stackLocals=0
   callee -1:5 QuicSentPackets.clear -> @nish.QuicSentPackets.clear
 function quicRecoveryInRanges(ranges: i64[], count: i32, pn: i64): boolean -> @nish.quicRecoveryInRanges
@@ -7976,7 +7978,7 @@ function QuicRecovery.processEcn(this: QuicRecovery, sp: QuicSentPackets, raised
   escaping: ce ect0 ect1 later now
   calls: nish.QuicRecovery.congestionEvent nish.QuicSentPackets.ackedSlot nish.QuicSentPackets.markedAt nish.QuicSentPackets.timeAt nish_panic_overflow
   pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicRecovery.congestionEvent#0
-  pointer sp: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.markedAt#0 nish.QuicSentPackets.ackedSlot#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.ackedSlot#0
+  pointer sp: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.markedAt#0 nish.QuicSentPackets.ackedSlot#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.ackedSlot#0
   stackSites=0 stackLocals=0
   local -9:9 marked: i64 (let)
   local -8:14 k: i32 (let)
@@ -8044,7 +8046,7 @@ function QuicRecovery.detectLoss(this: QuicRecovery, sp: QuicSentPackets, now: i
   sharedWrite: +0:5
   calls: nish.QuicRecovery.lossDelay nish.QuicSentPackets.markLost nish.QuicSentPackets.pnAt nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt nish.QuicSentPackets.timeAt nish_panic_overflow
   pointer this: size=152 writesThrough=false captured=false passedTo=nish.QuicRecovery.lossDelay#0
-  pointer sp: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.slot#0 nish.QuicSentPackets.pnAt#0 nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.markLost#0 nish.QuicSentPackets.timeAt#0
+  pointer sp: size=152 writesThrough=true captured=false passedTo=nish.QuicSentPackets.slot#0 nish.QuicSentPackets.pnAt#0 nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.markLost#0 nish.QuicSentPackets.timeAt#0
   stackSites=0 stackLocals=0
   local +1:11 delay: i64 (const)
   callee +1:24 QuicRecovery.lossDelay -> @nish.QuicRecovery.lossDelay
@@ -8065,7 +8067,7 @@ function QuicRecovery.packetsLost(this: QuicRecovery, sp: QuicSentPackets, now: 
   escaping: now
   calls: nish.QuicRecovery.congestionEvent nish.QuicRecovery.persistentCongestion nish.QuicSentPackets.lostSlot nish.QuicSentPackets.markedAt nish.QuicSentPackets.setState nish.QuicSentPackets.timeAt nish.quicRecoveryMax nish_panic_overflow
   pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicRecovery.congestionEvent#0 nish.QuicRecovery.persistentCongestion#0
-  pointer sp: size=160 writesThrough=false captured=false passedTo=nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.lostSlot#0 nish.QuicSentPackets.markedAt#0 nish.QuicSentPackets.lostSlot#0 nish.QuicRecovery.persistentCongestion#1 nish.QuicSentPackets.setState#0 nish.QuicSentPackets.lostSlot#0
+  pointer sp: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.lostSlot#0 nish.QuicSentPackets.markedAt#0 nish.QuicSentPackets.lostSlot#0 nish.QuicRecovery.persistentCongestion#1 nish.QuicSentPackets.setState#0 nish.QuicSentPackets.lostSlot#0
   stackSites=0 stackLocals=0
   local -4:9 newest: i64 (let)
   local -3:14 k: i32 (let)
@@ -8083,7 +8085,7 @@ function QuicRecovery.persistentCongestion(this: QuicRecovery, sp: QuicSentPacke
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.QuicRecovery.ptoBase nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt nish.QuicSentPackets.timeAt nish_panic_overflow
   pointer this: size=152 writesThrough=false captured=false passedTo=nish.QuicRecovery.ptoBase#0
-  pointer sp: size=160 writesThrough=false captured=false passedTo=nish.QuicSentPackets.slot#0 nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.timeAt#0
+  pointer sp: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.slot#0 nish.QuicSentPackets.stateAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.timeAt#0
   stackSites=0 stackLocals=0
   local +0:11 span: i64 (const)
   callee +0:24 QuicRecovery.ptoBase -> @nish.QuicRecovery.ptoBase
@@ -8117,7 +8119,7 @@ function QuicRecovery.packetAcked(this: QuicRecovery, sp: QuicSentPackets, s: i3
   escaping: s
   calls: nish.QuicRecovery.inRecovery nish.QuicSentPackets.sizeAt nish.QuicSentPackets.timeAt nish_panic_div nish_panic_overflow
   pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicRecovery.inRecovery#0
-  pointer sp: size=160 writesThrough=false captured=false passedTo=nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.sizeAt#0
+  pointer sp: size=152 writesThrough=false captured=false passedTo=nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.sizeAt#0
   stackSites=0 stackLocals=0
   callee -5:19 QuicRecovery.inRecovery -> @nish.QuicRecovery.inRecovery
   callee -5:35 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
