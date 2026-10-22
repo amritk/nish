@@ -23,6 +23,8 @@
 //     --no-openssl, --no-go, --no-rust, --no-node
 //                       leave that twin out; its cells read —
 //     --compiler <nish> the compiler under test (default build/nish)
+//     --families <dir>  read the families from <dir> rather than bench/crypto/:
+//                       tests/run.js validates altered copies this way
 //
 // Columns: nish, nish-copy (a byte-identical copy of the Nish binary, timed in
 // the same rounds: the noise band), openssl and openssl-portable (one binary,
@@ -79,6 +81,12 @@ const TARGET_NS = 200e6
 const RUN_TIMEOUT_MS = 120e3
 /** The portable proof's default: a portable column at least this much slower than its twin's default one. */
 const PORTABLE_MIN_RATIO = 1.2
+/**
+ * The paired-rounds proof (README.md, "portableRounds"): how many rounds, and
+ * the chance it may give a portable column that changed nothing a pass.
+ */
+const PAIRED_ROUNDS = 48
+const PAIRED_ALPHA = 0.001
 const TWINS = ["openssl", "go", "rust", "node"]
 const TWIN_LABELS = { openssl: "OpenSSL", go: "Go", rust: "Rust", node: "Node" }
 const PORTABLE_IDS = { openssl: "openssl-portable", go: "go-purego", rust: "rust-soft" }
@@ -151,6 +159,7 @@ const opts = {
   out: null,
   record: false,
   skip: new Set(),
+  families: here,
 }
 for (let i = 2; i < nishc.rest.length; i++) {
   const a = nishc.rest[i]
@@ -176,6 +185,8 @@ for (let i = 2; i < nishc.rest.length; i++) {
     opts.out = path.resolve(next())
   } else if (a === "--record") {
     opts.record = true
+  } else if (a === "--families") {
+    opts.families = path.resolve(next())
   } else if (a.startsWith("--no-") && TWINS.includes(a.slice(5))) {
     opts.skip.add(a.slice(5))
   } else {
@@ -190,8 +201,10 @@ if (opts.validate && (opts.record || opts.out !== null)) {
 }
 // docs/BENCHMARKS.md's section is the whole table: a part of it, or one with
 // a twin left out, goes to --out.
-if (opts.record && (opts.only !== null || opts.skip.size > 0)) {
-  fail("--record writes the whole table, so it takes no --only or --no-<twin>; use --out for a part")
+if (opts.record && (opts.only !== null || opts.skip.size > 0 || opts.families !== here)) {
+  fail(
+    "--record writes the whole table, so it takes no --only, --no-<twin> or --families; use --out for a part"
+  )
 }
 
 // ---- Families --------------------------------------------------------------------
@@ -211,7 +224,7 @@ const onlyKeys = (where, value, allowed) => {
 
 /** One family.json, checked against the schema in bench/crypto/README.md. */
 const loadFamily = (name) => {
-  const dir = path.join(here, name)
+  const dir = path.join(opts.families, name)
   const where = `bench/crypto/${name}/family.json`
   let spec
   try {
@@ -229,6 +242,7 @@ const loadFamily = (name) => {
     "portableProof",
     "portableMinRatio",
     "portableProofFlags",
+    "portableRounds",
     "needs",
     "notes",
   ])
@@ -385,6 +399,22 @@ const loadFamily = (name) => {
   if (spec.portableMinRatio !== undefined && proof === null) {
     fail(`${where}: \`portableMinRatio\` without a \`portableProof\``)
   }
+  // The twins whose short ratio is settled by the paired rounds instead.
+  const rounds = spec.portableRounds ?? []
+  if (
+    !(
+      isStringList(rounds) &&
+      new Set(rounds).size === rounds.length &&
+      rounds.every((t) => t in PORTABLE_IDS && minRatio[t] !== null)
+    )
+  ) {
+    fail(
+      `${where}: \`portableRounds\` lists distinct twins (${Object.keys(PORTABLE_IDS).join(", ")}) whose portableMinRatio is a number`
+    )
+  }
+  if (spec.portableRounds !== undefined && proof === null) {
+    fail(`${where}: \`portableRounds\` without a \`portableProof\``)
+  }
   // OpenSSL's proof is a time ratio, so it is held only on a CPU with an
   // extension whose loss slows the proof kernel; the mask may clear others.
   const mask = twins.openssl.portable?.env?.OPENSSL_ia32cap
@@ -421,6 +451,7 @@ const loadFamily = (name) => {
     proof,
     proofFlags: proofFlags ?? [],
     minRatio,
+    rounds: new Set(rounds),
     needs,
     notes: familyNotes,
   }
@@ -447,8 +478,8 @@ const readExpected = (family) => {
 }
 
 const familyNames = fs
-  .readdirSync(here, { withFileTypes: true })
-  .filter((e) => e.isDirectory() && fs.existsSync(path.join(here, e.name, "family.json")))
+  .readdirSync(opts.families, { withFileTypes: true })
+  .filter((e) => e.isDirectory() && fs.existsSync(path.join(opts.families, e.name, "family.json")))
   .map((e) => e.name)
   .sort()
 const families = familyNames.map(loadFamily)
@@ -944,6 +975,24 @@ const interleave = (variants, kernel, size, iterations, rounds) => {
   return { times, sums }
 }
 
+/**
+ * The fewest of `n` paired rounds the portable column must lose for a mask
+ * that changed nothing to reach it with probability at most `alpha`: with the
+ * same code on both sides each round is a coin toss, whatever the noise.
+ */
+const roundsNeeded = (n, alpha) => {
+  let choose = 1
+  let tail = 0
+  for (let k = n; k >= 0; k--) {
+    tail += choose / 2 ** n
+    if (tail > alpha) {
+      return k + 1
+    }
+    choose = (choose * k) / (n - k + 1)
+  }
+  return 0
+}
+
 // ---- --validate ------------------------------------------------------------------
 
 if (opts.validate) {
@@ -1124,6 +1173,27 @@ if (opts.validate) {
             )
             ratio = measure(11)
           }
+          // A twin whose mask costs about as much as the ratio's noise on some
+          // CPUs: the portable column must lose nearly every paired round.
+          if (ratio < need && family.rounds.has(twin)) {
+            const { times } = interleave([fast, slow], kernel, size, iterations, PAIRED_ROUNDS)
+            const fastNs = times.get(fast.id)
+            const lost = times.get(slow.id).filter((ns, r) => ns > fastNs[r]).length
+            const n = fastNs.length
+            const want = roundsNeeded(n, PAIRED_ALPHA)
+            const line = `${family.name} ${slow.id}: ${times3(ratio)} the time of ${fast.id} at ${kernel}@${size}, slower in ${lost} of ${n} paired rounds (needs ${times3(need)}, or ${want} of ${n})`
+            if (lost >= want) {
+              console.log(`portable ${line}`)
+              break
+            }
+            if (cases[i + 1] === undefined) {
+              console.log(`NOT PORTABLE ${line}`)
+              mismatches++
+              break
+            }
+            console.log(`short ${line}; trying ${cases[i + 1].kernel}@${cases[i + 1].size}`)
+            continue
+          }
           const next = cases[i + 1]
           if (ratio < need && next !== undefined) {
             console.log(
@@ -1229,6 +1299,9 @@ const machine = () => {
 /** The noise band of a row: how far Nish's median is from its byte-identical copy's. */
 const bandOf = (row) => Math.abs(row.medians.get("nish") / row.medians.get("nish-copy") - 1)
 
+/** A row's band for its column: `±1.2%`, or — without the copy. */
+const bandCell = (row) => (row.medians.has("nish-copy") ? `±${(bandOf(row) * 100).toFixed(1)}%` : "—")
+
 /** A quotient read against the noise band: `1.23x slower (rust-soft)`, or the band's word when within it. */
 const verdict = (row, ids) => {
   const have = ids.filter((id) => row.medians.has(id))
@@ -1248,7 +1321,7 @@ const lines = [
   "",
   "Written by `node bench/crypto/run.mjs --record`, not by `bench/run.mjs`, which carries this section over when it rewrites the file. The programs, the inputs and the measurement rules are in [bench/crypto/README.md](../bench/crypto/README.md).",
   "",
-  "Each cell is the median of the column's own timed loop over the rounds, every column at one iteration count per row, the order rotated each round and reversed on every other block. The last two columns divide Nish's median time by the fastest portable twin's (no assembly: OpenSSL under an `OPENSSL_ia32cap` mask, Go `-tags purego`, RustCrypto's soft backend) and by the fastest default twin's (assembly and CPU extensions allowed); above 1.000x Nish is slower. A quotient within the noise band, the gap between Nish and a byte-identical copy of its binary, is no difference.",
+  "Each cell is the median of the column's own timed loop over the rounds, every column at one iteration count per row, the order rotated each round and reversed on every other block. The last two columns divide Nish's median time by the fastest portable twin's (no assembly: OpenSSL under an `OPENSSL_ia32cap` mask, Go `-tags purego`, RustCrypto's soft backend) and by the fastest default twin's (assembly and CPU extensions allowed); above 1.000x Nish is slower. The Band column is the row's noise band, the gap between Nish and a byte-identical copy of its binary, and each quotient beside it is read against it: within the band is no difference.",
   "",
   `Machine: ${machine()}.`,
   "",
@@ -1259,8 +1332,8 @@ for (const { family, variants, rows } of sections) {
   const ids = new Set(variants.map((v) => v.id))
   lines.push(`### ${family.title} (\`bench/crypto/${family.name}\`)`, "")
   lines.push(
-    `| Kernel | Size | Unit | ${COLUMNS.map(([, l]) => l).join(" | ")} | Nish / best portable | Nish / best assembly |`,
-    `| --- | --- | --- | ${COLUMNS.map(() => "---:").join(" | ")} | --- | --- |`
+    `| Kernel | Size | Unit | ${COLUMNS.map(([, l]) => l).join(" | ")} | Band | Nish / best portable | Nish / best assembly |`,
+    `| --- | --- | --- | ${COLUMNS.map(() => "---:").join(" | ")} | ---: | --- | --- |`
   )
   for (const row of rows) {
     const cell = (id) => {
@@ -1268,17 +1341,10 @@ for (const { family, variants, rows } of sections) {
       return ns === undefined ? "—" : fmtRate(rateOf(row.kernel.unit, row.size, row.iterations, ns))
     }
     lines.push(
-      `| ${row.kernel.name} | ${fmtSize(row.size)} | ${row.kernel.unit} | ${COLUMNS.map(([id]) => cell(id)).join(" | ")} | ${verdict(row, PORTABLE_COLUMN_IDS)} | ${verdict(row, TWINS)} |`
+      `| ${row.kernel.name} | ${fmtSize(row.size)} | ${row.kernel.unit} | ${COLUMNS.map(([id]) => cell(id)).join(" | ")} | ${bandCell(row)} | ${verdict(row, PORTABLE_COLUMN_IDS)} | ${verdict(row, TWINS)} |`
     )
   }
-  const bands = rows.filter((r) => r.medians.has("nish-copy")).map(bandOf)
   lines.push("")
-  if (bands.length > 0) {
-    lines.push(
-      `Noise band, Nish against its byte-identical copy: ${(Math.min(...bands) * 100).toFixed(1)}% to ${(Math.max(...bands) * 100).toFixed(1)}% across the rows.`,
-      ""
-    )
-  }
   // Every — in the table says why.
   const why = []
   for (const twin of TWINS) {
