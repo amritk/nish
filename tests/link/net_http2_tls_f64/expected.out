@@ -6,7 +6,7 @@ PASS  a hundred DATA frames through one open stream come back
 PASS  and the server's calls moved the arena not at all (0 bytes)
 PASS  and with every frame sent, the idle slot holds none of its frame buffers (0 lent)
 PASS  five responses, the pinned clock a second on before each, carry its date
-PASS  formatting it once a second, and the arena moves no further than on a still clock (5 formats, 3640 and 3640 bytes)
+PASS  formatting it once a second, and the arena moves no further than on a still clock (5 formats, 0 and 0 bytes)
 PASS  the last stream ends
 PASS  after the client's GOAWAY the server sends close_notify
 PASS  and its program closes the slot

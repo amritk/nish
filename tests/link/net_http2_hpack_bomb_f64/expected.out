@@ -1,0 +1,41 @@
+PASS  a block that puts the field in the table and names it twice more is a request
+PASS  and its three fields reach the program whole
+PASS  which answers it
+PASS  named five times, from the table alone, the list is past the limit and never reaches the program
+PASS  it is answered with a 431
+PASS  a block of 16000 indexes, 16016 octets naming 64608000 bytes of fields, is a 431 too
+PASS  100 more reach the program not at all
+PASS  and the last 50 move the arena not at all (0 bytes)
+PASS  the table still holds the field: one more block naming it once is a request
+PASS  with the field whole
+PASS  past SETTINGS_MAX_CONCURRENT_STREAMS, a block naming the field three times is refused, never reaching the program
+PASS  100 more are refused, reaching the program not at all
+PASS  and the last 50 move the arena not at all (0 bytes)
+PASS  100 GETs, each naming the field once, are each a request
+PASS  and the last 50, each answered, move the arena not at all (0 bytes)
+PASS  a block that puts a name of 4,000 octets in the table and names it once is a request
+PASS  with both fields whole
+PASS  5000 literals without, 15016 octets naming 20160000 bytes of fields by index, are a 431
+PASS  100 more reach the program not at all
+PASS  and the last 50 move the arena not at all (0 bytes)
+PASS  and all 101 copy out of the table only the names under the list limit, 4 x 4,000 octets a block (1616000)
+PASS  5000 literals never, 15016 octets naming 20160000 bytes of fields by index, are a 431
+PASS  100 more reach the program not at all
+PASS  and the last 50 move the arena not at all (0 bytes)
+PASS  and all 101 copy out of the table only the names under the list limit, 4 x 4,000 octets a block (1616000)
+PASS  the table still names the field: one more block naming it once is a request
+PASS  with the field whole
+PASS  two literals with incremental indexing naming it, each copying the name out of the table and back in, are a request
+PASS  with both fields whole
+PASS  copying 16000 octets, as measured, the 16000 the budget charges, within its 4 x 4,096
+PASS  5000 of them, 10016 octets, pass the budget and end the connection with ENHANCE_YOUR_CALM
+PASS  stream 1's request
+PASS  then stream 3's block, past the header-list limit
+PASS  leaves stream 1's held fields empty, never stream 3's
+PASS  stream 5's request
+PASS  leaves them stream 5's whole
+PASS  while the copy taken of stream 1's path is still its own
+PASS  stream 1's request, left open
+PASS  then stream 3, past SETTINGS_MAX_CONCURRENT_STREAMS
+PASS  is refused, leaving stream 1's held fields empty, never stream 3's
+http2 hpack bomb: 40 passed, 0 failed, 0 skipped

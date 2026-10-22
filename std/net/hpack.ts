@@ -18,7 +18,7 @@
  *
  *     const dec = new HpackDecoder(4096, 65536);
  *     if (dec.decode(block, 0, toI32(block.length)) === HPACK_OK) {
- *       // dec.names[i], dec.values[i], dec.neverIndexed[i]
+ *       // dec.names[i], dec.values[i], dec.neverIndexed[i], until the next decode
  *     }
  *
  * Names and values are octets (`u8[]`), not strings, because a field value is
@@ -34,7 +34,10 @@
  * or after the block's first field, and a block that does not begin with the
  * update a lowered limit requires (§4.2). Each of those is HTTP/2's
  * COMPRESSION_ERROR, which closes the connection, so the code is sticky: every
- * later `decode` answers it again without reading anything.
+ * later `decode` answers it again without reading anything. So is
+ * `HPACK_ERR_COPY_BUDGET`, a block that would make the table copy more than
+ * `HPACK_COPY_FACTOR` times the larger of its size and the block's length,
+ * which HTTP/2 answers with ENHANCE_YOUR_CALM.
  *
  * A header list larger than the caller's limit is not one of them. The block
  * is still decoded to its end, so that the table stays in step with the
@@ -55,11 +58,15 @@
  * Nothing here is constant time. HPACK's secrets are protected by the
  * never-indexed representation, not by the codec's timing (§7.1).
  *
- * State is a class and dispatch is a `switch`, with no closures. Every field
- * a decoder answers is a fresh array of its own, so a caller may change one
- * without touching the table. Private helpers share the importing program's
- * flat symbol namespace (`docs/wp26-stdlib.md` §3e), which is why each one
- * carries the module's name.
+ * State is a class and dispatch is a `switch`, with no closures. A decoder
+ * answers its fields in arrays it owns and reuses, never the table's own
+ * octets, so a caller may change one without touching the table, and keeps
+ * one past the next `decode` by copying it. Once its arrays have grown to the
+ * largest block and header list the peer has sent, decoding allocates
+ * nothing, which bounds what a peer can make a connection hold (RFC 9113
+ * §10.5.1; `docs/security/http2.md`, H2-1). Private helpers share the
+ * importing program's flat symbol namespace (`docs/wp26-stdlib.md` §3e),
+ * which is why each one carries the module's name.
  *
  * Written from RFC 7541, not ported from another implementation. The Huffman
  * code is Appendix B's, stored as its 257 code lengths: the code is canonical
@@ -103,6 +110,27 @@ export const HPACK_ERR_SIZE_UPDATE_POSITION: i32 = -7
  * not begin with an update to at most the smallest limit since (§4.2).
  */
 export const HPACK_ERR_SIZE_UPDATE_MISSING: i32 = -8
+
+/**
+ * A block that asked the table to take more octets than its copy budget
+ * allows: `HPACK_COPY_FACTOR` times the larger of the table's maximum size
+ * and the block's own length. Valid HPACK, but no encoder needs it, and
+ * HTTP/2 answers it with ENHANCE_YOUR_CALM, not COMPRESSION_ERROR.
+ */
+export const HPACK_ERR_COPY_BUDGET: i32 = -9
+
+/**
+ * How many times the larger of the table's maximum size and a block's length
+ * the decoder copies into its table for one block, at most
+ * (`docs/security/http2.md`, H2-1). An index naming a dynamic entry is one or
+ * two octets, and a literal with incremental indexing that names it copies
+ * the name out of the table and back in, so without a budget a block of them
+ * costs about three times the table's size of work per two octets it holds.
+ * Four leaves an encoder room to re-add a full table's worth of fields twice
+ * over in one block, which none needs, since every add past the table's size
+ * evicts one of its own.
+ */
+export const HPACK_COPY_FACTOR: i32 = 4
 
 /** Add the field to the dynamic table (§6.2.1). */
 export const HPACK_INDEX_INCREMENTAL: i32 = 0
@@ -305,23 +333,27 @@ const hpackStaticValue = (index: i32): string => {
   }
 }
 
-/** The bytes of an ASCII string. */
-const hpackBytesOf = (text: string): u8[] => {
-  const out: u8[] = []
+/** Appends the octets of the ASCII string `text` to `out`. */
+const hpackAppendText = (out: u8[], text: string): void => {
   const n: i32 = toI32(text.length)
   for (let i: i32 = 0; i < n; i += 1) {
     out.push(toU8(text.charCodeAt(i)))
   }
-  return out
 }
 
-/** A copy of `bytes`, so that an answered field and a table entry never alias. */
-const hpackCopy = (bytes: u8[]): u8[] => {
-  const out: u8[] = []
-  for (const b of bytes) {
-    out.push(b)
+/** Appends `src[at, at + n)`, a window the caller has checked, to `out`. */
+const hpackAppend = (out: u8[], src: u8[], at: i32, n: i32): void => {
+  // The length test is the caller's check again, there so the prover drops the bounds check.
+  for (let i: i32 = at; i < at + n && i >= 0 && i < toI32(src.length); i += 1) {
+    out.push(src[i])
   }
-  return out
+}
+
+/** Empties `bytes`, keeping its storage for the next fill. */
+const hpackEmpty = (bytes: u8[]): void => {
+  while (toI32(bytes.length) > 0) {
+    bytes.pop()
+  }
 }
 
 /** Whether `bytes` spell the ASCII string `text`. */
@@ -340,14 +372,13 @@ const hpackSameAsText = (bytes: u8[], text: string): boolean => {
   return true
 }
 
-/** Whether two byte arrays hold the same bytes. */
-const hpackSameBytes = (a: u8[], b: u8[]): boolean => {
-  const n: i32 = toI32(a.length)
-  if (n !== toI32(b.length)) {
+/** Whether `bytes` hold the same octets as `store[at, at + n)`, a window inside `store`. */
+const hpackSameAsWindow = (bytes: u8[], store: u8[], at: i32, n: i32): boolean => {
+  if (toI32(bytes.length) !== n) {
     return false
   }
-  for (let i: i32 = 0; i < n && i < toI32(b.length); i += 1) {
-    if (a[i] !== b[i]) {
+  for (let i: i32 = 0; i < n && i < toI32(bytes.length); i += 1) {
+    if (bytes[i] !== store[at + i]) {
       return false
     }
   }
@@ -526,6 +557,14 @@ export class HpackCursor {
     this.pos = off
     this.end = off + len
   }
+
+  /** Points the cursor at `buf[off, off + len)` instead, which must lie inside `buf`. */
+  reset(buf: u8[], off: i32, len: i32): void {
+    hpackCheckWindow("HpackCursor", buf, off, len)
+    this.buf = buf
+    this.pos = off
+    this.end = off + len
+  }
 }
 
 /**
@@ -643,15 +682,22 @@ export const hpackDecodeString = (h: HpackHuffman, c: HpackCursor, out: u8[]): i
  * The dynamic table (§2.3.2, §4): a FIFO of fields, newest first by index,
  * whose size — every entry's name and value plus 32 — never passes `maxSize`.
  *
- * The entries are kept oldest first in `names` and `values` from `first` on,
- * so that adding one is a `push` and evicting one moves `first`; the evicted
- * prefix is dropped by a copy once it is half the arrays, which keeps both
- * amortised constant time without a ring's index arithmetic. Dynamic index 1,
- * the newest entry, is the last element.
+ * Every entry's octets live in one store, `bytes`: its name, then its value,
+ * oldest entry first. `entries` says where each entry sits, two numbers to an
+ * entry — where it starts in `bytes` and how long its name is; its value runs
+ * to where the next one starts — oldest first from entry `first` on, so that
+ * adding one is two `push`es and evicting one moves `first`. The evicted
+ * prefix of `entries`, and of `bytes`, is shifted out in place once it is half
+ * of either, which keeps both amortised constant time without a ring's index
+ * arithmetic. Shifting and popping keep an array's storage, and `bytes` never
+ * holds more than three times `maxSize`, so a table the peer fills and empties
+ * for as long as it likes stops allocating once its arrays have grown that far
+ * (`docs/security/http2.md`, H2-1). Dynamic index 1, the newest entry, is the
+ * last.
  */
 export class HpackTable {
-  names: u8[][]
-  values: u8[][]
+  bytes: u8[]
+  entries: i32[]
   first: i32
   size: i32
   maxSize: i32
@@ -660,63 +706,148 @@ export class HpackTable {
     if (maxSize < 0) {
       panic(`HpackTable: a maximum size of ${maxSize}`)
     }
-    this.names = []
-    this.values = []
+    this.bytes = []
+    this.entries = []
     this.first = 0
     this.size = 0
     this.maxSize = maxSize
   }
 
+  /** How many entries `entries` describes, evicted ones included. */
+  slots(): i32 {
+    return toI32(this.entries.length) >> 1
+  }
+
   /** How many entries the table holds. */
   count(): i32 {
-    return toI32(this.names.length) - this.first
+    return this.slots() - this.first
   }
 
-  /** The name of dynamic entry `i`, 1 being the newest; `i` must be in range. */
+  /** Where dynamic entry `i`, 1 being the newest, sits in `entries`; `i` must be in range. */
+  slot(i: i32): i32 {
+    return this.slots() - i
+  }
+
+  /** Where entry `k` of `entries` starts in `bytes`. */
+  startOf(k: i32): i32 {
+    return this.entries[k * 2]
+  }
+
+  /** Where entry `k` of `entries` ends in `bytes`: where the next starts, or the end of `bytes`. */
+  endOf(k: i32): i32 {
+    return k + 1 < this.slots() ? this.entries[k * 2 + 2] : toI32(this.bytes.length)
+  }
+
+  /** What entry `k` of `entries` costs (§4.1); it fits an `i32` because the table holds it. */
+  costOf(k: i32): i32 {
+    return this.endOf(k) - this.startOf(k) + HPACK_ENTRY_OVERHEAD
+  }
+
+  /** Where the name of dynamic entry `i` starts in `bytes`. */
+  nameStart(i: i32): i32 {
+    return this.startOf(this.slot(i))
+  }
+
+  /** How many octets the name of dynamic entry `i` has. */
+  nameLength(i: i32): i32 {
+    return this.entries[this.slot(i) * 2 + 1]
+  }
+
+  /** Where the value of dynamic entry `i` starts in `bytes`, straight after its name. */
+  valueStart(i: i32): i32 {
+    return this.nameStart(i) + this.nameLength(i)
+  }
+
+  /** How many octets the value of dynamic entry `i` has. */
+  valueLength(i: i32): i32 {
+    return this.endOf(this.slot(i)) - this.valueStart(i)
+  }
+
+  /** What dynamic entry `i` costs (§4.1). */
+  entrySize(i: i32): i32 {
+    return this.costOf(this.slot(i))
+  }
+
+  /** A fresh copy of the name of dynamic entry `i`. It allocates; the codec reads the window instead. */
   name(i: i32): u8[] {
-    return this.names[toI32(this.names.length) - i]
+    const out: u8[] = []
+    hpackAppend(out, this.bytes, this.nameStart(i), this.nameLength(i))
+    return out
   }
 
-  /** The value of dynamic entry `i`, 1 being the newest. */
+  /** A fresh copy of the value of dynamic entry `i`, as `name` makes the name. */
   value(i: i32): u8[] {
-    return this.values[toI32(this.values.length) - i]
+    const out: u8[] = []
+    hpackAppend(out, this.bytes, this.valueStart(i), this.valueLength(i))
+    return out
   }
 
   /** Evicts the oldest entries until the size is at most `limit` (§4.4). */
   evictTo(limit: i32): void {
     while (toI64(this.size) > toI64(limit) && this.count() > 0) {
-      this.size -= toI32(hpackEntrySize(this.names[this.first], this.values[this.first]))
+      this.size -= this.costOf(this.first)
       this.first += 1
     }
-    if (this.first >= 16 && this.first * 2 >= toI32(this.names.length)) {
-      const names: u8[][] = []
-      const values: u8[][] = []
-      for (let i: i32 = this.first; i < toI32(this.names.length); i += 1) {
-        names.push(this.names[i])
-        values.push(this.values[i])
+    this.compact()
+  }
+
+  /** Shifts the evicted prefix out of `entries`, and out of `bytes`, once it is half of either. */
+  compact(): void {
+    const end: i32 = toI32(this.bytes.length)
+    const start: i32 = this.count() > 0 ? this.startOf(this.first) : end
+    const n: i32 = this.slots()
+    if (this.first > 0 && this.first * 2 >= n) {
+      const live: i32 = (n - this.first) * 2
+      const from: i32 = this.first * 2
+      for (let k: i32 = 0; k < live; k += 1) {
+        this.entries[k] = this.entries[from + k]
       }
-      this.names = names
-      this.values = values
+      while (toI32(this.entries.length) > live) {
+        this.entries.pop()
+      }
       this.first = 0
+    }
+    if (start > 0 && start * 2 >= end) {
+      for (let k: i32 = start; k < end; k += 1) {
+        this.bytes[k - start] = this.bytes[k]
+      }
+      while (toI32(this.bytes.length) > end - start) {
+        this.bytes.pop()
+      }
+      for (let k: i32 = this.first; k < this.slots(); k += 1) {
+        this.entries[k * 2] -= start
+      }
     }
   }
 
   /**
-   * Adds a field as the newest entry, evicting first to make room. An entry
-   * larger than the whole table empties it and is not added (§4.4): that is
-   * not an error.
+   * Adds a field as the newest entry, copying its octets in, evicting first
+   * to make room. An entry larger than the whole table empties it and is not
+   * added (§4.4): that is not an error. Neither array may be `bytes` itself,
+   * since eviction may move what it holds. Returns the octets it pushed into
+   * `bytes`: none for an entry it did not add.
    */
-  add(name: u8[], value: u8[]): void {
+  add(name: u8[], value: u8[]): i32 {
     const cost: i64 = hpackEntrySize(name, value)
     if (cost > toI64(this.maxSize)) {
       const nothing: i32 = 0
       this.evictTo(nothing)
-      return
+      return nothing
     }
     this.evictTo(this.maxSize - toI32(cost))
-    this.names.push(name)
-    this.values.push(value)
+    this.entries.push(toI32(this.bytes.length))
+    this.entries.push(toI32(name.length))
+    let pushed: i32 = 0
+    for (const b of name) {
+      this.bytes.push(b)
+      pushed += 1
+    }
+    for (const b of value) {
+      this.bytes.push(b)
+      pushed += 1
+    }
     this.size += toI32(cost)
+    return pushed
   }
 
   /** Sets the maximum size, evicting what no longer fits (§4.3). */
@@ -754,15 +885,89 @@ const hpackRepresentationOf = (b: i32): i32 => {
 }
 
 /**
+ * The size classes of a decoded field's storage: class `j` holds arrays made
+ * with room for 2^j octets, up to 2^23, past any header list a connection
+ * would accept; a longer field grows the last class's array once.
+ */
+const HPACK_FIELD_CLASSES: i32 = 24
+
+/**
+ * What an `HpackDecoder` decodes a block with: the read position, reset for
+ * each block; a literal's name and value as they are read, before they are
+ * counted, copied or indexed; and the arrays the fields gave back, by size
+ * class, each class made when first needed.
+ */
+export class HpackWork {
+  cursor: HpackCursor
+  nameScratch: u8[]
+  valueScratch: u8[]
+  pools: u8[][][]
+
+  constructor() {
+    this.nameScratch = []
+    this.valueScratch = []
+    const nothing: i32 = 0
+    this.cursor = new HpackCursor(this.nameScratch, nothing, nothing)
+    this.pools = []
+  }
+
+  /** The smallest size class with room for `length` octets: the first `j` with 2^j past it, at most the last. */
+  classOf(length: i32): i32 {
+    let j: i32 = 0
+    while (j < HPACK_FIELD_CLASSES - 1 && 1 << j <= length) {
+      j += 1
+    }
+    return j
+  }
+
+  /** The pool of class `j`, made the first time a field needs it. */
+  pool(j: i32): u8[][] {
+    while (toI32(this.pools.length) <= j) {
+      const fresh: u8[][] = []
+      this.pools.push(fresh)
+    }
+    return this.pools[j]
+  }
+
+  /**
+   * An empty array with room for `length` octets: one an earlier block gave
+   * back, emptied, to its class's pool, or, once the pool is empty, a new one made with
+   * the class's room.
+   */
+  take(length: i32): u8[] {
+    const j: i32 = this.classOf(length)
+    const pool: u8[][] = this.pool(j)
+    const kept: i32 = toI32(pool.length)
+    if (kept === 0) {
+      const made: u8[] = new Array<u8>(1 << j)
+      hpackEmpty(made)
+      return made
+    }
+    const out: u8[] = pool[kept - 1]
+    pool.pop()
+    return out
+  }
+}
+
+/**
  * One HTTP/2 connection's receiving side: its dynamic table, the SETTINGS
  * limit the table may grow to, and the header-list limit.
  *
  * `decode` answers the block's fields in `names`, `values` and
- * `neverIndexed`, which it replaces on every call. `settingsLimit` is the
- * SETTINGS_HEADER_TABLE_SIZE this endpoint advertised and the peer
- * acknowledged; the table starts at it. `maxHeaderListSize` counts each field
- * as its name, its value and 32 bytes, as SETTINGS_MAX_HEADER_LIST_SIZE does
- * (RFC 9113 §6.5.2).
+ * `neverIndexed`, which it empties and refills on every call. Each name and
+ * value is an array the decoder owns, taken from its working storage's pools
+ * by its length and given back, emptied, at the next block, so **a field is
+ * valid until the next `decode`**: a caller that keeps one past it copies it,
+ * since the next block may refill the same array with another field. That is
+ * what keeps the storage a peer can make a connection hold bounded by the
+ * header-list limit, however many blocks it sends and whatever becomes of
+ * their streams (`docs/security/http2.md`, H2-1): a class `j` array holds a
+ * field of at least 2^(j-1) octets, so no class ever holds more than about
+ * twice the limit, and only the classes up to log2 of the limit, plus one,
+ * hold any. `settingsLimit` is the SETTINGS_HEADER_TABLE_SIZE this endpoint
+ * advertised and the peer acknowledged; the table starts at it.
+ * `maxHeaderListSize` counts each field as its name, its value and 32 bytes,
+ * as SETTINGS_MAX_HEADER_LIST_SIZE does (RFC 9113 §6.5.2).
  */
 export class HpackDecoder {
   table: HpackTable
@@ -776,6 +981,17 @@ export class HpackDecoder {
   names: u8[][]
   values: u8[][]
   neverIndexed: boolean[]
+  /** The storage a block is decoded with, made by the first `decode`, so an idle connection holds none. */
+  work: HpackWork | null = null
+  /**
+   * The octets the decoder has moved through its dynamic table, counted where
+   * they move: each name or value `appendNameAt` and `appendValueAt` copy out
+   * of the table, and each octet `table.add` pushes in. The budget
+   * (`HPACK_COPY_FACTOR`) is charged before a literal's copies, from the
+   * sizes it will copy; this counts what was copied, so that tests can hold
+   * the two equal. It is public so that tests can read it.
+   */
+  tableCopied: i64 = 0
 
   constructor(settingsLimit: i32, maxHeaderListSize: i32) {
     if (maxHeaderListSize < 0) {
@@ -790,6 +1006,17 @@ export class HpackDecoder {
     this.names = []
     this.values = []
     this.neverIndexed = []
+  }
+
+  /** The decoder's working storage, made the first time it is asked for. */
+  working(): HpackWork {
+    const work: HpackWork | null = this.work
+    if (work !== null) {
+      return work
+    }
+    const made: HpackWork = new HpackWork()
+    this.work = made
+    return made
   }
 
   /**
@@ -808,37 +1035,34 @@ export class HpackDecoder {
     }
   }
 
-  /**
-   * The name of static or dynamic index `index`, which must be in range. A
-   * dynamic name is the table's own array, not a copy: it may become another
-   * entry's name, since the table never changes an entry, but it is never
-   * answered to the caller as it is.
-   */
-  nameAt(index: i32): u8[] {
+  /** Appends the name at static or dynamic index `index`, which must be in range, to `out`. */
+  appendNameAt(index: i32, out: u8[]): void {
     if (index <= HPACK_STATIC_LENGTH) {
-      return hpackBytesOf(hpackStaticName(index))
+      hpackAppendText(out, hpackStaticName(index))
+      return
     }
-    return this.table.name(index - HPACK_STATIC_LENGTH)
+    const i: i32 = index - HPACK_STATIC_LENGTH
+    hpackAppend(out, this.table.bytes, this.table.nameStart(i), this.table.nameLength(i))
+    this.tableCopied += toI64(this.table.nameLength(i))
   }
 
-  /**
-   * A fresh copy of the name at `index`, for the caller: built straight from
-   * the static table, or copied once from the dynamic one, so that nothing
-   * else is allocated on the way.
-   */
-  copyNameAt(index: i32): u8[] {
+  /** Appends the value at `index` to `out`, as `appendNameAt` does the name. */
+  appendValueAt(index: i32, out: u8[]): void {
     if (index <= HPACK_STATIC_LENGTH) {
-      return hpackBytesOf(hpackStaticName(index))
+      hpackAppendText(out, hpackStaticValue(index))
+      return
     }
-    return hpackCopy(this.table.name(index - HPACK_STATIC_LENGTH))
+    const i: i32 = index - HPACK_STATIC_LENGTH
+    hpackAppend(out, this.table.bytes, this.table.valueStart(i), this.table.valueLength(i))
+    this.tableCopied += toI64(this.table.valueLength(i))
   }
 
-  /** A fresh copy of the value at `index`, as `copyNameAt` makes the name. */
-  copyValueAt(index: i32): u8[] {
+  /** How many octets the name at `index` has. */
+  nameLengthAt(index: i32): i32 {
     if (index <= HPACK_STATIC_LENGTH) {
-      return hpackBytesOf(hpackStaticValue(index))
+      return toI32(hpackStaticName(index).length)
     }
-    return hpackCopy(this.table.value(index - HPACK_STATIC_LENGTH))
+    return this.table.nameLength(index - HPACK_STATIC_LENGTH)
   }
 
   /** What the entry at `index` counts towards a header list, without building it. */
@@ -850,13 +1074,30 @@ export class HpackDecoder {
         toI64(HPACK_ENTRY_OVERHEAD)
       )
     }
-    const i: i32 = index - HPACK_STATIC_LENGTH
-    return hpackEntrySize(this.table.name(i), this.table.value(i))
+    return toI64(this.table.entrySize(index - HPACK_STATIC_LENGTH))
   }
 
   /** Whether `index` names an entry of either table. */
   hasIndex(index: i32): boolean {
     return index >= 1 && index <= HPACK_STATIC_LENGTH + this.table.count()
+  }
+
+  /** Empties the fields and gives each one's array back, emptied, to its class's pool, for the next block. */
+  clear(): void {
+    while (toI32(this.names.length) > 0) {
+      const work: HpackWork = this.working()
+      const last: i32 = toI32(this.names.length) - 1
+      const name: u8[] = this.names[last]
+      const value: u8[] = this.values[last]
+      this.names.pop()
+      this.values.pop()
+      work.pool(work.classOf(toI32(name.length))).push(name)
+      work.pool(work.classOf(toI32(value.length))).push(value)
+      // Emptied as it goes back, so a reference a caller kept past the block reads nothing until the array is taken again.
+      hpackEmpty(name)
+      hpackEmpty(value)
+      this.neverIndexed.pop()
+    }
   }
 
   /**
@@ -866,18 +1107,16 @@ export class HpackDecoder {
    * are empty and the decoder is spent.
    */
   decode(block: u8[], off: i32, len: i32): i32 {
-    this.names = []
-    this.values = []
-    this.neverIndexed = []
+    this.clear()
     if (this.failed !== 0) {
       return this.failed
     }
-    const result: i32 = this.decodeFields(new HpackCursor(block, off, len))
+    const cursor: HpackCursor = this.working().cursor
+    cursor.reset(block, off, len)
+    const result: i32 = this.decodeFields(cursor)
     if (result < 0) {
       this.failed = result
-      this.names = []
-      this.values = []
-      this.neverIndexed = []
+      this.clear()
     }
     return result
   }
@@ -887,15 +1126,28 @@ export class HpackDecoder {
    *
    * A field is counted against the header-list limit before it is copied out,
    * and one past the limit is never copied. That is what keeps a block of
-   * one-byte indexes, each naming a large dynamic entry, from allocating the
+   * one-byte indexes, each naming a large dynamic entry, from copying the
    * entry's size per byte read: past the limit an indexed field costs a
-   * lookup and nothing else. A literal's strings come from the block itself,
-   * so what they allocate is bounded by the block's length.
+   * lookup and nothing else, and a literal whose name is an index costs its
+   * value's octets, which the block holds, and a lookup. The one copy a peer
+   * can ask for past the limit is a literal with incremental indexing, which
+   * the table must take: its name and value are copied into the table, at
+   * most the table's maximum size per field, after its name is copied into
+   * the scratch when it is an index, and a block whose copies pass
+   * `HPACK_COPY_FACTOR` times the larger of the table's size and its own
+   * length ends the connection (`docs/security/http2.md`, H2-1). A
+   * literal's strings are read into the two scratch arrays, which the block's
+   * own length and the table's size bound, and a field within the limit is
+   * copied into the pools, which the limit bounds; nothing is allocated once
+   * those have grown to the largest block and list seen.
    */
   decodeFields(c: HpackCursor): i32 {
     let listSize: i64 = 0
     let tooLarge: boolean = false
     let sawField: boolean = false
+    // What this block has asked the table to copy, against its budget.
+    let copied: i64 = 0
+    const length: i32 = c.end - c.pos
     if (this.owedUpdate >= 0) {
       if (c.pos >= c.end || hpackRepresentationOf(toI32(c.buf[c.pos])) !== HPACK_REP_SIZE_UPDATE) {
         return HPACK_ERR_SIZE_UPDATE_MISSING
@@ -928,11 +1180,18 @@ export class HpackDecoder {
             return HPACK_ERR_INDEX
           }
           sawField = true
-          listSize += this.sizeAt(index)
+          const size: i64 = this.sizeAt(index)
+          listSize += size
           tooLarge = tooLarge || listSize > toI64(this.maxHeaderListSize)
           if (!tooLarge) {
-            this.names.push(this.copyNameAt(index))
-            this.values.push(this.copyValueAt(index))
+            // The entry's cost less the overhead is its name and value.
+            const nameLength: i32 = this.nameLengthAt(index)
+            const name: u8[] = this.working().take(nameLength)
+            this.appendNameAt(index, name)
+            const value: u8[] = this.working().take(toI32(size) - HPACK_ENTRY_OVERHEAD - nameLength)
+            this.appendValueAt(index, value)
+            this.names.push(name)
+            this.values.push(value)
             this.neverIndexed.push(false)
           }
           break
@@ -942,40 +1201,81 @@ export class HpackDecoder {
           if (index < 0) {
             return index
           }
-          let name: u8[] = []
+          if (index !== 0 && !this.hasIndex(index)) {
+            return HPACK_ERR_INDEX
+          }
+          const work: HpackWork = this.working()
+          // A new name is read into the scratch; one named by index stays in its table until it is needed.
+          const name: u8[] = work.nameScratch
+          hpackEmpty(name)
           if (index === 0) {
             const status: i32 = hpackDecodeString(this.huffman, c, name)
             if (status < 0) {
               return status
             }
-          } else if (this.hasIndex(index)) {
-            name = this.nameAt(index)
-          } else {
-            return HPACK_ERR_INDEX
           }
-          const value: u8[] = []
+          const value: u8[] = work.valueScratch
+          hpackEmpty(value)
           const status: i32 = hpackDecodeString(this.huffman, c, value)
           if (status < 0) {
             return status
           }
-          // The table takes these arrays as they are: `name` may be another
-          // entry's, which is safe because no entry is ever changed, and the
-          // caller is handed copies below.
-          if (rep === HPACK_REP_INCREMENTAL) {
-            this.table.add(name, value)
-          }
+          const nameLength: i32 = index === 0 ? toI32(name.length) : this.nameLengthAt(index)
+          const size: i64 = toI64(nameLength) + toI64(value.length) + toI64(HPACK_ENTRY_OVERHEAD)
           sawField = true
-          listSize += hpackEntrySize(name, value)
+          listSize += size
           tooLarge = tooLarge || listSize > toI64(this.maxHeaderListSize)
+          const incremental: boolean = rep === HPACK_REP_INCREMENTAL
+          const fits: boolean = size <= toI64(this.table.maxSize)
+          // The table copies the field in, and an indexed name out first.
+          const added: boolean = incremental && fits
+          const nameOut: i64 = index !== 0 ? toI64(nameLength) : toI64(0)
+          const cost: i64 = added ? size - toI64(HPACK_ENTRY_OVERHEAD) + nameOut : toI64(0)
+          copied += cost
+          const scale: i32 = this.table.maxSize > length ? this.table.maxSize : length
+          if (copied > toI64(HPACK_COPY_FACTOR) * toI64(scale)) {
+            return HPACK_ERR_COPY_BUDGET
+          }
+          // An indexed name is copied out only when the table takes the field,
+          // into the scratch, or the program does, straight into its field; both
+          // before the table changes, since adding the field, or emptying the
+          // table for one too large, may evict the entry the name came from and
+          // move what `bytes` holds (§4.4). A field that is neither costs its
+          // value's octets and a lookup.
+          if (index !== 0 && added) {
+            this.appendNameAt(index, name)
+          }
           if (!tooLarge) {
-            this.names.push(hpackCopy(name))
-            this.values.push(hpackCopy(value))
+            const kept: u8[] = work.take(nameLength)
+            if (index === 0 || added) {
+              const from: i32 = 0
+              hpackAppend(kept, name, from, toI32(name.length))
+            } else {
+              this.appendNameAt(index, kept)
+            }
+            this.names.push(kept)
+            this.values.push(this.copyOf(value))
             this.neverIndexed.push(rep === HPACK_REP_NEVER)
+          }
+          if (added) {
+            this.tableCopied += toI64(this.table.add(name, value))
+          } else if (incremental) {
+            const nothing: i32 = 0
+            this.table.evictTo(nothing)
           }
         }
       }
     }
     return tooLarge ? HPACK_LIST_TOO_LARGE : HPACK_OK
+  }
+
+  /** A pooled copy of `bytes`, for the caller. */
+  copyOf(bytes: u8[]): u8[] {
+    const out: u8[] = this.working().take(toI32(bytes.length))
+    for (const b of bytes) {
+      out.push(b)
+    }
+    return out
   }
 }
 
@@ -1025,7 +1325,11 @@ export class HpackEncoder {
     }
     const n: i32 = this.table.count()
     for (let i: i32 = 1; i <= n; i += 1) {
-      if (hpackSameBytes(name, this.table.name(i)) && hpackSameBytes(value, this.table.value(i))) {
+      const t: HpackTable = this.table
+      if (
+        hpackSameAsWindow(name, t.bytes, t.nameStart(i), t.nameLength(i)) &&
+        hpackSameAsWindow(value, t.bytes, t.valueStart(i), t.valueLength(i))
+      ) {
         return HPACK_STATIC_LENGTH + i
       }
     }
@@ -1041,7 +1345,7 @@ export class HpackEncoder {
     }
     const n: i32 = this.table.count()
     for (let i: i32 = 1; i <= n; i += 1) {
-      if (hpackSameBytes(name, this.table.name(i))) {
+      if (hpackSameAsWindow(name, this.table.bytes, this.table.nameStart(i), this.table.nameLength(i))) {
         return HPACK_STATIC_LENGTH + i
       }
     }
@@ -1088,7 +1392,7 @@ export class HpackEncoder {
     }
     hpackEncodeString(this.huffman, out, value, huffman)
     if (indexing === HPACK_INDEX_INCREMENTAL) {
-      this.table.add(hpackCopy(name), hpackCopy(value))
+      this.table.add(name, value)
     }
   }
 }

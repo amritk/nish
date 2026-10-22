@@ -25,12 +25,15 @@
  *
  * **Events.** `next()` reads the frames `feed` handed it and answers the
  * first that means something to the program: `H2_REQUEST` (a stream opened
- * with a request's header section; `fields` holds it), `H2_DATA` (some of a
- * request body, a window onto the input buffer that stays valid until the
- * next `feed`), `H2_TRAILERS`, `H2_RESET` (the stream is gone: the peer reset
- * it, or broke a rule that resets it — `errorCode` says which), `H2_WINDOW`
- * (a send window that held `writeData` back has opened: `stream`, or 0 for the
- * connection's), `H2_GOAWAY` (the peer is going away; `lastStreamId`), and
+ * with a request's header section; `fields` holds it until the next header
+ * block on the connection is read, for any stream, and a program copies what
+ * it keeps past that: the next block empties `fields` and reuses the arrays
+ * it pointed into), `H2_DATA` (some of a request body, a window onto the input
+ * buffer that stays valid until the next `feed`), `H2_TRAILERS`, `H2_RESET`
+ * (the stream is gone: the peer reset it, or broke a rule that resets it —
+ * `errorCode` says which), `H2_WINDOW` (a send window that held `writeData`
+ * back has opened: `stream`, or 0 for the connection's), `H2_GOAWAY` (the
+ * peer is going away; `lastStreamId`), and
  * `H2_ERROR`, final: the connection broke a rule, a GOAWAY with `errorCode`
  * is queued, and every later call answers it again. `H2_NEED_MORE` asks for
  * more input, or for the output to drain: a frame is read only while the
@@ -50,18 +53,19 @@
  * (COMPRESSION_ERROR, RFC 7541 §2.3.2); DATA past the connection window, or a
  * window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR, §6.9); a setting
  * `http2SettingError` refuses; a header block longer than `maxHeaderBlock`
- * or cut into more than `H2_MAX_FRAGMENTS` frames, and more streams reset
- * than `resetBudget` allows — by the peer, or by the server for a stream error
- * the peer caused (ENHANCE_YOUR_CALM, §10.5). A stream error resets one
- * stream and the connection lives: a malformed request — any
- * refusal of `nish/net/http-fields`, trailers without END_STREAM, a body that
- * disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or HEADERS
- * after the peer ended the stream (STREAM_CLOSED, §5.1); DATA past the
- * stream's window, or its window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR);
- * a stream past `maxStreams` (REFUSED_STREAM, §5.1.2); a stream that depends
- * on itself and a PRIORITY of the wrong length. A request whose header list
- * is longer than `maxHeaderListSize` is answered with a 431 and never reaches
- * the program (§10.5.1).
+ * or cut into more than `H2_MAX_FRAGMENTS` frames, a header block that would
+ * make the HPACK table copy past its budget (`HPACK_ERR_COPY_BUDGET`), and
+ * more streams reset than `resetBudget` allows — by the peer, or by the
+ * server for a stream error the peer caused (ENHANCE_YOUR_CALM, §10.5). A
+ * stream error resets one stream and the connection lives: a malformed request
+ * — any refusal of `nish/net/http-fields`, trailers without END_STREAM, a body
+ * that disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or
+ * HEADERS after the peer ended the stream (STREAM_CLOSED, §5.1); DATA past the
+ * stream's window, or its window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR); a
+ * stream past `maxStreams` (REFUSED_STREAM, §5.1.2); a stream that depends on
+ * itself and a PRIORITY of the wrong length. A request whose header list is
+ * longer than `maxHeaderListSize` is answered with a 431 and never reaches the
+ * program (§10.5.1).
  *
  * **Caps are start-up numbers**, all in `Http2Config`: the streams open at
  * once, the windows, the largest frame and header block accepted, the header
@@ -72,7 +76,10 @@
  * an idle connection holds none. A server shares one `Http2Pools` among its
  * slots; a connection on its own makes a private one that holds one buffer of
  * each. Once the pools are warm, reading DATA, writing DATA and every control
- * frame allocate nothing. A header block does allocate, through `HpackDecoder`
+ * frame allocate nothing, and neither does a header block once the
+ * decoder's arrays have grown to the largest block and header list seen: it
+ * decodes into storage the connection owns, bounded by `maxHeaderBlock` and
+ * `maxHeaderListSize` whether the stream is opened, refused or reset
  * (`docs/security/http2.md`, H2-1).
  *
  * The server sends no PUSH_PROMISE and no PRIORITY, and reads PRIORITY only to
@@ -97,6 +104,7 @@
 import { BufferPool } from "nish/net/buffer-pool"
 import {
   HPACK_DEFAULT_TABLE_SIZE,
+  HPACK_ERR_COPY_BUDGET,
   HPACK_INDEX_NEVER,
   HPACK_INDEX_WITHOUT,
   HPACK_LIST_TOO_LARGE,
@@ -398,7 +406,11 @@ export class Http2Connection {
   encoded: u8[]
   decoder: HpackDecoder
   encoder: HpackEncoder
-  /** The last request's or trailers' fields. */
+  /**
+   * The last request's or trailers' fields, valid until the next header block
+   * on the connection, for any stream: that block empties them and reuses
+   * their arrays, so a program copies what it keeps (`docs/security/http2.md`, H2-1).
+   */
   fields: HttpFields
   streams: Http2Stream[]
   /** The identifiers the server reset most recently, a ring. */
@@ -1215,11 +1227,15 @@ export class Http2Connection {
   endBlock(): i32 {
     const id: i32 = this.blockStream
     this.blockStream = 0
+    // The decoder takes back the arrays the last request's fields point into,
+    // so those fields go first: a stale read finds nothing, never this block's octets.
+    this.fields.clear()
     const decoded: i32 = this.decoder.decode(this.block, H2_ZERO, this.blockLength)
     // The decoder copied every field out, so the block goes back before the request is read.
     this.giveBlock()
     if (decoded < 0) {
-      return this.fail(H2_COMPRESSION_ERROR)
+      // A block past the decoder's copy budget is valid HPACK used as a lever, not a broken one (§10.5).
+      return this.fail(decoded === HPACK_ERR_COPY_BUDGET ? H2_ENHANCE_YOUR_CALM : H2_COMPRESSION_ERROR)
     }
     const s: Http2Stream | null = this.find(id)
     if (s !== null) {
