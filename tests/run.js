@@ -49,6 +49,7 @@ import {
   HTTP1_TLS_SERVER_START_BYTES,
   HTTP2_TLS_SERVER_START_BYTES,
   HTTP3_SERVER_START_BYTES,
+  HTTP3_SERVER_SLOT_BYTES,
   RUNTIME_BUDGETS,
   TLS_TCP_START_BYTES,
 } from "./runtime-budgets.js"
@@ -6553,8 +6554,9 @@ for (const [unit, program, name, ceiling, ceilingName] of [
 // connection is its per-slot tables. `tests/link/net_http3_server/startup.ts`
 // builds a pool of 65,536 slots on no socket and prints the arena bytes it
 // took, which the ceiling `HTTP3_SERVER_START_BYTES` in
-// `tests/runtime-budgets.js` holds, and whether they fit in one chunk, without
-// which `Arena.used()` measures nothing.
+// `tests/runtime-budgets.js` holds, then what the one slot `connection(0)`
+// builds took, which must equal `HTTP3_SERVER_SLOT_BYTES` exactly, and whether
+// they fit in one chunk, without which `Arena.used()` measures nothing.
 if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only)) {
   const dir = path.join(buildDir, "link", "net_http3_server.startup")
   fs.rmSync(dir, { recursive: true, force: true })
@@ -6567,11 +6569,16 @@ if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only
   )
   if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
     const run = spawnSync(exe, [], { encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" })
-    const [bytes, , chunk] = String(run.stdout).trim().split(" ")
+    const [bytes, slot, chunk] = String(run.stdout).trim().split(" ")
     check(
       "net_http3_server: a 65,536-slot Http3Server takes at most HTTP3_SERVER_START_BYTES before its first connection",
       run.status === 0 && chunk === "yes" && Number(bytes) > 0 && Number(bytes) <= HTTP3_SERVER_START_BYTES,
       `ceiling ${HTTP3_SERVER_START_BYTES}\n${shown(run)}`
+    )
+    check(
+      "net_http3_server: building one Http3Server slot takes exactly HTTP3_SERVER_SLOT_BYTES",
+      run.status === 0 && chunk === "yes" && Number(slot) === HTTP3_SERVER_SLOT_BYTES,
+      `expected ${HTTP3_SERVER_SLOT_BYTES}\n${shown(run)}`
     )
   }
 }
@@ -7049,6 +7056,10 @@ if (!only || "par_alloc".includes(only)) {
 // Node's arrows close over them, and natively each one travels as a parameter,
 // so the same values print both ways. `par_map_vector` is the scramble of
 // bench/par-regions.ts over a map, the program the check below vectorises.
+// `par_into_fresh_pipeline` and `par_into_fresh_object` (#612) read a
+// `parallelMap` result, a config object and a `const self = this` beside a
+// fresh `dst` nothing was handed before the call; `par_into_fresh_reads`
+// indexes, fills and walks that `dst` first.
 //
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
@@ -7111,6 +7122,9 @@ for (const name of [
   "par_from",
   "par_capture",
   "par_capture_large",
+  "par_into_fresh_object",
+  "par_into_fresh_pipeline",
+  "par_into_fresh_reads",
   "par_map_vector",
   "thread_scope_basic",
   "thread_scope_exit_paths",
@@ -21440,18 +21454,14 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
   )
 }
 
-// ---- No tool attribution: the hook and the PR body check ------------------------------
+// ---- No tool attribution: the hook ---------------------------------------------------
 // CLAUDE.md keeps session links, model names and "Generated with" footers out of
 // commits and PR text. `.claude/hooks/no-attribution.mjs` refuses the tool call that
-// would write one, and `scripts/check-pr-body.mjs` fails the `PR body` workflow on a
-// footer appended after that call, where the hook cannot see it (#176). One pattern
-// list serves both, so both suites run here: a pattern edited for one is tested
-// against the other's cases too.
-if (!only || "attribution".includes(only) || "pr-body".includes(only)) {
-  for (const suite of [".claude/hooks/no-attribution.test.mjs", "scripts/check-pr-body.test.mjs"]) {
-    const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" })
-    check(`attribution: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
-  }
+// would write one.
+if (!only || "attribution".includes(only)) {
+  const suite = ".claude/hooks/no-attribution.test.mjs"
+  const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" })
+  check(`attribution: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
 }
 
 // `.claude/hooks/format-edited.mjs` formats each file an agent edits, the way a

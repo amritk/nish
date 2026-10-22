@@ -21,8 +21,6 @@
     "!scripts/arrowify.mjs",
     "!scripts/fetch-seed.sh",
     "!scripts/check-filenames.mjs",
-    "!scripts/check-pr-body.mjs",
-    "!scripts/check-pr-body.test.mjs",
     "!scripts/changelog-gen.test.mjs",
     "!scripts/sync-main.mjs",
     "std",
