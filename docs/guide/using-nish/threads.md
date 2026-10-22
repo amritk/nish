@@ -259,7 +259,8 @@ export const main = (): i32 => {
   fine beside a `dst` that is a `const` bound to its own array and that
   nothing was given before the call: not stored in a field or a list, not
   passed to a function, not bound to a second name and not built into an
-  object. Use `dst` after the call as you like.
+  object. After the call you may hand `dst` on freely, except inside a loop
+  around the call, where the next pass's call comes after it.
 
 ```ts nish:ok
 import { parallelMap, parallelMapInto } from "nish/threads";

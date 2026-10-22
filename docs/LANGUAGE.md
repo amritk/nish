@@ -3489,10 +3489,13 @@ export const main = (): i32 => {
   `keep(h, d)` or `ts.push(d)` (`_helper`, `_push`), an alias `const e = d`
   (`_alias`), a branch `c ? d : w` (`_ternary`), a holder `new Holder(d)`
   (`_holder`), a store after the call inside a loop around it
-  (`_loop_store`), and the arrow reading `dst` itself (`_captured`). A `dst`
-  bound to a captured array is no fresh `const` (`_from_capture`). The rule
-  asks for the one binding of that name in its function, so a `dst` whose
-  name is declared twice there keeps the stricter rule above.
+  (`_loop_store`), a hand-on on one branch of an `if` (`_if_branch`), an
+  earlier call writing the same `dst` (`_twice`), `dst` passed as the call's
+  own `src` (`_as_src`), and the arrow reading `dst` itself (`_captured`). A
+  `dst` bound to a captured array is no fresh `const` (`_from_capture`). The
+  rule asks for the one binding of that name in its function, so a `dst`
+  whose name is declared twice there keeps the stricter rule above
+  (`_shadow`).
 
 ### Scoped tasks: `using s = scope()`
 

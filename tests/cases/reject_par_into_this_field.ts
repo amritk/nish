@@ -1,5 +1,5 @@
-// #612 (b14): a fresh destination stored into a field of `this` before the
-// call is what a captured `self` reads through that field.
+// #612: a fresh destination stored into a field of `this` before the call
+// is what a captured `self` reads through that field.
 import { parallelMap, parallelMapInto } from "nish/threads";
 
 class Table {

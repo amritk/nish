@@ -1467,7 +1467,10 @@ const dstBindings = (node: Node, name: string, out: Node[]): void => {
  * `before` comes after: earlier in the source, inside `loop` (a loop around
  * the call that the declaration is not in, whose next pass comes after a use
  * later in it), or in a function other than an arrow, which may run whenever
- * it is called. Every name spelled `name` counts, which can only refuse more.
+ * it is called. The parser refuses a function, method or class written
+ * inside a function body, so no program reaches that last case yet; it holds
+ * the rule the day one can. Every name spelled `name` counts, which can only
+ * refuse more.
  */
 const dstHandedOn = (
   node: Node,
