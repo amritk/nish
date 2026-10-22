@@ -44,12 +44,15 @@ before it is pushed (read the `wasi` skip line; it needs
 `WASI_SYSROOT=/usr`).
 
 **Generated goldens are regenerated, never edited or merged by hand.**
-`tests/self/goldens/checked*.txt` move with any change to `src/`, `std/` or a
-positive `tests/cases/*.ts`: rewrite them with `node tests/self/goldens.js
---update` (`--seed build/seed/bin/nish` without `build/nish`) and read the
-diff. On a conflict, merge `main` and regenerate. A new positive
-`tests/cases/*` is registered with `node tests/differential/goldens.js
---update` in the same commit. Details: `.claude/selfhost.md` → "The goldens".
+`tests/self/goldens/checked/` (one file per module) moves with any change to
+`src/`, `std/` or a positive `tests/cases/*.ts`: rewrite it with
+`node tests/self/goldens.js --update` (`--seed build/seed/bin/nish` without
+`build/nish`) and read the diff. To take in `main`, run `npm run sync-main`: it
+merges, regenerates the goldens and stages them without committing. Sync after
+any `src/` or `std/` change lands on `main`, even with no textual conflict. A
+new positive `tests/cases/*` is registered with
+`node tests/differential/goldens.js --update` in the same commit. Details:
+`.claude/selfhost.md` → "The goldens".
 
 **Moving where a fact lives moves every pointer to it in the same PR.** Grep
 the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.

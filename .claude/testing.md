@@ -484,11 +484,19 @@ oracles that compared stage1 with stage0 and were deleted with it.
 regenerating one, because regenerating without reading the diff is how a
 golden records a bug as the specification.
 
-`checked.txt` changes whenever a `tests/cases` program is added, so two open
-pull requests that each add a case conflict there as soon as one merges.
-Resolve it by merging `main` and running `node tests/self/goldens.js --update`,
-never by hand. Do it as the last push before merging, since each case another
-pull request lands makes the file stale again.
+`checked/` keeps one file per module, named after its path
+(`checked/tests/cases/add_plain.ts.txt`), and counts each body's `local`,
+`callee` and `sharedWrite` lines from that body's first position, so a line
+added above a function does not move it. Two pull requests that each add a
+case, or change different modules, therefore merge without a conflict; two that
+change the same module conflict in its file. Resolve that by merging `main` and
+running `node tests/self/goldens.js --update`, never by hand, and run it after
+any merge of `main` that touched `src/` or `std/`: a module's dump can move
+when a module it imports changes, without a textual conflict.
+`npm run sync-main` (`scripts/sync-main.mjs`) is that whole sequence: it
+merges `origin/main`, drops the conflicted files under `tests/self/goldens/`,
+runs both `--update`s and stages the result for you to read, stopping on any
+conflict it cannot regenerate — the frozen store below among them.
 
 `tests/differential/goldens/` is the third: the JavaScript every whole program
 rewrites to, which the WP13 oracle compares against Node. It is the one golden

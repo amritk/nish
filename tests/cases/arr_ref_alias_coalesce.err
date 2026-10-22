@@ -1,0 +1,1 @@
+`q` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage

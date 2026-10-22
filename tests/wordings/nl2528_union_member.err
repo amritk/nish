@@ -1,1 +1,1 @@
-`r` cannot be used on the union `Circle | Ball`: its tag `kind` is the one member a union has in this version
+`r` cannot be used on the union `Circle | Ball`: a union has only its tag `kind` until a test of the tag narrows it to one variant

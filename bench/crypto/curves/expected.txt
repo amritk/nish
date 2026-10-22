@@ -1,0 +1,7 @@
+# <kernel> <size> <iterations> <checksum>, written by `node bench/crypto/run.mjs --validate --write-expected`.
+x25519-base 32 3 34f038ae
+x25519 32 3 88867bd3
+p256-sign 64 3 c7504369
+p256-verify 64 3 2b51bfdc
+ed25519-sign 64 3 f2d2ff99
+ed25519-verify 64 3 bc585e67

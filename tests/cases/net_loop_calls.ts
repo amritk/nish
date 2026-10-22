@@ -5,7 +5,9 @@
 // is read, because readiness is level-triggered. A UDP socket is always
 // writable. A `ready` of two numbers holds one pair, however many are ready.
 // `pollModify` changes the events and the token, `pollRemove` stops the
-// watching, and shutting a socket's both sides is a hang-up, 4. -22 for an
+// watching, and shutting both sides of a connection is a hang-up, 4: a
+// connection, because Darwin shuts only a connected socket, where Linux also
+// shuts a UDP socket that has no peer. -22 for an
 // event bit past 2 and for a `ready` shorter than 2, -17 for a descriptor
 // added twice, -2 for one that was never added, -9 for a closed loop.
 const MS: i64 = 1000000;
@@ -46,18 +48,27 @@ export const main = (): number => {
   console.log(pollWait(loop, ready, 0));
   console.log(`${ready[0]} ${ready[1]}`);
 
-  // Both sides of a shut: readable, writable and hung up.
-  netShutdown(a, 2);
+  // Both sides of a connection shut: readable, writable and hung up, with a
+  // no longer watched, so the connection is the one ready.
+  const listener = tcpListen("127.0.0.1", 0, 1);
+  const toL: u8[] = new Array<u8>(18);
+  netAddress(toL, "127.0.0.1", netLocalPort(listener));
+  const c = tcpConnect(toL);
+  console.log(pollRemove(loop, a));
+  console.log(pollAdd(loop, c, 3, 9));
+  netShutdown(c, 2);
   console.log(pollWait(loop, ready, 0));
   console.log(`${ready[0]} ${ready[1]}`);
 
   console.log(pollAdd(loop, b, 4, 1));
   console.log(pollWait(loop, none, 0));
-  console.log(pollAdd(loop, a, 1, 1));
+  console.log(pollAdd(loop, c, 1, 1));
   console.log(pollRemove(loop, b));
   console.log(pollModify(loop, b, 1, 1));
   netClose(a);
   netClose(b);
+  netClose(c);
+  netClose(listener);
   console.log(netClose(loop));
   console.log(pollWait(loop, ready, 0));
   console.log(pollAdd(loop, 0, 1, 1));

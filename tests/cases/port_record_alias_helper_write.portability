@@ -1,0 +1,1 @@
+{"file":"tests/cases/port_record_alias_helper_write.ts","line":15,"column":11,"endLine":15,"endColumn":12,"severity":"portability","code":"NL8003","message":"`p` is copied into the array here, and TypeScript stores the same object, so the later write `setFirst(ps)` (line 16) is not seen through `p`"}

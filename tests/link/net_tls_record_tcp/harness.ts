@@ -81,6 +81,8 @@ export class Loopback {
   /** The first thing that went wrong, or empty. */
   failure: string = "";
   accepted: i32 = 0;
+  /** The slot the latest accept took: a closed slot is taken again, the last closed first. */
+  latest: i32 = -1;
   /** Accepts after which the one key buffer, refilled for every accept, read back as zeros. */
   keysWiped: i32 = 0;
   /** The one buffer every accept's ephemeral key is drawn into, as a server reusing it would. */
@@ -234,6 +236,7 @@ export class Loopback {
       const slot: i32 = this.server.accept(this.randomBuffer, this.keyBuffer);
       if (slot >= 0) {
         this.accepted = this.accepted + 1;
+        this.latest = slot;
         this.keysWiped = this.keysWiped + (allZero(this.keyBuffer) ? 1 : 0);
         this.requests[slot] = [];
         pollAdd(this.loop, this.server.fd(slot), 1, slot);

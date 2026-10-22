@@ -4,8 +4,8 @@
 @.str.1 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"value out of range: expected integer<0, 23>\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [43 x i8] } { i64 42, [43 x i8] c"value out of range: expected integer<0, 9>\00" }, align 8
 
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
-declare extern_weak void @nish_panic_overflow(i32 noundef) #2
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 
@@ -46,7 +46,7 @@ entry:
   ret i32 %0
 }
 
-define void @Clock.constructor(%struct.Clock* noundef nonnull noalias readonly align 8 dereferenceable(4) nocapture %this) #1 {
+define void @Clock.constructor(%struct.Clock* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Clock, %struct.Clock* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4, !tbaa !4
@@ -121,7 +121,8 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind noreturn cold }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }
 
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}

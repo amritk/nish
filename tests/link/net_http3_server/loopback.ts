@@ -14,7 +14,7 @@ import { netAddress, netLocalPort, udpBind, udpRecvFrom, udpSendTo } from "nish:
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 import { TLS_AES_128_GCM_SHA256 } from "nish/net/tls/schedule";
-import { quicPushAck, quicPushStream } from "nish/net/quic-frame";
+import { quicPushStream } from "nish/net/quic-frame";
 import { QUIC_LISTENER_ENTROPY_SIZE, quicListenerFlightTime, quicListenerPaceTime } from "nish/net/quic-listener";
 import { QuicServerConfig } from "nish/net/quic";
 import { QuicStreamPools } from "nish/net/quic-stream";
@@ -25,7 +25,7 @@ import { QpackEncoder } from "nish/net/qpack";
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafPrivate } from "../net_tls_common/server";
-import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcCrypto, qcFinishedPacket, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcShort } from "../net_quic_conn/client";
 import { QmMeter, qmPlain } from "../net_quic_memory/meter";
 import {
   CLIENT_CONTROL,
@@ -36,6 +36,7 @@ import {
   h3Config,
   H3Response,
   H3Wire,
+  WireWait,
   h3Cat,
   h3ClientSettings,
   h3Frame,
@@ -61,11 +62,15 @@ const listenerEntropy = (): u8[] => {
 export class LoopServer {
   server: Http3Server;
   port: i32 = 0;
+  /** The server's socket, waited on before a `receive` that must see a datagram just sent. */
+  arrival: WireWait;
 
   constructor(quicConfig: QuicServerConfig, slots: i32, port: i32) {
     const fd: i32 = udpBind("127.0.0.1", port, n32(0));
     this.port = netLocalPort(fd);
     this.server = new Http3Server(quicConfig, h3Config(), fd, slots, listenerEntropy());
+    this.arrival = new WireWait();
+    this.arrival.watch(fd);
   }
 }
 
@@ -268,9 +273,45 @@ const full = (t: Suite): void => {
   t.ok("the second gets no answer, and is counted", toI32(second.c.datagrams.length) === n32(0) && loop.server.refused >= n32(1));
 };
 
+/**
+ * A server builds a slot on the first Initial accepted into it and keeps it:
+ * none before the first client, one per slot ever busy after, and a slot
+ * released is taken again before one never built. A slot never built holds
+ * nothing, and the server refuses exactly when every slot is busy.
+ */
+const lazy = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(1024), n32(0));
+  const server: Http3Server = loop.server;
+  t.ok("a server of 1,024 slots has built none of them", toI32(server.quics.length) === n32(0) && toI32(server.conns.length) === n32(0) && toI32(server.addresses.length) === n32(0));
+  t.ok("and a slot never built holds nothing, nor counts as busy", !server.holds(n32(5)) && server.busy() === n32(0) && server.size() === n32(1024));
+  const first: H3Peer = h3WireConnect(server, loop.port, limits);
+  t.ok("the first client builds one slot, and takes it", first.conn.handshakeComplete && toI32(server.quics.length) === n32(1) && server.busy() === n32(1) && server.holds(n32(0)));
+  const second: H3Peer = h3WireConnect(server, loop.port, limits);
+  t.ok("the second builds the next", second.c.datagrams.length > 0 && toI32(server.quics.length) === n32(2) && server.holds(n32(1)) && server.busy() === n32(2));
+  server.connection(n32(0)).goaway();
+  server.touch(n32(0));
+  first.settle();
+  t.ok("the first, closed, frees its slot and keeps it built", !server.holds(n32(0)) && server.busy() === n32(1) && toI32(server.quics.length) === n32(2));
+  const third: H3Peer = h3WireConnect(server, loop.port, limits);
+  t.ok("a third takes the slot released, building nothing", third.c.datagrams.length > 0 && server.holds(n32(0)) && toI32(server.quics.length) === n32(2));
+  const bound: Http3Connection = server.connection(n32(3));
+  t.ok("asking for a slot not built builds it and those before it, and takes none", toI32(server.quics.length) === n32(4) && server.busy() === n32(2) && !server.holds(n32(3)));
+  t.ok("and the connection bound up front is the one the slot keeps", bound === server.connection(n32(3)) && server.quic(n32(3)) === server.quics[3]);
+  server.stop();
+  const pair = new LoopServer(h3QuicConfig(limits), n32(2), n32(0));
+  h3WireConnect(pair.server, pair.port, limits);
+  h3WireConnect(pair.server, pair.port, limits);
+  t.ok("a server of two slots takes two clients and refuses none", pair.server.busy() === n32(2) && pair.server.refused === n32(0) && toI32(pair.server.quics.length) === n32(2));
+  const late: H3Peer = h3WireConnect(pair.server, pair.port, limits);
+  t.ok("the third, with both busy, is refused and counted, and builds nothing", toI32(late.c.datagrams.length) === n32(0) && pair.server.refused === n32(1) && toI32(pair.server.quics.length) === n32(2));
+  pair.server.stop();
+};
+
 /** What one `receive` of the datagram `d`, sent from `fd`, keeps in the arena, measured in a fresh chunk. */
 const receiveCost = (loop: LoopServer, fd: i32, to: u8[], d: u8[], now: i64): i64 => {
   udpSendTo(fd, d, n32(0), toI32(d.length), to, n32(0), n32(0));
+  loop.arrival.arrived();
   const key: Secret<u8[]> = secret(leafPrivate());
   const filler: u8[] = new Array<u8>(70000);
   const before: i64 = Arena.used();
@@ -341,6 +382,7 @@ const markMoved = (loop: LoopServer, fd: i32, to: u8[], d: u8[], count: i32, now
   let moved: i64 = 0;
   for (let k: i32 = 0; k < count; k++) {
     udpSendTo(fd, d, n32(0), toI32(d.length), to, n32(0), n32(0));
+    loop.arrival.arrived();
     const before: i64 = Arena.mark();
     loop.server.receive(now + toI64(k) * step, key);
     moved = moved + (Arena.mark() - before);
@@ -408,11 +450,15 @@ class Lean {
   body: u8[];
   request: u8[];
   answered: i32 = 0;
+  wait: WireWait;
 
   constructor(loop: LoopServer) {
     this.loop = loop;
     this.c = new QcClient(TLS_AES_128_GCM_SHA256, fromHex(CLIENT_SCID));
     this.fd = udpBind("127.0.0.1", n32(0), n32(0));
+    this.wait = new WireWait();
+    this.wait.watch(loop.server.fd);
+    this.wait.watch(this.fd);
     this.to = new Array<u8>(18);
     netAddress(this.to, "127.0.0.1", loop.port);
     this.rx = new Array<u8>(65536);
@@ -431,7 +477,8 @@ class Lean {
  * The server's loop, each call measured on its own with a `fresh` meter
  * when `m` is one: receive, timers, every ready slot answered (each request
  * at its end, a 200 and 1,000 bytes), flush. Then the client reads what came
- * back, unmeasured. Answers whether anything moved.
+ * back, unmeasured. Answers whether anything moved, or is still on its way
+ * (`WireWait`).
  */
 const leanRound = (l: Lean, m: QmMeter): boolean => {
   const server: Http3Server = l.loop.server;
@@ -475,7 +522,7 @@ const leanRound = (l: Lean, m: QmMeter): boolean => {
     n = udpRecvFrom(l.fd, l.rx, n32(0), n32(65536), l.from, l.meta);
   }
   l.c.now = l.c.now + n64(1);
-  return got > 0 || read > 0;
+  return got > 0 || read > 0 || l.wait.landed();
 };
 
 /** Sends `datagram` to the server and runs rounds until nothing moves. */
@@ -490,7 +537,7 @@ const leanSend = (l: Lean, datagram: u8[], m: QmMeter): void => {
 const leanPacket = (l: Lean, payload: u8[], m: QmMeter): void => {
   const all: u8[] = [];
   if (l.c.largestApp >= n64(0)) {
-    quicPushAck(all, [n64(0), l.c.largestApp], n32(1), n64(0));
+    qcPushAppAck(all, l.c);
   }
   for (const b of payload) {
     all.push(b);
@@ -619,4 +666,5 @@ export const loopbackChecks = (t: Suite): void => {
   full(t);
   reused(t);
   idle(t);
+  lazy(t);
 };

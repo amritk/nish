@@ -97,15 +97,17 @@ every core the machine has, the ratio and the peak memory of both.
 | `par-short` | an eight-element map called 2^20 times, each call fed by the last: what calling a map costs when there is nothing to divide | 2^20 calls |
 | `par-regions` | a 2^17-element map called 1,000 times, each call fed by the last: what one divided region costs | 1,000 calls |
 | `par-histogram` | four tasks bin 50,000 values each into one `Mutex<Hist>`, taking the lock once per value: a lock fought over on every value. `seq` runs the four streams one after another, still locking | 16 rounds |
+| `par-histogram-atomic` | the same four streams into an `AtomicI32` per bin, one `add` per value: the same contention on sixteen bins, no lock | 16 rounds |
 
 ```bash
-node bench/run.mjs --only par            # the six and their twins; `--only par-nbody` names one
+node bench/run.mjs --only par            # all of them and their twins; `--only par-nbody` names one
 node bench/run.mjs --validate --only par # both runs of each and every twin, checksums only
 ```
 
 ### Against Rust and Go
 
-`par-compute`, `par-nbody`, `par-regions` and `par-histogram` have twins, so
+`par-compute`, `par-nbody`, `par-regions`, `par-histogram` and
+`par-histogram-atomic` have twins, so
 the second table in `docs/BENCHMARKS.md` compares the Nish `par` run with the
 same program in Rust and in Go:
 
@@ -124,8 +126,9 @@ twins split as Rayon does. `par-regions`' scope twin starts
 its threads on every call, because a scope cannot outlive it; the Rayon twin
 and the Go twin are the ones with a pool to compare with Nish's workers. The
 histogram takes a lock per value in every language (`Mutex`,
-`std::sync::Mutex`, `sync.Mutex`): Nish has no atomic counter yet, and a lock in
-one language against an atomic in another would not be the same program.
+`std::sync::Mutex`, `sync.Mutex`), and `par-histogram-atomic` an atomic add per
+value in every language (`AtomicI32.add`, `AtomicI32::fetch_add` with
+`SeqCst`, `atomic.Int32.Add`), so a lock is never timed against an atomic.
 
 **The same work is not the same checks or the same build**, and the table
 says so. Nish keeps its default overflow and bounds checks
@@ -178,18 +181,44 @@ because a squash merge does not keep the branch's own commits.
   the minimum in every run, and on the median in two runs of three, within the
   band in the third. `tests/run.js` pins the vector loop ("par_map_vector").
 - `par-histogram`: a contended lock, and the most machine- and load-sensitive
-  of the four; read its spread before its reading. What is measured: past 64
+  of the five; read its spread before its reading. What is measured: past 64
   spins `nish_mutex_wait` calls `sched_yield`, 640,000 to 850,000 times a run,
   and a run spends 0.6 to 0.8 s of system time against Go's 0.02 to 0.04 s.
   System time is not the whole story, though: Rust's futex lock spends about
   as much (0.46 s), and in those runs it came out about level with Nish, so
   parking on a futex is not shown to be the cure. Those figures are from an
   earlier session, in which Nish's `par` run took about 274 ms; in the table's
-  latest runs it took 96.7 ms and Rust's 259 ms, with no change to either
+  latest runs it took 116 ms and Rust's 308 ms, with no change to either
   program, so par-histogram moves by 2x and more between sessions on this
   machine. Even the sign is not stable: the latest runs put Nish ahead of Go
-  on the median in two runs and behind in one, where the runs before them put
-  it behind Go on every median.
+  on every median, outside the band in two of the three, where earlier runs
+  put it behind Go on every median.
+- `par-histogram-atomic`: 1.59x to 1.95x behind Rust on the minimum and 1.81x
+  to 1.96x on the median, past 1.10x in all three runs, and level with Go
+  (101 / 129 ms against Rust's 61.3 / 69.2 and Go's 93.3 / 106). Swapping the
+  lock for atomics takes Rust from 308 ms to 61 and Go from 194 to 93, but Nish
+  only from 116 to 101. Why is not measured yet. The differences in the
+  program are the checks above (an overflow check on `v * 75 + 74` and a
+  bounds check on `j.bins[bin]` per value, neither of which Rust makes), and
+  the bins: Nish's are an array of `AtomicI32` objects reached through the
+  task's class, where Rust's and Go's are sixteen counters inline in one array:
+  one more load per value in Nish, and a different layout in the cache.
+- `par-nbody`: 1.11x to 1.17x behind Rayon, past 1.10x in all three runs,
+  where on `main` at a1a5bf8a it was 0.96x to 1.06x. Part of that is
+  [#731](https://github.com/amritk/nish/pull/731), which cuts a divided region
+  into up to eight pieces per thread, claimed as threads finish: the same IR,
+  linked against the runtime from just before #731 (20a4e65f) and from
+  b1bf78f, timed in 3 runs of 41 interleaved rounds after a warm-up on four
+  threads, each binary beside a byte-identical copy, went from 54.9–58.8 /
+  63.2–65.3 ms to 63.5–63.7 / 67.6–68.9 (min / median): 1.08x to 1.16x slower
+  on the minimum and 1.06x to 1.07x on the median, against a band of 1.1% to
+  4.2% and 0% to 3.0%. [#743](https://github.com/amritk/nish/pull/743) does
+  not touch it: a number map never calls `nish_cross_keep`, and its binary
+  links byte-identical to #731's. Each step's map has 3,072 probes, so eight
+  pieces a thread is 96 probes a piece, and the cost of each claim is the
+  suspect; it is not measured which part of #731 costs it. The rest of the
+  move, from 47.4 ms then to 63.1 ms in the table now, is the machine between
+  sessions: the pre-#731 binary itself runs at 55 to 59 ms here.
 
 A missing toolchain is a skipped column, never a failure: without `rustc` the
 Rust columns go, without cargo or without crates.io the Rayon column goes, and
@@ -201,7 +230,7 @@ else: every other section, the header and json-compare's marked section
 included, stays byte for byte, and each table says the date, the CPU and the
 commit it was measured at, since those may differ from the header's. A report
 with no twins' table gets one under the data-parallel table. It writes only
-when all six kernels ran and nothing else was timed. A subset
+when every parallel kernel ran and nothing else was timed. A subset
 (`--only par-nbody`), a report with no data-parallel table, and the map half of
 `--only maps,par` leave the file as it was, and the run says so; any run that
 times the benchmark tables rewrites the whole report, as a full run does.
@@ -486,6 +515,28 @@ under test. The counts are only meaningful on x86-64 Linux, and valgrind does no
 run on macOS. So on any other host, or where valgrind is not on `PATH`, the check
 is a counted skip that names the reason. CI's Linux job installs valgrind beside
 LLVM, so the check runs there on every push.
+
+## Crypto against other languages
+
+[`crypto/`](crypto/README.md) holds the crypto twins: each family, such as
+`crypto/hash/` (SHA-256, SHA-512, HMAC-SHA256, HKDF), is one program per
+language over the same inputs. The languages are Nish, OpenSSL's libcrypto in
+C, Go's standard library, RustCrypto and `node:crypto`, each with a portable
+column where the library can switch its assembly off. `crypto/run.mjs` checks
+that every program prints the family's pinned checksums and times them in
+interleaved rounds beside a copy of the Nish binary, the noise band. It writes
+the `crypto` block of docs/BENCHMARKS.md, which `bench/run.mjs` carries over
+when it rewrites the file.
+
+```bash
+node bench/crypto/run.mjs --validate               # what CI runs: every checksum, and the portable proof
+node bench/crypto/run.mjs --record                 # time every family; rewrite the crypto block
+node bench/crypto/run.mjs --only hash --out x.md   # time one family into a file of its own
+node bench/run.mjs --only crypto                   # --record, from this runner (no --no-rust or --no-go)
+```
+
+The two drivers below time Nish against itself only: they are baselines for
+one kernel's own work packages, not comparisons with other languages.
 
 ## AES-GCM
 
@@ -822,13 +873,57 @@ the count, in one process, and fails if the checksum differs from the one
 pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
 must keep printing it.
 
+## TLS handshake
+
+`tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
+`tests/link/net_interop_server` run as `serve`, its own P-256 certificate,
+answering new connections on its h2 port. It is
+[WP34 K5](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline)'s
+measure for the scalar inversion, where `bench/p256.mjs` times the signature on
+its own; [the result](../docs/wp34-hosting-cs.md#k5-p-256-the-inversion--the-result)
+reads both against the bar. It is not in this suite's tables. It needs `curl` with HTTP/2 and
+`taskset`.
+
+```bash
+npm run build
+node bench/tls-handshake.mjs --check                # three handshakes: TLS 1.3, X25519 and h2, and CPU read
+node bench/tls-handshake.mjs --runs 16              # this checkout's server against a copy of itself
+node bench/tls-handshake.mjs --baseline main        # also the server built from another rev, and its copy
+node bench/tls-handshake.mjs --json out.json        # every round's figures, for a script
+```
+
+The targets are the server built by this checkout, a byte-identical copy of
+it, and with `--baseline REV` the server built from REV in a worktree under
+`build/` by that tree's own `build/nish`, and a copy of that. A target is named
+by its commit's short hash, with `+dirty` when the checkout has uncommitted
+changes, and a `--baseline` that names a target already measured is refused,
+since rounds are pooled by name. Each round starts
+every target fresh, in an order rotated by one each round, pinned to CPU 0.
+After five warm-up handshakes it makes `--handshakes` new connections (600 by
+default), each one `curl --http2 --tlsv1.3 -k` process pinned to CPUs 1–3, so
+every handshake is a full one and none is resumed. Each must return the
+17-byte file over HTTP/2. The figure is the server's utime + stime over those
+connections, read from `/proc/<pid>/stat`, a handshake's share of it: the
+handshake, one request and its response. curl's own connect-to-handshake time
+is reported beside it but is mostly the client's.
+
+The report gives each target's minimum and median over the rounds, user and
+system CPU apart, and each copy against its own build: whatever separates a
+server from its copy is the machine, and a difference between builds reads as
+one only outside that band. It also prints the fewest clock ticks
+in any round (10 ms each) so their resolution can be read, and the handshake every server
+negotiated, which must be the same for all of them or the run stops.
+
 ## Pool memory
 
 The interop server (`tests/link/net_interop_server`, the runner's endpoint)
-builds a connection pool per carrier before it listens: QUIC for HTTP/3,
-HTTP/2, HTTPS/1.1 and plain HTTP/1.1, each `--slots` connections deep (1 to
-4096, 64 by default; the two HTTP/1.1 pools stop at 500, where `H1Loop`'s
-event tokens run out). Two scripts measure what that costs and what it serves:
+serves a connection pool per carrier: QUIC for HTTP/3, HTTP/2, HTTPS/1.1 and
+plain HTTP/1.1, each `--slots` connections deep (1 to 4096, 64 by default; the
+two HTTP/1.1 pools stop at 500, where `H1Loop`'s event tokens run out). Before
+it listens a pool sizes its tables from `--slots`, and a slot's connection is
+built on the first connection accepted into it, slots 0 up, with the
+interop server's `WebTransport` bound beside an HTTP/3 slot when that slot
+is first served as `h3`. Two scripts measure what that costs and what it serves:
 
 ```bash
 build/nish tests/link/net_interop_server/main.ts -o build/interop.ir/ --link build/interop
@@ -913,6 +1008,48 @@ HTTPS/1.1 and HTTP/3 and ±20% for HTTP/2 on this machine. HTTP/3 runs 2,000
 requests rather than 20,000 because its rate falls as the one connection's
 streams pile up (about 1,900 requests a second over 20,000), and a longer run
 would measure that build-up rather than a request.
+
+### Lazy slots
+
+Start-up memory once every pool builds a slot on its first accept:
+`pool-rss.mjs --per-pool --runs 1`, 3 rounds a count, each round running base
+(`c8a00d6`), `main` at `c21e4a7` with the interop server's lazy `WebTransport`
+binding, and a byte-identical copy of that build, in an order
+that rotates each round. The machine has 4 CPUs and 16 GB with no swap. Each
+figure is the median VmRSS in MB; the plain and TLS HTTP/1.1 pools stop at
+500 slots (`TLS_SLOTS`), so their 1024 row is 500.
+
+| pool | slots | base | main | copy |
+| --- | ---: | ---: | ---: | ---: |
+| all | 16 | 10.1 | 5.9 | 5.9 |
+| all | 64 | 28.0 | 10.6 | 10.6 |
+| all | 256 | 99.8 | 29.4 | 29.4 |
+| all | 1024 | 358.7 | 104.3 | 104.3 |
+| QUIC (HTTP/3) | 16 | 8.2 | 5.8 | 5.8 |
+| QUIC (HTTP/3) | 64 | 20.1 | 10.2 | 10.2 |
+| QUIC (HTTP/3) | 256 | 67.8 | 27.5 | 27.5 |
+| QUIC (HTTP/3) | 1024 | 258.3 | 97.0 | 97.0 |
+| HTTP/2 | 16 | 5.6 | 4.6 | 4.6 |
+| HTTP/2 | 64 | 9.0 | 4.9 | 4.9 |
+| HTTP/2 | 256 | 22.9 | 6.3 | 6.3 |
+| HTTP/2 | 1024 | 78.3 | 11.7 | 11.7 |
+| HTTPS/1.1 | 16 | 5.4 | 4.5 | 4.5 |
+| HTTPS/1.1 | 64 | 7.9 | 4.5 | 4.5 |
+| HTTPS/1.1 | 256 | 18.1 | 4.5 | 4.5 |
+| HTTPS/1.1 | 1024 (500) | 31.2 | 4.6 | 4.6 |
+| HTTP/1.1 | 16 to 1024 (500) | 4.5 | 4.5 | 4.5 |
+
+The all-one-slot server is 4.5 MB in all three builds. Every count fits on
+this machine at base too, so none is dropped: base `c8a00d6` already sat far
+below the `249cbe9` figures above. The copy's median equals `main`'s in every
+row and every round's spread is at most 0.1 MB, so the noise band is 0.1 MB and
+every base-to-`main` difference but plain HTTP/1.1's, already lazy at base,
+lies outside it. What `main` still takes grows
+with the slots: QUIC's tables sized from `--slots` (about 93 kB a slot at
+1024) and HTTP/2's (about 7 kB), not slots built before the first connection.
+Time to listen with every pool at 1024 slots is 56 ms (52–58) on `main`
+against 214 ms (209–216) at base; the copy's 54 ms (53–64) puts that noise band
+at about 10 ms.
 
 ## HTTP/3 latency
 

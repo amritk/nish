@@ -118,7 +118,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, signalFd, readSignal, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, monotonicNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
@@ -275,6 +275,11 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "getenv" ||
       name === "spawnSync" ||
       name === "spawnSyncTo" ||
+      name === "spawn" ||
+      name === "kill" ||
+      name === "waitPid" ||
+      name === "availableParallelism" ||
+      name === "totalMemory" ||
       name === "monotonicNanos" ||
       name === "signalFd" ||
       name === "readSignal"

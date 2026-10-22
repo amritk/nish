@@ -39,7 +39,8 @@
  * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
  * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
- * rows and run by nothing. A WASI build has none of this (the checker refuses
+ * rows and run by its `runtime-net (macos-latest)` job: tests/runtime-test.c and
+ * the `net_` sections of tests/run.js, on a mac. A WASI build has none of this (the checker refuses
  * every `nish:net` call under a wasm target), so there the file is empty.
  */
 #if defined(__wasi__) || defined(__wasm__)
@@ -54,6 +55,7 @@ typedef int nish_net_unused;
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -188,10 +190,11 @@ int32_t nish_net_local_port(int32_t fd) {
    IPv4 host is an `AF_INET` socket; any other is `AF_INET6` with
    `IPV6_V6ONLY` off, so `::` hears both families. A stream gets
    `SO_REUSEADDR` and `arg` its backlog; a datagram socket's `arg` is
-   `udpBind`'s flags. `reuse` asks for `SO_REUSEPORT`. Every option is set
-   before the bind, which is where `SO_REUSEPORT` has to be, and where
-   `UDP_GRO` has to be for the first datagram to be coalesced. */
-static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int32_t arg, int reuse) {
+   `udpBind`'s flags. `opts` is a stream's `tcpListenFlags` word: bit 1 asks
+   for `SO_REUSEPORT`, bit 2 for `TCP_NODELAY`. Every option is set before the
+   bind, which is where `SO_REUSEPORT` has to be, and where `UDP_GRO` has to be
+   for the first datagram to be coalesced. */
+static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int32_t arg, int32_t opts) {
   unsigned char a[16];
   if ((uint32_t)port > 65535 || !nish_net_parse(host, a)) return -22;
   int v4 = memcmp(a, nish_mapped_prefix, 12) == 0;
@@ -209,9 +212,10 @@ static int32_t nish_net_bound(const nish_str *host, int32_t port, int type, int3
   /* Both families at once on an IPv6 socket; on an IPv4 one this fails with
      `ENOPROTOOPT` and changes nothing, which is cheaper than asking. */
   setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
-  int bad = reuse ? setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof one) : 0;
+  int bad = (opts & 1) ? setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &one, sizeof one) : 0;
   if (type == SOCK_STREAM) {
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    if (opts & 2) bad |= setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
   } else {
 #if defined(__linux__)
     if (arg & 2) bad |= setsockopt(fd, IPPROTO_UDP, UDP_GRO, &one, sizeof one);
@@ -240,10 +244,11 @@ int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog) {
 
 /* `tcpListenFlags(host, port, backlog, flags)`: `tcpListen`'s socket, with
    `SO_REUSEPORT` for flag 1, so several listeners of one uid share the port
-   (Linux spreads new connections across them; Darwin hands them all to one).
-   Any other bit is -22. */
+   (Linux spreads new connections across them; Darwin hands them all to one),
+   and `TCP_NODELAY` for flag 2, which the listener carries so that
+   `tcpAccept` sets it on each connection it takes. Any other bit is -22. */
 int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags) {
-  if ((uint32_t)flags > 1) return -22;
+  if ((uint32_t)flags > 3) return -22;
   return nish_net_bound(host, port, SOCK_STREAM, backlog, flags);
 }
 
@@ -272,7 +277,18 @@ static void nish_net_put(nish_array *out, const nish_sockaddr *s, socklen_t n) {
 /* `tcpAccept(fd, peer)`: the next connection as a descriptor of its own,
    non-blocking and close-on-exec, with the peer's address written into
    `peer`; -11 when none is waiting. A `peer` shorter than 18 bytes is -22
-   before anything is accepted, so no connection is taken and lost. */
+   before anything is accepted, so no connection is taken and lost.
+
+   A listener opened with `tcpListenFlags` flag 2 holds `TCP_NODELAY`, and the
+   connection gets it here. Linux copies the option to an accepted socket,
+   but that is not a rule other systems keep, so it is read off the listener
+   and set on the connection everywhere. The listener is the record of the
+   flag, rather than a table beside the descriptors, so it holds for a
+   descriptor however the program came by it, and a closed listener's number
+   reused leaves nothing stale behind. A listener that cannot answer (not
+   TCP) has no Nagle to turn off; a connection on which the set fails is
+   closed and its failure answered, so a flag-2 listener never hands out a
+   socket without it. */
 int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   if (peer->len < NISH_ADDR_BYTES) return -22;
   nish_sockaddr s;
@@ -283,6 +299,14 @@ int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
   int c = nish_net_setup(accept(fd, &s.sa, &n));
 #endif
   if (c < 0) return nish_net_fail();
+  int nodelay = 0;
+  socklen_t size = sizeof nodelay;
+  if (getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, &size) == 0 && nodelay != 0 &&
+      setsockopt(c, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof nodelay) != 0) {
+    int e = errno;
+    close(c);
+    return nish_net_err(e);
+  }
   nish_net_put(peer, &s, n);
   return c;
 }
@@ -511,11 +535,15 @@ static int nish_poll_change(int32_t loop, int32_t fd, int filter, int flags, int
 
 /* Add, modify or remove `fd` in `loop`. epoll does each in one call, with
    the token in `data.u32`. kqueue has a filter per direction rather than a
-   set of events, so a change is the filters deleted and then the ones asked
-   for added, each carrying the token in `udata`. Deleting a filter that was
-   never added is not an error, except to a removal that finds neither, which
-   answers epoll's ENOENT; a modification adds what it asks for either way, so
-   a descriptor added watching nothing, which has no filter, can be modified. */
+   set of events, so the answers epoll gives are built from filters: a
+   descriptor in the loop has at least one, a disabled read filter standing for
+   one added watching nothing; an add first touches both filters with no flags,
+   which answers ENOENT for a filter not there, and is EEXIST when either is;
+   a modification or a removal deletes both, and is ENOENT when neither was
+   there; a modification then adds the ones asked for, each carrying the token
+   in `udata`. A touch rewrites the filter's `udata`, and the add touches both
+   filters, so the add that answers -17 leaves the descriptor watched for its
+   old events, both ways, under the token it gave rather than the old one. */
 static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, int32_t token) {
   if ((uint32_t)events > 3) return -22;
 #if defined(__linux__)
@@ -525,14 +553,23 @@ static int32_t nish_poll_ctl(int32_t loop, int op, int32_t fd, int32_t events, i
   e.data.u32 = (uint32_t)token;
   return epoll_ctl(loop, op, fd, &e) != 0 ? nish_net_fail() : 0;
 #else
-  int e = 0;
-  if (op != NISH_POLL_ADD) {
-    int r = nish_poll_change(loop, fd, EVFILT_READ, EV_DELETE, 0);
-    int w = nish_poll_change(loop, fd, EVFILT_WRITE, EV_DELETE, 0);
-    if (op == NISH_POLL_REMOVE) return r != 0 && w != 0 ? nish_net_err(r) : 0;
+  int r, w;
+  if (op == NISH_POLL_ADD) {
+    r = nish_poll_change(loop, fd, EVFILT_READ, 0, token);
+    w = nish_poll_change(loop, fd, EVFILT_WRITE, 0, token);
+    if (r == 0 || w == 0) return -17;
+    if (r != ENOENT) return nish_net_err(r);
+    if (w != ENOENT) return nish_net_err(w);
+  } else {
+    r = nish_poll_change(loop, fd, EVFILT_READ, EV_DELETE, 0);
+    w = nish_poll_change(loop, fd, EVFILT_WRITE, EV_DELETE, 0);
+    if (r != 0 && w != 0) return nish_net_err(r);
+    if (op == NISH_POLL_REMOVE) return 0;
   }
+  int e = 0;
   if (events & 1) e = nish_poll_change(loop, fd, EVFILT_READ, EV_ADD | EV_ENABLE, token);
   if (e == 0 && (events & 2)) e = nish_poll_change(loop, fd, EVFILT_WRITE, EV_ADD | EV_ENABLE, token);
+  if (events == 0) e = nish_poll_change(loop, fd, EVFILT_READ, EV_ADD | EV_DISABLE, token);
   return e != 0 ? nish_net_err(e) : 0;
 #endif
 }
@@ -557,8 +594,7 @@ int32_t nish_poll_remove(int32_t loop, int32_t fd) { return nish_poll_ctl(loop, 
    `NISH_POLL_CHUNK`. A signal that interrupts the wait answers 0, as a
    timeout does, rather than waiting again past the deadline; the program's
    loop comes round and, if it watches `signalFd()`, finds the signal ready.
-   On Darwin a descriptor both readable and writable is two pairs with the
-   same token, one per filter. A `ready` shorter than 2 is -22. */
+   A `ready` shorter than 2 is -22. */
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   uint64_t room = ready->len / 2;
   if (room == 0) return -22;
@@ -568,22 +604,37 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms) {
   struct epoll_event e[NISH_POLL_CHUNK];
   /* epoll waits forever for any negative timeout, as the language does. */
   int n = epoll_wait(loop, e, max, timeout_ms);
-#else
-  struct kevent e[NISH_POLL_CHUNK];
-  struct timespec t = {timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000000};
-  int n = kevent(loop, NULL, 0, e, max, timeout_ms < 0 ? NULL : &t);
-#endif
   if (n < 0) return errno == EINTR ? 0 : nish_net_fail();
   for (int i = 0; i < n; i++) {
-#if defined(__linux__)
     uint32_t got = e[i].events;
     out[2 * i] = (int32_t)e[i].data.u32;
     out[2 * i + 1] = ((got & EPOLLIN) ? 1 : 0) | ((got & EPOLLOUT) ? 2 : 0) | ((got & (EPOLLHUP | EPOLLERR)) ? 4 : 0);
-#else
-    out[2 * i] = (int32_t)(intptr_t)e[i].udata;
-    out[2 * i + 1] = (e[i].filter == EVFILT_READ ? 1 : 2) | ((e[i].flags & (EV_EOF | EV_ERROR)) ? 4 : 0);
-#endif
   }
   return n;
+#else
+  /* A record per filter, so a descriptor ready both ways is two, folded here
+     into one pair as epoll's one event is. Twice the room is asked for, so a
+     full `ready` is not cut short by the folding; a descriptor that finds no
+     pair free is still ready at the next wait. */
+  struct kevent e[NISH_POLL_CHUNK];
+  struct timespec t = {timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000000};
+  int got = kevent(loop, NULL, 0, e, 2 * max < NISH_POLL_CHUNK ? 2 * max : NISH_POLL_CHUNK, timeout_ms < 0 ? NULL : &t);
+  if (got < 0) return errno == EINTR ? 0 : nish_net_fail();
+  int n = 0;
+  for (int i = 0; i < got; i++) {
+    int32_t bits = (e[i].filter == EVFILT_READ ? 1 : 2) | ((e[i].flags & (EV_EOF | EV_ERROR)) ? 4 : 0);
+    int k = 0;
+    while (k < n && e[k].ident != e[i].ident) k++;
+    if (k == n) {
+      if (n == max) continue;
+      e[n] = e[i];
+      out[2 * n] = (int32_t)(intptr_t)e[i].udata;
+      out[2 * n + 1] = 0;
+      n++;
+    }
+    out[2 * k + 1] |= bits;
+  }
+  return n;
+#endif
 }
 #endif

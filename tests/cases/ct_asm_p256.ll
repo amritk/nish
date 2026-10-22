@@ -10,50 +10,57 @@
 @.str.6 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296\00" }, align 8
 @.str.7 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5\00" }, align 8
 @.str.8 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
-@.str.9 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"ok    \00" }, align 8
-@.str.10 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"FAIL  \00" }, align 8
-@.str.11 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c": \00" }, align 8
-@.str.12 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb\00" }, align 8
-@.str.13 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d\00" }, align 8
-@.str.14 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"ffffffff00000001000000000000000000000000fffffffffffffffffffffffe\00" }, align 8
-@.str.15 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"fffffffe00000003fffffffd0000000200000001fffffffe0000000300000000\00" }, align 8
-@.str.16 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"0000000000000000000000000000000000000000000000000000000000000000\00" }, align 8
-@.str.17 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550\00" }, align 8
-@.str.18 = private unnamed_addr constant { i64, [27 x i8] } { i64 26, [27 x i8] c"p256FiatMul: a b / R mod p\00" }, align 8
-@.str.19 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"f7b77f634d49e7b16931916fe806ae02c4dc1b3efbc56b5da7aeefc0c3f6f39e\00" }, align 8
-@.str.20 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatMul: (p - 1)^2 / R mod p\00" }, align 8
-@.str.21 = private unnamed_addr constant { i64, [30 x i8] } { i64 29, [30 x i8] c"p256FiatMul: one times a is a\00" }, align 8
-@.str.22 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c"p256FiatMul: zero times a is zero\00" }, align 8
-@.str.23 = private unnamed_addr constant { i64, [29 x i8] } { i64 28, [29 x i8] c"p256FiatMul: out may be arg1\00" }, align 8
-@.str.24 = private unnamed_addr constant { i64, [30 x i8] } { i64 29, [30 x i8] c"p256FiatSquare: a^2 / R mod p\00" }, align 8
-@.str.25 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"33a5f07927935fea028224afa6d52c6009966566f231cc001f60a3910a739a85\00" }, align 8
-@.str.26 = private unnamed_addr constant { i64, [36 x i8] } { i64 35, [36 x i8] c"p256FiatSquare: (p - 1)^2 / R mod p\00" }, align 8
-@.str.27 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatScalarMul: a b / R mod n\00" }, align 8
-@.str.28 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"4cf6829aa93728e8f3c97df913fb1bfa95fe5810e2933a05943f8312a98d9cf2\00" }, align 8
-@.str.29 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"b831b33e0c05b45e15bbdd9b3bfa43825fee0aa0b6e5a54e31e2bd8b073b76b7\00" }, align 8
-@.str.30 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"398644212c9efd1fda959b7a3c3ccdc275942d68c27a8c80b6b19bfc9937d033\00" }, align 8
-@.str.31 = private unnamed_addr constant { i64, [39 x i8] } { i64 38, [39 x i8] c"p256FiatScalarMul: (n - 1)^2 / R mod n\00" }, align 8
-@.str.32 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"60d066334905c1e907f8b6041e607725badef3e243566fafce1bc8f79c197c79\00" }, align 8
-@.str.33 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatCmovznzU32: 0 keeps arg2\00" }, align 8
-@.str.34 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"7\00" }, align 8
-@.str.35 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatCmovznzU32: 1 takes arg3\00" }, align 8
-@.str.36 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"9\00" }, align 8
-@.str.37 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"p256FiatCmovznzU32: any non-zero takes arg3\00" }, align 8
-@.str.38 = private unnamed_addr constant { i64, [42 x i8] } { i64 41, [42 x i8] c"p256TableMove: hit 0 leaves out as it was\00" }, align 8
-@.str.39 = private unnamed_addr constant { i64, [51 x i8] } { i64 50, [51 x i8] c"p256TableMove: hit 1 takes the entry at the offset\00" }, align 8
-@.str.40 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"0000006b0000006a000000690000006800000067000000660000006500000064\00" }, align 8
-@.str.41 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"RFC 6979 A.2.5 public key\00" }, align 8
-@.str.42 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721\00" }, align 8
-@.str.43 = private unnamed_addr constant { i64, [130 x i8] } { i64 129, [130 x i8] c"60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6 7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299\00" }, align 8
-@.str.44 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60\00" }, align 8
-@.str.45 = private unnamed_addr constant { i64, [47 x i8] } { i64 46, [47 x i8] c"RFC 6979 A.2.5 SHA-256 \22sample\22: k G has x = r\00" }, align 8
-@.str.46 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716\00" }, align 8
-@.str.47 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"d16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0\00" }, align 8
-@.str.48 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"RFC 6979 A.2.5 SHA-256 \22test\22: k G has x = r\00" }, align 8
-@.str.49 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367\00" }, align 8
-@.str.50 = private unnamed_addr constant { i64, [39 x i8] } { i64 38, [39 x i8] c"RFC 6979 A.2.5 public key, by the comb\00" }, align 8
-@.str.51 = private unnamed_addr constant { i64, [60 x i8] } { i64 59, [60 x i8] c"RFC 6979 A.2.5 SHA-256 \22sample\22, by the comb: k G has x = r\00" }, align 8
-@.str.52 = private unnamed_addr constant { i64, [58 x i8] } { i64 57, [58 x i8] c"RFC 6979 A.2.5 SHA-256 \22test\22, by the comb: k G has x = r\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551\00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"ok    \00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"FAIL  \00" }, align 8
+@.str.12 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c": \00" }, align 8
+@.str.13 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb\00" }, align 8
+@.str.14 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d\00" }, align 8
+@.str.15 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"ffffffff00000001000000000000000000000000fffffffffffffffffffffffe\00" }, align 8
+@.str.16 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"fffffffe00000003fffffffd0000000200000001fffffffe0000000300000000\00" }, align 8
+@.str.17 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"0000000000000000000000000000000000000000000000000000000000000000\00" }, align 8
+@.str.18 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550\00" }, align 8
+@.str.19 = private unnamed_addr constant { i64, [27 x i8] } { i64 26, [27 x i8] c"p256FiatMul: a b / R mod p\00" }, align 8
+@.str.20 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"f7b77f634d49e7b16931916fe806ae02c4dc1b3efbc56b5da7aeefc0c3f6f39e\00" }, align 8
+@.str.21 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatMul: (p - 1)^2 / R mod p\00" }, align 8
+@.str.22 = private unnamed_addr constant { i64, [30 x i8] } { i64 29, [30 x i8] c"p256FiatMul: one times a is a\00" }, align 8
+@.str.23 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c"p256FiatMul: zero times a is zero\00" }, align 8
+@.str.24 = private unnamed_addr constant { i64, [29 x i8] } { i64 28, [29 x i8] c"p256FiatMul: out may be arg1\00" }, align 8
+@.str.25 = private unnamed_addr constant { i64, [30 x i8] } { i64 29, [30 x i8] c"p256FiatSquare: a^2 / R mod p\00" }, align 8
+@.str.26 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"33a5f07927935fea028224afa6d52c6009966566f231cc001f60a3910a739a85\00" }, align 8
+@.str.27 = private unnamed_addr constant { i64, [36 x i8] } { i64 35, [36 x i8] c"p256FiatSquare: (p - 1)^2 / R mod p\00" }, align 8
+@.str.28 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatScalarMul: a b / R mod n\00" }, align 8
+@.str.29 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"4cf6829aa93728e8f3c97df913fb1bfa95fe5810e2933a05943f8312a98d9cf2\00" }, align 8
+@.str.30 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"b831b33e0c05b45e15bbdd9b3bfa43825fee0aa0b6e5a54e31e2bd8b073b76b7\00" }, align 8
+@.str.31 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"398644212c9efd1fda959b7a3c3ccdc275942d68c27a8c80b6b19bfc9937d033\00" }, align 8
+@.str.32 = private unnamed_addr constant { i64, [39 x i8] } { i64 38, [39 x i8] c"p256FiatScalarMul: (n - 1)^2 / R mod n\00" }, align 8
+@.str.33 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"60d066334905c1e907f8b6041e607725badef3e243566fafce1bc8f79c197c79\00" }, align 8
+@.str.34 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatCmovznzU32: 0 keeps arg2\00" }, align 8
+@.str.35 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"7\00" }, align 8
+@.str.36 = private unnamed_addr constant { i64, [33 x i8] } { i64 32, [33 x i8] c"p256FiatCmovznzU32: 1 takes arg3\00" }, align 8
+@.str.37 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"9\00" }, align 8
+@.str.38 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"p256FiatCmovznzU32: any non-zero takes arg3\00" }, align 8
+@.str.39 = private unnamed_addr constant { i64, [42 x i8] } { i64 41, [42 x i8] c"p256TableMove: hit 0 leaves out as it was\00" }, align 8
+@.str.40 = private unnamed_addr constant { i64, [51 x i8] } { i64 50, [51 x i8] c"p256TableMove: hit 1 takes the entry at the offset\00" }, align 8
+@.str.41 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"0000006b0000006a000000690000006800000067000000660000006500000064\00" }, align 8
+@.str.42 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"RFC 6979 A.2.5 public key\00" }, align 8
+@.str.43 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721\00" }, align 8
+@.str.44 = private unnamed_addr constant { i64, [130 x i8] } { i64 129, [130 x i8] c"60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6 7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299\00" }, align 8
+@.str.45 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60\00" }, align 8
+@.str.46 = private unnamed_addr constant { i64, [47 x i8] } { i64 46, [47 x i8] c"RFC 6979 A.2.5 SHA-256 \22sample\22: k G has x = r\00" }, align 8
+@.str.47 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"efd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716\00" }, align 8
+@.str.48 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"d16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0\00" }, align 8
+@.str.49 = private unnamed_addr constant { i64, [45 x i8] } { i64 44, [45 x i8] c"RFC 6979 A.2.5 SHA-256 \22test\22: k G has x = r\00" }, align 8
+@.str.50 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367\00" }, align 8
+@.str.51 = private unnamed_addr constant { i64, [39 x i8] } { i64 38, [39 x i8] c"RFC 6979 A.2.5 public key, by the comb\00" }, align 8
+@.str.52 = private unnamed_addr constant { i64, [60 x i8] } { i64 59, [60 x i8] c"RFC 6979 A.2.5 SHA-256 \22sample\22, by the comb: k G has x = r\00" }, align 8
+@.str.53 = private unnamed_addr constant { i64, [58 x i8] } { i64 57, [58 x i8] c"RFC 6979 A.2.5 SHA-256 \22test\22, by the comb: k G has x = r\00" }, align 8
+@.str.54 = private unnamed_addr constant { i64, [75 x i8] } { i64 74, [75 x i8] c"p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / 2 mod n is (n + 1) / 2\00" }, align 8
+@.str.55 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"0000000000000000000000000000000000000000000000000000000000000002\00" }, align 8
+@.str.56 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a9\00" }, align 8
+@.str.57 = private unnamed_addr constant { i64, [75 x i8] } { i64 74, [75 x i8] c"p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / (n - 1) mod n is n - 1\00" }, align 8
+@.str.58 = private unnamed_addr constant { i64, [101 x i8] } { i64 100, [101 x i8] c"p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / k mod n, RFC 6979 A.2.5's SHA-256 \22sample\22 nonce\00" }, align 8
+@.str.59 = private unnamed_addr constant { i64, [65 x i8] } { i64 64, [65 x i8] c"aaf7a4c4d10293a89370e2cc3e88ca623e38b5814d37eb5e96ffdea769cfe547\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
@@ -17849,6 +17856,3762 @@ entry:
   ret void
 }
 
+define internal noundef i64 @p256Wide(i32 noundef %a) #0 {
+entry:
+  %0 = sext i32 %a to i64
+  ret i64 %0
+}
+
+define internal noundef i64 @p256Carry30(i64 noundef %c) #0 {
+entry:
+  %0 = ashr i64 %c, 30
+  ret i64 %0
+}
+
+define internal noundef i32 @p256SignMask(i32 noundef %a) #0 {
+entry:
+  %0 = ashr i32 %a, 31
+  ret i32 %0
+}
+
+define noundef i32 @p256Divsteps30(i32 noundef %zeta, i32 noundef %f0, i32 noundef %g0, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %t) #1 {
+entry:
+  %zero.addr = alloca i32, align 4
+  %z.addr = alloca i32, align 4
+  %f.addr = alloca i32, align 4
+  %g.addr = alloca i32, align 4
+  %u.addr = alloca i32, align 4
+  %v.addr = alloca i32, align 4
+  %q.addr = alloca i32, align 4
+  %r.addr = alloca i32, align 4
+  %mask1.addr = alloca i32, align 4
+  %mask2.addr = alloca i32, align 4
+  %mask1.addr.1 = alloca i32, align 4
+  %mask2.addr.1 = alloca i32, align 4
+  %mask1.addr.2 = alloca i32, align 4
+  %mask2.addr.2 = alloca i32, align 4
+  %mask1.addr.3 = alloca i32, align 4
+  %mask2.addr.3 = alloca i32, align 4
+  %mask1.addr.4 = alloca i32, align 4
+  %mask2.addr.4 = alloca i32, align 4
+  %mask1.addr.5 = alloca i32, align 4
+  %mask2.addr.5 = alloca i32, align 4
+  %mask1.addr.6 = alloca i32, align 4
+  %mask2.addr.6 = alloca i32, align 4
+  %mask1.addr.7 = alloca i32, align 4
+  %mask2.addr.7 = alloca i32, align 4
+  %mask1.addr.8 = alloca i32, align 4
+  %mask2.addr.8 = alloca i32, align 4
+  %mask1.addr.9 = alloca i32, align 4
+  %mask2.addr.9 = alloca i32, align 4
+  %mask1.addr.10 = alloca i32, align 4
+  %mask2.addr.10 = alloca i32, align 4
+  %mask1.addr.11 = alloca i32, align 4
+  %mask2.addr.11 = alloca i32, align 4
+  %mask1.addr.12 = alloca i32, align 4
+  %mask2.addr.12 = alloca i32, align 4
+  %mask1.addr.13 = alloca i32, align 4
+  %mask2.addr.13 = alloca i32, align 4
+  %mask1.addr.14 = alloca i32, align 4
+  %mask2.addr.14 = alloca i32, align 4
+  %mask1.addr.15 = alloca i32, align 4
+  %mask2.addr.15 = alloca i32, align 4
+  %mask1.addr.16 = alloca i32, align 4
+  %mask2.addr.16 = alloca i32, align 4
+  %mask1.addr.17 = alloca i32, align 4
+  %mask2.addr.17 = alloca i32, align 4
+  %mask1.addr.18 = alloca i32, align 4
+  %mask2.addr.18 = alloca i32, align 4
+  %mask1.addr.19 = alloca i32, align 4
+  %mask2.addr.19 = alloca i32, align 4
+  %mask1.addr.20 = alloca i32, align 4
+  %mask2.addr.20 = alloca i32, align 4
+  %mask1.addr.21 = alloca i32, align 4
+  %mask2.addr.21 = alloca i32, align 4
+  %mask1.addr.22 = alloca i32, align 4
+  %mask2.addr.22 = alloca i32, align 4
+  %mask1.addr.23 = alloca i32, align 4
+  %mask2.addr.23 = alloca i32, align 4
+  %mask1.addr.24 = alloca i32, align 4
+  %mask2.addr.24 = alloca i32, align 4
+  %mask1.addr.25 = alloca i32, align 4
+  %mask2.addr.25 = alloca i32, align 4
+  %mask1.addr.26 = alloca i32, align 4
+  %mask2.addr.26 = alloca i32, align 4
+  %mask1.addr.27 = alloca i32, align 4
+  %mask2.addr.27 = alloca i32, align 4
+  %mask1.addr.28 = alloca i32, align 4
+  %mask2.addr.28 = alloca i32, align 4
+  %mask1.addr.29 = alloca i32, align 4
+  %mask2.addr.29 = alloca i32, align 4
+  store i32 0, i32* %zero.addr, align 4
+  store i32 %zeta, i32* %z.addr, align 4
+  store i32 %f0, i32* %f.addr, align 4
+  store i32 %g0, i32* %g.addr, align 4
+  store i32 1, i32* %u.addr, align 4
+  store i32 0, i32* %v.addr, align 4
+  store i32 0, i32* %q.addr, align 4
+  store i32 1, i32* %r.addr, align 4
+  %0 = load i32, i32* %z.addr, align 4
+  %1 = call i32 @p256SignMask(i32 %0)
+  store i32 %1, i32* %mask1.addr, align 4
+  %2 = load i32, i32* %zero.addr, align 4
+  %3 = load i32, i32* %g.addr, align 4
+  %4 = and i32 %3, 1
+  %5 = sub i32 %2, %4
+  store i32 %5, i32* %mask2.addr, align 4
+  %6 = load i32, i32* %g.addr, align 4
+  %7 = load i32, i32* %f.addr, align 4
+  %8 = load i32, i32* %mask1.addr, align 4
+  %9 = xor i32 %7, %8
+  %10 = load i32, i32* %mask1.addr, align 4
+  %11 = sub i32 %9, %10
+  %12 = load i32, i32* %mask2.addr, align 4
+  %13 = and i32 %11, %12
+  %14 = add i32 %6, %13
+  store i32 %14, i32* %g.addr, align 4
+  %15 = load i32, i32* %q.addr, align 4
+  %16 = load i32, i32* %u.addr, align 4
+  %17 = load i32, i32* %mask1.addr, align 4
+  %18 = xor i32 %16, %17
+  %19 = load i32, i32* %mask1.addr, align 4
+  %20 = sub i32 %18, %19
+  %21 = load i32, i32* %mask2.addr, align 4
+  %22 = and i32 %20, %21
+  %23 = add i32 %15, %22
+  store i32 %23, i32* %q.addr, align 4
+  %24 = load i32, i32* %r.addr, align 4
+  %25 = load i32, i32* %v.addr, align 4
+  %26 = load i32, i32* %mask1.addr, align 4
+  %27 = xor i32 %25, %26
+  %28 = load i32, i32* %mask1.addr, align 4
+  %29 = sub i32 %27, %28
+  %30 = load i32, i32* %mask2.addr, align 4
+  %31 = and i32 %29, %30
+  %32 = add i32 %24, %31
+  store i32 %32, i32* %r.addr, align 4
+  %33 = load i32, i32* %mask1.addr, align 4
+  %34 = load i32, i32* %mask2.addr, align 4
+  %35 = and i32 %33, %34
+  store i32 %35, i32* %mask1.addr, align 4
+  %36 = load i32, i32* %z.addr, align 4
+  %37 = load i32, i32* %mask1.addr, align 4
+  %38 = xor i32 %36, %37
+  %39 = sub i32 %38, 1
+  store i32 %39, i32* %z.addr, align 4
+  %40 = load i32, i32* %f.addr, align 4
+  %41 = load i32, i32* %g.addr, align 4
+  %42 = load i32, i32* %mask1.addr, align 4
+  %43 = and i32 %41, %42
+  %44 = add i32 %40, %43
+  store i32 %44, i32* %f.addr, align 4
+  %45 = load i32, i32* %u.addr, align 4
+  %46 = load i32, i32* %q.addr, align 4
+  %47 = load i32, i32* %mask1.addr, align 4
+  %48 = and i32 %46, %47
+  %49 = add i32 %45, %48
+  store i32 %49, i32* %u.addr, align 4
+  %50 = load i32, i32* %v.addr, align 4
+  %51 = load i32, i32* %r.addr, align 4
+  %52 = load i32, i32* %mask1.addr, align 4
+  %53 = and i32 %51, %52
+  %54 = add i32 %50, %53
+  store i32 %54, i32* %v.addr, align 4
+  %55 = load i32, i32* %g.addr, align 4
+  %56 = lshr i32 %55, 1
+  store i32 %56, i32* %g.addr, align 4
+  %57 = load i32, i32* %u.addr, align 4
+  %58 = shl i32 %57, 1
+  store i32 %58, i32* %u.addr, align 4
+  %59 = load i32, i32* %v.addr, align 4
+  %60 = shl i32 %59, 1
+  store i32 %60, i32* %v.addr, align 4
+  %61 = load i32, i32* %z.addr, align 4
+  %62 = call i32 @p256SignMask(i32 %61)
+  store i32 %62, i32* %mask1.addr.1, align 4
+  %63 = load i32, i32* %zero.addr, align 4
+  %64 = load i32, i32* %g.addr, align 4
+  %65 = and i32 %64, 1
+  %66 = sub i32 %63, %65
+  store i32 %66, i32* %mask2.addr.1, align 4
+  %67 = load i32, i32* %g.addr, align 4
+  %68 = load i32, i32* %f.addr, align 4
+  %69 = load i32, i32* %mask1.addr.1, align 4
+  %70 = xor i32 %68, %69
+  %71 = load i32, i32* %mask1.addr.1, align 4
+  %72 = sub i32 %70, %71
+  %73 = load i32, i32* %mask2.addr.1, align 4
+  %74 = and i32 %72, %73
+  %75 = add i32 %67, %74
+  store i32 %75, i32* %g.addr, align 4
+  %76 = load i32, i32* %q.addr, align 4
+  %77 = load i32, i32* %u.addr, align 4
+  %78 = load i32, i32* %mask1.addr.1, align 4
+  %79 = xor i32 %77, %78
+  %80 = load i32, i32* %mask1.addr.1, align 4
+  %81 = sub i32 %79, %80
+  %82 = load i32, i32* %mask2.addr.1, align 4
+  %83 = and i32 %81, %82
+  %84 = add i32 %76, %83
+  store i32 %84, i32* %q.addr, align 4
+  %85 = load i32, i32* %r.addr, align 4
+  %86 = load i32, i32* %v.addr, align 4
+  %87 = load i32, i32* %mask1.addr.1, align 4
+  %88 = xor i32 %86, %87
+  %89 = load i32, i32* %mask1.addr.1, align 4
+  %90 = sub i32 %88, %89
+  %91 = load i32, i32* %mask2.addr.1, align 4
+  %92 = and i32 %90, %91
+  %93 = add i32 %85, %92
+  store i32 %93, i32* %r.addr, align 4
+  %94 = load i32, i32* %mask1.addr.1, align 4
+  %95 = load i32, i32* %mask2.addr.1, align 4
+  %96 = and i32 %94, %95
+  store i32 %96, i32* %mask1.addr.1, align 4
+  %97 = load i32, i32* %z.addr, align 4
+  %98 = load i32, i32* %mask1.addr.1, align 4
+  %99 = xor i32 %97, %98
+  %100 = sub i32 %99, 1
+  store i32 %100, i32* %z.addr, align 4
+  %101 = load i32, i32* %f.addr, align 4
+  %102 = load i32, i32* %g.addr, align 4
+  %103 = load i32, i32* %mask1.addr.1, align 4
+  %104 = and i32 %102, %103
+  %105 = add i32 %101, %104
+  store i32 %105, i32* %f.addr, align 4
+  %106 = load i32, i32* %u.addr, align 4
+  %107 = load i32, i32* %q.addr, align 4
+  %108 = load i32, i32* %mask1.addr.1, align 4
+  %109 = and i32 %107, %108
+  %110 = add i32 %106, %109
+  store i32 %110, i32* %u.addr, align 4
+  %111 = load i32, i32* %v.addr, align 4
+  %112 = load i32, i32* %r.addr, align 4
+  %113 = load i32, i32* %mask1.addr.1, align 4
+  %114 = and i32 %112, %113
+  %115 = add i32 %111, %114
+  store i32 %115, i32* %v.addr, align 4
+  %116 = load i32, i32* %g.addr, align 4
+  %117 = lshr i32 %116, 1
+  store i32 %117, i32* %g.addr, align 4
+  %118 = load i32, i32* %u.addr, align 4
+  %119 = shl i32 %118, 1
+  store i32 %119, i32* %u.addr, align 4
+  %120 = load i32, i32* %v.addr, align 4
+  %121 = shl i32 %120, 1
+  store i32 %121, i32* %v.addr, align 4
+  %122 = load i32, i32* %z.addr, align 4
+  %123 = call i32 @p256SignMask(i32 %122)
+  store i32 %123, i32* %mask1.addr.2, align 4
+  %124 = load i32, i32* %zero.addr, align 4
+  %125 = load i32, i32* %g.addr, align 4
+  %126 = and i32 %125, 1
+  %127 = sub i32 %124, %126
+  store i32 %127, i32* %mask2.addr.2, align 4
+  %128 = load i32, i32* %g.addr, align 4
+  %129 = load i32, i32* %f.addr, align 4
+  %130 = load i32, i32* %mask1.addr.2, align 4
+  %131 = xor i32 %129, %130
+  %132 = load i32, i32* %mask1.addr.2, align 4
+  %133 = sub i32 %131, %132
+  %134 = load i32, i32* %mask2.addr.2, align 4
+  %135 = and i32 %133, %134
+  %136 = add i32 %128, %135
+  store i32 %136, i32* %g.addr, align 4
+  %137 = load i32, i32* %q.addr, align 4
+  %138 = load i32, i32* %u.addr, align 4
+  %139 = load i32, i32* %mask1.addr.2, align 4
+  %140 = xor i32 %138, %139
+  %141 = load i32, i32* %mask1.addr.2, align 4
+  %142 = sub i32 %140, %141
+  %143 = load i32, i32* %mask2.addr.2, align 4
+  %144 = and i32 %142, %143
+  %145 = add i32 %137, %144
+  store i32 %145, i32* %q.addr, align 4
+  %146 = load i32, i32* %r.addr, align 4
+  %147 = load i32, i32* %v.addr, align 4
+  %148 = load i32, i32* %mask1.addr.2, align 4
+  %149 = xor i32 %147, %148
+  %150 = load i32, i32* %mask1.addr.2, align 4
+  %151 = sub i32 %149, %150
+  %152 = load i32, i32* %mask2.addr.2, align 4
+  %153 = and i32 %151, %152
+  %154 = add i32 %146, %153
+  store i32 %154, i32* %r.addr, align 4
+  %155 = load i32, i32* %mask1.addr.2, align 4
+  %156 = load i32, i32* %mask2.addr.2, align 4
+  %157 = and i32 %155, %156
+  store i32 %157, i32* %mask1.addr.2, align 4
+  %158 = load i32, i32* %z.addr, align 4
+  %159 = load i32, i32* %mask1.addr.2, align 4
+  %160 = xor i32 %158, %159
+  %161 = sub i32 %160, 1
+  store i32 %161, i32* %z.addr, align 4
+  %162 = load i32, i32* %f.addr, align 4
+  %163 = load i32, i32* %g.addr, align 4
+  %164 = load i32, i32* %mask1.addr.2, align 4
+  %165 = and i32 %163, %164
+  %166 = add i32 %162, %165
+  store i32 %166, i32* %f.addr, align 4
+  %167 = load i32, i32* %u.addr, align 4
+  %168 = load i32, i32* %q.addr, align 4
+  %169 = load i32, i32* %mask1.addr.2, align 4
+  %170 = and i32 %168, %169
+  %171 = add i32 %167, %170
+  store i32 %171, i32* %u.addr, align 4
+  %172 = load i32, i32* %v.addr, align 4
+  %173 = load i32, i32* %r.addr, align 4
+  %174 = load i32, i32* %mask1.addr.2, align 4
+  %175 = and i32 %173, %174
+  %176 = add i32 %172, %175
+  store i32 %176, i32* %v.addr, align 4
+  %177 = load i32, i32* %g.addr, align 4
+  %178 = lshr i32 %177, 1
+  store i32 %178, i32* %g.addr, align 4
+  %179 = load i32, i32* %u.addr, align 4
+  %180 = shl i32 %179, 1
+  store i32 %180, i32* %u.addr, align 4
+  %181 = load i32, i32* %v.addr, align 4
+  %182 = shl i32 %181, 1
+  store i32 %182, i32* %v.addr, align 4
+  %183 = load i32, i32* %z.addr, align 4
+  %184 = call i32 @p256SignMask(i32 %183)
+  store i32 %184, i32* %mask1.addr.3, align 4
+  %185 = load i32, i32* %zero.addr, align 4
+  %186 = load i32, i32* %g.addr, align 4
+  %187 = and i32 %186, 1
+  %188 = sub i32 %185, %187
+  store i32 %188, i32* %mask2.addr.3, align 4
+  %189 = load i32, i32* %g.addr, align 4
+  %190 = load i32, i32* %f.addr, align 4
+  %191 = load i32, i32* %mask1.addr.3, align 4
+  %192 = xor i32 %190, %191
+  %193 = load i32, i32* %mask1.addr.3, align 4
+  %194 = sub i32 %192, %193
+  %195 = load i32, i32* %mask2.addr.3, align 4
+  %196 = and i32 %194, %195
+  %197 = add i32 %189, %196
+  store i32 %197, i32* %g.addr, align 4
+  %198 = load i32, i32* %q.addr, align 4
+  %199 = load i32, i32* %u.addr, align 4
+  %200 = load i32, i32* %mask1.addr.3, align 4
+  %201 = xor i32 %199, %200
+  %202 = load i32, i32* %mask1.addr.3, align 4
+  %203 = sub i32 %201, %202
+  %204 = load i32, i32* %mask2.addr.3, align 4
+  %205 = and i32 %203, %204
+  %206 = add i32 %198, %205
+  store i32 %206, i32* %q.addr, align 4
+  %207 = load i32, i32* %r.addr, align 4
+  %208 = load i32, i32* %v.addr, align 4
+  %209 = load i32, i32* %mask1.addr.3, align 4
+  %210 = xor i32 %208, %209
+  %211 = load i32, i32* %mask1.addr.3, align 4
+  %212 = sub i32 %210, %211
+  %213 = load i32, i32* %mask2.addr.3, align 4
+  %214 = and i32 %212, %213
+  %215 = add i32 %207, %214
+  store i32 %215, i32* %r.addr, align 4
+  %216 = load i32, i32* %mask1.addr.3, align 4
+  %217 = load i32, i32* %mask2.addr.3, align 4
+  %218 = and i32 %216, %217
+  store i32 %218, i32* %mask1.addr.3, align 4
+  %219 = load i32, i32* %z.addr, align 4
+  %220 = load i32, i32* %mask1.addr.3, align 4
+  %221 = xor i32 %219, %220
+  %222 = sub i32 %221, 1
+  store i32 %222, i32* %z.addr, align 4
+  %223 = load i32, i32* %f.addr, align 4
+  %224 = load i32, i32* %g.addr, align 4
+  %225 = load i32, i32* %mask1.addr.3, align 4
+  %226 = and i32 %224, %225
+  %227 = add i32 %223, %226
+  store i32 %227, i32* %f.addr, align 4
+  %228 = load i32, i32* %u.addr, align 4
+  %229 = load i32, i32* %q.addr, align 4
+  %230 = load i32, i32* %mask1.addr.3, align 4
+  %231 = and i32 %229, %230
+  %232 = add i32 %228, %231
+  store i32 %232, i32* %u.addr, align 4
+  %233 = load i32, i32* %v.addr, align 4
+  %234 = load i32, i32* %r.addr, align 4
+  %235 = load i32, i32* %mask1.addr.3, align 4
+  %236 = and i32 %234, %235
+  %237 = add i32 %233, %236
+  store i32 %237, i32* %v.addr, align 4
+  %238 = load i32, i32* %g.addr, align 4
+  %239 = lshr i32 %238, 1
+  store i32 %239, i32* %g.addr, align 4
+  %240 = load i32, i32* %u.addr, align 4
+  %241 = shl i32 %240, 1
+  store i32 %241, i32* %u.addr, align 4
+  %242 = load i32, i32* %v.addr, align 4
+  %243 = shl i32 %242, 1
+  store i32 %243, i32* %v.addr, align 4
+  %244 = load i32, i32* %z.addr, align 4
+  %245 = call i32 @p256SignMask(i32 %244)
+  store i32 %245, i32* %mask1.addr.4, align 4
+  %246 = load i32, i32* %zero.addr, align 4
+  %247 = load i32, i32* %g.addr, align 4
+  %248 = and i32 %247, 1
+  %249 = sub i32 %246, %248
+  store i32 %249, i32* %mask2.addr.4, align 4
+  %250 = load i32, i32* %g.addr, align 4
+  %251 = load i32, i32* %f.addr, align 4
+  %252 = load i32, i32* %mask1.addr.4, align 4
+  %253 = xor i32 %251, %252
+  %254 = load i32, i32* %mask1.addr.4, align 4
+  %255 = sub i32 %253, %254
+  %256 = load i32, i32* %mask2.addr.4, align 4
+  %257 = and i32 %255, %256
+  %258 = add i32 %250, %257
+  store i32 %258, i32* %g.addr, align 4
+  %259 = load i32, i32* %q.addr, align 4
+  %260 = load i32, i32* %u.addr, align 4
+  %261 = load i32, i32* %mask1.addr.4, align 4
+  %262 = xor i32 %260, %261
+  %263 = load i32, i32* %mask1.addr.4, align 4
+  %264 = sub i32 %262, %263
+  %265 = load i32, i32* %mask2.addr.4, align 4
+  %266 = and i32 %264, %265
+  %267 = add i32 %259, %266
+  store i32 %267, i32* %q.addr, align 4
+  %268 = load i32, i32* %r.addr, align 4
+  %269 = load i32, i32* %v.addr, align 4
+  %270 = load i32, i32* %mask1.addr.4, align 4
+  %271 = xor i32 %269, %270
+  %272 = load i32, i32* %mask1.addr.4, align 4
+  %273 = sub i32 %271, %272
+  %274 = load i32, i32* %mask2.addr.4, align 4
+  %275 = and i32 %273, %274
+  %276 = add i32 %268, %275
+  store i32 %276, i32* %r.addr, align 4
+  %277 = load i32, i32* %mask1.addr.4, align 4
+  %278 = load i32, i32* %mask2.addr.4, align 4
+  %279 = and i32 %277, %278
+  store i32 %279, i32* %mask1.addr.4, align 4
+  %280 = load i32, i32* %z.addr, align 4
+  %281 = load i32, i32* %mask1.addr.4, align 4
+  %282 = xor i32 %280, %281
+  %283 = sub i32 %282, 1
+  store i32 %283, i32* %z.addr, align 4
+  %284 = load i32, i32* %f.addr, align 4
+  %285 = load i32, i32* %g.addr, align 4
+  %286 = load i32, i32* %mask1.addr.4, align 4
+  %287 = and i32 %285, %286
+  %288 = add i32 %284, %287
+  store i32 %288, i32* %f.addr, align 4
+  %289 = load i32, i32* %u.addr, align 4
+  %290 = load i32, i32* %q.addr, align 4
+  %291 = load i32, i32* %mask1.addr.4, align 4
+  %292 = and i32 %290, %291
+  %293 = add i32 %289, %292
+  store i32 %293, i32* %u.addr, align 4
+  %294 = load i32, i32* %v.addr, align 4
+  %295 = load i32, i32* %r.addr, align 4
+  %296 = load i32, i32* %mask1.addr.4, align 4
+  %297 = and i32 %295, %296
+  %298 = add i32 %294, %297
+  store i32 %298, i32* %v.addr, align 4
+  %299 = load i32, i32* %g.addr, align 4
+  %300 = lshr i32 %299, 1
+  store i32 %300, i32* %g.addr, align 4
+  %301 = load i32, i32* %u.addr, align 4
+  %302 = shl i32 %301, 1
+  store i32 %302, i32* %u.addr, align 4
+  %303 = load i32, i32* %v.addr, align 4
+  %304 = shl i32 %303, 1
+  store i32 %304, i32* %v.addr, align 4
+  %305 = load i32, i32* %z.addr, align 4
+  %306 = call i32 @p256SignMask(i32 %305)
+  store i32 %306, i32* %mask1.addr.5, align 4
+  %307 = load i32, i32* %zero.addr, align 4
+  %308 = load i32, i32* %g.addr, align 4
+  %309 = and i32 %308, 1
+  %310 = sub i32 %307, %309
+  store i32 %310, i32* %mask2.addr.5, align 4
+  %311 = load i32, i32* %g.addr, align 4
+  %312 = load i32, i32* %f.addr, align 4
+  %313 = load i32, i32* %mask1.addr.5, align 4
+  %314 = xor i32 %312, %313
+  %315 = load i32, i32* %mask1.addr.5, align 4
+  %316 = sub i32 %314, %315
+  %317 = load i32, i32* %mask2.addr.5, align 4
+  %318 = and i32 %316, %317
+  %319 = add i32 %311, %318
+  store i32 %319, i32* %g.addr, align 4
+  %320 = load i32, i32* %q.addr, align 4
+  %321 = load i32, i32* %u.addr, align 4
+  %322 = load i32, i32* %mask1.addr.5, align 4
+  %323 = xor i32 %321, %322
+  %324 = load i32, i32* %mask1.addr.5, align 4
+  %325 = sub i32 %323, %324
+  %326 = load i32, i32* %mask2.addr.5, align 4
+  %327 = and i32 %325, %326
+  %328 = add i32 %320, %327
+  store i32 %328, i32* %q.addr, align 4
+  %329 = load i32, i32* %r.addr, align 4
+  %330 = load i32, i32* %v.addr, align 4
+  %331 = load i32, i32* %mask1.addr.5, align 4
+  %332 = xor i32 %330, %331
+  %333 = load i32, i32* %mask1.addr.5, align 4
+  %334 = sub i32 %332, %333
+  %335 = load i32, i32* %mask2.addr.5, align 4
+  %336 = and i32 %334, %335
+  %337 = add i32 %329, %336
+  store i32 %337, i32* %r.addr, align 4
+  %338 = load i32, i32* %mask1.addr.5, align 4
+  %339 = load i32, i32* %mask2.addr.5, align 4
+  %340 = and i32 %338, %339
+  store i32 %340, i32* %mask1.addr.5, align 4
+  %341 = load i32, i32* %z.addr, align 4
+  %342 = load i32, i32* %mask1.addr.5, align 4
+  %343 = xor i32 %341, %342
+  %344 = sub i32 %343, 1
+  store i32 %344, i32* %z.addr, align 4
+  %345 = load i32, i32* %f.addr, align 4
+  %346 = load i32, i32* %g.addr, align 4
+  %347 = load i32, i32* %mask1.addr.5, align 4
+  %348 = and i32 %346, %347
+  %349 = add i32 %345, %348
+  store i32 %349, i32* %f.addr, align 4
+  %350 = load i32, i32* %u.addr, align 4
+  %351 = load i32, i32* %q.addr, align 4
+  %352 = load i32, i32* %mask1.addr.5, align 4
+  %353 = and i32 %351, %352
+  %354 = add i32 %350, %353
+  store i32 %354, i32* %u.addr, align 4
+  %355 = load i32, i32* %v.addr, align 4
+  %356 = load i32, i32* %r.addr, align 4
+  %357 = load i32, i32* %mask1.addr.5, align 4
+  %358 = and i32 %356, %357
+  %359 = add i32 %355, %358
+  store i32 %359, i32* %v.addr, align 4
+  %360 = load i32, i32* %g.addr, align 4
+  %361 = lshr i32 %360, 1
+  store i32 %361, i32* %g.addr, align 4
+  %362 = load i32, i32* %u.addr, align 4
+  %363 = shl i32 %362, 1
+  store i32 %363, i32* %u.addr, align 4
+  %364 = load i32, i32* %v.addr, align 4
+  %365 = shl i32 %364, 1
+  store i32 %365, i32* %v.addr, align 4
+  %366 = load i32, i32* %z.addr, align 4
+  %367 = call i32 @p256SignMask(i32 %366)
+  store i32 %367, i32* %mask1.addr.6, align 4
+  %368 = load i32, i32* %zero.addr, align 4
+  %369 = load i32, i32* %g.addr, align 4
+  %370 = and i32 %369, 1
+  %371 = sub i32 %368, %370
+  store i32 %371, i32* %mask2.addr.6, align 4
+  %372 = load i32, i32* %g.addr, align 4
+  %373 = load i32, i32* %f.addr, align 4
+  %374 = load i32, i32* %mask1.addr.6, align 4
+  %375 = xor i32 %373, %374
+  %376 = load i32, i32* %mask1.addr.6, align 4
+  %377 = sub i32 %375, %376
+  %378 = load i32, i32* %mask2.addr.6, align 4
+  %379 = and i32 %377, %378
+  %380 = add i32 %372, %379
+  store i32 %380, i32* %g.addr, align 4
+  %381 = load i32, i32* %q.addr, align 4
+  %382 = load i32, i32* %u.addr, align 4
+  %383 = load i32, i32* %mask1.addr.6, align 4
+  %384 = xor i32 %382, %383
+  %385 = load i32, i32* %mask1.addr.6, align 4
+  %386 = sub i32 %384, %385
+  %387 = load i32, i32* %mask2.addr.6, align 4
+  %388 = and i32 %386, %387
+  %389 = add i32 %381, %388
+  store i32 %389, i32* %q.addr, align 4
+  %390 = load i32, i32* %r.addr, align 4
+  %391 = load i32, i32* %v.addr, align 4
+  %392 = load i32, i32* %mask1.addr.6, align 4
+  %393 = xor i32 %391, %392
+  %394 = load i32, i32* %mask1.addr.6, align 4
+  %395 = sub i32 %393, %394
+  %396 = load i32, i32* %mask2.addr.6, align 4
+  %397 = and i32 %395, %396
+  %398 = add i32 %390, %397
+  store i32 %398, i32* %r.addr, align 4
+  %399 = load i32, i32* %mask1.addr.6, align 4
+  %400 = load i32, i32* %mask2.addr.6, align 4
+  %401 = and i32 %399, %400
+  store i32 %401, i32* %mask1.addr.6, align 4
+  %402 = load i32, i32* %z.addr, align 4
+  %403 = load i32, i32* %mask1.addr.6, align 4
+  %404 = xor i32 %402, %403
+  %405 = sub i32 %404, 1
+  store i32 %405, i32* %z.addr, align 4
+  %406 = load i32, i32* %f.addr, align 4
+  %407 = load i32, i32* %g.addr, align 4
+  %408 = load i32, i32* %mask1.addr.6, align 4
+  %409 = and i32 %407, %408
+  %410 = add i32 %406, %409
+  store i32 %410, i32* %f.addr, align 4
+  %411 = load i32, i32* %u.addr, align 4
+  %412 = load i32, i32* %q.addr, align 4
+  %413 = load i32, i32* %mask1.addr.6, align 4
+  %414 = and i32 %412, %413
+  %415 = add i32 %411, %414
+  store i32 %415, i32* %u.addr, align 4
+  %416 = load i32, i32* %v.addr, align 4
+  %417 = load i32, i32* %r.addr, align 4
+  %418 = load i32, i32* %mask1.addr.6, align 4
+  %419 = and i32 %417, %418
+  %420 = add i32 %416, %419
+  store i32 %420, i32* %v.addr, align 4
+  %421 = load i32, i32* %g.addr, align 4
+  %422 = lshr i32 %421, 1
+  store i32 %422, i32* %g.addr, align 4
+  %423 = load i32, i32* %u.addr, align 4
+  %424 = shl i32 %423, 1
+  store i32 %424, i32* %u.addr, align 4
+  %425 = load i32, i32* %v.addr, align 4
+  %426 = shl i32 %425, 1
+  store i32 %426, i32* %v.addr, align 4
+  %427 = load i32, i32* %z.addr, align 4
+  %428 = call i32 @p256SignMask(i32 %427)
+  store i32 %428, i32* %mask1.addr.7, align 4
+  %429 = load i32, i32* %zero.addr, align 4
+  %430 = load i32, i32* %g.addr, align 4
+  %431 = and i32 %430, 1
+  %432 = sub i32 %429, %431
+  store i32 %432, i32* %mask2.addr.7, align 4
+  %433 = load i32, i32* %g.addr, align 4
+  %434 = load i32, i32* %f.addr, align 4
+  %435 = load i32, i32* %mask1.addr.7, align 4
+  %436 = xor i32 %434, %435
+  %437 = load i32, i32* %mask1.addr.7, align 4
+  %438 = sub i32 %436, %437
+  %439 = load i32, i32* %mask2.addr.7, align 4
+  %440 = and i32 %438, %439
+  %441 = add i32 %433, %440
+  store i32 %441, i32* %g.addr, align 4
+  %442 = load i32, i32* %q.addr, align 4
+  %443 = load i32, i32* %u.addr, align 4
+  %444 = load i32, i32* %mask1.addr.7, align 4
+  %445 = xor i32 %443, %444
+  %446 = load i32, i32* %mask1.addr.7, align 4
+  %447 = sub i32 %445, %446
+  %448 = load i32, i32* %mask2.addr.7, align 4
+  %449 = and i32 %447, %448
+  %450 = add i32 %442, %449
+  store i32 %450, i32* %q.addr, align 4
+  %451 = load i32, i32* %r.addr, align 4
+  %452 = load i32, i32* %v.addr, align 4
+  %453 = load i32, i32* %mask1.addr.7, align 4
+  %454 = xor i32 %452, %453
+  %455 = load i32, i32* %mask1.addr.7, align 4
+  %456 = sub i32 %454, %455
+  %457 = load i32, i32* %mask2.addr.7, align 4
+  %458 = and i32 %456, %457
+  %459 = add i32 %451, %458
+  store i32 %459, i32* %r.addr, align 4
+  %460 = load i32, i32* %mask1.addr.7, align 4
+  %461 = load i32, i32* %mask2.addr.7, align 4
+  %462 = and i32 %460, %461
+  store i32 %462, i32* %mask1.addr.7, align 4
+  %463 = load i32, i32* %z.addr, align 4
+  %464 = load i32, i32* %mask1.addr.7, align 4
+  %465 = xor i32 %463, %464
+  %466 = sub i32 %465, 1
+  store i32 %466, i32* %z.addr, align 4
+  %467 = load i32, i32* %f.addr, align 4
+  %468 = load i32, i32* %g.addr, align 4
+  %469 = load i32, i32* %mask1.addr.7, align 4
+  %470 = and i32 %468, %469
+  %471 = add i32 %467, %470
+  store i32 %471, i32* %f.addr, align 4
+  %472 = load i32, i32* %u.addr, align 4
+  %473 = load i32, i32* %q.addr, align 4
+  %474 = load i32, i32* %mask1.addr.7, align 4
+  %475 = and i32 %473, %474
+  %476 = add i32 %472, %475
+  store i32 %476, i32* %u.addr, align 4
+  %477 = load i32, i32* %v.addr, align 4
+  %478 = load i32, i32* %r.addr, align 4
+  %479 = load i32, i32* %mask1.addr.7, align 4
+  %480 = and i32 %478, %479
+  %481 = add i32 %477, %480
+  store i32 %481, i32* %v.addr, align 4
+  %482 = load i32, i32* %g.addr, align 4
+  %483 = lshr i32 %482, 1
+  store i32 %483, i32* %g.addr, align 4
+  %484 = load i32, i32* %u.addr, align 4
+  %485 = shl i32 %484, 1
+  store i32 %485, i32* %u.addr, align 4
+  %486 = load i32, i32* %v.addr, align 4
+  %487 = shl i32 %486, 1
+  store i32 %487, i32* %v.addr, align 4
+  %488 = load i32, i32* %z.addr, align 4
+  %489 = call i32 @p256SignMask(i32 %488)
+  store i32 %489, i32* %mask1.addr.8, align 4
+  %490 = load i32, i32* %zero.addr, align 4
+  %491 = load i32, i32* %g.addr, align 4
+  %492 = and i32 %491, 1
+  %493 = sub i32 %490, %492
+  store i32 %493, i32* %mask2.addr.8, align 4
+  %494 = load i32, i32* %g.addr, align 4
+  %495 = load i32, i32* %f.addr, align 4
+  %496 = load i32, i32* %mask1.addr.8, align 4
+  %497 = xor i32 %495, %496
+  %498 = load i32, i32* %mask1.addr.8, align 4
+  %499 = sub i32 %497, %498
+  %500 = load i32, i32* %mask2.addr.8, align 4
+  %501 = and i32 %499, %500
+  %502 = add i32 %494, %501
+  store i32 %502, i32* %g.addr, align 4
+  %503 = load i32, i32* %q.addr, align 4
+  %504 = load i32, i32* %u.addr, align 4
+  %505 = load i32, i32* %mask1.addr.8, align 4
+  %506 = xor i32 %504, %505
+  %507 = load i32, i32* %mask1.addr.8, align 4
+  %508 = sub i32 %506, %507
+  %509 = load i32, i32* %mask2.addr.8, align 4
+  %510 = and i32 %508, %509
+  %511 = add i32 %503, %510
+  store i32 %511, i32* %q.addr, align 4
+  %512 = load i32, i32* %r.addr, align 4
+  %513 = load i32, i32* %v.addr, align 4
+  %514 = load i32, i32* %mask1.addr.8, align 4
+  %515 = xor i32 %513, %514
+  %516 = load i32, i32* %mask1.addr.8, align 4
+  %517 = sub i32 %515, %516
+  %518 = load i32, i32* %mask2.addr.8, align 4
+  %519 = and i32 %517, %518
+  %520 = add i32 %512, %519
+  store i32 %520, i32* %r.addr, align 4
+  %521 = load i32, i32* %mask1.addr.8, align 4
+  %522 = load i32, i32* %mask2.addr.8, align 4
+  %523 = and i32 %521, %522
+  store i32 %523, i32* %mask1.addr.8, align 4
+  %524 = load i32, i32* %z.addr, align 4
+  %525 = load i32, i32* %mask1.addr.8, align 4
+  %526 = xor i32 %524, %525
+  %527 = sub i32 %526, 1
+  store i32 %527, i32* %z.addr, align 4
+  %528 = load i32, i32* %f.addr, align 4
+  %529 = load i32, i32* %g.addr, align 4
+  %530 = load i32, i32* %mask1.addr.8, align 4
+  %531 = and i32 %529, %530
+  %532 = add i32 %528, %531
+  store i32 %532, i32* %f.addr, align 4
+  %533 = load i32, i32* %u.addr, align 4
+  %534 = load i32, i32* %q.addr, align 4
+  %535 = load i32, i32* %mask1.addr.8, align 4
+  %536 = and i32 %534, %535
+  %537 = add i32 %533, %536
+  store i32 %537, i32* %u.addr, align 4
+  %538 = load i32, i32* %v.addr, align 4
+  %539 = load i32, i32* %r.addr, align 4
+  %540 = load i32, i32* %mask1.addr.8, align 4
+  %541 = and i32 %539, %540
+  %542 = add i32 %538, %541
+  store i32 %542, i32* %v.addr, align 4
+  %543 = load i32, i32* %g.addr, align 4
+  %544 = lshr i32 %543, 1
+  store i32 %544, i32* %g.addr, align 4
+  %545 = load i32, i32* %u.addr, align 4
+  %546 = shl i32 %545, 1
+  store i32 %546, i32* %u.addr, align 4
+  %547 = load i32, i32* %v.addr, align 4
+  %548 = shl i32 %547, 1
+  store i32 %548, i32* %v.addr, align 4
+  %549 = load i32, i32* %z.addr, align 4
+  %550 = call i32 @p256SignMask(i32 %549)
+  store i32 %550, i32* %mask1.addr.9, align 4
+  %551 = load i32, i32* %zero.addr, align 4
+  %552 = load i32, i32* %g.addr, align 4
+  %553 = and i32 %552, 1
+  %554 = sub i32 %551, %553
+  store i32 %554, i32* %mask2.addr.9, align 4
+  %555 = load i32, i32* %g.addr, align 4
+  %556 = load i32, i32* %f.addr, align 4
+  %557 = load i32, i32* %mask1.addr.9, align 4
+  %558 = xor i32 %556, %557
+  %559 = load i32, i32* %mask1.addr.9, align 4
+  %560 = sub i32 %558, %559
+  %561 = load i32, i32* %mask2.addr.9, align 4
+  %562 = and i32 %560, %561
+  %563 = add i32 %555, %562
+  store i32 %563, i32* %g.addr, align 4
+  %564 = load i32, i32* %q.addr, align 4
+  %565 = load i32, i32* %u.addr, align 4
+  %566 = load i32, i32* %mask1.addr.9, align 4
+  %567 = xor i32 %565, %566
+  %568 = load i32, i32* %mask1.addr.9, align 4
+  %569 = sub i32 %567, %568
+  %570 = load i32, i32* %mask2.addr.9, align 4
+  %571 = and i32 %569, %570
+  %572 = add i32 %564, %571
+  store i32 %572, i32* %q.addr, align 4
+  %573 = load i32, i32* %r.addr, align 4
+  %574 = load i32, i32* %v.addr, align 4
+  %575 = load i32, i32* %mask1.addr.9, align 4
+  %576 = xor i32 %574, %575
+  %577 = load i32, i32* %mask1.addr.9, align 4
+  %578 = sub i32 %576, %577
+  %579 = load i32, i32* %mask2.addr.9, align 4
+  %580 = and i32 %578, %579
+  %581 = add i32 %573, %580
+  store i32 %581, i32* %r.addr, align 4
+  %582 = load i32, i32* %mask1.addr.9, align 4
+  %583 = load i32, i32* %mask2.addr.9, align 4
+  %584 = and i32 %582, %583
+  store i32 %584, i32* %mask1.addr.9, align 4
+  %585 = load i32, i32* %z.addr, align 4
+  %586 = load i32, i32* %mask1.addr.9, align 4
+  %587 = xor i32 %585, %586
+  %588 = sub i32 %587, 1
+  store i32 %588, i32* %z.addr, align 4
+  %589 = load i32, i32* %f.addr, align 4
+  %590 = load i32, i32* %g.addr, align 4
+  %591 = load i32, i32* %mask1.addr.9, align 4
+  %592 = and i32 %590, %591
+  %593 = add i32 %589, %592
+  store i32 %593, i32* %f.addr, align 4
+  %594 = load i32, i32* %u.addr, align 4
+  %595 = load i32, i32* %q.addr, align 4
+  %596 = load i32, i32* %mask1.addr.9, align 4
+  %597 = and i32 %595, %596
+  %598 = add i32 %594, %597
+  store i32 %598, i32* %u.addr, align 4
+  %599 = load i32, i32* %v.addr, align 4
+  %600 = load i32, i32* %r.addr, align 4
+  %601 = load i32, i32* %mask1.addr.9, align 4
+  %602 = and i32 %600, %601
+  %603 = add i32 %599, %602
+  store i32 %603, i32* %v.addr, align 4
+  %604 = load i32, i32* %g.addr, align 4
+  %605 = lshr i32 %604, 1
+  store i32 %605, i32* %g.addr, align 4
+  %606 = load i32, i32* %u.addr, align 4
+  %607 = shl i32 %606, 1
+  store i32 %607, i32* %u.addr, align 4
+  %608 = load i32, i32* %v.addr, align 4
+  %609 = shl i32 %608, 1
+  store i32 %609, i32* %v.addr, align 4
+  %610 = load i32, i32* %z.addr, align 4
+  %611 = call i32 @p256SignMask(i32 %610)
+  store i32 %611, i32* %mask1.addr.10, align 4
+  %612 = load i32, i32* %zero.addr, align 4
+  %613 = load i32, i32* %g.addr, align 4
+  %614 = and i32 %613, 1
+  %615 = sub i32 %612, %614
+  store i32 %615, i32* %mask2.addr.10, align 4
+  %616 = load i32, i32* %g.addr, align 4
+  %617 = load i32, i32* %f.addr, align 4
+  %618 = load i32, i32* %mask1.addr.10, align 4
+  %619 = xor i32 %617, %618
+  %620 = load i32, i32* %mask1.addr.10, align 4
+  %621 = sub i32 %619, %620
+  %622 = load i32, i32* %mask2.addr.10, align 4
+  %623 = and i32 %621, %622
+  %624 = add i32 %616, %623
+  store i32 %624, i32* %g.addr, align 4
+  %625 = load i32, i32* %q.addr, align 4
+  %626 = load i32, i32* %u.addr, align 4
+  %627 = load i32, i32* %mask1.addr.10, align 4
+  %628 = xor i32 %626, %627
+  %629 = load i32, i32* %mask1.addr.10, align 4
+  %630 = sub i32 %628, %629
+  %631 = load i32, i32* %mask2.addr.10, align 4
+  %632 = and i32 %630, %631
+  %633 = add i32 %625, %632
+  store i32 %633, i32* %q.addr, align 4
+  %634 = load i32, i32* %r.addr, align 4
+  %635 = load i32, i32* %v.addr, align 4
+  %636 = load i32, i32* %mask1.addr.10, align 4
+  %637 = xor i32 %635, %636
+  %638 = load i32, i32* %mask1.addr.10, align 4
+  %639 = sub i32 %637, %638
+  %640 = load i32, i32* %mask2.addr.10, align 4
+  %641 = and i32 %639, %640
+  %642 = add i32 %634, %641
+  store i32 %642, i32* %r.addr, align 4
+  %643 = load i32, i32* %mask1.addr.10, align 4
+  %644 = load i32, i32* %mask2.addr.10, align 4
+  %645 = and i32 %643, %644
+  store i32 %645, i32* %mask1.addr.10, align 4
+  %646 = load i32, i32* %z.addr, align 4
+  %647 = load i32, i32* %mask1.addr.10, align 4
+  %648 = xor i32 %646, %647
+  %649 = sub i32 %648, 1
+  store i32 %649, i32* %z.addr, align 4
+  %650 = load i32, i32* %f.addr, align 4
+  %651 = load i32, i32* %g.addr, align 4
+  %652 = load i32, i32* %mask1.addr.10, align 4
+  %653 = and i32 %651, %652
+  %654 = add i32 %650, %653
+  store i32 %654, i32* %f.addr, align 4
+  %655 = load i32, i32* %u.addr, align 4
+  %656 = load i32, i32* %q.addr, align 4
+  %657 = load i32, i32* %mask1.addr.10, align 4
+  %658 = and i32 %656, %657
+  %659 = add i32 %655, %658
+  store i32 %659, i32* %u.addr, align 4
+  %660 = load i32, i32* %v.addr, align 4
+  %661 = load i32, i32* %r.addr, align 4
+  %662 = load i32, i32* %mask1.addr.10, align 4
+  %663 = and i32 %661, %662
+  %664 = add i32 %660, %663
+  store i32 %664, i32* %v.addr, align 4
+  %665 = load i32, i32* %g.addr, align 4
+  %666 = lshr i32 %665, 1
+  store i32 %666, i32* %g.addr, align 4
+  %667 = load i32, i32* %u.addr, align 4
+  %668 = shl i32 %667, 1
+  store i32 %668, i32* %u.addr, align 4
+  %669 = load i32, i32* %v.addr, align 4
+  %670 = shl i32 %669, 1
+  store i32 %670, i32* %v.addr, align 4
+  %671 = load i32, i32* %z.addr, align 4
+  %672 = call i32 @p256SignMask(i32 %671)
+  store i32 %672, i32* %mask1.addr.11, align 4
+  %673 = load i32, i32* %zero.addr, align 4
+  %674 = load i32, i32* %g.addr, align 4
+  %675 = and i32 %674, 1
+  %676 = sub i32 %673, %675
+  store i32 %676, i32* %mask2.addr.11, align 4
+  %677 = load i32, i32* %g.addr, align 4
+  %678 = load i32, i32* %f.addr, align 4
+  %679 = load i32, i32* %mask1.addr.11, align 4
+  %680 = xor i32 %678, %679
+  %681 = load i32, i32* %mask1.addr.11, align 4
+  %682 = sub i32 %680, %681
+  %683 = load i32, i32* %mask2.addr.11, align 4
+  %684 = and i32 %682, %683
+  %685 = add i32 %677, %684
+  store i32 %685, i32* %g.addr, align 4
+  %686 = load i32, i32* %q.addr, align 4
+  %687 = load i32, i32* %u.addr, align 4
+  %688 = load i32, i32* %mask1.addr.11, align 4
+  %689 = xor i32 %687, %688
+  %690 = load i32, i32* %mask1.addr.11, align 4
+  %691 = sub i32 %689, %690
+  %692 = load i32, i32* %mask2.addr.11, align 4
+  %693 = and i32 %691, %692
+  %694 = add i32 %686, %693
+  store i32 %694, i32* %q.addr, align 4
+  %695 = load i32, i32* %r.addr, align 4
+  %696 = load i32, i32* %v.addr, align 4
+  %697 = load i32, i32* %mask1.addr.11, align 4
+  %698 = xor i32 %696, %697
+  %699 = load i32, i32* %mask1.addr.11, align 4
+  %700 = sub i32 %698, %699
+  %701 = load i32, i32* %mask2.addr.11, align 4
+  %702 = and i32 %700, %701
+  %703 = add i32 %695, %702
+  store i32 %703, i32* %r.addr, align 4
+  %704 = load i32, i32* %mask1.addr.11, align 4
+  %705 = load i32, i32* %mask2.addr.11, align 4
+  %706 = and i32 %704, %705
+  store i32 %706, i32* %mask1.addr.11, align 4
+  %707 = load i32, i32* %z.addr, align 4
+  %708 = load i32, i32* %mask1.addr.11, align 4
+  %709 = xor i32 %707, %708
+  %710 = sub i32 %709, 1
+  store i32 %710, i32* %z.addr, align 4
+  %711 = load i32, i32* %f.addr, align 4
+  %712 = load i32, i32* %g.addr, align 4
+  %713 = load i32, i32* %mask1.addr.11, align 4
+  %714 = and i32 %712, %713
+  %715 = add i32 %711, %714
+  store i32 %715, i32* %f.addr, align 4
+  %716 = load i32, i32* %u.addr, align 4
+  %717 = load i32, i32* %q.addr, align 4
+  %718 = load i32, i32* %mask1.addr.11, align 4
+  %719 = and i32 %717, %718
+  %720 = add i32 %716, %719
+  store i32 %720, i32* %u.addr, align 4
+  %721 = load i32, i32* %v.addr, align 4
+  %722 = load i32, i32* %r.addr, align 4
+  %723 = load i32, i32* %mask1.addr.11, align 4
+  %724 = and i32 %722, %723
+  %725 = add i32 %721, %724
+  store i32 %725, i32* %v.addr, align 4
+  %726 = load i32, i32* %g.addr, align 4
+  %727 = lshr i32 %726, 1
+  store i32 %727, i32* %g.addr, align 4
+  %728 = load i32, i32* %u.addr, align 4
+  %729 = shl i32 %728, 1
+  store i32 %729, i32* %u.addr, align 4
+  %730 = load i32, i32* %v.addr, align 4
+  %731 = shl i32 %730, 1
+  store i32 %731, i32* %v.addr, align 4
+  %732 = load i32, i32* %z.addr, align 4
+  %733 = call i32 @p256SignMask(i32 %732)
+  store i32 %733, i32* %mask1.addr.12, align 4
+  %734 = load i32, i32* %zero.addr, align 4
+  %735 = load i32, i32* %g.addr, align 4
+  %736 = and i32 %735, 1
+  %737 = sub i32 %734, %736
+  store i32 %737, i32* %mask2.addr.12, align 4
+  %738 = load i32, i32* %g.addr, align 4
+  %739 = load i32, i32* %f.addr, align 4
+  %740 = load i32, i32* %mask1.addr.12, align 4
+  %741 = xor i32 %739, %740
+  %742 = load i32, i32* %mask1.addr.12, align 4
+  %743 = sub i32 %741, %742
+  %744 = load i32, i32* %mask2.addr.12, align 4
+  %745 = and i32 %743, %744
+  %746 = add i32 %738, %745
+  store i32 %746, i32* %g.addr, align 4
+  %747 = load i32, i32* %q.addr, align 4
+  %748 = load i32, i32* %u.addr, align 4
+  %749 = load i32, i32* %mask1.addr.12, align 4
+  %750 = xor i32 %748, %749
+  %751 = load i32, i32* %mask1.addr.12, align 4
+  %752 = sub i32 %750, %751
+  %753 = load i32, i32* %mask2.addr.12, align 4
+  %754 = and i32 %752, %753
+  %755 = add i32 %747, %754
+  store i32 %755, i32* %q.addr, align 4
+  %756 = load i32, i32* %r.addr, align 4
+  %757 = load i32, i32* %v.addr, align 4
+  %758 = load i32, i32* %mask1.addr.12, align 4
+  %759 = xor i32 %757, %758
+  %760 = load i32, i32* %mask1.addr.12, align 4
+  %761 = sub i32 %759, %760
+  %762 = load i32, i32* %mask2.addr.12, align 4
+  %763 = and i32 %761, %762
+  %764 = add i32 %756, %763
+  store i32 %764, i32* %r.addr, align 4
+  %765 = load i32, i32* %mask1.addr.12, align 4
+  %766 = load i32, i32* %mask2.addr.12, align 4
+  %767 = and i32 %765, %766
+  store i32 %767, i32* %mask1.addr.12, align 4
+  %768 = load i32, i32* %z.addr, align 4
+  %769 = load i32, i32* %mask1.addr.12, align 4
+  %770 = xor i32 %768, %769
+  %771 = sub i32 %770, 1
+  store i32 %771, i32* %z.addr, align 4
+  %772 = load i32, i32* %f.addr, align 4
+  %773 = load i32, i32* %g.addr, align 4
+  %774 = load i32, i32* %mask1.addr.12, align 4
+  %775 = and i32 %773, %774
+  %776 = add i32 %772, %775
+  store i32 %776, i32* %f.addr, align 4
+  %777 = load i32, i32* %u.addr, align 4
+  %778 = load i32, i32* %q.addr, align 4
+  %779 = load i32, i32* %mask1.addr.12, align 4
+  %780 = and i32 %778, %779
+  %781 = add i32 %777, %780
+  store i32 %781, i32* %u.addr, align 4
+  %782 = load i32, i32* %v.addr, align 4
+  %783 = load i32, i32* %r.addr, align 4
+  %784 = load i32, i32* %mask1.addr.12, align 4
+  %785 = and i32 %783, %784
+  %786 = add i32 %782, %785
+  store i32 %786, i32* %v.addr, align 4
+  %787 = load i32, i32* %g.addr, align 4
+  %788 = lshr i32 %787, 1
+  store i32 %788, i32* %g.addr, align 4
+  %789 = load i32, i32* %u.addr, align 4
+  %790 = shl i32 %789, 1
+  store i32 %790, i32* %u.addr, align 4
+  %791 = load i32, i32* %v.addr, align 4
+  %792 = shl i32 %791, 1
+  store i32 %792, i32* %v.addr, align 4
+  %793 = load i32, i32* %z.addr, align 4
+  %794 = call i32 @p256SignMask(i32 %793)
+  store i32 %794, i32* %mask1.addr.13, align 4
+  %795 = load i32, i32* %zero.addr, align 4
+  %796 = load i32, i32* %g.addr, align 4
+  %797 = and i32 %796, 1
+  %798 = sub i32 %795, %797
+  store i32 %798, i32* %mask2.addr.13, align 4
+  %799 = load i32, i32* %g.addr, align 4
+  %800 = load i32, i32* %f.addr, align 4
+  %801 = load i32, i32* %mask1.addr.13, align 4
+  %802 = xor i32 %800, %801
+  %803 = load i32, i32* %mask1.addr.13, align 4
+  %804 = sub i32 %802, %803
+  %805 = load i32, i32* %mask2.addr.13, align 4
+  %806 = and i32 %804, %805
+  %807 = add i32 %799, %806
+  store i32 %807, i32* %g.addr, align 4
+  %808 = load i32, i32* %q.addr, align 4
+  %809 = load i32, i32* %u.addr, align 4
+  %810 = load i32, i32* %mask1.addr.13, align 4
+  %811 = xor i32 %809, %810
+  %812 = load i32, i32* %mask1.addr.13, align 4
+  %813 = sub i32 %811, %812
+  %814 = load i32, i32* %mask2.addr.13, align 4
+  %815 = and i32 %813, %814
+  %816 = add i32 %808, %815
+  store i32 %816, i32* %q.addr, align 4
+  %817 = load i32, i32* %r.addr, align 4
+  %818 = load i32, i32* %v.addr, align 4
+  %819 = load i32, i32* %mask1.addr.13, align 4
+  %820 = xor i32 %818, %819
+  %821 = load i32, i32* %mask1.addr.13, align 4
+  %822 = sub i32 %820, %821
+  %823 = load i32, i32* %mask2.addr.13, align 4
+  %824 = and i32 %822, %823
+  %825 = add i32 %817, %824
+  store i32 %825, i32* %r.addr, align 4
+  %826 = load i32, i32* %mask1.addr.13, align 4
+  %827 = load i32, i32* %mask2.addr.13, align 4
+  %828 = and i32 %826, %827
+  store i32 %828, i32* %mask1.addr.13, align 4
+  %829 = load i32, i32* %z.addr, align 4
+  %830 = load i32, i32* %mask1.addr.13, align 4
+  %831 = xor i32 %829, %830
+  %832 = sub i32 %831, 1
+  store i32 %832, i32* %z.addr, align 4
+  %833 = load i32, i32* %f.addr, align 4
+  %834 = load i32, i32* %g.addr, align 4
+  %835 = load i32, i32* %mask1.addr.13, align 4
+  %836 = and i32 %834, %835
+  %837 = add i32 %833, %836
+  store i32 %837, i32* %f.addr, align 4
+  %838 = load i32, i32* %u.addr, align 4
+  %839 = load i32, i32* %q.addr, align 4
+  %840 = load i32, i32* %mask1.addr.13, align 4
+  %841 = and i32 %839, %840
+  %842 = add i32 %838, %841
+  store i32 %842, i32* %u.addr, align 4
+  %843 = load i32, i32* %v.addr, align 4
+  %844 = load i32, i32* %r.addr, align 4
+  %845 = load i32, i32* %mask1.addr.13, align 4
+  %846 = and i32 %844, %845
+  %847 = add i32 %843, %846
+  store i32 %847, i32* %v.addr, align 4
+  %848 = load i32, i32* %g.addr, align 4
+  %849 = lshr i32 %848, 1
+  store i32 %849, i32* %g.addr, align 4
+  %850 = load i32, i32* %u.addr, align 4
+  %851 = shl i32 %850, 1
+  store i32 %851, i32* %u.addr, align 4
+  %852 = load i32, i32* %v.addr, align 4
+  %853 = shl i32 %852, 1
+  store i32 %853, i32* %v.addr, align 4
+  %854 = load i32, i32* %z.addr, align 4
+  %855 = call i32 @p256SignMask(i32 %854)
+  store i32 %855, i32* %mask1.addr.14, align 4
+  %856 = load i32, i32* %zero.addr, align 4
+  %857 = load i32, i32* %g.addr, align 4
+  %858 = and i32 %857, 1
+  %859 = sub i32 %856, %858
+  store i32 %859, i32* %mask2.addr.14, align 4
+  %860 = load i32, i32* %g.addr, align 4
+  %861 = load i32, i32* %f.addr, align 4
+  %862 = load i32, i32* %mask1.addr.14, align 4
+  %863 = xor i32 %861, %862
+  %864 = load i32, i32* %mask1.addr.14, align 4
+  %865 = sub i32 %863, %864
+  %866 = load i32, i32* %mask2.addr.14, align 4
+  %867 = and i32 %865, %866
+  %868 = add i32 %860, %867
+  store i32 %868, i32* %g.addr, align 4
+  %869 = load i32, i32* %q.addr, align 4
+  %870 = load i32, i32* %u.addr, align 4
+  %871 = load i32, i32* %mask1.addr.14, align 4
+  %872 = xor i32 %870, %871
+  %873 = load i32, i32* %mask1.addr.14, align 4
+  %874 = sub i32 %872, %873
+  %875 = load i32, i32* %mask2.addr.14, align 4
+  %876 = and i32 %874, %875
+  %877 = add i32 %869, %876
+  store i32 %877, i32* %q.addr, align 4
+  %878 = load i32, i32* %r.addr, align 4
+  %879 = load i32, i32* %v.addr, align 4
+  %880 = load i32, i32* %mask1.addr.14, align 4
+  %881 = xor i32 %879, %880
+  %882 = load i32, i32* %mask1.addr.14, align 4
+  %883 = sub i32 %881, %882
+  %884 = load i32, i32* %mask2.addr.14, align 4
+  %885 = and i32 %883, %884
+  %886 = add i32 %878, %885
+  store i32 %886, i32* %r.addr, align 4
+  %887 = load i32, i32* %mask1.addr.14, align 4
+  %888 = load i32, i32* %mask2.addr.14, align 4
+  %889 = and i32 %887, %888
+  store i32 %889, i32* %mask1.addr.14, align 4
+  %890 = load i32, i32* %z.addr, align 4
+  %891 = load i32, i32* %mask1.addr.14, align 4
+  %892 = xor i32 %890, %891
+  %893 = sub i32 %892, 1
+  store i32 %893, i32* %z.addr, align 4
+  %894 = load i32, i32* %f.addr, align 4
+  %895 = load i32, i32* %g.addr, align 4
+  %896 = load i32, i32* %mask1.addr.14, align 4
+  %897 = and i32 %895, %896
+  %898 = add i32 %894, %897
+  store i32 %898, i32* %f.addr, align 4
+  %899 = load i32, i32* %u.addr, align 4
+  %900 = load i32, i32* %q.addr, align 4
+  %901 = load i32, i32* %mask1.addr.14, align 4
+  %902 = and i32 %900, %901
+  %903 = add i32 %899, %902
+  store i32 %903, i32* %u.addr, align 4
+  %904 = load i32, i32* %v.addr, align 4
+  %905 = load i32, i32* %r.addr, align 4
+  %906 = load i32, i32* %mask1.addr.14, align 4
+  %907 = and i32 %905, %906
+  %908 = add i32 %904, %907
+  store i32 %908, i32* %v.addr, align 4
+  %909 = load i32, i32* %g.addr, align 4
+  %910 = lshr i32 %909, 1
+  store i32 %910, i32* %g.addr, align 4
+  %911 = load i32, i32* %u.addr, align 4
+  %912 = shl i32 %911, 1
+  store i32 %912, i32* %u.addr, align 4
+  %913 = load i32, i32* %v.addr, align 4
+  %914 = shl i32 %913, 1
+  store i32 %914, i32* %v.addr, align 4
+  %915 = load i32, i32* %z.addr, align 4
+  %916 = call i32 @p256SignMask(i32 %915)
+  store i32 %916, i32* %mask1.addr.15, align 4
+  %917 = load i32, i32* %zero.addr, align 4
+  %918 = load i32, i32* %g.addr, align 4
+  %919 = and i32 %918, 1
+  %920 = sub i32 %917, %919
+  store i32 %920, i32* %mask2.addr.15, align 4
+  %921 = load i32, i32* %g.addr, align 4
+  %922 = load i32, i32* %f.addr, align 4
+  %923 = load i32, i32* %mask1.addr.15, align 4
+  %924 = xor i32 %922, %923
+  %925 = load i32, i32* %mask1.addr.15, align 4
+  %926 = sub i32 %924, %925
+  %927 = load i32, i32* %mask2.addr.15, align 4
+  %928 = and i32 %926, %927
+  %929 = add i32 %921, %928
+  store i32 %929, i32* %g.addr, align 4
+  %930 = load i32, i32* %q.addr, align 4
+  %931 = load i32, i32* %u.addr, align 4
+  %932 = load i32, i32* %mask1.addr.15, align 4
+  %933 = xor i32 %931, %932
+  %934 = load i32, i32* %mask1.addr.15, align 4
+  %935 = sub i32 %933, %934
+  %936 = load i32, i32* %mask2.addr.15, align 4
+  %937 = and i32 %935, %936
+  %938 = add i32 %930, %937
+  store i32 %938, i32* %q.addr, align 4
+  %939 = load i32, i32* %r.addr, align 4
+  %940 = load i32, i32* %v.addr, align 4
+  %941 = load i32, i32* %mask1.addr.15, align 4
+  %942 = xor i32 %940, %941
+  %943 = load i32, i32* %mask1.addr.15, align 4
+  %944 = sub i32 %942, %943
+  %945 = load i32, i32* %mask2.addr.15, align 4
+  %946 = and i32 %944, %945
+  %947 = add i32 %939, %946
+  store i32 %947, i32* %r.addr, align 4
+  %948 = load i32, i32* %mask1.addr.15, align 4
+  %949 = load i32, i32* %mask2.addr.15, align 4
+  %950 = and i32 %948, %949
+  store i32 %950, i32* %mask1.addr.15, align 4
+  %951 = load i32, i32* %z.addr, align 4
+  %952 = load i32, i32* %mask1.addr.15, align 4
+  %953 = xor i32 %951, %952
+  %954 = sub i32 %953, 1
+  store i32 %954, i32* %z.addr, align 4
+  %955 = load i32, i32* %f.addr, align 4
+  %956 = load i32, i32* %g.addr, align 4
+  %957 = load i32, i32* %mask1.addr.15, align 4
+  %958 = and i32 %956, %957
+  %959 = add i32 %955, %958
+  store i32 %959, i32* %f.addr, align 4
+  %960 = load i32, i32* %u.addr, align 4
+  %961 = load i32, i32* %q.addr, align 4
+  %962 = load i32, i32* %mask1.addr.15, align 4
+  %963 = and i32 %961, %962
+  %964 = add i32 %960, %963
+  store i32 %964, i32* %u.addr, align 4
+  %965 = load i32, i32* %v.addr, align 4
+  %966 = load i32, i32* %r.addr, align 4
+  %967 = load i32, i32* %mask1.addr.15, align 4
+  %968 = and i32 %966, %967
+  %969 = add i32 %965, %968
+  store i32 %969, i32* %v.addr, align 4
+  %970 = load i32, i32* %g.addr, align 4
+  %971 = lshr i32 %970, 1
+  store i32 %971, i32* %g.addr, align 4
+  %972 = load i32, i32* %u.addr, align 4
+  %973 = shl i32 %972, 1
+  store i32 %973, i32* %u.addr, align 4
+  %974 = load i32, i32* %v.addr, align 4
+  %975 = shl i32 %974, 1
+  store i32 %975, i32* %v.addr, align 4
+  %976 = load i32, i32* %z.addr, align 4
+  %977 = call i32 @p256SignMask(i32 %976)
+  store i32 %977, i32* %mask1.addr.16, align 4
+  %978 = load i32, i32* %zero.addr, align 4
+  %979 = load i32, i32* %g.addr, align 4
+  %980 = and i32 %979, 1
+  %981 = sub i32 %978, %980
+  store i32 %981, i32* %mask2.addr.16, align 4
+  %982 = load i32, i32* %g.addr, align 4
+  %983 = load i32, i32* %f.addr, align 4
+  %984 = load i32, i32* %mask1.addr.16, align 4
+  %985 = xor i32 %983, %984
+  %986 = load i32, i32* %mask1.addr.16, align 4
+  %987 = sub i32 %985, %986
+  %988 = load i32, i32* %mask2.addr.16, align 4
+  %989 = and i32 %987, %988
+  %990 = add i32 %982, %989
+  store i32 %990, i32* %g.addr, align 4
+  %991 = load i32, i32* %q.addr, align 4
+  %992 = load i32, i32* %u.addr, align 4
+  %993 = load i32, i32* %mask1.addr.16, align 4
+  %994 = xor i32 %992, %993
+  %995 = load i32, i32* %mask1.addr.16, align 4
+  %996 = sub i32 %994, %995
+  %997 = load i32, i32* %mask2.addr.16, align 4
+  %998 = and i32 %996, %997
+  %999 = add i32 %991, %998
+  store i32 %999, i32* %q.addr, align 4
+  %1000 = load i32, i32* %r.addr, align 4
+  %1001 = load i32, i32* %v.addr, align 4
+  %1002 = load i32, i32* %mask1.addr.16, align 4
+  %1003 = xor i32 %1001, %1002
+  %1004 = load i32, i32* %mask1.addr.16, align 4
+  %1005 = sub i32 %1003, %1004
+  %1006 = load i32, i32* %mask2.addr.16, align 4
+  %1007 = and i32 %1005, %1006
+  %1008 = add i32 %1000, %1007
+  store i32 %1008, i32* %r.addr, align 4
+  %1009 = load i32, i32* %mask1.addr.16, align 4
+  %1010 = load i32, i32* %mask2.addr.16, align 4
+  %1011 = and i32 %1009, %1010
+  store i32 %1011, i32* %mask1.addr.16, align 4
+  %1012 = load i32, i32* %z.addr, align 4
+  %1013 = load i32, i32* %mask1.addr.16, align 4
+  %1014 = xor i32 %1012, %1013
+  %1015 = sub i32 %1014, 1
+  store i32 %1015, i32* %z.addr, align 4
+  %1016 = load i32, i32* %f.addr, align 4
+  %1017 = load i32, i32* %g.addr, align 4
+  %1018 = load i32, i32* %mask1.addr.16, align 4
+  %1019 = and i32 %1017, %1018
+  %1020 = add i32 %1016, %1019
+  store i32 %1020, i32* %f.addr, align 4
+  %1021 = load i32, i32* %u.addr, align 4
+  %1022 = load i32, i32* %q.addr, align 4
+  %1023 = load i32, i32* %mask1.addr.16, align 4
+  %1024 = and i32 %1022, %1023
+  %1025 = add i32 %1021, %1024
+  store i32 %1025, i32* %u.addr, align 4
+  %1026 = load i32, i32* %v.addr, align 4
+  %1027 = load i32, i32* %r.addr, align 4
+  %1028 = load i32, i32* %mask1.addr.16, align 4
+  %1029 = and i32 %1027, %1028
+  %1030 = add i32 %1026, %1029
+  store i32 %1030, i32* %v.addr, align 4
+  %1031 = load i32, i32* %g.addr, align 4
+  %1032 = lshr i32 %1031, 1
+  store i32 %1032, i32* %g.addr, align 4
+  %1033 = load i32, i32* %u.addr, align 4
+  %1034 = shl i32 %1033, 1
+  store i32 %1034, i32* %u.addr, align 4
+  %1035 = load i32, i32* %v.addr, align 4
+  %1036 = shl i32 %1035, 1
+  store i32 %1036, i32* %v.addr, align 4
+  %1037 = load i32, i32* %z.addr, align 4
+  %1038 = call i32 @p256SignMask(i32 %1037)
+  store i32 %1038, i32* %mask1.addr.17, align 4
+  %1039 = load i32, i32* %zero.addr, align 4
+  %1040 = load i32, i32* %g.addr, align 4
+  %1041 = and i32 %1040, 1
+  %1042 = sub i32 %1039, %1041
+  store i32 %1042, i32* %mask2.addr.17, align 4
+  %1043 = load i32, i32* %g.addr, align 4
+  %1044 = load i32, i32* %f.addr, align 4
+  %1045 = load i32, i32* %mask1.addr.17, align 4
+  %1046 = xor i32 %1044, %1045
+  %1047 = load i32, i32* %mask1.addr.17, align 4
+  %1048 = sub i32 %1046, %1047
+  %1049 = load i32, i32* %mask2.addr.17, align 4
+  %1050 = and i32 %1048, %1049
+  %1051 = add i32 %1043, %1050
+  store i32 %1051, i32* %g.addr, align 4
+  %1052 = load i32, i32* %q.addr, align 4
+  %1053 = load i32, i32* %u.addr, align 4
+  %1054 = load i32, i32* %mask1.addr.17, align 4
+  %1055 = xor i32 %1053, %1054
+  %1056 = load i32, i32* %mask1.addr.17, align 4
+  %1057 = sub i32 %1055, %1056
+  %1058 = load i32, i32* %mask2.addr.17, align 4
+  %1059 = and i32 %1057, %1058
+  %1060 = add i32 %1052, %1059
+  store i32 %1060, i32* %q.addr, align 4
+  %1061 = load i32, i32* %r.addr, align 4
+  %1062 = load i32, i32* %v.addr, align 4
+  %1063 = load i32, i32* %mask1.addr.17, align 4
+  %1064 = xor i32 %1062, %1063
+  %1065 = load i32, i32* %mask1.addr.17, align 4
+  %1066 = sub i32 %1064, %1065
+  %1067 = load i32, i32* %mask2.addr.17, align 4
+  %1068 = and i32 %1066, %1067
+  %1069 = add i32 %1061, %1068
+  store i32 %1069, i32* %r.addr, align 4
+  %1070 = load i32, i32* %mask1.addr.17, align 4
+  %1071 = load i32, i32* %mask2.addr.17, align 4
+  %1072 = and i32 %1070, %1071
+  store i32 %1072, i32* %mask1.addr.17, align 4
+  %1073 = load i32, i32* %z.addr, align 4
+  %1074 = load i32, i32* %mask1.addr.17, align 4
+  %1075 = xor i32 %1073, %1074
+  %1076 = sub i32 %1075, 1
+  store i32 %1076, i32* %z.addr, align 4
+  %1077 = load i32, i32* %f.addr, align 4
+  %1078 = load i32, i32* %g.addr, align 4
+  %1079 = load i32, i32* %mask1.addr.17, align 4
+  %1080 = and i32 %1078, %1079
+  %1081 = add i32 %1077, %1080
+  store i32 %1081, i32* %f.addr, align 4
+  %1082 = load i32, i32* %u.addr, align 4
+  %1083 = load i32, i32* %q.addr, align 4
+  %1084 = load i32, i32* %mask1.addr.17, align 4
+  %1085 = and i32 %1083, %1084
+  %1086 = add i32 %1082, %1085
+  store i32 %1086, i32* %u.addr, align 4
+  %1087 = load i32, i32* %v.addr, align 4
+  %1088 = load i32, i32* %r.addr, align 4
+  %1089 = load i32, i32* %mask1.addr.17, align 4
+  %1090 = and i32 %1088, %1089
+  %1091 = add i32 %1087, %1090
+  store i32 %1091, i32* %v.addr, align 4
+  %1092 = load i32, i32* %g.addr, align 4
+  %1093 = lshr i32 %1092, 1
+  store i32 %1093, i32* %g.addr, align 4
+  %1094 = load i32, i32* %u.addr, align 4
+  %1095 = shl i32 %1094, 1
+  store i32 %1095, i32* %u.addr, align 4
+  %1096 = load i32, i32* %v.addr, align 4
+  %1097 = shl i32 %1096, 1
+  store i32 %1097, i32* %v.addr, align 4
+  %1098 = load i32, i32* %z.addr, align 4
+  %1099 = call i32 @p256SignMask(i32 %1098)
+  store i32 %1099, i32* %mask1.addr.18, align 4
+  %1100 = load i32, i32* %zero.addr, align 4
+  %1101 = load i32, i32* %g.addr, align 4
+  %1102 = and i32 %1101, 1
+  %1103 = sub i32 %1100, %1102
+  store i32 %1103, i32* %mask2.addr.18, align 4
+  %1104 = load i32, i32* %g.addr, align 4
+  %1105 = load i32, i32* %f.addr, align 4
+  %1106 = load i32, i32* %mask1.addr.18, align 4
+  %1107 = xor i32 %1105, %1106
+  %1108 = load i32, i32* %mask1.addr.18, align 4
+  %1109 = sub i32 %1107, %1108
+  %1110 = load i32, i32* %mask2.addr.18, align 4
+  %1111 = and i32 %1109, %1110
+  %1112 = add i32 %1104, %1111
+  store i32 %1112, i32* %g.addr, align 4
+  %1113 = load i32, i32* %q.addr, align 4
+  %1114 = load i32, i32* %u.addr, align 4
+  %1115 = load i32, i32* %mask1.addr.18, align 4
+  %1116 = xor i32 %1114, %1115
+  %1117 = load i32, i32* %mask1.addr.18, align 4
+  %1118 = sub i32 %1116, %1117
+  %1119 = load i32, i32* %mask2.addr.18, align 4
+  %1120 = and i32 %1118, %1119
+  %1121 = add i32 %1113, %1120
+  store i32 %1121, i32* %q.addr, align 4
+  %1122 = load i32, i32* %r.addr, align 4
+  %1123 = load i32, i32* %v.addr, align 4
+  %1124 = load i32, i32* %mask1.addr.18, align 4
+  %1125 = xor i32 %1123, %1124
+  %1126 = load i32, i32* %mask1.addr.18, align 4
+  %1127 = sub i32 %1125, %1126
+  %1128 = load i32, i32* %mask2.addr.18, align 4
+  %1129 = and i32 %1127, %1128
+  %1130 = add i32 %1122, %1129
+  store i32 %1130, i32* %r.addr, align 4
+  %1131 = load i32, i32* %mask1.addr.18, align 4
+  %1132 = load i32, i32* %mask2.addr.18, align 4
+  %1133 = and i32 %1131, %1132
+  store i32 %1133, i32* %mask1.addr.18, align 4
+  %1134 = load i32, i32* %z.addr, align 4
+  %1135 = load i32, i32* %mask1.addr.18, align 4
+  %1136 = xor i32 %1134, %1135
+  %1137 = sub i32 %1136, 1
+  store i32 %1137, i32* %z.addr, align 4
+  %1138 = load i32, i32* %f.addr, align 4
+  %1139 = load i32, i32* %g.addr, align 4
+  %1140 = load i32, i32* %mask1.addr.18, align 4
+  %1141 = and i32 %1139, %1140
+  %1142 = add i32 %1138, %1141
+  store i32 %1142, i32* %f.addr, align 4
+  %1143 = load i32, i32* %u.addr, align 4
+  %1144 = load i32, i32* %q.addr, align 4
+  %1145 = load i32, i32* %mask1.addr.18, align 4
+  %1146 = and i32 %1144, %1145
+  %1147 = add i32 %1143, %1146
+  store i32 %1147, i32* %u.addr, align 4
+  %1148 = load i32, i32* %v.addr, align 4
+  %1149 = load i32, i32* %r.addr, align 4
+  %1150 = load i32, i32* %mask1.addr.18, align 4
+  %1151 = and i32 %1149, %1150
+  %1152 = add i32 %1148, %1151
+  store i32 %1152, i32* %v.addr, align 4
+  %1153 = load i32, i32* %g.addr, align 4
+  %1154 = lshr i32 %1153, 1
+  store i32 %1154, i32* %g.addr, align 4
+  %1155 = load i32, i32* %u.addr, align 4
+  %1156 = shl i32 %1155, 1
+  store i32 %1156, i32* %u.addr, align 4
+  %1157 = load i32, i32* %v.addr, align 4
+  %1158 = shl i32 %1157, 1
+  store i32 %1158, i32* %v.addr, align 4
+  %1159 = load i32, i32* %z.addr, align 4
+  %1160 = call i32 @p256SignMask(i32 %1159)
+  store i32 %1160, i32* %mask1.addr.19, align 4
+  %1161 = load i32, i32* %zero.addr, align 4
+  %1162 = load i32, i32* %g.addr, align 4
+  %1163 = and i32 %1162, 1
+  %1164 = sub i32 %1161, %1163
+  store i32 %1164, i32* %mask2.addr.19, align 4
+  %1165 = load i32, i32* %g.addr, align 4
+  %1166 = load i32, i32* %f.addr, align 4
+  %1167 = load i32, i32* %mask1.addr.19, align 4
+  %1168 = xor i32 %1166, %1167
+  %1169 = load i32, i32* %mask1.addr.19, align 4
+  %1170 = sub i32 %1168, %1169
+  %1171 = load i32, i32* %mask2.addr.19, align 4
+  %1172 = and i32 %1170, %1171
+  %1173 = add i32 %1165, %1172
+  store i32 %1173, i32* %g.addr, align 4
+  %1174 = load i32, i32* %q.addr, align 4
+  %1175 = load i32, i32* %u.addr, align 4
+  %1176 = load i32, i32* %mask1.addr.19, align 4
+  %1177 = xor i32 %1175, %1176
+  %1178 = load i32, i32* %mask1.addr.19, align 4
+  %1179 = sub i32 %1177, %1178
+  %1180 = load i32, i32* %mask2.addr.19, align 4
+  %1181 = and i32 %1179, %1180
+  %1182 = add i32 %1174, %1181
+  store i32 %1182, i32* %q.addr, align 4
+  %1183 = load i32, i32* %r.addr, align 4
+  %1184 = load i32, i32* %v.addr, align 4
+  %1185 = load i32, i32* %mask1.addr.19, align 4
+  %1186 = xor i32 %1184, %1185
+  %1187 = load i32, i32* %mask1.addr.19, align 4
+  %1188 = sub i32 %1186, %1187
+  %1189 = load i32, i32* %mask2.addr.19, align 4
+  %1190 = and i32 %1188, %1189
+  %1191 = add i32 %1183, %1190
+  store i32 %1191, i32* %r.addr, align 4
+  %1192 = load i32, i32* %mask1.addr.19, align 4
+  %1193 = load i32, i32* %mask2.addr.19, align 4
+  %1194 = and i32 %1192, %1193
+  store i32 %1194, i32* %mask1.addr.19, align 4
+  %1195 = load i32, i32* %z.addr, align 4
+  %1196 = load i32, i32* %mask1.addr.19, align 4
+  %1197 = xor i32 %1195, %1196
+  %1198 = sub i32 %1197, 1
+  store i32 %1198, i32* %z.addr, align 4
+  %1199 = load i32, i32* %f.addr, align 4
+  %1200 = load i32, i32* %g.addr, align 4
+  %1201 = load i32, i32* %mask1.addr.19, align 4
+  %1202 = and i32 %1200, %1201
+  %1203 = add i32 %1199, %1202
+  store i32 %1203, i32* %f.addr, align 4
+  %1204 = load i32, i32* %u.addr, align 4
+  %1205 = load i32, i32* %q.addr, align 4
+  %1206 = load i32, i32* %mask1.addr.19, align 4
+  %1207 = and i32 %1205, %1206
+  %1208 = add i32 %1204, %1207
+  store i32 %1208, i32* %u.addr, align 4
+  %1209 = load i32, i32* %v.addr, align 4
+  %1210 = load i32, i32* %r.addr, align 4
+  %1211 = load i32, i32* %mask1.addr.19, align 4
+  %1212 = and i32 %1210, %1211
+  %1213 = add i32 %1209, %1212
+  store i32 %1213, i32* %v.addr, align 4
+  %1214 = load i32, i32* %g.addr, align 4
+  %1215 = lshr i32 %1214, 1
+  store i32 %1215, i32* %g.addr, align 4
+  %1216 = load i32, i32* %u.addr, align 4
+  %1217 = shl i32 %1216, 1
+  store i32 %1217, i32* %u.addr, align 4
+  %1218 = load i32, i32* %v.addr, align 4
+  %1219 = shl i32 %1218, 1
+  store i32 %1219, i32* %v.addr, align 4
+  %1220 = load i32, i32* %z.addr, align 4
+  %1221 = call i32 @p256SignMask(i32 %1220)
+  store i32 %1221, i32* %mask1.addr.20, align 4
+  %1222 = load i32, i32* %zero.addr, align 4
+  %1223 = load i32, i32* %g.addr, align 4
+  %1224 = and i32 %1223, 1
+  %1225 = sub i32 %1222, %1224
+  store i32 %1225, i32* %mask2.addr.20, align 4
+  %1226 = load i32, i32* %g.addr, align 4
+  %1227 = load i32, i32* %f.addr, align 4
+  %1228 = load i32, i32* %mask1.addr.20, align 4
+  %1229 = xor i32 %1227, %1228
+  %1230 = load i32, i32* %mask1.addr.20, align 4
+  %1231 = sub i32 %1229, %1230
+  %1232 = load i32, i32* %mask2.addr.20, align 4
+  %1233 = and i32 %1231, %1232
+  %1234 = add i32 %1226, %1233
+  store i32 %1234, i32* %g.addr, align 4
+  %1235 = load i32, i32* %q.addr, align 4
+  %1236 = load i32, i32* %u.addr, align 4
+  %1237 = load i32, i32* %mask1.addr.20, align 4
+  %1238 = xor i32 %1236, %1237
+  %1239 = load i32, i32* %mask1.addr.20, align 4
+  %1240 = sub i32 %1238, %1239
+  %1241 = load i32, i32* %mask2.addr.20, align 4
+  %1242 = and i32 %1240, %1241
+  %1243 = add i32 %1235, %1242
+  store i32 %1243, i32* %q.addr, align 4
+  %1244 = load i32, i32* %r.addr, align 4
+  %1245 = load i32, i32* %v.addr, align 4
+  %1246 = load i32, i32* %mask1.addr.20, align 4
+  %1247 = xor i32 %1245, %1246
+  %1248 = load i32, i32* %mask1.addr.20, align 4
+  %1249 = sub i32 %1247, %1248
+  %1250 = load i32, i32* %mask2.addr.20, align 4
+  %1251 = and i32 %1249, %1250
+  %1252 = add i32 %1244, %1251
+  store i32 %1252, i32* %r.addr, align 4
+  %1253 = load i32, i32* %mask1.addr.20, align 4
+  %1254 = load i32, i32* %mask2.addr.20, align 4
+  %1255 = and i32 %1253, %1254
+  store i32 %1255, i32* %mask1.addr.20, align 4
+  %1256 = load i32, i32* %z.addr, align 4
+  %1257 = load i32, i32* %mask1.addr.20, align 4
+  %1258 = xor i32 %1256, %1257
+  %1259 = sub i32 %1258, 1
+  store i32 %1259, i32* %z.addr, align 4
+  %1260 = load i32, i32* %f.addr, align 4
+  %1261 = load i32, i32* %g.addr, align 4
+  %1262 = load i32, i32* %mask1.addr.20, align 4
+  %1263 = and i32 %1261, %1262
+  %1264 = add i32 %1260, %1263
+  store i32 %1264, i32* %f.addr, align 4
+  %1265 = load i32, i32* %u.addr, align 4
+  %1266 = load i32, i32* %q.addr, align 4
+  %1267 = load i32, i32* %mask1.addr.20, align 4
+  %1268 = and i32 %1266, %1267
+  %1269 = add i32 %1265, %1268
+  store i32 %1269, i32* %u.addr, align 4
+  %1270 = load i32, i32* %v.addr, align 4
+  %1271 = load i32, i32* %r.addr, align 4
+  %1272 = load i32, i32* %mask1.addr.20, align 4
+  %1273 = and i32 %1271, %1272
+  %1274 = add i32 %1270, %1273
+  store i32 %1274, i32* %v.addr, align 4
+  %1275 = load i32, i32* %g.addr, align 4
+  %1276 = lshr i32 %1275, 1
+  store i32 %1276, i32* %g.addr, align 4
+  %1277 = load i32, i32* %u.addr, align 4
+  %1278 = shl i32 %1277, 1
+  store i32 %1278, i32* %u.addr, align 4
+  %1279 = load i32, i32* %v.addr, align 4
+  %1280 = shl i32 %1279, 1
+  store i32 %1280, i32* %v.addr, align 4
+  %1281 = load i32, i32* %z.addr, align 4
+  %1282 = call i32 @p256SignMask(i32 %1281)
+  store i32 %1282, i32* %mask1.addr.21, align 4
+  %1283 = load i32, i32* %zero.addr, align 4
+  %1284 = load i32, i32* %g.addr, align 4
+  %1285 = and i32 %1284, 1
+  %1286 = sub i32 %1283, %1285
+  store i32 %1286, i32* %mask2.addr.21, align 4
+  %1287 = load i32, i32* %g.addr, align 4
+  %1288 = load i32, i32* %f.addr, align 4
+  %1289 = load i32, i32* %mask1.addr.21, align 4
+  %1290 = xor i32 %1288, %1289
+  %1291 = load i32, i32* %mask1.addr.21, align 4
+  %1292 = sub i32 %1290, %1291
+  %1293 = load i32, i32* %mask2.addr.21, align 4
+  %1294 = and i32 %1292, %1293
+  %1295 = add i32 %1287, %1294
+  store i32 %1295, i32* %g.addr, align 4
+  %1296 = load i32, i32* %q.addr, align 4
+  %1297 = load i32, i32* %u.addr, align 4
+  %1298 = load i32, i32* %mask1.addr.21, align 4
+  %1299 = xor i32 %1297, %1298
+  %1300 = load i32, i32* %mask1.addr.21, align 4
+  %1301 = sub i32 %1299, %1300
+  %1302 = load i32, i32* %mask2.addr.21, align 4
+  %1303 = and i32 %1301, %1302
+  %1304 = add i32 %1296, %1303
+  store i32 %1304, i32* %q.addr, align 4
+  %1305 = load i32, i32* %r.addr, align 4
+  %1306 = load i32, i32* %v.addr, align 4
+  %1307 = load i32, i32* %mask1.addr.21, align 4
+  %1308 = xor i32 %1306, %1307
+  %1309 = load i32, i32* %mask1.addr.21, align 4
+  %1310 = sub i32 %1308, %1309
+  %1311 = load i32, i32* %mask2.addr.21, align 4
+  %1312 = and i32 %1310, %1311
+  %1313 = add i32 %1305, %1312
+  store i32 %1313, i32* %r.addr, align 4
+  %1314 = load i32, i32* %mask1.addr.21, align 4
+  %1315 = load i32, i32* %mask2.addr.21, align 4
+  %1316 = and i32 %1314, %1315
+  store i32 %1316, i32* %mask1.addr.21, align 4
+  %1317 = load i32, i32* %z.addr, align 4
+  %1318 = load i32, i32* %mask1.addr.21, align 4
+  %1319 = xor i32 %1317, %1318
+  %1320 = sub i32 %1319, 1
+  store i32 %1320, i32* %z.addr, align 4
+  %1321 = load i32, i32* %f.addr, align 4
+  %1322 = load i32, i32* %g.addr, align 4
+  %1323 = load i32, i32* %mask1.addr.21, align 4
+  %1324 = and i32 %1322, %1323
+  %1325 = add i32 %1321, %1324
+  store i32 %1325, i32* %f.addr, align 4
+  %1326 = load i32, i32* %u.addr, align 4
+  %1327 = load i32, i32* %q.addr, align 4
+  %1328 = load i32, i32* %mask1.addr.21, align 4
+  %1329 = and i32 %1327, %1328
+  %1330 = add i32 %1326, %1329
+  store i32 %1330, i32* %u.addr, align 4
+  %1331 = load i32, i32* %v.addr, align 4
+  %1332 = load i32, i32* %r.addr, align 4
+  %1333 = load i32, i32* %mask1.addr.21, align 4
+  %1334 = and i32 %1332, %1333
+  %1335 = add i32 %1331, %1334
+  store i32 %1335, i32* %v.addr, align 4
+  %1336 = load i32, i32* %g.addr, align 4
+  %1337 = lshr i32 %1336, 1
+  store i32 %1337, i32* %g.addr, align 4
+  %1338 = load i32, i32* %u.addr, align 4
+  %1339 = shl i32 %1338, 1
+  store i32 %1339, i32* %u.addr, align 4
+  %1340 = load i32, i32* %v.addr, align 4
+  %1341 = shl i32 %1340, 1
+  store i32 %1341, i32* %v.addr, align 4
+  %1342 = load i32, i32* %z.addr, align 4
+  %1343 = call i32 @p256SignMask(i32 %1342)
+  store i32 %1343, i32* %mask1.addr.22, align 4
+  %1344 = load i32, i32* %zero.addr, align 4
+  %1345 = load i32, i32* %g.addr, align 4
+  %1346 = and i32 %1345, 1
+  %1347 = sub i32 %1344, %1346
+  store i32 %1347, i32* %mask2.addr.22, align 4
+  %1348 = load i32, i32* %g.addr, align 4
+  %1349 = load i32, i32* %f.addr, align 4
+  %1350 = load i32, i32* %mask1.addr.22, align 4
+  %1351 = xor i32 %1349, %1350
+  %1352 = load i32, i32* %mask1.addr.22, align 4
+  %1353 = sub i32 %1351, %1352
+  %1354 = load i32, i32* %mask2.addr.22, align 4
+  %1355 = and i32 %1353, %1354
+  %1356 = add i32 %1348, %1355
+  store i32 %1356, i32* %g.addr, align 4
+  %1357 = load i32, i32* %q.addr, align 4
+  %1358 = load i32, i32* %u.addr, align 4
+  %1359 = load i32, i32* %mask1.addr.22, align 4
+  %1360 = xor i32 %1358, %1359
+  %1361 = load i32, i32* %mask1.addr.22, align 4
+  %1362 = sub i32 %1360, %1361
+  %1363 = load i32, i32* %mask2.addr.22, align 4
+  %1364 = and i32 %1362, %1363
+  %1365 = add i32 %1357, %1364
+  store i32 %1365, i32* %q.addr, align 4
+  %1366 = load i32, i32* %r.addr, align 4
+  %1367 = load i32, i32* %v.addr, align 4
+  %1368 = load i32, i32* %mask1.addr.22, align 4
+  %1369 = xor i32 %1367, %1368
+  %1370 = load i32, i32* %mask1.addr.22, align 4
+  %1371 = sub i32 %1369, %1370
+  %1372 = load i32, i32* %mask2.addr.22, align 4
+  %1373 = and i32 %1371, %1372
+  %1374 = add i32 %1366, %1373
+  store i32 %1374, i32* %r.addr, align 4
+  %1375 = load i32, i32* %mask1.addr.22, align 4
+  %1376 = load i32, i32* %mask2.addr.22, align 4
+  %1377 = and i32 %1375, %1376
+  store i32 %1377, i32* %mask1.addr.22, align 4
+  %1378 = load i32, i32* %z.addr, align 4
+  %1379 = load i32, i32* %mask1.addr.22, align 4
+  %1380 = xor i32 %1378, %1379
+  %1381 = sub i32 %1380, 1
+  store i32 %1381, i32* %z.addr, align 4
+  %1382 = load i32, i32* %f.addr, align 4
+  %1383 = load i32, i32* %g.addr, align 4
+  %1384 = load i32, i32* %mask1.addr.22, align 4
+  %1385 = and i32 %1383, %1384
+  %1386 = add i32 %1382, %1385
+  store i32 %1386, i32* %f.addr, align 4
+  %1387 = load i32, i32* %u.addr, align 4
+  %1388 = load i32, i32* %q.addr, align 4
+  %1389 = load i32, i32* %mask1.addr.22, align 4
+  %1390 = and i32 %1388, %1389
+  %1391 = add i32 %1387, %1390
+  store i32 %1391, i32* %u.addr, align 4
+  %1392 = load i32, i32* %v.addr, align 4
+  %1393 = load i32, i32* %r.addr, align 4
+  %1394 = load i32, i32* %mask1.addr.22, align 4
+  %1395 = and i32 %1393, %1394
+  %1396 = add i32 %1392, %1395
+  store i32 %1396, i32* %v.addr, align 4
+  %1397 = load i32, i32* %g.addr, align 4
+  %1398 = lshr i32 %1397, 1
+  store i32 %1398, i32* %g.addr, align 4
+  %1399 = load i32, i32* %u.addr, align 4
+  %1400 = shl i32 %1399, 1
+  store i32 %1400, i32* %u.addr, align 4
+  %1401 = load i32, i32* %v.addr, align 4
+  %1402 = shl i32 %1401, 1
+  store i32 %1402, i32* %v.addr, align 4
+  %1403 = load i32, i32* %z.addr, align 4
+  %1404 = call i32 @p256SignMask(i32 %1403)
+  store i32 %1404, i32* %mask1.addr.23, align 4
+  %1405 = load i32, i32* %zero.addr, align 4
+  %1406 = load i32, i32* %g.addr, align 4
+  %1407 = and i32 %1406, 1
+  %1408 = sub i32 %1405, %1407
+  store i32 %1408, i32* %mask2.addr.23, align 4
+  %1409 = load i32, i32* %g.addr, align 4
+  %1410 = load i32, i32* %f.addr, align 4
+  %1411 = load i32, i32* %mask1.addr.23, align 4
+  %1412 = xor i32 %1410, %1411
+  %1413 = load i32, i32* %mask1.addr.23, align 4
+  %1414 = sub i32 %1412, %1413
+  %1415 = load i32, i32* %mask2.addr.23, align 4
+  %1416 = and i32 %1414, %1415
+  %1417 = add i32 %1409, %1416
+  store i32 %1417, i32* %g.addr, align 4
+  %1418 = load i32, i32* %q.addr, align 4
+  %1419 = load i32, i32* %u.addr, align 4
+  %1420 = load i32, i32* %mask1.addr.23, align 4
+  %1421 = xor i32 %1419, %1420
+  %1422 = load i32, i32* %mask1.addr.23, align 4
+  %1423 = sub i32 %1421, %1422
+  %1424 = load i32, i32* %mask2.addr.23, align 4
+  %1425 = and i32 %1423, %1424
+  %1426 = add i32 %1418, %1425
+  store i32 %1426, i32* %q.addr, align 4
+  %1427 = load i32, i32* %r.addr, align 4
+  %1428 = load i32, i32* %v.addr, align 4
+  %1429 = load i32, i32* %mask1.addr.23, align 4
+  %1430 = xor i32 %1428, %1429
+  %1431 = load i32, i32* %mask1.addr.23, align 4
+  %1432 = sub i32 %1430, %1431
+  %1433 = load i32, i32* %mask2.addr.23, align 4
+  %1434 = and i32 %1432, %1433
+  %1435 = add i32 %1427, %1434
+  store i32 %1435, i32* %r.addr, align 4
+  %1436 = load i32, i32* %mask1.addr.23, align 4
+  %1437 = load i32, i32* %mask2.addr.23, align 4
+  %1438 = and i32 %1436, %1437
+  store i32 %1438, i32* %mask1.addr.23, align 4
+  %1439 = load i32, i32* %z.addr, align 4
+  %1440 = load i32, i32* %mask1.addr.23, align 4
+  %1441 = xor i32 %1439, %1440
+  %1442 = sub i32 %1441, 1
+  store i32 %1442, i32* %z.addr, align 4
+  %1443 = load i32, i32* %f.addr, align 4
+  %1444 = load i32, i32* %g.addr, align 4
+  %1445 = load i32, i32* %mask1.addr.23, align 4
+  %1446 = and i32 %1444, %1445
+  %1447 = add i32 %1443, %1446
+  store i32 %1447, i32* %f.addr, align 4
+  %1448 = load i32, i32* %u.addr, align 4
+  %1449 = load i32, i32* %q.addr, align 4
+  %1450 = load i32, i32* %mask1.addr.23, align 4
+  %1451 = and i32 %1449, %1450
+  %1452 = add i32 %1448, %1451
+  store i32 %1452, i32* %u.addr, align 4
+  %1453 = load i32, i32* %v.addr, align 4
+  %1454 = load i32, i32* %r.addr, align 4
+  %1455 = load i32, i32* %mask1.addr.23, align 4
+  %1456 = and i32 %1454, %1455
+  %1457 = add i32 %1453, %1456
+  store i32 %1457, i32* %v.addr, align 4
+  %1458 = load i32, i32* %g.addr, align 4
+  %1459 = lshr i32 %1458, 1
+  store i32 %1459, i32* %g.addr, align 4
+  %1460 = load i32, i32* %u.addr, align 4
+  %1461 = shl i32 %1460, 1
+  store i32 %1461, i32* %u.addr, align 4
+  %1462 = load i32, i32* %v.addr, align 4
+  %1463 = shl i32 %1462, 1
+  store i32 %1463, i32* %v.addr, align 4
+  %1464 = load i32, i32* %z.addr, align 4
+  %1465 = call i32 @p256SignMask(i32 %1464)
+  store i32 %1465, i32* %mask1.addr.24, align 4
+  %1466 = load i32, i32* %zero.addr, align 4
+  %1467 = load i32, i32* %g.addr, align 4
+  %1468 = and i32 %1467, 1
+  %1469 = sub i32 %1466, %1468
+  store i32 %1469, i32* %mask2.addr.24, align 4
+  %1470 = load i32, i32* %g.addr, align 4
+  %1471 = load i32, i32* %f.addr, align 4
+  %1472 = load i32, i32* %mask1.addr.24, align 4
+  %1473 = xor i32 %1471, %1472
+  %1474 = load i32, i32* %mask1.addr.24, align 4
+  %1475 = sub i32 %1473, %1474
+  %1476 = load i32, i32* %mask2.addr.24, align 4
+  %1477 = and i32 %1475, %1476
+  %1478 = add i32 %1470, %1477
+  store i32 %1478, i32* %g.addr, align 4
+  %1479 = load i32, i32* %q.addr, align 4
+  %1480 = load i32, i32* %u.addr, align 4
+  %1481 = load i32, i32* %mask1.addr.24, align 4
+  %1482 = xor i32 %1480, %1481
+  %1483 = load i32, i32* %mask1.addr.24, align 4
+  %1484 = sub i32 %1482, %1483
+  %1485 = load i32, i32* %mask2.addr.24, align 4
+  %1486 = and i32 %1484, %1485
+  %1487 = add i32 %1479, %1486
+  store i32 %1487, i32* %q.addr, align 4
+  %1488 = load i32, i32* %r.addr, align 4
+  %1489 = load i32, i32* %v.addr, align 4
+  %1490 = load i32, i32* %mask1.addr.24, align 4
+  %1491 = xor i32 %1489, %1490
+  %1492 = load i32, i32* %mask1.addr.24, align 4
+  %1493 = sub i32 %1491, %1492
+  %1494 = load i32, i32* %mask2.addr.24, align 4
+  %1495 = and i32 %1493, %1494
+  %1496 = add i32 %1488, %1495
+  store i32 %1496, i32* %r.addr, align 4
+  %1497 = load i32, i32* %mask1.addr.24, align 4
+  %1498 = load i32, i32* %mask2.addr.24, align 4
+  %1499 = and i32 %1497, %1498
+  store i32 %1499, i32* %mask1.addr.24, align 4
+  %1500 = load i32, i32* %z.addr, align 4
+  %1501 = load i32, i32* %mask1.addr.24, align 4
+  %1502 = xor i32 %1500, %1501
+  %1503 = sub i32 %1502, 1
+  store i32 %1503, i32* %z.addr, align 4
+  %1504 = load i32, i32* %f.addr, align 4
+  %1505 = load i32, i32* %g.addr, align 4
+  %1506 = load i32, i32* %mask1.addr.24, align 4
+  %1507 = and i32 %1505, %1506
+  %1508 = add i32 %1504, %1507
+  store i32 %1508, i32* %f.addr, align 4
+  %1509 = load i32, i32* %u.addr, align 4
+  %1510 = load i32, i32* %q.addr, align 4
+  %1511 = load i32, i32* %mask1.addr.24, align 4
+  %1512 = and i32 %1510, %1511
+  %1513 = add i32 %1509, %1512
+  store i32 %1513, i32* %u.addr, align 4
+  %1514 = load i32, i32* %v.addr, align 4
+  %1515 = load i32, i32* %r.addr, align 4
+  %1516 = load i32, i32* %mask1.addr.24, align 4
+  %1517 = and i32 %1515, %1516
+  %1518 = add i32 %1514, %1517
+  store i32 %1518, i32* %v.addr, align 4
+  %1519 = load i32, i32* %g.addr, align 4
+  %1520 = lshr i32 %1519, 1
+  store i32 %1520, i32* %g.addr, align 4
+  %1521 = load i32, i32* %u.addr, align 4
+  %1522 = shl i32 %1521, 1
+  store i32 %1522, i32* %u.addr, align 4
+  %1523 = load i32, i32* %v.addr, align 4
+  %1524 = shl i32 %1523, 1
+  store i32 %1524, i32* %v.addr, align 4
+  %1525 = load i32, i32* %z.addr, align 4
+  %1526 = call i32 @p256SignMask(i32 %1525)
+  store i32 %1526, i32* %mask1.addr.25, align 4
+  %1527 = load i32, i32* %zero.addr, align 4
+  %1528 = load i32, i32* %g.addr, align 4
+  %1529 = and i32 %1528, 1
+  %1530 = sub i32 %1527, %1529
+  store i32 %1530, i32* %mask2.addr.25, align 4
+  %1531 = load i32, i32* %g.addr, align 4
+  %1532 = load i32, i32* %f.addr, align 4
+  %1533 = load i32, i32* %mask1.addr.25, align 4
+  %1534 = xor i32 %1532, %1533
+  %1535 = load i32, i32* %mask1.addr.25, align 4
+  %1536 = sub i32 %1534, %1535
+  %1537 = load i32, i32* %mask2.addr.25, align 4
+  %1538 = and i32 %1536, %1537
+  %1539 = add i32 %1531, %1538
+  store i32 %1539, i32* %g.addr, align 4
+  %1540 = load i32, i32* %q.addr, align 4
+  %1541 = load i32, i32* %u.addr, align 4
+  %1542 = load i32, i32* %mask1.addr.25, align 4
+  %1543 = xor i32 %1541, %1542
+  %1544 = load i32, i32* %mask1.addr.25, align 4
+  %1545 = sub i32 %1543, %1544
+  %1546 = load i32, i32* %mask2.addr.25, align 4
+  %1547 = and i32 %1545, %1546
+  %1548 = add i32 %1540, %1547
+  store i32 %1548, i32* %q.addr, align 4
+  %1549 = load i32, i32* %r.addr, align 4
+  %1550 = load i32, i32* %v.addr, align 4
+  %1551 = load i32, i32* %mask1.addr.25, align 4
+  %1552 = xor i32 %1550, %1551
+  %1553 = load i32, i32* %mask1.addr.25, align 4
+  %1554 = sub i32 %1552, %1553
+  %1555 = load i32, i32* %mask2.addr.25, align 4
+  %1556 = and i32 %1554, %1555
+  %1557 = add i32 %1549, %1556
+  store i32 %1557, i32* %r.addr, align 4
+  %1558 = load i32, i32* %mask1.addr.25, align 4
+  %1559 = load i32, i32* %mask2.addr.25, align 4
+  %1560 = and i32 %1558, %1559
+  store i32 %1560, i32* %mask1.addr.25, align 4
+  %1561 = load i32, i32* %z.addr, align 4
+  %1562 = load i32, i32* %mask1.addr.25, align 4
+  %1563 = xor i32 %1561, %1562
+  %1564 = sub i32 %1563, 1
+  store i32 %1564, i32* %z.addr, align 4
+  %1565 = load i32, i32* %f.addr, align 4
+  %1566 = load i32, i32* %g.addr, align 4
+  %1567 = load i32, i32* %mask1.addr.25, align 4
+  %1568 = and i32 %1566, %1567
+  %1569 = add i32 %1565, %1568
+  store i32 %1569, i32* %f.addr, align 4
+  %1570 = load i32, i32* %u.addr, align 4
+  %1571 = load i32, i32* %q.addr, align 4
+  %1572 = load i32, i32* %mask1.addr.25, align 4
+  %1573 = and i32 %1571, %1572
+  %1574 = add i32 %1570, %1573
+  store i32 %1574, i32* %u.addr, align 4
+  %1575 = load i32, i32* %v.addr, align 4
+  %1576 = load i32, i32* %r.addr, align 4
+  %1577 = load i32, i32* %mask1.addr.25, align 4
+  %1578 = and i32 %1576, %1577
+  %1579 = add i32 %1575, %1578
+  store i32 %1579, i32* %v.addr, align 4
+  %1580 = load i32, i32* %g.addr, align 4
+  %1581 = lshr i32 %1580, 1
+  store i32 %1581, i32* %g.addr, align 4
+  %1582 = load i32, i32* %u.addr, align 4
+  %1583 = shl i32 %1582, 1
+  store i32 %1583, i32* %u.addr, align 4
+  %1584 = load i32, i32* %v.addr, align 4
+  %1585 = shl i32 %1584, 1
+  store i32 %1585, i32* %v.addr, align 4
+  %1586 = load i32, i32* %z.addr, align 4
+  %1587 = call i32 @p256SignMask(i32 %1586)
+  store i32 %1587, i32* %mask1.addr.26, align 4
+  %1588 = load i32, i32* %zero.addr, align 4
+  %1589 = load i32, i32* %g.addr, align 4
+  %1590 = and i32 %1589, 1
+  %1591 = sub i32 %1588, %1590
+  store i32 %1591, i32* %mask2.addr.26, align 4
+  %1592 = load i32, i32* %g.addr, align 4
+  %1593 = load i32, i32* %f.addr, align 4
+  %1594 = load i32, i32* %mask1.addr.26, align 4
+  %1595 = xor i32 %1593, %1594
+  %1596 = load i32, i32* %mask1.addr.26, align 4
+  %1597 = sub i32 %1595, %1596
+  %1598 = load i32, i32* %mask2.addr.26, align 4
+  %1599 = and i32 %1597, %1598
+  %1600 = add i32 %1592, %1599
+  store i32 %1600, i32* %g.addr, align 4
+  %1601 = load i32, i32* %q.addr, align 4
+  %1602 = load i32, i32* %u.addr, align 4
+  %1603 = load i32, i32* %mask1.addr.26, align 4
+  %1604 = xor i32 %1602, %1603
+  %1605 = load i32, i32* %mask1.addr.26, align 4
+  %1606 = sub i32 %1604, %1605
+  %1607 = load i32, i32* %mask2.addr.26, align 4
+  %1608 = and i32 %1606, %1607
+  %1609 = add i32 %1601, %1608
+  store i32 %1609, i32* %q.addr, align 4
+  %1610 = load i32, i32* %r.addr, align 4
+  %1611 = load i32, i32* %v.addr, align 4
+  %1612 = load i32, i32* %mask1.addr.26, align 4
+  %1613 = xor i32 %1611, %1612
+  %1614 = load i32, i32* %mask1.addr.26, align 4
+  %1615 = sub i32 %1613, %1614
+  %1616 = load i32, i32* %mask2.addr.26, align 4
+  %1617 = and i32 %1615, %1616
+  %1618 = add i32 %1610, %1617
+  store i32 %1618, i32* %r.addr, align 4
+  %1619 = load i32, i32* %mask1.addr.26, align 4
+  %1620 = load i32, i32* %mask2.addr.26, align 4
+  %1621 = and i32 %1619, %1620
+  store i32 %1621, i32* %mask1.addr.26, align 4
+  %1622 = load i32, i32* %z.addr, align 4
+  %1623 = load i32, i32* %mask1.addr.26, align 4
+  %1624 = xor i32 %1622, %1623
+  %1625 = sub i32 %1624, 1
+  store i32 %1625, i32* %z.addr, align 4
+  %1626 = load i32, i32* %f.addr, align 4
+  %1627 = load i32, i32* %g.addr, align 4
+  %1628 = load i32, i32* %mask1.addr.26, align 4
+  %1629 = and i32 %1627, %1628
+  %1630 = add i32 %1626, %1629
+  store i32 %1630, i32* %f.addr, align 4
+  %1631 = load i32, i32* %u.addr, align 4
+  %1632 = load i32, i32* %q.addr, align 4
+  %1633 = load i32, i32* %mask1.addr.26, align 4
+  %1634 = and i32 %1632, %1633
+  %1635 = add i32 %1631, %1634
+  store i32 %1635, i32* %u.addr, align 4
+  %1636 = load i32, i32* %v.addr, align 4
+  %1637 = load i32, i32* %r.addr, align 4
+  %1638 = load i32, i32* %mask1.addr.26, align 4
+  %1639 = and i32 %1637, %1638
+  %1640 = add i32 %1636, %1639
+  store i32 %1640, i32* %v.addr, align 4
+  %1641 = load i32, i32* %g.addr, align 4
+  %1642 = lshr i32 %1641, 1
+  store i32 %1642, i32* %g.addr, align 4
+  %1643 = load i32, i32* %u.addr, align 4
+  %1644 = shl i32 %1643, 1
+  store i32 %1644, i32* %u.addr, align 4
+  %1645 = load i32, i32* %v.addr, align 4
+  %1646 = shl i32 %1645, 1
+  store i32 %1646, i32* %v.addr, align 4
+  %1647 = load i32, i32* %z.addr, align 4
+  %1648 = call i32 @p256SignMask(i32 %1647)
+  store i32 %1648, i32* %mask1.addr.27, align 4
+  %1649 = load i32, i32* %zero.addr, align 4
+  %1650 = load i32, i32* %g.addr, align 4
+  %1651 = and i32 %1650, 1
+  %1652 = sub i32 %1649, %1651
+  store i32 %1652, i32* %mask2.addr.27, align 4
+  %1653 = load i32, i32* %g.addr, align 4
+  %1654 = load i32, i32* %f.addr, align 4
+  %1655 = load i32, i32* %mask1.addr.27, align 4
+  %1656 = xor i32 %1654, %1655
+  %1657 = load i32, i32* %mask1.addr.27, align 4
+  %1658 = sub i32 %1656, %1657
+  %1659 = load i32, i32* %mask2.addr.27, align 4
+  %1660 = and i32 %1658, %1659
+  %1661 = add i32 %1653, %1660
+  store i32 %1661, i32* %g.addr, align 4
+  %1662 = load i32, i32* %q.addr, align 4
+  %1663 = load i32, i32* %u.addr, align 4
+  %1664 = load i32, i32* %mask1.addr.27, align 4
+  %1665 = xor i32 %1663, %1664
+  %1666 = load i32, i32* %mask1.addr.27, align 4
+  %1667 = sub i32 %1665, %1666
+  %1668 = load i32, i32* %mask2.addr.27, align 4
+  %1669 = and i32 %1667, %1668
+  %1670 = add i32 %1662, %1669
+  store i32 %1670, i32* %q.addr, align 4
+  %1671 = load i32, i32* %r.addr, align 4
+  %1672 = load i32, i32* %v.addr, align 4
+  %1673 = load i32, i32* %mask1.addr.27, align 4
+  %1674 = xor i32 %1672, %1673
+  %1675 = load i32, i32* %mask1.addr.27, align 4
+  %1676 = sub i32 %1674, %1675
+  %1677 = load i32, i32* %mask2.addr.27, align 4
+  %1678 = and i32 %1676, %1677
+  %1679 = add i32 %1671, %1678
+  store i32 %1679, i32* %r.addr, align 4
+  %1680 = load i32, i32* %mask1.addr.27, align 4
+  %1681 = load i32, i32* %mask2.addr.27, align 4
+  %1682 = and i32 %1680, %1681
+  store i32 %1682, i32* %mask1.addr.27, align 4
+  %1683 = load i32, i32* %z.addr, align 4
+  %1684 = load i32, i32* %mask1.addr.27, align 4
+  %1685 = xor i32 %1683, %1684
+  %1686 = sub i32 %1685, 1
+  store i32 %1686, i32* %z.addr, align 4
+  %1687 = load i32, i32* %f.addr, align 4
+  %1688 = load i32, i32* %g.addr, align 4
+  %1689 = load i32, i32* %mask1.addr.27, align 4
+  %1690 = and i32 %1688, %1689
+  %1691 = add i32 %1687, %1690
+  store i32 %1691, i32* %f.addr, align 4
+  %1692 = load i32, i32* %u.addr, align 4
+  %1693 = load i32, i32* %q.addr, align 4
+  %1694 = load i32, i32* %mask1.addr.27, align 4
+  %1695 = and i32 %1693, %1694
+  %1696 = add i32 %1692, %1695
+  store i32 %1696, i32* %u.addr, align 4
+  %1697 = load i32, i32* %v.addr, align 4
+  %1698 = load i32, i32* %r.addr, align 4
+  %1699 = load i32, i32* %mask1.addr.27, align 4
+  %1700 = and i32 %1698, %1699
+  %1701 = add i32 %1697, %1700
+  store i32 %1701, i32* %v.addr, align 4
+  %1702 = load i32, i32* %g.addr, align 4
+  %1703 = lshr i32 %1702, 1
+  store i32 %1703, i32* %g.addr, align 4
+  %1704 = load i32, i32* %u.addr, align 4
+  %1705 = shl i32 %1704, 1
+  store i32 %1705, i32* %u.addr, align 4
+  %1706 = load i32, i32* %v.addr, align 4
+  %1707 = shl i32 %1706, 1
+  store i32 %1707, i32* %v.addr, align 4
+  %1708 = load i32, i32* %z.addr, align 4
+  %1709 = call i32 @p256SignMask(i32 %1708)
+  store i32 %1709, i32* %mask1.addr.28, align 4
+  %1710 = load i32, i32* %zero.addr, align 4
+  %1711 = load i32, i32* %g.addr, align 4
+  %1712 = and i32 %1711, 1
+  %1713 = sub i32 %1710, %1712
+  store i32 %1713, i32* %mask2.addr.28, align 4
+  %1714 = load i32, i32* %g.addr, align 4
+  %1715 = load i32, i32* %f.addr, align 4
+  %1716 = load i32, i32* %mask1.addr.28, align 4
+  %1717 = xor i32 %1715, %1716
+  %1718 = load i32, i32* %mask1.addr.28, align 4
+  %1719 = sub i32 %1717, %1718
+  %1720 = load i32, i32* %mask2.addr.28, align 4
+  %1721 = and i32 %1719, %1720
+  %1722 = add i32 %1714, %1721
+  store i32 %1722, i32* %g.addr, align 4
+  %1723 = load i32, i32* %q.addr, align 4
+  %1724 = load i32, i32* %u.addr, align 4
+  %1725 = load i32, i32* %mask1.addr.28, align 4
+  %1726 = xor i32 %1724, %1725
+  %1727 = load i32, i32* %mask1.addr.28, align 4
+  %1728 = sub i32 %1726, %1727
+  %1729 = load i32, i32* %mask2.addr.28, align 4
+  %1730 = and i32 %1728, %1729
+  %1731 = add i32 %1723, %1730
+  store i32 %1731, i32* %q.addr, align 4
+  %1732 = load i32, i32* %r.addr, align 4
+  %1733 = load i32, i32* %v.addr, align 4
+  %1734 = load i32, i32* %mask1.addr.28, align 4
+  %1735 = xor i32 %1733, %1734
+  %1736 = load i32, i32* %mask1.addr.28, align 4
+  %1737 = sub i32 %1735, %1736
+  %1738 = load i32, i32* %mask2.addr.28, align 4
+  %1739 = and i32 %1737, %1738
+  %1740 = add i32 %1732, %1739
+  store i32 %1740, i32* %r.addr, align 4
+  %1741 = load i32, i32* %mask1.addr.28, align 4
+  %1742 = load i32, i32* %mask2.addr.28, align 4
+  %1743 = and i32 %1741, %1742
+  store i32 %1743, i32* %mask1.addr.28, align 4
+  %1744 = load i32, i32* %z.addr, align 4
+  %1745 = load i32, i32* %mask1.addr.28, align 4
+  %1746 = xor i32 %1744, %1745
+  %1747 = sub i32 %1746, 1
+  store i32 %1747, i32* %z.addr, align 4
+  %1748 = load i32, i32* %f.addr, align 4
+  %1749 = load i32, i32* %g.addr, align 4
+  %1750 = load i32, i32* %mask1.addr.28, align 4
+  %1751 = and i32 %1749, %1750
+  %1752 = add i32 %1748, %1751
+  store i32 %1752, i32* %f.addr, align 4
+  %1753 = load i32, i32* %u.addr, align 4
+  %1754 = load i32, i32* %q.addr, align 4
+  %1755 = load i32, i32* %mask1.addr.28, align 4
+  %1756 = and i32 %1754, %1755
+  %1757 = add i32 %1753, %1756
+  store i32 %1757, i32* %u.addr, align 4
+  %1758 = load i32, i32* %v.addr, align 4
+  %1759 = load i32, i32* %r.addr, align 4
+  %1760 = load i32, i32* %mask1.addr.28, align 4
+  %1761 = and i32 %1759, %1760
+  %1762 = add i32 %1758, %1761
+  store i32 %1762, i32* %v.addr, align 4
+  %1763 = load i32, i32* %g.addr, align 4
+  %1764 = lshr i32 %1763, 1
+  store i32 %1764, i32* %g.addr, align 4
+  %1765 = load i32, i32* %u.addr, align 4
+  %1766 = shl i32 %1765, 1
+  store i32 %1766, i32* %u.addr, align 4
+  %1767 = load i32, i32* %v.addr, align 4
+  %1768 = shl i32 %1767, 1
+  store i32 %1768, i32* %v.addr, align 4
+  %1769 = load i32, i32* %z.addr, align 4
+  %1770 = call i32 @p256SignMask(i32 %1769)
+  store i32 %1770, i32* %mask1.addr.29, align 4
+  %1771 = load i32, i32* %zero.addr, align 4
+  %1772 = load i32, i32* %g.addr, align 4
+  %1773 = and i32 %1772, 1
+  %1774 = sub i32 %1771, %1773
+  store i32 %1774, i32* %mask2.addr.29, align 4
+  %1775 = load i32, i32* %g.addr, align 4
+  %1776 = load i32, i32* %f.addr, align 4
+  %1777 = load i32, i32* %mask1.addr.29, align 4
+  %1778 = xor i32 %1776, %1777
+  %1779 = load i32, i32* %mask1.addr.29, align 4
+  %1780 = sub i32 %1778, %1779
+  %1781 = load i32, i32* %mask2.addr.29, align 4
+  %1782 = and i32 %1780, %1781
+  %1783 = add i32 %1775, %1782
+  store i32 %1783, i32* %g.addr, align 4
+  %1784 = load i32, i32* %q.addr, align 4
+  %1785 = load i32, i32* %u.addr, align 4
+  %1786 = load i32, i32* %mask1.addr.29, align 4
+  %1787 = xor i32 %1785, %1786
+  %1788 = load i32, i32* %mask1.addr.29, align 4
+  %1789 = sub i32 %1787, %1788
+  %1790 = load i32, i32* %mask2.addr.29, align 4
+  %1791 = and i32 %1789, %1790
+  %1792 = add i32 %1784, %1791
+  store i32 %1792, i32* %q.addr, align 4
+  %1793 = load i32, i32* %r.addr, align 4
+  %1794 = load i32, i32* %v.addr, align 4
+  %1795 = load i32, i32* %mask1.addr.29, align 4
+  %1796 = xor i32 %1794, %1795
+  %1797 = load i32, i32* %mask1.addr.29, align 4
+  %1798 = sub i32 %1796, %1797
+  %1799 = load i32, i32* %mask2.addr.29, align 4
+  %1800 = and i32 %1798, %1799
+  %1801 = add i32 %1793, %1800
+  store i32 %1801, i32* %r.addr, align 4
+  %1802 = load i32, i32* %mask1.addr.29, align 4
+  %1803 = load i32, i32* %mask2.addr.29, align 4
+  %1804 = and i32 %1802, %1803
+  store i32 %1804, i32* %mask1.addr.29, align 4
+  %1805 = load i32, i32* %z.addr, align 4
+  %1806 = load i32, i32* %mask1.addr.29, align 4
+  %1807 = xor i32 %1805, %1806
+  %1808 = sub i32 %1807, 1
+  store i32 %1808, i32* %z.addr, align 4
+  %1809 = load i32, i32* %f.addr, align 4
+  %1810 = load i32, i32* %g.addr, align 4
+  %1811 = load i32, i32* %mask1.addr.29, align 4
+  %1812 = and i32 %1810, %1811
+  %1813 = add i32 %1809, %1812
+  store i32 %1813, i32* %f.addr, align 4
+  %1814 = load i32, i32* %u.addr, align 4
+  %1815 = load i32, i32* %q.addr, align 4
+  %1816 = load i32, i32* %mask1.addr.29, align 4
+  %1817 = and i32 %1815, %1816
+  %1818 = add i32 %1814, %1817
+  store i32 %1818, i32* %u.addr, align 4
+  %1819 = load i32, i32* %v.addr, align 4
+  %1820 = load i32, i32* %r.addr, align 4
+  %1821 = load i32, i32* %mask1.addr.29, align 4
+  %1822 = and i32 %1820, %1821
+  %1823 = add i32 %1819, %1822
+  store i32 %1823, i32* %v.addr, align 4
+  %1824 = load i32, i32* %g.addr, align 4
+  %1825 = lshr i32 %1824, 1
+  store i32 %1825, i32* %g.addr, align 4
+  %1826 = load i32, i32* %u.addr, align 4
+  %1827 = shl i32 %1826, 1
+  store i32 %1827, i32* %u.addr, align 4
+  %1828 = load i32, i32* %v.addr, align 4
+  %1829 = shl i32 %1828, 1
+  store i32 %1829, i32* %v.addr, align 4
+  %1830 = load i32, i32* %u.addr, align 4
+  %1831 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %1832 = load i8*, i8** %1831, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1833 = bitcast i8* %1832 to i32*
+  %1834 = getelementptr inbounds i32, i32* %1833, i64 0
+  store i32 %1830, i32* %1834, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %1835 = load i32, i32* %v.addr, align 4
+  %1836 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %1837 = load i8*, i8** %1836, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1838 = bitcast i8* %1837 to i32*
+  %1839 = getelementptr inbounds i32, i32* %1838, i64 1
+  store i32 %1835, i32* %1839, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %1840 = load i32, i32* %q.addr, align 4
+  %1841 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %1842 = load i8*, i8** %1841, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1843 = bitcast i8* %1842 to i32*
+  %1844 = getelementptr inbounds i32, i32* %1843, i64 2
+  store i32 %1840, i32* %1844, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %1845 = load i32, i32* %r.addr, align 4
+  %1846 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %1847 = load i8*, i8** %1846, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %1848 = bitcast i8* %1847 to i32*
+  %1849 = getelementptr inbounds i32, i32* %1848, i64 3
+  store i32 %1845, i32* %1849, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %1850 = load i32, i32* %z.addr, align 4
+  ret i32 %1850
+}
+
+define void @p256UpdateDe30(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %d, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %e, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %t, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n) #1 {
+entry:
+  %u.addr = alloca i64, align 8
+  %v.addr = alloca i64, align 8
+  %q.addr = alloca i64, align 8
+  %r.addr = alloca i64, align 8
+  %inverse30.addr = alloca i32, align 4
+  %sd.addr = alloca i32, align 4
+  %se.addr = alloca i32, align 4
+  %md.addr = alloca i32, align 4
+  %me.addr = alloca i32, align 4
+  %d0.addr = alloca i64, align 8
+  %e0.addr = alloca i64, align 8
+  %cd.addr = alloca i64, align 8
+  %ce.addr = alloca i64, align 8
+  %mdWide.addr = alloca i64, align 8
+  %meWide.addr = alloca i64, align 8
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %1 = load i8*, i8** %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = bitcast i8* %1 to i32*
+  %3 = getelementptr inbounds i32, i32* %2, i64 0
+  %4 = load i32, i32* %3, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %5 = call i64 @p256Wide(i32 %4)
+  store i64 %5, i64* %u.addr, align 8
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %8 = bitcast i8* %7 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 1
+  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %11 = call i64 @p256Wide(i32 %10)
+  store i64 %11, i64* %v.addr, align 8
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %14 = bitcast i8* %13 to i32*
+  %15 = getelementptr inbounds i32, i32* %14, i64 2
+  %16 = load i32, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %17 = call i64 @p256Wide(i32 %16)
+  store i64 %17, i64* %q.addr, align 8
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %20 = bitcast i8* %19 to i32*
+  %21 = getelementptr inbounds i32, i32* %20, i64 3
+  %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %23 = call i64 @p256Wide(i32 %22)
+  store i64 %23, i64* %r.addr, align 8
+  store i32 301941681, i32* %inverse30.addr, align 4
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %25 = load i8*, i8** %24, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %26 = bitcast i8* %25 to i32*
+  %27 = getelementptr inbounds i32, i32* %26, i64 8
+  %28 = load i32, i32* %27, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %29 = call i32 @p256SignMask(i32 %28)
+  store i32 %29, i32* %sd.addr, align 4
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %31 = load i8*, i8** %30, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %32 = bitcast i8* %31 to i32*
+  %33 = getelementptr inbounds i32, i32* %32, i64 8
+  %34 = load i32, i32* %33, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %35 = call i32 @p256SignMask(i32 %34)
+  store i32 %35, i32* %se.addr, align 4
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %37 = load i8*, i8** %36, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %38 = bitcast i8* %37 to i32*
+  %39 = getelementptr inbounds i32, i32* %38, i64 0
+  %40 = load i32, i32* %39, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %41 = load i32, i32* %sd.addr, align 4
+  %42 = and i32 %40, %41
+  %43 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %44 = load i8*, i8** %43, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %45 = bitcast i8* %44 to i32*
+  %46 = getelementptr inbounds i32, i32* %45, i64 1
+  %47 = load i32, i32* %46, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %48 = load i32, i32* %se.addr, align 4
+  %49 = and i32 %47, %48
+  %50 = add i32 %42, %49
+  store i32 %50, i32* %md.addr, align 4
+  %51 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %52 = load i8*, i8** %51, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %53 = bitcast i8* %52 to i32*
+  %54 = getelementptr inbounds i32, i32* %53, i64 2
+  %55 = load i32, i32* %54, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %56 = load i32, i32* %sd.addr, align 4
+  %57 = and i32 %55, %56
+  %58 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %59 = load i8*, i8** %58, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %60 = bitcast i8* %59 to i32*
+  %61 = getelementptr inbounds i32, i32* %60, i64 3
+  %62 = load i32, i32* %61, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %63 = load i32, i32* %se.addr, align 4
+  %64 = and i32 %62, %63
+  %65 = add i32 %57, %64
+  store i32 %65, i32* %me.addr, align 4
+  %66 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %67 = load i8*, i8** %66, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %68 = bitcast i8* %67 to i32*
+  %69 = getelementptr inbounds i32, i32* %68, i64 0
+  %70 = load i32, i32* %69, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %71 = call i64 @p256Wide(i32 %70)
+  store i64 %71, i64* %d0.addr, align 8
+  %72 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %73 = load i8*, i8** %72, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %74 = bitcast i8* %73 to i32*
+  %75 = getelementptr inbounds i32, i32* %74, i64 0
+  %76 = load i32, i32* %75, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %77 = call i64 @p256Wide(i32 %76)
+  store i64 %77, i64* %e0.addr, align 8
+  %78 = load i64, i64* %u.addr, align 8
+  %79 = load i64, i64* %d0.addr, align 8
+  %80 = mul i64 %78, %79
+  %81 = load i64, i64* %v.addr, align 8
+  %82 = load i64, i64* %e0.addr, align 8
+  %83 = mul i64 %81, %82
+  %84 = add i64 %80, %83
+  store i64 %84, i64* %cd.addr, align 8
+  %85 = load i64, i64* %q.addr, align 8
+  %86 = load i64, i64* %d0.addr, align 8
+  %87 = mul i64 %85, %86
+  %88 = load i64, i64* %r.addr, align 8
+  %89 = load i64, i64* %e0.addr, align 8
+  %90 = mul i64 %88, %89
+  %91 = add i64 %87, %90
+  store i64 %91, i64* %ce.addr, align 8
+  %92 = load i32, i32* %md.addr, align 4
+  %93 = load i32, i32* %inverse30.addr, align 4
+  %94 = load i64, i64* %cd.addr, align 8
+  %95 = trunc i64 %94 to i32
+  %96 = mul i32 %93, %95
+  %97 = load i32, i32* %md.addr, align 4
+  %98 = add i32 %96, %97
+  %99 = and i32 %98, 1073741823
+  %100 = sub i32 %92, %99
+  store i32 %100, i32* %md.addr, align 4
+  %101 = load i32, i32* %me.addr, align 4
+  %102 = load i32, i32* %inverse30.addr, align 4
+  %103 = load i64, i64* %ce.addr, align 8
+  %104 = trunc i64 %103 to i32
+  %105 = mul i32 %102, %104
+  %106 = load i32, i32* %me.addr, align 4
+  %107 = add i32 %105, %106
+  %108 = and i32 %107, 1073741823
+  %109 = sub i32 %101, %108
+  store i32 %109, i32* %me.addr, align 4
+  %110 = load i32, i32* %md.addr, align 4
+  %111 = call i64 @p256Wide(i32 %110)
+  store i64 %111, i64* %mdWide.addr, align 8
+  %112 = load i32, i32* %me.addr, align 4
+  %113 = call i64 @p256Wide(i32 %112)
+  store i64 %113, i64* %meWide.addr, align 8
+  %114 = load i64, i64* %cd.addr, align 8
+  %115 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %116 = load i8*, i8** %115, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %117 = bitcast i8* %116 to i32*
+  %118 = getelementptr inbounds i32, i32* %117, i64 0
+  %119 = load i32, i32* %118, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %120 = call i64 @p256Wide(i32 %119)
+  %121 = load i64, i64* %mdWide.addr, align 8
+  %122 = mul i64 %120, %121
+  %123 = add i64 %114, %122
+  %124 = call i64 @p256Carry30(i64 %123)
+  store i64 %124, i64* %cd.addr, align 8
+  %125 = load i64, i64* %ce.addr, align 8
+  %126 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %127 = load i8*, i8** %126, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %128 = bitcast i8* %127 to i32*
+  %129 = getelementptr inbounds i32, i32* %128, i64 0
+  %130 = load i32, i32* %129, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %131 = call i64 @p256Wide(i32 %130)
+  %132 = load i64, i64* %meWide.addr, align 8
+  %133 = mul i64 %131, %132
+  %134 = add i64 %125, %133
+  %135 = call i64 @p256Carry30(i64 %134)
+  store i64 %135, i64* %ce.addr, align 8
+  %136 = load i64, i64* %cd.addr, align 8
+  %137 = load i64, i64* %u.addr, align 8
+  %138 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %139 = load i8*, i8** %138, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %140 = bitcast i8* %139 to i32*
+  %141 = getelementptr inbounds i32, i32* %140, i64 1
+  %142 = load i32, i32* %141, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %143 = call i64 @p256Wide(i32 %142)
+  %144 = mul i64 %137, %143
+  %145 = add i64 %136, %144
+  %146 = load i64, i64* %v.addr, align 8
+  %147 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %148 = load i8*, i8** %147, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %149 = bitcast i8* %148 to i32*
+  %150 = getelementptr inbounds i32, i32* %149, i64 1
+  %151 = load i32, i32* %150, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %152 = call i64 @p256Wide(i32 %151)
+  %153 = mul i64 %146, %152
+  %154 = add i64 %145, %153
+  %155 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %156 = load i8*, i8** %155, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %157 = bitcast i8* %156 to i32*
+  %158 = getelementptr inbounds i32, i32* %157, i64 1
+  %159 = load i32, i32* %158, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %160 = call i64 @p256Wide(i32 %159)
+  %161 = load i64, i64* %mdWide.addr, align 8
+  %162 = mul i64 %160, %161
+  %163 = add i64 %154, %162
+  store i64 %163, i64* %cd.addr, align 8
+  %164 = load i64, i64* %ce.addr, align 8
+  %165 = load i64, i64* %q.addr, align 8
+  %166 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %167 = load i8*, i8** %166, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %168 = bitcast i8* %167 to i32*
+  %169 = getelementptr inbounds i32, i32* %168, i64 1
+  %170 = load i32, i32* %169, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %171 = call i64 @p256Wide(i32 %170)
+  %172 = mul i64 %165, %171
+  %173 = add i64 %164, %172
+  %174 = load i64, i64* %r.addr, align 8
+  %175 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %176 = load i8*, i8** %175, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %177 = bitcast i8* %176 to i32*
+  %178 = getelementptr inbounds i32, i32* %177, i64 1
+  %179 = load i32, i32* %178, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %180 = call i64 @p256Wide(i32 %179)
+  %181 = mul i64 %174, %180
+  %182 = add i64 %173, %181
+  %183 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %184 = load i8*, i8** %183, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %185 = bitcast i8* %184 to i32*
+  %186 = getelementptr inbounds i32, i32* %185, i64 1
+  %187 = load i32, i32* %186, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %188 = call i64 @p256Wide(i32 %187)
+  %189 = load i64, i64* %meWide.addr, align 8
+  %190 = mul i64 %188, %189
+  %191 = add i64 %182, %190
+  store i64 %191, i64* %ce.addr, align 8
+  %192 = load i64, i64* %cd.addr, align 8
+  %193 = trunc i64 %192 to i32
+  %194 = and i32 %193, 1073741823
+  %195 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %196 = load i8*, i8** %195, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %197 = bitcast i8* %196 to i32*
+  %198 = getelementptr inbounds i32, i32* %197, i64 0
+  store i32 %194, i32* %198, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %199 = load i64, i64* %ce.addr, align 8
+  %200 = trunc i64 %199 to i32
+  %201 = and i32 %200, 1073741823
+  %202 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %203 = load i8*, i8** %202, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %204 = bitcast i8* %203 to i32*
+  %205 = getelementptr inbounds i32, i32* %204, i64 0
+  store i32 %201, i32* %205, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %206 = load i64, i64* %cd.addr, align 8
+  %207 = call i64 @p256Carry30(i64 %206)
+  store i64 %207, i64* %cd.addr, align 8
+  %208 = load i64, i64* %ce.addr, align 8
+  %209 = call i64 @p256Carry30(i64 %208)
+  store i64 %209, i64* %ce.addr, align 8
+  %210 = load i64, i64* %cd.addr, align 8
+  %211 = load i64, i64* %u.addr, align 8
+  %212 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %213 = load i8*, i8** %212, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %214 = bitcast i8* %213 to i32*
+  %215 = getelementptr inbounds i32, i32* %214, i64 2
+  %216 = load i32, i32* %215, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %217 = call i64 @p256Wide(i32 %216)
+  %218 = mul i64 %211, %217
+  %219 = add i64 %210, %218
+  %220 = load i64, i64* %v.addr, align 8
+  %221 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %222 = load i8*, i8** %221, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %223 = bitcast i8* %222 to i32*
+  %224 = getelementptr inbounds i32, i32* %223, i64 2
+  %225 = load i32, i32* %224, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %226 = call i64 @p256Wide(i32 %225)
+  %227 = mul i64 %220, %226
+  %228 = add i64 %219, %227
+  %229 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %230 = load i8*, i8** %229, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %231 = bitcast i8* %230 to i32*
+  %232 = getelementptr inbounds i32, i32* %231, i64 2
+  %233 = load i32, i32* %232, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %234 = call i64 @p256Wide(i32 %233)
+  %235 = load i64, i64* %mdWide.addr, align 8
+  %236 = mul i64 %234, %235
+  %237 = add i64 %228, %236
+  store i64 %237, i64* %cd.addr, align 8
+  %238 = load i64, i64* %ce.addr, align 8
+  %239 = load i64, i64* %q.addr, align 8
+  %240 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %241 = load i8*, i8** %240, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %242 = bitcast i8* %241 to i32*
+  %243 = getelementptr inbounds i32, i32* %242, i64 2
+  %244 = load i32, i32* %243, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %245 = call i64 @p256Wide(i32 %244)
+  %246 = mul i64 %239, %245
+  %247 = add i64 %238, %246
+  %248 = load i64, i64* %r.addr, align 8
+  %249 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %250 = load i8*, i8** %249, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %251 = bitcast i8* %250 to i32*
+  %252 = getelementptr inbounds i32, i32* %251, i64 2
+  %253 = load i32, i32* %252, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %254 = call i64 @p256Wide(i32 %253)
+  %255 = mul i64 %248, %254
+  %256 = add i64 %247, %255
+  %257 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %258 = load i8*, i8** %257, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %259 = bitcast i8* %258 to i32*
+  %260 = getelementptr inbounds i32, i32* %259, i64 2
+  %261 = load i32, i32* %260, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %262 = call i64 @p256Wide(i32 %261)
+  %263 = load i64, i64* %meWide.addr, align 8
+  %264 = mul i64 %262, %263
+  %265 = add i64 %256, %264
+  store i64 %265, i64* %ce.addr, align 8
+  %266 = load i64, i64* %cd.addr, align 8
+  %267 = trunc i64 %266 to i32
+  %268 = and i32 %267, 1073741823
+  %269 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %270 = load i8*, i8** %269, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %271 = bitcast i8* %270 to i32*
+  %272 = getelementptr inbounds i32, i32* %271, i64 1
+  store i32 %268, i32* %272, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %273 = load i64, i64* %ce.addr, align 8
+  %274 = trunc i64 %273 to i32
+  %275 = and i32 %274, 1073741823
+  %276 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %277 = load i8*, i8** %276, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %278 = bitcast i8* %277 to i32*
+  %279 = getelementptr inbounds i32, i32* %278, i64 1
+  store i32 %275, i32* %279, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %280 = load i64, i64* %cd.addr, align 8
+  %281 = call i64 @p256Carry30(i64 %280)
+  store i64 %281, i64* %cd.addr, align 8
+  %282 = load i64, i64* %ce.addr, align 8
+  %283 = call i64 @p256Carry30(i64 %282)
+  store i64 %283, i64* %ce.addr, align 8
+  %284 = load i64, i64* %cd.addr, align 8
+  %285 = load i64, i64* %u.addr, align 8
+  %286 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %287 = load i8*, i8** %286, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %288 = bitcast i8* %287 to i32*
+  %289 = getelementptr inbounds i32, i32* %288, i64 3
+  %290 = load i32, i32* %289, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %291 = call i64 @p256Wide(i32 %290)
+  %292 = mul i64 %285, %291
+  %293 = add i64 %284, %292
+  %294 = load i64, i64* %v.addr, align 8
+  %295 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %296 = load i8*, i8** %295, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %297 = bitcast i8* %296 to i32*
+  %298 = getelementptr inbounds i32, i32* %297, i64 3
+  %299 = load i32, i32* %298, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %300 = call i64 @p256Wide(i32 %299)
+  %301 = mul i64 %294, %300
+  %302 = add i64 %293, %301
+  %303 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %304 = load i8*, i8** %303, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %305 = bitcast i8* %304 to i32*
+  %306 = getelementptr inbounds i32, i32* %305, i64 3
+  %307 = load i32, i32* %306, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %308 = call i64 @p256Wide(i32 %307)
+  %309 = load i64, i64* %mdWide.addr, align 8
+  %310 = mul i64 %308, %309
+  %311 = add i64 %302, %310
+  store i64 %311, i64* %cd.addr, align 8
+  %312 = load i64, i64* %ce.addr, align 8
+  %313 = load i64, i64* %q.addr, align 8
+  %314 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %315 = load i8*, i8** %314, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %316 = bitcast i8* %315 to i32*
+  %317 = getelementptr inbounds i32, i32* %316, i64 3
+  %318 = load i32, i32* %317, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %319 = call i64 @p256Wide(i32 %318)
+  %320 = mul i64 %313, %319
+  %321 = add i64 %312, %320
+  %322 = load i64, i64* %r.addr, align 8
+  %323 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %324 = load i8*, i8** %323, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %325 = bitcast i8* %324 to i32*
+  %326 = getelementptr inbounds i32, i32* %325, i64 3
+  %327 = load i32, i32* %326, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %328 = call i64 @p256Wide(i32 %327)
+  %329 = mul i64 %322, %328
+  %330 = add i64 %321, %329
+  %331 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %332 = load i8*, i8** %331, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %333 = bitcast i8* %332 to i32*
+  %334 = getelementptr inbounds i32, i32* %333, i64 3
+  %335 = load i32, i32* %334, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %336 = call i64 @p256Wide(i32 %335)
+  %337 = load i64, i64* %meWide.addr, align 8
+  %338 = mul i64 %336, %337
+  %339 = add i64 %330, %338
+  store i64 %339, i64* %ce.addr, align 8
+  %340 = load i64, i64* %cd.addr, align 8
+  %341 = trunc i64 %340 to i32
+  %342 = and i32 %341, 1073741823
+  %343 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %344 = load i8*, i8** %343, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %345 = bitcast i8* %344 to i32*
+  %346 = getelementptr inbounds i32, i32* %345, i64 2
+  store i32 %342, i32* %346, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %347 = load i64, i64* %ce.addr, align 8
+  %348 = trunc i64 %347 to i32
+  %349 = and i32 %348, 1073741823
+  %350 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %351 = load i8*, i8** %350, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %352 = bitcast i8* %351 to i32*
+  %353 = getelementptr inbounds i32, i32* %352, i64 2
+  store i32 %349, i32* %353, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %354 = load i64, i64* %cd.addr, align 8
+  %355 = call i64 @p256Carry30(i64 %354)
+  store i64 %355, i64* %cd.addr, align 8
+  %356 = load i64, i64* %ce.addr, align 8
+  %357 = call i64 @p256Carry30(i64 %356)
+  store i64 %357, i64* %ce.addr, align 8
+  %358 = load i64, i64* %cd.addr, align 8
+  %359 = load i64, i64* %u.addr, align 8
+  %360 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %361 = load i8*, i8** %360, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %362 = bitcast i8* %361 to i32*
+  %363 = getelementptr inbounds i32, i32* %362, i64 4
+  %364 = load i32, i32* %363, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %365 = call i64 @p256Wide(i32 %364)
+  %366 = mul i64 %359, %365
+  %367 = add i64 %358, %366
+  %368 = load i64, i64* %v.addr, align 8
+  %369 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %370 = load i8*, i8** %369, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %371 = bitcast i8* %370 to i32*
+  %372 = getelementptr inbounds i32, i32* %371, i64 4
+  %373 = load i32, i32* %372, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %374 = call i64 @p256Wide(i32 %373)
+  %375 = mul i64 %368, %374
+  %376 = add i64 %367, %375
+  %377 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %378 = load i8*, i8** %377, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %379 = bitcast i8* %378 to i32*
+  %380 = getelementptr inbounds i32, i32* %379, i64 4
+  %381 = load i32, i32* %380, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %382 = call i64 @p256Wide(i32 %381)
+  %383 = load i64, i64* %mdWide.addr, align 8
+  %384 = mul i64 %382, %383
+  %385 = add i64 %376, %384
+  store i64 %385, i64* %cd.addr, align 8
+  %386 = load i64, i64* %ce.addr, align 8
+  %387 = load i64, i64* %q.addr, align 8
+  %388 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %389 = load i8*, i8** %388, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %390 = bitcast i8* %389 to i32*
+  %391 = getelementptr inbounds i32, i32* %390, i64 4
+  %392 = load i32, i32* %391, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %393 = call i64 @p256Wide(i32 %392)
+  %394 = mul i64 %387, %393
+  %395 = add i64 %386, %394
+  %396 = load i64, i64* %r.addr, align 8
+  %397 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %398 = load i8*, i8** %397, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %399 = bitcast i8* %398 to i32*
+  %400 = getelementptr inbounds i32, i32* %399, i64 4
+  %401 = load i32, i32* %400, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %402 = call i64 @p256Wide(i32 %401)
+  %403 = mul i64 %396, %402
+  %404 = add i64 %395, %403
+  %405 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %406 = load i8*, i8** %405, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %407 = bitcast i8* %406 to i32*
+  %408 = getelementptr inbounds i32, i32* %407, i64 4
+  %409 = load i32, i32* %408, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %410 = call i64 @p256Wide(i32 %409)
+  %411 = load i64, i64* %meWide.addr, align 8
+  %412 = mul i64 %410, %411
+  %413 = add i64 %404, %412
+  store i64 %413, i64* %ce.addr, align 8
+  %414 = load i64, i64* %cd.addr, align 8
+  %415 = trunc i64 %414 to i32
+  %416 = and i32 %415, 1073741823
+  %417 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %418 = load i8*, i8** %417, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %419 = bitcast i8* %418 to i32*
+  %420 = getelementptr inbounds i32, i32* %419, i64 3
+  store i32 %416, i32* %420, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %421 = load i64, i64* %ce.addr, align 8
+  %422 = trunc i64 %421 to i32
+  %423 = and i32 %422, 1073741823
+  %424 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %425 = load i8*, i8** %424, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %426 = bitcast i8* %425 to i32*
+  %427 = getelementptr inbounds i32, i32* %426, i64 3
+  store i32 %423, i32* %427, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %428 = load i64, i64* %cd.addr, align 8
+  %429 = call i64 @p256Carry30(i64 %428)
+  store i64 %429, i64* %cd.addr, align 8
+  %430 = load i64, i64* %ce.addr, align 8
+  %431 = call i64 @p256Carry30(i64 %430)
+  store i64 %431, i64* %ce.addr, align 8
+  %432 = load i64, i64* %cd.addr, align 8
+  %433 = load i64, i64* %u.addr, align 8
+  %434 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %435 = load i8*, i8** %434, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %436 = bitcast i8* %435 to i32*
+  %437 = getelementptr inbounds i32, i32* %436, i64 5
+  %438 = load i32, i32* %437, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %439 = call i64 @p256Wide(i32 %438)
+  %440 = mul i64 %433, %439
+  %441 = add i64 %432, %440
+  %442 = load i64, i64* %v.addr, align 8
+  %443 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %444 = load i8*, i8** %443, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %445 = bitcast i8* %444 to i32*
+  %446 = getelementptr inbounds i32, i32* %445, i64 5
+  %447 = load i32, i32* %446, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %448 = call i64 @p256Wide(i32 %447)
+  %449 = mul i64 %442, %448
+  %450 = add i64 %441, %449
+  %451 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %452 = load i8*, i8** %451, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %453 = bitcast i8* %452 to i32*
+  %454 = getelementptr inbounds i32, i32* %453, i64 5
+  %455 = load i32, i32* %454, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %456 = call i64 @p256Wide(i32 %455)
+  %457 = load i64, i64* %mdWide.addr, align 8
+  %458 = mul i64 %456, %457
+  %459 = add i64 %450, %458
+  store i64 %459, i64* %cd.addr, align 8
+  %460 = load i64, i64* %ce.addr, align 8
+  %461 = load i64, i64* %q.addr, align 8
+  %462 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %463 = load i8*, i8** %462, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %464 = bitcast i8* %463 to i32*
+  %465 = getelementptr inbounds i32, i32* %464, i64 5
+  %466 = load i32, i32* %465, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %467 = call i64 @p256Wide(i32 %466)
+  %468 = mul i64 %461, %467
+  %469 = add i64 %460, %468
+  %470 = load i64, i64* %r.addr, align 8
+  %471 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %472 = load i8*, i8** %471, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %473 = bitcast i8* %472 to i32*
+  %474 = getelementptr inbounds i32, i32* %473, i64 5
+  %475 = load i32, i32* %474, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %476 = call i64 @p256Wide(i32 %475)
+  %477 = mul i64 %470, %476
+  %478 = add i64 %469, %477
+  %479 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %480 = load i8*, i8** %479, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %481 = bitcast i8* %480 to i32*
+  %482 = getelementptr inbounds i32, i32* %481, i64 5
+  %483 = load i32, i32* %482, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %484 = call i64 @p256Wide(i32 %483)
+  %485 = load i64, i64* %meWide.addr, align 8
+  %486 = mul i64 %484, %485
+  %487 = add i64 %478, %486
+  store i64 %487, i64* %ce.addr, align 8
+  %488 = load i64, i64* %cd.addr, align 8
+  %489 = trunc i64 %488 to i32
+  %490 = and i32 %489, 1073741823
+  %491 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %492 = load i8*, i8** %491, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %493 = bitcast i8* %492 to i32*
+  %494 = getelementptr inbounds i32, i32* %493, i64 4
+  store i32 %490, i32* %494, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %495 = load i64, i64* %ce.addr, align 8
+  %496 = trunc i64 %495 to i32
+  %497 = and i32 %496, 1073741823
+  %498 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %499 = load i8*, i8** %498, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %500 = bitcast i8* %499 to i32*
+  %501 = getelementptr inbounds i32, i32* %500, i64 4
+  store i32 %497, i32* %501, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %502 = load i64, i64* %cd.addr, align 8
+  %503 = call i64 @p256Carry30(i64 %502)
+  store i64 %503, i64* %cd.addr, align 8
+  %504 = load i64, i64* %ce.addr, align 8
+  %505 = call i64 @p256Carry30(i64 %504)
+  store i64 %505, i64* %ce.addr, align 8
+  %506 = load i64, i64* %cd.addr, align 8
+  %507 = load i64, i64* %u.addr, align 8
+  %508 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %509 = load i8*, i8** %508, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %510 = bitcast i8* %509 to i32*
+  %511 = getelementptr inbounds i32, i32* %510, i64 6
+  %512 = load i32, i32* %511, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %513 = call i64 @p256Wide(i32 %512)
+  %514 = mul i64 %507, %513
+  %515 = add i64 %506, %514
+  %516 = load i64, i64* %v.addr, align 8
+  %517 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %518 = load i8*, i8** %517, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %519 = bitcast i8* %518 to i32*
+  %520 = getelementptr inbounds i32, i32* %519, i64 6
+  %521 = load i32, i32* %520, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %522 = call i64 @p256Wide(i32 %521)
+  %523 = mul i64 %516, %522
+  %524 = add i64 %515, %523
+  %525 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %526 = load i8*, i8** %525, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %527 = bitcast i8* %526 to i32*
+  %528 = getelementptr inbounds i32, i32* %527, i64 6
+  %529 = load i32, i32* %528, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %530 = call i64 @p256Wide(i32 %529)
+  %531 = load i64, i64* %mdWide.addr, align 8
+  %532 = mul i64 %530, %531
+  %533 = add i64 %524, %532
+  store i64 %533, i64* %cd.addr, align 8
+  %534 = load i64, i64* %ce.addr, align 8
+  %535 = load i64, i64* %q.addr, align 8
+  %536 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %537 = load i8*, i8** %536, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %538 = bitcast i8* %537 to i32*
+  %539 = getelementptr inbounds i32, i32* %538, i64 6
+  %540 = load i32, i32* %539, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %541 = call i64 @p256Wide(i32 %540)
+  %542 = mul i64 %535, %541
+  %543 = add i64 %534, %542
+  %544 = load i64, i64* %r.addr, align 8
+  %545 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %546 = load i8*, i8** %545, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %547 = bitcast i8* %546 to i32*
+  %548 = getelementptr inbounds i32, i32* %547, i64 6
+  %549 = load i32, i32* %548, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %550 = call i64 @p256Wide(i32 %549)
+  %551 = mul i64 %544, %550
+  %552 = add i64 %543, %551
+  %553 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %554 = load i8*, i8** %553, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %555 = bitcast i8* %554 to i32*
+  %556 = getelementptr inbounds i32, i32* %555, i64 6
+  %557 = load i32, i32* %556, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %558 = call i64 @p256Wide(i32 %557)
+  %559 = load i64, i64* %meWide.addr, align 8
+  %560 = mul i64 %558, %559
+  %561 = add i64 %552, %560
+  store i64 %561, i64* %ce.addr, align 8
+  %562 = load i64, i64* %cd.addr, align 8
+  %563 = trunc i64 %562 to i32
+  %564 = and i32 %563, 1073741823
+  %565 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %566 = load i8*, i8** %565, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %567 = bitcast i8* %566 to i32*
+  %568 = getelementptr inbounds i32, i32* %567, i64 5
+  store i32 %564, i32* %568, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %569 = load i64, i64* %ce.addr, align 8
+  %570 = trunc i64 %569 to i32
+  %571 = and i32 %570, 1073741823
+  %572 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %573 = load i8*, i8** %572, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %574 = bitcast i8* %573 to i32*
+  %575 = getelementptr inbounds i32, i32* %574, i64 5
+  store i32 %571, i32* %575, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %576 = load i64, i64* %cd.addr, align 8
+  %577 = call i64 @p256Carry30(i64 %576)
+  store i64 %577, i64* %cd.addr, align 8
+  %578 = load i64, i64* %ce.addr, align 8
+  %579 = call i64 @p256Carry30(i64 %578)
+  store i64 %579, i64* %ce.addr, align 8
+  %580 = load i64, i64* %cd.addr, align 8
+  %581 = load i64, i64* %u.addr, align 8
+  %582 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %583 = load i8*, i8** %582, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %584 = bitcast i8* %583 to i32*
+  %585 = getelementptr inbounds i32, i32* %584, i64 7
+  %586 = load i32, i32* %585, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %587 = call i64 @p256Wide(i32 %586)
+  %588 = mul i64 %581, %587
+  %589 = add i64 %580, %588
+  %590 = load i64, i64* %v.addr, align 8
+  %591 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %592 = load i8*, i8** %591, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %593 = bitcast i8* %592 to i32*
+  %594 = getelementptr inbounds i32, i32* %593, i64 7
+  %595 = load i32, i32* %594, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %596 = call i64 @p256Wide(i32 %595)
+  %597 = mul i64 %590, %596
+  %598 = add i64 %589, %597
+  %599 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %600 = load i8*, i8** %599, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %601 = bitcast i8* %600 to i32*
+  %602 = getelementptr inbounds i32, i32* %601, i64 7
+  %603 = load i32, i32* %602, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %604 = call i64 @p256Wide(i32 %603)
+  %605 = load i64, i64* %mdWide.addr, align 8
+  %606 = mul i64 %604, %605
+  %607 = add i64 %598, %606
+  store i64 %607, i64* %cd.addr, align 8
+  %608 = load i64, i64* %ce.addr, align 8
+  %609 = load i64, i64* %q.addr, align 8
+  %610 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %611 = load i8*, i8** %610, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %612 = bitcast i8* %611 to i32*
+  %613 = getelementptr inbounds i32, i32* %612, i64 7
+  %614 = load i32, i32* %613, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %615 = call i64 @p256Wide(i32 %614)
+  %616 = mul i64 %609, %615
+  %617 = add i64 %608, %616
+  %618 = load i64, i64* %r.addr, align 8
+  %619 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %620 = load i8*, i8** %619, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %621 = bitcast i8* %620 to i32*
+  %622 = getelementptr inbounds i32, i32* %621, i64 7
+  %623 = load i32, i32* %622, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %624 = call i64 @p256Wide(i32 %623)
+  %625 = mul i64 %618, %624
+  %626 = add i64 %617, %625
+  %627 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %628 = load i8*, i8** %627, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %629 = bitcast i8* %628 to i32*
+  %630 = getelementptr inbounds i32, i32* %629, i64 7
+  %631 = load i32, i32* %630, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %632 = call i64 @p256Wide(i32 %631)
+  %633 = load i64, i64* %meWide.addr, align 8
+  %634 = mul i64 %632, %633
+  %635 = add i64 %626, %634
+  store i64 %635, i64* %ce.addr, align 8
+  %636 = load i64, i64* %cd.addr, align 8
+  %637 = trunc i64 %636 to i32
+  %638 = and i32 %637, 1073741823
+  %639 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %640 = load i8*, i8** %639, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %641 = bitcast i8* %640 to i32*
+  %642 = getelementptr inbounds i32, i32* %641, i64 6
+  store i32 %638, i32* %642, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %643 = load i64, i64* %ce.addr, align 8
+  %644 = trunc i64 %643 to i32
+  %645 = and i32 %644, 1073741823
+  %646 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %647 = load i8*, i8** %646, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %648 = bitcast i8* %647 to i32*
+  %649 = getelementptr inbounds i32, i32* %648, i64 6
+  store i32 %645, i32* %649, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %650 = load i64, i64* %cd.addr, align 8
+  %651 = call i64 @p256Carry30(i64 %650)
+  store i64 %651, i64* %cd.addr, align 8
+  %652 = load i64, i64* %ce.addr, align 8
+  %653 = call i64 @p256Carry30(i64 %652)
+  store i64 %653, i64* %ce.addr, align 8
+  %654 = load i64, i64* %cd.addr, align 8
+  %655 = load i64, i64* %u.addr, align 8
+  %656 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %657 = load i8*, i8** %656, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %658 = bitcast i8* %657 to i32*
+  %659 = getelementptr inbounds i32, i32* %658, i64 8
+  %660 = load i32, i32* %659, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %661 = call i64 @p256Wide(i32 %660)
+  %662 = mul i64 %655, %661
+  %663 = add i64 %654, %662
+  %664 = load i64, i64* %v.addr, align 8
+  %665 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %666 = load i8*, i8** %665, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %667 = bitcast i8* %666 to i32*
+  %668 = getelementptr inbounds i32, i32* %667, i64 8
+  %669 = load i32, i32* %668, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %670 = call i64 @p256Wide(i32 %669)
+  %671 = mul i64 %664, %670
+  %672 = add i64 %663, %671
+  %673 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %674 = load i8*, i8** %673, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %675 = bitcast i8* %674 to i32*
+  %676 = getelementptr inbounds i32, i32* %675, i64 8
+  %677 = load i32, i32* %676, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %678 = call i64 @p256Wide(i32 %677)
+  %679 = load i64, i64* %mdWide.addr, align 8
+  %680 = mul i64 %678, %679
+  %681 = add i64 %672, %680
+  store i64 %681, i64* %cd.addr, align 8
+  %682 = load i64, i64* %ce.addr, align 8
+  %683 = load i64, i64* %q.addr, align 8
+  %684 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %685 = load i8*, i8** %684, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %686 = bitcast i8* %685 to i32*
+  %687 = getelementptr inbounds i32, i32* %686, i64 8
+  %688 = load i32, i32* %687, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %689 = call i64 @p256Wide(i32 %688)
+  %690 = mul i64 %683, %689
+  %691 = add i64 %682, %690
+  %692 = load i64, i64* %r.addr, align 8
+  %693 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %694 = load i8*, i8** %693, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %695 = bitcast i8* %694 to i32*
+  %696 = getelementptr inbounds i32, i32* %695, i64 8
+  %697 = load i32, i32* %696, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %698 = call i64 @p256Wide(i32 %697)
+  %699 = mul i64 %692, %698
+  %700 = add i64 %691, %699
+  %701 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %702 = load i8*, i8** %701, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %703 = bitcast i8* %702 to i32*
+  %704 = getelementptr inbounds i32, i32* %703, i64 8
+  %705 = load i32, i32* %704, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %706 = call i64 @p256Wide(i32 %705)
+  %707 = load i64, i64* %meWide.addr, align 8
+  %708 = mul i64 %706, %707
+  %709 = add i64 %700, %708
+  store i64 %709, i64* %ce.addr, align 8
+  %710 = load i64, i64* %cd.addr, align 8
+  %711 = trunc i64 %710 to i32
+  %712 = and i32 %711, 1073741823
+  %713 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %714 = load i8*, i8** %713, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %715 = bitcast i8* %714 to i32*
+  %716 = getelementptr inbounds i32, i32* %715, i64 7
+  store i32 %712, i32* %716, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %717 = load i64, i64* %ce.addr, align 8
+  %718 = trunc i64 %717 to i32
+  %719 = and i32 %718, 1073741823
+  %720 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %721 = load i8*, i8** %720, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %722 = bitcast i8* %721 to i32*
+  %723 = getelementptr inbounds i32, i32* %722, i64 7
+  store i32 %719, i32* %723, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %724 = load i64, i64* %cd.addr, align 8
+  %725 = call i64 @p256Carry30(i64 %724)
+  store i64 %725, i64* %cd.addr, align 8
+  %726 = load i64, i64* %ce.addr, align 8
+  %727 = call i64 @p256Carry30(i64 %726)
+  store i64 %727, i64* %ce.addr, align 8
+  %728 = load i64, i64* %cd.addr, align 8
+  %729 = trunc i64 %728 to i32
+  %730 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %d, i64 0, i32 2
+  %731 = load i8*, i8** %730, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %732 = bitcast i8* %731 to i32*
+  %733 = getelementptr inbounds i32, i32* %732, i64 8
+  store i32 %729, i32* %733, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %734 = load i64, i64* %ce.addr, align 8
+  %735 = trunc i64 %734 to i32
+  %736 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %e, i64 0, i32 2
+  %737 = load i8*, i8** %736, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %738 = bitcast i8* %737 to i32*
+  %739 = getelementptr inbounds i32, i32* %738, i64 8
+  store i32 %735, i32* %739, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  ret void
+}
+
+define void @p256UpdateFg30(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %f, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %g, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %t) #1 {
+entry:
+  %u.addr = alloca i64, align 8
+  %v.addr = alloca i64, align 8
+  %q.addr = alloca i64, align 8
+  %r.addr = alloca i64, align 8
+  %f0.addr = alloca i64, align 8
+  %g0.addr = alloca i64, align 8
+  %cf.addr = alloca i64, align 8
+  %cg.addr = alloca i64, align 8
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %1 = load i8*, i8** %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = bitcast i8* %1 to i32*
+  %3 = getelementptr inbounds i32, i32* %2, i64 0
+  %4 = load i32, i32* %3, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %5 = call i64 @p256Wide(i32 %4)
+  store i64 %5, i64* %u.addr, align 8
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %8 = bitcast i8* %7 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 1
+  %10 = load i32, i32* %9, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %11 = call i64 @p256Wide(i32 %10)
+  store i64 %11, i64* %v.addr, align 8
+  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %13 = load i8*, i8** %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %14 = bitcast i8* %13 to i32*
+  %15 = getelementptr inbounds i32, i32* %14, i64 2
+  %16 = load i32, i32* %15, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %17 = call i64 @p256Wide(i32 %16)
+  store i64 %17, i64* %q.addr, align 8
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %t, i64 0, i32 2
+  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %20 = bitcast i8* %19 to i32*
+  %21 = getelementptr inbounds i32, i32* %20, i64 3
+  %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %23 = call i64 @p256Wide(i32 %22)
+  store i64 %23, i64* %r.addr, align 8
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %25 = load i8*, i8** %24, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %26 = bitcast i8* %25 to i32*
+  %27 = getelementptr inbounds i32, i32* %26, i64 0
+  %28 = load i32, i32* %27, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %29 = call i64 @p256Wide(i32 %28)
+  store i64 %29, i64* %f0.addr, align 8
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %31 = load i8*, i8** %30, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %32 = bitcast i8* %31 to i32*
+  %33 = getelementptr inbounds i32, i32* %32, i64 0
+  %34 = load i32, i32* %33, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %35 = call i64 @p256Wide(i32 %34)
+  store i64 %35, i64* %g0.addr, align 8
+  %36 = load i64, i64* %u.addr, align 8
+  %37 = load i64, i64* %f0.addr, align 8
+  %38 = mul i64 %36, %37
+  %39 = load i64, i64* %v.addr, align 8
+  %40 = load i64, i64* %g0.addr, align 8
+  %41 = mul i64 %39, %40
+  %42 = add i64 %38, %41
+  %43 = call i64 @p256Carry30(i64 %42)
+  store i64 %43, i64* %cf.addr, align 8
+  %44 = load i64, i64* %q.addr, align 8
+  %45 = load i64, i64* %f0.addr, align 8
+  %46 = mul i64 %44, %45
+  %47 = load i64, i64* %r.addr, align 8
+  %48 = load i64, i64* %g0.addr, align 8
+  %49 = mul i64 %47, %48
+  %50 = add i64 %46, %49
+  %51 = call i64 @p256Carry30(i64 %50)
+  store i64 %51, i64* %cg.addr, align 8
+  %52 = load i64, i64* %cf.addr, align 8
+  %53 = load i64, i64* %u.addr, align 8
+  %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %55 = load i8*, i8** %54, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %56 = bitcast i8* %55 to i32*
+  %57 = getelementptr inbounds i32, i32* %56, i64 1
+  %58 = load i32, i32* %57, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %59 = call i64 @p256Wide(i32 %58)
+  %60 = mul i64 %53, %59
+  %61 = add i64 %52, %60
+  %62 = load i64, i64* %v.addr, align 8
+  %63 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %64 = load i8*, i8** %63, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %65 = bitcast i8* %64 to i32*
+  %66 = getelementptr inbounds i32, i32* %65, i64 1
+  %67 = load i32, i32* %66, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %68 = call i64 @p256Wide(i32 %67)
+  %69 = mul i64 %62, %68
+  %70 = add i64 %61, %69
+  store i64 %70, i64* %cf.addr, align 8
+  %71 = load i64, i64* %cg.addr, align 8
+  %72 = load i64, i64* %q.addr, align 8
+  %73 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %74 = load i8*, i8** %73, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %75 = bitcast i8* %74 to i32*
+  %76 = getelementptr inbounds i32, i32* %75, i64 1
+  %77 = load i32, i32* %76, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %78 = call i64 @p256Wide(i32 %77)
+  %79 = mul i64 %72, %78
+  %80 = add i64 %71, %79
+  %81 = load i64, i64* %r.addr, align 8
+  %82 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %83 = load i8*, i8** %82, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %84 = bitcast i8* %83 to i32*
+  %85 = getelementptr inbounds i32, i32* %84, i64 1
+  %86 = load i32, i32* %85, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %87 = call i64 @p256Wide(i32 %86)
+  %88 = mul i64 %81, %87
+  %89 = add i64 %80, %88
+  store i64 %89, i64* %cg.addr, align 8
+  %90 = load i64, i64* %cf.addr, align 8
+  %91 = trunc i64 %90 to i32
+  %92 = and i32 %91, 1073741823
+  %93 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %94 = load i8*, i8** %93, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %95 = bitcast i8* %94 to i32*
+  %96 = getelementptr inbounds i32, i32* %95, i64 0
+  store i32 %92, i32* %96, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %97 = load i64, i64* %cg.addr, align 8
+  %98 = trunc i64 %97 to i32
+  %99 = and i32 %98, 1073741823
+  %100 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %101 = load i8*, i8** %100, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %102 = bitcast i8* %101 to i32*
+  %103 = getelementptr inbounds i32, i32* %102, i64 0
+  store i32 %99, i32* %103, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %104 = load i64, i64* %cf.addr, align 8
+  %105 = call i64 @p256Carry30(i64 %104)
+  store i64 %105, i64* %cf.addr, align 8
+  %106 = load i64, i64* %cg.addr, align 8
+  %107 = call i64 @p256Carry30(i64 %106)
+  store i64 %107, i64* %cg.addr, align 8
+  %108 = load i64, i64* %cf.addr, align 8
+  %109 = load i64, i64* %u.addr, align 8
+  %110 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %111 = load i8*, i8** %110, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %112 = bitcast i8* %111 to i32*
+  %113 = getelementptr inbounds i32, i32* %112, i64 2
+  %114 = load i32, i32* %113, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %115 = call i64 @p256Wide(i32 %114)
+  %116 = mul i64 %109, %115
+  %117 = add i64 %108, %116
+  %118 = load i64, i64* %v.addr, align 8
+  %119 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %120 = load i8*, i8** %119, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %121 = bitcast i8* %120 to i32*
+  %122 = getelementptr inbounds i32, i32* %121, i64 2
+  %123 = load i32, i32* %122, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %124 = call i64 @p256Wide(i32 %123)
+  %125 = mul i64 %118, %124
+  %126 = add i64 %117, %125
+  store i64 %126, i64* %cf.addr, align 8
+  %127 = load i64, i64* %cg.addr, align 8
+  %128 = load i64, i64* %q.addr, align 8
+  %129 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %130 = load i8*, i8** %129, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %131 = bitcast i8* %130 to i32*
+  %132 = getelementptr inbounds i32, i32* %131, i64 2
+  %133 = load i32, i32* %132, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %134 = call i64 @p256Wide(i32 %133)
+  %135 = mul i64 %128, %134
+  %136 = add i64 %127, %135
+  %137 = load i64, i64* %r.addr, align 8
+  %138 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %139 = load i8*, i8** %138, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %140 = bitcast i8* %139 to i32*
+  %141 = getelementptr inbounds i32, i32* %140, i64 2
+  %142 = load i32, i32* %141, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %143 = call i64 @p256Wide(i32 %142)
+  %144 = mul i64 %137, %143
+  %145 = add i64 %136, %144
+  store i64 %145, i64* %cg.addr, align 8
+  %146 = load i64, i64* %cf.addr, align 8
+  %147 = trunc i64 %146 to i32
+  %148 = and i32 %147, 1073741823
+  %149 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %150 = load i8*, i8** %149, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %151 = bitcast i8* %150 to i32*
+  %152 = getelementptr inbounds i32, i32* %151, i64 1
+  store i32 %148, i32* %152, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %153 = load i64, i64* %cg.addr, align 8
+  %154 = trunc i64 %153 to i32
+  %155 = and i32 %154, 1073741823
+  %156 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %157 = load i8*, i8** %156, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %158 = bitcast i8* %157 to i32*
+  %159 = getelementptr inbounds i32, i32* %158, i64 1
+  store i32 %155, i32* %159, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %160 = load i64, i64* %cf.addr, align 8
+  %161 = call i64 @p256Carry30(i64 %160)
+  store i64 %161, i64* %cf.addr, align 8
+  %162 = load i64, i64* %cg.addr, align 8
+  %163 = call i64 @p256Carry30(i64 %162)
+  store i64 %163, i64* %cg.addr, align 8
+  %164 = load i64, i64* %cf.addr, align 8
+  %165 = load i64, i64* %u.addr, align 8
+  %166 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %167 = load i8*, i8** %166, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %168 = bitcast i8* %167 to i32*
+  %169 = getelementptr inbounds i32, i32* %168, i64 3
+  %170 = load i32, i32* %169, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %171 = call i64 @p256Wide(i32 %170)
+  %172 = mul i64 %165, %171
+  %173 = add i64 %164, %172
+  %174 = load i64, i64* %v.addr, align 8
+  %175 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %176 = load i8*, i8** %175, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %177 = bitcast i8* %176 to i32*
+  %178 = getelementptr inbounds i32, i32* %177, i64 3
+  %179 = load i32, i32* %178, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %180 = call i64 @p256Wide(i32 %179)
+  %181 = mul i64 %174, %180
+  %182 = add i64 %173, %181
+  store i64 %182, i64* %cf.addr, align 8
+  %183 = load i64, i64* %cg.addr, align 8
+  %184 = load i64, i64* %q.addr, align 8
+  %185 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %186 = load i8*, i8** %185, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %187 = bitcast i8* %186 to i32*
+  %188 = getelementptr inbounds i32, i32* %187, i64 3
+  %189 = load i32, i32* %188, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %190 = call i64 @p256Wide(i32 %189)
+  %191 = mul i64 %184, %190
+  %192 = add i64 %183, %191
+  %193 = load i64, i64* %r.addr, align 8
+  %194 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %195 = load i8*, i8** %194, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %196 = bitcast i8* %195 to i32*
+  %197 = getelementptr inbounds i32, i32* %196, i64 3
+  %198 = load i32, i32* %197, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %199 = call i64 @p256Wide(i32 %198)
+  %200 = mul i64 %193, %199
+  %201 = add i64 %192, %200
+  store i64 %201, i64* %cg.addr, align 8
+  %202 = load i64, i64* %cf.addr, align 8
+  %203 = trunc i64 %202 to i32
+  %204 = and i32 %203, 1073741823
+  %205 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %206 = load i8*, i8** %205, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %207 = bitcast i8* %206 to i32*
+  %208 = getelementptr inbounds i32, i32* %207, i64 2
+  store i32 %204, i32* %208, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %209 = load i64, i64* %cg.addr, align 8
+  %210 = trunc i64 %209 to i32
+  %211 = and i32 %210, 1073741823
+  %212 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %213 = load i8*, i8** %212, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %214 = bitcast i8* %213 to i32*
+  %215 = getelementptr inbounds i32, i32* %214, i64 2
+  store i32 %211, i32* %215, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %216 = load i64, i64* %cf.addr, align 8
+  %217 = call i64 @p256Carry30(i64 %216)
+  store i64 %217, i64* %cf.addr, align 8
+  %218 = load i64, i64* %cg.addr, align 8
+  %219 = call i64 @p256Carry30(i64 %218)
+  store i64 %219, i64* %cg.addr, align 8
+  %220 = load i64, i64* %cf.addr, align 8
+  %221 = load i64, i64* %u.addr, align 8
+  %222 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %223 = load i8*, i8** %222, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %224 = bitcast i8* %223 to i32*
+  %225 = getelementptr inbounds i32, i32* %224, i64 4
+  %226 = load i32, i32* %225, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %227 = call i64 @p256Wide(i32 %226)
+  %228 = mul i64 %221, %227
+  %229 = add i64 %220, %228
+  %230 = load i64, i64* %v.addr, align 8
+  %231 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %232 = load i8*, i8** %231, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %233 = bitcast i8* %232 to i32*
+  %234 = getelementptr inbounds i32, i32* %233, i64 4
+  %235 = load i32, i32* %234, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %236 = call i64 @p256Wide(i32 %235)
+  %237 = mul i64 %230, %236
+  %238 = add i64 %229, %237
+  store i64 %238, i64* %cf.addr, align 8
+  %239 = load i64, i64* %cg.addr, align 8
+  %240 = load i64, i64* %q.addr, align 8
+  %241 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %242 = load i8*, i8** %241, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %243 = bitcast i8* %242 to i32*
+  %244 = getelementptr inbounds i32, i32* %243, i64 4
+  %245 = load i32, i32* %244, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %246 = call i64 @p256Wide(i32 %245)
+  %247 = mul i64 %240, %246
+  %248 = add i64 %239, %247
+  %249 = load i64, i64* %r.addr, align 8
+  %250 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %251 = load i8*, i8** %250, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %252 = bitcast i8* %251 to i32*
+  %253 = getelementptr inbounds i32, i32* %252, i64 4
+  %254 = load i32, i32* %253, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %255 = call i64 @p256Wide(i32 %254)
+  %256 = mul i64 %249, %255
+  %257 = add i64 %248, %256
+  store i64 %257, i64* %cg.addr, align 8
+  %258 = load i64, i64* %cf.addr, align 8
+  %259 = trunc i64 %258 to i32
+  %260 = and i32 %259, 1073741823
+  %261 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %262 = load i8*, i8** %261, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %263 = bitcast i8* %262 to i32*
+  %264 = getelementptr inbounds i32, i32* %263, i64 3
+  store i32 %260, i32* %264, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %265 = load i64, i64* %cg.addr, align 8
+  %266 = trunc i64 %265 to i32
+  %267 = and i32 %266, 1073741823
+  %268 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %269 = load i8*, i8** %268, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %270 = bitcast i8* %269 to i32*
+  %271 = getelementptr inbounds i32, i32* %270, i64 3
+  store i32 %267, i32* %271, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %272 = load i64, i64* %cf.addr, align 8
+  %273 = call i64 @p256Carry30(i64 %272)
+  store i64 %273, i64* %cf.addr, align 8
+  %274 = load i64, i64* %cg.addr, align 8
+  %275 = call i64 @p256Carry30(i64 %274)
+  store i64 %275, i64* %cg.addr, align 8
+  %276 = load i64, i64* %cf.addr, align 8
+  %277 = load i64, i64* %u.addr, align 8
+  %278 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %279 = load i8*, i8** %278, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %280 = bitcast i8* %279 to i32*
+  %281 = getelementptr inbounds i32, i32* %280, i64 5
+  %282 = load i32, i32* %281, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %283 = call i64 @p256Wide(i32 %282)
+  %284 = mul i64 %277, %283
+  %285 = add i64 %276, %284
+  %286 = load i64, i64* %v.addr, align 8
+  %287 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %288 = load i8*, i8** %287, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %289 = bitcast i8* %288 to i32*
+  %290 = getelementptr inbounds i32, i32* %289, i64 5
+  %291 = load i32, i32* %290, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %292 = call i64 @p256Wide(i32 %291)
+  %293 = mul i64 %286, %292
+  %294 = add i64 %285, %293
+  store i64 %294, i64* %cf.addr, align 8
+  %295 = load i64, i64* %cg.addr, align 8
+  %296 = load i64, i64* %q.addr, align 8
+  %297 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %298 = load i8*, i8** %297, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %299 = bitcast i8* %298 to i32*
+  %300 = getelementptr inbounds i32, i32* %299, i64 5
+  %301 = load i32, i32* %300, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %302 = call i64 @p256Wide(i32 %301)
+  %303 = mul i64 %296, %302
+  %304 = add i64 %295, %303
+  %305 = load i64, i64* %r.addr, align 8
+  %306 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %307 = load i8*, i8** %306, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %308 = bitcast i8* %307 to i32*
+  %309 = getelementptr inbounds i32, i32* %308, i64 5
+  %310 = load i32, i32* %309, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %311 = call i64 @p256Wide(i32 %310)
+  %312 = mul i64 %305, %311
+  %313 = add i64 %304, %312
+  store i64 %313, i64* %cg.addr, align 8
+  %314 = load i64, i64* %cf.addr, align 8
+  %315 = trunc i64 %314 to i32
+  %316 = and i32 %315, 1073741823
+  %317 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %318 = load i8*, i8** %317, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %319 = bitcast i8* %318 to i32*
+  %320 = getelementptr inbounds i32, i32* %319, i64 4
+  store i32 %316, i32* %320, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %321 = load i64, i64* %cg.addr, align 8
+  %322 = trunc i64 %321 to i32
+  %323 = and i32 %322, 1073741823
+  %324 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %325 = load i8*, i8** %324, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %326 = bitcast i8* %325 to i32*
+  %327 = getelementptr inbounds i32, i32* %326, i64 4
+  store i32 %323, i32* %327, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %328 = load i64, i64* %cf.addr, align 8
+  %329 = call i64 @p256Carry30(i64 %328)
+  store i64 %329, i64* %cf.addr, align 8
+  %330 = load i64, i64* %cg.addr, align 8
+  %331 = call i64 @p256Carry30(i64 %330)
+  store i64 %331, i64* %cg.addr, align 8
+  %332 = load i64, i64* %cf.addr, align 8
+  %333 = load i64, i64* %u.addr, align 8
+  %334 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %335 = load i8*, i8** %334, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %336 = bitcast i8* %335 to i32*
+  %337 = getelementptr inbounds i32, i32* %336, i64 6
+  %338 = load i32, i32* %337, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %339 = call i64 @p256Wide(i32 %338)
+  %340 = mul i64 %333, %339
+  %341 = add i64 %332, %340
+  %342 = load i64, i64* %v.addr, align 8
+  %343 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %344 = load i8*, i8** %343, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %345 = bitcast i8* %344 to i32*
+  %346 = getelementptr inbounds i32, i32* %345, i64 6
+  %347 = load i32, i32* %346, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %348 = call i64 @p256Wide(i32 %347)
+  %349 = mul i64 %342, %348
+  %350 = add i64 %341, %349
+  store i64 %350, i64* %cf.addr, align 8
+  %351 = load i64, i64* %cg.addr, align 8
+  %352 = load i64, i64* %q.addr, align 8
+  %353 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %354 = load i8*, i8** %353, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %355 = bitcast i8* %354 to i32*
+  %356 = getelementptr inbounds i32, i32* %355, i64 6
+  %357 = load i32, i32* %356, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %358 = call i64 @p256Wide(i32 %357)
+  %359 = mul i64 %352, %358
+  %360 = add i64 %351, %359
+  %361 = load i64, i64* %r.addr, align 8
+  %362 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %363 = load i8*, i8** %362, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %364 = bitcast i8* %363 to i32*
+  %365 = getelementptr inbounds i32, i32* %364, i64 6
+  %366 = load i32, i32* %365, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %367 = call i64 @p256Wide(i32 %366)
+  %368 = mul i64 %361, %367
+  %369 = add i64 %360, %368
+  store i64 %369, i64* %cg.addr, align 8
+  %370 = load i64, i64* %cf.addr, align 8
+  %371 = trunc i64 %370 to i32
+  %372 = and i32 %371, 1073741823
+  %373 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %374 = load i8*, i8** %373, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %375 = bitcast i8* %374 to i32*
+  %376 = getelementptr inbounds i32, i32* %375, i64 5
+  store i32 %372, i32* %376, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %377 = load i64, i64* %cg.addr, align 8
+  %378 = trunc i64 %377 to i32
+  %379 = and i32 %378, 1073741823
+  %380 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %381 = load i8*, i8** %380, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %382 = bitcast i8* %381 to i32*
+  %383 = getelementptr inbounds i32, i32* %382, i64 5
+  store i32 %379, i32* %383, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %384 = load i64, i64* %cf.addr, align 8
+  %385 = call i64 @p256Carry30(i64 %384)
+  store i64 %385, i64* %cf.addr, align 8
+  %386 = load i64, i64* %cg.addr, align 8
+  %387 = call i64 @p256Carry30(i64 %386)
+  store i64 %387, i64* %cg.addr, align 8
+  %388 = load i64, i64* %cf.addr, align 8
+  %389 = load i64, i64* %u.addr, align 8
+  %390 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %391 = load i8*, i8** %390, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %392 = bitcast i8* %391 to i32*
+  %393 = getelementptr inbounds i32, i32* %392, i64 7
+  %394 = load i32, i32* %393, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %395 = call i64 @p256Wide(i32 %394)
+  %396 = mul i64 %389, %395
+  %397 = add i64 %388, %396
+  %398 = load i64, i64* %v.addr, align 8
+  %399 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %400 = load i8*, i8** %399, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %401 = bitcast i8* %400 to i32*
+  %402 = getelementptr inbounds i32, i32* %401, i64 7
+  %403 = load i32, i32* %402, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %404 = call i64 @p256Wide(i32 %403)
+  %405 = mul i64 %398, %404
+  %406 = add i64 %397, %405
+  store i64 %406, i64* %cf.addr, align 8
+  %407 = load i64, i64* %cg.addr, align 8
+  %408 = load i64, i64* %q.addr, align 8
+  %409 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %410 = load i8*, i8** %409, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %411 = bitcast i8* %410 to i32*
+  %412 = getelementptr inbounds i32, i32* %411, i64 7
+  %413 = load i32, i32* %412, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %414 = call i64 @p256Wide(i32 %413)
+  %415 = mul i64 %408, %414
+  %416 = add i64 %407, %415
+  %417 = load i64, i64* %r.addr, align 8
+  %418 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %419 = load i8*, i8** %418, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %420 = bitcast i8* %419 to i32*
+  %421 = getelementptr inbounds i32, i32* %420, i64 7
+  %422 = load i32, i32* %421, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %423 = call i64 @p256Wide(i32 %422)
+  %424 = mul i64 %417, %423
+  %425 = add i64 %416, %424
+  store i64 %425, i64* %cg.addr, align 8
+  %426 = load i64, i64* %cf.addr, align 8
+  %427 = trunc i64 %426 to i32
+  %428 = and i32 %427, 1073741823
+  %429 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %430 = load i8*, i8** %429, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %431 = bitcast i8* %430 to i32*
+  %432 = getelementptr inbounds i32, i32* %431, i64 6
+  store i32 %428, i32* %432, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %433 = load i64, i64* %cg.addr, align 8
+  %434 = trunc i64 %433 to i32
+  %435 = and i32 %434, 1073741823
+  %436 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %437 = load i8*, i8** %436, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %438 = bitcast i8* %437 to i32*
+  %439 = getelementptr inbounds i32, i32* %438, i64 6
+  store i32 %435, i32* %439, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %440 = load i64, i64* %cf.addr, align 8
+  %441 = call i64 @p256Carry30(i64 %440)
+  store i64 %441, i64* %cf.addr, align 8
+  %442 = load i64, i64* %cg.addr, align 8
+  %443 = call i64 @p256Carry30(i64 %442)
+  store i64 %443, i64* %cg.addr, align 8
+  %444 = load i64, i64* %cf.addr, align 8
+  %445 = load i64, i64* %u.addr, align 8
+  %446 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %447 = load i8*, i8** %446, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %448 = bitcast i8* %447 to i32*
+  %449 = getelementptr inbounds i32, i32* %448, i64 8
+  %450 = load i32, i32* %449, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %451 = call i64 @p256Wide(i32 %450)
+  %452 = mul i64 %445, %451
+  %453 = add i64 %444, %452
+  %454 = load i64, i64* %v.addr, align 8
+  %455 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %456 = load i8*, i8** %455, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %457 = bitcast i8* %456 to i32*
+  %458 = getelementptr inbounds i32, i32* %457, i64 8
+  %459 = load i32, i32* %458, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %460 = call i64 @p256Wide(i32 %459)
+  %461 = mul i64 %454, %460
+  %462 = add i64 %453, %461
+  store i64 %462, i64* %cf.addr, align 8
+  %463 = load i64, i64* %cg.addr, align 8
+  %464 = load i64, i64* %q.addr, align 8
+  %465 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %466 = load i8*, i8** %465, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %467 = bitcast i8* %466 to i32*
+  %468 = getelementptr inbounds i32, i32* %467, i64 8
+  %469 = load i32, i32* %468, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %470 = call i64 @p256Wide(i32 %469)
+  %471 = mul i64 %464, %470
+  %472 = add i64 %463, %471
+  %473 = load i64, i64* %r.addr, align 8
+  %474 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %475 = load i8*, i8** %474, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %476 = bitcast i8* %475 to i32*
+  %477 = getelementptr inbounds i32, i32* %476, i64 8
+  %478 = load i32, i32* %477, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %479 = call i64 @p256Wide(i32 %478)
+  %480 = mul i64 %473, %479
+  %481 = add i64 %472, %480
+  store i64 %481, i64* %cg.addr, align 8
+  %482 = load i64, i64* %cf.addr, align 8
+  %483 = trunc i64 %482 to i32
+  %484 = and i32 %483, 1073741823
+  %485 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %486 = load i8*, i8** %485, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %487 = bitcast i8* %486 to i32*
+  %488 = getelementptr inbounds i32, i32* %487, i64 7
+  store i32 %484, i32* %488, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %489 = load i64, i64* %cg.addr, align 8
+  %490 = trunc i64 %489 to i32
+  %491 = and i32 %490, 1073741823
+  %492 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %493 = load i8*, i8** %492, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %494 = bitcast i8* %493 to i32*
+  %495 = getelementptr inbounds i32, i32* %494, i64 7
+  store i32 %491, i32* %495, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %496 = load i64, i64* %cf.addr, align 8
+  %497 = call i64 @p256Carry30(i64 %496)
+  store i64 %497, i64* %cf.addr, align 8
+  %498 = load i64, i64* %cg.addr, align 8
+  %499 = call i64 @p256Carry30(i64 %498)
+  store i64 %499, i64* %cg.addr, align 8
+  %500 = load i64, i64* %cf.addr, align 8
+  %501 = trunc i64 %500 to i32
+  %502 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %f, i64 0, i32 2
+  %503 = load i8*, i8** %502, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %504 = bitcast i8* %503 to i32*
+  %505 = getelementptr inbounds i32, i32* %504, i64 8
+  store i32 %501, i32* %505, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %506 = load i64, i64* %cg.addr, align 8
+  %507 = trunc i64 %506 to i32
+  %508 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %g, i64 0, i32 2
+  %509 = load i8*, i8** %508, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %510 = bitcast i8* %509 to i32*
+  %511 = getelementptr inbounds i32, i32* %510, i64 8
+  store i32 %507, i32* %511, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  ret void
+}
+
 define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @limbsOfHex(i8* noundef nonnull noalias readonly align 8 nocapture %text) #3 {
 entry:
   %out.addr = alloca %struct.nish_array*, align 8
@@ -19229,6 +22992,472 @@ for.end:
   ret i8* %38
 }
 
+define internal noundef i32 @bitOf(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #2 {
+entry:
+  %limb.addr = alloca i32, align 4
+  %0 = ashr i32 %i, 5
+  store i32 %0, i32* %limb.addr, align 4
+  %1 = load i32, i32* %limb.addr, align 4
+  %2 = icmp sge i32 %1, 0
+  br i1 %2, label %land.rhs, label %land.end
+
+land.rhs:
+  %3 = load i32, i32* %limb.addr, align 4
+  %4 = icmp slt i32 %3, 8
+  br label %land.end
+
+land.end:
+  %5 = phi i1 [ false, %entry ], [ %4, %land.rhs ]
+  br i1 %5, label %cond.true, label %cond.false
+
+cond.true:
+  %6 = load i32, i32* %limb.addr, align 4
+  %7 = sext i32 %6 to i64
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %10 = bitcast i8* %9 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %7
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %13 = and i32 %i, 31
+  %14 = and i32 %13, 31
+  %15 = lshr i32 %12, %14
+  %16 = and i32 %15, 1
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %17 = phi i32 [ %16, %cond.true ], [ 0, %cond.false ]
+  ret i32 %17
+}
+
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @signed30Of(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a) #1 {
+entry:
+  %out.addr = alloca %struct.nish_array*, align 8
+  %i.addr = alloca i32, align 4
+  %limb.addr = alloca i32, align 4
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 9, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 9, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %4 = mul i64 9, 4
+  %5 = call i8* @nish_alloc_struct(i64 %4)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %5, i8 0, i64 %4, i1 false), !alias.scope !4, !noalias !3
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* %5, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  store %struct.nish_array* %1, %struct.nish_array** %out.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  %7 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %7, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  br label %for.cond
+
+for.cond:
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = icmp slt i32 %10, 256
+  br i1 %11, label %for.body, label %for.end
+
+for.body:
+  %12 = load i32, i32* %i.addr, align 4
+  %13 = sdiv i32 %12, 30
+  store i32 %13, i32* %limb.addr, align 4
+  %14 = load i32, i32* %limb.addr, align 4
+  %15 = icmp sge i32 %14, 0
+  br i1 %15, label %land.rhs, label %land.end
+
+land.rhs:
+  %16 = load i32, i32* %limb.addr, align 4
+  %17 = icmp slt i32 %16, 9
+  br label %land.end
+
+land.end:
+  %18 = phi i1 [ false, %for.body ], [ %17, %land.rhs ]
+  br i1 %18, label %if.then, label %if.end
+
+if.then:
+  %19 = load i32, i32* %limb.addr, align 4
+  %20 = sext i32 %19 to i64
+  %21 = load i32, i32* %limb.addr, align 4
+  %22 = sext i32 %21 to i64
+  %23 = bitcast i8* %9 to i32*
+  %24 = getelementptr inbounds i32, i32* %23, i64 %22
+  %25 = load i32, i32* %24, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = call i32 @bitOf(%struct.nish_array* %a, i32 %26)
+  %28 = load i32, i32* %i.addr, align 4
+  %29 = srem i32 %28, 30
+  %30 = and i32 %29, 31
+  %31 = shl i32 %27, %30
+  %32 = or i32 %25, %31
+  %33 = bitcast i8* %9 to i32*
+  %34 = getelementptr inbounds i32, i32* %33, i64 %20
+  store i32 %32, i32* %34, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  br label %if.end
+
+if.end:
+  br label %for.inc
+
+for.inc:
+  %35 = load i32, i32* %i.addr, align 4
+  %36 = add nsw i32 %35, 1
+  store i32 %36, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %37 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  ret %struct.nish_array* %37
+}
+
+define internal void @addOrder30(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %n, i32 noundef %mask, i32 noundef %negate) #1 {
+entry:
+  %i.addr = alloca i32, align 4
+  %i.addr.1 = alloca i32, align 4
+  store i32 0, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %1 = load i8*, i8** %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %n, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  br label %for.cond
+
+for.cond:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = icmp slt i32 %4, 9
+  br i1 %5, label %for.body, label %for.end
+
+for.body:
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = sext i32 %6 to i64
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = sext i32 %8 to i64
+  %10 = bitcast i8* %1 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %9
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %13 = load i32, i32* %i.addr, align 4
+  %14 = sext i32 %13 to i64
+  %15 = bitcast i8* %3 to i32*
+  %16 = getelementptr inbounds i32, i32* %15, i64 %14
+  %17 = load i32, i32* %16, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %18 = and i32 %17, %mask
+  %19 = add i32 %12, %18
+  %20 = xor i32 %19, %negate
+  %21 = sub i32 %20, %negate
+  %22 = bitcast i8* %1 to i32*
+  %23 = getelementptr inbounds i32, i32* %22, i64 %7
+  store i32 %21, i32* %23, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  br label %for.inc
+
+for.inc:
+  %24 = load i32, i32* %i.addr, align 4
+  %25 = add nsw i32 %24, 1
+  store i32 %25, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  store i32 1, i32* %i.addr.1, align 4
+  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %27 = load i8*, i8** %26, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  br label %for.cond.1
+
+for.cond.1:
+  %28 = load i32, i32* %i.addr.1, align 4
+  %29 = icmp slt i32 %28, 9
+  br i1 %29, label %for.body.1, label %for.end.1
+
+for.body.1:
+  %30 = load i32, i32* %i.addr.1, align 4
+  %31 = sext i32 %30 to i64
+  %32 = load i32, i32* %i.addr.1, align 4
+  %33 = sext i32 %32 to i64
+  %34 = bitcast i8* %27 to i32*
+  %35 = getelementptr inbounds i32, i32* %34, i64 %33
+  %36 = load i32, i32* %35, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %37 = load i32, i32* %i.addr.1, align 4
+  %38 = sub nsw i32 %37, 1
+  %39 = sext i32 %38 to i64
+  %40 = bitcast i8* %27 to i32*
+  %41 = getelementptr inbounds i32, i32* %40, i64 %39
+  %42 = load i32, i32* %41, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %43 = ashr i32 %42, 30
+  %44 = add i32 %36, %43
+  %45 = bitcast i8* %27 to i32*
+  %46 = getelementptr inbounds i32, i32* %45, i64 %31
+  store i32 %44, i32* %46, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %47 = load i32, i32* %i.addr.1, align 4
+  %48 = sub nsw i32 %47, 1
+  %49 = sext i32 %48 to i64
+  %50 = load i32, i32* %i.addr.1, align 4
+  %51 = sub nsw i32 %50, 1
+  %52 = sext i32 %51 to i64
+  %53 = bitcast i8* %27 to i32*
+  %54 = getelementptr inbounds i32, i32* %53, i64 %52
+  %55 = load i32, i32* %54, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %56 = and i32 %55, 1073741823
+  %57 = bitcast i8* %27 to i32*
+  %58 = getelementptr inbounds i32, i32* %57, i64 %49
+  store i32 %56, i32* %58, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  br label %for.inc.1
+
+for.inc.1:
+  %59 = load i32, i32* %i.addr.1, align 4
+  %60 = add nsw i32 %59, 1
+  store i32 %60, i32* %i.addr.1, align 4
+  br label %for.cond.1
+
+for.end.1:
+  ret void
+}
+
+define internal noundef nonnull align 8 i8* @inverseHex(i8* noundef nonnull noalias readonly align 8 %text) #3 {
+entry:
+  %n.addr = alloca %struct.nish_array*, align 8
+  %d.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [9 x i32], align 8
+  %e.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.1 = alloca %struct.nish_array, align 8
+  %arr.data.1 = alloca [9 x i32], align 8
+  %f.addr = alloca %struct.nish_array*, align 8
+  %g.addr = alloca %struct.nish_array*, align 8
+  %t.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.2 = alloca %struct.nish_array, align 8
+  %arr.data.2 = alloca [4 x i32], align 8
+  %zeta.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %out.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.3 = alloca %struct.nish_array, align 8
+  %arr.data.3 = alloca [8 x i32], align 8
+  %i.addr.1 = alloca i32, align 4
+  %limb.addr = alloca i32, align 4
+  %word.addr = alloca i32, align 4
+  %bit.addr = alloca i32, align 4
+  %0 = call %struct.nish_array* @limbsOfHex(i8* bitcast ({ i64, [65 x i8] }* @.str.9 to i8*))
+  %1 = call %struct.nish_array* @signed30Of(%struct.nish_array* %0)
+  store %struct.nish_array* %1, %struct.nish_array** %n.addr, align 8
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 9, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 9, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %4 = mul i64 9, 4
+  %5 = bitcast [9 x i32]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %5, i8 0, i64 %4, i1 false), !alias.scope !4, !noalias !3
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %5, i8** %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %d.addr, align 8
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
+  store i64 9, i64* %7, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 1
+  store i64 9, i64* %8, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %9 = mul i64 9, 4
+  %10 = bitcast [9 x i32]* %arr.data.1 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %10, i8 0, i64 %9, i1 false), !alias.scope !4, !noalias !3
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 2
+  store i8* %10, i8** %11, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %e.addr, align 8
+  %12 = call %struct.nish_array* @limbsOfHex(i8* bitcast ({ i64, [65 x i8] }* @.str.9 to i8*))
+  %13 = call %struct.nish_array* @signed30Of(%struct.nish_array* %12)
+  store %struct.nish_array* %13, %struct.nish_array** %f.addr, align 8
+  %14 = call %struct.nish_array* @limbsOfHex(i8* %text)
+  %15 = call %struct.nish_array* @signed30Of(%struct.nish_array* %14)
+  store %struct.nish_array* %15, %struct.nish_array** %g.addr, align 8
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 0
+  store i64 4, i64* %16, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 1
+  store i64 4, i64* %17, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %18 = mul i64 4, 4
+  %19 = bitcast [4 x i32]* %arr.data.2 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %19, i8 0, i64 %18, i1 false), !alias.scope !4, !noalias !3
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 2
+  store i8* %19, i8** %20, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  store %struct.nish_array* %arr.hdr.2, %struct.nish_array** %t.addr, align 8
+  %21 = load %struct.nish_array*, %struct.nish_array** %e.addr, align 8
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %21, i64 0, i32 2
+  %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %24 = bitcast i8* %23 to i32*
+  %25 = getelementptr inbounds i32, i32* %24, i64 0
+  store i32 1, i32* %25, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  store i32 4294967295, i32* %zeta.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  %26 = load %struct.nish_array*, %struct.nish_array** %f.addr, align 8
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 2
+  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %29 = load %struct.nish_array*, %struct.nish_array** %g.addr, align 8
+  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %29, i64 0, i32 2
+  %31 = load i8*, i8** %30, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  br label %for.cond
+
+for.cond:
+  %32 = load i32, i32* %i.addr, align 4
+  %33 = icmp slt i32 %32, 20
+  br i1 %33, label %for.body, label %for.end
+
+for.body:
+  %34 = load i32, i32* %zeta.addr, align 4
+  %35 = bitcast i8* %28 to i32*
+  %36 = getelementptr inbounds i32, i32* %35, i64 0
+  %37 = load i32, i32* %36, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %38 = bitcast i8* %31 to i32*
+  %39 = getelementptr inbounds i32, i32* %38, i64 0
+  %40 = load i32, i32* %39, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %41 = load %struct.nish_array*, %struct.nish_array** %t.addr, align 8
+  %42 = call i32 @p256Divsteps30(i32 %34, i32 %37, i32 %40, %struct.nish_array* %41)
+  store i32 %42, i32* %zeta.addr, align 4
+  %43 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
+  %44 = load %struct.nish_array*, %struct.nish_array** %e.addr, align 8
+  %45 = load %struct.nish_array*, %struct.nish_array** %t.addr, align 8
+  %46 = load %struct.nish_array*, %struct.nish_array** %n.addr, align 8
+  call void @p256UpdateDe30(%struct.nish_array* %43, %struct.nish_array* %44, %struct.nish_array* %45, %struct.nish_array* %46)
+  %47 = load %struct.nish_array*, %struct.nish_array** %f.addr, align 8
+  %48 = load %struct.nish_array*, %struct.nish_array** %g.addr, align 8
+  %49 = load %struct.nish_array*, %struct.nish_array** %t.addr, align 8
+  call void @p256UpdateFg30(%struct.nish_array* %47, %struct.nish_array* %48, %struct.nish_array* %49)
+  br label %for.inc
+
+for.inc:
+  %50 = load i32, i32* %i.addr, align 4
+  %51 = add nsw i32 %50, 1
+  store i32 %51, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %52 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
+  %53 = load %struct.nish_array*, %struct.nish_array** %n.addr, align 8
+  %54 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
+  %55 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %54, i64 0, i32 2
+  %56 = load i8*, i8** %55, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %57 = bitcast i8* %56 to i32*
+  %58 = getelementptr inbounds i32, i32* %57, i64 8
+  %59 = load i32, i32* %58, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %60 = call i32 @p256SignMask(i32 %59)
+  %61 = load %struct.nish_array*, %struct.nish_array** %f.addr, align 8
+  %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %61, i64 0, i32 2
+  %63 = load i8*, i8** %62, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %64 = bitcast i8* %63 to i32*
+  %65 = getelementptr inbounds i32, i32* %64, i64 8
+  %66 = load i32, i32* %65, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %67 = call i32 @p256SignMask(i32 %66)
+  call void @addOrder30(%struct.nish_array* %52, %struct.nish_array* %53, i32 %60, i32 %67)
+  %68 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
+  %69 = load %struct.nish_array*, %struct.nish_array** %n.addr, align 8
+  %70 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
+  %71 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %70, i64 0, i32 2
+  %72 = load i8*, i8** %71, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %73 = bitcast i8* %72 to i32*
+  %74 = getelementptr inbounds i32, i32* %73, i64 8
+  %75 = load i32, i32* %74, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %76 = call i32 @p256SignMask(i32 %75)
+  call void @addOrder30(%struct.nish_array* %68, %struct.nish_array* %69, i32 %76, i32 0)
+  %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 0
+  store i64 8, i64* %77, align 8, !alias.scope !3, !noalias !4, !tbaa !13
+  %78 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 1
+  store i64 8, i64* %78, align 8, !alias.scope !3, !noalias !4, !tbaa !14
+  %79 = mul i64 8, 4
+  %80 = bitcast [8 x i32]* %arr.data.3 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %80, i8 0, i64 %79, i1 false), !alias.scope !4, !noalias !3
+  %81 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.3, i64 0, i32 2
+  store i8* %80, i8** %81, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  store %struct.nish_array* %arr.hdr.3, %struct.nish_array** %out.addr, align 8
+  store i32 0, i32* %i.addr.1, align 4
+  %82 = load %struct.nish_array*, %struct.nish_array** %d.addr, align 8
+  %83 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %82, i64 0, i32 2
+  %84 = load i8*, i8** %83, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %85 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %86 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %85, i64 0, i32 2
+  %87 = load i8*, i8** %86, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  br label %for.cond.1
+
+for.cond.1:
+  %88 = load i32, i32* %i.addr.1, align 4
+  %89 = icmp slt i32 %88, 256
+  br i1 %89, label %for.body.1, label %for.end.1
+
+for.body.1:
+  %90 = load i32, i32* %i.addr.1, align 4
+  %91 = sdiv i32 %90, 30
+  store i32 %91, i32* %limb.addr, align 4
+  %92 = load i32, i32* %i.addr.1, align 4
+  %93 = ashr i32 %92, 5
+  store i32 %93, i32* %word.addr, align 4
+  %94 = load i32, i32* %limb.addr, align 4
+  %95 = icmp sge i32 %94, 0
+  br i1 %95, label %land.rhs.2, label %land.end.2
+
+land.rhs.2:
+  %96 = load i32, i32* %limb.addr, align 4
+  %97 = icmp slt i32 %96, 9
+  br label %land.end.2
+
+land.end.2:
+  %98 = phi i1 [ false, %for.body.1 ], [ %97, %land.rhs.2 ]
+  br i1 %98, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %99 = load i32, i32* %word.addr, align 4
+  %100 = icmp sge i32 %99, 0
+  br label %land.end.1
+
+land.end.1:
+  %101 = phi i1 [ false, %land.end.2 ], [ %100, %land.rhs.1 ]
+  br i1 %101, label %land.rhs, label %land.end
+
+land.rhs:
+  %102 = load i32, i32* %word.addr, align 4
+  %103 = icmp slt i32 %102, 8
+  br label %land.end
+
+land.end:
+  %104 = phi i1 [ false, %land.end.1 ], [ %103, %land.rhs ]
+  br i1 %104, label %if.then, label %if.end
+
+if.then:
+  %105 = load i32, i32* %limb.addr, align 4
+  %106 = sext i32 %105 to i64
+  %107 = bitcast i8* %84 to i32*
+  %108 = getelementptr inbounds i32, i32* %107, i64 %106
+  %109 = load i32, i32* %108, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %110 = load i32, i32* %i.addr.1, align 4
+  %111 = srem i32 %110, 30
+  %112 = and i32 %111, 31
+  %113 = lshr i32 %109, %112
+  %114 = and i32 %113, 1
+  store i32 %114, i32* %bit.addr, align 4
+  %115 = load i32, i32* %word.addr, align 4
+  %116 = sext i32 %115 to i64
+  %117 = load i32, i32* %word.addr, align 4
+  %118 = sext i32 %117 to i64
+  %119 = bitcast i8* %87 to i32*
+  %120 = getelementptr inbounds i32, i32* %119, i64 %118
+  %121 = load i32, i32* %120, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  %122 = load i32, i32* %bit.addr, align 4
+  %123 = load i32, i32* %i.addr.1, align 4
+  %124 = and i32 %123, 31
+  %125 = and i32 %124, 31
+  %126 = shl i32 %122, %125
+  %127 = or i32 %121, %126
+  %128 = bitcast i8* %87 to i32*
+  %129 = getelementptr inbounds i32, i32* %128, i64 %116
+  store i32 %127, i32* %129, align 4, !alias.scope !4, !noalias !3, !tbaa !12
+  br label %if.end
+
+if.end:
+  br label %for.inc.1
+
+for.inc.1:
+  %130 = load i32, i32* %i.addr.1, align 4
+  %131 = add nsw i32 %130, 1
+  store i32 %131, i32* %i.addr.1, align 4
+  br label %for.cond.1
+
+for.end.1:
+  %132 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %133 = call i64 @nish_arena_mark()
+  %134 = call i8* @hexOfLimbs(%struct.nish_array* %132)
+  %135 = call i8* @nish_arena_keep(i64 %133, i8* %134)
+  ret i8* %135
+}
+
 define internal noundef i32 @report(i8* noundef nonnull noalias readonly align 8 nocapture %name, i8* noundef nonnull noalias readonly align 8 nocapture %actual, i8* noundef nonnull noalias readonly align 8 nocapture %expected) #3 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
@@ -19236,14 +23465,14 @@ entry:
   br i1 %0, label %if.then, label %if.end
 
 if.then:
-  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.9 to i8*), i8* %name)
+  %1 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.10 to i8*), i8* %name)
   call void @nish_print(i8* %1)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 
 if.end:
-  %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.10 to i8*), i8* %name)
-  %3 = call i8* @nish_str_concat(i8* %2, i8* bitcast ({ i64, [3 x i8] }* @.str.11 to i8*))
+  %2 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.11 to i8*), i8* %name)
+  %3 = call i8* @nish_str_concat(i8* %2, i8* bitcast ({ i64, [3 x i8] }* @.str.12 to i8*))
   %4 = call i8* @nish_str_concat(i8* %3, i8* %actual)
   call void @nish_print(i8* %4)
   call void @nish_arena_release(i64 %arena.mark)
@@ -19344,13 +23573,13 @@ entry:
   %i.addr = alloca i32, align 4
   %moved.addr = alloca %struct.nish_array*, align 8
   %arena.mark = call i64 @nish_arena_mark()
-  store i8* bitcast ({ i64, [65 x i8] }* @.str.12 to i8*), i8** %a.addr, align 8
-  store i8* bitcast ({ i64, [65 x i8] }* @.str.13 to i8*), i8** %b.addr, align 8
-  store i8* bitcast ({ i64, [65 x i8] }* @.str.14 to i8*), i8** %pMinus1.addr, align 8
-  store i8* bitcast ({ i64, [65 x i8] }* @.str.15 to i8*), i8** %pMinus1Squared.addr, align 8
+  store i8* bitcast ({ i64, [65 x i8] }* @.str.13 to i8*), i8** %a.addr, align 8
+  store i8* bitcast ({ i64, [65 x i8] }* @.str.14 to i8*), i8** %b.addr, align 8
+  store i8* bitcast ({ i64, [65 x i8] }* @.str.15 to i8*), i8** %pMinus1.addr, align 8
+  store i8* bitcast ({ i64, [65 x i8] }* @.str.16 to i8*), i8** %pMinus1Squared.addr, align 8
   store i8* bitcast ({ i64, [65 x i8] }* @.str.5 to i8*), i8** %montOne.addr, align 8
-  store i8* bitcast ({ i64, [65 x i8] }* @.str.16 to i8*), i8** %zero.addr, align 8
-  store i8* bitcast ({ i64, [65 x i8] }* @.str.17 to i8*), i8** %nMinus1.addr, align 8
+  store i8* bitcast ({ i64, [65 x i8] }* @.str.17 to i8*), i8** %zero.addr, align 8
+  store i8* bitcast ({ i64, [65 x i8] }* @.str.18 to i8*), i8** %nMinus1.addr, align 8
   store i32 0, i32* %failed.addr, align 4
   %0 = load i32, i32* %failed.addr, align 4
   %1 = load i8*, i8** %a.addr, align 8
@@ -19358,7 +23587,7 @@ entry:
   %3 = call i64 @nish_arena_mark()
   %4 = call i8* @mulHex(i8* %1, i8* %2)
   %5 = call i8* @nish_arena_keep(i64 %3, i8* %4)
-  %6 = call i32 @report(i8* bitcast ({ i64, [27 x i8] }* @.str.18 to i8*), i8* %5, i8* bitcast ({ i64, [65 x i8] }* @.str.19 to i8*))
+  %6 = call i32 @report(i8* bitcast ({ i64, [27 x i8] }* @.str.19 to i8*), i8* %5, i8* bitcast ({ i64, [65 x i8] }* @.str.20 to i8*))
   %7 = add nsw i32 %0, %6
   store i32 %7, i32* %failed.addr, align 4
   %8 = load i32, i32* %failed.addr, align 4
@@ -19368,7 +23597,7 @@ entry:
   %12 = call i8* @mulHex(i8* %9, i8* %10)
   %13 = call i8* @nish_arena_keep(i64 %11, i8* %12)
   %14 = load i8*, i8** %pMinus1Squared.addr, align 8
-  %15 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.20 to i8*), i8* %13, i8* %14)
+  %15 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.21 to i8*), i8* %13, i8* %14)
   %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %8, i32 %15)
   %17 = extractvalue { i32, i1 } %16, 0
   %18 = extractvalue { i32, i1 } %16, 1
@@ -19383,7 +23612,7 @@ ovf.ok:
   %23 = call i8* @mulHex(i8* %20, i8* %21)
   %24 = call i8* @nish_arena_keep(i64 %22, i8* %23)
   %25 = load i8*, i8** %a.addr, align 8
-  %26 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.21 to i8*), i8* %24, i8* %25)
+  %26 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.22 to i8*), i8* %24, i8* %25)
   %27 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %19, i32 %26)
   %28 = extractvalue { i32, i1 } %27, 0
   %29 = extractvalue { i32, i1 } %27, 1
@@ -19398,7 +23627,7 @@ ovf.ok.1:
   %34 = call i8* @mulHex(i8* %31, i8* %32)
   %35 = call i8* @nish_arena_keep(i64 %33, i8* %34)
   %36 = load i8*, i8** %zero.addr, align 8
-  %37 = call i32 @report(i8* bitcast ({ i64, [34 x i8] }* @.str.22 to i8*), i8* %35, i8* %36)
+  %37 = call i32 @report(i8* bitcast ({ i64, [34 x i8] }* @.str.23 to i8*), i8* %35, i8* %36)
   %38 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %30, i32 %37)
   %39 = extractvalue { i32, i1 } %38, 0
   %40 = extractvalue { i32, i1 } %38, 1
@@ -19424,7 +23653,7 @@ ovf.ok.2:
   %54 = call i64 @nish_arena_mark()
   %55 = call i8* @mulHex(i8* %52, i8* %53)
   %56 = call i8* @nish_arena_keep(i64 %54, i8* %55)
-  %57 = call i32 @report(i8* bitcast ({ i64, [29 x i8] }* @.str.23 to i8*), i8* %51, i8* %56)
+  %57 = call i32 @report(i8* bitcast ({ i64, [29 x i8] }* @.str.24 to i8*), i8* %51, i8* %56)
   %58 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %47, i32 %57)
   %59 = extractvalue { i32, i1 } %58, 0
   %60 = extractvalue { i32, i1 } %58, 1
@@ -19437,7 +23666,7 @@ ovf.ok.3:
   %63 = call i64 @nish_arena_mark()
   %64 = call i8* @squareHex(i8* %62)
   %65 = call i8* @nish_arena_keep(i64 %63, i8* %64)
-  %66 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.24 to i8*), i8* %65, i8* bitcast ({ i64, [65 x i8] }* @.str.25 to i8*))
+  %66 = call i32 @report(i8* bitcast ({ i64, [30 x i8] }* @.str.25 to i8*), i8* %65, i8* bitcast ({ i64, [65 x i8] }* @.str.26 to i8*))
   %67 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %61, i32 %66)
   %68 = extractvalue { i32, i1 } %67, 0
   %69 = extractvalue { i32, i1 } %67, 1
@@ -19451,7 +23680,7 @@ ovf.ok.4:
   %73 = call i8* @squareHex(i8* %71)
   %74 = call i8* @nish_arena_keep(i64 %72, i8* %73)
   %75 = load i8*, i8** %pMinus1Squared.addr, align 8
-  %76 = call i32 @report(i8* bitcast ({ i64, [36 x i8] }* @.str.26 to i8*), i8* %74, i8* %75)
+  %76 = call i32 @report(i8* bitcast ({ i64, [36 x i8] }* @.str.27 to i8*), i8* %74, i8* %75)
   %77 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %70, i32 %76)
   %78 = extractvalue { i32, i1 } %77, 0
   %79 = extractvalue { i32, i1 } %77, 1
@@ -19461,9 +23690,9 @@ ovf.ok.5:
   store i32 %78, i32* %failed.addr, align 4
   %80 = load i32, i32* %failed.addr, align 4
   %81 = call i64 @nish_arena_mark()
-  %82 = call i8* @scalarMulHex(i8* bitcast ({ i64, [65 x i8] }* @.str.28 to i8*), i8* bitcast ({ i64, [65 x i8] }* @.str.29 to i8*))
+  %82 = call i8* @scalarMulHex(i8* bitcast ({ i64, [65 x i8] }* @.str.29 to i8*), i8* bitcast ({ i64, [65 x i8] }* @.str.30 to i8*))
   %83 = call i8* @nish_arena_keep(i64 %81, i8* %82)
-  %84 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.27 to i8*), i8* %83, i8* bitcast ({ i64, [65 x i8] }* @.str.30 to i8*))
+  %84 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.28 to i8*), i8* %83, i8* bitcast ({ i64, [65 x i8] }* @.str.31 to i8*))
   %85 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %80, i32 %84)
   %86 = extractvalue { i32, i1 } %85, 0
   %87 = extractvalue { i32, i1 } %85, 1
@@ -19477,7 +23706,7 @@ ovf.ok.6:
   %91 = call i64 @nish_arena_mark()
   %92 = call i8* @scalarMulHex(i8* %89, i8* %90)
   %93 = call i8* @nish_arena_keep(i64 %91, i8* %92)
-  %94 = call i32 @report(i8* bitcast ({ i64, [39 x i8] }* @.str.31 to i8*), i8* %93, i8* bitcast ({ i64, [65 x i8] }* @.str.32 to i8*))
+  %94 = call i32 @report(i8* bitcast ({ i64, [39 x i8] }* @.str.32 to i8*), i8* %93, i8* bitcast ({ i64, [65 x i8] }* @.str.33 to i8*))
   %95 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %88, i32 %94)
   %96 = extractvalue { i32, i1 } %95, 0
   %97 = extractvalue { i32, i1 } %95, 1
@@ -19489,7 +23718,7 @@ ovf.ok.7:
   %99 = call i32 @p256FiatCmovznzU32(i32 0, i32 7, i32 9)
   %100 = zext i32 %99 to i64
   %101 = call i8* @nish_str_from_u64(i64 %100)
-  %102 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.33 to i8*), i8* %101, i8* bitcast ({ i64, [2 x i8] }* @.str.34 to i8*))
+  %102 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.34 to i8*), i8* %101, i8* bitcast ({ i64, [2 x i8] }* @.str.35 to i8*))
   %103 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %98, i32 %102)
   %104 = extractvalue { i32, i1 } %103, 0
   %105 = extractvalue { i32, i1 } %103, 1
@@ -19501,7 +23730,7 @@ ovf.ok.8:
   %107 = call i32 @p256FiatCmovznzU32(i32 1, i32 7, i32 9)
   %108 = zext i32 %107 to i64
   %109 = call i8* @nish_str_from_u64(i64 %108)
-  %110 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.35 to i8*), i8* %109, i8* bitcast ({ i64, [2 x i8] }* @.str.36 to i8*))
+  %110 = call i32 @report(i8* bitcast ({ i64, [33 x i8] }* @.str.36 to i8*), i8* %109, i8* bitcast ({ i64, [2 x i8] }* @.str.37 to i8*))
   %111 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %106, i32 %110)
   %112 = extractvalue { i32, i1 } %111, 0
   %113 = extractvalue { i32, i1 } %111, 1
@@ -19513,7 +23742,7 @@ ovf.ok.9:
   %115 = call i32 @p256FiatCmovznzU32(i32 2147483648, i32 7, i32 9)
   %116 = zext i32 %115 to i64
   %117 = call i8* @nish_str_from_u64(i64 %116)
-  %118 = call i32 @report(i8* bitcast ({ i64, [44 x i8] }* @.str.37 to i8*), i8* %117, i8* bitcast ({ i64, [2 x i8] }* @.str.36 to i8*))
+  %118 = call i32 @report(i8* bitcast ({ i64, [44 x i8] }* @.str.38 to i8*), i8* %117, i8* bitcast ({ i64, [2 x i8] }* @.str.37 to i8*))
   %119 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %114, i32 %118)
   %120 = extractvalue { i32, i1 } %119, 0
   %121 = extractvalue { i32, i1 } %119, 1
@@ -19575,7 +23804,7 @@ for.end:
   %151 = call i8* @hexOfLimbs(%struct.nish_array* %149)
   %152 = call i8* @nish_arena_keep(i64 %150, i8* %151)
   %153 = load i8*, i8** %a.addr, align 8
-  %154 = call i32 @report(i8* bitcast ({ i64, [42 x i8] }* @.str.38 to i8*), i8* %152, i8* %153)
+  %154 = call i32 @report(i8* bitcast ({ i64, [42 x i8] }* @.str.39 to i8*), i8* %152, i8* %153)
   %155 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %148, i32 %154)
   %156 = extractvalue { i32, i1 } %155, 0
   %157 = extractvalue { i32, i1 } %155, 1
@@ -19591,7 +23820,7 @@ ovf.ok.11:
   %162 = call i64 @nish_arena_mark()
   %163 = call i8* @hexOfLimbs(%struct.nish_array* %161)
   %164 = call i8* @nish_arena_keep(i64 %162, i8* %163)
-  %165 = call i32 @report(i8* bitcast ({ i64, [51 x i8] }* @.str.39 to i8*), i8* %164, i8* bitcast ({ i64, [65 x i8] }* @.str.40 to i8*))
+  %165 = call i32 @report(i8* bitcast ({ i64, [51 x i8] }* @.str.40 to i8*), i8* %164, i8* bitcast ({ i64, [65 x i8] }* @.str.41 to i8*))
   %166 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %160, i32 %165)
   %167 = extractvalue { i32, i1 } %166, 0
   %168 = extractvalue { i32, i1 } %166, 1
@@ -19619,9 +23848,9 @@ entry:
   store i32 %0, i32* %failed.addr, align 4
   %1 = load i32, i32* %failed.addr, align 4
   %2 = call i64 @nish_arena_mark()
-  %3 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.42 to i8*))
+  %3 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.43 to i8*))
   %4 = call i8* @nish_arena_keep(i64 %2, i8* %3)
-  %5 = call i32 @report(i8* bitcast ({ i64, [26 x i8] }* @.str.41 to i8*), i8* %4, i8* bitcast ({ i64, [130 x i8] }* @.str.43 to i8*))
+  %5 = call i32 @report(i8* bitcast ({ i64, [26 x i8] }* @.str.42 to i8*), i8* %4, i8* bitcast ({ i64, [130 x i8] }* @.str.44 to i8*))
   %6 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %1, i32 %5)
   %7 = extractvalue { i32, i1 } %6, 0
   %8 = extractvalue { i32, i1 } %6, 1
@@ -19630,7 +23859,7 @@ entry:
 ovf.ok:
   store i32 %7, i32* %failed.addr, align 4
   %9 = call i64 @nish_arena_mark()
-  %10 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.44 to i8*))
+  %10 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.45 to i8*))
   %11 = call i8* @nish_arena_keep(i64 %9, i8* %10)
   store i8* %11, i8** %sample.addr, align 8
   %12 = load i32, i32* %failed.addr, align 4
@@ -19645,7 +23874,7 @@ ovf.ok:
   %21 = getelementptr inbounds i8, i8* %13, i64 8
   %22 = getelementptr inbounds i8, i8* %21, i64 %18
   %23 = call i8* @nish_str_new(i8* %22, i64 %20)
-  %24 = call i32 @report(i8* bitcast ({ i64, [47 x i8] }* @.str.45 to i8*), i8* %23, i8* bitcast ({ i64, [65 x i8] }* @.str.46 to i8*))
+  %24 = call i32 @report(i8* bitcast ({ i64, [47 x i8] }* @.str.46 to i8*), i8* %23, i8* bitcast ({ i64, [65 x i8] }* @.str.47 to i8*))
   %25 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %12, i32 %24)
   %26 = extractvalue { i32, i1 } %25, 0
   %27 = extractvalue { i32, i1 } %25, 1
@@ -19654,7 +23883,7 @@ ovf.ok:
 ovf.ok.1:
   store i32 %26, i32* %failed.addr, align 4
   %28 = call i64 @nish_arena_mark()
-  %29 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.47 to i8*))
+  %29 = call i8* @baseMult(i8* bitcast ({ i64, [65 x i8] }* @.str.48 to i8*))
   %30 = call i8* @nish_arena_keep(i64 %28, i8* %29)
   store i8* %30, i8** %test.addr, align 8
   %31 = load i32, i32* %failed.addr, align 4
@@ -19669,7 +23898,7 @@ ovf.ok.1:
   %40 = getelementptr inbounds i8, i8* %32, i64 8
   %41 = getelementptr inbounds i8, i8* %40, i64 %37
   %42 = call i8* @nish_str_new(i8* %41, i64 %39)
-  %43 = call i32 @report(i8* bitcast ({ i64, [45 x i8] }* @.str.48 to i8*), i8* %42, i8* bitcast ({ i64, [65 x i8] }* @.str.49 to i8*))
+  %43 = call i32 @report(i8* bitcast ({ i64, [45 x i8] }* @.str.49 to i8*), i8* %42, i8* bitcast ({ i64, [65 x i8] }* @.str.50 to i8*))
   %44 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %31, i32 %43)
   %45 = extractvalue { i32, i1 } %44, 0
   %46 = extractvalue { i32, i1 } %44, 1
@@ -19682,9 +23911,9 @@ ovf.ok.2:
   %48 = load i32, i32* %failed.addr, align 4
   %49 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
   %50 = call i64 @nish_arena_mark()
-  %51 = call i8* @combMult(%struct.nish_array* %49, i8* bitcast ({ i64, [65 x i8] }* @.str.42 to i8*))
+  %51 = call i8* @combMult(%struct.nish_array* %49, i8* bitcast ({ i64, [65 x i8] }* @.str.43 to i8*))
   %52 = call i8* @nish_arena_keep(i64 %50, i8* %51)
-  %53 = call i32 @report(i8* bitcast ({ i64, [39 x i8] }* @.str.50 to i8*), i8* %52, i8* bitcast ({ i64, [130 x i8] }* @.str.43 to i8*))
+  %53 = call i32 @report(i8* bitcast ({ i64, [39 x i8] }* @.str.51 to i8*), i8* %52, i8* bitcast ({ i64, [130 x i8] }* @.str.44 to i8*))
   %54 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %48, i32 %53)
   %55 = extractvalue { i32, i1 } %54, 0
   %56 = extractvalue { i32, i1 } %54, 1
@@ -19695,7 +23924,7 @@ ovf.ok.3:
   %57 = load i32, i32* %failed.addr, align 4
   %58 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
   %59 = call i64 @nish_arena_mark()
-  %60 = call i8* @combMult(%struct.nish_array* %58, i8* bitcast ({ i64, [65 x i8] }* @.str.44 to i8*))
+  %60 = call i8* @combMult(%struct.nish_array* %58, i8* bitcast ({ i64, [65 x i8] }* @.str.45 to i8*))
   %61 = call i8* @nish_arena_keep(i64 %59, i8* %60)
   %62 = bitcast i8* %61 to i64*
   %63 = load i64, i64* %62, align 8
@@ -19707,7 +23936,7 @@ ovf.ok.3:
   %69 = getelementptr inbounds i8, i8* %61, i64 8
   %70 = getelementptr inbounds i8, i8* %69, i64 %66
   %71 = call i8* @nish_str_new(i8* %70, i64 %68)
-  %72 = call i32 @report(i8* bitcast ({ i64, [60 x i8] }* @.str.51 to i8*), i8* %71, i8* bitcast ({ i64, [65 x i8] }* @.str.46 to i8*))
+  %72 = call i32 @report(i8* bitcast ({ i64, [60 x i8] }* @.str.52 to i8*), i8* %71, i8* bitcast ({ i64, [65 x i8] }* @.str.47 to i8*))
   %73 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %57, i32 %72)
   %74 = extractvalue { i32, i1 } %73, 0
   %75 = extractvalue { i32, i1 } %73, 1
@@ -19718,7 +23947,7 @@ ovf.ok.4:
   %76 = load i32, i32* %failed.addr, align 4
   %77 = load %struct.nish_array*, %struct.nish_array** %table.addr, align 8
   %78 = call i64 @nish_arena_mark()
-  %79 = call i8* @combMult(%struct.nish_array* %77, i8* bitcast ({ i64, [65 x i8] }* @.str.47 to i8*))
+  %79 = call i8* @combMult(%struct.nish_array* %77, i8* bitcast ({ i64, [65 x i8] }* @.str.48 to i8*))
   %80 = call i8* @nish_arena_keep(i64 %78, i8* %79)
   %81 = bitcast i8* %80 to i64*
   %82 = load i64, i64* %81, align 8
@@ -19730,7 +23959,7 @@ ovf.ok.4:
   %88 = getelementptr inbounds i8, i8* %80, i64 8
   %89 = getelementptr inbounds i8, i8* %88, i64 %85
   %90 = call i8* @nish_str_new(i8* %89, i64 %87)
-  %91 = call i32 @report(i8* bitcast ({ i64, [58 x i8] }* @.str.52 to i8*), i8* %90, i8* bitcast ({ i64, [65 x i8] }* @.str.49 to i8*))
+  %91 = call i32 @report(i8* bitcast ({ i64, [58 x i8] }* @.str.53 to i8*), i8* %90, i8* bitcast ({ i64, [65 x i8] }* @.str.50 to i8*))
   %92 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %76, i32 %91)
   %93 = extractvalue { i32, i1 } %92, 0
   %94 = extractvalue { i32, i1 } %92, 1
@@ -19739,8 +23968,44 @@ ovf.ok.4:
 ovf.ok.5:
   store i32 %93, i32* %failed.addr, align 4
   %95 = load i32, i32* %failed.addr, align 4
+  %96 = call i64 @nish_arena_mark()
+  %97 = call i8* @inverseHex(i8* bitcast ({ i64, [65 x i8] }* @.str.55 to i8*))
+  %98 = call i8* @nish_arena_keep(i64 %96, i8* %97)
+  %99 = call i32 @report(i8* bitcast ({ i64, [75 x i8] }* @.str.54 to i8*), i8* %98, i8* bitcast ({ i64, [65 x i8] }* @.str.56 to i8*))
+  %100 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %95, i32 %99)
+  %101 = extractvalue { i32, i1 } %100, 0
+  %102 = extractvalue { i32, i1 } %100, 1
+  br i1 %102, label %ovf.fail, label %ovf.ok.6
+
+ovf.ok.6:
+  store i32 %101, i32* %failed.addr, align 4
+  %103 = load i32, i32* %failed.addr, align 4
+  %104 = call i64 @nish_arena_mark()
+  %105 = call i8* @inverseHex(i8* bitcast ({ i64, [65 x i8] }* @.str.18 to i8*))
+  %106 = call i8* @nish_arena_keep(i64 %104, i8* %105)
+  %107 = call i32 @report(i8* bitcast ({ i64, [75 x i8] }* @.str.57 to i8*), i8* %106, i8* bitcast ({ i64, [65 x i8] }* @.str.18 to i8*))
+  %108 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %103, i32 %107)
+  %109 = extractvalue { i32, i1 } %108, 0
+  %110 = extractvalue { i32, i1 } %108, 1
+  br i1 %110, label %ovf.fail, label %ovf.ok.7
+
+ovf.ok.7:
+  store i32 %109, i32* %failed.addr, align 4
+  %111 = load i32, i32* %failed.addr, align 4
+  %112 = call i64 @nish_arena_mark()
+  %113 = call i8* @inverseHex(i8* bitcast ({ i64, [65 x i8] }* @.str.45 to i8*))
+  %114 = call i8* @nish_arena_keep(i64 %112, i8* %113)
+  %115 = call i32 @report(i8* bitcast ({ i64, [101 x i8] }* @.str.58 to i8*), i8* %114, i8* bitcast ({ i64, [65 x i8] }* @.str.59 to i8*))
+  %116 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %111, i32 %115)
+  %117 = extractvalue { i32, i1 } %116, 0
+  %118 = extractvalue { i32, i1 } %116, 1
+  br i1 %118, label %ovf.fail, label %ovf.ok.8
+
+ovf.ok.8:
+  store i32 %117, i32* %failed.addr, align 4
+  %119 = load i32, i32* %failed.addr, align 4
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %95
+  ret i32 %119
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)

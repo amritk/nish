@@ -134,10 +134,17 @@ const classify = (n: i32): string => {
 To declare a variable inside a clause, wrap its body in a block. A `switch`
 on a string is refused; write an `if` / `else if` chain.
 
+A `switch` without a `default` lets a value no label names fall past it, so
+a function that returns a value needs a `return` after it, even when the
+labels name every member of an enum. The exception is a `switch` on a
+[union's tag](unions.md#a-switch-that-covers-every-variant) whose labels name
+every variant: nothing else can reach its end.
+
 ## Unreachable code is an error
 
 Code after a `return`, `break`, `continue`, `panic(…)` or `process.exit(…)`
-— or after an `if` whose branches all return — is refused rather than
+— or after an `if` whose branches all return, or a `switch` that cannot fall
+through — is refused rather than
 warned about. The same analysis is what checks that a non-`void` function
 returns on every path.
 

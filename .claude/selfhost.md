@@ -359,10 +359,11 @@ something surprising.**
 ### The goldens
 
 ```bash
-node tests/self/goldens.js                  # verify all of them, ~13 s
+node tests/self/goldens.js                  # verify all of them, ~2.5 min
 node tests/self/goldens.js checked --verbose
 npm run test:update                         # regenerate, with the .ll goldens
 node tests/self/goldens.js --update         # regenerate these alone
+npm run sync-main                           # merge origin/main, regenerate, stage
 ```
 
 They were written by stage1 while stage0 still agreed with it byte for byte,
@@ -374,21 +375,29 @@ reference was stage0's *checker* — the rewrite needs the static type of every
 expression and `src/` has no rewriter — so it cannot be rewritten at all, only
 checked for freshness (`node tests/differential/goldens.js --fresh`, and wp19
 §6 item 6 for what the freeze does not save). A corpus program with no frozen
-rewrite is named in a register rather than silently skipped. `src/`'s dump is
-stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
-— and the comparison still reads every byte of it.
+rewrite is named in a register rather than silently skipped. The checked dump
+is stored one file per module under `checked/`, each module once however many
+programs load it (the generator fails if two programs dump one module
+differently), and each body's positions counted from its first, so that two
+pull requests collide only when they change the same module.
 
-**`checked.txt` and `checked-self.txt` are regenerated, never edited or merged
-by hand.** They are stage1's `--emit-checked` dump of the golden cases and of
-`src/`, so any change to `src/`, to `std/` or to a positive `tests/cases/*.ts`
-moves them, and a plan stage that changes `src/` or `std/` owns them (#532
-regenerated `checked.txt` outside its declared files). When another `src/` or
-`std/` pull request lands first, merge `main` and regenerate even if git
-reports no conflict, and merge only once CI is green on that head: the goldens
-and the `.ll` the two changes share move without a textual conflict (#549
-after #547). A new positive `tests/cases/*` is registered with
-`node tests/differential/goldens.js --update` in the same commit, or
-`differential: the frozen rewrites` fails (#548).
+**`checked/` is regenerated, never edited or merged by hand.** It is stage1's
+`--emit-checked` dump of the corpus and of `src/`, so any change to `src/`, to
+`std/` or to a positive `tests/cases/*.ts` moves the files of the modules it
+touches, and a plan stage that changes `src/` or `std/` owns them (#532
+regenerated them outside its declared files). `npm run sync-main` fetches,
+merges `origin/main`, drops every conflicted golden under
+`tests/self/goldens/`, runs both `--update`s and stages what they wrote; it
+stops on any other conflict, the frozen `tests/differential/goldens/` store's
+included, for `-- --continue` once it is resolved, and never commits, so read
+the staged diff before `git commit --no-edit`. When another `src/` or `std/`
+pull request lands first, sync even if git reports no conflict, and merge only
+once CI is green on that head: the goldens and the `.ll` the two changes share
+move without a textual conflict (#549 after #547). Where the merge queue is on
+for `main`, CI's `merge_group` run catches that pair by testing each pull
+request on top of the ones queued ahead of it. A new positive `tests/cases/*`
+is registered with `node tests/differential/goldens.js --update` in the same
+commit, or `differential: the frozen rewrites` fails (#548).
 
 ## Habits that have paid off
 

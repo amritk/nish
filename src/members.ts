@@ -65,7 +65,7 @@ import {
   Node,
 } from "./nodes"
 import { ParentTable } from "./parents"
-import { channelCapacityMessage, isChannelClass, spawnFormFor } from "./parallel"
+import { channelCapacityMessage, isChannelClass, isThreadsStruct, spawnFormFor } from "./parallel"
 import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program"
 import { Scope } from "./symbols"
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types"
@@ -208,16 +208,26 @@ export const checkMember = (ctx: CheckContext, expr: Node, scope: Scope): i32 =>
 const checkUnionTag = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
   const tag = ctx.table.tagNameOf(receiver)
   if (expr.text !== tag) {
-    ctx.errorAtProperty(expr, unionMemberMessage(ctx, receiver, expr.text))
+    ctx.errorAtProperty(expr, unionMemberMessage(ctx, expr.children[0], receiver, expr.text))
     return T_ERROR
   }
   ctx.program.memberSets[expr.id] = receiver
   return ctx.table.tagEnumOf(receiver)
 }
 
-/** Every member of a union but its tag, read, written or called. */
-const unionMemberMessage = (ctx: CheckContext, union: i32, name: string): string =>
-  `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\`: its tag \`${ctx.table.tagNameOf(union)}\` is the one member a union has in this version`
+/**
+ * Every member of a union but its tag, read, written or called. A test of the
+ * tag narrows a variable and nothing else, so a union reached through a
+ * property path or an index keeps its tag alone however it was tested, which
+ * TypeScript would narrow: that message says to copy it into a local.
+ */
+const unionMemberMessage = (ctx: CheckContext, receiverExpr: Node, union: i32, name: string): string => {
+  const receiver = unwrapParens(receiverExpr)
+  if (receiver.kind === N_MEMBER || receiver.kind === N_INDEX) {
+    return `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that`
+  }
+  return `\`${name}\` cannot be used on the union \`${ctx.table.typeName(union)}\`: a union has only its tag \`${ctx.table.tagNameOf(union)}\` until a test of the tag narrows it to one variant`
+}
 
 /** `Kind.If`: the member's integer, recorded for the emitter, and the enum's type (WP23). */
 const checkEnumMember = (ctx: CheckContext, expr: Node, info: EnumInfo): i32 => {
@@ -334,7 +344,7 @@ export const checkMethodCall = (ctx: CheckContext, expr: Node, scope: Scope): i3
     return T_ERROR
   }
   if (ctx.table.isUnion(receiver)) {
-    ctx.errorAtProperty(access, unionMemberMessage(ctx, receiver, access.text))
+    ctx.errorAtProperty(access, unionMemberMessage(ctx, receiverExpr, receiver, access.text))
     return T_ERROR
   }
   if (receiver === T_STRING) {
@@ -674,6 +684,15 @@ const takesDeclaredContext = (value: Node): boolean => {
   return value.kind !== N_NUMBER && value.kind !== N_ARRAY
 }
 
+/** Whether `info` declares a method, generic or not: a constructor is not one. */
+const hasMethods = (info: StructInfo): boolean =>
+  info.methodSigs.length > 0 || info.methodTemplateList.length > 0
+
+/** NL2556: an object literal typed as a class with methods. */
+const classLiteralMessage = (name: string): string =>
+  `\`${name}\` has methods, so it is made only by \`new\`: an object literal would be a plain object under Node, ` +
+  `with none of the methods the class is used through. Write \`new ${name}(...)\``
+
 /** `{ x: 1, y: 2 }`, which needs a contextual class or interface type. */
 export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 => {
   if (want < 0 || !ctx.table.isStruct(ctx.table.stripNull(want))) {
@@ -690,6 +709,12 @@ export const checkObjectLiteral = (ctx: CheckContext, expr: Node, scope: Scope, 
   // `nish:secret`: a holder's `Secret` field is set by its constructor alone.
   if (secretFieldOf(ctx.table, info) !== null) {
     return ctx.errorType(expr, holderLiteralMessage(info.name))
+  }
+  // Native lowering would give a literal the class's layout and its methods,
+  // but under Node it is a plain object and a call on it throws (#656). The
+  // `nish/threads` classes keep their own refusal, NL2515, from the scope pass.
+  if (info.kind === STRUCT_CLASS && hasMethods(info) && !isThreadsStruct(info)) {
+    return ctx.errorType(expr, classLiteralMessage(ctx.table.typeName(info.type)))
   }
   const seen: string[] = []
   for (const prop of expr.children) {

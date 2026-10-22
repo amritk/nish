@@ -37,13 +37,16 @@
  * a monotonic millisecond the timers run on, and `wall`, the Unix millisecond
  * a grant's expiry is compared with.
  *
- * **Memory.** Every table is made by the constructor from the caps: the
- * Http3Server's slots, a `WebTransport` per slot, each slot's session state
- * in arrays, the per-peer table (`peers.ts`), the timer wheel, and one
- * receive buffer, one frame buffer and one GSO batch shared by every session,
- * which the single loop makes safe. A datagram, a timer and a session's
- * whole life, its handshake included, keep nothing after warm-up
- * (`tests/link/net_relay_soak`: 0 bytes over 100,000 sessions).
+ * **Memory.** Every table is sized by the constructor from the caps: each
+ * slot's session state in arrays, the per-peer table (`peers.ts`), the timer
+ * wheel, and one receive buffer, one frame buffer and one GSO batch shared by
+ * every session, which the single loop makes safe. A slot's connections are
+ * the Http3Server's, built on the first Initial accepted into the slot, and
+ * its `WebTransport` is bound on the first event served from it (`wt`), so
+ * the caps are ceilings and an idle relay holds no slot's connection. A
+ * datagram, a timer and a session's whole life, its handshake included, keep
+ * nothing after warm-up (`tests/link/net_relay_soak`: 0 bytes over 100,000
+ * sessions).
  *
  * **Offload.** The client side is the carrier's: GRO on the socket, a GSO
  * flight a send. With `config.offload`, each upstream socket asks for GRO
@@ -221,7 +224,9 @@ const RELAY_NO_GSO: i32 = -95
 export class Relay {
   config: RelayConfig
   server: Http3Server
+  /** Each slot's `WebTransport`, bound by `wt` on the first ask for the slot: the slots asked for so far, 0 up. */
   wts: WebTransport[]
+  wtConfig: WebTransportConfig
   verifier: GrantVerifier
   peers: RelayPeers
   wheel: Http3Wheel
@@ -341,14 +346,13 @@ export class Relay {
     this.server = new Http3Server(quicConfig, relayH3Config(), fd, slots, entropy)
     this.verifier = verifier
     this.wheel = new Http3Wheel(slots)
-    const wtConfig = new WebTransportConfig()
-    wtConfig.maxStreams = 1
-    wtConfig.maxPending = 0
+    this.wtConfig = new WebTransportConfig()
+    this.wtConfig.maxStreams = 1
+    this.wtConfig.maxPending = 0
     this.wts = []
     this.upstreamAddresses = []
     this.peerAddresses = []
     for (let k: i32 = 0; k < slots; k++) {
-      this.wts.push(new WebTransport(wtConfig, this.server.connection(k)))
       this.upstreamAddresses.push(new Array<u8>(RELAY_ADDRESS))
       this.peerAddresses.push(new Array<u8>(RELAY_PEER_KEY))
     }
@@ -591,7 +595,7 @@ export class Relay {
     if (code >= 0 && session >= 0) {
       const n: i32 = relayEncodeClose(this.out, RELAY_ZERO, code, reason)
       if (n > 0) {
-        this.wts[slot].sendDatagram(session, this.out, RELAY_ZERO, n)
+        this.wt(slot).sendDatagram(session, this.out, RELAY_ZERO, n)
       }
     }
     this.release(slot)
@@ -611,6 +615,20 @@ export class Relay {
     }
   }
 
+  /**
+   * `slot`'s `WebTransport`, bound here on the first ask for the slot, with
+   * every slot's before it: `Http3Server` builds a slot's connection on the
+   * first Initial accepted into it, slots 0 up, and `connection` would build
+   * one asked for before then, so binding them all at start-up would build
+   * every slot before the relay listens.
+   */
+  wt(slot: i32): WebTransport {
+    while (toI32(this.wts.length) <= slot) {
+      this.wts.push(new WebTransport(this.wtConfig, this.server.connection(toI32(this.wts.length))))
+    }
+    return this.wts[slot]
+  }
+
   /** Every event `slot`'s connection has, handled. */
   serveSlot(slot: i32, now: i64, wall: i64, grantKey: Secret<u8[]>): void {
     this.reconcile(slot, now)
@@ -618,7 +636,7 @@ export class Relay {
       this.served[this.servedCount] = slot
       this.servedCount = this.servedCount + 1
     }
-    const wt: WebTransport = this.wts[slot]
+    const wt: WebTransport = this.wt(slot)
     let event: i32 = wt.next()
     for (let guard: i32 = 0; guard < 100000 && event !== H3_NEED_MORE && event !== H3_ERROR; guard++) {
       if (event === WT_DATAGRAM) {
@@ -899,7 +917,7 @@ export class Relay {
     }
     const fd: i32 = this.upstreams[slot]
     const to: u8[] = this.upstreamAddresses[slot]
-    const wt: WebTransport = this.wts[slot]
+    const wt: WebTransport = this.wt(slot)
     const session: i64 = this.sessions[slot]
     const cap: i32 = this.config.offload ? RELAY_READ_COALESCED : RELAY_READ_PLAIN
     for (let reads: i32 = 0; reads < RELAY_BATCH; reads++) {
@@ -994,7 +1012,7 @@ export class Relay {
         this.fromClient[slot],
         this.fromUpstream[slot]
       )
-      this.wts[slot].sendDatagram(this.sessions[slot], this.out, RELAY_ZERO, n)
+      this.wt(slot).sendDatagram(this.sessions[slot], this.out, RELAY_ZERO, n)
       this.fromClient[slot] = 0
       this.fromUpstream[slot] = 0
       this.server.touch(slot)

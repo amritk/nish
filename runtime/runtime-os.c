@@ -25,6 +25,9 @@
  * compiling against the header a C host sees is what keeps a definition here
  * from drifting from the contract it is published under.
  */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE /* `sched_getaffinity` and `CPU_COUNT`, for `nish_cpu_online` */
+#endif
 #define _POSIX_C_SOURCE 200809L
 /* `realpath` is XSI rather than POSIX base, so _POSIX_C_SOURCE alone does not
    declare it (measured on glibc 2.39: undeclared, and clang then infers
@@ -46,9 +49,13 @@
 #include <unistd.h>
 #ifndef __wasi__
 /* WASI has no processes, so `spawn.h` and `wait.h` do not exist there. */
+#include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
 extern char **environ;
+#endif
+#ifdef __linux__
+#include <sched.h>
 #endif
 
 #include "nish.h"
@@ -216,18 +223,20 @@ _Bool nish_mkdir(const nish_str *path) {
    value rather than through a child that has already run.
 
    `out` and `err` are paths for the child's stdout and stderr, or NULL to let
-   it inherit this process's. Both spawn builtins are this function with those
-   two arguments answered differently, so the argv vector, the wait and the
-   signal convention are written once; it is `static`, so a program that spawns
-   nothing still loses all three to `--gc-sections`. */
-static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, const nish_str *err) {
+   it inherit this process's. Every spawn builtin starts its child here, so the
+   argv vector and the redirects are written once; it is `static`, so a program
+   that spawns nothing loses it to `--gc-sections`. The answer is the child's
+   pid, or a negative errno: -EINVAL for an empty argv or an argument holding a
+   NUL, and `posix_spawnp`'s own error otherwise (-ENOENT for a command that is
+   not on PATH, on glibc). */
+static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err) {
 #ifdef __wasi__
   (void)argv;
   (void)out;
   (void)err;
-  return -1;
+  return -ENOSYS;
 #else
-  if (!argv->len) return -1; /* argv[0] would read past an empty array */
+  if (!argv->len) return -EINVAL; /* argv[0] would read past an empty array */
   nish_str **s = (nish_str **)argv->data;
   /* NULL-terminated, borrowing each string's bytes; the arena owns it, so no
      path out of here has anything to free. */
@@ -238,14 +247,15 @@ static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, cons
      the one whose C string is not its own bytes. */
   for (; i < argv->len; i++) {
     v[i] = (char *)nish_cpath(s[i]);
-    if (v[i] != s[i]->data) return -1;
+    if (v[i] != s[i]->data) return -EINVAL;
   }
   v[i] = 0;
   /* One list of file actions whether or not a stream is redirected: an empty
      list is the same spawn as none, and one path through is less code than
      creating the list only when a stream needs it. */
   posix_spawn_file_actions_t fa;
-  if (posix_spawn_file_actions_init(&fa)) return -1;
+  int failed = posix_spawn_file_actions_init(&fa);
+  if (failed) return -failed;
   const nish_str *to[2] = { out, err };
   for (int k = 0; k < 2; k++) {
     /* The child opens the file, not this process: a redirect that this process
@@ -254,12 +264,31 @@ static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, cons
     if (to[k]) posix_spawn_file_actions_addopen(&fa, k + 1, nish_cpath(to[k]), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0644);
   }
   pid_t pid;
-  int status;
-  int failed = posix_spawnp(&pid, v[0], &fa, 0, v, environ);
+  failed = posix_spawnp(&pid, v[0], &fa, 0, v, environ);
   posix_spawn_file_actions_destroy(&fa);
-  if (failed) return -1;
-  if (waitpid(pid, &status, 0) < 0) return -1;
+  return failed ? -failed : (int32_t)pid;
+#endif
+}
+
+#ifndef __wasi__
+/* A wait status in spawnSync's convention: the exit code, or 128 plus the
+   signal that ended the child, as a shell reports it. */
+static int32_t nish_exit_code(int status) {
   return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
+}
+#endif
+
+/* The two blocking builtins: start, then wait for that one child. A failed
+   start is -1, the answer they have always given. */
+static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, const nish_str *err) {
+  int32_t pid = nish_spawn_start(argv, out, err);
+  if (pid < 0) return -1;
+#ifdef __wasi__
+  return -1;
+#else
+  int status;
+  if (waitpid(pid, &status, 0) < 0) return -1;
+  return nish_exit_code(status);
 #endif
 }
 
@@ -278,6 +307,174 @@ int32_t nish_spawn(const nish_array *argv) { return nish_spawn_impl(argv, 0, 0);
    interleave. Capturing them apart and concatenating is the way to merge. */
 int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_str *err) {
   return nish_spawn_impl(argv, out->len ? out : 0, err->len ? err : 0);
+}
+
+/* `spawn(argv)`: the child's pid, or a negative errno, without waiting. The
+   child is this process's until a `waitPid` reaps it; one never reaped stays
+   a zombie until the program exits, as it would in C. */
+int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv, 0, 0); }
+
+/* `kill(pid, sig)`: 0, or a negative errno. Only the four signals a program
+   asks a child to stop or report with are sent -- 0 (is it there), SIGINT,
+   SIGKILL and SIGTERM, whose numbers are the same on Linux and Darwin -- and
+   any other is -EINVAL, so the number a program writes means the same signal
+   on every host. A pid of 0 or below is -EINVAL too: `kill(2)` reads those as
+   a process group or every process the user owns, which is not one process.
+   A positive pid may be any process of this uid, not only a child: the same
+   reach `kill(1)` has (docs/security/runtime.md, RT-19). */
+int32_t nish_kill(int32_t pid, int32_t sig) {
+#ifdef __wasi__
+  (void)pid;
+  (void)sig;
+  return -ENOSYS;
+#else
+  if (pid <= 0 || !(sig == 0 || sig == SIGINT || sig == SIGKILL || sig == SIGTERM)) return -EINVAL;
+  return kill(pid, sig) == 0 ? 0 : -errno;
+#endif
+}
+
+/* `waitPid(pid, flags)`: `[pid, status]`, a fresh two-element `i32[]`. `pid`
+   is a child's or -1 for any child; flag 1 is WNOHANG, and any other bit, like
+   a pid of 0 or below -1 (a process group), is -EINVAL. The status is
+   spawnSync's: the exit code, or 128 plus the signal. `[0, 0]` is a WNOHANG
+   wait with a child left and none exited, and a failure is `[-errno, 0]`:
+   -ECHILD with no child to wait for, -EINTR when a signal interrupted it. */
+nish_array *nish_wait_pid(int32_t pid, int32_t flags) {
+  nish_array *out = nish_alloc_array(sizeof(int32_t), 2);
+  int32_t *w = (int32_t *)out->data;
+  w[1] = 0;
+#ifdef __wasi__
+  (void)pid;
+  (void)flags;
+  w[0] = -ENOSYS;
+#else
+  if ((pid <= 0 && pid != -1) || (flags & ~1)) {
+    w[0] = -EINVAL;
+    return out;
+  }
+  int status = 0;
+  pid_t got = waitpid(pid, &status, flags ? WNOHANG : 0);
+  w[0] = got < 0 ? -errno : (int32_t)got;
+  if (got > 0) w[1] = nish_exit_code(status);
+#endif
+  return out;
+}
+
+#ifdef __linux__
+/* Reads up to `cap - 1` bytes of a small file into `buf`, terminated; 0 bytes
+ * when it cannot be opened. */
+static void nish_read_small(const char *path, char *buf, size_t cap) {
+  ssize_t got = -1;
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd >= 0) {
+    got = read(fd, buf, cap - 1);
+    close(fd);
+  }
+  buf[got > 0 ? got : 0] = 0;
+}
+
+/* The cgroup v2 CPU quota of this process and of every cgroup above it, as a
+ * whole number of CPUs rounded up, and `n` when it is lower or there is none.
+ * A container limited to 1.5 CPUs on a 64-core host is what this is for: its
+ * affinity mask still names all 64, and 63 workers time-sliced into a budget
+ * of 1.5 cores is the slowest way there is to run a loop. `cpu.max` reads
+ * `<quota> <period>`, or `max <period>` when there is no limit, which the
+ * digit test leaves out. The path is the `0::` line of /proc/self/cgroup under
+ * /sys/fs/cgroup, where a v2-only system and a container mount the hierarchy;
+ * a v1 system has no `cpu.max` there and keeps `n`. */
+static int64_t nish_cgroup_cpus(int64_t n) {
+  char text[512];
+  char path[512] = "/sys/fs/cgroup";
+  nish_read_small("/proc/self/cgroup", text, sizeof text);
+  char *at = strstr(text, "0::/");
+  if (!at || (at != text && at[-1] != '\n')) return n;
+  size_t len = strcspn(at + 3, "\n");
+  if (len > sizeof path - 24) return n;
+  memcpy(path + 14, at + 3, len);
+  for (;;) {
+    memcpy(path + 14 + len, "/cpu.max", 9);
+    nish_read_small(path, text, sizeof text);
+    if (text[0] >= '1' && text[0] <= '9') {
+      char *rest;
+      int64_t quota = strtoll(text, &rest, 10);
+      int64_t period = strtoll(rest, 0, 10);
+      if (period > 0) {
+        int64_t cpus = quota / period + (quota % period != 0);
+        if (cpus < n) n = cpus;
+      }
+    }
+    /* Up one level, by dropping the last component, until the root is read. */
+    if (len <= 1) return n;
+    while (len > 1 && path[14 + len - 1] != '/') len--;
+    if (len > 1) len--;
+  }
+}
+#endif
+
+#ifdef __APPLE__
+/* <sys/sysctl.h> does not compile at the strict feature level this file
+   selects, so the one function is declared by hand, as Darwin's libc has it. */
+int sysctlbyname(const char *, void *, size_t *, void *, size_t);
+#endif
+
+/* The CPUs this program may use: the smallest of the CPUs online, the ones
+   this thread may run on (`taskset`, a container's cpuset), the cgroup quota,
+   and `NISH_NUM_THREADS` when it is a positive number. The variable can lower
+   the count and never raise it, so it caps a program's threads (a CI job
+   sharing its machine, a benchmark pinned to one core) without ever putting
+   more of them on the machine than it has. At least 1, and 1 on WASI.
+
+   It lives here rather than in runtime-parallel.c because two builtins read
+   it: `availableParallelism`, in every build, and `nish_cpu_count`, which
+   divides regions by it under `--threads` and answers 1 without, as a
+   sequential build divides nothing. Uncached: runtime-parallel.c caches its
+   own answer, and a program asking how many workers to start asks once. */
+int64_t nish_cpu_online(void) {
+#ifdef __wasi__
+  return 1;
+#else
+#ifdef __APPLE__
+  /* `_SC_NPROCESSORS_ONLN` is hidden on Darwin at this file's feature level. */
+  int got = 0;
+  size_t size = sizeof got;
+  if (sysctlbyname("hw.activecpu", &got, &size, 0, 0) != 0) got = 0;
+#else
+  long got = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+  int64_t n = got > 0 ? (int64_t)got : 1;
+#ifdef __linux__
+  cpu_set_t set;
+  if (sched_getaffinity(0, sizeof set, &set) == 0) {
+    int mine = CPU_COUNT(&set);
+    if (mine > 0 && mine < n) n = mine;
+  }
+  n = nish_cgroup_cpus(n);
+#endif
+  const char *env = getenv("NISH_NUM_THREADS");
+  if (env) {
+    char *end;
+    long long want = strtoll(env, &end, 10);
+    if (end != env && *end == 0 && want > 0 && want < n) n = (int64_t)want;
+  }
+  return n;
+#endif
+}
+
+/* `totalMemory()`: bytes of physical memory, or -1 when the host does not say.
+   The machine's, not a cgroup's limit: what a container may use is a policy
+   the program reads elsewhere. */
+int64_t nish_total_memory(void) {
+#if defined(__APPLE__)
+  uint64_t bytes = 0;
+  size_t size = sizeof bytes;
+  return sysctlbyname("hw.memsize", &bytes, &size, 0, 0) == 0 ? (int64_t)bytes : -1;
+#elif defined(__linux__)
+  long pages = sysconf(_SC_PHYS_PAGES);
+  long page = sysconf(_SC_PAGESIZE);
+  return pages > 0 && page > 0 ? (int64_t)pages * page : -1;
+#else
+  return -1;
+#endif
 }
 
 /* `readdirSync(path)`: the listing a driver needs to discover its own inputs.
