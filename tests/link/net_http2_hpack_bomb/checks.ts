@@ -351,7 +351,7 @@ export const hpackBombChecks = (): i32 => {
   );
   t.eqI32("with both fields whole", longNamesIn(l), toI32(2));
   const twice: i64 = l.conn.decoder.tableCopied - twiceBefore;
-  t.ok(`copying ${twice} octets, within the block's budget of 4 x 4,096`, twice === toI64(4 * LONG_NAME) && twice <= toI64(4 * 4096));
+  t.ok(`copying ${twice} octets, within the block's budget of 4 x 4,096`, twice === toI64(4) * toI64(LONG_NAME) && twice <= toI64(4) * toI64(4096));
   l.conn.respond(literalStream, ok, noFields, noFields, true);
   l.takeFrames();
   const lastStream: i32 = literalStream;
