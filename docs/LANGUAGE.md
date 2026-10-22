@@ -3483,13 +3483,17 @@ export const main = (): i32 => {
   no capture can reach it: the only way into a value is through a binding, and
   none was given this one. So the body may read a `parallelMap` result, a
   config object or a `const self = this` beside it
-  (`tests/link/par_into_fresh_pipeline`, `par_into_fresh_object`). Anything that hands
+  (`tests/link/par_into_fresh_pipeline`, `par_into_fresh_object`); indexing
+  it, reading `d.length`, calling `d.fill(0)` or walking it with `for...of`
+  first hands it to no one (`par_into_fresh_reads`). Anything that hands
   `dst` on first is refused with the message above: a store `p.arr = d` or
   `this.tab = d` (`reject_par_into_store_field`, `_this_field`), an argument
   `keep(h, d)` or `ts.push(d)` (`_helper`, `_push`), an alias `const e = d`
   (`_alias`), a branch `c ? d : w` (`_ternary`), a holder `new Holder(d)`
   (`_holder`), a store after the call inside a loop around it
-  (`_loop_store`), a hand-on on one branch of an `if` (`_if_branch`), an
+  (`_loop_store`, and `_loop_store_while`, `_do`, `_for_of` for the other
+  loops) — the outermost such loop, so a store after an inner loop
+  inside an outer one counts (`_nested_loop`) — a hand-on on one branch of an `if` (`_if_branch`), an
   earlier call writing the same `dst` (`_twice`), `dst` passed as the call's
   own `src` (`_as_src`), and the arrow reading `dst` itself (`_captured`). A
   `dst` bound to a captured array is no fresh `const` (`_from_capture`). The

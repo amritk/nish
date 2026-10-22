@@ -1023,14 +1023,14 @@ function dstUnsharedAt(program: CheckedProgram, call: Node, dst: Local): boolean
   stackSites=1 stackLocals=1
   local +0:9 body: Node | null (const)
   callee +0:16 dstHostDecl -> @dstHostDecl
-  local +4:9 bindings: Node[] (const)
-  callee +5:3 dstBindings -> @dstBindings
-  local +6:9 decl: Node | null (const)
-  local +7:9 declared: Local | null (const)
-  local +11:9 skip: Node (const)
-  callee +11:16 unwrapParens -> @unwrapParens
-  callee +12:11 dstHandedOn -> @dstHandedOn
-  callee +12:61 dstLoopAround -> @dstLoopAround
+  local +7:9 bindings: Node[] (const)
+  callee +8:3 dstBindings -> @dstBindings
+  local +9:9 decl: Node | null (const)
+  local +10:9 declared: Local | null (const)
+  local +18:9 skip: Node (const)
+  callee +18:16 unwrapParens -> @unwrapParens
+  callee +19:11 dstHandedOn -> @dstHandedOn
+  callee +19:61 dstLoopAround -> @dstLoopAround
 function dstUnshared(program: CheckedProgram, sig: FunctionSig, dst: Local | null): boolean -> @dstUnshared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via dstUnsharedAt

@@ -1434,6 +1434,10 @@ const dstSpans = (outer: Node, inner: Node): boolean => outer.start <= inner.sta
 /**
  * The innermost function of `program` whose declaration holds `node`: the
  * body a call is written in, which is where its destination is declared.
+ * `program.functions` also holds what the module imports, whose spans are
+ * offsets in another file, so in a program of several modules this can pick a
+ * function of another file; its binding then is not `dst`'s local, and
+ * `dstUnsharedAt` refuses a call it could have admitted, never the reverse.
  */
 const dstHostDecl = (program: CheckedProgram, node: Node): Node | null => {
   let best: Node | null = null
@@ -1536,6 +1540,9 @@ const dstLoopAround = (node: Node, call: Node, decl: Node): Node | null => {
  */
 const dstUnsharedAt = (program: CheckedProgram, call: Node, dst: Local): boolean => {
   const body = dstHostDecl(program, call)
+  // No test reaches these: every statement is in a function (field
+  // initialisers are literals), and `recordParallelCall` records a `dst` only
+  // for an `N_CALL` with one.
   if (body === null || call.kind !== N_CALL || call.children[1].children.length < 2) {
     return false
   }
@@ -1543,6 +1550,10 @@ const dstUnsharedAt = (program: CheckedProgram, call: Node, dst: Local): boolean
   dstBindings(body, dst.name, bindings)
   const decl: Node | null = bindings.length === 1 ? bindings[0] : null
   const declared: Local | null = decl === null ? null : program.nodeLocals[decl.id]
+  // `declared !== dst` and a declaration after the call are reached only by
+  // the other file's function `dstHostDecl` may pick: in the call's own
+  // function, `dst` is a local (a module constant cannot be an array, and no
+  // function nests), declared before it is named.
   if (decl === null || declared === null || declared !== dst || decl.start > call.start) {
     return false
   }

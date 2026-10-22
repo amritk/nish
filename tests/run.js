@@ -7051,7 +7051,8 @@ if (!only || "par_alloc".includes(only)) {
 // bench/par-regions.ts over a map, the program the check below vectorises.
 // `par_into_fresh_pipeline` and `par_into_fresh_object` (#612) read a
 // `parallelMap` result, a config object and a `const self = this` beside a
-// fresh `dst` nothing was handed before the call.
+// fresh `dst` nothing was handed before the call; `par_into_fresh_reads`
+// indexes, fills and walks that `dst` first.
 //
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
@@ -7116,6 +7117,7 @@ for (const name of [
   "par_capture_large",
   "par_into_fresh_object",
   "par_into_fresh_pipeline",
+  "par_into_fresh_reads",
   "par_map_vector",
   "thread_scope_basic",
   "thread_scope_exit_paths",

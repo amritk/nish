@@ -258,9 +258,12 @@ export const main = (): i32 => {
   `const table = [1, 2]` and `const dst = new Array<i32>(n)`. Any capture is
   fine beside a `dst` that is a `const` bound to its own array and that
   nothing was given before the call: not stored in a field or a list, not
-  passed to a function, not bound to a second name and not built into an
-  object. After the call you may hand `dst` on freely, except inside a loop
-  around the call, where the next pass's call comes after it.
+  passed to a function, not bound to a second name, not built into an object
+  and not written by an earlier `parallelMapInto`. Indexing it, reading its
+  `length`, calling its methods and walking it with `for...of` give it to no
+  one. After the call you may hand `dst` on, except inside a loop around the
+  call that `dst` was declared outside of, where the next pass's call comes
+  after it; a loop that declares its own `dst` each pass is fine.
 
 ```ts nish:ok
 import { parallelMap, parallelMapInto } from "nish/threads";
