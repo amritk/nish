@@ -1490,7 +1490,10 @@ const dstHandedOn = (
   const inner =
     nested ||
     (parent !== null &&
-      (node.kind === N_FUNCTION || node.kind === N_METHOD || node.kind === N_CONSTRUCTOR || node.kind === N_CLASS))
+      (node.kind === N_FUNCTION ||
+        node.kind === N_METHOD ||
+        node.kind === N_CONSTRUCTOR ||
+        node.kind === N_CLASS))
   for (const child of node.children) {
     if (dstHandedOn(child, node, name, skip, before, loop, inner)) {
       return true

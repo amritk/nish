@@ -26,6 +26,7 @@ import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
 import N_EMPTY from "./nodes" -> const N_EMPTY
 import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
 import N_CLASS from "./nodes" -> const N_CLASS
+import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
 import N_FIELD from "./nodes" -> const N_FIELD
 import FLAG_COMPUTED from "./nodes" -> const FLAG_COMPUTED
 import FLAG_CONST from "./nodes" -> const FLAG_CONST
@@ -959,24 +960,112 @@ function knownApart(captured: Local, dst: Local | null): boolean -> @knownApart
   callee +2:11 isFreshConst -> @isFreshConst
   callee +2:38 isFreshConst -> @isFreshConst
   callee +2:74 isFreshConst -> @isFreshConst
+function dstSpans(outer: Node, inner: Node): boolean -> @dstSpans
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer outer: size=40 writesThrough=false captured=false
+  pointer inner: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function dstHostDecl(program: CheckedProgram, node: Node): Node | null -> @dstHostDecl
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: dstSpans
+  pointer program: size=656 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false passedTo=dstSpans#1
+  stackSites=0 stackLocals=0
+  local +0:7 best: Node | null (let)
+  local +1:14 fn: FunctionSig (const)
+  local +2:11 decl: Node (const)
+  callee +3:9 dstSpans -> @dstSpans
+  callee +3:51 dstSpans -> @dstSpans
+function dstBindings(node: Node, name: string, out: Node[]): void -> @dstBindings
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: name node
+  calls: dstBindings nish_array_grow nish_panic_index nish_str_eq
+  pointer node: size=40 writesThrough=true captured=true
+  pointer out: size=0 writesThrough=true captured=false passedTo=dstBindings#2
+  stackSites=0 stackLocals=0
+  local +2:14 child: Node (const)
+  callee +3:5 dstBindings -> @dstBindings
+function dstHandedOn(node: Node, parent: Node | null, name: string, skip: Node, before: i32, loop: Node | null, nested: boolean): boolean -> @dstHandedOn
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: before name
+  calls: dstHandedOn dstSpans nish_panic_index nish_str_eq
+  pointer node: size=40 writesThrough=false captured=false passedTo=dstSpans#1 dstHandedOn#1
+  pointer parent: size=40 writesThrough=false captured=false
+  pointer skip: size=40 writesThrough=false captured=false passedTo=dstHandedOn#3
+  pointer loop: size=40 writesThrough=false captured=false passedTo=dstSpans#0 dstHandedOn#5
+  stackSites=0 stackLocals=0
+  local +0:11 base: boolean (const)
+  callee +4:70 dstSpans -> @dstSpans
+  local +8:9 inner: boolean (const)
+  local +15:14 child: Node (const)
+  callee +16:9 dstHandedOn -> @dstHandedOn
+function dstLoopAround(node: Node, call: Node, decl: Node): Node | null -> @dstLoopAround
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: node
+  calls: dstLoopAround dstSpans
+  pointer node: size=40 writesThrough=true captured=true passedTo=dstSpans#0 dstSpans#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=dstSpans#1 dstLoopAround#1
+  pointer decl: size=40 writesThrough=false captured=false passedTo=dstSpans#1 dstLoopAround#2
+  stackSites=0 stackLocals=0
+  callee +0:25 dstSpans -> @dstSpans
+  callee +5:6 dstSpans -> @dstSpans
+  local +9:14 child: Node (const)
+  local +10:11 found: Node | null (const)
+  callee +10:19 dstLoopAround -> @dstLoopAround
+function dstUnsharedAt(program: CheckedProgram, call: Node, dst: Local): boolean -> @dstUnsharedAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via dstBindings
+  calls: dstBindings dstHandedOn dstHostDecl dstLoopAround nish_panic_index unwrapParens
+  pointer program: size=656 writesThrough=false captured=false passedTo=dstHostDecl#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=dstHostDecl#1 dstLoopAround#1
+  pointer dst: size=64 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 body: Node | null (const)
+  callee +0:16 dstHostDecl -> @dstHostDecl
+  local +4:9 bindings: Node[] (const)
+  callee +5:3 dstBindings -> @dstBindings
+  local +6:9 decl: Node | null (const)
+  local +7:9 declared: Local | null (const)
+  local +11:9 skip: Node (const)
+  callee +11:16 unwrapParens -> @unwrapParens
+  callee +12:11 dstHandedOn -> @dstHandedOn
+  callee +12:61 dstLoopAround -> @dstLoopAround
+function dstUnshared(program: CheckedProgram, sig: FunctionSig, dst: Local | null): boolean -> @dstUnshared
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via dstUnsharedAt
+  calls: dstUnsharedAt isFreshConst
+  pointer program: size=656 writesThrough=false captured=false passedTo=dstUnsharedAt#0
+  pointer sig: size=136 writesThrough=false captured=false
+  pointer dst: size=64 writesThrough=false captured=false passedTo=isFreshConst#0 dstUnsharedAt#2
+  stackSites=0 stackLocals=0
+  callee +0:24 isFreshConst -> @isFreshConst
+  local +3:7 found: boolean (let)
+  local +4:14 call: ParallelCall (const)
+  local +5:11 held: Local | null (const)
+  callee +7:12 dstUnsharedAt -> @dstUnsharedAt
 function captureReachesDstMessage(table: TypeTable, program: CheckedProgram, sig: FunctionSig, fn: FunctionSig, dstLocal: Local | null): string -> @captureReachesDstMessage [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachingPath
-  calls: StringSet.constructor TypeTable.typeName knownApart nish_panic_index nish_str_concat nish_str_eq reachingPath
+  calls: StringSet.constructor TypeTable.typeName dstUnshared knownApart nish_panic_index nish_str_concat nish_str_eq reachingPath sourceLocal
   pointer table: size=96 writesThrough=false captured=false passedTo=reachingPath#0 TypeTable.typeName#0
-  pointer program: size=656 writesThrough=false captured=false passedTo=reachingPath#1
-  pointer sig: size=136 writesThrough=false captured=false
+  pointer program: size=656 writesThrough=false captured=false passedTo=reachingPath#1 dstUnshared#0
+  pointer sig: size=136 writesThrough=false captured=false passedTo=dstUnshared#1
   pointer fn: size=136 writesThrough=false captured=false
-  pointer dstLocal: size=64 writesThrough=false captured=false passedTo=knownApart#1
+  pointer dstLocal: size=64 writesThrough=false captured=false passedTo=knownApart#1 dstUnshared#2
   stackSites=1 stackLocals=0
   local +0:9 instance: Instantiation | null (const)
   local +4:9 target: i32 (const)
-  local +5:14 captured: Local (const)
-  local +6:11 path: string (const)
-  callee +6:18 reachingPath -> @reachingPath
-  callee +6:85 new StringSet -> @StringSet.constructor
-  callee +10:35 knownApart -> @knownApart
-  callee +14:77 TypeTable.typeName -> @TypeTable.typeName
+  local +6:7 unshared: i32 (let)
+  local +7:14 captured: Local (const)
+  local +8:11 path: string (const)
+  callee +8:18 reachingPath -> @reachingPath
+  callee +8:85 new StringSet -> @StringSet.constructor
+  callee +12:35 knownApart -> @knownApart
+  callee +16:18 dstUnshared -> @dstUnshared
+  local +18:11 source: Local | null (const)
+  callee +18:20 sourceLocal -> @sourceLocal
+  callee +23:77 TypeTable.typeName -> @TypeTable.typeName
 function scaled(a: i32, b: i32): i32 -> @scaled
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
