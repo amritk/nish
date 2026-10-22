@@ -713,7 +713,8 @@ A/A band of 0.996 (0.910–1.365): no change outside the noise.
 ### Slots built on the first accept
 
 *Written with the stage that builds TLS slots lazily (#753, #744); it names
-functions rather than lines, as of `14a6ff11`.*
+functions rather than lines, as of `c21e4a7` (#777), the commit that merged it;
+`Http2TlsServer`'s connections followed in `cfecc62` (#767).*
 
 A `TlsTcpServer` used to build every slot's `TlsRecordServer`, `TlsServer`
 and server random in its constructor, so a pool sized for its peak paid for
@@ -725,7 +726,10 @@ and closes the socket without building anything. A slot past the mark is
 built there, by `build`, and kept for every later connection: so the first
 accepts take slots 0, 1, 2 …, finding a slot is O(1), and `size()` answers
 the cap. `Http1TlsServer` builds the slot's `Http1Connection` beside it, on
-the same accept.
+the same accept, and `Http2TlsServer` its `Http2Connection` (#767), except
+slot 0's, which its constructor builds so that an `Http2Config` RFC 9113
+does not allow is refused when the server is made rather than at a client's
+first accept.
 
 `build` makes what the constructor used to make for each slot, in the same
 way: a 32-byte server random of the slot's own, a 32-byte zero key standing
@@ -754,25 +758,35 @@ Evidence:
   slots 0, 1, 2 in order, building each on its first accept"; "with size
   slots busy the next is shed with TLS_TCP_POOL_FULL and nothing more is
   built"; "a closed slot is taken again, its TLS state kept rather than built
-  anew"; "the first accept into a slot moves Arena.mark(); closing it
-  and accepting into it again leaves it where it was"; and, over a pool of 16,384 on
+  anew"; "the first accept into each slot moves Arena.mark(); closing
+  one and accepting into it again leaves it where it was"; and, over a pool of 16,384 on
   no socket, "a pool of 16,384 reports its size with no slot built", "a slot
   never built holds nothing: no descriptor, done to every call, -22 to reads
   and writes", "closing it and enabling tickets build nothing", "an accept
   with no listener answers tcpAccept's -9 and builds nothing" and "a
-  never-built slot's connection is slot 0's, built once, failed, with tickets
-  on as the pool's are".
+  never-built slot's connection is one no slot holds, made once, failed, with
+  no ALPN, and building no slot".
 - **`Http1TlsServer`** (`net_http1_server` and `_f64`): "TLS: a pool built as
   it accepts takes slots 0, 1, 2 in order, building each slot's connection
   and TLS state on its first accept", "TLS: a closed slot is taken again, its
   connection kept rather than built anew", "TLS: a slot never built holds
   nothing: no descriptor, H1_ERROR to next, done to the rest" and the rest
   of its `TLS: ` checks.
+- **`Http2TlsServer`** (`net_http2_tls` and `_f64`): "one client at a time
+  has used slot 0 alone, and slot 1's connection is not made (1 made)", "and
+  a second fills the pool, accepted into slot 1", "and has made one slot's
+  connection, slot 0's (1)" and "and names slot 0's connection, making none
+  for itself". The bad config is refused in the constructor:
+  `net_http2_bad_config_tls` makes a server on the defaults, then one with a
+  `maxFrameSize` of 1,024, which panics there and exits 1 with no socket to
+  accept on.
 - Start-up is a ceiling, `tests/run.js`'s templated check "`${unit}: a
   16,384-slot ${name} takes at most ${ceilingName} before its first
-  connection`", run for `TlsTcpServer` under `TLS_TCP_START_BYTES` (41,640
-  bytes, `tests/runtime-budgets.js`) and for `Http1TlsServer` under
-  `HTTP1_TLS_SERVER_START_BYTES` (58,296).
+  connection`", run for `TlsTcpServer` under `TLS_TCP_START_BYTES` (41,728
+  bytes, measured at 41,640, `tests/runtime-budgets.js`), for
+  `Http1TlsServer` under `HTTP1_TLS_SERVER_START_BYTES` (58,368, measured at
+  58,296) and for `Http2TlsServer` under `HTTP2_TLS_SERVER_START_BYTES`
+  (58,624, measured at 58,560 with slot 0's connection).
 - The handshakes over a lazily built slot are the ones above: every check of
   `net_tls_record_tcp`, `net_tls_memory` and `net_loopback` runs through
   slots built by `accept`, with `net_tls_memory`'s 0 bytes per handshake
@@ -782,9 +796,12 @@ Measured with `bench/pool-rss.mjs --per-pool` (three runs each, every copy
 of a build within 0.1 MB of it), the interoperability server's HTTPS/1.1 pool
 with nothing connected is resident at 4.6 MB where it was 31.2 MB at 1,024
 slots and 18.1 MB at 256, and listens in 6 ms where it took 21 at 1,024; its
-HTTP/2 pool, whose TLS slots this builds lazily while its connections stay
-prebuilt, is 27.8 MB where it was 78.2 at 1,024 slots; all pools together are
-281.7 MB where they were 358.7.
+HTTP/2 pool, whose TLS slots this built lazily while its connections were
+still prebuilt, was 27.8 MB where it had been 78.2 at 1,024 slots; all pools
+together were 281.7 MB where they had been 358.7. Once `Http2TlsServer`
+built its connections on the first accept too (#767, measured in #787), that
+pool was 11.7 MB at 1,024 slots, 7 kB a slot where it was 23
+(`HTTP2_TLS_SERVER_START_BYTES` in `tests/runtime-budgets.js` records how).
 
 ## What is not checked here
 

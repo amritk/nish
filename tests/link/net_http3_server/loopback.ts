@@ -654,6 +654,55 @@ const idle = (t: Suite): void => {
   loop.server.stop();
 };
 
+/** A handshake from `l` to the server's slot, each server call metered by `m`; whether it completed. */
+const leanHandshake = (l: Lean, limits: H3Limits, m: QmMeter): boolean => {
+  const hello: u8[] = h3Hello(limits);
+  l.c.before = hello;
+  leanSend(l, qcInitial(l.c, qcCrypto(n64(0), hello), n32(1200)), m);
+  if (!qcReadFlight(l.c, n32(0), n32(0))) {
+    return false;
+  }
+  leanSend(l, qcFinishedPacket(l.c), m);
+  return true;
+};
+
+/**
+ * What building a slot costs, read across chunks with `QmMeter` over the
+ * server's own calls only: the first Initial into a slot never built keeps
+ * arena memory, the slot's connections and address (111,424 bytes on this
+ * configuration, `startup.ts`); one into a slot released and kept keeps
+ * none, so a re-accept builds nothing; and the next slot past the mark
+ * costs again.
+ */
+const lazyKept = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(4), n32(0));
+  const server: Http3Server = loop.server;
+  const first = new Lean(loop);
+  const built = new QmMeter();
+  const firstDone: boolean = leanHandshake(first, limits, built);
+  t.ok("the first Initial into a slot never built keeps the slot in the arena", firstDone && built.kept > n64(0) && toI32(server.quics.length) === n32(1));
+  server.connection(n32(0)).goaway();
+  server.touch(n32(0));
+  const empty: u8[] = [];
+  for (let r: i32 = 0; r < 4 && server.busy() > 0; r++) {
+    leanPacket(first, empty, qmPlain());
+  }
+  t.ok("closed after its GOAWAY, its slot is free and still built", server.busy() === n32(0) && toI32(server.quics.length) === n32(1));
+  const second = new Lean(loop);
+  second.c.now = n64(100000);
+  const again = new QmMeter();
+  const secondDone: boolean = leanHandshake(second, limits, again);
+  t.ok("a second client takes that slot", secondDone && server.holds(n32(0)) && server.busy() === n32(1) && toI32(server.quics.length) === n32(1));
+  t.eqI64("a client taking the slot released keeps 0 bytes in the arena: the re-accept builds nothing", secondDone ? again.kept : n64(-1), n64(0));
+  const third = new Lean(loop);
+  third.c.now = n64(200000);
+  const next = new QmMeter();
+  const thirdDone: boolean = leanHandshake(third, limits, next);
+  t.ok("while one past the high-water mark builds the next slot and keeps it", thirdDone && next.kept > n64(0) && server.holds(n32(1)) && toI32(server.quics.length) === n32(2));
+  server.stop();
+};
+
 /** Every check of this file. */
 export const loopbackChecks = (t: Suite): void => {
   exchange(t);
@@ -667,4 +716,5 @@ export const loopbackChecks = (t: Suite): void => {
   reused(t);
   idle(t);
   lazy(t);
+  lazyKept(t);
 };
