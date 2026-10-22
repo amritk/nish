@@ -1,6 +1,6 @@
 // WP33 NL8001 (#629): the count `parallelFrom` is handed is how many elements
 // it makes, so an offset there makes an array of a different length under
-// TypeScript.
+// TypeScript. A code unit there is reported the same way.
 import { parallelFrom } from "nish/threads";
 
 export const main = (): number => {
@@ -11,5 +11,8 @@ export const main = (): number => {
     total = total + x;
   }
   console.log(total);
+  const sizes: i32[] = [1, 2, 3, 4, 5];
+  const coded = parallelFrom(word.charCodeAt(0) % sizes.length, (i) => i);
+  console.log(coded.length);
   return 0;
 };

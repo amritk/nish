@@ -541,29 +541,33 @@ function loopOf(walk: PortabilityWalk, comparison: Node): Node | null -> @loopOf
 function isCursor(walk: PortabilityWalk, expr: Node, loop: Node): boolean -> @isCursor
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via readsOf
-  calls: ParentTable.parentOf isArithmetic isString nish_panic_index readsOf sourceLocal unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=readsOf#0 isString#0 isString#0
+  calls: ParentTable.parentOf isArithmetic isNumberLiteral isString nish_panic_index nish_str_eq readsOf sourceLocal unwrapParens
+  pointer walk: size=48 writesThrough=false captured=false passedTo=isNumberLiteral#0 isNumberLiteral#0 readsOf#0 isString#0 isString#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer loop: size=40 writesThrough=true captured=true passedTo=readsOf#1
   stackSites=1 stackLocals=1
-  local +0:9 e: Node (const)
-  callee +0:13 unwrapParens -> @unwrapParens
-  local +1:9 local: Local | null (const)
-  callee +1:52 sourceLocal -> @sourceLocal
-  local +5:9 reads: Node[] (const)
-  callee +6:3 readsOf -> @readsOf
-  local +7:14 read: Node (const)
-  local +8:9 at: Node (let)
-  local +9:9 parent: Node | null (let)
-  callee +9:18 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +12:64 isArithmetic -> @isArithmetic
-  callee +15:16 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +20:65 isString -> @isString
-  local +23:11 call: Node | null (const)
-  callee +23:56 ParentTable.parentOf -> @ParentTable.parentOf
-  local +25:13 callee: Node (const)
-  callee +25:22 unwrapParens -> @unwrapParens
-  callee +26:39 isString -> @isString
+  local +0:7 e: Node (let)
+  callee +0:11 unwrapParens -> @unwrapParens
+  callee +2:9 isNumberLiteral -> @isNumberLiteral
+  callee +3:11 unwrapParens -> @unwrapParens
+  callee +4:34 isNumberLiteral -> @isNumberLiteral
+  callee +5:11 unwrapParens -> @unwrapParens
+  local +10:9 local: Local | null (const)
+  callee +10:52 sourceLocal -> @sourceLocal
+  local +14:9 reads: Node[] (const)
+  callee +15:3 readsOf -> @readsOf
+  local +16:14 read: Node (const)
+  local +17:9 at: Node (let)
+  local +18:9 parent: Node | null (let)
+  callee +18:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +21:64 isArithmetic -> @isArithmetic
+  callee +24:16 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +29:65 isString -> @isString
+  local +32:11 call: Node | null (const)
+  callee +32:56 ParentTable.parentOf -> @ParentTable.parentOf
+  local +34:13 callee: Node (const)
+  callee +34:22 unwrapParens -> @unwrapParens
+  callee +35:39 isString -> @isString
 function storeInto(trail: Trail, target: Node, value: Node, holder: Local | null): void -> @storeInto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Trail.report

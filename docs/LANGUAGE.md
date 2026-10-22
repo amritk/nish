@@ -9601,13 +9601,16 @@ by the caller.
     operand does not itself hold an offset, as in `width - s.length`, the
     room left in a column that was not counted in bytes;
   - it **indexes an array** (`a[s.indexOf(t)]` picks another element) or
-    **counts the elements** `parallelFrom(n, f)` makes;
+    **counts the elements** `parallelFrom(n, f)` makes — an offset or a code
+    unit alike (`table[s.charCodeAt(i) % n]` reads another slot where the
+    byte and the unit differ);
   - it **bounds a loop**: either operand of a comparison in a `while`, `do`
     or `for` condition, unless the other operand also holds an offset or is
     the loop's *cursor* into a string — a local the loop uses as a string's
     index or hands to a string's method, alone or in arithmetic — which
     counts in the string's own unit (`for (let i = 0; i < s.length; i++)`
-    over `s.charCodeAt(i)` is quiet);
+    over `s.charCodeAt(i)` is quiet, and so is a bound that moves the cursor
+    by a constant to look ahead, `i + 1 < s.length`);
   - it is **a data-parallel body's answer**: stored in the array
     `parallelMap`, `parallelMapInto` or `parallelFrom` fills, or folded by
     `parallelReduce` (with its identity) into the value the call answers,
@@ -9624,6 +9627,13 @@ by the caller.
   skipped. A name an arrow captures is provably ASCII when the function that
   hosts the arrow writes only ASCII to it.
 
+  The walk is a lint, not a proof, and it is silent where it stops: past the
+  fourth call (a recursive call ends there), into a generic function, a
+  method of a generic class or a function of another module, at a parameter
+  the callee never reads, or one it reads only inside an arrow it passes on,
+  and at the answer of a `spawn` body, whose task is not followed into the
+  value its scope hands back (`tests/link/port_utf8_offset_walk_limits`).
+
   One `+ k` on the offset an `indexOf` (with or without a start) or
   `lastIndexOf` of a provably ASCII needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
   fact from outside: `line.substring(line.indexOf(":") + 1)` is quiet, and
@@ -9636,7 +9646,8 @@ by the caller.
   `port_str_needle_step_printed`, `port_utf8_offset_index`,
   `port_utf8_offset_argument`, `port_utf8_offset_loop_bound`,
   `port_utf8_offset_helper_return`; `tests/link/port_utf8_offset_parallel_body`,
-  `port_utf8_offset_parallel_from`, `port_utf8_offset_parallel_reduce`; quiet:
+  `port_utf8_offset_parallel_from`, `port_utf8_offset_parallel_reduce`,
+  `port_utf8_offset_walk_limits`; quiet:
   `port_str_ascii_literal_quiet`, `port_str_offset_roundtrip_quiet`,
   `tests/link/port_utf8_offset_quiet`; the form with a start:
   `str_index_of_from_port`).

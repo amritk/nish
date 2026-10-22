@@ -5,6 +5,15 @@ function firstL(s: string): i32 -> @firstL
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
+function same(n: i32): i32 -> @same
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  stackSites=0 stackLocals=0
+function kept(n: i32): i32 -> @kept
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
+  stackSites=0 stackLocals=0
+  local +0:9 m: i32 (const)
 function width(s: string): i32 -> @width
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
@@ -12,12 +21,16 @@ function width(s: string): i32 -> @width
   stackSites=0 stackLocals=0
   callee +0:35 firstL -> @firstL
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: firstL nish_arena_mark nish_arena_release nish_print nish_str_from_i32 width
+  calls: firstL kept nish_arena_mark nish_arena_release nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from same width
   stackSites=0 stackLocals=0
   local +0:9 word: string (const)
   callee +1:15 firstL -> @firstL
   local +2:9 w: i32 (const)
   callee +2:13 width -> @width
   callee +4:15 firstL -> @firstL
+  callee +5:15 same -> @same
+  local +6:9 back: i32 (const)
+  callee +6:16 kept -> @kept
+  callee +8:7 same -> @same

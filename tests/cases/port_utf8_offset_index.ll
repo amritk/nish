@@ -11,6 +11,7 @@ declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare void @nish_panic_div(i1 noundef zeroext) #3
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -117,6 +118,57 @@ if.then:
   br label %if.end
 
 if.end:
+  %54 = load %struct.nish_array*, %struct.nish_array** %scores.addr, align 8
+  %55 = load i8*, i8** %word.addr, align 8
+  %56 = bitcast i8* %55 to i64*
+  %57 = load i64, i64* %56, align 8
+  %58 = icmp ult i64 0, %57
+  br i1 %58, label %bounds.ok.3, label %bounds.fail.3
+
+bounds.fail.3:
+  call void @nish_panic_index(i64 0, i64 %57)
+  unreachable
+
+bounds.ok.3:
+  %59 = getelementptr inbounds i8, i8* %55, i64 8
+  %60 = getelementptr inbounds i8, i8* %59, i64 0
+  %61 = load i8, i8* %60, align 1
+  %62 = zext i8 %61 to i32
+  %63 = load %struct.nish_array*, %struct.nish_array** %scores.addr, align 8
+  %64 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %63, i64 0, i32 0
+  %65 = load i64, i64* %64, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %66 = trunc i64 %65 to i32
+  %67 = icmp eq i32 %66, 0
+  %68 = icmp eq i32 %62, -2147483648
+  %69 = icmp eq i32 %66, -1
+  %70 = and i1 %68, %69
+  %71 = or i1 %67, %70
+  br i1 %71, label %div.fail, label %div.ok
+
+div.fail:
+  call void @nish_panic_div(i1 zeroext %67)
+  unreachable
+
+div.ok:
+  %72 = srem i32 %62, %66
+  %73 = sext i32 %72 to i64
+  %74 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %54, i64 0, i32 0
+  %75 = load i64, i64* %74, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %76 = icmp ult i64 %73, %75
+  br i1 %76, label %bounds.ok.4, label %bounds.fail.4
+
+bounds.fail.4:
+  call void @nish_panic_index(i64 %73, i64 %75)
+  unreachable
+
+bounds.ok.4:
+  %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %54, i64 0, i32 2
+  %78 = load i8*, i8** %77, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %79 = bitcast i8* %78 to i32*
+  %80 = getelementptr inbounds i32, i32* %79, i64 %73
+  %81 = load i32, i32* %80, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  %82 = call i8* @nish_str_from_i32(i32 %81)
+  call void @nish_print(i8* %82)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

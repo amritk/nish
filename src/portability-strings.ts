@@ -125,12 +125,14 @@ const CODE_UNIT: i32 = 2
  *   was not counted in bytes (it pads or aligns output — the language has no
  *   `padStart` or `repeat` to be the site instead);
  * - as the index of an element access on anything but a string (`a[n]`: it
- *   picks a different element), or the count `parallelFrom(n, f)` makes;
+ *   picks a different element), or the count `parallelFrom(n, f)` makes — an
+ *   offset or a code unit alike (`table[s.charCodeAt(i) % n]` reads another
+ *   slot where the byte and the unit differ);
  * - as a bound of a loop: either operand of a comparison in a `while`, `do`
  *   or `for` condition whose other operand does not hold an offset and is not
  *   the loop's cursor into a string — a local the loop uses as a string's
  *   index or hands to a string's method (`isCursor`), which counts in the
- *   string's own unit;
+ *   string's own unit, alone or moved by a constant (`i + 1 < s.length`);
  * - as the answer of a data-parallel body (`parallelMap`, `parallelMapInto`,
  *   `parallelFrom`: stored in the array it fills; `parallelReduce`: folded
  *   into the value the call answers, which is followed on from the call).
@@ -144,6 +146,11 @@ const CODE_UNIT: i32 = 2
  * the module, and from the parallel call that runs an arrow as its body; a
  * call whose matching argument is provably ASCII is skipped. A name an arrow
  * captures is ASCII when the function hosting it writes only ASCII to it.
+ *
+ * The walk is a lint, not a proof, and it is silent where it stops: past
+ * `MAX_DEPTH` (a recursive call ends there), into a generic function or a
+ * function of another module, at a parameter the callee never reads or reads
+ * only inside an arrow it passes on, and at the answer of a `spawn` body.
  *
  * Everything else is quiet: an offset handed to a string method, compared
  * with another offset or with a cursor, or kept inside a function the walk
@@ -714,6 +721,10 @@ const followOutOfFunction = (trail: Trail, value: Node, holder: Local | null): v
  * answer in its array; a `parallelReduce` that runs it folds them into its
  * own answer. An arrow handed to the form is reported where it answers, a
  * named function where it is passed.
+ *
+ * Each hop scans the module's call sites afresh — no map of callers is kept —
+ * so the cost is the module's size times the offsets that reach a `return`,
+ * bounded by `MAX_DEPTH`; it runs only under `--warn-portability`.
  */
 const followIntoCallers = (trail: Trail, value: Node, holder: Local | null): void => {
   const walk = trail.walk
@@ -900,9 +911,20 @@ const loopOf = (walk: PortabilityWalk, comparison: Node): Node | null => {
  * arithmetic. A cursor bounded by a length counts in the string's own unit,
  * so the loop visits every byte here and every unit there and the work it
  * does per position agrees; a loop over anything else counts bytes as steps.
+ * The bound may move the cursor by a constant, `i + 1 < s.length`, which
+ * looks ahead in the same unit.
  */
 const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node): boolean => {
-  const e = unwrapParens(expr)
+  let e = unwrapParens(expr)
+  while (e.kind === N_BINARY && (e.text === "+" || e.text === "-")) {
+    if (isNumberLiteral(walk, e.children[1])) {
+      e = unwrapParens(e.children[0])
+    } else if (e.text === "+" && isNumberLiteral(walk, e.children[0])) {
+      e = unwrapParens(e.children[1])
+    } else {
+      break
+    }
+  }
   const local: Local | null = e.kind === N_IDENT ? sourceLocal(walk.program.nodeLocals[e.id]) : null
   if (local === null) {
     return false
