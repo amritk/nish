@@ -57,8 +57,9 @@
 //         libm names (`erf`, `tgamma`, `ilogb`, `remquo`, `fdim`, `hypot`,
 //         `fmaximum_num`, ...) that LLVM 18's lacks, and a private `tgamma`
 //         built with that LLVM would be folded as the C one. The `_FloatN`
-//         variants of Annex X (`sinf128`) are not listed; the
-//         `llvm-tli-checker` check names any an LLVM it runs recognises;
+//         variants of Annex X (`sinf128`) are not listed: the
+//         `llvm-tli-checker` check below reports any of them that the LLVM
+//         it runs recognises;
 //       - every name a wasi-libc member defines or references when
 //         `--profile wasi` links wasi-libc statically, reserved on every target
 //         like the rest: one member's reference to another binds to a program
@@ -85,9 +86,10 @@
 // To refresh the list, run the suite's "c-symbols" section with the toolchain
 // to track (`node tests/run.js c-symbols`, which finds `llvm-tli-checker` and
 // `llvm-nm` on `PATH` before their `-18` names, and wasi-libc under
-// `WASI_SYSROOT`) and add each name it reports; the libm set is a C standard's,
-// refreshed when a new one adds a `<math.h>` or `<complex.h>` function. The
-// names are kept in byte order, one per line.
+// `WASI_SYSROOT`) and add each name it reports. Nothing checks the libm set
+// against the C standard: when a new standard comes out, re-read the function
+// list of its `<math.h>` and `<complex.h>` by hand and add each new name in
+// its three precisions. The names are kept in byte order, one per line.
 //
 // The names are reserved on every target, not only where each one binds: a
 // name only wasi-libc defines (`strdup`, `unlink`) is refused in a native build
