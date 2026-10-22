@@ -15,7 +15,8 @@ differs from this note:
 - The supervisor runs `/proc/self/exe` on Linux, `argv[0]` elsewhere (§2.3).
 - It answers `PREFORK_SPAWN_FAILED` (-2) when a worker cannot be started,
   after stopping the ones already running, rather than panicking with
-  workers left behind. A bad `PreforkConfig` panics before any spawn.
+  workers left behind, and when it cannot set up its signal handling, before
+  any spawn. A bad `PreforkConfig` panics before any spawn.
 - A second `SIGTERM` or `SIGINT` during the grace period sends `SIGKILL` at
   once.
 - A `NISH_WORKERS` of anything but ASCII digits is ignored; it has no cap.

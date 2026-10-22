@@ -13,7 +13,12 @@
 //      after which the port refuses a connection;
 //   6. a worker that dies young waits before its restart, twice as long each
 //      time up to the cap: each crash worker sends its start time on the
-//      system-wide monotonic clock, so the gaps have exact lower bounds.
+//      system-wide monotonic clock, so the gaps have exact lower bounds;
+//   7. (Linux) with workers that ignore SIGTERM, so the SIGKILL phase runs,
+//      and a child that is not a worker exiting during the shutdown, the
+//      supervisor reaps that child and every worker before `preforkWith`
+//      returns: the supervisor then lingers a second, and a pid it had not
+//      reaped would still answer `kill(pid, 0)` as a zombie.
 //
 // Every wait is bounded. The driver passes its pid to each supervisor, which
 // adds its own; a worker that finds the driver gone (the harness killed it, or
@@ -37,7 +42,7 @@ import {
   udpRecvFrom,
   udpSendTo,
 } from "nish:net";
-import { getenv, kill, monotonicNanos, platform, spawn, waitPid } from "nish:process";
+import { getenv, kill, monotonicNanos, platform, signalFd, spawn, waitPid } from "nish:process";
 import { PreforkConfig, preforkArgs, preforkIndex, preforkWith, preforkWorkerCount } from "nish/net/prefork";
 
 const WOULD_BLOCK: i32 = -11;
@@ -45,6 +50,7 @@ const REFUSED: i32 = -111;
 const BACKOFF_MS: i32 = 40;
 const CAP_MS: i32 = 160;
 const STARTS: i32 = 6;
+const STUBBORN_GRACE_MS: i32 = 1000;
 
 /** Three workers where the kernel spreads a shared port, one elsewhere. */
 const workers = (): i32 => (platform === "linux" ? 3 : 1);
@@ -108,18 +114,50 @@ const serveWorker = (index: i32, port: i32, args: string[]): number => {
   return 0;
 };
 
+/** Send `text` to the driver's UDP `port`. */
+const tell = (port: i32, text: string): void => {
+  const fd = udpBind("127.0.0.1", 0, 0);
+  const to: u8[] = new Array<u8>(18);
+  netAddress(to, "127.0.0.1", port);
+  const out: u8[] = new Array<u8>(32);
+  const n = ascii(text, out);
+  udpSendTo(fd, out, 0, n, to, 0, 0);
+  netClose(fd);
+};
+
 /** A worker of `crash`: send its start time to the driver's UDP port, then fail. */
 const crashWorker = (port: i32, args: string[]): number => {
   if (orphaned(args)) {
     return 0;
   }
-  const fd = udpBind("127.0.0.1", 0, 0);
-  const to: u8[] = new Array<u8>(18);
-  netAddress(to, "127.0.0.1", port);
-  const out: u8[] = new Array<u8>(32);
-  const n = ascii(`${monotonicNanos()}`, out);
-  udpSendTo(fd, out, 0, n, to, 0, 0);
+  tell(port, `${monotonicNanos()}`);
   return 7;
+};
+
+/**
+ * A worker of `stubborn`: catch SIGTERM through `signalFd()` and never read
+ * it, so only SIGKILL ends it; send its pid first. Twenty seconds at most.
+ */
+const stubbornWorker = (port: i32, args: string[]): number => {
+  signalFd();
+  tell(port, `w ${selfPid()}`);
+  for (let k: i32 = 0; k < 400 && !orphaned(args); k++) {
+    pause(50);
+  }
+  return 0;
+};
+
+/**
+ * The child a `stubborn` supervisor starts itself before `preforkWith`: it
+ * waits for the driver's SIGTERM, ten seconds at most, or until the driver
+ * (`args[3]`) is gone.
+ */
+const linger = (args: string[]): number => {
+  const driver: i32 = parseInt(args[3]);
+  for (let k: i32 = 0; k < 200 && kill(driver, 0) === 0; k++) {
+    pause(50);
+  }
+  return 0;
 };
 
 /**
@@ -134,20 +172,37 @@ const supervise = (mode: string, port: i32): number => {
     config.workers = 1;
     config.backoffMs = BACKOFF_MS;
     config.backoffCapMs = CAP_MS;
+    // Every start counts as young however slow the runner, so each gap is a
+    // backoff and none is reset by a start that took over a second to reap.
+    config.quickExitMs = 10000;
+  } else if (mode === "stubborn") {
+    config.workers = 2;
+    config.graceMs = STUBBORN_GRACE_MS;
   } else {
     config.workers = workers();
   }
   const argv: string[] = preforkArgs(process.argv);
-  if (preforkIndex(process.argv) < 0) {
+  const supervisor = preforkIndex(process.argv) < 0;
+  if (supervisor) {
     argv.push(`${selfPid()}`);
   } else {
     argv.push(process.argv[process.argv.length - 1]);
   }
+  if (supervisor && mode === "stubborn") {
+    tell(port, `f ${spawn([selfPath(), "linger", `${port}`, argv[3]])}`);
+  }
   const worker = preforkWith(argv, config);
   if (worker < 0) {
+    if (mode === "stubborn") {
+      tell(port, "d");
+      pause(1000);
+    }
     return worker === -1 ? 0 : 1;
   }
   const args = preforkArgs(argv);
+  if (mode === "stubborn") {
+    return stubbornWorker(port, args);
+  }
   return mode === "crash" ? crashWorker(port, args) : serveWorker(worker, port, args);
 };
 
@@ -336,8 +391,85 @@ const crashes = (): void => {
   netClose(fd);
 };
 
+/**
+ * Step 7: the next UDP message on `fd` within `ms`, "" when none comes.
+ */
+const message = (fd: i32, loop: i32, ms: i32): string => {
+  const buf: u8[] = new Array<u8>(32);
+  const from: u8[] = new Array<u8>(18);
+  const meta: i32[] = new Array<i32>(2);
+  const ready: i32[] = new Array<i32>(2);
+  let n = udpRecvFrom(fd, buf, 0, 32, from, meta);
+  if (n <= 0 && pollWait(loop, ready, ms) > 0) {
+    n = udpRecvFrom(fd, buf, 0, 32, from, meta);
+  }
+  return n > 0 ? String.fromBytes(buf, 0, n) : "";
+};
+
+/** Step 7: a non-worker child reaped during a shutdown that needs SIGKILL. */
+const stubborn = (): void => {
+  if (platform !== "linux") {
+    for (let i: i32 = 0; i < 6; i++) {
+      console.log(true);
+    }
+    return;
+  }
+  const fd = udpBind("127.0.0.1", 0, 0);
+  const port = netLocalPort(fd);
+  const loop = pollCreate();
+  pollAdd(loop, fd, 1, 0);
+  const sup = spawn([selfPath(), "stubborn", `${port}`, `${selfPid()}`]);
+  let foreign: i32 = 0;
+  const pids: i32[] = [];
+  let quiet = false;
+  while ((foreign === 0 || pids.length < 2) && !quiet) {
+    const got = message(fd, loop, 5000);
+    quiet = got === "";
+    if (got.startsWith("f ")) {
+      foreign = parseInt(got.substring(2));
+    } else if (got.startsWith("w ")) {
+      pids.push(parseInt(got.substring(2)));
+    }
+  }
+  console.log(sup > 0 && foreign > 0 && pids.length === 2 && pids[0] > 0 && pids[1] > 0);
+
+  // The workers ignore this, and the non-worker child exits well inside the
+  // grace period, while the supervisor is in `stop`.
+  const from: i64 = monotonicNanos();
+  console.log(kill(sup, 15) === 0);
+  pause(200);
+  console.log(kill(foreign, 15) === 0);
+
+  let done = false;
+  while (!done && !quiet) {
+    const got = message(fd, loop, 5000);
+    quiet = got === "";
+    done = got === "d";
+  }
+  // `preforkWith` returned only after the grace period: SIGKILL ended them.
+  const tookMs: i64 = (monotonicNanos() - from) / 1000000;
+  console.log(done && tookMs >= toI64(STUBBORN_GRACE_MS));
+  // The supervisor is still alive, so a child it left unreaped is a zombie
+  // and answers `kill(pid, 0)`; each one has been reaped.
+  let reaped = kill(foreign, 0) !== 0;
+  for (const pid of pids) {
+    if (kill(pid, 0) === 0) {
+      console.log(`worker ${pid} left behind`);
+      reaped = false;
+    }
+  }
+  console.log(reaped);
+  const status = waitPid(sup, 0);
+  console.log(status[0] === sup && status[1] === 0);
+  netClose(loop);
+  netClose(fd);
+};
+
 export const main = (): number => {
   const args = preforkArgs(process.argv);
+  if (args.length > 2 && args[1] === "linger") {
+    return linger(args);
+  }
   if (args.length > 2) {
     return supervise(args[1], parseInt(args[2]));
   }
@@ -345,5 +477,6 @@ export const main = (): number => {
   helpers();
   served();
   crashes();
+  stubborn();
   return 0;
 };

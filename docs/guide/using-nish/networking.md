@@ -161,7 +161,9 @@ export const main = (): i32 => {
 The program runs in two roles. The process you start becomes the supervisor:
 it starts the program again once per worker, and `preforkWorkers` answers it
 only when they have all exited, with `-1` (`PREFORK_STOPPED`) after a shutdown
-or `-2` (`PREFORK_SPAWN_FAILED`) when a worker's first start failed. In each
+or `-2` (`PREFORK_SPAWN_FAILED`) when a worker's first start failed or the
+supervisor could not set up its signal handling, in which case no worker
+starts. In each
 worker it answers that worker's index, `0` up to one less than the count, at
 once. A worker is told its index by one extra argument at the end of its
 arguments; `preforkArgs(process.argv)` gives you the arguments without it, the

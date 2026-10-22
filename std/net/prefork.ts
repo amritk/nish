@@ -16,9 +16,10 @@
  * process. In a worker it answers the worker's index, `0` to `N - 1`, at once,
  * and the program goes on to bind its listener and serve. In the process the
  * user started it supervises, and answers only once every worker has exited:
- * `-1` after a shutdown, `-2` when the workers could not be started. Each worker
- * binds its own listener with `tcpListenFlags`' flag 1 (`SO_REUSEPORT`), so on
- * Linux the kernel spreads new connections across them and no state is shared:
+ * `-1` after a shutdown, `-2` when the workers could not be started or the
+ * supervisor could not listen for signals. Each worker binds its own listener
+ * with `tcpListenFlags`' flag 1 (`SO_REUSEPORT`), so on Linux the kernel
+ * spreads new connections across them and no state is shared:
  * a worker is the single-threaded server it was before, `Arena.used()` flat
  * per worker.
  *
@@ -78,7 +79,10 @@ export const PREFORK_WORKER_FLAG: string = "--nish-prefork-worker="
 
 /** What `preforkWith` answers in the supervisor once its workers are gone. */
 export const PREFORK_STOPPED: i32 = -1
-/** What `preforkWith` answers when a worker could not be started. */
+/**
+ * What `preforkWith` answers when a worker could not be started, or when the
+ * supervisor could not listen for SIGTERM and so starts none.
+ */
 export const PREFORK_SPAWN_FAILED: i32 = -2
 
 /** The supervisor's numbers; every one is checked by `preforkWith`. */
@@ -246,16 +250,17 @@ class PreforkSupervisor {
    * Reap every worker that has exited. Unless `stopping`, each one's slot is
    * given the time it may start again. A child that is not a worker (one the
    * program spawned itself before calling `preforkWith`) is reaped too, and
-   * its status is discarded.
+   * its status is discarded. Answers false when `waitPid` fails, which means
+   * no child is left to wait for.
    */
-  reap(stopping: boolean): void {
+  reap(stopping: boolean): boolean {
     while (this.running > 0) {
       const done: i32[] = waitPid(-1, 1)
       if (done[0] === -4) {
         continue
       }
       if (done[0] <= 0) {
-        return
+        return done[0] === 0
       }
       const index: i32 = this.find(done[0])
       if (index < 0) {
@@ -268,6 +273,7 @@ class PreforkSupervisor {
         this.backoff(slot, preforkNowMs(), false)
       }
     }
+    return true
   }
 
   /**
@@ -302,7 +308,9 @@ class PreforkSupervisor {
   /**
    * SIGTERM, reap until `graceMs` or a second signal, SIGKILL, reap until no
    * worker is left. Two signals that arrive before the supervisor reads the
-   * first count as the second here too.
+   * first count as the second here too. Every reap goes through `reap`, so a
+   * child that is not a worker is skipped in both phases, and the SIGKILL
+   * phase ends only when the last worker is reaped or no child is left.
    */
   stop(loop: i32, signals: i32, ready: i32[]): void {
     this.signal(PREFORK_SIGTERM)
@@ -319,15 +327,9 @@ class PreforkSupervisor {
     }
     if (this.running > 0) {
       this.signal(PREFORK_SIGKILL)
-      while (this.running > 0) {
-        const done: i32[] = waitPid(-1, 0)
-        const index: i32 = done[0] > 0 ? this.find(done[0]) : -1
-        if (index >= 0) {
-          this.slots[index].pid = 0
-          this.running = this.running - 1
-        } else if (done[0] <= 0 && done[0] !== -4) {
-          // No child is left, so no worker is either.
-          return
+      while (this.reap(true) && this.running > 0) {
+        if (pollWait(loop, ready, this.config.tickMs) > 0) {
+          readSignal(signals)
         }
       }
     }
@@ -354,7 +356,8 @@ const preforkInvalid = (config: PreforkConfig): string => {
 /**
  * In a worker, its index. In the supervisor, run the workers until SIGTERM or
  * SIGINT and answer `PREFORK_STOPPED`, or `PREFORK_SPAWN_FAILED` when a worker's
- * first start failed (those already started are stopped first). Panics on a config
+ * first start failed (those already started are stopped first) or no signal
+ * listener could be made (no worker is started). Panics on a config
  * `preforkInvalid` names a field of.
  */
 export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
@@ -369,7 +372,12 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
   const signals: i32 = signalFd()
   const loop: i32 = pollCreate()
   if (signals < 0 || loop < 0 || pollAdd(loop, signals, 1, 0) < 0) {
+    // `signals` is the process's one signal pipe, which every later
+    // `signalFd()` answers, so only the loop is closed.
     console.error("nish/net/prefork: cannot listen for SIGTERM")
+    if (loop >= 0) {
+      netClose(loop)
+    }
     return PREFORK_SPAWN_FAILED
   }
   const supervisor = new PreforkSupervisor(
