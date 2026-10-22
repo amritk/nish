@@ -697,8 +697,12 @@ const lazyKept = (t: Suite): void => {
   const secondDone: boolean = leanHandshake(second, limits, again);
   t.ok("a second client takes that slot", secondDone && server.holds(n32(0)) && server.busy() === n32(1) && toI32(server.quics.length) === n32(1));
   t.eqI64("a client taking the slot released keeps 0 bytes in the arena: the re-accept builds nothing", secondDone ? again.kept : n64(-1), n64(0));
+  // A second on, inside the second client's 30-second idle timeout: past it,
+  // the first tick would free slot 0, and whether the third took it or
+  // built slot 1 would hang on whether its Initial reached the socket before
+  // that tick, which on macOS it may not.
   const third = new Lean(loop);
-  third.c.now = n64(200000);
+  third.c.now = n64(101000);
   const next = new QmMeter();
   const thirdDone: boolean = leanHandshake(third, limits, next);
   t.ok("while one past the high-water mark builds the next slot and keeps it", thirdDone && next.kept > n64(0) && server.holds(n32(1)) && toI32(server.quics.length) === n32(2));
