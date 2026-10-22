@@ -1,0 +1,10 @@
+PASS  60 fields added to a table of 300 bytes, 224 entries read back by index after each, match the model
+PASS  the evicted entries were shifted out while entries survived (14 times)
+PASS  and the evicted octets shifted out of the store while entries survived (16 times)
+PASS  which never held more than three times the table's size (243 octets)
+PASS  an entry of 85 bytes in a table of 100
+PASS  a literal naming it, whose 55 bytes evict it, decodes with its name
+PASS  and the table holds the new entry alone
+PASS  a literal naming it whose 115 bytes pass the table's 100 decodes with its name
+PASS  and empties the table
+http2 hpack table: 9 passed, 0 failed, 0 skipped
