@@ -25,12 +25,13 @@
  *
  * **Events.** `next()` reads the frames `feed` handed it and answers the
  * first that means something to the program: `H2_REQUEST` (a stream opened
- * with a request's header section; `fields` holds it), `H2_DATA` (some of a
- * request body, a window onto the input buffer that stays valid until the
- * next `feed`), `H2_TRAILERS`, `H2_RESET` (the stream is gone: the peer reset
- * it, or broke a rule that resets it — `errorCode` says which), `H2_WINDOW`
- * (a send window that held `writeData` back has opened: `stream`, or 0 for the
- * connection's), `H2_GOAWAY` (the peer is going away; `lastStreamId`), and
+ * with a request's header section; `fields` holds it until the next header
+ * block is read), `H2_DATA` (some of a request body, a window onto the input
+ * buffer that stays valid until the next `feed`), `H2_TRAILERS`, `H2_RESET`
+ * (the stream is gone: the peer reset it, or broke a rule that resets it —
+ * `errorCode` says which), `H2_WINDOW` (a send window that held `writeData`
+ * back has opened: `stream`, or 0 for the connection's), `H2_GOAWAY` (the
+ * peer is going away; `lastStreamId`), and
  * `H2_ERROR`, final: the connection broke a rule, a GOAWAY with `errorCode`
  * is queued, and every later call answers it again. `H2_NEED_MORE` asks for
  * more input, or for the output to drain: a frame is read only while the
@@ -72,7 +73,10 @@
  * an idle connection holds none. A server shares one `Http2Pools` among its
  * slots; a connection on its own makes a private one that holds one buffer of
  * each. Once the pools are warm, reading DATA, writing DATA and every control
- * frame allocate nothing. A header block does allocate, through `HpackDecoder`
+ * frame allocate nothing, and neither does a header block once the
+ * decoder's arrays have grown to the largest block and header list seen: it
+ * decodes into storage the connection owns, bounded by `maxHeaderBlock` and
+ * `maxHeaderListSize` whether the stream is opened, refused or reset
  * (`docs/security/http2.md`, H2-1).
  *
  * The server sends no PUSH_PROMISE and no PRIORITY, and reads PRIORITY only to
