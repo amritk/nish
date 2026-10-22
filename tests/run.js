@@ -16166,6 +16166,8 @@ if (!only || "crypto-bench".includes(only)) {
     // compiler it was given reaches the child, and the child's status comes
     // back. A wrapper answers --version from the compiler under test and fails
     // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    // That build is whichever family sorts first, so the log may name any
+    // family's main.ts.
     const wrapDir = path.join(buildDir, "crypto-bench")
     const wrapper = path.join(wrapDir, "nish-wrapper")
     const wrapLog = path.join(wrapDir, "wrapper.log")
@@ -16184,7 +16186,7 @@ if (!only || "crypto-bench".includes(only)) {
     const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
     check(
       "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
-      deleg.status === 1 && forwarded.includes(path.join("bench", "crypto", "hash", "main.ts")),
+      deleg.status === 1 && /bench[\\/]crypto[\\/][a-z0-9-]+[\\/]main\.ts/.test(forwarded),
       `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
     )
     // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
