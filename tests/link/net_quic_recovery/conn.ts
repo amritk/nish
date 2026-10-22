@@ -22,7 +22,16 @@ import {
   quicPushStreamError,
   quicPushValue,
 } from "nish/net/quic-frame";
-import { QUIC_RECOVERY_APPLICATION_CAPACITY } from "nish/net/quic-recovery";
+import { quicVarintPush } from "nish/net/quic-packet";
+import {
+  QUIC_RECOVERY_APPLICATION,
+  QUIC_RECOVERY_APPLICATION_CAPACITY,
+  QUIC_RECOVERY_ECN_CAPABLE,
+  QUIC_RECOVERY_ECN_FAILED,
+  QUIC_RECOVERY_ECN_TESTING,
+  QUIC_RECOVERY_ECT0,
+  QUIC_RECOVERY_MINIMUM_WINDOW,
+} from "nish/net/quic-recovery";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_STATE_CONNECTED, QUIC_STATE_TIMED_OUT, QuicConnection } from "nish/net/quic";
 import { QUIC_LISTENER_FLIGHT_QUANTUM, QuicFlight, quicListenerFlightTime, quicListenerPaceTime, quicListenerTakeFlight, quicListenerTakePaced } from "nish/net/quic-listener";
@@ -49,12 +58,23 @@ import {
 } from "../net_quic_conn/client";
 import { QcFound, qcConnected, qcData, qcDefaultConfig, qcFind, qcServer } from "../net_quic_conn/common";
 import { qcStream } from "../net_quic_conn/data";
+import { fixedEntropy } from "../net_quic_conn_replay/server";
 
 /** An ACK frame from the client for `[low, high]`, with an ACK Delay field of `delay` (scaled by the default exponent, 3). */
 export const rcAck = (low: i64, high: i64, delay: i64): u8[] => {
   const out: u8[] = [];
   const ranges: i64[] = [low, high];
   quicPushAck(out, ranges, n32(1), delay);
+  return out;
+};
+
+/** An ACK_ECN frame from the client for `[low, high]`, with no delay, carrying the counts `ect0`, `ect1` and `ce`. */
+const rcClientAckEcn = (low: i64, high: i64, ect0: i64, ect1: i64, ce: i64): u8[] => {
+  const out: u8[] = rcAck(low, high, n64(0));
+  out[0] = toU8(0x03);
+  quicVarintPush(out, ect0);
+  quicVarintPush(out, ect1);
+  quicVarintPush(out, ce);
   return out;
 };
 
@@ -460,6 +480,38 @@ const rcFlightQuantum = (t: Suite): void => {
 };
 
 /** Every check of loss recovery inside the connection. */
+/** ECN inside the connection: marked only when the carrier says it marks, and an ACK_ECN's counts read (RFC 9002 §7.1). */
+const rcEcn = (t: Suite): void => {
+  const off: QuicConnection = qcServer(qcDefaultConfig());
+  const a: QcClient = rcOpened(off);
+  const sent: i64 = rcWrite(off, a, "plain");
+  t.ok("a connection whose carrier does not mark sends Not-ECT, and counts nothing marked", off.datagramEcn === n32(0) && off.recovery.spaces[QUIC_RECOVERY_APPLICATION].ectSent === n64(0));
+  qcExchange(off, a, qcShort(a, rcClientAckEcn(sent, sent, n64(0), n64(0), n64(1))));
+  t.ok("so a peer's CE count for it fails validation and shrinks nothing", off.recovery.ecnState === QUIC_RECOVERY_ECN_FAILED && off.recovery.congestionEvents === n32(0));
+
+  const on: QuicConnection = qcServer(qcDefaultConfig());
+  const c: QcClient = rcOpened(on);
+  on.ecnMarking = true;
+  const first: i64 = rcWrite(on, c, "marked");
+  const app = on.recovery.spaces[QUIC_RECOVERY_APPLICATION];
+  t.ok("once the carrier marks, the datagram is ECT(0) and its packet counted", on.datagramEcn === QUIC_RECOVERY_ECT0 && app.ectSent === n64(1));
+  qcExchange(on, c, qcShort(c, rcClientAckEcn(first, first, app.ectSent, n64(0), n64(0))));
+  t.eqI32("an ACK_ECN counting it ECT(0) validates the path", on.recovery.ecnState, QUIC_RECOVERY_ECN_CAPABLE);
+  const window: i64 = on.recovery.congestionWindow;
+  const next: i64 = rcWrite(on, c, "again");
+  qcExchange(on, c, qcShort(c, rcClientAckEcn(next, next, app.ectSent - n64(1), n64(0), n64(1))));
+  t.ok("an ACK_ECN whose CE count rose halves the window", on.recovery.ecnCongestionEvents === n32(1) && on.recovery.congestionWindow === (window / n64(2) > QUIC_RECOVERY_MINIMUM_WINDOW ? window / n64(2) : QUIC_RECOVERY_MINIMUM_WINDOW));
+
+  const bare: QuicConnection = qcServer(qcDefaultConfig());
+  const d: QcClient = rcOpened(bare);
+  bare.ecnMarking = true;
+  const pn: i64 = rcWrite(bare, d, "bare");
+  qcExchange(bare, d, qcShort(d, rcAck(pn, pn, n64(0))));
+  t.ok("a plain ACK of a marked packet fails validation, and the connection marks no more", bare.recovery.ecnState === QUIC_RECOVERY_ECN_FAILED && rcWrite(bare, d, "after") > pn && bare.datagramEcn === n32(0));
+  bare.reset(fixedEntropy());
+  t.ok("reset keeps the carrier's ecnMarking and puts ECN back to testing", bare.ecnMarking && bare.datagramEcn === n32(0) && bare.recovery.ecnState === QUIC_RECOVERY_ECN_TESTING);
+};
+
 export const recoveryConnChecks = (t: Suite): void => {
   rcLostFlight(t);
   rcPacketThreshold(t);
@@ -471,4 +523,5 @@ export const recoveryConnChecks = (t: Suite): void => {
   rcFullRecord(t);
   rcPacing(t);
   rcFlightQuantum(t);
+  rcEcn(t);
 };

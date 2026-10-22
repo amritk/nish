@@ -7,6 +7,11 @@ import { Suite } from "nish/testing";
 import { QUIC_MAX_VARINT } from "nish/net/quic-packet";
 import {
   QUIC_RECOVERY_APPLICATION,
+  QUIC_RECOVERY_ECN_CAPABLE,
+  QUIC_RECOVERY_ECN_FAILED,
+  QUIC_RECOVERY_ECN_TESTING,
+  QUIC_RECOVERY_ECN_UNKNOWN,
+  QUIC_RECOVERY_ECT0,
   QUIC_RECOVERY_HANDSHAKE,
   QUIC_RECOVERY_HANDSHAKE_CAPACITY,
   QUIC_RECOVERY_INITIAL,
@@ -365,7 +370,6 @@ const rcRefusalChecks = (t: Suite): void => {
   t.ok("out of flight, with no congestion event", initial.inFlight === n32(15) && ring.congestionEvents === events);
 };
 
-/** Every check of the module on its own. */
 /** `reset` puts a used recovery back as a new connection has it, for a reused slot (QUIC-3). */
 const rcResetChecks = (t: Suite): void => {
   const r = new QuicRecovery();
@@ -381,6 +385,104 @@ const rcResetChecks = (t: Suite): void => {
   t.eqI32("so the next connection records its packet 0 again, in slot 0", r.onPacketSent(n32(2), n64(0), n32(1200), n64(0)), n32(0));
 };
 
+/** Sends packets `from` to `to` as `rcSend` does, each marked ECT(0). */
+const rcSendMarked = (r: QuicRecovery, from: i64, to: i64, now: i64): void => {
+  for (let pn: i64 = from; pn <= to; pn++) {
+    r.onEctSent(APP, r.onPacketSent(APP, pn, FULL, now));
+  }
+};
+
+/** An ACK of `[low, high]` at `now`, with no delay, carrying ECN counts (-1 each for none). */
+const rcAckEcn = (r: QuicRecovery, low: i64, high: i64, now: i64, ect0: i64, ect1: i64, ce: i64): i32 =>
+  r.onAckEcn(APP, rcRange(low, high), n32(1), n64(0), now, ect0, ect1, ce);
+
+/** ECN validation (RFC 9000 §13.4.2.1, A.4) and a rise in ECN-CE as a congestion signal (RFC 9002 §7.1, B.7). */
+const rcEcnChecks = (t: Suite): void => {
+  const r = rcConfirmed();
+  t.ok("a new recovery is testing, and asks for ECT(0)", r.ecnState === QUIC_RECOVERY_ECN_TESTING && r.ecnCodepoint() === QUIC_RECOVERY_ECT0);
+  rcSendMarked(r, n64(0), n64(3), n64(0));
+  t.eqI32("four packets marked while testing", r.ecnTestSent, n32(4));
+  t.eqI32("an ACK_ECN counting all four ECT(0) acknowledges them", rcAckEcn(r, n64(0), n64(3), n64(100), n64(4), n64(0), n64(0)), n32(4));
+  t.ok("and validates: the path is capable, still marked ECT(0)", r.ecnState === QUIC_RECOVERY_ECN_CAPABLE && r.ecnCodepoint() === QUIC_RECOVERY_ECT0);
+  t.ok("counts with no CE are no congestion event, and 4800 bytes in flight did not grow the window (§7.8)", r.congestionEvents === n32(0) && r.congestionWindow === n64(12000));
+
+  rcSendMarked(r, n64(4), n64(9), n64(200));
+  rcAckEcn(r, n64(4), n64(5), n64(300), n64(5), n64(0), n64(1));
+  t.ok("a rise in ECN-CE is a congestion event: the window halves to 6000 (B.7)", r.ecnCongestionEvents === n32(1) && r.congestionEvents === n32(1) && r.congestionWindow === n64(6000));
+  t.eqI64("its recovery period starts now, at 300 ms", r.recoveryStart, n64(300));
+  rcAckEcn(r, n64(4), n64(7), n64(310), n64(6), n64(0), n64(2));
+  t.ok("a second rise, its largest packet sent at 200 ms before the period started, halves nothing: once per round trip", r.ecnCongestionEvents === n32(1) && r.congestionWindow === n64(6000) && rcApp(r).ce === n64(2));
+  rcSendMarked(r, n64(10), n64(10), n64(320));
+  rcAckEcn(r, n64(4), n64(10), n64(400), n64(8), n64(0), n64(3));
+  t.ok("a rise whose largest packet was sent after the period started is a new congestion event", r.ecnCongestionEvents === n32(2) && r.congestionWindow === n64(3000));
+  t.eqI32("an ACK that acknowledges nothing new does not reach ECN", r.onAck(APP, rcRange(n64(0), n64(10)), n32(1), n64(0), n64(420)), n32(0));
+  t.eqI32("so the path stays capable", r.ecnState, QUIC_RECOVERY_ECN_CAPABLE);
+
+  const old = rcConfirmed();
+  rcSendMarked(old, n64(0), n64(2), n64(0));
+  rcAckEcn(old, n64(2), n64(2), n64(100), n64(1), n64(0), n64(0));
+  t.eqI32("an ACK_ECN of 2 validates", old.ecnState, QUIC_RECOVERY_ECN_CAPABLE);
+  t.eqI32("a later one newly acknowledges 0 and 1 without raising the largest acknowledged", rcAckEcn(old, n64(0), n64(2), n64(105), n64(3), n64(0), n64(1)), n32(2));
+  t.ok("so its counts are neither validated nor used: no congestion event", old.congestionEvents === n32(0) && rcApp(old).ce === n64(0) && old.ecnState === QUIC_RECOVERY_ECN_CAPABLE);
+
+  const plain = rcConfirmed();
+  rcSend(plain, n64(0), n64(3), n64(0));
+  plain.onAck(APP, rcRange(n64(0), n64(3)), n32(1), n64(0), n64(100));
+  t.eqI32("an ACK without counts of unmarked packets leaves ECN testing", plain.ecnState, QUIC_RECOVERY_ECN_TESTING);
+  rcSend(plain, n64(4), n64(4), n64(100));
+  rcAckEcn(plain, n64(4), n64(4), n64(200), n64(0), n64(0), n64(1));
+  t.ok("counts past the packets marked, a CE of none sent, fail validation and are no congestion event", plain.ecnState === QUIC_RECOVERY_ECN_FAILED && plain.congestionEvents === n32(0));
+  t.eqI32("a failed path is marked no more", plain.ecnCodepoint(), n32(0));
+
+  const bare = rcConfirmed();
+  rcSendMarked(bare, n64(0), n64(1), n64(0));
+  bare.onAck(APP, rcRange(n64(0), n64(1)), n32(1), n64(0), n64(100));
+  t.eqI32("an ACK without counts that acknowledges a marked packet fails validation", bare.ecnState, QUIC_RECOVERY_ECN_FAILED);
+
+  const short = rcConfirmed();
+  rcSendMarked(short, n64(0), n64(3), n64(0));
+  rcAckEcn(short, n64(0), n64(3), n64(100), n64(2), n64(0), n64(1));
+  t.ok("ECT(0) and CE rising by 3 for 4 marked packets acknowledged fail validation, and the CE is not used", short.ecnState === QUIC_RECOVERY_ECN_FAILED && short.congestionEvents === n32(0));
+
+  const bleached = rcConfirmed();
+  rcSendMarked(bleached, n64(0), n64(3), n64(0));
+  rcAckEcn(bleached, n64(0), n64(3), n64(100), n64(0), n64(4), n64(0));
+  t.eqI32("ECT(1) counted for packets marked ECT(0) falls short too", bleached.ecnState, QUIC_RECOVERY_ECN_FAILED);
+
+  const falls = rcConfirmed();
+  rcSendMarked(falls, n64(0), n64(3), n64(0));
+  rcAckEcn(falls, n64(0), n64(1), n64(100), n64(1), n64(0), n64(1));
+  t.eqI32("ECT(0) 1 and CE 1 for two marked packets validate", falls.ecnState, QUIC_RECOVERY_ECN_CAPABLE);
+  rcAckEcn(falls, n64(0), n64(3), n64(110), n64(3), n64(0), n64(0));
+  t.ok("a CE count that falls fails validation", falls.ecnState === QUIC_RECOVERY_ECN_FAILED && falls.ecnCongestionEvents === n32(1));
+
+  const once = rcConfirmed();
+  rcSendMarked(once, n64(0), n64(9), n64(0));
+  t.ok("after ten packets marked while testing, ECN is unknown and marks no more", once.ecnState === QUIC_RECOVERY_ECN_UNKNOWN && once.ecnCodepoint() === n32(0));
+  rcSend(once, n64(10), n64(10), n64(0));
+  rcAckEcn(once, n64(10), n64(10), n64(100), n64(0), n64(0), n64(0));
+  t.eqI32("an ACK of an unmarked packet decides nothing", once.ecnState, QUIC_RECOVERY_ECN_UNKNOWN);
+  t.ok("and declares 0 to 7 lost by packet threshold, 8 and 9 still out", rcLost(rcApp(once)) === "0 1 2 3 4 5 6 7" && once.ecnState === QUIC_RECOVERY_ECN_UNKNOWN);
+  once.onTimeout(n64(1000), false);
+  t.ok("the timer loses 8 and 9: every packet of the testing period lost fails validation (A.4)", rcLost(rcApp(once)) === "8 9" && once.ecnState === QUIC_RECOVERY_ECN_FAILED);
+
+  const unknown = rcConfirmed();
+  rcSendMarked(unknown, n64(0), n64(9), n64(0));
+  rcAckEcn(unknown, n64(0), n64(9), n64(100), n64(10), n64(0), n64(0));
+  t.ok("ten acknowledged with ECT(0) 10 make the unknown path capable, marked again", unknown.ecnState === QUIC_RECOVERY_ECN_CAPABLE && unknown.ecnCodepoint() === QUIC_RECOVERY_ECT0);
+
+  const unrecorded = rcConfirmed();
+  unrecorded.onEctSent(APP, n32(-1));
+  rcSendMarked(unrecorded, n64(1), n64(1), n64(0));
+  rcAckEcn(unrecorded, n64(0), n64(1), n64(100), n64(2), n64(0), n64(0));
+  t.ok("a marked packet that elicits no ACK still counts toward the packets marked", unrecorded.ecnState === QUIC_RECOVERY_ECN_CAPABLE && rcApp(unrecorded).ectSent === n64(2));
+
+  unrecorded.reset();
+  t.ok("reset puts ECN back to testing, with no counts", unrecorded.ecnState === QUIC_RECOVERY_ECN_TESTING && unrecorded.ecnTestSent === n32(0) && rcApp(unrecorded).ectSent === n64(0) && rcApp(unrecorded).ect0 === n64(0));
+};
+
+/** Every check of the module on its own. */
+
 export const recoveryUnitChecks = (t: Suite): void => {
   rcRttChecks(t);
   rcLossChecks(t);
@@ -390,4 +492,5 @@ export const recoveryUnitChecks = (t: Suite): void => {
   rcFinePacerChecks(t);
   rcRefusalChecks(t);
   rcResetChecks(t);
+  rcEcnChecks(t);
 };

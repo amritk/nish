@@ -44,10 +44,26 @@
  *
  * **What the server leaves out.** It is written for the server side of a
  * connection: there is no client anti-deadlock probe (§6.2.2.1), since a
- * server never has to send to unblock its peer, and nothing reads ECN
- * (§7.1, B.7). A congestion window that the sender does not use is not
- * grown (§7.8): an acknowledgement grows it only if, when it arrived, the
- * bytes in flight were at least half the window.
+ * server never has to send to unblock its peer. A congestion window that
+ * the sender does not use is not grown (§7.8): an acknowledgement grows it
+ * only if, when it arrived, the bytes in flight were at least half the
+ * window.
+ *
+ * **ECN** (§7.1, B.7; RFC 9000 §13.4.2 and its Appendix A.4). A caller that
+ * marks its packets ECT(0) asks `ecnCodepoint()` what to mark with, says so
+ * with `onEctSent` for every packet it marked, and hands an ACK_ECN frame's
+ * counts to `onAckEcn`. The counts are validated against the packets marked
+ * before they are used: an ACK that newly acknowledges a marked packet
+ * without counts, a count that falls, counts past the packets marked, or an
+ * increase in ECT(0) and ECN-CE short of the marked packets newly
+ * acknowledged fails validation, as does every packet of the testing period
+ * being lost, and a failed path is marked no more (`QUIC_RECOVERY_ECN_FAILED`).
+ * Only the first `QUIC_RECOVERY_ECN_TESTING_PACKETS` are marked until one
+ * validates. A rise in the ECN-CE count is a congestion event, from the
+ * largest packet newly acknowledged, so it halves the window once per
+ * recovery period as a loss does. Counts that arrive with an ACK that does
+ * not raise the largest acknowledged are neither validated nor used: they
+ * may be older than those already read.
  *
  * **What a peer cannot do.** Every input is checked: the ranges of an
  * acknowledgement are read only up to the count given and the array's
@@ -122,6 +138,16 @@ const QUIC_RECOVERY_ACKED: i32 = 2
 const QUIC_RECOVERY_LOST: i32 = 3
 const QUIC_RECOVERY_LOST_NOW: i32 = 4
 
+/** The ECT(0) codepoint (RFC 3168), the only one this module asks a caller to mark with. */
+export const QUIC_RECOVERY_ECT0: i32 = 2
+/** How many packets are marked while ECN is tested, before a marked one is acknowledged (RFC 9000 A.4). */
+export const QUIC_RECOVERY_ECN_TESTING_PACKETS: i32 = 10
+/** ECN's states (RFC 9000 A.4): testing, marking the first packets; unknown, those sent and none validated yet; capable; and failed, for the connection's life. */
+export const QUIC_RECOVERY_ECN_TESTING: i32 = 0
+export const QUIC_RECOVERY_ECN_UNKNOWN: i32 = 1
+export const QUIC_RECOVERY_ECN_CAPABLE: i32 = 2
+export const QUIC_RECOVERY_ECN_FAILED: i32 = 3
+
 /** Microseconds in a millisecond: the pacer's clock against the caller's `now`. */
 const QUIC_RECOVERY_MICROS: i64 = 1000
 
@@ -150,6 +176,8 @@ export class QuicSentPackets {
   fineSent: i64[]
   size: i32[]
   state: u8[]
+  /** Whether each packet was sent marked ECT(0): 1 if it was. */
+  marked: u8[]
   /** The slots the last `onAck` acknowledged, `ackedCount` of them, oldest first. */
   acked: i32[]
   /** The slots the last `onAck` or `onTimeout` declared lost, `lostCount` of them, oldest first. */
@@ -171,6 +199,12 @@ export class QuicSentPackets {
   inFlight: i32 = 0
   ackedCount: i32 = 0
   lostCount: i32 = 0
+  /** How many of this space's packets, recorded or not, were sent marked ECT(0). */
+  ectSent: i64 = 0
+  /** The ECN counts of the last ACK_ECN frame validated in this space (RFC 9000 §19.3.2). */
+  ect0: i64 = 0
+  ect1: i64 = 0
+  ce: i64 = 0
 
   constructor(capacity: i32) {
     this.capacity = capacity
@@ -179,6 +213,7 @@ export class QuicSentPackets {
     this.fineSent = new Array<i64>(capacity)
     this.size = new Array<i32>(capacity)
     this.state = new Array<u8>(capacity)
+    this.marked = new Array<u8>(capacity)
     this.acked = new Array<i32>(capacity)
     this.lost = new Array<i32>(capacity)
   }
@@ -221,6 +256,18 @@ export class QuicSentPackets {
   /** The size of the packet in slot `s`, or 0. */
   sizeAt(s: i32): i32 {
     return s >= 0 && s < toI32(this.size.length) ? this.size[s] : 0
+  }
+
+  /** Whether the packet in slot `s` was sent marked ECT(0). */
+  markedAt(s: i32): boolean {
+    return s >= 0 && s < toI32(this.marked.length) && this.marked[s] !== toU8(0)
+  }
+
+  /** Sets whether the packet in slot `s` was sent marked ECT(0). */
+  setMarked(s: i32, value: boolean): void {
+    if (s >= 0 && s < toI32(this.marked.length)) {
+      this.marked[s] = toU8(value ? 1 : 0)
+    }
   }
 
   /** The `k`-th slot the last call acknowledged, or -1. */
@@ -297,6 +344,10 @@ export class QuicSentPackets {
     this.clear()
     this.largestAcked = -1
     this.lastPn = -1
+    this.ectSent = 0
+    this.ect0 = 0
+    this.ect1 = 0
+    this.ce = 0
   }
 }
 
@@ -356,6 +407,14 @@ export class QuicRecovery {
   /** How many congestion events reduced the window, and how many of them were persistent congestion. */
   congestionEvents: i32 = 0
   persistentCongestions: i32 = 0
+  /** How many congestion events a rise in the ECN-CE count caused (§7.1). */
+  ecnCongestionEvents: i32 = 0
+  /** ECN's state, `QUIC_RECOVERY_ECN_TESTING` until a marked packet's counts validate or fail. */
+  ecnState: i32 = 0
+  /** The packets marked while testing, and of those recorded, how many and how many of them were lost. */
+  ecnTestSent: i32 = 0
+  ecnTestRecorded: i32 = 0
+  ecnTestLost: i32 = 0
   /** Whether the handshake is confirmed (RFC 9001 §4.1.2), which the caller sets: the peer's max_ack_delay then bounds its ACK delays, and the Application Data space has a probe timeout. */
   handshakeConfirmed: boolean = false
 
@@ -394,6 +453,11 @@ export class QuicRecovery {
     this.timeoutSpace = -1
     this.congestionEvents = 0
     this.persistentCongestions = 0
+    this.ecnCongestionEvents = 0
+    this.ecnState = QUIC_RECOVERY_ECN_TESTING
+    this.ecnTestSent = 0
+    this.ecnTestRecorded = 0
+    this.ecnTestLost = 0
     this.handshakeConfirmed = false
   }
 
@@ -448,6 +512,7 @@ export class QuicRecovery {
     sp.timeSent[s] = now
     sp.fineSent[s] = this.fineNow(now)
     sp.size[s] = size
+    sp.setMarked(s, false)
     sp.setState(s, QUIC_RECOVERY_SENT)
     sp.count = sp.count + 1
     sp.inFlight = sp.inFlight + 1
@@ -455,6 +520,45 @@ export class QuicRecovery {
     sp.lastPn = pn
     sp.lastAckEliciting = now
     return s
+  }
+
+  /**
+   * The ECN codepoint to mark the next packet with (RFC 9000 A.4): ECT(0)
+   * for the first `QUIC_RECOVERY_ECN_TESTING_PACKETS` and, once the path is
+   * capable, for every one; 0, Not-ECT, while the testing packets wait to be
+   * validated and once validation failed.
+   */
+  ecnCodepoint(): i32 {
+    const testing: boolean =
+      this.ecnState === QUIC_RECOVERY_ECN_TESTING && this.ecnTestSent < QUIC_RECOVERY_ECN_TESTING_PACKETS
+    return testing || this.ecnState === QUIC_RECOVERY_ECN_CAPABLE ? QUIC_RECOVERY_ECT0 : 0
+  }
+
+  /**
+   * A packet of space `space` went out marked ECT(0): `slot` is the one
+   * `onPacketSent` answered for it, or -1 for a packet that elicits no
+   * acknowledgement and so was not recorded. Every packet of a datagram
+   * marked counts, whatever `ecnCodepoint()` answers by the last of them.
+   */
+  onEctSent(space: i32, slot: i32): void {
+    const sp: QuicSentPackets | null = this.space(space)
+    if (sp === null) {
+      return
+    }
+    sp.ectSent = sp.ectSent + 1
+    const recorded: boolean = sp.inFlightAt(slot) && !sp.markedAt(slot)
+    if (recorded) {
+      sp.setMarked(slot, true)
+    }
+    if (this.ecnState === QUIC_RECOVERY_ECN_TESTING || this.ecnState === QUIC_RECOVERY_ECN_UNKNOWN) {
+      this.ecnTestSent = this.ecnTestSent + 1
+      if (recorded) {
+        this.ecnTestRecorded = this.ecnTestRecorded + 1
+      }
+      if (this.ecnTestSent >= QUIC_RECOVERY_ECN_TESTING_PACKETS) {
+        this.ecnState = QUIC_RECOVERY_ECN_UNKNOWN
+      }
+    }
   }
 
   /**
@@ -471,14 +575,36 @@ export class QuicRecovery {
    * elicit no acknowledgement, which are not recorded here.
    */
   onAck(space: i32, ranges: i64[], count: i32, ackDelay: i64, now: i64): i32 {
+    const none: i64 = -1
+    return this.onAckEcn(space, ranges, count, ackDelay, now, none, none, none)
+  }
+
+  /**
+   * `onAck` for an ACK frame that carries ECN counts, `ect0`, `ect1` and
+   * `ce` as ACK_ECN gives them (RFC 9000 §19.3.2), or -1 each for one that
+   * carries none. The counts are validated (RFC 9000 §13.4.2.1) and a rise
+   * in ECN-CE is a congestion event (§7.1, B.7) before loss is detected, as
+   * A.7 orders it.
+   */
+  onAckEcn(
+    space: i32,
+    ranges: i64[],
+    count: i32,
+    ackDelay: i64,
+    now: i64,
+    ect0: i64,
+    ect1: i64,
+    ce: i64
+  ): i32 {
     const sp: QuicSentPackets | null = this.space(space)
     if (sp === null || count <= 0 || toI32(ranges.length) < 2) {
       return -1
     }
     const largest: i64 = ranges[1]
+    const raised: boolean = largest > sp.largestAcked
     sp.compact()
     sp.clearResults()
-    if (largest > sp.largestAcked) {
+    if (raised) {
       sp.largestAcked = largest
     }
     // The bytes in flight before this ACK decide whether the window was in
@@ -514,6 +640,9 @@ export class QuicRecovery {
       this.updateRtt(delay, now)
       this.updatePacerRtt(this.fineSample(now, sp.fineAt(sampleAt)), delay, first)
     }
+    if (this.ecnState !== QUIC_RECOVERY_ECN_FAILED) {
+      this.processEcn(sp, raised, ect0, ect1, ce, now)
+    }
     this.detectLoss(sp, now)
     this.packetsLost(sp, now)
     for (let k: i32 = 0; k < sp.ackedCount; k += 1) {
@@ -521,6 +650,62 @@ export class QuicRecovery {
     }
     this.ptoCount = 0
     return sp.ackedCount
+  }
+
+  /**
+   * ECN validation (RFC 9000 §13.4.2.1) and ProcessECN (B.7) for the ACK
+   * `onAckEcn` just settled in `sp`, `raised` saying whether it raised the
+   * largest acknowledged. A failure stops ECN for the connection and its
+   * counts are not used; a pass makes the path capable once a marked packet
+   * is among those acknowledged, and a rise in ECN-CE halves the window from
+   * the send time of the largest packet newly acknowledged.
+   */
+  processEcn(sp: QuicSentPackets, raised: boolean, ect0: i64, ect1: i64, ce: i64, now: i64): void {
+    let marked: i64 = 0
+    for (let k: i32 = 0; k < sp.ackedCount; k += 1) {
+      if (sp.markedAt(sp.ackedSlot(k))) {
+        marked = marked + 1
+      }
+    }
+    if (ect0 < 0 || ect1 < 0 || ce < 0) {
+      // An ACK without counts that newly acknowledges a marked packet: the path, or the peer, dropped them.
+      if (marked > 0) {
+        this.ecnState = QUIC_RECOVERY_ECN_FAILED
+      }
+      return
+    }
+    if (!raised) {
+      return
+    }
+    // A count only grows, and none of them, nor their sum, can pass the
+    // packets marked. Each is a varint, so the sum is taken by subtraction.
+    const sent: i64 = sp.ectSent
+    if (
+      ect0 < sp.ect0 ||
+      ect1 < sp.ect1 ||
+      ce < sp.ce ||
+      ect0 > sent ||
+      ect1 > sent - ect0 ||
+      ce > sent - ect0 - ect1 ||
+      ect0 - sp.ect0 + (ce - sp.ce) < marked
+    ) {
+      this.ecnState = QUIC_RECOVERY_ECN_FAILED
+      return
+    }
+    if (marked > 0) {
+      this.ecnState = QUIC_RECOVERY_ECN_CAPABLE
+    }
+    const rose: boolean = ce > sp.ce
+    sp.ect0 = ect0
+    sp.ect1 = ect1
+    sp.ce = ce
+    if (rose) {
+      const events: i32 = this.congestionEvents
+      this.congestionEvent(sp.timeAt(sp.ackedSlot(sp.ackedCount - 1)), now)
+      if (this.congestionEvents > events) {
+        this.ecnCongestionEvents = this.ecnCongestionEvents + 1
+      }
+    }
   }
 
   /** UpdateRtt (§5.3, A.7) with a sample in `latestRtt`, `ackDelay` the peer's delay in milliseconds. */
@@ -644,6 +829,17 @@ export class QuicRecovery {
     let newest: i64 = -1
     for (let k: i32 = 0; k < sp.lostCount; k += 1) {
       newest = quicRecoveryMax(newest, sp.timeAt(sp.lostSlot(k)))
+      if (sp.markedAt(sp.lostSlot(k)) && this.ecnState !== QUIC_RECOVERY_ECN_CAPABLE) {
+        this.ecnTestLost = this.ecnTestLost + 1
+      }
+    }
+    // RFC 9000 A.4: every packet marked while testing that could be lost was.
+    if (
+      this.ecnState === QUIC_RECOVERY_ECN_UNKNOWN &&
+      this.ecnTestRecorded > 0 &&
+      this.ecnTestLost >= this.ecnTestRecorded
+    ) {
+      this.ecnState = QUIC_RECOVERY_ECN_FAILED
     }
     this.congestionEvent(newest, now)
     if (this.persistentCongestion(sp)) {
