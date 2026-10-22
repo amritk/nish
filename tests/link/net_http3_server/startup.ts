@@ -1,6 +1,7 @@
 // What `Http3Server` costs before its first connection, for the ceiling
-// `HTTP3_SERVER_START_BYTES` in `tests/runtime-budgets.js`, which
-// `tests/run.js` holds this program's answer to: a pool of 65,536 slots, the
+// `HTTP3_SERVER_START_BYTES` and the exact `HTTP3_SERVER_SLOT_BYTES` in
+// `tests/runtime-budgets.js`, which `tests/run.js` holds this program's
+// answer to: a pool of 65,536 slots, the
 // most it takes, on the test configuration and no socket, then the one slot
 // `connection(0)` builds for a slot never accepted into. It prints
 // `<the pool's bytes> <that slot's bytes> <one chunk>`, the bytes read from

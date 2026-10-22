@@ -228,10 +228,42 @@ jobs:
           go-version: "1.25.x"
           cache: false
 
+      # The runner image ships clang-18, lld-18 and llvm-18, so what this job
+      # downloads is the rest: valgrind with its libc6-dbg, wasi-libc and the
+      # wasm32 builtins, about 23 MB. The Azure mirror sometimes serves that at
+      # a trickle -- never idle long enough for `APT_OPTS`'s thirty seconds to
+      # fire, so the step's five-minute limit did, and in October 2026 that was
+      # every red run on main (one `test` shard of four, a different one each
+      # time). The .debs are kept in the Actions cache, keyed by runner image,
+      # so a shard normally downloads nothing. On a miss (a new image), the
+      # download is cut at a minute per attempt and retried without the Azure
+      # mirror: the stall is that mirror's (libc6-dbg, on #821's first
+      # run, on all three attempts), so a retry against it stalls again.
+      - name: Apt cache key (Ubuntu)
+        id: apt-key
+        if: runner.os == 'Linux'
+        run: |
+          echo "prefix=apt-test-$ImageOS-" >> "$GITHUB_OUTPUT"
+          echo "key=apt-test-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt packages (Ubuntu)
+        id: apt-cache
+        if: runner.os == 'Linux'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: ${{ steps.apt-key.outputs.key }}
+          restore-keys: ${{ steps.apt-key.outputs.prefix }}
+
       - name: Install LLVM 18 + lld (Ubuntu)
         if: runner.os == 'Linux'
         timeout-minutes: 5
         run: |
+          archives="$RUNNER_TEMP/apt-archives"
+          mkdir -p "$archives/partial"
+          # `_apt` cannot reach a directory under the runner's home, so apt would
+          # download as root anyway, with a warning; say so up front.
+          apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
           sudo apt-get $APT_OPTS update
           # wasi-libc and compiler-rt's wasm32 builtins are the WASI sysroot the
           # `wasi` profile links against (scripts/build.sh). Without them the
@@ -240,8 +272,32 @@ jobs:
           # counted skips, "no WASI sysroot", and nothing here would notice a
           # runtime that stops building against wasi-libc, as runtime-os.c did
           # when it called a `realpath` wasi-libc does not have (#396).
-          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 valgrind \
-            wasi-libc libclang-rt-18-dev-wasm32
+          pkgs="clang-18 lld-18 llvm-18 valgrind wasi-libc libclang-rt-18-dev-wasm32"
+          for attempt in 1 2 3; do
+            if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
+              --download-only $pkgs; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::apt could not download the packages in three one-minute attempts"
+              exit 1
+            fi
+            echo "::warning::apt download attempt $attempt stalled or failed; retrying without the Azure mirror"
+            # The image's sources name `mirror+file:/etc/apt/apt-mirrors.txt`,
+            # Azure first, then archive.ubuntu.com and security.ubuntu.com. apt
+            # reads the list on each run, so no second `update` is needed.
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+              cat /etc/apt/apt-mirrors.txt
+            fi
+          done
+          sudo apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $pkgs
+          # Drop .debs the mirror no longer offers (left over from an older
+          # image's cache) and hand the directory back to the runner user, so
+          # the save step below can read apt's root-owned files.
+          sudo apt-get $apt_cache autoclean
+          sudo rm -rf "$archives/partial" "$archives/lock"
+          sudo chown -R "$(id -u):$(id -g)" "$archives"
           # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
           # plain names through a private bin dir placed ahead of /usr/bin so the
           # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `llvm-nm`, `opt`,
@@ -252,6 +308,17 @@ jobs:
             ln -sf "/usr/bin/$tool-18" "$bin/$tool"
           done
           echo "$bin" >> "$GITHUB_PATH"
+
+      # Saved here rather than by actions/cache's post step, which saves only
+      # when the whole job passes: a red test would otherwise leave every later
+      # run downloading again. The four shards race to save one key; the losers
+      # log a warning and carry on.
+      - name: Save apt packages (Ubuntu)
+        if: runner.os == 'Linux' && steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: ${{ steps.apt-key.outputs.key }}
 
       - name: Install LLVM 18 + lld (macOS)
         if: runner.os == 'macOS'
