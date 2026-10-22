@@ -80,7 +80,9 @@ wasi packages at a trickle ran the install step into its five minutes on one
 shard of most main runs in October 2026. So `test` keeps those `.deb`s in the
 Actions cache, keyed by runner image (`apt-test-$ImageOS-$ImageVersion`), and a
 shard normally downloads nothing; on a miss each download attempt is cut at a
-minute and retried twice, resuming from the partial files.
+minute and retried twice without the Azure mirror (dropped from
+`/etc/apt/apt-mirrors.txt`), since the stall is that mirror's and
+retrying it stalls again.
 
 Two jobs took longer than 15 minutes unsplit, so each runs as four:
 

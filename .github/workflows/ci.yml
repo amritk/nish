@@ -235,9 +235,10 @@ jobs:
       # fire, so the step's five-minute limit did, and in October 2026 that was
       # every red run on main (one `test` shard of four, a different one each
       # time). The .debs are kept in the Actions cache, keyed by runner image,
-      # so a shard normally downloads nothing; on a miss (a new image), the
-      # download is cut at a minute per attempt and retried, and a retry
-      # resumes from the partial files rather than starting over.
+      # so a shard normally downloads nothing. On a miss (a new image), the
+      # download is cut at a minute per attempt and retried without the Azure
+      # mirror: the stall is that mirror's (libc6-dbg, on #821's first
+      # run, on all three attempts), so a retry against it stalls again.
       - name: Apt cache key (Ubuntu)
         id: apt-key
         if: runner.os == 'Linux'
@@ -281,7 +282,14 @@ jobs:
               echo "::error::apt could not download the packages in three one-minute attempts"
               exit 1
             fi
-            echo "::warning::apt download attempt $attempt stalled or failed; retrying"
+            echo "::warning::apt download attempt $attempt stalled or failed; retrying without the Azure mirror"
+            # The image's sources name `mirror+file:/etc/apt/apt-mirrors.txt`,
+            # Azure first, then archive.ubuntu.com and security.ubuntu.com. apt
+            # reads the list on each run, so no second `update` is needed.
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+              cat /etc/apt/apt-mirrors.txt
+            fi
           done
           sudo apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $pkgs
           # Drop .debs the mirror no longer offers (left over from an older
