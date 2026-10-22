@@ -109,7 +109,7 @@ Through npm, which is also how an Nish *program* resolves its dependencies
 the compiler pinned per project in a `package.json`:
 
 ```bash
-npm install -g @amritk/nish
+npm install -g nish
 nish --version
 ```
 
@@ -171,13 +171,11 @@ never fails over it.
 > underlying defect is [wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
 > item 4.
 
-**Do not install `nish`.** That name on the public registry has belonged to
-`stdarg`'s "A Node.js Interactive shell" since February 2014 — versions 0.0.0
-and 0.0.1, both deprecated by their author, nothing published since. **This
-compiler is `@amritk/nish`** (decided 2026-09-19,
-[docs/wp12-release.md](wp12-release.md#the-npm-name)), and the command it
-installs is still `nish` — the package name and the command are two different
-strings, and that is the one thing the scope costs.
+**The package is `nish` from 0.20.0.** Releases up to 0.19.0 were published
+as `@amritk/nish`, which is deprecated and points here; `npm install -g nish`
+replaces it ([docs/wp12-release.md](wp12-release.md#the-npm-name)). Versions
+0.0.0 and 0.0.1 of `nish` are an unrelated 2014 project that held the name
+before it, so pin `nish@^0.20.0` or later rather than an older range.
 
 **On a platform this project attaches no binary for, `npm install` gets you a
 command that refuses.** The table below is the whole list, so musl, FreeBSD and
@@ -241,18 +239,19 @@ routes are
 If you need one of these to be a first-class install, that is the conversation
 to have on the issue tracker rather than a workaround to discover here.
 
-**On the registry from 0.10.0.** Every release publishes the main package and
-its platform packages to npm from `release.yml`, by trusted publishing
+**On the registry from 0.10.0** — as `@amritk/nish` through 0.19.0, and as
+`nish` from 0.20.0. Every release publishes the main package and its platform
+packages to npm from `release.yml`, by trusted publishing
 ([docs/wp12-release.md](wp12-release.md#release-procedure) step 4), so
-`npm install -g @amritk/nish` is the whole install. The rest of this section is
+`npm install -g nish` is the whole install. The rest of this section is
 for a machine that cannot reach the registry, or a release before 0.10.0.
 
 From a release tarball on GitHub — the same package `npm publish` uploads,
 carried by the release instead of the registry. The `Release` workflow attaches
 the npm tarball to the release it builds for a `v*` tag. `npm pack` names it
-after `package.json#name`, so it is `amritk-nish-<version>.tgz` from 0.4.0 on
-and `nish-<version>.tgz` for the releases cut before the scope was taken — the
-example below is one of those:
+after `package.json#name`, so it is `nish-<version>.tgz` before 0.4.0 and
+from 0.20.0 on, and `amritk-nish-<version>.tgz` from 0.4.0 to 0.19.0, while the
+package was scoped — the example below is one of the early ones:
 
 ```bash
 curl -LO https://github.com/amritk/nish/releases/download/v0.2.0/nish-0.2.0.tgz
@@ -362,7 +361,7 @@ The published package ships `bin/` (the `nish` command, which is a launcher),
 `runtime/` (the C runtime — eight translation units, the wasm subset and their header),
 `scripts/build.sh` (the link pipeline) and `std/` (the standard library). The
 compiler itself is not in it: it arrives as one prebuilt
-`@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
+`nish-<asset>` package per platform, and `bin/nish` hands over to
 whichever one npm installed. `nish` locates the runtime, the script and `std/`
 relative to its own install directory, so a global install works from any
 working directory — and the binary runs from inside its own platform package

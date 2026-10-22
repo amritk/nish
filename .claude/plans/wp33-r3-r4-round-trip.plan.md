@@ -28,7 +28,7 @@ stages:
         status: pending
   - id: r3-browser
     title: R3b — the browser adapter, the package entry points and their types
-    goal: Publish @amritk/nish/runtime (the core, with declarations) and @amritk/nish/runtime/node and /browser, with the core and the browser adapter proven to load and run in a context that has only web globals
+    goal: Publish nish/runtime (the core, with declarations) and nish/runtime/node and /browser, with the core and the browser adapter proven to load and run in a context that has only web globals
     verification: npm run check, npm run lint and an undegraded npm test green; node tests/run.js runtime-hosts passes, including the web-globals-only check; npm pack --dry-run lists the new files; the rule-6 guard prints nothing
     status: pending
     todos:
@@ -196,9 +196,9 @@ The live differential's predecessor was stage0's rewriter. All that is left of i
 ## Approach
 
 **The core is one specifier, and the host is chosen once, at the entry.**
-- Every emitted module imports only from `@amritk/nish/runtime`, the core.
+- Every emitted module imports only from `nish/runtime`, the core.
 - Host-bound names (`readFileSync`, `getenv`, `write`, `exit`, …) are exported by the core too, as thin delegates to an installed host object.
-- `entry.ts` imports one adapter (`@amritk/nish/runtime/node` by default) for its side effect, then calls `main`.
+- `entry.ts` imports one adapter (`nish/runtime/node` by default) for its side effect, then calls `main`.
 - So the emitted modules are host-independent and bundle for a browser unchanged, and switching host is one line in one file.
 - Calling a host-bound name with no host installed throws an error that names the missing adapter.
 
@@ -220,7 +220,7 @@ The live differential's predecessor was stage0's rewriter. All that is left of i
 - `Edit {start, end, text}` ([src/diagnostics.ts](../../src/diagnostics.ts):233) is still the type.
 
 **Standard-library modules are emitted too.**
-- §3.5 maps `nish/<module>` to the package specifier `@amritk/nish/<module>`. But that resolves to `std/<module>.ts`, which is Nish source with class-C sites of its own (i32 arithmetic), not faithful TypeScript.
+- §3.5 keeps `nish/<module>` as the package's own specifier. But that resolves to `std/<module>.ts`, which is Nish source with class-C sites of its own (i32 arithmetic), not faithful TypeScript.
 - So `--emit-ts` writes each std module the program reaches under `<dir>/nish/<module>.ts` and rewrites the specifier relatively.
 - The `nish:` builtin modules (`nish:fs`, `nish:process`, `nish:secret`, `nish:unsafe`) become named imports from the core.
 
@@ -398,7 +398,7 @@ In the `runtime-hosts` section:
    - It links `core.mjs` and `browser.mjs` as `SourceTextModule`s, with `node:` specifiers refused by the linker.
    - It calls one helper from each core file, plus `write`, `panic` and `exit`.
    - It asserts the lines and the `NishExit` code, and asserts that `readFileSync` panics naming the browser.
-2. `runtime-hosts: the package resolves @amritk/nish/runtime, /node and /browser`. The check uses `import.meta.resolve` through a self-reference from inside the package.
+2. `runtime-hosts: the package resolves nish/runtime, /node and /browser`. The check uses `import.meta.resolve` through a self-reference from inside the package.
 3. `runtime-hosts: core.d.ts declares every name the core exports, and agrees with nish.d.ts`.
 
 The npm-pack `required` list (`tests/run.js` around :17965) gains `runtime/core.mjs`, `runtime/core.d.ts`, `runtime/node.mjs` and `runtime/browser.mjs`.
@@ -439,12 +439,12 @@ It records each module's top-level changed nodes as `Edit`s, applied front to ba
 2. **Rewrites the specifiers.**
    - Relative specifiers gain `.ts`, because Node's type stripping needs the extension; Nish sources write `"./locals"`.
    - `nish/<module>` becomes the relative path to the emitted std file.
-   - `nish:` modules become `@amritk/nish/runtime`.
+   - `nish:` modules become `nish/runtime`.
 3. **Adds one import line at the top of each changed module.**
    - It names every ambient global the module uses (from `nodeBuiltins` and the ambient table) and every helper a row hook registered through `walk.useHelper(name)`.
    - It adds `import type { i32, … }` for each width type the module spells.
    - If the module begins with a comment, the line goes after it.
-4. **Writes `<dir>/entry.ts`.** It imports `@amritk/nish/runtime/node`, imports `main` from the entry module, and exits with its answer through the core's `exit`.
+4. **Writes `<dir>/entry.ts`.** It imports `nish/runtime/node`, imports `main` from the entry module, and exits with its answer through the core's `exit`.
 5. **Writes nothing on refusal.** Files are written only after every module has emitted.
 
 ### The row hooks
@@ -697,7 +697,7 @@ A row stage also runs `node tests/differential/emit-ts.js --update` and commits 
 2. A module with no class-C site is written byte for byte: `cmp` of source and output succeeds.
 3. In `npm test`, every whole program in `tests/cases` and `tests/differential/corpus` agrees with its native binary under `--emit-ts` on stdout, stderr and exit status. That includes the programs that panic. The only exceptions are listed in `tests/differential/emit-ts-known.txt`, whose reasons are only `libm`, `ffi` and `refused`.
 4. `tsc --strict --noEmit` over the emitted corpus exits 0.
-5. `@amritk/nish/runtime`, `@amritk/nish/runtime/node` and `@amritk/nish/runtime/browser` resolve from the published package. The core and the browser adapter import no `node:` module, and they load and run in a context with only web globals. A file-system call under the browser adapter panics naming the host.
+5. `nish/runtime`, `nish/runtime/node` and `nish/runtime/browser` resolve from the published package. The core and the browser adapter import no `node:` module, and they load and run in a context with only web globals. A file-system call under the browser adapter panics naming the host.
 6. Every program that ran under `node --import runtime/nish.mjs` before R3 prints the same output after it. The existing prelude checks and `unmodified.js` pass unmodified.
 7. Across every merged PR, no existing `.ll` golden is modified or deleted, `bench/instructions.json` is unchanged, and `node tests/run.js instructions` is green on `main`.
 8. `--emit-ts` on a program that declares C functions, or that uses `signalFd` or `nish:net`, exits non-zero with a `--json` diagnostic of a registered NL4xxx code, and writes no file.

@@ -18671,7 +18671,7 @@ if (!only || "docs".includes(only) || "ai".includes(only) || "guide".includes(on
 //
 // **The package is an installer and carries no compiler of its own.** `bin.nish` is the
 // launcher in `bin/`, plain JavaScript that needs no build step; the compiler arrives as
-// one `@amritk/nish-<asset>` platform package per supported platform. So this block has
+// one `nish-<asset>` platform package per supported platform. So this block has
 // two halves and they are different claims: with a platform package the round trip above
 // has to work end to end, and with none the command has to say so and exit non-zero. The
 // second half used to be a fallback to the Node compiler in `dist/`, which `files` no
@@ -19423,7 +19423,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         // The regression this file did not have, and the reason the swap is an
         // `exec` rather than a copy of the binary into the main package.
         //
-        // npm links the command as `.bin/nish -> ../@amritk/nish/bin/nish`, so
+        // npm links the command as `.bin/nish -> ../nish/bin/nish`, so
         // a user always invokes it through a symlink -- `bin` above is that
         // symlink, deliberately. The native compiler resolves `build.sh` and
         // `runtime/` from `argv[0]`'s directory and does not follow one
@@ -19830,7 +19830,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       // The other half of the same defect, and the compiler answers this one too as of
       // 2026-09-21: `argv[0]` naming a **symbolic link** to the compiler rather than the
       // compiler. npm writes exactly that shape
-      // (`node_modules/.bin/nish -> ../@amritk/nish/bin/nish`), and so does an admin's
+      // (`node_modules/.bin/nish -> ../nish/bin/nish`), and so does an admin's
       // `ln -s /opt/nish/bin/nish /usr/local/bin/nish`. Neither the parent of the link's
       // directory nor the `$PATH` lookup above finds the package, because a link is
       // itself a perfectly good path -- so the real path of whatever was invoked is a

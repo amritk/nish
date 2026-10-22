@@ -2,7 +2,7 @@
  * Which prebuilt binary this machine wants, and what the package holding it is
  * called.
  *
- * `npm install -g @amritk/nish` is a download, not a build: the native
+ * `npm install -g nish` is a download, not a build: the native
  * compiler is already built, verified and smoke-tested per platform by
  * `release.yml`, and it reaches a user as an `optionalDependencies` entry that
  * npm installs only where `os` and `cpu` match -- the esbuild pattern. This
@@ -107,12 +107,12 @@ export const targetForAsset = (asset) => {
 
 /**
  * The package holding the binary for one asset, derived from the main
- * package's own name: `@amritk/nish` + `x86_64-linux` -> `@amritk/nish-x86_64-linux`.
+ * package's own name: `nish` + `x86_64-linux` -> `nish-x86_64-linux`.
  *
- * Derived rather than written out so that the scope is spelled once. The
- * registry name was settled late (`nish` belongs to somebody else, so this one
- * is scoped -- docs/wp12-release.md "The npm name"), and a list of five literal
- * names would be five places to edit if it ever moves again.
+ * Derived rather than written out so that the name is spelled once. It has
+ * moved before -- `@amritk/nish` until 0.19.0, `nish` after it
+ * (docs/wp12-release.md "The npm name") -- and a list of five literal names
+ * would have been five places to edit.
  */
 export const platformPackageName = (packageName, asset) => `${packageName}-${asset}`
 

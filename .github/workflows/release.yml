@@ -4,7 +4,7 @@
 # CHANGELOG.md section.
 #
 # Two audiences, and as many artifacts as the release is due to carry:
-#   amritk-nish-<version>.tgz      the npm package (@amritk/nish); needs Node
+#   nish-<version>.tgz             the npm package (nish); needs Node
 #   nish-<version>-<asset>.tar.gz  the self-hosted compiler; needs nothing
 #
 # The binaries are also the seed: ci.yml's `bootstrap` job downloads the one
@@ -488,10 +488,11 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           : > build/release/assets.txt
           : > build/release/packages.txt
-          # `npm pack` names a tarball after the package: the leading `@` goes
-          # and every `/` becomes `-`, so `@<scope>/nish-<asset>` packs as
-          # `<scope>-nish-<asset>-<version>.tgz`. Both halves are derived --
-          # the scope from package.json#name and the asset from the matrix --
+          # `npm pack` names a tarball after the package, so `nish-<asset>`
+          # packs as `nish-<asset>-<version>.tgz`; a scoped name would lose its
+          # `@` and have its `/` become `-`, which the `replace` calls keep
+          # true. Both halves are derived -- the name from package.json#name
+          # and the asset from the matrix --
           # for the reason this whole file names no platform: a contract
           # written down twice is two strings that agree until one is edited,
           # and tests/run.js fails on an asset spelled here
@@ -646,7 +647,7 @@ jobs:
           ls -l build/npm
 
       # The same derivation the `release` job's asset check makes, for the same
-      # reason: the platforms come from the matrix and the scope from
+      # reason: the platforms come from the matrix and the name from
       # package.json, so this file still names no platform. Platform packages
       # first and the main package last, so a publish that fails half way leaves
       # a registry where this version of the main package does not exist yet,
@@ -726,10 +727,11 @@ jobs:
       # above left out every version already on the registry, and the order is
       # still platforms first.
       #
-      # `--access public` because a scoped package is private by default, and a
-      # private publish on a free account fails at the registry. Trusted
-      # publishing attaches a provenance attestation without being asked;
-      # `--provenance` says so where the command is read.
+      # `--access public` because a scoped package is private by default and a
+      # private publish on a free account fails at the registry. No package is
+      # scoped since the move to `nish`, so it is a no-op kept for the day one
+      # is again. Trusted publishing attaches a provenance attestation without
+      # being asked; `--provenance` says so where the command is read.
       - name: Publish
         run: |
           while IFS= read -r tgz; do

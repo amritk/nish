@@ -18,7 +18,7 @@
 # against the SHA256SUMS file release.yml attaches beside it. A release that
 # has neither is refused rather than trusted (docs/security/supply-chain.md).
 #
-# The other way in is npm -- `npm install -g @amritk/nish` -- which gets the
+# The other way in is npm -- `npm install -g nish` -- which gets the
 # same binary through per-platform packages. It covers the same platforms and no
 # more: since 0.6.0 there is no compiler inside that package to fall back to, so
 # on anything else it refuses by name rather than serving something slower.

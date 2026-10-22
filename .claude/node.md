@@ -13,7 +13,7 @@ commands a user would.
   `npm run <script>` to run scripts. Do not introduce `bun`, `bunx`, `pnpm` or
   `yarn` anywhere, including in docs and CI.
 - The published package has **no runtime dependency**. `bin/nish` hands over to
-  the native compiler npm installed from the matching `@amritk/nish-<asset>`
+  the native compiler npm installed from the matching `nish-<asset>`
   optional dependency, and an unsupported platform is an error rather than a
   fallback. `typescript` and `@biomejs/biome` are development dependencies:
   `npm run check`, the lexer and parser oracles and a few packaging checks use

@@ -259,7 +259,7 @@ host is a contract that a test enforces:
 | Importer `declare` = exporter `define` attributes | `src/attributes.ts`, `src/emit.ts` | every `tests/link/*` positive test compares the attribute sets across modules |
 | Entry wrapper and exit codes | `src/emit.ts` (`emitEntryWrapper`), `src/compile.ts` | `entry_main*` goldens, `tests/link/*` expected exit codes, the WP12 exit-code block (ICE hook, missing toolchain, failing `build.sh`) |
 | C ABI of scalars (`int32_t`, `double`, `bool` zero-extended) | `src/interop-abi.ts` | `examples/main.c` driver in the size-profile check, `tests/driver.c` in every `.out` case |
-| Package contents (`bin/`, `runtime/`, `scripts/`, `std/`, `LICENSE`, `docs/INSTALL.md`); the compiler itself comes from the platform package `@amritk/nish-<asset>` | `package.json#files`, `optionalDependencies` | the WP12 package block: `npm pack`, install into a temp prefix, link a hello-world from another directory |
+| Package contents (`bin/`, `runtime/`, `scripts/`, `std/`, `LICENSE`, `docs/INSTALL.md`); the compiler itself comes from the platform package `nish-<asset>` | `package.json#files`, `optionalDependencies` | the WP12 package block: `npm pack`, install into a temp prefix, link a hello-world from another directory |
 
 The rule behind the table (MASTER_PLAN.md §2): any change to a struct layout
 touches `src/runtime.ts` and `runtime.c` in the same commit and adds or extends
@@ -825,7 +825,7 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | --- | --- |
 | `src/` | the compiler, in Nish (see the pipeline table); `branding.ts` holds the project's name, `codes.ts` the diagnostic registry |
 | `runtime/` | `runtime.c` (the core every program touches) and `runtime-os.c` (the system-call half, measured against its own ceiling), `nish.h`, `runtime-wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests), `nish.d.ts` (the builtins' declarations `npm run check` type-checks against) |
-| `bin/` | the npm package's installer: `nish` hands over to the prebuilt native compiler from the platform package `@amritk/nish-<asset>`; an unsupported platform is an error, not a fallback |
+| `bin/` | the npm package's installer: `nish` hands over to the prebuilt native compiler from the platform package `nish-<asset>`; an unsupported platform is an error, not a fallback |
 | `scripts/` | `build.sh`, `bootstrap.sh`, `fetch-seed.sh`, `size-report.sh`, `smoke.sh`, `changelog-gen.mjs`, `gen-diagnostic-codes.mjs` (frozen; `--check` only) |
 | `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself, and `collections.ts`, the global `Map` and `Set`. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
 | `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `self/` (the bootstrap and the compiler's own goldens), `wordings/`, `nish/`, `nish-cmp.js`, `differential/` (`run.js`, `lib.js`, `fuzz.js`, `corpus/`, `goldens/`, `known-failures.txt`), `runtime-test.c`, `driver.c` |

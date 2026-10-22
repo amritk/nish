@@ -310,7 +310,7 @@ A `std/` module is its own package (`nish`), so its symbols are scoped and a
 program may declare a function one of these modules also exports
 (`tests/link/std_package_scope`, `docs/wp21-packages.md` §5a). The package is
 decided by the `nish/` specifier rather than by the directory the file is found
-in — read off the path it would be `nish` from `node_modules/@amritk/nish/std/` and the
+in — read off the path it would be `nish` from `node_modules/nish/std/` and the
 root package from a checkout, and the same program would compile against an
 installed compiler and be refused by a checkout of it.
 
@@ -333,14 +333,14 @@ reasons that are only true of it:
   guess a resolver makes — it is the only `std/` that can be correct for the
   compiler reading it. No version can be skewed against it.
 - It **is** what Node and `tsc` resolve. The package is published as
-  `@amritk/nish`, so a bare `nish/text` is not a package self-reference on its
-  own; `runtime/nish.mjs`, the prelude a program runs under Node with
-  (`node --experimental-strip-types --import ./runtime/nish.mjs`), resolves
-  `nish/<module>` to `std/<module>.ts` beside itself, and the repository's
-  `tsconfig.json` maps `nish/*` to `./std/*`, which is what gives `tsc` and an
-  editor go-to-definition into the real source. `package.json` still declares
-  `"./*": "./std/*.ts"` in `exports`, so `@amritk/nish/text` reaches the same
-  file. The compiler short-circuits to that answer rather than walking
+  `nish` and declares `"./*": "./std/*.ts"` in `exports`, so with it installed
+  a bare `nish/text` is an ordinary package specifier that reaches
+  `std/text.ts`. Without it, `runtime/nish.mjs`, the prelude a program runs
+  under Node with (`node --experimental-strip-types --import
+  ./runtime/nish.mjs`), resolves `nish/<module>` to `std/<module>.ts` beside
+  itself, and the repository's `tsconfig.json` maps `nish/*` to `./std/*`,
+  which is what gives `tsc` and an editor go-to-definition into the real
+  source. The compiler short-circuits to that answer rather than walking
   `node_modules` to reach it.
 
 So this is WP21's first slice rather than a detour around it: the spelling is

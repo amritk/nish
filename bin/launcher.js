@@ -4,7 +4,7 @@
  *
  * This is what `bin.nish` points at, and it exists because npm cannot point a
  * `bin` entry at a dependency that may or may not be installed. The native
- * compiler ships as `@amritk/nish-<asset>` packages declared as
+ * compiler ships as `nish-<asset>` packages declared as
  * `optionalDependencies` with `os` and `cpu` set, so npm installs exactly the
  * one that matches and silently skips the rest (docs/wp12-release.md,
  * "Which compiler the package ships"). Something still has to look at what
@@ -136,7 +136,7 @@ const refuse = (unstartable) => {
     platform: process.platform,
     arch: process.arch,
     // The name comes from this package's own `package.json` or not at all. A
-    // literal here would be the scope spelled a second time, against
+    // literal here would be the name spelled a second time, against
     // packaging.js's own rule, and a *wrong* package name is worse advice than
     // none: it sends the user to install something that does not exist.
     packageName: packageName(),
