@@ -4,7 +4,8 @@
 // module names it through the call alone, and its IR defines it all the same.
 // Each payload way in is here: an array literal, `new Array`, a call, a moved
 // local, a ternary of two fresh values, a local holding an object literal, a call
-// answering an interface and a `new`; each is exposed and wiped.
+// answering an interface and a `new`, a class held in a `const` alias and a call
+// answering a class; each is exposed and wiped.
 import { expose, secret, wipe } from "nish:secret";
 
 interface Pair {
@@ -48,6 +49,8 @@ const total = (p: Pair): u32 => p.lo + p.hi;
 
 const seen = (c: Counter): i64 => c.hits + c.misses;
 
+const counterOf = (hits: i64, misses: i64): Counter => new Counter(hits, misses);
+
 export const main = (): i32 => {
   const literal = secret([1, 2, 3]);
   console.log(expose(literal, (k: i32[]): i32 => k.length));
@@ -77,5 +80,12 @@ export const main = (): i32 => {
   const counter = secret(new Counter(3, 4));
   console.log(expose(counter, seen));
   wipe(counter);
+  const held = new Counter(5, 6);
+  const aliased = secret(held);
+  console.log(expose(aliased, seen));
+  wipe(aliased);
+  const answered = secret(counterOf(10, 1));
+  console.log(expose(answered, seen));
+  wipe(answered);
   return 0;
 };

@@ -19195,7 +19195,7 @@ declare double @llvm.floor.f64(double) #0
 declare double @llvm.minnum.f64(double, double) #0
 declare double @llvm.maxnum.f64(double, double) #0
 
-define internal noundef double @hypot(double noundef %a, double noundef %b) #0 {
+define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
   %0 = fmul double %a, %a
   %1 = fmul double %b, %b
