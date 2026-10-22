@@ -26,7 +26,9 @@
  * **Events.** `next()` reads the frames `feed` handed it and answers the
  * first that means something to the program: `H2_REQUEST` (a stream opened
  * with a request's header section; `fields` holds it until the next header
- * block is read), `H2_DATA` (some of a request body, a window onto the input
+ * block on the connection is read, for any stream, and a program copies what
+ * it keeps past that: the next block empties `fields` and reuses the arrays
+ * it pointed into), `H2_DATA` (some of a request body, a window onto the input
  * buffer that stays valid until the next `feed`), `H2_TRAILERS`, `H2_RESET`
  * (the stream is gone: the peer reset it, or broke a rule that resets it —
  * `errorCode` says which), `H2_WINDOW` (a send window that held `writeData`
@@ -402,7 +404,11 @@ export class Http2Connection {
   encoded: u8[]
   decoder: HpackDecoder
   encoder: HpackEncoder
-  /** The last request's or trailers' fields. */
+  /**
+   * The last request's or trailers' fields, valid until the next header block
+   * on the connection, for any stream: that block empties them and reuses
+   * their arrays, so a program copies what it keeps (`docs/security/http2.md`, H2-1).
+   */
   fields: HttpFields
   streams: Http2Stream[]
   /** The identifiers the server reset most recently, a ring. */
@@ -1219,6 +1225,9 @@ export class Http2Connection {
   endBlock(): i32 {
     const id: i32 = this.blockStream
     this.blockStream = 0
+    // The decoder takes back the arrays the last request's fields point into,
+    // so those fields go first: a stale read finds nothing, never this block's octets.
+    this.fields.clear()
     const decoded: i32 = this.decoder.decode(this.block, H2_ZERO, this.blockLength)
     // The decoder copied every field out, so the block goes back before the request is read.
     this.giveBlock()

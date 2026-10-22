@@ -12,6 +12,14 @@
 //   4. Fifty streams past SETTINGS_MAX_CONCURRENT_STREAMS, each naming the
 //      field three times, are refused and move the arena not at all.
 //   5. A hundred GETs answered move the arena not at all.
+//   6. A field whose name is about 4 KB, named by index from a literal two or
+//      three octets long, 5,000 times a block, as each of the three literals
+//      (with incremental indexing, without, never indexed): each block a 431,
+//      fifty of each kind moving the arena not at all, and the table still
+//      naming the field whole afterwards.
+//   7. A program that holds a request's fields past the next header block —
+//      a 431, a refused stream or another request — never reads that block's
+//      octets in them: the fields are empty, or the newer request's whole.
 //
 // Each measured batch follows one like it, so that the connection's own
 // arrays have grown to what the batch needs, and is measured from one `rest`
@@ -22,15 +30,21 @@
 import { H2_FLAG_END_HEADERS, H2_FLAG_END_STREAM } from "nish/net/http2-frame";
 import { H2_NEED_MORE, Http2Config } from "nish/net/http2";
 import { Suite } from "nish/testing";
-import { httpFieldBytes } from "nish/net/http-fields";
+import { HttpFields, httpFieldBytes } from "nish/net/http-fields";
 import { fromHex } from "../crypto_x509/hex";
-import { Client, ZERO, postOf, textAt } from "../net_http2/peer";
+import { Client, ZERO, getOf, postOf, textAt } from "../net_http2/peer";
 
 /** The octets of the value the bomb puts in the table. */
 const BOMB_VALUE: i32 = 4000;
 
 /** How many indexes the bomb's block holds: under `maxHeaderBlock` and one frame. */
 const BOMB_INDEXES: i32 = 16000;
+
+/** The octets of the name the literal bomb puts in the table. */
+const LONG_NAME: i32 = 4000;
+
+/** How many literals the literal bomb's block holds: three octets each at most, one frame. */
+const LITERAL_INDEXES: i32 = 5000;
 
 /** How many blocks each measured round sends, after one that warms the decoder. */
 const ROUNDS: i32 = 50;
@@ -67,6 +81,54 @@ const bombBlock = (insert: boolean, indexes: i32): u8[] => {
   }
   return out;
 };
+
+/**
+ * A GET for `/` at example.com, then, when `insert`, a field whose name is
+ * `LONG_NAME` octets of `a` and whose value is empty, put in the table; then
+ * `count` literals of `kind`'s representation naming it by index 62 with an
+ * empty value, or one indexed field naming it whole when `kind` is empty.
+ */
+const literalBlock = (insert: boolean, kind: string, count: i32): u8[] => {
+  const out: u8[] = fromHex("828784010b");
+  append(out, httpFieldBytes("example.com"));
+  if (insert) {
+    // A new name of 4,000 octets, as a 7-bit prefix integer: 127, then 3,873; then an empty value.
+    append(out, fromHex("407fa11e"));
+    const a: u8 = 0x61;
+    for (let k: i32 = 0; k < LONG_NAME; k++) {
+      out.push(a);
+    }
+    append(out, fromHex("00"));
+  }
+  if (kind === "") {
+    append(out, fromHex("be"));
+    return out;
+  }
+  // Index 62 in a 6-bit prefix is one octet; in a 4-bit one it is 15, then 47.
+  const literal: u8[] = fromHex(kind === "incremental" ? "7e00" : kind === "without" ? "0f2f00" : "1f2f00");
+  for (let k: i32 = 0; k < count; k++) {
+    append(out, literal);
+  }
+  return out;
+};
+
+/** How many of the program's fields have the long name whole and an empty value. */
+const longNamesIn = (c: Client): i32 => {
+  let count: i32 = 0;
+  const names: u8[][] = c.conn.fields.names;
+  for (let k: i32 = 0; k < toI32(names.length); k++) {
+    const name: u8[] = names[k];
+    const whole: boolean = toI32(name.length) === LONG_NAME && name[LONG_NAME - 1] === 0x61;
+    if (whole && toI32(c.conn.fields.values[k].length) === 0) {
+      count = count + 1;
+    }
+  }
+  return count;
+};
+
+/** `fields`' method, path and authority, and how many regular fields it holds, between bars. */
+const heldText = (fields: HttpFields): string =>
+  `${textAt(fields.method, ZERO, toI32(fields.method.length))}|${textAt(fields.path, ZERO, toI32(fields.path.length))}|${textAt(fields.authority, ZERO, toI32(fields.authority.length))}|${toI32(fields.names.length)}`;
 
 /** HEADERS carrying `block` whole, with END_HEADERS and END_STREAM. */
 const sendBlock = (c: Client, stream: i32, block: u8[]): void => {
@@ -228,6 +290,78 @@ export const hpackBombChecks = (): i32 => {
   const getsMoved: i64 = Arena.used() - getsBefore;
   t.eqI32(`${ROUNDS * toI32(2)} GETs, each naming the field once, are each a request`, answered, ROUNDS * toI32(2));
   t.ok(`and the last ${ROUNDS}, each answered, move the arena not at all (${getsMoved} bytes)`, getsMoved === toI64(0));
+
+  // --- 6. Literals naming a long name ---------------------------------------------------------------
+  const l = new Client(config);
+  l.open();
+  sendBlock(l, toI32(1), literalBlock(true, "", toI32(0)));
+  l.send();
+  t.eqStr("a block that puts a name of 4,000 octets in the table and names it once is a request", l.takeEvents(), "request 1 GET / end");
+  t.eqI32("with both fields whole", longNamesIn(l), toI32(2));
+  l.conn.respond(toI32(1), ok, noFields, noFields, true);
+  l.takeFrames();
+  let literalStream: i32 = 3;
+  const kinds: string[] = ["incremental", "without", "never"];
+  for (const kind of kinds) {
+    const block: u8[] = literalBlock(false, kind, LITERAL_INDEXES);
+    sendBlock(l, literalStream, block);
+    l.send();
+    t.eqStr(
+      `${LITERAL_INDEXES} literals ${kind}, ${toI32(block.length)} octets naming ${LITERAL_INDEXES * (LONG_NAME + 32)} bytes of fields by index, are a 431`,
+      `${l.takeEvents()}|${l.takeFrames()}`,
+      `|HEADERS ${literalStream} end :status=431`
+    );
+    literalStream = literalStream + 2;
+    for (let k: i32 = 0; k < ROUNDS; k++) {
+      sendBlock(l, literalStream, block);
+      literalStream = literalStream + 2;
+    }
+    let literalEvents: i32 = feedAll(l, l.wire.take(), false);
+    for (let k: i32 = 0; k < ROUNDS; k++) {
+      sendBlock(l, literalStream, block);
+      literalStream = literalStream + 2;
+    }
+    const literals: u8[] = l.wire.take();
+    const literalsBefore: i64 = Arena.used();
+    literalEvents = literalEvents + feedAll(l, literals, false);
+    const literalsMoved: i64 = Arena.used() - literalsBefore;
+    t.eqI32(`${ROUNDS * toI32(2)} more reach the program not at all`, literalEvents, ZERO);
+    t.ok(`and the last ${ROUNDS} move the arena not at all (${literalsMoved} bytes)`, literalsMoved === toI64(0));
+  }
+  sendBlock(l, literalStream, literalBlock(false, "", toI32(0)));
+  l.send();
+  t.eqStr("the table still names the field: one more block naming it once is a request", l.takeEvents(), `request ${literalStream} GET / end`);
+  t.eqI32("with the field whole", longNamesIn(l), toI32(1));
+
+  // --- 7. Fields held past the next block ----------------------------------------------------------
+  const a = new Client(config);
+  a.open();
+  a.wire.headers(toI32(1), getOf("/one"), H2_FLAG_END_STREAM);
+  a.send();
+  t.eqStr("stream 1's request", a.takeEvents(), "request 1 GET /one end");
+  const held: HttpFields = a.conn.fields;
+  const copied: string = textAt(held.path, ZERO, toI32(held.path.length));
+  a.conn.respond(toI32(1), ok, noFields, noFields, true);
+  a.takeFrames();
+  sendBlock(a, toI32(3), bombBlock(true, toI32(5)));
+  a.send();
+  t.eqStr("then stream 3's block, past the header-list limit", `${a.takeEvents()}|${a.takeFrames()}`, "|HEADERS 3 end :status=431");
+  t.eqStr("leaves stream 1's held fields empty, never stream 3's", heldText(held), "|||0");
+  a.wire.headers(toI32(5), getOf("/five"), H2_FLAG_END_STREAM);
+  a.send();
+  t.eqStr("stream 5's request", a.takeEvents(), "request 5 GET /five end");
+  t.eqStr("leaves them stream 5's whole", heldText(held), "GET|/five|example.com|0");
+  t.eqStr("while the copy taken of stream 1's path is still its own", copied, "/one");
+  const h = new Client(one);
+  h.open();
+  h.wire.headers(toI32(1), postOf("/one", toI32(9)), ZERO);
+  h.send();
+  t.eqStr("stream 1's request, left open", h.takeEvents(), "request 1 POST /one");
+  const refusedHeld: HttpFields = h.conn.fields;
+  h.wire.headers(toI32(3), getOf("/three"), H2_FLAG_END_STREAM);
+  h.send();
+  t.eqStr("then stream 3, past SETTINGS_MAX_CONCURRENT_STREAMS", `${h.takeEvents()}|${h.takeFrames()}`, "|RST_STREAM 3 7");
+  t.eqStr("is refused, leaving stream 1's held fields empty, never stream 3's", heldText(refusedHeld), "|||0");
 
   return t.done();
 };
