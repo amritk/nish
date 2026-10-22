@@ -967,15 +967,16 @@ function dstSpans(outer: Node, inner: Node): boolean -> @dstSpans
   stackSites=0 stackLocals=0
 function dstHostDecl(program: CheckedProgram, node: Node): Node | null -> @dstHostDecl
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: dstSpans
+  calls: FunctionSig.definedIn dstSpans
   pointer program: size=656 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=dstSpans#1
   stackSites=0 stackLocals=0
   local +0:7 best: Node | null (let)
   local +1:14 fn: FunctionSig (const)
   local +2:11 decl: Node (const)
-  callee +3:9 dstSpans -> @dstSpans
-  callee +3:51 dstSpans -> @dstSpans
+  callee +3:9 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +3:41 dstSpans -> @dstSpans
+  callee +3:83 dstSpans -> @dstSpans
 function dstBindings(node: Node, name: string, out: Node[]): void -> @dstBindings
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

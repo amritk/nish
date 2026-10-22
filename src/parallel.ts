@@ -1432,18 +1432,19 @@ const knownApart = (captured: Local, dst: Local | null): boolean => {
 const dstSpans = (outer: Node, inner: Node): boolean => outer.start <= inner.start && inner.end <= outer.end
 
 /**
- * The innermost function of `program` whose declaration holds `node`: the
- * body a call is written in, which is where its destination is declared.
- * `program.functions` also holds what the module imports, whose spans are
- * offsets in another file, so in a program of several modules this can pick a
- * function of another file; its binding then is not `dst`'s local, and
- * `dstUnsharedAt` refuses a call it could have admitted, never the reverse.
+ * The innermost function this module defines whose declaration holds `node`:
+ * the body a call is written in, which is where its destination is declared.
+ * `program.functions` also lists what the module imports, whose spans are
+ * offsets in another file and whose node ids collide with this module's, so
+ * a function of another file could hold the call's offset and name a binding
+ * whose id is `dst`'s; only functions defined here are candidates. The body
+ * found is then a tree of this module's source, whose ids index `nodeLocals`.
  */
 const dstHostDecl = (program: CheckedProgram, node: Node): Node | null => {
   let best: Node | null = null
   for (const fn of program.functions) {
     const decl = fn.decl
-    if (dstSpans(decl, node) && (best === null || dstSpans(best, decl))) {
+    if (fn.definedIn(program.source) && dstSpans(decl, node) && (best === null || dstSpans(best, decl))) {
       best = decl
     }
   }
@@ -1550,10 +1551,10 @@ const dstUnsharedAt = (program: CheckedProgram, call: Node, dst: Local): boolean
   dstBindings(body, dst.name, bindings)
   const decl: Node | null = bindings.length === 1 ? bindings[0] : null
   const declared: Local | null = decl === null ? null : program.nodeLocals[decl.id]
-  // `declared !== dst` and a declaration after the call are reached only by
-  // the other file's function `dstHostDecl` may pick: in the call's own
-  // function, `dst` is a local (a module constant cannot be an array, and no
-  // function nests), declared before it is named.
+  // The host is a function of the call's own module, so its one binding of
+  // `dst.name` is a node of this file; `declared === dst` ties that node to
+  // `dst` itself, and a table holding another `Local` there refuses the call,
+  // never admits it. A binding after the call is a different one.
   if (decl === null || declared === null || declared !== dst || decl.start > call.start) {
     return false
   }
