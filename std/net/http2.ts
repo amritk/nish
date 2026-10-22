@@ -53,9 +53,10 @@
  * (COMPRESSION_ERROR, RFC 7541 §2.3.2); DATA past the connection window, or a
  * window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR, §6.9); a setting
  * `http2SettingError` refuses; a header block longer than `maxHeaderBlock`
- * or cut into more than `H2_MAX_FRAGMENTS` frames, and more streams reset
- * than `resetBudget` allows — by the peer, or by the server for a stream error
- * the peer caused (ENHANCE_YOUR_CALM, §10.5). A stream error resets one
+ * or cut into more than `H2_MAX_FRAGMENTS` frames, a header block that would
+ * make the HPACK table copy past its budget (`HPACK_ERR_COPY_BUDGET`), and
+ * more streams reset than `resetBudget` allows — by the peer, or by the
+ * server for a stream error the peer caused (ENHANCE_YOUR_CALM, §10.5). A stream error resets one
  * stream and the connection lives: a malformed request — any
  * refusal of `nish/net/http-fields`, trailers without END_STREAM, a body that
  * disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or HEADERS
@@ -103,6 +104,7 @@
 import { BufferPool } from "nish/net/buffer-pool"
 import {
   HPACK_DEFAULT_TABLE_SIZE,
+  HPACK_ERR_COPY_BUDGET,
   HPACK_INDEX_NEVER,
   HPACK_INDEX_WITHOUT,
   HPACK_LIST_TOO_LARGE,
@@ -1232,7 +1234,8 @@ export class Http2Connection {
     // The decoder copied every field out, so the block goes back before the request is read.
     this.giveBlock()
     if (decoded < 0) {
-      return this.fail(H2_COMPRESSION_ERROR)
+      // A block past the decoder's copy budget is valid HPACK used as a lever, not a broken one (§10.5).
+      return this.fail(decoded === HPACK_ERR_COPY_BUDGET ? H2_ENHANCE_YOUR_CALM : H2_COMPRESSION_ERROR)
     }
     const s: Http2Stream | null = this.find(id)
     if (s !== null) {

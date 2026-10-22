@@ -11,10 +11,12 @@
 //      the new entry.
 //   3. One whose entry is larger than the table empties it, and still decodes
 //      with the name it named.
+//   4. One whose entry is larger than the table and past the header-list
+//      limit empties the table too, copying the name it named nowhere.
 //
 // The checks live here so that `tests/link/net_http2_hpack_table_f64` runs every
 // one again under `--number-mode f64`.
-import { HPACK_OK, HpackDecoder, HpackHuffman, hpackEncodeInteger, hpackEncodeString } from "nish/net/hpack";
+import { HPACK_LIST_TOO_LARGE, HPACK_OK, HpackDecoder, HpackHuffman, hpackEncodeInteger, hpackEncodeString } from "nish/net/hpack";
 import { Suite } from "nish/testing";
 import { httpFieldBytes } from "nish/net/http-fields";
 import { ZERO, textAt } from "../net_http2/peer";
@@ -137,10 +139,11 @@ export const hpackTableChecks = (): i32 => {
     if (decoded !== `${name}: ${value}`) {
       mismatches = mismatches + 1;
     }
-    if (d.table.count() > 0 && firstBefore > 0 && d.table.first === 0) {
+    // More than the entry just added, so an older one survived the shift.
+    if (d.table.count() > 1 && firstBefore > 0 && d.table.first === 0) {
       entriesShifted = entriesShifted + 1;
     }
-    if (d.table.count() > 0 && startBefore > 0 && d.table.nameStart(d.table.count()) === 0) {
+    if (d.table.count() > 1 && startBefore > 0 && d.table.nameStart(d.table.count()) === 0) {
       bytesShifted = bytesShifted + 1;
     }
     if (toI32(d.table.bytes.length) > largestStore) {
@@ -182,6 +185,31 @@ export const hpackTableChecks = (): i32 => {
   literalNamed(h, large, 62, repeat("z", 80));
   t.eqStr("a literal naming it whose 115 bytes pass the table's 100 decodes with its name", decodeAll(e, large), `abc: ${repeat("z", 80)}`);
   t.eqI32("and empties the table", e.table.count(), ZERO);
+
+  // --- 4. Larger than the table, past the list limit -----------------------------------------------
+  const f = new HpackDecoder(100, 40);
+  const over: u8[] = [];
+  literalNew(h, over, "abc", repeat("x", 50));
+  const overResult: i32 = f.decode(over, ZERO, toI32(over.length));
+  t.eqStr(
+    "an entry of 85 bytes, past a header-list limit of 40, is dropped from the list and still added",
+    `${overResult}|${toI32(f.names.length)}|${f.table.count()}`,
+    `${HPACK_LIST_TOO_LARGE}|0|1`
+  );
+  const copiedBefore: i64 = f.tableCopied;
+  const both: u8[] = [];
+  literalNamed(h, both, 62, repeat("z", 80));
+  const bothResult: i32 = f.decode(both, ZERO, toI32(both.length));
+  t.eqStr(
+    "a literal naming it whose 115 bytes pass both the table and the limit reaches no list",
+    `${bothResult}|${toI32(f.names.length)}`,
+    `${HPACK_LIST_TOO_LARGE}|0`
+  );
+  t.eqStr(
+    "and empties the table, copying nothing out of it",
+    `${f.table.count()}|${f.table.size}|${f.tableCopied - copiedBefore}`,
+    "0|0|0"
+  );
 
   return t.done();
 };

@@ -244,14 +244,24 @@ const route: i32 = router.match(
   parser.head, parser.targetStart, parser.targetEnd, params);
 ```
 
-With `nish/net/http2` or `nish/net/http3`, a request's `HttpFields` holds
-`:method` and `:path` as arrays of their own:
+With `nish/net/http2` or `nish/net/http3`, a request's `HttpFields` hands
+over `:method` and `:path` as arrays:
 
 ```ts
 const fields = conn.fields;
 const route: i32 = router.match(
   fields.method, 0, toI32(fields.method.length),
   fields.path, 0, toI32(fields.path.length), params);
+```
+
+Under `nish/net/http2` those arrays are the connection's, not the request's.
+`conn.fields`, and every `u8[]` taken from it (`path`, `method`, `get(..)`,
+`names[k]`), holds until the connection decodes its next header block, on any
+stream, one your program never sees included. Route at `H2_REQUEST`; a value
+needed later, at `H2_DATA` of a streaming POST say, is copied there first:
+
+```ts
+const path: u8[] = []; for (const b of fields.path) { path.push(b) }
 ```
 
 The same table and the same `switch` then serve all three. The

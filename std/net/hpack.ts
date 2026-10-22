@@ -34,7 +34,10 @@
  * or after the block's first field, and a block that does not begin with the
  * update a lowered limit requires (§4.2). Each of those is HTTP/2's
  * COMPRESSION_ERROR, which closes the connection, so the code is sticky: every
- * later `decode` answers it again without reading anything.
+ * later `decode` answers it again without reading anything. So is
+ * `HPACK_ERR_COPY_BUDGET`, a block that would make the table copy more than
+ * `HPACK_COPY_FACTOR` times the larger of its size and the block's length,
+ * which HTTP/2 answers with ENHANCE_YOUR_CALM.
  *
  * A header list larger than the caller's limit is not one of them. The block
  * is still decoded to its end, so that the table stays in step with the
@@ -107,6 +110,27 @@ export const HPACK_ERR_SIZE_UPDATE_POSITION: i32 = -7
  * not begin with an update to at most the smallest limit since (§4.2).
  */
 export const HPACK_ERR_SIZE_UPDATE_MISSING: i32 = -8
+
+/**
+ * A block that asked the table to take more octets than its copy budget
+ * allows: `HPACK_COPY_FACTOR` times the larger of the table's maximum size
+ * and the block's own length. Valid HPACK, but no encoder needs it, and
+ * HTTP/2 answers it with ENHANCE_YOUR_CALM, not COMPRESSION_ERROR.
+ */
+export const HPACK_ERR_COPY_BUDGET: i32 = -9
+
+/**
+ * How many times the larger of the table's maximum size and a block's length
+ * the decoder copies into its table for one block, at most
+ * (`docs/security/http2.md`, H2-1). An index naming a dynamic entry is one or
+ * two octets, and a literal with incremental indexing that names it copies
+ * the name out of the table and back in, so without a budget a block of them
+ * costs about three times the table's size of work per two octets it holds.
+ * Four leaves an encoder room to re-add a full table's worth of fields twice
+ * over in one block, which none needs, since every add past the table's size
+ * evicts one of its own.
+ */
+export const HPACK_COPY_FACTOR: i32 = 4
 
 /** Add the field to the dynamic table (§6.2.1). */
 export const HPACK_INDEX_INCREMENTAL: i32 = 0
@@ -954,6 +978,13 @@ export class HpackDecoder {
   neverIndexed: boolean[]
   /** The storage a block is decoded with, made by the first `decode`, so an idle connection holds none. */
   work: HpackWork | null = null
+  /**
+   * The octets every block so far has copied to index a field: a name
+   * named by index, copied out of a table into the scratch, and each field
+   * `table.add` copies in. A block may add at most its budget to it
+   * (`HPACK_COPY_FACTOR`); it is public so that tests can read it.
+   */
+  tableCopied: i64 = 0
 
   constructor(settingsLimit: i32, maxHeaderListSize: i32) {
     if (maxHeaderListSize < 0) {
@@ -1093,7 +1124,9 @@ export class HpackDecoder {
    * can ask for past the limit is a literal with incremental indexing, which
    * the table must take: its name and value are copied into the table, at
    * most the table's maximum size per field, after its name is copied into
-   * the scratch when it is an index (`docs/security/http2.md`, H2-1). A
+   * the scratch when it is an index, and a block whose copies pass
+   * `HPACK_COPY_FACTOR` times the larger of the table's size and its own
+   * length ends the connection (`docs/security/http2.md`, H2-1). A
    * literal's strings are read into the two scratch arrays, which the block's
    * own length and the table's size bound, and a field within the limit is
    * copied into the pools, which the limit bounds; nothing is allocated once
@@ -1103,6 +1136,9 @@ export class HpackDecoder {
     let listSize: i64 = 0
     let tooLarge: boolean = false
     let sawField: boolean = false
+    // What this block has asked the table to copy, against its budget.
+    let copied: i64 = 0
+    const length: i32 = c.end - c.pos
     if (this.owedUpdate >= 0) {
       if (c.pos >= c.end || hpackRepresentationOf(toI32(c.buf[c.pos])) !== HPACK_REP_SIZE_UPDATE) {
         return HPACK_ERR_SIZE_UPDATE_MISSING
@@ -1182,24 +1218,25 @@ export class HpackDecoder {
           tooLarge = tooLarge || listSize > toI64(this.maxHeaderListSize)
           const incremental: boolean = rep === HPACK_REP_INCREMENTAL
           const fits: boolean = size <= toI64(this.table.maxSize)
-          // An indexed name is copied out only when the table takes the field or
-          // the program does, and before the table adds it: adding it may evict
-          // the entry the name came from and move what `bytes` holds (§4.4). A
-          // field that is neither costs its value's octets and a lookup.
-          if (index !== 0 && incremental && (fits || !tooLarge)) {
-            this.appendNameAt(index, name)
+          // The table copies the field in, and an indexed name out first.
+          const added: boolean = incremental && fits
+          const cost: i64 = added ? size - toI64(HPACK_ENTRY_OVERHEAD) + (index !== 0 ? toI64(nameLength) : toI64(0)) : toI64(0)
+          copied += cost
+          if (copied > toI64(HPACK_COPY_FACTOR) * toI64(this.table.maxSize > length ? this.table.maxSize : length)) {
+            return HPACK_ERR_COPY_BUDGET
           }
-          if (incremental) {
-            if (fits) {
-              this.table.add(name, value)
-            } else {
-              const nothing: i32 = 0
-              this.table.evictTo(nothing)
-            }
+          // An indexed name is copied out only when the table takes the field,
+          // into the scratch, or the program does, straight into its field; both
+          // before the table changes, since adding the field, or emptying the
+          // table for one too large, may evict the entry the name came from and
+          // move what `bytes` holds (§4.4). A field that is neither costs its
+          // value's octets and a lookup.
+          if (index !== 0 && added) {
+            this.appendNameAt(index, name)
           }
           if (!tooLarge) {
             const kept: u8[] = work.take(nameLength)
-            if (index === 0 || incremental) {
+            if (index === 0 || added) {
               const from: i32 = 0
               hpackAppend(kept, name, from, toI32(name.length))
             } else {
@@ -1208,6 +1245,13 @@ export class HpackDecoder {
             this.names.push(kept)
             this.values.push(this.copyOf(value))
             this.neverIndexed.push(rep === HPACK_REP_NEVER)
+          }
+          if (added) {
+            this.tableCopied += cost
+            this.table.add(name, value)
+          } else if (incremental) {
+            const nothing: i32 = 0
+            this.table.evictTo(nothing)
           }
         }
       }

@@ -7,4 +7,7 @@ PASS  a literal naming it, whose 55 bytes evict it, decodes with its name
 PASS  and the table holds the new entry alone
 PASS  a literal naming it whose 115 bytes pass the table's 100 decodes with its name
 PASS  and empties the table
-http2 hpack table: 9 passed, 0 failed, 0 skipped
+PASS  an entry of 85 bytes, past a header-list limit of 40, is dropped from the list and still added
+PASS  a literal naming it whose 115 bytes pass both the table and the limit reaches no list
+PASS  and empties the table, copying nothing out of it
+http2 hpack table: 12 passed, 0 failed, 0 skipped

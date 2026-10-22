@@ -12,11 +12,14 @@
 //   4. Fifty streams past SETTINGS_MAX_CONCURRENT_STREAMS, each naming the
 //      field three times, are refused and move the arena not at all.
 //   5. A hundred GETs answered move the arena not at all.
-//   6. A field whose name is about 4 KB, named by index from a literal two or
-//      three octets long, 5,000 times a block, as each of the three literals
-//      (with incremental indexing, without, never indexed): each block a 431,
-//      fifty of each kind moving the arena not at all, and the table still
-//      naming the field whole afterwards.
+//   6. A field whose name is about 4 KB, named by index from a literal three
+//      octets long, 5,000 times a block, as a literal without indexing and as
+//      one never indexed: each block a 431, fifty of each kind moving the arena
+//      not at all and copying nothing out of the table, which still names the
+//      field whole afterwards. As a literal with incremental indexing, two
+//      octets long, the table copies the name out and back in each time: twice
+//      in a block is within the block's copy budget and is a request, and
+//      5,000 times ends the connection with ENHANCE_YOUR_CALM.
 //   7. A program that holds a request's fields past the next header block —
 //      a 431, a refused stream or another request — never reads that block's
 //      octets in them: the fields are empty, or the newer request's whole.
@@ -301,9 +304,10 @@ export const hpackBombChecks = (): i32 => {
   l.conn.respond(toI32(1), ok, noFields, noFields, true);
   l.takeFrames();
   let literalStream: i32 = 3;
-  const kinds: string[] = ["incremental", "without", "never"];
+  const kinds: string[] = ["without", "never"];
   for (const kind of kinds) {
     const block: u8[] = literalBlock(false, kind, LITERAL_INDEXES);
+    const copiedBefore: i64 = l.conn.decoder.tableCopied;
     sendBlock(l, literalStream, block);
     l.send();
     t.eqStr(
@@ -325,13 +329,41 @@ export const hpackBombChecks = (): i32 => {
     const literalsBefore: i64 = Arena.used();
     literalEvents = literalEvents + feedAll(l, literals, false);
     const literalsMoved: i64 = Arena.used() - literalsBefore;
+    const literalsCopied: i64 = l.conn.decoder.tableCopied - copiedBefore;
     t.eqI32(`${ROUNDS * toI32(2)} more reach the program not at all`, literalEvents, ZERO);
     t.ok(`and the last ${ROUNDS} move the arena not at all (${literalsMoved} bytes)`, literalsMoved === toI64(0));
+    t.ok(`and all ${ROUNDS * toI32(2) + toI32(1)} copy no octet out of the table (${literalsCopied})`, literalsCopied === toI64(0));
   }
   sendBlock(l, literalStream, literalBlock(false, "", toI32(0)));
   l.send();
   t.eqStr("the table still names the field: one more block naming it once is a request", l.takeEvents(), `request ${literalStream} GET / end`);
   t.eqI32("with the field whole", longNamesIn(l), toI32(1));
+  l.conn.respond(literalStream, ok, noFields, noFields, true);
+  l.takeFrames();
+  literalStream = literalStream + 2;
+  const twiceBefore: i64 = l.conn.decoder.tableCopied;
+  sendBlock(l, literalStream, literalBlock(false, "incremental", toI32(2)));
+  l.send();
+  t.eqStr(
+    "two literals with incremental indexing naming it, each copying the name out of the table and back in, are a request",
+    l.takeEvents(),
+    `request ${literalStream} GET / end`
+  );
+  t.eqI32("with both fields whole", longNamesIn(l), toI32(2));
+  const twice: i64 = l.conn.decoder.tableCopied - twiceBefore;
+  t.ok(`copying ${twice} octets, within the block's budget of 4 x 4,096`, twice === toI64(4 * LONG_NAME) && twice <= toI64(4 * 4096));
+  l.conn.respond(literalStream, ok, noFields, noFields, true);
+  l.takeFrames();
+  const lastStream: i32 = literalStream;
+  literalStream = literalStream + 2;
+  const incremental: u8[] = literalBlock(false, "incremental", LITERAL_INDEXES);
+  sendBlock(l, literalStream, incremental);
+  l.send();
+  t.eqStr(
+    `${LITERAL_INDEXES} of them, ${toI32(incremental.length)} octets, pass the budget and end the connection with ENHANCE_YOUR_CALM`,
+    `${l.takeEvents()}|${l.takeFrames()}`,
+    `error 11|GOAWAY ${lastStream} 11`
+  );
 
   // --- 7. Fields held past the next block ----------------------------------------------------------
   const a = new Client(config);
