@@ -55,18 +55,6 @@ WebAssembly targets, install Homebrew's LLVM instead, as
 Either way below installs the same prebuilt compiler; nothing is compiled
 during the install.
 
-**With npm.** This needs Node.js 22.18 or newer. The package and the
-command it installs are both `nish`. Releases up to 0.19.0 were published as
-`@amritk/nish`; if you installed that, uninstall it and install `nish`
-instead.
-
-```bash
-npm install -g nish
-```
-
-Install it without `-g` (`npm install --save-dev nish`) to pin the
-version per project in `package.json`, and run it as `npx nish`.
-
 **With the install script.** This needs neither Node nor npm, only `sh`,
 `curl` and `tar`:
 
@@ -80,9 +68,21 @@ new terminal. To upgrade later, run the same command again. Ending the
 command with `| sh -s -- --help` instead of `| sh` lists the script's other
 options: another directory, and uninstalling.
 
+**Or with npm.** This needs Node.js 22.18 or newer. The package and the
+command it installs are both `nish`:
+
+```bash
+npm install -g nish
+```
+
+Install it without `-g` (`npm install --save-dev nish`) to pin the
+version per project in `package.json`, and run it as `npx nish`. Releases up
+to 0.19.0 were published as `@amritk/nish`; if you installed that, uninstall
+it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
+
 Nish is pre-alpha and changes between minor releases, so you may want to pin
-an exact version: `npm install -g nish@0.20.0`, or end the install
-script's command with `| sh -s 0.20.0`. Read the
+an exact version: end the install script's command with `| sh -s 0.20.0`,
+or run `npm install -g nish@0.20.0`. Read the
 [changelog](../../../CHANGELOG.md) before you upgrade.
 
 ## 3. Check that it worked
