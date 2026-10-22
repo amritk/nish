@@ -244,6 +244,24 @@ file and per code. Two checks read it:
 Both are counted from `--json` by `code` rather than from the report, for the
 reason the next section gives: the report stops at 20.
 
+### A `Measured:` trailer
+
+A commit's `Measured:` trailer is the changelog's figure, so it states the
+figures themselves: a trailer that points at the pull request body loses them,
+because the body is not the changelog.
+
+- Time a loop whose input changes on every iteration and whose output is
+  folded into a printed checksum, or the optimiser may compute the answer once
+  and time nothing (one P-256 measurement came out twenty times too fast).
+- State the noise band — the baseline timed against a byte-identical copy of
+  itself in the same interleaved rounds — and read every delta against it:
+  "faster", or "none faster", is claimed only outside that band (#538).
+- Copy a figure from where the repository records it (the comment beside a
+  ceiling in `tests/runtime-budgets.js`, the benchmark's own output) on the
+  head being merged, not from the pull request body. #566's entry carried
+  609 / 1,424 bytes from an earlier head, while `tests/run.js` recorded
+  597 / 1,403.
+
 ## Testing a Nish program in Nish
 
 Everything above is the harness that tests the *compiler*. A program the

@@ -16,6 +16,22 @@ memory corruption, a verifier that accepts bad input, secret-dependent timing
 in a fixture path. Medium: denial of service (a panic, an unbounded loop or
 allocation) on attacker input. Low: hardening and documentation drift.
 
+## Writing a record
+
+- **A record states the commit its `file:line` anchors are at.** A row
+  rewritten after that base names the commit its own anchors are at, rather
+  than moving them silently (#529, CG-5).
+- **A record's Tests list names every check it cites by its exact
+  `check(...)` string**, templated names as templates, so a grep from the
+  record finds the test. Grep each one against `tests/run.js` before pushing
+  (#557, rounds 2 and 4).
+- **A cache entry's `key`, written last, is its only completeness signal.** A
+  hit trusts the stored key alone, equal byte for byte to the computed one; a
+  missing or mismatched key is a miss and the entry is rebuilt. Files removed
+  by hand from an entry whose key is intact are out of scope for the run cache
+  and the runtime cache alike (CLI-5, CLI-11), so a review need not raise
+  them: #557's reviewers did in all five rounds, and each was refuted.
+
 ## Areas
 
 Counts are by severity, C / H / M / L, and say what is true on `main` now. A

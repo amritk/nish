@@ -19,7 +19,7 @@ export const runFfiBufferChecks = ({ only, has, check, skip, shown, nish, root, 
   // it is passed, so an exported function that hands its parameter to such a C
   // function writes that parameter: its header drops the `const`, its glue
   // copies the bytes back, and its `define` loses `readonly` (§5). The rest pins
-  // the ways CLAUDE.md names for a call to reach a rule: a constructor reached
+  // the ways `.claude/selfhost.md` names for a call to reach a rule: a constructor reached
   // by `new`, every declarator of a `using`, and `this` stored out of a
   // constructor, each for the `ffi-length` site and for the task that races a
   // buffer C writes.

@@ -1107,8 +1107,8 @@ themselves: a form no row names is still refused, by the general rule, and
 general messages (`reject_ffi_handle_position`,
 `reject_ffi_handle_type_position`, `reject_ffi_handle_field_position`), apart
 from the declaration refusals of §4a and the dispose rules of §4b and §4c;
-the names in the last column are case files. CLAUDE.md's three recurring
-shapes (a constructor reached by `new`, every declarator of `using`, and
+the names in the last column are case files. The three recurring
+shapes of `.claude/selfhost.md` (a constructor reached by `new`, every declarator of `using`, and
 `this` leaving a constructor) are rows 1 to 3. Every row gets its own negative
 case. A review that finds one of them probes the rest in the same round.
 
