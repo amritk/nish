@@ -130,6 +130,18 @@ A program can watch both listeners in one loop, as in the server above, and
 accept from whichever is ready. A server that wants both the shared port and
 its small answers sent at once opens each listener with `3`.
 
+## Trusting a peer's address
+
+A TCP peer's address is proven: the handshake that `tcpAccept` completes needs
+answers sent to it. A UDP datagram's source address is only what its sender
+wrote, so anyone can send one that names another host. A server that caps or
+allows clients by address keys that on a UDP address only once a handshake has
+proven it. For QUIC, `Http3Server.addresses[slot]` is the source of the slot's
+first datagram, and it is proven once `server.quic(slot).addressValidated` is
+set: by a Handshake packet from the client, or by a Retry token when the
+server's config turns `retry` on. The relay example in `examples/relay` counts
+a client against its per-address cap only from that point.
+
 ## Under Node
 
 A program that uses `nish:net` type-checks with `npm run check`, but it has no
