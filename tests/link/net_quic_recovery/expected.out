@@ -113,6 +113,38 @@ PASS  evicting gives up the oldest still in flight, packet 1
 PASS  out of flight, with no congestion event
 PASS  reset empties every space and puts the estimate and the window back
 PASS  so the next connection records its packet 0 again, in slot 0
+PASS  a new recovery is testing, and asks for ECT(0)
+PASS  four packets marked while testing
+PASS  an ACK_ECN counting all four ECT(0) acknowledges them
+PASS  and validates: the path is capable, still marked ECT(0)
+PASS  counts with no CE are no congestion event, and 4800 bytes in flight did not grow the window (§7.8)
+PASS  a rise in ECN-CE is a congestion event: the window halves to 6000 (B.7)
+PASS  its recovery period starts now, at 300 ms
+PASS  a second rise, its largest packet sent at 200 ms before the period started, halves nothing: once per round trip
+PASS  a rise whose largest packet was sent after the period started is a new congestion event
+PASS  an ACK that acknowledges nothing new does not reach ECN
+PASS  so the path stays capable
+PASS  an ACK_ECN of 2 validates
+PASS  a later one newly acknowledges 0 and 1 without raising the largest acknowledged
+PASS  so its counts are neither validated nor used: no congestion event
+PASS  an ACK without counts of unmarked packets leaves ECN testing
+PASS  counts past the packets marked, a CE of none sent, fail validation and are no congestion event
+PASS  a failed path is marked no more
+PASS  an ACK without counts that acknowledges a marked packet fails validation
+PASS  ECT(0) and CE rising by 3 for 4 marked packets acknowledged fail validation, and the CE is not used
+PASS  ECT(1) counted for packets marked ECT(0) falls short too
+PASS  ECT(1) 1 beside ECT(0) 4 for four marked packets validates: ECT(1) is bounded, not refused
+PASS  an ACK_ECN raising the largest to 4, a packet that elicits no ACK, acknowledges nothing recorded
+PASS  its CE rise is still read: a congestion event timed from 5's send at 150 ms halves the window
+PASS  ECT(0) 1 and CE 1 for two marked packets validate
+PASS  a CE count that falls fails validation
+PASS  after ten packets marked while testing, ECN is unknown and marks no more
+PASS  an ACK of an unmarked packet decides nothing
+PASS  and declares 0 to 7 lost by packet threshold, 8 and 9 still out
+PASS  the timer loses 8 and 9: every packet of the testing period lost fails validation (A.4)
+PASS  ten acknowledged with ECT(0) 10 make the unknown path capable, marked again
+PASS  a marked packet that elicits no ACK still counts toward the packets marked
+PASS  reset puts ECN back to testing, with no counts
 PASS  the server's first flight goes out, and the network loses it
 PASS  with no RTT sample, its probe timeout is 333 + 4 × 166 ms after it
 PASS  there is room under the amplification limit for a probe
@@ -166,6 +198,13 @@ PASS  with credit for two datagrams a fast connection starts no flight
 PASS  and waits for the next millisecond
 PASS  though one datagram alone may go
 PASS  with credit for four it sends the four together
+PASS  a connection whose carrier does not mark sends Not-ECT, and counts nothing marked
+PASS  so a peer's CE count for it fails validation and shrinks nothing
+PASS  once the carrier marks, the datagram is ECT(0) and its packet counted
+PASS  an ACK_ECN counting it ECT(0) validates the path
+PASS  an ACK_ECN whose CE count rose halves the window
+PASS  a plain ACK of a marked packet fails validation, and the connection marks no more
+PASS  reset keeps the carrier's ecnMarking and puts ECN back to testing
 PASS  the first flight is one datagram, and the network loses it
 PASS  the probe timeout is 997 ms after it
 PASS  the first probe goes out, and the network loses it too
@@ -208,4 +247,4 @@ PASS  the server never sends more than three times what it received
 PASS  the other is still owed
 PASS  and goes once the client sends more
 PASS  still inside the limit
-quic recovery: 210 passed, 0 failed, 0 skipped
+quic recovery: 249 passed, 0 failed, 0 skipped
