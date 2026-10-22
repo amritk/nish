@@ -50,9 +50,10 @@
  * (COMPRESSION_ERROR, RFC 7541 §2.3.2); DATA past the connection window, or a
  * window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR, §6.9); a setting
  * `http2SettingError` refuses; a header block longer than `maxHeaderBlock`
- * or cut into more than `H2_MAX_FRAGMENTS` frames, and more streams reset by
- * the peer than `resetBudget` allows (ENHANCE_YOUR_CALM, §10.5). A stream
- * error resets one stream and the connection lives: a malformed request — any
+ * or cut into more than `H2_MAX_FRAGMENTS` frames, and more streams reset
+ * than `resetBudget` allows — by the peer, or by the server for a stream error
+ * the peer caused (ENHANCE_YOUR_CALM, §10.5). A stream error resets one
+ * stream and the connection lives: a malformed request — any
  * refusal of `nish/net/http-fields`, trailers without END_STREAM, a body that
  * disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or HEADERS
  * after the peer ended the stream (STREAM_CLOSED, §5.1); DATA past the
@@ -250,7 +251,10 @@ export class Http2Config {
   enableConnectProtocol: boolean = false
   /** The output buffer, in bytes. */
   outputSize: i32 = 65536
-  /** How many streams the peer may reset before finishing, net of the ones it lets finish. */
+  /**
+   * How many streams may be reset — by the peer, or by the server for a
+   * stream error the peer caused — net of the ones the server finishes.
+   */
   resetBudget: i32 = 100
 }
 
@@ -927,10 +931,30 @@ export class Http2Connection {
     return true
   }
 
-  /** A stream error on `s`: resets it, and answers the H2_RESET that tells the program. */
+  /**
+   * Charges one stream the peer had reset to the reset budget, whichever side
+   * sent the RST_STREAM: a client that cannot send one itself provokes the
+   * server into it (MadeYouReset, CVE-2025-8671). Answers H2_NEED_MORE, or
+   * once the budget is spent the connection error ENHANCE_YOUR_CALM (§10.5).
+   */
+  chargeReset(): i32 {
+    this.resetCredit = this.resetCredit - 1
+    return this.resetCredit < 0 ? this.fail(H2_ENHANCE_YOUR_CALM) : H2_NEED_MORE
+  }
+
+  /** A stream error the peer caused on `id`, which the program never saw: resets it and charges the budget. */
+  refuseStream(id: i32, code: i32): i32 {
+    this.resetStream(id, code)
+    return this.chargeReset()
+  }
+
+  /** A stream error on `s`: resets it, charges the budget, and answers the H2_RESET that tells the program. */
   streamError(s: Http2Stream, code: i32): i32 {
     const id: i32 = s.id
-    this.resetStream(id, code)
+    const charged: i32 = this.refuseStream(id, code)
+    if (charged !== H2_NEED_MORE) {
+      return charged
+    }
     this.stream = id
     this.errorCode = toI64(code)
     this.resetByPeer = false
@@ -1111,10 +1135,7 @@ export class Http2Connection {
     this.recvWindow = this.recvWindow - toI64(size)
     if (s === null) {
       this.credit(null, size)
-      if (!this.discarded(id)) {
-        this.resetStream(id, H2_STREAM_CLOSED)
-      }
-      return H2_NEED_MORE
+      return this.discarded(id) ? H2_NEED_MORE : this.refuseStream(id, H2_STREAM_CLOSED)
     }
     const end: boolean = f.has(H2_FLAG_END_STREAM)
     const received: i64 = s.received + toI64(f.contentLength)
@@ -1218,16 +1239,14 @@ export class Http2Connection {
       return H2_NEED_MORE
     }
     if (this.blockError !== 0) {
-      this.resetStream(id, this.blockError)
-      return H2_NEED_MORE
+      return this.refuseStream(id, this.blockError)
     }
     if (decoded === HPACK_LIST_TOO_LARGE) {
       this.tooLarge(id)
-      return H2_NEED_MORE
+      return this.chargeReset()
     }
     if (this.active >= this.config.maxStreams) {
-      this.resetStream(id, H2_REFUSED_STREAM)
-      return H2_NEED_MORE
+      return this.refuseStream(id, H2_REFUSED_STREAM)
     }
     const shape: i32 = this.fields.readRequest(
       this.decoder.names,
@@ -1235,8 +1254,7 @@ export class Http2Connection {
       this.config.enableConnectProtocol
     )
     if (shape !== HTTP_FIELDS_OK || (this.blockEndStream && this.fields.contentLength > toI64(0))) {
-      this.resetStream(id, H2_PROTOCOL_ERROR)
-      return H2_NEED_MORE
+      return this.refuseStream(id, H2_PROTOCOL_ERROR)
     }
     const opened: Http2Stream = this.open(id)
     opened.contentLength = this.fields.contentLength
@@ -1330,8 +1348,7 @@ export class Http2Connection {
     if (s !== null) {
       return this.streamError(s, f.streamError)
     }
-    this.resetStream(f.streamId, f.streamError)
-    return H2_NEED_MORE
+    return this.refuseStream(f.streamId, f.streamError)
   }
 
   /** RST_STREAM (§6.4): the stream is closed; on an idle one it is a connection error. */
@@ -1344,9 +1361,9 @@ export class Http2Connection {
       return H2_NEED_MORE
     }
     this.release(s)
-    this.resetCredit = this.resetCredit - 1
-    if (this.resetCredit < 0) {
-      return this.fail(H2_ENHANCE_YOUR_CALM)
+    const charged: i32 = this.chargeReset()
+    if (charged !== H2_NEED_MORE) {
+      return charged
     }
     this.stream = f.streamId
     this.errorCode = f.errorCode

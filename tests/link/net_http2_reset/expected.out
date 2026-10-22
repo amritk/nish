@@ -1,0 +1,22 @@
+PASS  a WINDOW_UPDATE of zero on the stream, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a WINDOW_UPDATE of zero on the stream, as often as it allows: the connection lives
+PASS  a PRIORITY that makes the stream depend on itself, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a PRIORITY that makes the stream depend on itself, as often as it allows: the connection lives
+PASS  a WINDOW_UPDATE that takes the stream's window past 2^31 - 1, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a WINDOW_UPDATE that takes the stream's window past 2^31 - 1, as often as it allows: the connection lives
+PASS  DATA past the stream's window, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  DATA past the stream's window, as often as it allows: the connection lives
+PASS  trailers without END_STREAM, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  trailers without END_STREAM, as often as it allows: the connection lives
+PASS  a header list past SETTINGS_MAX_HEADER_LIST_SIZE, answered with a 431, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a header list past SETTINGS_MAX_HEADER_LIST_SIZE, answered with a 431, as often as it allows: the connection lives
+PASS  a malformed request, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a malformed request, as often as it allows: the connection lives
+PASS  a HEADERS that makes its own stream depend on itself, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a HEADERS that makes its own stream depend on itself, as often as it allows: the connection lives
+PASS  a stream past SETTINGS_MAX_CONCURRENT_STREAMS, refused, once more than resetBudget allows: ENHANCE_YOUR_CALM
+PASS  a stream past SETTINGS_MAX_CONCURRENT_STREAMS, refused, as often as it allows: the connection lives
+PASS  a reset the client sends and two it provokes, against a budget of two: ENHANCE_YOUR_CALM
+PASS  a stream the server finishes earns the budget back: a budget of one takes a provoked reset after every answer
+PASS  streams the program resets itself are not charged to the client
+http2 reset budget: 21 passed, 0 failed, 0 skipped
