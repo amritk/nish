@@ -3476,6 +3476,23 @@ export const main = (): i32 => {
   parameter table, and two fresh `const`s in a generic function, are
   admitted). Two parameters may be one array and are refused. `parallelMap`
   and `parallelFrom` allocate their own `dst`, which no capture can reach.
+- **A fresh `dst` nothing was handed is apart from every capture** (#612).
+  When `dst` is a `const` bound to an array of its own, and nothing before the
+  call — or in a loop around the call that does not also declare it, or in a
+  function written inside — names it except to index it or read a member, then
+  no capture can reach it: the only way into a value is through a binding, and
+  none was given this one. So the body may read a `parallelMap` result, a
+  config object or a `const self = this` beside it
+  (`par_into_fresh_pipeline`, `par_into_fresh_object`). Anything that hands
+  `dst` on first is refused with the message above: a store `p.arr = d` or
+  `this.tab = d` (`reject_par_into_store_field`, `_this_field`), an argument
+  `keep(h, d)` or `ts.push(d)` (`_helper`, `_push`), an alias `const e = d`
+  (`_alias`), a branch `c ? d : w` (`_ternary`), a holder `new Holder(d)`
+  (`_holder`), a store after the call inside a loop around it
+  (`_loop_store`), and the arrow reading `dst` itself (`_captured`). A `dst`
+  bound to a captured array is no fresh `const` (`_from_capture`). The rule
+  asks for the one binding of that name in its function, so a `dst` whose
+  name is declared twice there keeps the stricter rule above.
 
 ### Scoped tasks: `using s = scope()`
 
