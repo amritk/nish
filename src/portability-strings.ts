@@ -244,14 +244,10 @@ class Trail {
       return
     }
     const via = this.via
-    let source = `\`${this.walk.textOf(this.source)}\``
-    if (via !== null) {
-      source = `\`${this.walk.textOf(via)}\`, which ${this.verb} ${source}`
-    }
-    let quote = via === null ? source : `${source},`
-    if (holder !== null) {
-      quote = `\`${holder.name}\`, which holds ${source},`
-    }
+    const origin = `\`${this.walk.textOf(this.source)}\``
+    const source = via === null ? origin : `\`${this.walk.textOf(via)}\`, which ${this.verb} ${origin}`
+    const quote =
+      holder !== null ? `\`${holder.name}\`, which holds ${source},` : via === null ? source : `${source},`
     this.out.push(new PortabilityFinding(at, `${quote} ${NL8001}, ${reason}`))
   }
 
@@ -435,7 +431,7 @@ const parameterIndex = (walk: PortabilityWalk, expr: Node): i32 => {
   const names = walk.sig.paramNames
   const first = names.length > 0 && names[0] === "this" ? 1 : 0
   for (let k = first; k < names.length; k++) {
-    if (names[k] === local.name) {
+    if (k >= 0 && names[k] === local.name) {
       return k - first
     }
   }
