@@ -242,8 +242,12 @@ class PreforkSupervisor {
       const now: i64 = preforkNowMs()
       if (now - slot.at < toI64(this.config.quickExitMs)) {
         const cap: i32 = this.config.backoffCapMs
-        // Compared before doubling, so a cap near the i32 limit cannot overflow.
-        slot.delay = slot.delay === 0 ? this.config.backoffMs : slot.delay > cap / 2 ? cap : slot.delay * 2
+        if (slot.delay === 0) {
+          slot.delay = this.config.backoffMs
+        } else {
+          // Compared before doubling, so a cap near the i32 limit cannot overflow.
+          slot.delay = slot.delay > cap / 2 ? cap : slot.delay * 2
+        }
       } else {
         slot.delay = 0
       }
@@ -340,7 +344,11 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
     console.error("nish/net/prefork: cannot listen for SIGTERM")
     return PREFORK_SPAWN_FAILED
   }
-  const supervisor = new PreforkSupervisor(config, args, preforkWorkerCount(config.workers, getenv("NISH_WORKERS")))
+  const supervisor = new PreforkSupervisor(
+    config,
+    args,
+    preforkWorkerCount(config.workers, getenv("NISH_WORKERS"))
+  )
   const ready: i32[] = new Array<i32>(2)
   let result: i32 = PREFORK_STOPPED
   if (!supervisor.restart()) {

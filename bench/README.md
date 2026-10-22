@@ -840,6 +840,50 @@ route, eight segments and three parameters deep in the table, runs at 140,405:
 101% of `nish`'s plaintext rate in the same rounds, with its answer built from
 the three parameters. `old` has no such route, so its cell is n/a.
 
+**On every core.** With `BENCH_CORES=N` above 1, `http1-server.ts` runs as N
+workers under [`nish/net/prefork`](../std/net/prefork.ts), each with its own
+`SO_REUSEPORT` listener and pool, and `http.mjs --cores` sets it. Worker 0
+prints `listening` only once every worker has bound: the workers check in
+over a UDP port, because wrk opens its connections once, at that line, and a
+connection opened before a worker bound would stay on the others for the whole
+run. `requests` (the `/json` `n`) counts per worker. Without `BENCH_CORES`,
+or at 1, it is the one-process server above. A worker restarted after a crash
+waits up to 5 s for a check-in nobody answers before it serves; the bench does
+not crash it.
+
+```bash
+node bench/http.mjs --cores 1,2,4 --rounds 5 --duration 3 \
+  --only "plaintext keep-alive c=256,post-json keep-alive,plaintext close c=64" \
+  nish=build/bench/h1 nish-copy=build/bench/h1-copy
+```
+
+`nish` and `nish-copy` are byte-identical `--profile speed` builds (175,344
+bytes), timed in the same interleaved rounds on 2026-10-22, on a shared
+four-vCPU KVM VM (Intel Xeon @ 2.80 GHz, Linux 6.18, wrk 4.1.0). At N cores
+the server has CPUs 0 to N−1 and wrk the rest, with as many threads; at 4
+cores wrk has none of its own and shares the server's. Each cell is `nish`'s
+median, its spread under it, and the band is `nish-copy`'s median against it:
+
+| scenario | 1 core | 2 cores | 4 cores, client shares | band (1 / 2 / 4) |
+| --- | ---: | ---: | ---: | ---: |
+| plaintext keep-alive c=256 | 103,768<br>56,901–108,755 | 224,012<br>180,794–246,398 | 196,398<br>183,526–210,002 | +3.4% / −8.4% / −4.2% |
+| post-json keep-alive c=256 | 30,584<br>28,919–34,032 | 82,443<br>76,709–93,989 | 112,420<br>110,874–119,031 | +9.4% / +5.0% / −1.6% |
+| plaintext close c=64 | 39,361<br>38,041–45,491 | 31,514<br>28,290–33,238 | 42,201<br>39,155–46,854 | +2.0% / −2.4% / −1.9% |
+| plaintext close c=64 + 8000 idle | 43,734<br>39,238–46,940 | 30,514<br>27,356–33,548 | 42,309<br>37,554–42,974 | −3.1% / −1.8% / −2.2% |
+
+Keep-alive scales with the server's cores while wrk keeps cores of its own:
+2.2× on plaintext and 2.7× on post-json at 2 cores, well outside the bands. At
+4 cores plaintext falls back to 196,398, because wrk's four threads now take
+CPU from the four workers; post-json, which spends more of each request in the
+server, still rises to 3.7× one core. The `Connection: close` rows do not
+scale on this machine: every request is a new TCP connection, and the
+handshake costs the client and the kernel as much as the server, so at 2
+cores, with wrk down from three CPUs to two, the rate falls by a fifth, and at
+4 cores it is back at the 1-core figure. System time per request rises with
+the cores on those rows (20.4 µs to 30.5 µs), the kernel's share of the
+accept path. Peak RSS is the sum over the workers: 4 MB at 1 core, 8 MB at 2,
+13 MB at 4 on plaintext.
+
 ## P-256
 
 `p256.ts` times ECDSA over P-256 on the three calls a key's life makes:
