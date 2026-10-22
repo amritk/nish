@@ -196,7 +196,7 @@ PASS  a connection that keeps pinging is kept until the deadline
 PASS  a connection that keeps pinging and never sends CONNECT is closed at the hello deadline
 PASS  handshakes alone from one address take no more global places than its cap of 2
 PASS  and hold no more slots than its cap and the 2 spare ones
-PASS  the two past that are closed with code 1 at their first Initial, counted
+PASS  the two past that are closed with code 1 once their address is validated, counted
 PASS  another address still opens a session and is answered HELLO_OK
 PASS  and its DATA goes up and comes back down
 PASS  four DATA in one pass reach the game server in order, the shorter last

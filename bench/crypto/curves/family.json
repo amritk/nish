@@ -36,7 +36,7 @@
       "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off"
     }
   },
-  "portableProof": "x25519@32",
+  "portableProof": ["x25519@32", "p256-verify@64"],
   "portableProofFlags": ["bmi2", "adx"],
   "portableMinRatio": { "openssl": 1.05, "rust": null }
 }

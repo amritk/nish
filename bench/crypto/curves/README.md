@@ -58,13 +58,19 @@ across iterations of a timed loop: the X25519 calls store an allocation, so no
 | Node | — | `node:crypto` is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off. |
 
 `portableProof` is `x25519@32`, the kernel where OpenSSL's mask costs the
-most. OpenSSL 3.0's curve assembly is not switched off by any mask, only its
-MULX/ADX paths are, so OpenSSL portable takes about 1.1x the time of OpenSSL
-on every row it reaches: on this family's reference machine (with `bmi2` and
-`adx`), 1.11x to 1.14x at `x25519`, 1.09x at `p256-verify` and 1.08x at
-`p256-sign`, against a noise band of about ±4% (the default binary timed
-against itself in the same rounds). OpenSSL's floor is therefore 1.05x, above
-that band, rather than the default 1.2x. Go purego takes about 1.3x the time of
-Go at `x25519` (2.7x at `p256-verify`). Rust's portable build lacks the proof
-kernel, so its proof reads "unproved" and its ratio is `null`: its Ed25519
-verify row shows the backend's cost, about 1.4x.
+most, then `p256-verify@64` for a column that comes up short there. OpenSSL
+3.0's curve assembly is not switched off by any mask, only its MULX/ADX paths
+are, so OpenSSL portable takes about 1.1x the time of OpenSSL on every row it
+reaches: on this family's reference machine (with `bmi2` and `adx`), 1.11x to
+1.14x at `x25519`, 1.09x at `p256-verify` and 1.08x at `p256-sign`, against a
+noise band of about ±4% (the default binary timed against itself in the same
+rounds). OpenSSL's floor is therefore 1.05x, above that band, rather than the
+default 1.2x. Go purego took about 1.6x the time of Go at `x25519` under Go
+1.24, but Go 1.25 narrows it: 1.23x on one x86-64 machine, just over the 1.2x
+floor, and 1.09x on CI's runner, under it. Its proof therefore falls through
+to `p256-verify`, where purego gives up the `nistec` assembly and takes 2.5x
+the time of Go. `x25519` stays first because OpenSSL's mask costs less at
+`p256-verify`, and nothing at all on the machine that measured Go's 2.5x.
+Rust's portable build lacks both proof kernels, so its proof reads "unproved"
+and its ratio is `null`: its Ed25519 verify row shows the backend's cost,
+about 1.4x.
