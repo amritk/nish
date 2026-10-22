@@ -60,16 +60,25 @@ a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
 ## Quickstart
 
-Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
-per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
+Requirements: clang (LLVM 18) + lld, to produce binaries; per-OS install
+commands are in [docs/INSTALL.md](docs/INSTALL.md).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
+```
+
+The script needs only `sh`, `curl` and `tar`. It installs the prebuilt
+compiler into `~/.nish` and ends by printing the `export PATH=…` line to add
+to your shell profile.
+
+**Or with npm**, which needs Node.js 22.18+:
 
 ```bash
 npm install -g nish            # or per project: npm i -D nish
 npx nish --version             # or run it without installing
-# or, with no Node at all:
-curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
-# npm fetches the prebuilt native compiler for your machine alongside it.
 ```
+
+npm fetches the prebuilt native compiler for your machine alongside it.
 
 > [!NOTE]
 > **From a release tarball rather than the registry, install the pair.** The
