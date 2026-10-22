@@ -21,13 +21,21 @@ node bench/run.mjs --only crypto                      # the same --record, throu
 
 `--compiler <nish>` names the compiler under test, and defaults to
 `build/nish`. `--only` takes family names (`hash`) or kernel names (`sha256`).
+`--families <dir>` reads the families from another directory, which is how
+`tests/run.js` validates an altered copy of one.
 `node bench/crypto/run.mjs --help` lists every option. `--record` writes the
-whole table, so it refuses `--only` and `--no-<twin>`, which time a part of it:
-send a part to `--out` or stdout instead. It also refuses a `docs/BENCHMARKS.md`
-whose markers are not each there once, `begin` before `end`, or both absent.
+whole table, so it refuses `--only`, `--no-<twin>` and `--families`, which time
+a part of it or something else: send a part to `--out` or stdout instead. It
+also refuses a `docs/BENCHMARKS.md` whose markers are not each there once,
+`begin` before `end`, or both absent.
 
-`tests/run.js crypto-bench` runs `--validate` over every family it finds. A new
-family therefore needs no edit to the test harness: CI picks up its directory.
+`tests/run.js crypto-bench` runs `--validate` over every family it finds. It
+also proves that `--validate` fails: a copy of the curves family whose
+`expected.txt` has one line altered must exit 1 with a `CHECKSUM MISMATCH`
+line, where the unaltered copy passes; and the `portableRounds` proof must pass
+the real OpenSSL mask and fail a mask that clears nothing the proof kernel
+uses. A new family therefore needs no edit to the test harness: CI picks up
+its directory.
 
 A missing toolchain is a note, never a failure, and that twin's columns read
 —. The runner detects each twin as follows:
@@ -182,6 +190,7 @@ cannot fall back to a default.
 | `portableProof` | `"<kernel>@<size>"`, or a non-empty list of distinct ones, optional | The case `--validate` times to prove each portable column is portable; a list is tried in order, and the first case that reaches the ratio proves the twin. |
 | `portableProofFlags` | array of `/proc/cpuinfo` flags; required with `portableProof` and an `OPENSSL_ia32cap` mask | The extensions whose loss slows the proof kernel under OpenSSL, each one the mask clears. OpenSSL's proof is held only on a CPU that has one of them. |
 | `portableMinRatio` | number above 1, or an object, optional | How much slower a portable column must be than its default one at `portableProof`; the default is 1.2. An object sets it per twin (`openssl`, `go` and `rust`; a twin it leaves out keeps 1.2). A twin's value of `null` measures and reports the ratio without gating on it. Only valid with `portableProof`. |
+| `portableRounds` | array of twins, optional | The twins (`openssl`, `go`, `rust`) whose proof, short of `portableMinRatio`, is settled by the paired rounds instead (see `portableProof` below). Each one's `portableMinRatio` must be a number. Only valid with `portableProof`. |
 | `notes` | array of strings, optional | Footnotes printed under the family's table after the generated ones, for anything about its columns a reader needs and no other field says. |
 | `needs` | array, optional | `["loopback"]` when the programs listen on and connect to `127.0.0.1`, as a handshake does. On a machine that refuses a loopback socket, the family is noted and left out, rather than failing; `--validate` prints `<family>: skipped (needs loopback)`. |
 
@@ -207,7 +216,7 @@ cannot fall back to a default.
 
 | Twin | Fields | What the runner does |
 | --- | --- | --- |
-| `openssl` | `env`, required | Runs the same binary under these variables, typically `OPENSSL_ia32cap`, a mask that clears the CPU capability bits OpenSSL's assembly dispatches on. |
+| `openssl` | `env`, required | Runs the same binary under these variables, typically `OPENSSL_ia32cap`, a mask that clears the CPU capability bits OpenSSL's assembly dispatches on. A mask with no `:` second word clears that whole word (BMI1, AVX2, BMI2, ADX, SHA-NI and on), so write `:~0x0` to keep it. |
 | `go` | `tags`, `env` | Builds a second binary with `-tags <tags joined by ,>` (`purego` turns off the standard library's assembly), with `env` at build time and at run time. |
 | `rust` | `rustflags`, `env` | Builds a second binary into a target directory of its own, with `CARGO_ENCODED_RUSTFLAGS` set to these flags, one element each. The usual flag is a backend `--cfg` that the crate reads. The default build gets an empty `CARGO_ENCODED_RUSTFLAGS`, and neither build sees a `RUSTFLAGS` from the environment, so the two differ by these flags alone. |
 
@@ -232,6 +241,26 @@ with both a default column and a portable one, `--validate` does two things:
    time. The portable column must take at least `portableMinRatio` times as
    long. A short result is measured once more over 11 rounds (12) before it counts
    as short.
+
+A twin listed in `portableRounds` gets one more measurement when both ratios
+fall short: 48 interleaved rounds of the two columns, each round a pair run
+back to back. The portable column must be the slower of the pair in at least
+36 of them. A count short of that prints `retry …` and the 48 rounds are
+measured once more, as a short ratio is; the second count decides. A mask that
+changed nothing runs the same code on both sides, so each pair is a coin toss
+whatever the machine's noise: 36 of 48 or more comes up by chance with
+probability 3.6e-4 a set, 7.2e-4 over the two. A real cost makes the portable
+column the slower of a pair with some probability p above one half, and the
+count misses with probability 0.15 a set at p = 0.8, 0.022 at p = 0.85 and
+6.6e-4 at p = 0.9; with the second set, 0.022, 4.7e-4 and 4.4e-7. The line
+reads `portable <family> <column>: <ratio> the time of <twin> at <case>,
+slower in <n> of 48 paired rounds (needs <ratio>, or 36 of 48)`, or
+`NOT PORTABLE …` when short.
+It is for a mask whose cost on some CI machines is about the size of the
+ratio's noise: on GitHub's runners OpenSSL's X25519 under the curves family's
+mask measured 1.029x to 1.046x against its 1.05x floor, while a reference
+machine measures 1.1x. A lower floor would pass a mask that changed nothing
+on a noisy run; a paired count does not.
 
 When `portableProof` is a list, a short case prints `short <family> <column>:
 … trying <next case>` and the next case is timed the same way; the first case
@@ -309,7 +338,8 @@ copy of every twin would add up to seven columns to every row, and the noise a
 band measures is mostly the machine's: every column runs in the same
 interleaved rounds and meets it alike. A twin whose own runs spread wider than
 Nish's is not caught by it, so a quotient just past the band is weak evidence;
-the table prints each family's band range for that reading.
+the table's **Band** column prints each row's band, as `±1.2%`, between the
+timed columns and the two quotients read against it.
 
 - **within the band:** no difference;
 - **edge:** too close to call;

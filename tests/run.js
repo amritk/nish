@@ -7049,6 +7049,10 @@ if (!only || "par_alloc".includes(only)) {
 // Node's arrows close over them, and natively each one travels as a parameter,
 // so the same values print both ways. `par_map_vector` is the scramble of
 // bench/par-regions.ts over a map, the program the check below vectorises.
+// `par_into_fresh_pipeline` and `par_into_fresh_object` (#612) read a
+// `parallelMap` result, a config object and a `const self = this` beside a
+// fresh `dst` nothing was handed before the call; `par_into_fresh_reads`
+// indexes, fills and walks that `dst` first.
 //
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
@@ -7111,6 +7115,9 @@ for (const name of [
   "par_from",
   "par_capture",
   "par_capture_large",
+  "par_into_fresh_object",
+  "par_into_fresh_pipeline",
+  "par_into_fresh_reads",
   "par_map_vector",
   "thread_scope_basic",
   "thread_scope_exit_paths",
@@ -16162,6 +16169,116 @@ if (!only || "crypto-bench".includes(only)) {
         console.log(`      ${line}`)
       }
     }
+    // --validate fails, not only passes: a copy of the curves family, read
+    // through --families, passes as committed and fails once one line of its
+    // expected.txt is altered. Nish and OpenSSL alone, at x25519's one size.
+    const copies = path.join(buildDir, "crypto-bench", "families")
+    const copyCurves = (name, edit) => {
+      const dir = path.join(copies, name)
+      fs.rmSync(dir, { recursive: true, force: true })
+      // main.ts imports ../lib/gen, so the shared library comes along.
+      for (const d of ["curves", "lib"]) {
+        fs.cpSync(path.join(root, "bench", "crypto", d), path.join(dir, d), { recursive: true })
+      }
+      edit(path.join(dir, "curves"))
+      return dir
+    }
+    const validateCopy = (dir, only) =>
+      spawnSync(
+        "node",
+        [
+          path.join(root, "bench", "crypto", "run.mjs"),
+          "--compiler",
+          path.relative(root, NISH),
+          "--families",
+          dir,
+          "--only",
+          only,
+          "--no-go",
+          "--no-rust",
+          "--no-node",
+          "--validate",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    const clean = validateCopy(
+      copyCurves("clean", () => {}),
+      "x25519"
+    )
+    const altered = validateCopy(
+      copyCurves("altered", (dir) => {
+        const file = path.join(dir, "expected.txt")
+        const text = fs.readFileSync(file, "utf8")
+        // The checksum's last hex digit, moved by one: still a well-formed line.
+        const next = text.replace(/^(x25519 32 \d+ [0-9a-f]{7})([0-9a-f])$/m, (_, head, d) =>
+          `${head}${((parseInt(d, 16) + 1) % 16).toString(16)}`
+        )
+        fs.writeFileSync(file, next === text ? `${text}# no x25519 32 line to alter\n` : next)
+      }),
+      "x25519"
+    )
+    check(
+      "crypto-bench: --validate exits 1 with a CHECKSUM MISMATCH line when one expected.txt line is altered, and 0 on the unaltered copy",
+      clean.status === 0 &&
+        /^curves: 1 of 1 kernel size\(s\) match expected\.txt$/m.test(clean.stdout) &&
+        altered.status === 1 &&
+        /^CHECKSUM MISMATCH x25519 32 nish: printed [0-9a-f]{8}, expected\.txt has [0-9a-f]{8}$/m.test(
+          altered.stdout
+        ) &&
+        /^crypto: \d+ mismatch\(es\); nothing is timed$/m.test(altered.stdout),
+      `unaltered: exit ${clean.status}\n${clean.stdout}${clean.stderr}\naltered: exit ${altered.status}\n${altered.stdout}${altered.stderr}`
+    )
+    // The paired-rounds proof (portableRounds) on two more copies, each with a
+    // ratio floor no mask reaches so the rounds alone decide: the real mask
+    // must pass; a mask that clears only AVX, which X25519 does not use, must
+    // fail (its ratio alone would pass it on a noisy run, as 1.098x once did).
+    // That mask names its second word as `~0x0`: OpenSSL reads a missing second
+    // word as zero, which would clear BMI2 and ADX too. Each needs a CPU with
+    // the flags its mask clears; GitHub's runner has them. The verdict line
+    // names whichever proof case decided, the last one when all fall short.
+    const withFamily = (edit) => (dir) => {
+      const file = path.join(dir, "family.json")
+      const spec = JSON.parse(fs.readFileSync(file, "utf8"))
+      edit(spec)
+      fs.writeFileSync(file, `${JSON.stringify(spec, null, 2)}\n`)
+    }
+    const pairedLine = (verdict) =>
+      new RegExp(
+        `^${verdict} curves openssl-portable: \\d+\\.\\d{3}x the time of openssl at [\\w-]+@\\d+, slower in \\d+ of \\d+ paired rounds `,
+        "m"
+      )
+    const paired = [
+      {
+        name: "crypto-bench: portableRounds proves the curves family's OpenSSL mask by its paired rounds when the ratio falls short",
+        dir: "paired-real",
+        edit: (spec) => {
+          spec.portableMinRatio.openssl = 100
+        },
+        status: 0,
+        line: pairedLine("portable"),
+      },
+      {
+        name: "crypto-bench: portableRounds fails an OpenSSL mask that clears nothing X25519 uses (AVX only)",
+        dir: "paired-avx",
+        edit: (spec) => {
+          spec.portableMinRatio.openssl = 100
+          spec.twins.openssl.portable.env.OPENSSL_ia32cap = "~0x1000000000000000:~0x0"
+          spec.portableProofFlags = ["avx"]
+        },
+        status: 1,
+        line: pairedLine("NOT PORTABLE"),
+      },
+    ]
+    for (const c of paired) {
+      const r = validateCopy(copyCurves(c.dir, withFamily(c.edit)), "curves")
+      const unproved = /^portable curves openssl-portable: unproved \((.*)\)$/m.exec(r.stdout)
+      if (unproved !== null && !strict) {
+        skip(`${c.name} (${unproved[1]})`)
+        continue
+      }
+      check(c.name, r.status === c.status && c.line.test(r.stdout), `exit ${r.status}\n${r.stdout}${r.stderr}`)
+    }
+    fs.rmSync(copies, { recursive: true, force: true })
     // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
     // compiler it was given reaches the child, and the child's status comes
     // back. A wrapper answers --version from the compiler under test and fails

@@ -38,5 +38,6 @@
   },
   "portableProof": ["x25519@32", "p256-verify@64"],
   "portableProofFlags": ["bmi2", "adx"],
-  "portableMinRatio": { "openssl": 1.05, "rust": null }
+  "portableMinRatio": { "openssl": 1.05, "rust": null },
+  "portableRounds": ["openssl"]
 }
