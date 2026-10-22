@@ -3493,7 +3493,8 @@ export const main = (): i32 => {
   (`_holder`), a store after the call inside a loop around it
   (`_loop_store`, and `_loop_store_while`, `_do`, `_for_of` for the other
   loops) — the outermost such loop, so a store after an inner loop
-  inside an outer one counts (`_nested_loop`) — a hand-on on one branch of an `if` (`_if_branch`), an
+  inside an outer one counts (`_nested_loop`) — a hand-on on one branch of
+  an `if` (`_if_branch`), an
   earlier call writing the same `dst` (`_twice`), `dst` passed as the call's
   own `src` (`_as_src`), and the arrow reading `dst` itself (`_captured`). A
   `dst` bound to a captured array is no fresh `const` (`_from_capture`). The
