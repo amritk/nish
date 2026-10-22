@@ -494,17 +494,27 @@ export class Rig {
     }
   }
 
-  /** A client numbered `index` from `host`, through its QUIC handshake with the relay. */
-  connect(index: i32, host: string): RigClient {
+  /**
+   * A client numbered `index` from `host` that sends its first Initial and
+   * nothing after it, as one whose source address is forged does: the relay's
+   * answer goes to the address, never to the sender, so the handshake goes no
+   * further and the address is never validated.
+   */
+  initial(index: i32, host: string): RigClient {
     const c = new RigClient(index, host, this.port);
     this.clients.push(c);
     this.wait.watch(c.fd);
     const hello: u8[] = c.hello();
     c.c.before = hello;
-    const from: i32 = toI32(c.c.datagrams.length);
     c.transmit(qcInitial(c.c, qcCrypto(n64(0), hello), n32(1200)));
     this.settle(n32(50));
-    if (qcReadFlight(c.c, from, n32(0))) {
+    return c;
+  }
+
+  /** A client numbered `index` from `host`, through its QUIC handshake with the relay. */
+  connect(index: i32, host: string): RigClient {
+    const c: RigClient = this.initial(index, host);
+    if (qcReadFlight(c.c, n32(0), n32(0))) {
       c.transmit(qcFinishedPacket(c.c));
       c.connected = true;
       this.settle(n32(50));

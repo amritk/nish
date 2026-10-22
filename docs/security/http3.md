@@ -278,6 +278,22 @@ the resident memory an HTTP/3 slot adds went from 12,462 kB to 254 kB. Add
 the decoder's and the field copies' growth to the largest
 section seen (H3-2).
 
+**A slot's address is the program's to trust only once QUIC validates it**
+(#806). `Http3Server.addresses[slot]` is the source of the slot's first
+datagram, which anyone may forge; `quic(slot).addressValidated` says when
+RFC 9000 §8.1 has proven it, by a Handshake packet or, with `retry` on, a
+Retry token the listener checked. The relay of `examples/relay`, which caps
+sessions per address with `retry` off, claims an address's place only from
+that point, so Initials that name a real client's address and never answer
+the server's flight hold a slot each until the hello deadline, and none of
+the address's places (`net_relay_forged`, "they hold no place of the address
+and no global place, and none is shed", "two clients from that address then
+open sessions under its cap of two"); a validated client past the cap is
+still refused ("a third validated client from it is refused"). Without
+`retry`, forged Initials can still fill the slot pool from any addresses for
+the hello deadline, each answered within QUIC's amplification limit; `retry`
+on gives them no slot at all.
+
 ## What is and is not wiped
 
 HTTP/3 holds no key material: the packet keys are QUIC's and TLS's

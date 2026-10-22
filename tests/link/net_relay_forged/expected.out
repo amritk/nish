@@ -1,0 +1,8 @@
+PASS  four Initials that never finish the handshake are each answered, and none closed
+PASS  they hold no place of the address and no global place, and none is shed
+PASS  two clients from that address then open sessions under its cap of two
+PASS  a third validated client from it is refused
+PASS  closed with code 1, holding no place
+PASS  at the hello deadline the four are closed, counted, and their slots given back
+PASS  and the two sessions keep their places
+relay forged: 7 passed, 0 failed, 0 skipped

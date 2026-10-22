@@ -298,7 +298,7 @@ const caps = (t: Suite): void => {
   t.ok("a refused session hands its global place back, and its address holds no extra row", rig2.relay.live === n32(3) && rig2.relay.peers.used === n32(2));
 };
 
-/** A handshake holds both places from its first Initial, and only until the hello deadline unless it opens a session. */
+/** A handshake holds both places once its Handshake packet validates the address, and only until the hello deadline unless it opens a session. */
 const connecting = (t: Suite): void => {
   const config: RelayConfig = rigConfig();
   config.maxSessions = 66;
@@ -357,7 +357,7 @@ const oneAddress = (t: Suite): void => {
   }
   t.ok("handshakes alone from one address take no more global places than its cap of 2", rig.relay.live <= n32(2));
   t.ok("and hold no more slots than its cap and the 2 spare ones", held <= n32(4));
-  t.ok("the two past that are closed with code 1 at their first Initial, counted", rig.relay.shed === n32(2) && rig.relay.unplacedCount === n32(2));
+  t.ok("the two past that are closed with code 1 once their address is validated, counted", rig.relay.shed === n32(2) && rig.relay.unplacedCount === n32(2));
   const other: RigClient = rig.session(n32(7), "127.0.0.2");
   t.eqStr("another address still opens a session and is answered HELLO_OK", toHex(other.last()).substring(0, 2), "02");
   other.send(rigData(n32(1), n32(10), n32(0x77)));
