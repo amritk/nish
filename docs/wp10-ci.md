@@ -16,10 +16,10 @@ runs are cancelled; a push to `main` never is, because each one is a merge and
 its run is the only record of whether `main` was green after it (the runs of #396
 and #397 ended cancelled before that rule).
 
-It also runs on `merge_group`, the merge queue's event, as do `pr-title.yml`
-and `pr-body.yml`. A pull request's own run tests its head merged with `main`
-as `main` stood when the run began, so two pull requests each green that way
-can be red together: the self-goldens and the `.ll` they share move without a
+It also runs on `merge_group`, the merge queue's event, as does
+`pr-title.yml`. A pull request's own run tests its head merged with `main` as
+`main` stood when the run began, so two pull requests each green that way can
+be red together: the self-goldens and the `.ll` they share move without a
 textual conflict (#549 after #547). The queue runs CI on each one on top of
 `main` and everything queued ahead of it, on a temporary
 `gh-readonly-queue/main/*` branch, and merges only what passed there. The queue
@@ -53,8 +53,7 @@ nightly `parity.yml` and `release.yml`'s `ddc` job — were deleted with stage0'
 
 The other workflows: `release.yml` and `release-pr.yml`
 ([wp12-release.md](wp12-release.md#release-procedure)); `pr-title.yml`, which
-checks a pull request title with `changelog-gen.mjs --check-subject`;
-`pr-body.yml`, which refuses tool attribution in a pull request body; and
+checks a pull request title with `changelog-gen.mjs --check-subject`; and
 `ct-timing.yml`, a weekly dudect-style timing test of the constant-time crypto
 code that files an issue rather than failing a pull request.
 

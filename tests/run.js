@@ -21454,18 +21454,14 @@ if (!only || ["third-party-licence", "awfy-licence"].some((name) => name.include
   )
 }
 
-// ---- No tool attribution: the hook and the PR body check ------------------------------
+// ---- No tool attribution: the hook ---------------------------------------------------
 // CLAUDE.md keeps session links, model names and "Generated with" footers out of
 // commits and PR text. `.claude/hooks/no-attribution.mjs` refuses the tool call that
-// would write one, and `scripts/check-pr-body.mjs` fails the `PR body` workflow on a
-// footer appended after that call, where the hook cannot see it (#176). One pattern
-// list serves both, so both suites run here: a pattern edited for one is tested
-// against the other's cases too.
-if (!only || "attribution".includes(only) || "pr-body".includes(only)) {
-  for (const suite of [".claude/hooks/no-attribution.test.mjs", "scripts/check-pr-body.test.mjs"]) {
-    const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" })
-    check(`attribution: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
-  }
+// would write one.
+if (!only || "attribution".includes(only)) {
+  const suite = ".claude/hooks/no-attribution.test.mjs"
+  const r = spawnSync(process.execPath, [path.join(root, suite)], { cwd: root, encoding: "utf8" })
+  check(`attribution: node ${suite} passes`, r.status === 0, r.stdout + r.stderr)
 }
 
 // `.claude/hooks/format-edited.mjs` formats each file an agent edits, the way a
