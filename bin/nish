@@ -2,7 +2,7 @@
 // The `nish` command, before `scripts/postinstall.mjs` has had a look at it.
 //
 // This file is deliberately tiny and deliberately not the whole story. On a
-// machine that installed one of the prebuilt `nish-<asset>` packages,
+// machine that installed one of the prebuilt `@amritk/nish-<asset>` packages,
 // postinstall replaces this file with a one-line `/bin/sh` exec of that
 // package's native compiler, so nothing node-shaped is left in the path --
 // measured at 3.2 ms against 94 ms for this shim, which is almost entirely

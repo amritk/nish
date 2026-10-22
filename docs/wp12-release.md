@@ -15,7 +15,7 @@ no build step), `runtime/`, `scripts/` minus the repository-only tools,
 `docs/INSTALL.md`. `npm pack --dry-run` lists it.
 
 `bin/nish` finds the prebuilt native compiler for this machine and hands over
-to it. The binary arrives as one of four `nish-<asset>` packages
+to it. The binary arrives as one of four `@amritk/nish-<asset>` packages
 declared as `optionalDependencies` with `os` and `cpu` set, so npm installs
 the matching one. **Nothing is compiled on a user's machine on any path**:
 each platform package is the binary `release.yml` built, `--verify`d and
@@ -241,23 +241,27 @@ published as `@amritk/nish` (decided 2026-09-19, when a scope was reversible
 into a bare name and npm's dispute process was slow and could fail). The name
 was handed over in October 2026, and 0.20.0 is the first release under it.
 
-- The platform packages moved with it, from `@amritk/nish-<asset>` to
-  `nish-<asset>`. Nothing spells either: `bin/packaging.js`'s
-  `platformPackageName`, `scripts/platform-package.mjs`, `release.yml` and
-  the `wp12` block of `tests/run.js` all derive it from `package.json#name`,
-  so the move was that one field. Each new name was published once by hand
-  and given `npm trust github` before `release.yml` could publish to it
-  ([Release procedure](#release-procedure)).
-- `npm pack` names the tarball `nish-<version>.tgz`, beside the release's
-  `nish-<version>-<asset>.tar.gz`; the extensions keep them apart.
+- The platform packages stay `@amritk/nish-<asset>`, the esbuild pattern
+  (`esbuild` installs `@esbuild/linux-x64`): nobody types their names, they
+  were already published and trusted by `release.yml`, and npm's spam check
+  refused the unscoped `nish-<asset>` names outright. So the platform name is
+  no longer the main name plus a suffix: `PLATFORM_PACKAGE_PREFIX` in
+  `bin/packaging.js` spells it once, and `platformPackageName` is what the
+  launcher, `postinstall.mjs`, `platform-package.mjs`, `release.yml` and
+  `tests/run.js` call. `release-pr.yml` bumps every `optionalDependencies`
+  key rather than the ones that start with the main name, which since this
+  move is none of them.
+- `npm pack` names the main tarball `nish-<version>.tgz` and a platform one
+  `amritk-nish-<asset>-<version>.tgz`, beside the release's
+  `nish-<version>-<asset>.tar.gz`.
 - `tests/nish/cli.ts` still reads the tool name from `bin`'s key rather than
   from `package.json#name`. The two strings agree again, but only `bin` is
   the tool.
 - The standard-library prefix `STD_PREFIX` is `nish/`, which is now also the
   package's own specifier: `nish/text` from an installed package reaches
   `std/text.ts` through `exports`, the same file the compiler reads.
-- `@amritk/nish` and its platform packages stay on the registry, deprecated
-  with a pointer to `nish`, so a lockfile that pins them keeps installing.
+- `@amritk/nish` stays on the registry, deprecated with a pointer to `nish`,
+  so a lockfile that pins it keeps installing.
 
 ## Which compiler the package ships
 

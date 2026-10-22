@@ -24,7 +24,7 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { targetForAsset } from "../bin/packaging.js"
+import { platformPackageName, targetForAsset } from "../bin/packaging.js"
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -59,7 +59,7 @@ const pretty = { linux: "Linux", darwin: "macOS" }[target.os] ?? target.os
 const chip = { x64: "x86_64", arm64: "ARM64" }[target.cpu] ?? target.cpu
 
 const manifest = {
-  name: `${main.name}-${asset}`,
+  name: platformPackageName(asset),
   version,
   description: `The ${main.name} native compiler for ${pretty} on ${chip}`,
   license: main.license,

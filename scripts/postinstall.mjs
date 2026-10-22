@@ -6,7 +6,7 @@
  * it. That works everywhere and costs node's startup on every invocation --
  * 94 ms against the binary's own 2.7 ms, which is nothing for a single build
  * and is 80 seconds across a suite that spawns a compiler per case. So when a
- * `nish-<asset>` package did get installed, this replaces the shim
+ * `@amritk/nish-<asset>` package did get installed, this replaces the shim
  * with a one-line `exec` of that package's binary: 3.9 ms, and no node.
  *
  * **It execs the binary where it lies; it does not copy it here.** Copying was
@@ -79,10 +79,7 @@ const swap = async () => {
     return `no prebuilt binary for ${process.platform}/${process.arch}`
   }
 
-  const name = platformPackageName(
-    JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).name,
-    asset
-  )
+  const name = platformPackageName(asset)
   let binary
   try {
     const manifest = createRequire(import.meta.url).resolve(`${name}/package.json`)

@@ -308,7 +308,7 @@ and `INSTALL.md` rewritten. **Closed:**
   v0.4.0 was the first release to attach all four.
 - The package is `nish`, the command `nish`
   ([wp12-release.md](wp12-release.md#the-npm-name)). `bin/nish` is a launcher,
-  and the compiler arrives as one `nish-<asset>` optional dependency
+  and the compiler arrives as one `@amritk/nish-<asset>` optional dependency
   per platform, so nothing is compiled on a user's machine.
   `node tests/run.js wp12` packs, installs and links through it.
 - `--version` reads `VERSION` in `src/branding.ts`.
