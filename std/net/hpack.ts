@@ -1220,9 +1220,11 @@ export class HpackDecoder {
           const fits: boolean = size <= toI64(this.table.maxSize)
           // The table copies the field in, and an indexed name out first.
           const added: boolean = incremental && fits
-          const cost: i64 = added ? size - toI64(HPACK_ENTRY_OVERHEAD) + (index !== 0 ? toI64(nameLength) : toI64(0)) : toI64(0)
+          const nameOut: i64 = index !== 0 ? toI64(nameLength) : toI64(0)
+          const cost: i64 = added ? size - toI64(HPACK_ENTRY_OVERHEAD) + nameOut : toI64(0)
           copied += cost
-          if (copied > toI64(HPACK_COPY_FACTOR) * toI64(this.table.maxSize > length ? this.table.maxSize : length)) {
+          const scale: i32 = this.table.maxSize > length ? this.table.maxSize : length
+          if (copied > toI64(HPACK_COPY_FACTOR) * toI64(scale)) {
             return HPACK_ERR_COPY_BUDGET
           }
           // An indexed name is copied out only when the table takes the field,

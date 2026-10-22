@@ -1531,17 +1531,19 @@ function HpackDecoder.decodeFields(this: HpackDecoder, c: HpackCursor): i32 -> @
   local +58:17 incremental: boolean (const)
   local +59:17 fits: boolean (const)
   local +61:17 added: boolean (const)
-  local +62:17 cost: i64 (const)
-  callee +74:13 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
-  local +77:19 kept: u8[] (const)
-  callee +77:32 HpackWork.take -> @nish.HpackWork.take
-  local +79:21 from: i32 (const)
-  callee +80:15 hpackAppend -> @nish.hpackAppend
-  callee +82:15 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
-  callee +85:30 HpackDecoder.copyOf -> @nish.HpackDecoder.copyOf
-  callee +90:13 HpackTable.add -> @nish.HpackTable.add
-  local +92:19 nothing: i32 (const)
-  callee +93:13 HpackTable.evictTo -> @nish.HpackTable.evictTo
+  local +62:17 nameOut: i64 (const)
+  local +63:17 cost: i64 (const)
+  local +65:17 scale: i32 (const)
+  callee +76:13 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
+  local +79:19 kept: u8[] (const)
+  callee +79:32 HpackWork.take -> @nish.HpackWork.take
+  local +81:21 from: i32 (const)
+  callee +82:15 hpackAppend -> @nish.hpackAppend
+  callee +84:15 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
+  callee +87:30 HpackDecoder.copyOf -> @nish.HpackDecoder.copyOf
+  callee +92:13 HpackTable.add -> @nish.HpackTable.add
+  local +94:19 nothing: i32 (const)
+  callee +95:13 HpackTable.evictTo -> @nish.HpackTable.evictTo
 function HpackDecoder.copyOf(this: HpackDecoder, bytes: u8[]): u8[] -> @nish.HpackDecoder.copyOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
