@@ -3483,7 +3483,7 @@ export const main = (): i32 => {
   no capture can reach it: the only way into a value is through a binding, and
   none was given this one. So the body may read a `parallelMap` result, a
   config object or a `const self = this` beside it
-  (`par_into_fresh_pipeline`, `par_into_fresh_object`). Anything that hands
+  (`tests/link/par_into_fresh_pipeline`, `par_into_fresh_object`). Anything that hands
   `dst` on first is refused with the message above: a store `p.arr = d` or
   `this.tab = d` (`reject_par_into_store_field`, `_this_field`), an argument
   `keep(h, d)` or `ts.push(d)` (`_helper`, `_push`), an alias `const e = d`

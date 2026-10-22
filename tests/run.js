@@ -7049,6 +7049,9 @@ if (!only || "par_alloc".includes(only)) {
 // Node's arrows close over them, and natively each one travels as a parameter,
 // so the same values print both ways. `par_map_vector` is the scramble of
 // bench/par-regions.ts over a map, the program the check below vectorises.
+// `par_into_fresh_pipeline` and `par_into_fresh_object` (#612) read a
+// `parallelMap` result, a config object and a `const self = this` beside a
+// fresh `dst` nothing was handed before the call.
 //
 // `thread_scope_libc_named_tasks` (#610) names its tasks `read`, `write` and
 // `free`, and its map body `close`: each task stores only its own answer, so
@@ -7111,6 +7114,8 @@ for (const name of [
   "par_from",
   "par_capture",
   "par_capture_large",
+  "par_into_fresh_object",
+  "par_into_fresh_pipeline",
   "par_map_vector",
   "thread_scope_basic",
   "thread_scope_exit_paths",
