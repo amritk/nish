@@ -18,16 +18,16 @@ PASS  with both fields whole
 PASS  5000 literals without, 15016 octets naming 20160000 bytes of fields by index, are a 431
 PASS  100 more reach the program not at all
 PASS  and the last 50 move the arena not at all (0 bytes)
-PASS  and all 101 copy no octet out of the table (0)
+PASS  and all 101 copy out of the table only the names under the list limit, 4 x 4,000 octets a block (1616000)
 PASS  5000 literals never, 15016 octets naming 20160000 bytes of fields by index, are a 431
 PASS  100 more reach the program not at all
 PASS  and the last 50 move the arena not at all (0 bytes)
-PASS  and all 101 copy no octet out of the table (0)
+PASS  and all 101 copy out of the table only the names under the list limit, 4 x 4,000 octets a block (1616000)
 PASS  the table still names the field: one more block naming it once is a request
 PASS  with the field whole
 PASS  two literals with incremental indexing naming it, each copying the name out of the table and back in, are a request
 PASS  with both fields whole
-PASS  copying 16000 octets, within the block's budget of 4 x 4,096
+PASS  copying 16000 octets, as measured, the 16000 the budget charges, within its 4 x 4,096
 PASS  5000 of them, 10016 octets, pass the budget and end the connection with ENHANCE_YOUR_CALM
 PASS  stream 1's request
 PASS  then stream 3's block, past the header-list limit

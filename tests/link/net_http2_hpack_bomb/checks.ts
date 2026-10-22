@@ -332,7 +332,14 @@ export const hpackBombChecks = (): i32 => {
     const literalsCopied: i64 = l.conn.decoder.tableCopied - copiedBefore;
     t.eqI32(`${ROUNDS * toI32(2)} more reach the program not at all`, literalEvents, ZERO);
     t.ok(`and the last ${ROUNDS} move the arena not at all (${literalsMoved} bytes)`, literalsMoved === toI64(0));
-    t.ok(`and all ${ROUNDS * toI32(2) + toI32(1)} copy no octet out of the table (${literalsCopied})`, literalsCopied === toI64(0));
+    // The GET's four fields are 177 bytes of the 16,384 the list limit allows, so 4 of the 4,032-byte
+    // literals fit under it; each of those copies its 4,000-octet name for the program, the rest nothing.
+    const blocks: i64 = toI64(ROUNDS * toI32(2) + toI32(1));
+    const keptPerBlock: i64 = toI64(4) * toI64(LONG_NAME);
+    t.ok(
+      `and all ${blocks} copy out of the table only the names under the list limit, 4 x 4,000 octets a block (${literalsCopied})`,
+      literalsCopied === blocks * keptPerBlock && keptPerBlock <= toI64(config.maxHeaderListSize)
+    );
   }
   sendBlock(l, literalStream, literalBlock(false, "", toI32(0)));
   l.send();
@@ -351,7 +358,12 @@ export const hpackBombChecks = (): i32 => {
   );
   t.eqI32("with both fields whole", longNamesIn(l), toI32(2));
   const twice: i64 = l.conn.decoder.tableCopied - twiceBefore;
-  t.ok(`copying ${twice} octets, within the block's budget of 4 x 4,096`, twice === toI64(4) * toI64(LONG_NAME) && twice <= toI64(4) * toI64(4096));
+  // The budget charges each literal its name out of the table and its field back in, before copying.
+  const charged: i64 = toI64(2) * (toI64(LONG_NAME) + toI64(LONG_NAME));
+  t.ok(
+    `copying ${twice} octets, as measured, the ${charged} the budget charges, within its 4 x 4,096`,
+    twice === charged && charged <= toI64(4) * toI64(4096)
+  );
   l.conn.respond(literalStream, ok, noFields, noFields, true);
   l.takeFrames();
   const lastStream: i32 = literalStream;

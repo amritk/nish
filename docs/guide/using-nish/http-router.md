@@ -264,6 +264,15 @@ needed later, at `H2_DATA` of a streaming POST say, is copied there first:
 const path: u8[] = []; for (const b of fields.path) { path.push(b) }
 ```
 
+`get(..)` answers `null` for a field the request does not carry, so copy what
+it found, and keep an empty array (or your own default) for what it did not:
+
+```ts
+const found: u8[] | null = fields.get("content-type");
+const type: u8[] = [];
+if (found !== null) { for (const b of found) { type.push(b) } }
+```
+
 The same table and the same `switch` then serve all three. The
 [standard library page](standard-library.md#nishnet) lists the carriers, and
 the [library's README](../../../std/README.md) every export.

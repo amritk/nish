@@ -56,16 +56,16 @@
  * or cut into more than `H2_MAX_FRAGMENTS` frames, a header block that would
  * make the HPACK table copy past its budget (`HPACK_ERR_COPY_BUDGET`), and
  * more streams reset than `resetBudget` allows — by the peer, or by the
- * server for a stream error the peer caused (ENHANCE_YOUR_CALM, §10.5). A stream error resets one
- * stream and the connection lives: a malformed request — any
- * refusal of `nish/net/http-fields`, trailers without END_STREAM, a body that
- * disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or HEADERS
- * after the peer ended the stream (STREAM_CLOSED, §5.1); DATA past the
- * stream's window, or its window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR);
- * a stream past `maxStreams` (REFUSED_STREAM, §5.1.2); a stream that depends
- * on itself and a PRIORITY of the wrong length. A request whose header list
- * is longer than `maxHeaderListSize` is answered with a 431 and never reaches
- * the program (§10.5.1).
+ * server for a stream error the peer caused (ENHANCE_YOUR_CALM, §10.5). A
+ * stream error resets one stream and the connection lives: a malformed request
+ * — any refusal of `nish/net/http-fields`, trailers without END_STREAM, a body
+ * that disagrees with `content-length` (PROTOCOL_ERROR, §8.1.1); DATA or
+ * HEADERS after the peer ended the stream (STREAM_CLOSED, §5.1); DATA past the
+ * stream's window, or its window pushed past 2^31 − 1 (FLOW_CONTROL_ERROR); a
+ * stream past `maxStreams` (REFUSED_STREAM, §5.1.2); a stream that depends on
+ * itself and a PRIORITY of the wrong length. A request whose header list is
+ * longer than `maxHeaderListSize` is answered with a 431 and never reaches the
+ * program (§10.5.1).
  *
  * **Caps are start-up numbers**, all in `Http2Config`: the streams open at
  * once, the windows, the largest frame and header block accepted, the header

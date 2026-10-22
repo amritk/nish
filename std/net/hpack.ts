@@ -824,25 +824,30 @@ export class HpackTable {
    * Adds a field as the newest entry, copying its octets in, evicting first
    * to make room. An entry larger than the whole table empties it and is not
    * added (§4.4): that is not an error. Neither array may be `bytes` itself,
-   * since eviction may move what it holds.
+   * since eviction may move what it holds. Returns the octets it pushed into
+   * `bytes`: none for an entry it did not add.
    */
-  add(name: u8[], value: u8[]): void {
+  add(name: u8[], value: u8[]): i32 {
     const cost: i64 = hpackEntrySize(name, value)
     if (cost > toI64(this.maxSize)) {
       const nothing: i32 = 0
       this.evictTo(nothing)
-      return
+      return nothing
     }
     this.evictTo(this.maxSize - toI32(cost))
     this.entries.push(toI32(this.bytes.length))
     this.entries.push(toI32(name.length))
+    let pushed: i32 = 0
     for (const b of name) {
       this.bytes.push(b)
+      pushed += 1
     }
     for (const b of value) {
       this.bytes.push(b)
+      pushed += 1
     }
     this.size += toI32(cost)
+    return pushed
   }
 
   /** Sets the maximum size, evicting what no longer fits (§4.3). */
@@ -979,10 +984,12 @@ export class HpackDecoder {
   /** The storage a block is decoded with, made by the first `decode`, so an idle connection holds none. */
   work: HpackWork | null = null
   /**
-   * The octets every block so far has copied to index a field: a name
-   * named by index, copied out of a table into the scratch, and each field
-   * `table.add` copies in. A block may add at most its budget to it
-   * (`HPACK_COPY_FACTOR`); it is public so that tests can read it.
+   * The octets the decoder has moved through its dynamic table, counted where
+   * they move: each name or value `appendNameAt` and `appendValueAt` copy out
+   * of the table, and each octet `table.add` pushes in. The budget
+   * (`HPACK_COPY_FACTOR`) is charged before a literal's copies, from the
+   * sizes it will copy; this counts what was copied, so that tests can hold
+   * the two equal. It is public so that tests can read it.
    */
   tableCopied: i64 = 0
 
@@ -1036,6 +1043,7 @@ export class HpackDecoder {
     }
     const i: i32 = index - HPACK_STATIC_LENGTH
     hpackAppend(out, this.table.bytes, this.table.nameStart(i), this.table.nameLength(i))
+    this.tableCopied += toI64(this.table.nameLength(i))
   }
 
   /** Appends the value at `index` to `out`, as `appendNameAt` does the name. */
@@ -1046,6 +1054,7 @@ export class HpackDecoder {
     }
     const i: i32 = index - HPACK_STATIC_LENGTH
     hpackAppend(out, this.table.bytes, this.table.valueStart(i), this.table.valueLength(i))
+    this.tableCopied += toI64(this.table.valueLength(i))
   }
 
   /** How many octets the name at `index` has. */
@@ -1249,8 +1258,7 @@ export class HpackDecoder {
             this.neverIndexed.push(rep === HPACK_REP_NEVER)
           }
           if (added) {
-            this.tableCopied += cost
-            this.table.add(name, value)
+            this.tableCopied += toI64(this.table.add(name, value))
           } else if (incremental) {
             const nothing: i32 = 0
             this.table.evictTo(nothing)
