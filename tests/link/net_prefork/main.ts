@@ -20,7 +20,9 @@
 //      returns: the supervisor then lingers a second, and a pid it had not
 //      reaped would still answer `kill(pid, 0)` as a zombie.
 //
-// Every wait is bounded. The driver passes its pid to each supervisor, which
+// Every wait is bounded, and every pid is checked before it is signalled or
+// waited on: a step whose child did not start or did not report says false
+// and goes no further. The driver passes its pid to each supervisor, which
 // adds its own; a worker that finds the driver gone (the harness killed it, or
 // it failed) sends the supervisor SIGTERM, so no supervisor outlives its driver
 // by more than a second restarting workers nobody reads.
@@ -84,7 +86,7 @@ const orphaned = (args: string[]): boolean => {
   if (driver <= 0 || kill(driver, 0) === 0) {
     return false;
   }
-  kill(parseInt(args[4]), 15);
+  signal(parseInt(args[4]), 15);
   return true;
 };
 
@@ -154,7 +156,7 @@ const stubbornWorker = (port: i32, args: string[]): number => {
  */
 const linger = (args: string[]): number => {
   const driver: i32 = parseInt(args[3]);
-  for (let k: i32 = 0; k < 200 && kill(driver, 0) === 0; k++) {
+  for (let k: i32 = 0; k < 200 && signal(driver, 0); k++) {
     pause(50);
   }
   return 0;
@@ -250,6 +252,32 @@ const pause = (ms: i32): void => {
   netClose(loop);
 };
 
+/** `kill(pid, sig)` succeeded; false without a call for a pid that is not positive. */
+const signal = (pid: i32, sig: i32): boolean => pid > 0 && kill(pid, sig) === 0;
+
+/**
+ * True when child `pid` exits 0 within `ms`. A WNOHANG loop, never a blocking
+ * wait, and never on a pid that is not positive (-1 would be any child): past
+ * the deadline the child gets SIGKILL and a second at most to be reaped.
+ */
+const exitsZero = (pid: i32, ms: i32): boolean => {
+  if (pid <= 0) {
+    return false;
+  }
+  for (let k: i32 = 0; k < ms / 10 + 100; k++) {
+    const status = waitPid(pid, 1);
+    if (status[0] !== 0) {
+      return status[0] === pid && status[1] === 0 && k < ms / 10;
+    }
+    if (k === ms / 10) {
+      console.log(`child ${pid} still running after ${ms} ms`);
+      signal(pid, 9);
+    }
+    pause(10);
+  }
+  return false;
+};
+
 /** The first answer, retrying while the workers bind; "" after 5 s. */
 const firstAnswer = (port: i32): string => {
   for (let tries: i32 = 0; tries < 100; tries++) {
@@ -300,6 +328,9 @@ const served = (): void => {
   const sup = spawn([selfPath(), "serve", `${port}`, `${selfPid()}`]);
   const first = firstAnswer(port);
   console.log(sup > 0 && first !== "" && first !== "refused");
+  if (sup <= 0) {
+    return;
+  }
 
   // Spread, and each worker's arena across its answers.
   const pids: i32[] = new Array<i32>(workers());
@@ -335,7 +366,7 @@ const served = (): void => {
       old = pids[i];
     }
   }
-  console.log(platform !== "linux" || kill(old, 9) === 0);
+  console.log(platform !== "linux" || signal(old, 9));
   let back = platform !== "linux";
   // It died young, so it waits out `backoffMs` first; five seconds at most.
   for (let k: i32 = 0; k < 500 && !back; k++) {
@@ -348,9 +379,8 @@ const served = (): void => {
   console.log(back);
 
   // SIGTERM stops it all.
-  console.log(kill(sup, 15) === 0);
-  const done = waitPid(sup, 0);
-  console.log(done[0] === sup && done[1] === 0);
+  console.log(signal(sup, 15));
+  console.log(exitsZero(sup, 10000));
   console.log(request(port) === "refused");
 };
 
@@ -359,6 +389,12 @@ const crashes = (): void => {
   const fd = udpBind("127.0.0.1", 0, 0);
   const port = netLocalPort(fd);
   const sup = spawn([selfPath(), "crash", `${port}`, `${selfPid()}`]);
+  if (sup <= 0) {
+    console.log(`spawn: ${sup}`);
+    console.log(false);
+    netClose(fd);
+    return;
+  }
   const loop = pollCreate();
   pollAdd(loop, fd, 1, 0);
   const ready: i32[] = new Array<i32>(2);
@@ -385,9 +421,9 @@ const crashes = (): void => {
     wait = wait * 2 < toI64(CAP_MS) ? wait * 2 : toI64(CAP_MS);
   }
   console.log(ordered);
-  console.log(kill(sup, 15) === 0);
-  const done = waitPid(sup, 0);
-  console.log(done[0] === sup && done[1] === 0);
+  console.log(signal(sup, 15));
+  console.log(exitsZero(sup, 10000));
+  netClose(loop);
   netClose(fd);
 };
 
@@ -431,14 +467,23 @@ const stubborn = (): void => {
       pids.push(parseInt(got.substring(2)));
     }
   }
-  console.log(sup > 0 && foreign > 0 && pids.length === 2 && pids[0] > 0 && pids[1] > 0);
+  const started = sup > 0 && foreign > 0 && pids.length === 2 && pids[0] > 0 && pids[1] > 0;
+  console.log(started);
+  if (!started) {
+    console.log(`spawn: ${sup}, foreign: ${foreign}, workers: ${pids.length}`);
+    signal(sup, 15);
+    exitsZero(sup, 5000);
+    netClose(loop);
+    netClose(fd);
+    return;
+  }
 
   // The workers ignore this, and the non-worker child exits well inside the
   // grace period, while the supervisor is in `stop`.
   const from: i64 = monotonicNanos();
-  console.log(kill(sup, 15) === 0);
+  console.log(signal(sup, 15));
   pause(200);
-  console.log(kill(foreign, 15) === 0);
+  console.log(signal(foreign, 15));
 
   let done = false;
   while (!done && !quiet) {
@@ -451,16 +496,15 @@ const stubborn = (): void => {
   console.log(done && tookMs >= toI64(STUBBORN_GRACE_MS));
   // The supervisor is still alive, so a child it left unreaped is a zombie
   // and answers `kill(pid, 0)`; each one has been reaped.
-  let reaped = kill(foreign, 0) !== 0;
+  let reaped = !signal(foreign, 0);
   for (const pid of pids) {
-    if (kill(pid, 0) === 0) {
+    if (signal(pid, 0)) {
       console.log(`worker ${pid} left behind`);
       reaped = false;
     }
   }
   console.log(reaped);
-  const status = waitPid(sup, 0);
-  console.log(status[0] === sup && status[1] === 0);
+  console.log(exitsZero(sup, 10000));
   netClose(loop);
   netClose(fd);
 };
