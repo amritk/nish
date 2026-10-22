@@ -43,7 +43,7 @@ PASS  http/2: past the server's 65,535-byte stream window the client waited for 
 PASS  http/2: fifty DATA frames echoed on the warm open stream
 PASS  http/2: and every server wake kept 0 bytes over them
 PASS  http/2: a GET on a new stream of the warm connection
-http/2: that request kept 728 bytes (H2-1, HPACK's per header block)
+http/2: that request kept 0 bytes (H2-1, HPACK's per header block)
 PASS  http/2: the client's GOAWAY and close_notify are answered with the server's close_notify
 PASS  http/2: the server's program saw the GOAWAY, and the slot closed
 PASS  http/2: every stream ended, none reset

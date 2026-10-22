@@ -319,7 +319,8 @@ const hpackAppendText = (out: u8[], text: string): void => {
 
 /** Appends `src[at, at + n)`, a window the caller has checked, to `out`. */
 const hpackAppend = (out: u8[], src: u8[], at: i32, n: i32): void => {
-  for (let i: i32 = at; i < at + n; i += 1) {
+  // The length test is the caller's check again, there so the prover drops the bounds check.
+  for (let i: i32 = at; i < at + n && i >= 0 && i < toI32(src.length); i += 1) {
     out.push(src[i])
   }
 }
