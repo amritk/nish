@@ -2052,7 +2052,10 @@ and their `.ll` goldens are byte-identical files.
   recognises as a library function on the targets the compiler emits for
   (`abs`, `atan`, `rename`, `qsort`: LLVM folds or rewrites a call to one of
   them whatever its definition, so `abs(-3)` answered 3;
-  `reject_export_c_symbol_tli`). `tests/run.js` reads them back with `llvm-nm` from the runtime's
+  `reject_export_c_symbol_tli`), and every function C23's `<math.h>` and C99's
+  `<complex.h>` declare, in `double`, `float` and `long double` (`tgamma`,
+  `erff`, `ilogbl`, `cexp`), whether or not the LLVM in use knows it, because a
+  later LLVM than CI's recognises more of them (#651). `tests/run.js` reads them back with `llvm-nm` from the runtime's
   objects, `runtime-wasm.c`, the N-API shim, and two programs — one that calls
   every `Math` builtin, one that multiplies `i64`s, copies arrays and prints
   strings — linked at three optimisation levels and compiled for wasm32, the
