@@ -1369,7 +1369,6 @@ function HpackWork.take(this: HpackWork, length: i32): u8[] -> @nish.HpackWork.t
   local -5:13 made: u8[] (const)
   callee -4:7 hpackEmpty -> @nish.hpackEmpty
   local -1:11 out: u8[] (const)
-  callee +1:5 hpackEmpty -> @nish.hpackEmpty
 function HpackDecoder.constructor(this: HpackDecoder, settingsLimit: i32, maxHeaderListSize: i32): void -> @nish.HpackDecoder.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: maxHeaderListSize settingsLimit
@@ -1448,7 +1447,7 @@ function HpackDecoder.hasIndex(this: HpackDecoder, index: i32): boolean -> @nish
 function HpackDecoder.clear(this: HpackDecoder): void -> @nish.HpackDecoder.clear [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.HpackDecoder.working nish.HpackWork.classOf nish.HpackWork.pool nish_array_grow nish_panic_index
+  calls: nish.HpackDecoder.working nish.HpackWork.classOf nish.HpackWork.pool nish.hpackEmpty nish_array_grow nish_panic_index
   pointer this: size=64 writesThrough=true captured=false passedTo=nish.HpackDecoder.working#0
   stackSites=0 stackLocals=0
   local -4:13 work: HpackWork (const)
@@ -1460,6 +1459,8 @@ function HpackDecoder.clear(this: HpackDecoder): void -> @nish.HpackDecoder.clea
   callee +2:17 HpackWork.classOf -> @nish.HpackWork.classOf
   callee +3:7 HpackWork.pool -> @nish.HpackWork.pool
   callee +3:17 HpackWork.classOf -> @nish.HpackWork.classOf
+  callee +5:7 hpackEmpty -> @nish.hpackEmpty
+  callee +6:7 hpackEmpty -> @nish.hpackEmpty
 function HpackDecoder.decode(this: HpackDecoder, block: u8[], off: i32, len: i32): i32 -> @nish.HpackDecoder.decode [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1478,8 +1479,8 @@ function HpackDecoder.decode(this: HpackDecoder, block: u8[], off: i32, len: i32
 function HpackDecoder.decodeFields(this: HpackDecoder, c: HpackCursor): i32 -> @nish.HpackDecoder.decodeFields [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
-  calls: nish.HpackDecoder.appendNameAt nish.HpackDecoder.appendValueAt nish.HpackDecoder.copyOf nish.HpackDecoder.hasIndex nish.HpackDecoder.nameLengthAt nish.HpackDecoder.sizeAt nish.HpackDecoder.working nish.HpackTable.add nish.HpackTable.resize nish.HpackWork.take nish.hpackDecodeInteger nish.hpackDecodeString nish.hpackEmpty nish.hpackEntrySize nish.hpackRepresentationOf nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.sizeAt#0 nish.HpackDecoder.nameLengthAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendValueAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.copyOf#0 nish.HpackDecoder.copyOf#0
+  calls: nish.HpackDecoder.appendNameAt nish.HpackDecoder.appendValueAt nish.HpackDecoder.copyOf nish.HpackDecoder.hasIndex nish.HpackDecoder.nameLengthAt nish.HpackDecoder.sizeAt nish.HpackDecoder.working nish.HpackTable.add nish.HpackTable.evictTo nish.HpackTable.resize nish.HpackWork.take nish.hpackAppend nish.hpackDecodeInteger nish.hpackDecodeString nish.hpackEmpty nish.hpackRepresentationOf nish_array_grow nish_panic_index nish_panic_overflow
+  pointer this: size=64 writesThrough=true captured=false passedTo=nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.sizeAt#0 nish.HpackDecoder.nameLengthAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendValueAt#0 nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.working#0 nish.HpackDecoder.nameLengthAt#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.copyOf#0
   pointer c: size=16 writesThrough=true captured=false passedTo=nish.hpackDecodeInteger#0 nish.hpackDecodeInteger#0 nish.hpackDecodeInteger#0 nish.hpackDecodeString#1 nish.hpackDecodeString#1
   stackSites=0 stackLocals=0
   local -22:9 listSize: i64 (let)
@@ -1508,22 +1509,32 @@ function HpackDecoder.decodeFields(this: HpackDecoder, c: HpackCursor): i32 -> @
   callee +22:13 HpackDecoder.appendValueAt -> @nish.HpackDecoder.appendValueAt
   local +30:17 index: i32 (const)
   callee +30:30 hpackDecodeInteger -> @nish.hpackDecodeInteger
-  local +36:17 name: u8[] (const)
-  callee +36:30 HpackDecoder.working -> @nish.HpackDecoder.working
-  callee +37:11 hpackEmpty -> @nish.hpackEmpty
-  local +39:19 status: i32 (const)
-  callee +39:33 hpackDecodeString -> @nish.hpackDecodeString
-  callee +43:22 HpackDecoder.hasIndex -> @nish.HpackDecoder.hasIndex
-  callee +44:13 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
-  local +48:17 value: u8[] (const)
-  callee +48:31 HpackDecoder.working -> @nish.HpackDecoder.working
-  callee +49:11 hpackEmpty -> @nish.hpackEmpty
-  local +50:17 status: i32 (const)
-  callee +50:31 hpackDecodeString -> @nish.hpackDecodeString
-  callee +55:13 HpackTable.add -> @nish.HpackTable.add
-  callee +58:23 hpackEntrySize -> @nish.hpackEntrySize
-  callee +61:29 HpackDecoder.copyOf -> @nish.HpackDecoder.copyOf
-  callee +62:30 HpackDecoder.copyOf -> @nish.HpackDecoder.copyOf
+  callee +34:31 HpackDecoder.hasIndex -> @nish.HpackDecoder.hasIndex
+  local +37:17 work: HpackWork (const)
+  callee +37:35 HpackDecoder.working -> @nish.HpackDecoder.working
+  local +39:17 name: u8[] (const)
+  callee +40:11 hpackEmpty -> @nish.hpackEmpty
+  local +42:19 status: i32 (const)
+  callee +42:33 hpackDecodeString -> @nish.hpackDecodeString
+  local +47:17 value: u8[] (const)
+  callee +48:11 hpackEmpty -> @nish.hpackEmpty
+  local +49:17 status: i32 (const)
+  callee +49:31 hpackDecodeString -> @nish.hpackDecodeString
+  local +53:17 nameLength: i32 (const)
+  callee +53:70 HpackDecoder.nameLengthAt -> @nish.HpackDecoder.nameLengthAt
+  local +54:17 size: i64 (const)
+  local +58:17 incremental: boolean (const)
+  local +59:17 fits: boolean (const)
+  callee +65:13 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
+  callee +69:15 HpackTable.add -> @nish.HpackTable.add
+  local +71:21 nothing: i32 (const)
+  callee +72:15 HpackTable.evictTo -> @nish.HpackTable.evictTo
+  local +76:19 kept: u8[] (const)
+  callee +76:32 HpackWork.take -> @nish.HpackWork.take
+  local +78:21 from: i32 (const)
+  callee +79:15 hpackAppend -> @nish.hpackAppend
+  callee +81:15 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
+  callee +84:30 HpackDecoder.copyOf -> @nish.HpackDecoder.copyOf
 function HpackDecoder.copyOf(this: HpackDecoder, bytes: u8[]): u8[] -> @nish.HpackDecoder.copyOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
