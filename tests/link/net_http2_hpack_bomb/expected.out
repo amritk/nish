@@ -13,4 +13,26 @@ PASS  100 more are refused, reaching the program not at all
 PASS  and the last 50 move the arena not at all (0 bytes)
 PASS  100 GETs, each naming the field once, are each a request
 PASS  and the last 50, each answered, move the arena not at all (0 bytes)
-http2 hpack bomb: 15 passed, 0 failed, 0 skipped
+PASS  a block that puts a name of 4,000 octets in the table and names it once is a request
+PASS  with both fields whole
+PASS  5000 literals incremental, 10016 octets naming 20160000 bytes of fields by index, are a 431
+PASS  100 more reach the program not at all
+PASS  and the last 50 move the arena not at all (0 bytes)
+PASS  5000 literals without, 15016 octets naming 20160000 bytes of fields by index, are a 431
+PASS  100 more reach the program not at all
+PASS  and the last 50 move the arena not at all (0 bytes)
+PASS  5000 literals never, 15016 octets naming 20160000 bytes of fields by index, are a 431
+PASS  100 more reach the program not at all
+PASS  and the last 50 move the arena not at all (0 bytes)
+PASS  the table still names the field: one more block naming it once is a request
+PASS  with the field whole
+PASS  stream 1's request
+PASS  then stream 3's block, past the header-list limit
+PASS  leaves stream 1's held fields empty, never stream 3's
+PASS  stream 5's request
+PASS  leaves them stream 5's whole
+PASS  while the copy taken of stream 1's path is still its own
+PASS  stream 1's request, left open
+PASS  then stream 3, past SETTINGS_MAX_CONCURRENT_STREAMS
+PASS  is refused, leaving stream 1's held fields empty, never stream 3's
+http2 hpack bomb: 37 passed, 0 failed, 0 skipped
