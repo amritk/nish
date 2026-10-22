@@ -246,8 +246,13 @@ class Trail {
     const via = this.via
     const origin = `\`${this.walk.textOf(this.source)}\``
     const source = via === null ? origin : `\`${this.walk.textOf(via)}\`, which ${this.verb} ${origin}`
-    const quote =
-      holder !== null ? `\`${holder.name}\`, which holds ${source},` : via === null ? source : `${source},`
+    if (holder !== null) {
+      this.out.push(
+        new PortabilityFinding(at, `\`${holder.name}\`, which holds ${source}, ${NL8001}, ${reason}`)
+      )
+      return
+    }
+    const quote = via === null ? source : `${source},`
     this.out.push(new PortabilityFinding(at, `${quote} ${NL8001}, ${reason}`))
   }
 
