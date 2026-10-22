@@ -171,8 +171,9 @@ never fails over it.
 > underlying defect is [wp19 §5a](wp19-stage0-retirement.md#5a-what-r6-is-waiting-on)
 > item 4.
 
-**The package is `nish` from 0.20.0.** Releases up to 0.19.0 were published
-as `@amritk/nish`, which is deprecated and points here; `npm install -g nish`
+**The package is `nish` from 0.20.0.** Releases up to 0.18.0 were published
+as `@amritk/nish` (0.19.0's publish to npm failed), which is deprecated and
+points here; `npm install -g nish`
 replaces it ([docs/wp12-release.md](wp12-release.md#the-npm-name)). Versions
 0.0.0 and 0.0.1 of `nish` are an unrelated 2014 project that held the name
 before it, so pin `nish@^0.20.0` or later rather than an older range.
@@ -239,9 +240,10 @@ routes are
 If you need one of these to be a first-class install, that is the conversation
 to have on the issue tracker rather than a workaround to discover here.
 
-**On the registry from 0.10.0** — as `@amritk/nish` through 0.19.0, and as
-`nish` from 0.20.0. Every release publishes the main package and its platform
-packages to npm from `release.yml`, by trusted publishing
+**On the registry from 0.10.0** — as `@amritk/nish` through 0.18.0, and as
+`nish` from 0.20.0; 0.19.0 is on GitHub only, because its npm publish
+failed. Every release publishes the main package and its platform packages to
+npm from `release.yml`, by trusted publishing
 ([docs/wp12-release.md](wp12-release.md#release-procedure) step 4), so
 `npm install -g nish` is the whole install. The rest of this section is
 for a machine that cannot reach the registry, or a release before 0.10.0.

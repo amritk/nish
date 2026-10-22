@@ -77,7 +77,7 @@ npm install -g nish
 
 Install it without `-g` (`npm install --save-dev nish`) to pin the
 version per project in `package.json`, and run it as `npx nish`. Releases up
-to 0.19.0 were published as `@amritk/nish`; if you installed that, uninstall
+to 0.18.0 were published as `@amritk/nish`; if you installed that, uninstall
 it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
 
 Nish is pre-alpha and changes between minor releases, so you may want to pin

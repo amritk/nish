@@ -236,8 +236,9 @@ are the only commits at which that property can be demonstrated again
 
 **Decided 2026-10-22: the package is `nish`, and so is the command.** The
 bare name belonged from 2014 to `stdarg`'s deprecated "Node.js Interactive
-shell" (versions 0.0.0 and 0.0.1), which is why 0.10.0 to 0.19.0 were
-published as `@amritk/nish` (decided 2026-09-19, when a scope was reversible
+shell" (versions 0.0.0 and 0.0.1), which is why 0.10.0 to 0.18.0 were
+published as `@amritk/nish` (0.19.0 was built under that name too, and its npm
+publish failed) (decided 2026-09-19, when a scope was reversible
 into a bare name and npm's dispute process was slow and could fail). The name
 was handed over in October 2026, and 0.20.0 is the first release under it.
 
