@@ -1,0 +1,5 @@
+declare noundef i32 @nish_signal_fd()
+declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8)
+declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef)
+declare noundef i32 @nish_kill(i32 noundef, i32 noundef)
+declare noundef i32 @nish_tcp_listen_flags(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef)
