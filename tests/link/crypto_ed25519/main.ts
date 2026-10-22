@@ -131,6 +131,39 @@ export const main = (): i32 => {
       )
     )
   );
+  // x = 0 with the sign bit set: [S]B - [k]A is encoded canonically, so this
+  // R never matches either.
+  t.ok(
+    "R with x = 0 and the sign bit set is refused",
+    !ed25519Verify(
+      pub,
+      ab,
+      fromHex(
+        "0100000000000000000000000000000000000000000000000000000000000080" +
+          "5c36be344fcc7277b5af39d483033c2aa6a252c11d108e57f8fcf95760099309"
+      )
+    )
+  );
+
+  // --- S's high bits ------------------------------------------------------------
+  // S is below L < 2^253, so bit 255 or bit 253 set is refused by the range
+  // check before any point is computed.
+  t.ok("S with bit 255 set is refused", !ed25519Verify(pub, empty, flip(sig, 63, 0x80)));
+  t.ok("S of 2^253 or more is refused", !ed25519Verify(pub, empty, flip(sig, 63, 0x20)));
+
+  // --- A key of small order -----------------------------------------------------
+  // (0, -1) has order 2. RFC 8032 does not refuse it and neither does this
+  // module: cofactorless, R = the identity and S = 0 verify under it for every
+  // message whose k is even ("b"), and not for one whose k is odd ("a"), where
+  // [k]A is the key itself. A protocol that needs a signature to bind a key
+  // checks the key itself (ECC-5).
+  const smallOrder: u8[] = fromHex("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f");
+  const zeroSig: u8[] = fromHex(
+    "0100000000000000000000000000000000000000000000000000000000000000" +
+      "0000000000000000000000000000000000000000000000000000000000000000"
+  );
+  t.ok("a key of order 2 verifies R = the identity, S = 0 when k is even", ed25519Verify(smallOrder, fromHex("62"), zeroSig));
+  t.ok("a key of order 2 refuses R = the identity, S = 0 when k is odd", !ed25519Verify(smallOrder, fromHex("61"), zeroSig));
 
   return t.done();
 };

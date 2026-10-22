@@ -48,7 +48,10 @@
  * below p or that is not on the curve, and an x of zero with the sign bit set
  * are all refused (§5.1.3). R is not decoded: [S]B - [k]A is encoded and
  * compared with R's bytes, and since the encoding is canonical, an R that is
- * not the canonical encoding of a point never matches.
+ * not the canonical encoding of a point never matches. A public key of small
+ * order is not refused, as RFC 8032 does not ask it to be: under such a key,
+ * some signatures verify for messages its owner never signed, so a protocol
+ * that needs a signature to bind one key checks the key itself.
  *
  * **The seed is a `Secret`** (`nish:secret`, docs/LANGUAGE.md "Secrets").
  * `ed25519PublicKey` and `ed25519Sign` take the 32-byte seed as a
@@ -736,10 +739,16 @@ const ed25519PublicKeyExposed = (seed: u8[]): u8[] | null => {
  * The Ed25519 signature of `msg` under `seed` (RFC 8032 §5.1.6), `R || S`,
  * 64 bytes. Signing is deterministic: the same seed and message always give
  * the same signature. Answers `null` unless `seed` is `ED25519_SEED_SIZE`
- * bytes. The public key is derived from the seed again on every call.
+ * bytes. The public key is derived from the seed again on every call. A
+ * message longer than 2^31 - 1 bytes panics, as in `sha512`: its length does
+ * not survive `toI32`, and the signature would be of a prefix.
  */
-export const ed25519Sign = (seed: Secret<u8[]>, msg: u8[]): u8[] | null =>
-  exposeWith(seed, msg, ed25519SignExposed)
+export const ed25519Sign = (seed: Secret<u8[]>, msg: u8[]): u8[] | null => {
+  if (msg.length > 2147483647) {
+    panic("ed25519Sign: a message longer than 2^31 - 1 bytes")
+  }
+  return exposeWith(seed, msg, ed25519SignExposed)
+}
 
 /**
  * `ed25519Sign` on the plain seed, for `exposeWith` to run. The seed's hash
@@ -792,10 +801,15 @@ const ed25519SignExposed = (seed: u8[], msg: u8[]): u8[] | null => {
  * `pub` (RFC 8032 §5.1.7): [S]B = R + [k]A with k = SHA-512(R || A || M)
  * mod L, checked as the encoding of [S]B + [k](-A) against R's bytes.
  * Answers `false` for a key or signature of the wrong length, an S of L or
- * more, and a key that does not decode. Every value here is public, so the
- * answer may be reached by branches.
+ * more, and a key that does not decode. A message longer than 2^31 - 1
+ * bytes panics, as in `ed25519Sign`: a check of a prefix would accept the
+ * signature for any longer message that shares it. Every value here is
+ * public, so the answer may be reached by branches.
  */
 export const ed25519Verify = (pub: u8[], msg: u8[], sig: u8[]): boolean => {
+  if (msg.length > 2147483647) {
+    panic("ed25519Verify: a message longer than 2^31 - 1 bytes")
+  }
   if (toI32(pub.length) !== 32 || toI32(sig.length) !== 64) {
     return false
   }

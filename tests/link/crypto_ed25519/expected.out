@@ -33,4 +33,9 @@ PASS  a key with no x on the curve is refused
 PASS  x = 0 with the sign bit set is refused
 PASS  R = the identity, canonical, verifies
 PASS  R = the identity spelled y = p + 1 is refused
-ed25519: 35 passed, 0 failed, 0 skipped
+PASS  R with x = 0 and the sign bit set is refused
+PASS  S with bit 255 set is refused
+PASS  S of 2^253 or more is refused
+PASS  a key of order 2 verifies R = the identity, S = 0 when k is even
+PASS  a key of order 2 refuses R = the identity, S = 0 when k is odd
+ed25519: 40 passed, 0 failed, 0 skipped
