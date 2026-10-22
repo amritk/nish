@@ -29,9 +29,14 @@
  * input, with `batch` the smallest power of two whose median measurement is
  * 64 ticks or more.
  *
- * Usage: <program> <samples> <seed>. One line per function on stdout, tab
- * separated: name, batch, max |t|, the test it came from, the smaller class
- * count of that test, and the uncropped t.
+ * Usage: <program> <samples> <seed> [--null] [<function> ...]. One line per
+ * function on stdout, tab separated: name, batch, max |t|, the test it came
+ * from, the smaller class count of that test, and the uncropped t. Named
+ * functions are the only ones timed, which is how tests/ct-timing.js
+ * re-measures one on a fresh seed. `--null` is the A/A run: every measurement
+ * is still labelled with a class drawn at random, but every one is prepared
+ * as class 1, so the two classes are the same and any |t| is the tests' own
+ * false positive.
  */
 #include "dudect.h"
 
@@ -52,6 +57,8 @@
 #define CT_CALIBRATION 1001
 
 static uint64_t ct_state = 0x9e3779b97f4a7c15u;
+/* `--null`: prepare every measurement as class 1, whatever its label. */
+static int ct_null = 0;
 
 static uint64_t ct_random(void) {
   ct_state ^= ct_state >> 12;
@@ -148,7 +155,7 @@ static double ct_t(const ct_ttest *t) {
 }
 
 static uint64_t ct_measure(const ct_function *f, int c, int batch) {
-  f->prepare(c);
+  f->prepare(ct_null ? 1 : c);
   uint64_t start = ct_ticks();
   for (int k = 0; k < batch; k++) {
     f->call();
@@ -255,9 +262,19 @@ static void ct_run(const ct_function *f, long samples) {
   fflush(stdout);
 }
 
+/* Whether `name` is timed: every function when none is named, else the named ones. */
+static int ct_named(const char *name, char **names, int count) {
+  for (int i = 0; i < count; i++) {
+    if (strcmp(name, names[i]) == 0) {
+      return 1;
+    }
+  }
+  return count == 0;
+}
+
 int main(int argc, char **argv) {
-  if (argc != 3) {
-    fprintf(stderr, "usage: %s <samples> <seed>\n", argv[0]);
+  if (argc < 3) {
+    fprintf(stderr, "usage: %s <samples> <seed> [--null] [<function> ...]\n", argv[0]);
     return 2;
   }
   long samples = atol(argv[1]);
@@ -265,8 +282,23 @@ int main(int argc, char **argv) {
   if (seed != 0) {
     ct_state = seed;
   }
+  int first = 3;
+  if (argc > first && strcmp(argv[first], "--null") == 0) {
+    ct_null = 1;
+    first++;
+  }
+  int timed = 0;
   for (int i = 0; i < ct_function_count; i++) {
-    ct_run(&ct_functions[i], samples);
+    if (ct_named(ct_functions[i].name, argv + first, argc - first)) {
+      ct_run(&ct_functions[i], samples);
+      timed++;
+    }
+  }
+  // A misspelt name would otherwise time nothing and print nothing.
+  if (timed < argc - first) {
+    fprintf(stderr, "ct-timing: %d of the %d functions named are not in this driver\n", argc - first - timed,
+            argc - first);
+    return 2;
   }
   return 0;
 }

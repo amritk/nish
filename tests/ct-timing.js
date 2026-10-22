@@ -34,10 +34,26 @@
  *   node tests/ct-timing.js            the full run, SAMPLES measurements a function
  *   node tests/ct-timing.js --quick    a smoke run, QUICK_SAMPLES a function
  *   node tests/ct-timing.js --samples <n> [--seed <n>] [--nish <compiler>] [<fixture substring>]
+ *   ... --function <name>              time that one function alone, with the controls
+ *   ... --out-of-domain                time a `DOMAINS` fixture on its types' whole range
+ *   ... --null                         the A/A run: both classes prepared alike, so every
+ *                                      |t| is noise, and the table is the false-positive rate
  *
- * It prints a Markdown table and exits 1 when any function's largest |t| is
- * above 4.5, 2 when it could not run or a control did not differ, and 0
- * otherwise. It
+ * A function is timed 102 ways at once (uncropped, 100 cropped percentiles and
+ * a second-order test), and the largest |t| of 102 correlated tests on a
+ * shared machine crosses 4.5 now and then with no leak behind it: the CI
+ * runners have done it once in some 260 function-runs, and the A/A run
+ * (`--null`) measures the rate on a machine (docs/security/ct-verification.md,
+ * "The re-measure rule"). So a function above 4.5 is timed again, by itself in
+ * the same linked driver, on a fresh seed derived from the run's, and is a
+ * finding only when it crosses on both. One
+ * that crossed once and not again stays in the table, as "crossed once, did not
+ * repeat". A control is never re-measured: it must differ on its first
+ * measurement.
+ *
+ * It prints a Markdown table and exits 1 when a function's largest |t| is above
+ * 4.5 on both measurements, 2 when it could not run or a control did not
+ * differ, and 0 otherwise (an A/A run exits 0 or 2). It
  * is not part of `npm test`: the numbers are about the machine it runs on, and
  * a shared runner is noisy, so `.github/workflows/ct-timing.yml` runs it weekly
  * and files what it finds as an issue rather than as a red pull request.
@@ -185,6 +201,9 @@ let samples = SAMPLES
 let seed = (Date.now() % 1000000007) + 1
 let nish = null
 let only = null
+let onlyFunction = null
+let outOfDomain = false
+let nullRun = false
 /** The value after the option at `i`, refusing an option given last or followed by another. */
 const optionValue = (i) => {
   const value = args[i + 1]
@@ -202,6 +221,12 @@ for (let i = 0; i < args.length; i++) {
     seed = Number(optionValue(i++))
   } else if (args[i] === "--nish") {
     nish = path.resolve(optionValue(i++))
+  } else if (args[i] === "--function") {
+    onlyFunction = optionValue(i++)
+  } else if (args[i] === "--out-of-domain") {
+    outOfDomain = true
+  } else if (args[i] === "--null") {
+    nullRun = true
   } else if (args[i].startsWith("-")) {
     fail(`unknown option ${args[i]} (see the header of tests/ct-timing.js)`)
   } else {
@@ -341,6 +366,34 @@ if (only === null ? fixtures.length === 0 : !fixtures.some((f) => f.includes(onl
   fail(`no tests/cases/ct_asm_*.ts${only === null ? "" : ` matches ${only}`}`)
 }
 
+/**
+ * The seed a function over the threshold is re-measured on: the run's seed
+ * times an odd 64-bit constant, so another stream of `ct_random` that is never
+ * zero, and one fixed by `--seed`, so a run repeats with its re-measures.
+ */
+const freshSeed = String((BigInt(seed) * 0x9e3779b97f4a7c15n) % (1n << 64n))
+
+/**
+ * One run of a fixture's driver on `runSeed`, of `names` alone when it is
+ * given: a reading per function, as `tests/ct-timing/dudect.c` prints them.
+ */
+const measure = (name, exe, runSeed, names = []) => {
+  const run = spawnSync(exe, [String(samples), String(runSeed), ...(nullRun ? ["--null"] : []), ...names], {
+    encoding: "utf8",
+    maxBuffer: 1 << 24,
+  })
+  if (run.status !== 0) {
+    fail(`${name} exited ${run.status}:\n${run.stderr}`)
+  }
+  return run.stdout
+    .trim()
+    .split("\n")
+    .map((line) => {
+      const [fn, batch, max, test, used, raw] = line.split("\t")
+      return { fn, batch, max: Number(max), test, used, raw }
+    })
+}
+
 const rows = []
 for (const file of fixtures) {
   const name = file.slice(0, -".ts".length)
@@ -349,7 +402,14 @@ for (const file of fixtures) {
   if (broken.length > 0) {
     fail(`${name}: ${broken.map((spec) => `${spec.name}: ${spec.problems.join("; ")}`).join("\n")}`)
   }
-  const specs = all.filter((spec) => spec.expect === null || spec.expect === "branch")
+  // With --function, the named function and the control's `expect=branch` ones; else all but the other seeds.
+  const specs = all.filter(
+    (spec) =>
+      (spec.expect === null || spec.expect === "branch") &&
+      (onlyFunction === null ||
+        spec.name === onlyFunction ||
+        (file === CONTROL_FIXTURE && spec.expect === "branch"))
+  )
   if (specs.length === 0) {
     continue
   }
@@ -366,7 +426,14 @@ for (const file of fixtures) {
     ll,
     fs.readFileSync(ll, "utf8").replace(/^(define [^@\n]*)@main\(/m, "$1@ct_fixture_main(")
   )
-  const driver = driverFor(specs, DOMAINS[file])
+  // A domain narrows the functions timed here; --function leaves it fewer of them, --out-of-domain none.
+  const domain =
+    outOfDomain || DOMAINS[file] === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(DOMAINS[file]).filter(([fn]) => specs.some((spec) => spec.name === fn))
+        )
+  const driver = driverFor(specs, domain)
   if (driver.error !== undefined) {
     fail(`${name}: ${driver.error}`)
   }
@@ -392,27 +459,18 @@ for (const file of fixtures) {
   if (cc.status !== 0) {
     fail(`${name} does not link:\n${cc.stderr}`)
   }
-  const run = spawnSync(exe, [String(samples), String(seed)], { encoding: "utf8", maxBuffer: 1 << 24 })
-  if (run.status !== 0) {
-    fail(`${name} exited ${run.status}:\n${run.stderr}`)
-  }
   const controls = new Set(specs.filter((spec) => spec.expect !== null).map((spec) => spec.name))
   const domainControlNames = new Set(driver.controls)
-  for (const line of run.stdout.trim().split("\n")) {
-    const [fn, batch, max, test, used, raw] = line.split("\t")
+  for (const reading of measure(name, exe, seed)) {
     // A domain's controls must differ like the others, but only an `expect=branch` function is the run's control.
-    const domainControl = domainControlNames.has(fn)
-    rows.push({
-      fixture: name,
-      fn,
-      batch,
-      max: Number(max),
-      test,
-      used,
-      raw,
-      control: controls.has(fn) || domainControl,
-      domainControl,
-    })
+    const domainControl = domainControlNames.has(reading.fn)
+    // Under --null no class differs, so a control is read like any other function.
+    const control = !nullRun && (controls.has(reading.fn) || domainControl)
+    // A function over the threshold is timed again, by itself in the same driver, on a fresh seed, and is
+    // a finding only if it crosses again. A control is never re-measured: it must differ the first time.
+    const again =
+      !control && reading.max > THRESHOLD ? measure(name, exe, freshSeed, [reading.fn])[0].max : null
+    rows.push({ fixture: name, ...reading, again, control, domainControl })
   }
   // A control that printed no row was never timed, and would otherwise pass unseen.
   const silent = driver.controls.filter((fn) => !rows.some((r) => r.fixture === name && r.fn === fn))
@@ -421,26 +479,47 @@ for (const file of fixtures) {
   }
 }
 
+if (onlyFunction !== null && !rows.some((r) => r.fn === onlyFunction)) {
+  fail(`--function ${onlyFunction}: no ct_asm_* fixture${only === null ? "" : ` matching ${only}`} times it`)
+}
 console.log(
-  `ct-timing: ${os.arch()}, ${os.cpus()[0]?.model.trim() ?? "unknown CPU"}; ${samples} measurements a function, seed ${seed}; threshold |t| > ${THRESHOLD}`
+  `ct-timing: ${os.arch()}, ${os.cpus()[0]?.model.trim() ?? "unknown CPU"}; ${samples} measurements a function, seed ${seed}, re-measured on seed ${freshSeed}; threshold |t| > ${THRESHOLD}${nullRun ? "; the A/A run (--null): both classes are class 1" : ""}`
 )
 console.log("")
-console.log("| fixture | function | batch | max \\|t\\| | from test | per class | uncropped t | verdict |")
-console.log("| --- | --- | ---: | ---: | --- | ---: | ---: | --- |")
+console.log(
+  "| fixture | function | batch | max \\|t\\| | from test | per class | uncropped t | re-measured \\|t\\| | verdict |"
+)
+console.log("| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | --- |")
 for (const r of rows) {
-  const differs = r.max > THRESHOLD
-  let verdict = differs ? "**differs**" : "ok"
+  let verdict = "ok"
   if (r.control) {
-    verdict = differs ? "control: differs, as it must" : "**control did not differ**"
+    verdict = r.max > THRESHOLD ? "control: differs, as it must" : "**control did not differ**"
+  } else if (r.again !== null) {
+    verdict = r.again > THRESHOLD ? "**differs**, and again on a fresh seed" : "crossed once, did not repeat"
   }
   console.log(
-    `| ${r.fixture} | ${r.fn} | ${r.batch} | ${r.max.toFixed(2)} | ${r.test} | ${r.used} | ${r.raw} | ${verdict} |`
+    `| ${r.fixture} | ${r.fn} | ${r.batch} | ${r.max.toFixed(2)} | ${r.test} | ${r.used} | ${r.raw} | ${r.again === null ? "" : r.again.toFixed(2)} | ${verdict} |`
   )
 }
 const checked = rows.filter((r) => !r.control)
-const over = checked.filter((r) => r.max > THRESHOLD)
+const once = checked.filter((r) => r.again !== null)
+const over = once.filter((r) => r.again > THRESHOLD)
 const quiet = rows.filter((r) => r.control && r.max <= THRESHOLD)
+const crossedOnce =
+  once.length === over.length
+    ? ""
+    : `; crossed once and not again: ${once
+        .filter((r) => r.again <= THRESHOLD)
+        .map((r) => r.fn)
+        .join(", ")}`
 console.log("")
+if (nullRun) {
+  // The A/A run measures the tests' false positives, so it has no control to require and no finding to fail on.
+  console.log(
+    `ct-timing: the A/A run: ${once.length} of ${checked.length} functions above |t| = ${THRESHOLD}, ${over.length} of them again on a fresh seed`
+  )
+  process.exit(0)
+}
 if (!rows.some((r) => r.control && !r.domainControl)) {
   fail("no `expect=branch` function was timed, so nothing shows this run could see a leak")
 }
@@ -451,7 +530,7 @@ if (quiet.length > 0) {
 }
 console.log(
   over.length === 0
-    ? `ct-timing: ${checked.length} functions, none above |t| = ${THRESHOLD}; the control differed`
-    : `ct-timing: ${over.length} of ${checked.length} functions above |t| = ${THRESHOLD}: ${over.map((r) => r.fn).join(", ")}`
+    ? `ct-timing: ${checked.length} functions, none above |t| = ${THRESHOLD} twice${crossedOnce}; the control differed`
+    : `ct-timing: ${over.length} of ${checked.length} functions above |t| = ${THRESHOLD} on two seeds: ${over.map((r) => r.fn).join(", ")}${crossedOnce}`
 )
 process.exit(over.length === 0 ? 0 : 1)

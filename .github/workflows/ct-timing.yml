@@ -5,7 +5,18 @@
 # access (tests/ct-asm.js). What it cannot see is what the processor does with
 # the instructions it passes. tests/ct-timing.js measures that instead: a
 # dudect-style Welch's t-test between a fixed and a random secret, over every
-# one of those functions, on an x86-64 and an aarch64 runner.
+# one of those functions, on an x86-64 and an aarch64 runner. A function above
+# |t| = 4.5 is timed again, by itself in the same linked driver, on a fresh
+# seed, and is a finding only when it crosses on both: the largest of 102
+# correlated tests on a shared runner crosses once now and then with no leak
+# behind it (once in some 260 function-runs here so far; docs/security/
+# ct-verification.md, "The re-measure rule"). One that crosses once passes, and
+# is commented on the `ct-timing` issue so that a repeat offender is seen. The
+# controls must differ on their first measurement. A dispatch with `aa_runs`
+# set (a whole number, at most 50) runs the A/A test that many times on each
+# runner instead (tests/ct-timing.js --null): both classes prepared alike, so
+# whatever crosses measures that runner's false-positive rate, which so far
+# rests on that one crossing.
 #
 # It is not a check on pull requests and must not become one. Timing on a
 # shared runner is noisy, so a finding goes to one open issue labelled
@@ -20,6 +31,11 @@ on:
     # Mondays, 04:37 UTC: off the hour, where most scheduled jobs queue.
     - cron: "37 4 * * 1"
   workflow_dispatch:
+    inputs:
+      aa_runs:
+        description: "A/A runs (0 to 50) instead of the timing run (tests/ct-timing.js --null): the runners' false-positive rate"
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -36,6 +52,8 @@ jobs:
   timing:
     name: timing (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A timing run takes about a minute and a half on either runner, so 50 A/A runs fit.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -81,17 +99,41 @@ jobs:
         run: build/seed/bin/nish src/compile.ts --link build/nish
 
       # The exit code is kept rather than acted on here, so that the table is
-      # uploaded whatever it says: 0 none above the threshold, 1 a function
-      # above it, 2 the harness could not run. The `report` job reads it. The
+      # uploaded whatever it says: 0 nothing above the threshold twice, 1 a
+      # function above it on both seeds, 2 the harness could not run or a
+      # control did not differ. The `report` job reads it. The
       # step still fails on anything but 0, so the run itself is red.
       - name: Time the constant-time fixtures
         env:
           MATRIX_OS: ${{ matrix.os }}
+          AA_RUNS: ${{ inputs.aa_runs || 0 }}
         run: |
           mkdir -p build/ct-timing-report
+          : > build/ct-timing-report/table.md
+          # A value that is not a whole number up to 50 is refused, not read as 0.
+          case "$AA_RUNS" in
+            '' | *[!0-9]*) bad=1 ;;
+            *) [ "$AA_RUNS" -le 50 ] && bad=0 || bad=1 ;;
+          esac
+          if [ "$bad" = 1 ]; then
+            echo "aa_runs must be a whole number from 0 to 50, not '$AA_RUNS'" | tee build/ct-timing-report/stderr.txt
+            echo 2 > build/ct-timing-report/code
+            exit 2
+          fi
           set +e
-          node tests/ct-timing.js > build/ct-timing-report/table.md 2> build/ct-timing-report/stderr.txt
-          code=$?
+          if [ "$AA_RUNS" -gt 0 ]; then
+            echo "$AA_RUNS" > build/ct-timing-report/aa
+            # The A/A runs, each on its own seed; the worst exit code is kept.
+            code=0
+            for _ in $(seq "$AA_RUNS"); do
+              node tests/ct-timing.js --null >> build/ct-timing-report/table.md 2>> build/ct-timing-report/stderr.txt
+              run=$?
+              [ "$run" -gt "$code" ] && code=$run
+            done
+          else
+            node tests/ct-timing.js > build/ct-timing-report/table.md 2> build/ct-timing-report/stderr.txt
+            code=$?
+          fi
           set -e
           echo "$code" > build/ct-timing-report/code
           cat build/ct-timing-report/table.md build/ct-timing-report/stderr.txt
@@ -133,13 +175,16 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           failed=0
+          crossed=0
+          aa=0
           {
             echo "The weekly constant-time timing run needs a look: $RUN_URL"
             echo
             echo "Each row below says whether it found a difference or could not run at all."
             echo "A |t| above 4.5 means the fixed and the random secret took measurably different"
-            echo "time. On a shared runner that can be noise, so re-run the workflow before reading"
-            echo "it as a leak; one that repeats, on the same function, is a finding."
+            echo "time. A function above it was timed again on a fresh seed, and only one that"
+            echo "crossed on both is a finding; one that crossed once and not again is in the table"
+            echo "and passes. Re-run the workflow before reading a finding as a leak."
             for os in ubuntu-latest ubuntu-24.04-arm; do
               dir="reports/ct-timing-$os"
               echo
@@ -152,10 +197,15 @@ jobs:
               fi
               code="$(cat "$dir/code")"
               [ "$code" = 0 ] || failed=1
+              if [ -f "$dir/aa" ]; then
+                aa=1
+                echo "The A/A run, $(cat "$dir/aa") times: both classes alike, so every |t| is noise."
+              fi
+              grep -q "crossed once, did not repeat" "$dir/table.md" && crossed=1
               case "$code" in
-                0) echo "Ran; nothing above the threshold." ;;
-                1) echo "**A function was above the threshold.**" ;;
-                *) echo "The harness could not run (exit $code): a build or link failure, not a timing result." ;;
+                0) [ -f "$dir/aa" ] && echo "Ran." || echo "Ran; nothing above the threshold on two seeds." ;;
+                1) echo "**A function was above the threshold on two seeds.**" ;;
+                *) echo "The harness could not run, or a control did not differ (exit $code): not a reading of the code." ;;
               esac
               echo
               cat "$dir/table.md"
@@ -167,9 +217,16 @@ jobs:
               fi
             done
           } > body.md
-          if [ "$failed" = 0 ]; then
-            echo "Both rows ran and nothing was above the threshold."
+          # A function that crossed once passes, but is still put in front of a
+          # person, so one that does it every week is seen. An A/A run is noise
+          # by construction and reads from its summary, so it files nothing.
+          if [ "$failed" = 0 ] && { [ "$crossed" = 0 ] || [ "$aa" = 1 ]; }; then
+            echo "Both rows ran and nothing was above the threshold on two seeds."
             exit 0
+          fi
+          if [ "$failed" = 0 ]; then
+            { echo "**The run passed.** A function crossed |t| = 4.5 once and not on its fresh seed; it is recorded here so that a function that does so week after week is seen."; echo; cat body.md; } > note.md
+            mv note.md body.md
           fi
           gh label create ct-timing --color d93f0b \
             --description "The weekly constant-time timing run found a difference or could not run" 2>/dev/null || true

@@ -28,7 +28,7 @@ the record that found it. The notes below the table name each such finding.
 | P-256 and X25519 | [crypto-ecc.md](crypto-ecc.md) | `std/crypto/p256.ts`, `std/crypto/x25519.ts`, their constant-time fixtures | 0 / 0 / 0 / 3 | 0 / 0 / 0 / 0 |
 | SHA-2, HMAC, HKDF, ct, base64url | [crypto-k1.md](crypto-k1.md) | `std/crypto/sha256.ts`, `sha512.ts`, `hmac.ts`, `hkdf.ts`, `ct.ts`, `base64url.ts` | 0 / 3 / 0 / 4 ¹ | 0 / 0 / 0 / 0 |
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 0 / 8 | 0 / 0 / 0 / 1 |
-| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 16 | 0 / 1 ² / 0 / 1 |
+| Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 17 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 7 / 8 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
@@ -43,13 +43,20 @@ the record that found it. The notes below the table name each such finding.
 | Percent-decoding and query strings | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
-| **Total** ⁸ | | | **3 / 10 / 17 / 93** | **0 / 1 / 3 / 13** |
+| **Total** ⁸ | | | **3 / 10 / 17 / 94** | **0 / 0 / 3 / 13** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
    by the runtime stage. The one source left, `join`, was closed with CG-3
    (#427, for #382) and is counted under it.
-2. CT-13 is High *if real* and is unconfirmed.
+2. CT-13, High *if real*, is closed as an artefact and is not counted: it did
+   not reproduce in 54 later runs on a VM of the same class or in three
+   weekly runs on the CI runners, and `ladderStep`'s code on both targets is
+   made of instructions whose time does not follow their operands. The host
+   and the driver layout that read the 35–42 were never re-measured, so its
+   cause is not known. CT-19 (Low), the weekly run failed by one
+   reading of `macEqual` that did not repeat, is fixed by the harness's
+   re-measure rule and counted as a fixed Low.
 3. CG-9 (Low) was fixed by the runtime stage as RT-7; the codegen record
    counts CG-9 and the runtime record counts RT-7. K1-6, which the codegen
    record also lists, is counted once, under K1.
@@ -150,7 +157,6 @@ only.
 
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
-| CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts` (`ladderStep`), `std/crypto/x25519.ts` | `ladderStep` measured \|t\| = 35–42 in one link layout of the timing driver and 1.4–2.9 in others. 34 later runs read 1.46–3.22, and the weekly CI run 1.17 (x86-64) and 2.09 (aarch64), but the 35–42 was never re-run on the host that produced it. Not established as a leak or as an artefact | #378 |
 | H1-1 | Medium | `std/net/http1-server.ts` (`Http1Server.expire`, `Http1TlsServer.expire`, `Http1Connection.idle`) | The idle timeout counts from the last byte moved, so a client that sends one byte of its head every `idleTimeout` (slowloris) keeps its slot, and with every slot held new connections are shed. Memory stays bounded. The fix is a deadline for a whole head | — |
 | H2-1 | Medium | `std/net/http2.ts` (`endBlock`, `trailers`), `std/net/hpack.ts` (`HpackDecoder.decode`) | Each header block leaves memory in the arena until the program resets it: 664 bytes a request, so a client that sends requests in a loop grows the server. The way out is an HPACK decoder that decodes into storage the caller owns | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
