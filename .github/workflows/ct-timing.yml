@@ -8,15 +8,21 @@
 # one of those functions, on an x86-64 and an aarch64 runner. A function above
 # |t| = 4.5 is timed again, by itself in the same linked driver, on a fresh
 # seed, and is a finding only when it crosses on both: the largest of 102
-# correlated tests on a shared runner crosses once now and then with no leak
-# behind it (once in some 260 function-runs here so far; docs/security/
+# correlated tests can cross with no leak behind it (docs/security/
 # ct-verification.md, "The re-measure rule"). One that crosses once passes, and
 # is commented on the `ct-timing` issue so that a repeat offender is seen. The
-# controls must differ on their first measurement. A dispatch with `aa_runs`
-# set (a whole number, at most 50) runs the A/A test that many times on each
-# runner instead (tests/ct-timing.js --null): both classes prepared alike, so
-# whatever crosses measures that runner's false-positive rate, which so far
-# rests on that one crossing.
+# controls must differ on their first measurement.
+#
+# Every run names the CPU it ran on (a fingerprint line read from
+# /proc/cpuinfo and sysfs) and times a same-runner A/A pass in the same linked
+# drivers: both classes prepared alike, so whatever crosses there is this
+# machine's noise, measured in this job. The A/A pass never changes the exit
+# code; a crossing in it is filed like a single crossing, and a function that
+# crosses in both passes is named as such. A dispatch with `aa_runs` set (a
+# whole number, at most 50) runs only the A/A test that many times on each
+# runner instead (tests/ct-timing.js --null), to measure the rate more closely:
+# run 39733213208 (10 runs) found 0 of 540 function-runs above 4.5 on either
+# runner.
 #
 # It is not a check on pull requests and must not become one. Timing on a
 # shared runner is noisy, so a finding goes to one open issue labelled
@@ -52,7 +58,8 @@ jobs:
   timing:
     name: timing (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # A timing run takes about a minute and a half on either runner, so 50 A/A runs fit.
+    # A timing run, with its A/A pass, takes about three minutes on either
+    # runner; an `aa_runs` A/A run about a minute and a half, so 50 fit.
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -184,7 +191,9 @@ jobs:
             echo "A |t| above 4.5 means the fixed and the random secret took measurably different"
             echo "time. A function above it was timed again on a fresh seed, and only one that"
             echo "crossed on both is a finding; one that crossed once and not again is in the table"
-            echo "and passes. Re-run the workflow before reading a finding as a leak."
+            echo "and passes. Each row also names its CPU and the same-runner A/A pass: both"
+            echo "classes alike in the same drivers, so a crossing there is that machine's noise."
+            echo "Re-run the workflow before reading a finding as a leak."
             for os in ubuntu-latest ubuntu-24.04-arm; do
               dir="reports/ct-timing-$os"
               echo
@@ -202,6 +211,14 @@ jobs:
                 echo "The A/A run, $(cat "$dir/aa") times: both classes alike, so every |t| is noise."
               fi
               grep -q "crossed once, did not repeat" "$dir/table.md" && crossed=1
+              # The CPU and the same-runner null, ahead of the table they qualify.
+              grep '^ct-timing: CPU' "$dir/table.md" | head -n 1 || echo "No CPU fingerprint line: the harness did not reach it."
+              if grep -q 'same-runner A/A pass: ' "$dir/table.md"; then
+                grep 'same-runner A/A pass: ' "$dir/table.md"
+                # A crossing in the null is reported, not hidden.
+                grep -q 'same-runner A/A pass: [1-9]' "$dir/table.md" && crossed=1
+              fi
+              echo
               case "$code" in
                 0) [ -f "$dir/aa" ] && echo "Ran." || echo "Ran; nothing above the threshold on two seeds." ;;
                 1) echo "**A function was above the threshold on two seeds.**" ;;
@@ -225,7 +242,7 @@ jobs:
             exit 0
           fi
           if [ "$failed" = 0 ]; then
-            { echo "**The run passed.** A function crossed |t| = 4.5 once and not on its fresh seed; it is recorded here so that a function that does so week after week is seen."; echo; cat body.md; } > note.md
+            { echo "**The run passed.** A function crossed |t| = 4.5 once and not on its fresh seed, or the same-runner A/A pass crossed; it is recorded here so that a function that does so week after week is seen."; echo; cat body.md; } > note.md
             mv note.md body.md
           fi
           gh label create ct-timing --color d93f0b \

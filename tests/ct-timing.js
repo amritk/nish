@@ -38,18 +38,29 @@
  *   ... --out-of-domain                time a `DOMAINS` fixture on its types' whole range
  *   ... --null                         the A/A run: both classes prepared alike, so every
  *                                      |t| is noise, and the table is the false-positive rate
+ *   ... --no-aa                        leave out the same-runner A/A pass (below)
  *
  * A function is timed 102 ways at once (uncropped, 100 cropped percentiles and
  * a second-order test), and the largest |t| of 102 correlated tests on a
- * shared machine crosses 4.5 now and then with no leak behind it: the CI
- * runners have done it once in some 260 function-runs, and the A/A run
- * (`--null`) measures the rate on a machine (docs/security/ct-verification.md,
- * "The re-measure rule"). So a function above 4.5 is timed again, by itself in
- * the same linked driver, on a fresh seed derived from the run's, and is a
- * finding only when it crosses on both. One
- * that crossed once and not again stays in the table, as "crossed once, did not
+ * shared machine crosses 4.5 now and then with no leak behind it. So a
+ * function above 4.5 is timed again, by itself in the same linked driver, on a
+ * fresh seed derived from the run's, and is a finding only when it crosses on
+ * both (docs/security/ct-verification.md, "The re-measure rule"). One that
+ * crossed once and not again stays in the table, as "crossed once, did not
  * repeat". A control is never re-measured: it must differ on its first
  * measurement.
+ *
+ * A reading is only worth something next to the machine it was taken on, and
+ * the CI runners land on whatever CPU is free. So the output opens with the
+ * CPU's fingerprint, read from the kernel (`cpuFingerprint`), and every timing
+ * run ends with one A/A pass in the same linked drivers, on its own seed: both
+ * classes prepared alike, as `--null` does, so whatever crosses there is this
+ * machine's false alarm, measured in the same job as the table it sits beside.
+ * The A/A pass never changes the exit code. It qualifies a finding rather than
+ * clearing one: a function the timing pass flagged that crosses in the A/A
+ * pass too is named as such in the summary, and the run still exits 1. It
+ * bounds false alarms on one machine and makes them neither zero nor
+ * impossible elsewhere, and it cannot make a weak leak visible.
  *
  * It prints a Markdown table and exits 1 when a function's largest |t| is above
  * 4.5 on both measurements, 2 when it could not run or a control did not
@@ -204,6 +215,7 @@ let only = null
 let onlyFunction = null
 let outOfDomain = false
 let nullRun = false
+let aaPass = true
 /** The value after the option at `i`, refusing an option given last or followed by another. */
 const optionValue = (i) => {
   const value = args[i + 1]
@@ -227,6 +239,8 @@ for (let i = 0; i < args.length; i++) {
     outOfDomain = true
   } else if (args[i] === "--null") {
     nullRun = true
+  } else if (args[i] === "--no-aa") {
+    aaPass = false
   } else if (args[i].startsWith("-")) {
     fail(`unknown option ${args[i]} (see the header of tests/ct-timing.js)`)
   } else {
@@ -248,6 +262,86 @@ if (nish === null) {
   if (nish === undefined) {
     fail("no compiler in build/: run `npm run build` (or `npm test`), or name one with --nish")
   }
+}
+
+/**
+ * The Arm cores named by their MIDR_EL1 implementer and part, as each core's
+ * Technical Reference Manual gives them ("MIDR_EL1, Main ID Register") and
+ * Linux's arch/arm64/include/asm/cputype.h spells them. A part not here is
+ * printed by its raw values only: a name guessed for it would be worse than none.
+ */
+const ARM_PARTS = {
+  "0x41:0xd0c": "Arm Neoverse N1",
+  "0x41:0xd40": "Arm Neoverse V1",
+  "0x41:0xd49": "Arm Neoverse N2",
+  "0x41:0xd4f": "Arm Neoverse V2",
+}
+
+/** A file's contents trimmed, or null when it is not there or cannot be read. */
+const readKernel = (file) => {
+  try {
+    return fs.readFileSync(file, "utf8").trim()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * One line that says which CPU the run was timed on, read from the kernel:
+ * `/proc/cpuinfo`'s first processor, the identification register and the
+ * frequency-boost switches in sysfs, and the kernel release. The CI runners
+ * land on different CPUs from week to week, and a marketing string (all
+ * `os.cpus()` gives on x86, and nothing at all on arm64) cannot tell an Ice
+ * Lake from a Sapphire Rapids. A field the kernel does not give prints as
+ * "unreadable", never as a default, so a missing value cannot pass for one.
+ */
+const cpuFingerprint = () => {
+  const cpus = os.cpus()
+  const cpuinfo = os.platform() === "linux" ? readKernel("/proc/cpuinfo") : null
+  if (cpuinfo === null) {
+    const where =
+      os.platform() === "linux" ? "/proc/cpuinfo is unreadable" : `this is ${os.platform()}, not Linux`
+    return `ct-timing: CPU from os.cpus() only (${where}): ${os.arch()}, "${cpus[0]?.model.trim() ?? "unreadable"}", ${cpus.length} logical CPUs, kernel ${os.release()}`
+  }
+  // The first processor's block: each "key : value" line up to the first blank one.
+  const fields = new Map()
+  for (const line of cpuinfo.split("\n\n")[0].split("\n")) {
+    const colon = line.indexOf(":")
+    if (colon > 0) {
+      fields.set(line.slice(0, colon).trim(), line.slice(colon + 1).trim())
+    }
+  }
+  const field = (key) => fields.get(key) ?? "unreadable"
+  const parts = []
+  if (fields.has("vendor_id")) {
+    parts.push(
+      `${os.arch()} ${field("vendor_id")} family ${field("cpu family")} model ${field("model")} stepping ${field("stepping")} microcode ${field("microcode")} "${field("model name")}"`
+    )
+    const flags = fields.get("flags")
+    parts.push(
+      flags === undefined
+        ? "hypervisor flag unreadable"
+        : `hypervisor flag ${flags.split(/\s+/).includes("hypervisor") ? "set" : "not set"}`
+    )
+  } else {
+    const implementer = field("CPU implementer")
+    const part = field("CPU part")
+    const name = ARM_PARTS[`${implementer}:${part}`]
+    parts.push(
+      `${os.arch()} implementer ${implementer} part ${part}${name === undefined ? "" : ` (${name})`} variant ${field("CPU variant")} revision ${field("CPU revision")}`
+    )
+    const midr = readKernel("/sys/devices/system/cpu/cpu0/regs/identification/midr_el1")
+    parts.push(`MIDR_EL1 ${midr ?? "unreadable"}`)
+    // aarch64's cpuinfo has no flag for it, and its absence is not "not set".
+    parts.push("hypervisor flag unreadable")
+  }
+  parts.push(`cpufreq boost ${readKernel("/sys/devices/system/cpu/cpufreq/boost") ?? "unreadable"}`)
+  parts.push(
+    `intel_pstate no_turbo ${readKernel("/sys/devices/system/cpu/intel_pstate/no_turbo") ?? "unreadable"}`
+  )
+  parts.push(`kernel ${readKernel("/proc/sys/kernel/osrelease") ?? "unreadable"}`)
+  parts.push(`${cpus.length} logical CPUs`)
+  return `ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs): ${parts.join("; ")}`
 }
 
 /**
@@ -372,13 +466,21 @@ if (only === null ? fixtures.length === 0 : !fixtures.some((f) => f.includes(onl
  * zero, and one fixed by `--seed`, so a run repeats with its re-measures.
  */
 const freshSeed = String((BigInt(seed) * 0x9e3779b97f4a7c15n) % (1n << 64n))
+/**
+ * The same-runner A/A pass's seed, by another odd constant so it shares a
+ * stream with neither of the above, and the seed its crossings are re-measured
+ * on, derived from it as `freshSeed` is from the run's.
+ */
+const aaSeed = (BigInt(seed) * 0xbf58476d1ce4e5b9n) % (1n << 64n)
+const aaFreshSeed = String((aaSeed * 0x9e3779b97f4a7c15n) % (1n << 64n))
 
 /**
  * One run of a fixture's driver on `runSeed`, of `names` alone when it is
  * given: a reading per function, as `tests/ct-timing/dudect.c` prints them.
+ * With `asNull`, both classes are prepared as class 1 (the A/A run).
  */
-const measure = (name, exe, runSeed, names = []) => {
-  const run = spawnSync(exe, [String(samples), String(runSeed), ...(nullRun ? ["--null"] : []), ...names], {
+const measure = (name, exe, runSeed, names = [], asNull = nullRun) => {
+  const run = spawnSync(exe, [String(samples), String(runSeed), ...(asNull ? ["--null"] : []), ...names], {
     encoding: "utf8",
     maxBuffer: 1 << 24,
   })
@@ -394,7 +496,11 @@ const measure = (name, exe, runSeed, names = []) => {
     })
 }
 
+// Read before anything is timed, so it describes the machine as the run found it.
+const fingerprint = cpuFingerprint()
 const rows = []
+/** Each fixture's linked driver, kept for the A/A pass so it runs in the layout the table was read in. */
+const drivers = []
 for (const file of fixtures) {
   const name = file.slice(0, -".ts".length)
   const all = ctSpecs(fs.readFileSync(path.join(casesDir, file), "utf8"))
@@ -472,6 +578,7 @@ for (const file of fixtures) {
       !control && reading.max > THRESHOLD ? measure(name, exe, freshSeed, [reading.fn])[0].max : null
     rows.push({ fixture: name, ...reading, again, control, domainControl })
   }
+  drivers.push({ name, exe })
   // A control that printed no row was never timed, and would otherwise pass unseen.
   const silent = driver.controls.filter((fn) => !rows.some((r) => r.fixture === name && r.fn === fn))
   if (silent.length > 0) {
@@ -482,14 +589,44 @@ for (const file of fixtures) {
 if (onlyFunction !== null && !rows.some((r) => r.fn === onlyFunction)) {
   fail(`--function ${onlyFunction}: no ct_asm_* fixture${only === null ? "" : ` matching ${only}`} times it`)
 }
+
+/**
+ * The same-runner A/A pass: every driver run once more under `--null`, on
+ * `aaSeed`, after the timing pass and in the same linked binaries, with the
+ * re-measure rule applied as it is to the timing pass. Keyed by fixture and
+ * function; empty under `--null`, which is an A/A run already, and `--no-aa`.
+ */
+const aa = new Map()
+if (aaPass && !nullRun) {
+  for (const { name, exe } of drivers) {
+    for (const reading of measure(name, exe, aaSeed, [], true)) {
+      const again =
+        reading.max > THRESHOLD ? measure(name, exe, aaFreshSeed, [reading.fn], true)[0].max : null
+      aa.set(`${name}\t${reading.fn}`, { fixture: name, fn: reading.fn, max: reading.max, again })
+    }
+  }
+}
+
+console.log(fingerprint)
 console.log(
-  `ct-timing: ${os.arch()}, ${os.cpus()[0]?.model.trim() ?? "unknown CPU"}; ${samples} measurements a function, seed ${seed}, re-measured on seed ${freshSeed}; threshold |t| > ${THRESHOLD}${nullRun ? "; the A/A run (--null): both classes are class 1" : ""}`
+  `ct-timing: ${samples} measurements a function, seed ${seed}, re-measured on seed ${freshSeed}; threshold |t| > ${THRESHOLD}${nullRun ? "; the A/A run (--null): both classes are class 1" : ""}${aa.size > 0 ? `; same-runner A/A pass on seed ${aaSeed}, re-measured on seed ${aaFreshSeed}` : ""}`
 )
 console.log("")
+const aaColumn = aa.size > 0
 console.log(
-  "| fixture | function | batch | max \\|t\\| | from test | per class | uncropped t | re-measured \\|t\\| | verdict |"
+  `| fixture | function | batch | max \\|t\\| | from test | per class | uncropped t | re-measured \\|t\\| | verdict |${aaColumn ? " A/A \\|t\\| |" : ""}`
 )
-console.log("| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | --- |")
+console.log(`| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | --- |${aaColumn ? " ---: |" : ""}`)
+/** An A/A reading as its table cell: the |t|, and the re-measure's when it crossed. */
+const aaCell = (r) => {
+  const reading = aa.get(`${r.fixture}\t${r.fn}`)
+  if (reading === undefined) {
+    return ""
+  }
+  return reading.again === null
+    ? reading.max.toFixed(2)
+    : `**${reading.max.toFixed(2)}**, again ${reading.again.toFixed(2)}`
+}
 for (const r of rows) {
   let verdict = "ok"
   if (r.control) {
@@ -498,7 +635,7 @@ for (const r of rows) {
     verdict = r.again > THRESHOLD ? "**differs**, and again on a fresh seed" : "crossed once, did not repeat"
   }
   console.log(
-    `| ${r.fixture} | ${r.fn} | ${r.batch} | ${r.max.toFixed(2)} | ${r.test} | ${r.used} | ${r.raw} | ${r.again === null ? "" : r.again.toFixed(2)} | ${verdict} |`
+    `| ${r.fixture} | ${r.fn} | ${r.batch} | ${r.max.toFixed(2)} | ${r.test} | ${r.used} | ${r.raw} | ${r.again === null ? "" : r.again.toFixed(2)} | ${verdict} |${aaColumn ? ` ${aaCell(r)} |` : ""}`
   )
 }
 const checked = rows.filter((r) => !r.control)
@@ -520,6 +657,14 @@ if (nullRun) {
   )
   process.exit(0)
 }
+// Printed before the controls are judged, so a run that fails on them still says what its null read.
+const aaOver = [...aa.values()].filter((r) => r.max > THRESHOLD)
+const aaAgain = aaOver.filter((r) => r.again > THRESHOLD)
+if (aa.size > 0) {
+  console.log(
+    `ct-timing: the same-runner A/A pass: ${aaOver.length} of ${aa.size} functions above |t| = ${THRESHOLD}${aaOver.length === 0 ? "" : ` (${aaOver.map((r) => r.fn).join(", ")})`}, ${aaAgain.length} of them again on a fresh seed`
+  )
+}
 if (!rows.some((r) => r.control && !r.domainControl)) {
   fail("no `expect=branch` function was timed, so nothing shows this run could see a leak")
 }
@@ -528,9 +673,16 @@ if (quiet.length > 0) {
     `the control ${quiet.map((r) => r.fn).join(", ")} did not differ (|t| <= ${THRESHOLD}): a run that cannot see a leak written to be seen proves nothing about the others`
   )
 }
+// A function the timing pass flagged that this machine's null also crossed: said, and never read as a pass.
+const alsoNull = once.filter((r) => aaOver.some((n) => n.fixture === r.fixture && n.fn === r.fn))
+const alsoNullNote =
+  alsoNull.length === 0
+    ? ""
+    : `; the same-runner A/A pass crossed on ${alsoNull.map((r) => r.fn).join(", ")} too, so this machine's noise reaches the same function: re-run before reading it as a leak`
 console.log(
   over.length === 0
-    ? `ct-timing: ${checked.length} functions, none above |t| = ${THRESHOLD} twice${crossedOnce}; the control differed`
-    : `ct-timing: ${over.length} of ${checked.length} functions above |t| = ${THRESHOLD} on two seeds: ${over.map((r) => r.fn).join(", ")}${crossedOnce}`
+    ? `ct-timing: ${checked.length} functions, none above |t| = ${THRESHOLD} twice${crossedOnce}; the control differed${alsoNullNote}`
+    : `ct-timing: ${over.length} of ${checked.length} functions above |t| = ${THRESHOLD} on two seeds: ${over.map((r) => r.fn).join(", ")}${crossedOnce}${alsoNullNote}`
 )
+// The A/A pass reports and never decides: the exit code is the timing pass's alone.
 process.exit(over.length === 0 ? 0 : 1)
