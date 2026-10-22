@@ -11495,13 +11495,13 @@ import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
 const X25519_SIZE: i32 = 32 [exported]
 const X25519_A24: i64 = 121665
-function f25519Add64(a: i64, b: i64): i64 -> @nish.f25519Add64
+function f25519Add64(a: i64, b: i64): i64 -> @nish.f25519Add64 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function f25519Sub64(a: i64, b: i64): i64 -> @nish.f25519Sub64
+function f25519Sub64(a: i64, b: i64): i64 -> @nish.f25519Sub64 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function f25519Mul64(a: i64, b: i64): i64 -> @nish.f25519Mul64
+function f25519Mul64(a: i64, b: i64): i64 -> @nish.f25519Mul64 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function f25519Width(i: i32): i64 -> @nish.f25519Width
@@ -11515,11 +11515,11 @@ function f25519LimbMask(i: i32): i64 -> @nish.f25519LimbMask
   stackSites=0 stackLocals=0
   callee +0:41 f25519Sub64 -> @nish.f25519Sub64
   callee +0:65 f25519Width -> @nish.f25519Width
-function f25519Zero(): i64[] -> @nish.f25519Zero
+function f25519Zero(): i64[] -> @nish.f25519Zero [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:9 f: i64[] (const)
-function f25519Small(n: i64): i64[] -> @nish.f25519Small
+function f25519Small(n: i64): i64[] -> @nish.f25519Small [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: n
@@ -11527,7 +11527,7 @@ function f25519Small(n: i64): i64[] -> @nish.f25519Small
   stackSites=0 stackLocals=0
   local -1:9 f: i64[] (const)
   callee -1:20 f25519Zero -> @nish.f25519Zero
-function f25519Copy(out: i64[], f: i64[]): void -> @nish.f25519Copy
+function f25519Copy(out: i64[], f: i64[]): void -> @nish.f25519Copy [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   pointer out: size=0 writesThrough=true captured=false
@@ -11545,7 +11545,7 @@ function f25519CarryChain(h: i64[]): void -> @nish.f25519CarryChain
   callee -1:28 f25519Width -> @nish.f25519Width
   callee +0:19 f25519LimbMask -> @nish.f25519LimbMask
   callee +1:16 f25519Add64 -> @nish.f25519Add64
-function f25519Carry(h: i64[]): void -> @nish.f25519Carry
+function f25519Carry(h: i64[]): void -> @nish.f25519Carry [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: nish.f25519Add64 nish.f25519CarryChain nish.f25519LimbMask nish.f25519Mul64
@@ -11559,7 +11559,7 @@ function f25519Carry(h: i64[]): void -> @nish.f25519Carry
   local +2:9 c0: i64 (const)
   callee +3:17 f25519LimbMask -> @nish.f25519LimbMask
   callee +4:10 f25519Add64 -> @nish.f25519Add64
-function f25519Add(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Add
+function f25519Add(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Add [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.f25519Add64
@@ -11569,7 +11569,7 @@ function f25519Add(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Add
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
   callee +0:14 f25519Add64 -> @nish.f25519Add64
-function f25519Sub(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Sub
+function f25519Sub(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Sub [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.f25519Sub64
@@ -11579,7 +11579,7 @@ function f25519Sub(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Sub
   stackSites=0 stackLocals=0
   local -1:12 i: i32 (let)
   callee +0:14 f25519Sub64 -> @nish.f25519Sub64
-function f25519Mul(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Mul
+function f25519Mul(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Mul [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.f25519Copy
   calls: nish.f25519Add64 nish.f25519Carry nish.f25519Copy nish.f25519Mul64
@@ -11603,7 +11603,7 @@ function f25519Mul(out: i64[], f: i64[], g: i64[]): void -> @nish.f25519Mul
   callee +18:33 f25519Mul64 -> @nish.f25519Mul64
   callee +21:3 f25519Carry -> @nish.f25519Carry
   callee +22:3 f25519Copy -> @nish.f25519Copy
-function f25519Square(out: i64[], f: i64[]): void -> @nish.f25519Square
+function f25519Square(out: i64[], f: i64[]): void -> @nish.f25519Square [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.f25519Mul
   calls: nish.f25519Mul
@@ -11611,7 +11611,7 @@ function f25519Square(out: i64[], f: i64[]): void -> @nish.f25519Square
   pointer f: size=0 writesThrough=true captured=false passedTo=nish.f25519Mul#1 nish.f25519Mul#2
   stackSites=0 stackLocals=0
   callee +0:3 f25519Mul -> @nish.f25519Mul
-function f25519SquareTimes(out: i64[], f: i64[], n: i32): void -> @nish.f25519SquareTimes
+function f25519SquareTimes(out: i64[], f: i64[], n: i32): void -> @nish.f25519SquareTimes [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.f25519Square
   calls: nish.f25519Square
@@ -11631,36 +11631,35 @@ function f25519MulA24(out: i64[], f: i64[]): void -> @nish.f25519MulA24
   local -1:12 i: i32 (let)
   callee +0:14 f25519Mul64 -> @nish.f25519Mul64
   callee +2:3 f25519Carry -> @nish.f25519Carry
-function f25519Invert(out: i64[], z: i64[]): void -> @nish.f25519Invert
+function f25519Pow250(out: i64[], z11: i64[], z: i64[]): void -> @nish.f25519Pow250 [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish.f25519Square
   calls: nish.f25519Mul nish.f25519Square nish.f25519SquareTimes nish.f25519Zero nish_arena_mark nish_arena_release
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.f25519Mul#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.f25519Mul#0 nish.f25519SquareTimes#1 nish.f25519Mul#0 nish.f25519Mul#2 nish.f25519SquareTimes#1 nish.f25519Mul#0 nish.f25519SquareTimes#1 nish.f25519Mul#0 nish.f25519Mul#2 nish.f25519SquareTimes#1 nish.f25519Mul#0
+  pointer z11: size=0 writesThrough=true captured=false passedTo=nish.f25519Mul#0
   pointer z: size=0 writesThrough=true captured=false passedTo=nish.f25519Square#1 nish.f25519Mul#2 nish.f25519Mul#2
   stackSites=0 stackLocals=0
   local +0:9 z2: i64[] (const)
   callee +0:21 f25519Zero -> @nish.f25519Zero
-  local +1:9 z11: i64[] (const)
-  callee +1:22 f25519Zero -> @nish.f25519Zero
-  local +2:9 e2: i64[] (const)
+  local +1:9 e2: i64[] (const)
+  callee +1:21 f25519Zero -> @nish.f25519Zero
+  local +2:9 e5: i64[] (const)
   callee +2:21 f25519Zero -> @nish.f25519Zero
-  local +3:9 e5: i64[] (const)
-  callee +3:21 f25519Zero -> @nish.f25519Zero
-  local +4:9 e10: i64[] (const)
+  local +3:9 e10: i64[] (const)
+  callee +3:22 f25519Zero -> @nish.f25519Zero
+  local +4:9 e50: i64[] (const)
   callee +4:22 f25519Zero -> @nish.f25519Zero
-  local +5:9 e50: i64[] (const)
-  callee +5:22 f25519Zero -> @nish.f25519Zero
-  local +6:9 t: i64[] (const)
-  callee +6:20 f25519Zero -> @nish.f25519Zero
-  local +7:9 acc: i64[] (const)
-  callee +7:22 f25519Zero -> @nish.f25519Zero
-  callee +9:3 f25519Square -> @nish.f25519Square
+  local +5:9 t: i64[] (const)
+  callee +5:20 f25519Zero -> @nish.f25519Zero
+  callee +7:3 f25519Square -> @nish.f25519Square
+  callee +8:3 f25519Mul -> @nish.f25519Mul
+  callee +9:3 f25519SquareTimes -> @nish.f25519SquareTimes
   callee +10:3 f25519Mul -> @nish.f25519Mul
-  callee +11:3 f25519SquareTimes -> @nish.f25519SquareTimes
-  callee +12:3 f25519Mul -> @nish.f25519Mul
-  callee +14:3 f25519SquareTimes -> @nish.f25519SquareTimes
+  callee +12:3 f25519SquareTimes -> @nish.f25519SquareTimes
+  callee +13:3 f25519Mul -> @nish.f25519Mul
+  callee +14:3 f25519Square -> @nish.f25519Square
   callee +15:3 f25519Mul -> @nish.f25519Mul
-  callee +16:3 f25519Square -> @nish.f25519Square
+  callee +16:3 f25519SquareTimes -> @nish.f25519SquareTimes
   callee +17:3 f25519Mul -> @nish.f25519Mul
   callee +18:3 f25519SquareTimes -> @nish.f25519SquareTimes
   callee +19:3 f25519Mul -> @nish.f25519Mul
@@ -11674,11 +11673,23 @@ function f25519Invert(out: i64[], z: i64[]): void -> @nish.f25519Invert
   callee +27:3 f25519Mul -> @nish.f25519Mul
   callee +28:3 f25519SquareTimes -> @nish.f25519SquareTimes
   callee +29:3 f25519Mul -> @nish.f25519Mul
-  callee +30:3 f25519SquareTimes -> @nish.f25519SquareTimes
-  callee +31:3 f25519Mul -> @nish.f25519Mul
-  callee +32:3 f25519SquareTimes -> @nish.f25519SquareTimes
-  callee +33:3 f25519Mul -> @nish.f25519Mul
-function f25519Swap(f: i64[], g: i64[], bit: i64): void -> @nish.f25519Swap
+function f25519Invert(out: i64[], z: i64[]): void -> @nish.f25519Invert [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.f25519Pow250
+  calls: nish.f25519Mul nish.f25519Pow250 nish.f25519SquareTimes nish.f25519Zero nish_arena_mark nish_arena_release
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.f25519Mul#0
+  pointer z: size=0 writesThrough=true captured=false passedTo=nish.f25519Pow250#2
+  stackSites=0 stackLocals=0
+  local +0:9 z11: i64[] (const)
+  callee +0:22 f25519Zero -> @nish.f25519Zero
+  local +1:9 acc: i64[] (const)
+  callee +1:22 f25519Zero -> @nish.f25519Zero
+  local +2:9 t: i64[] (const)
+  callee +2:20 f25519Zero -> @nish.f25519Zero
+  callee +3:3 f25519Pow250 -> @nish.f25519Pow250
+  callee +4:3 f25519SquareTimes -> @nish.f25519SquareTimes
+  callee +5:3 f25519Mul -> @nish.f25519Mul
+function f25519Swap(f: i64[], g: i64[], bit: i64): void -> @nish.f25519Swap [exported]
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: bit
@@ -11690,7 +11701,7 @@ function f25519Swap(f: i64[], g: i64[], bit: i64): void -> @nish.f25519Swap
   callee -3:21 f25519Sub64 -> @nish.f25519Sub64
   local -2:12 i: i32 (let)
   local -1:11 t: i64 (const)
-function f25519Decode(bytes: u8[]): i64[] -> @nish.f25519Decode
+function f25519Decode(bytes: u8[]): i64[] -> @nish.f25519Decode [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.f25519LimbMask nish.f25519Width nish_panic_overflow
   pointer bytes: size=0 writesThrough=false captured=false
@@ -11704,7 +11715,7 @@ function f25519Decode(bytes: u8[]): i64[] -> @nish.f25519Decode
   local +15:13 width: i64 (const)
   callee +15:26 f25519Width -> @nish.f25519Width
   callee +17:25 f25519LimbMask -> @nish.f25519LimbMask
-function f25519Encode(f: i64[]): u8[] -> @nish.f25519Encode
+function f25519Encode(f: i64[]): u8[] -> @nish.f25519Encode [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.f25519Add64 nish.f25519Carry nish.f25519CarryChain nish.f25519Copy nish.f25519LimbMask nish.f25519Mul64 nish.f25519Width nish_panic_overflow
   pointer f: size=0 writesThrough=false captured=false passedTo=nish.f25519Copy#1

@@ -1,12 +1,12 @@
-// The curves family's Nish program: X25519 and ECDSA over P-256 from
+// The curves family's Nish program: X25519, ECDSA over P-256 and Ed25519 from
 // std/crypto, under the contract in bench/crypto/README.md. bench/crypto/run.mjs
 // builds it with `--profile speed` and runs
 //
 //   main <kernel> <size> <iterations>
 //
 // The inputs each kernel draws, and what each folds, are in this family's
-// README.md. The two Ed25519 kernels have no Nish column: std/crypto has no
-// Ed25519.
+// README.md.
+import { ed25519PublicKey, ed25519Sign, ed25519Verify } from "nish/crypto/ed25519"
 import { p256PublicKey, p256Sign, p256Verify, p256VerifySha256, p256SignSha256 } from "nish/crypto/p256"
 import { sha256 } from "nish/crypto/sha256"
 import { x25519, x25519Base } from "nish/crypto/x25519"
@@ -175,6 +175,84 @@ const verifyLoop = (a: Args): i32 => {
   return 0
 }
 
+/** The Ed25519 signature of the tweaked message; deterministic, so each is folded. */
+const ed25519SignLoop = (a: Args): i32 => {
+  const inp: Inputs = inputs(a.kernel, a.size, 32, 0, 0, a.size)
+  const seed: Secret<u8[]> = secret(copyOf(inp.key))
+  const pub: u8[] | null = ed25519PublicKey(seed)
+  if (pub === null) {
+    writeError("curves: ed25519PublicKey answered null\n")
+    wipe(seed)
+    return 1
+  }
+  const msg: u8[] = inp.msg
+  const base: u8[] = baseOf(msg, 0)
+  let sum: u32 = fold(foldStart(), pub)
+  const started: i64 = now()
+  for (let i: i32 = 0; i < a.iterations; i++) {
+    tweak(msg, 0, base, i)
+    const sig: u8[] | null = ed25519Sign(seed, msg)
+    if (sig === null) {
+      writeError("curves: ed25519Sign answered null\n")
+      wipe(seed)
+      return 1
+    }
+    sum = fold(sum, sig)
+  }
+  report(sum, started)
+  wipe(seed)
+  return 0
+}
+
+/** Ed25519 verify over a ring of signed messages, one of them tampered with. */
+const ed25519VerifyLoop = (a: Args): i32 => {
+  const inp: Inputs = inputs(a.kernel, a.size, 32, 0, 0, a.size)
+  const seed: Secret<u8[]> = secret(copyOf(inp.key))
+  const pub: u8[] | null = ed25519PublicKey(seed)
+  if (pub === null) {
+    writeError("curves: ed25519PublicKey answered null\n")
+    wipe(seed)
+    return 1
+  }
+  const base: u8[] = baseOf(inp.msg, 0)
+  const msgs: u8[][] = []
+  const sigs: u8[][] = []
+  for (let j: i32 = 0; j < RING; j++) {
+    const m: u8[] = copyOf(inp.msg)
+    tweak(m, 0, base, j)
+    const sig: u8[] | null = ed25519Sign(seed, m)
+    if (sig === null) {
+      writeError("curves: ed25519Sign answered null\n")
+      wipe(seed)
+      return 1
+    }
+    msgs.push(m)
+    sigs.push(sig)
+  }
+  wipe(seed)
+  const last: i32 = a.size - 1
+  msgs[TAMPERED][last] = msgs[TAMPERED][last] ^ toU8(1)
+  // The byte folded for each verify: 1 when it answered true, 0 when false.
+  const valid: u8[] = [toU8(1)]
+  const invalid: u8[] = [toU8(0)]
+  let sum: u32 = fold(foldStart(), pub)
+  const started: i64 = now()
+  for (let i: i32 = 0; i < a.iterations; i++) {
+    const j: i32 = i % RING
+    if (j < 0 || j >= toI32(msgs.length) || j >= toI32(sigs.length)) {
+      return 1
+    }
+    const ok: boolean = ed25519Verify(pub, msgs[j], sigs[j])
+    if (ok !== (j !== TAMPERED)) {
+      writeError("curves: ed25519Verify gave the wrong answer\n")
+      return 1
+    }
+    sum = fold(sum, ok ? valid : invalid)
+  }
+  report(sum, started)
+  return 0
+}
+
 export const main = (): i32 => {
   const a: Args | null = parseArgs("curves")
   if (a === null) {
@@ -198,6 +276,12 @@ export const main = (): i32 => {
   }
   if (a.kernel === "p256-verify") {
     return verifyLoop(a)
+  }
+  if (a.kernel === "ed25519-sign") {
+    return ed25519SignLoop(a)
+  }
+  if (a.kernel === "ed25519-verify") {
+    return ed25519VerifyLoop(a)
   }
   writeError(`curves: no kernel ${a.kernel}\n`)
   return 2

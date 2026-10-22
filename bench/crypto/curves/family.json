@@ -5,8 +5,8 @@
     { "name": "x25519", "sizes": [32], "unit": "op/s" },
     { "name": "p256-sign", "sizes": [64], "unit": "op/s" },
     { "name": "p256-verify", "sizes": [64], "unit": "op/s" },
-    { "name": "ed25519-sign", "sizes": [64], "unit": "op/s", "nish": "not in std/crypto" },
-    { "name": "ed25519-verify", "sizes": [64], "unit": "op/s", "nish": "not in std/crypto" }
+    { "name": "ed25519-sign", "sizes": [64], "unit": "op/s" },
+    { "name": "ed25519-verify", "sizes": [64], "unit": "op/s" }
   ],
   "twins": {
     "openssl": {

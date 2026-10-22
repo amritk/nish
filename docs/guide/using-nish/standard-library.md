@@ -40,7 +40,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
-| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509, base64url |
+| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router |
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
 
@@ -931,6 +931,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
 | `nish/crypto/aes` | `aesKey` for AES-128 and AES-256, `aesGcmSeal` and `aesGcmOpen` |
 | `nish/crypto/x25519` | X25519 key exchange |
+| `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>` |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
@@ -962,9 +963,10 @@ ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0
 
 A function that returns `u8[] | null` answers `null` for an input it refuses —
 a bad key length, a tag that does not verify — so narrow the result before you
-use it. The modules that hold a private key (`p256`, `x25519`, `x509`,
-`x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1`,
-which came later, has been through a security audit; the records are in
+use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
+`x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1` and
+`ed25519`, which came later, has been through a security audit (`ed25519` is
+recorded as a change after its area's audit); the records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`

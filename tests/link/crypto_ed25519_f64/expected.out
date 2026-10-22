@@ -1,0 +1,18 @@
+PASS  TEST 1: public key
+PASS  TEST 1: signature
+PASS  TEST 1: verifies
+PASS  TEST 2: public key
+PASS  TEST 2: signature
+PASS  TEST 2: verifies
+PASS  TEST 3: public key
+PASS  TEST 3: signature
+PASS  TEST 3: verifies
+PASS  TEST 1024: public key
+PASS  TEST 1024: signature
+PASS  TEST 1024: verifies
+PASS  TEST SHA(abc): public key
+PASS  TEST SHA(abc): signature
+PASS  TEST SHA(abc): verifies
+PASS  S + L is refused
+PASS  another message is refused
+ed25519 (f64 mode): 17 passed, 0 failed, 0 skipped

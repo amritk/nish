@@ -1,0 +1,36 @@
+PASS  TEST 1: public key
+PASS  TEST 1: signature
+PASS  TEST 1: verifies
+PASS  TEST 2: public key
+PASS  TEST 2: signature
+PASS  TEST 2: verifies
+PASS  TEST 3: public key
+PASS  TEST 3: signature
+PASS  TEST 3: verifies
+PASS  TEST 1024: public key
+PASS  TEST 1024: signature
+PASS  TEST 1024: verifies
+PASS  TEST SHA(abc): public key
+PASS  TEST SHA(abc): signature
+PASS  TEST SHA(abc): verifies
+PASS  signing leaves the seed as it was
+PASS  signing is deterministic
+PASS  a 31-byte seed has no public key
+PASS  a 33-byte seed signs nothing
+PASS  a 63-byte signature is refused
+PASS  a 31-byte key is refused
+PASS  a changed message is refused
+PASS  a flipped bit of R is refused
+PASS  R's sign bit flipped is refused
+PASS  a flipped bit of S is refused
+PASS  another key is refused
+PASS  A's sign bit flipped is refused
+PASS  S + L is refused
+PASS  S = L is refused
+PASS  a key with y = p + 1 is refused
+PASS  a key with y = p is refused
+PASS  a key with no x on the curve is refused
+PASS  x = 0 with the sign bit set is refused
+PASS  R = the identity, canonical, verifies
+PASS  R = the identity spelled y = p + 1 is refused
+ed25519: 35 passed, 0 failed, 0 skipped
