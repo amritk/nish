@@ -1252,6 +1252,17 @@ export class QuicConnection {
   sealedUnderKey: i64 = 0
   authFailures: i64 = 0
   /**
+   * ECN (RFC 9000 §13.4): `ecnMarking` is the carrier's to set when it sends
+   * this connection's datagrams with the ECN bits of `datagramEcn`, which
+   * each `takeDatagramInto` sets for the datagram it wrote: ECT(0) while
+   * loss recovery's `ecnCodepoint()` asks for it, 0 otherwise and always
+   * while `ecnMarking` is false. Every packet of a marked datagram is counted
+   * as marked, and an ACK_ECN's counts are validated against them. `reset`
+   * keeps `ecnMarking`, which is the carrier's, and clears the rest.
+   */
+  ecnMarking: boolean = false
+  datagramEcn: i32 = 0
+  /**
    * The next Application Data packet number skipped (RFC 9000 §21.4), or -1
    * before the 1-RTT keys; a test may set it to force one. `skipped` holds
    * the last `QUIC_CONN_SKIP_RING` skipped, -1 where none, `skipHead` where
@@ -1441,6 +1452,7 @@ export class QuicConnection {
     this.integrityLimit = QUIC_CONN_INTEGRITY_LIMIT_GCM
     this.sealedUnderKey = 0
     this.authFailures = 0
+    this.datagramEcn = 0
     this.nextSkip = -1
     quicConnForgetSkips(this.skipped)
     this.skipsDrawn = 0
@@ -2339,9 +2351,24 @@ export class QuicConnection {
     }
     const sent: QuicSentPackets | null = this.recovery.space(space.level)
     const delay: i64 = this.ackDelayOf(frame.ackDelay)
+    // ACK_ECN's counts (RFC 9002 §7.1), or -1 each for a plain ACK.
+    const ecn: boolean = frame.type === QUIC_FRAME_ACK_ECN
+    const none: i64 = -1
+    const ect0: i64 = ecn ? frame.ect0 : none
+    const ect1: i64 = ecn ? frame.ect1 : none
+    const ce: i64 = ecn ? frame.ce : none
     if (
       sent === null ||
-      this.recovery.onAck(space.level, frame.ackRanges, frame.ackRangeCount, delay, this.now) <= 0
+      this.recovery.onAckEcn(
+        space.level,
+        frame.ackRanges,
+        frame.ackRangeCount,
+        delay,
+        this.now,
+        ect0,
+        ect1,
+        ce
+      ) <= 0
     ) {
       return
     }
@@ -3302,6 +3329,7 @@ export class QuicConnection {
       return 0
     }
     let n: i32 = 0
+    this.datagramEcn = 0
     if (this.state === QUIC_STATE_CLOSING) {
       using _scope = arena()
       n = this.takeCloseInto(out, at)
@@ -3316,6 +3344,7 @@ export class QuicConnection {
       return 0
     }
     this.beforeDatagram()
+    this.datagramEcn = this.ecnMarking ? this.recovery.ecnCodepoint() : 0
     {
       using _scope = arena()
       n = this.buildDatagram(out, at)
@@ -3698,7 +3727,10 @@ export class QuicConnection {
     if (space.level === TLS_LEVEL_APPLICATION) {
       this.sealedUnderKey = this.sealedUnderKey + 1
     }
-    this.recordSent(space, pn, end - start)
+    const slot: i32 = this.recordSent(space, pn, end - start)
+    if (this.datagramEcn !== 0) {
+      this.recovery.onEctSent(space.level, slot)
+    }
     return end - start
   }
 
@@ -3709,10 +3741,11 @@ export class QuicConnection {
    * recorded. `buildDatagram` builds nothing ack-eliciting into a space
    * whose record is full, so recovery does not refuse one; if it ever did,
    * what the packet carried is queued again at once, as though lost.
+   * Answers the slot recovery recorded it in, or -1.
    */
-  recordSent(space: QuicConnSpace, pn: i64, size: i32): void {
+  recordSent(space: QuicConnSpace, pn: i64, size: i32): i32 {
     if (!space.stagedEliciting) {
-      return
+      return -1
     }
     const slot: i32 = this.recovery.onPacketSent(space.level, pn, size, this.now)
     if (slot >= 0) {
@@ -3730,6 +3763,7 @@ export class QuicConnection {
       this.requeue(space, space.staging)
     }
     space.clearStaged()
+    return slot
   }
 
   /** An acknowledged packet in row `row`: each stream chunk and stream control frame it carried is settled. */
