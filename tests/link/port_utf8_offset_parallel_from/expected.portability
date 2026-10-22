@@ -1,0 +1,2 @@
+{"file":"tests/link/port_utf8_offset_parallel_from/main.ts","line":8,"column":29,"endLine":8,"endColumn":40,"severity":"portability","code":"NL8001","message":"`word.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it counts the elements `parallelFrom` makes"}
+{"file":"tests/link/port_utf8_offset_parallel_from/main.ts","line":15,"column":30,"endLine":15,"endColumn":48,"severity":"portability","code":"NL8001","message":"`word.charCodeAt(0)` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it counts the elements `parallelFrom` makes"}

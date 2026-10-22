@@ -912,6 +912,8 @@ const HPACK_ERR_HUFFMAN_EOS: i32 = -5 [exported]
 const HPACK_ERR_TABLE_SIZE: i32 = -6 [exported]
 const HPACK_ERR_SIZE_UPDATE_POSITION: i32 = -7 [exported]
 const HPACK_ERR_SIZE_UPDATE_MISSING: i32 = -8 [exported]
+const HPACK_ERR_COPY_BUDGET: i32 = -9 [exported]
+const HPACK_COPY_FACTOR: i32 = 4 [exported]
 const HPACK_INDEX_INCREMENTAL: i32 = 0 [exported]
 const HPACK_INDEX_WITHOUT: i32 = 1 [exported]
 const HPACK_INDEX_NEVER: i32 = 2 [exported]
@@ -974,7 +976,7 @@ struct HpackWork (class) size=32 align=8 exported
   method classOf -> @nish.HpackWork.classOf
   method pool -> @nish.HpackWork.pool
   method take -> @nish.HpackWork.take
-struct HpackDecoder (class) size=64 align=8 exported
+struct HpackDecoder (class) size=72 align=8 exported
   field table: HpackTable index=0 offset=0
   field huffman: HpackHuffman index=1 offset=8
   field settingsLimit: i32 index=2 offset=16
@@ -985,6 +987,7 @@ struct HpackDecoder (class) size=64 align=8 exported
   field values: u8[][] index=7 offset=40
   field neverIndexed: boolean[] index=8 offset=48
   field work: HpackWork | null index=9 offset=56 initialized
+  field tableCopied: i64 index=10 offset=64 initialized
   constructor -> @nish.HpackDecoder.constructor
   method working -> @nish.HpackDecoder.working
   method setSettingsLimit -> @nish.HpackDecoder.setSettingsLimit
@@ -1373,7 +1376,7 @@ function HpackDecoder.constructor(this: HpackDecoder, settingsLimit: i32, maxHea
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: maxHeaderListSize settingsLimit
   calls: nish.HpackHuffman.constructor nish.HpackTable.constructor nish_alloc_struct nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new HpackTable -> @nish.HpackTable.constructor
   callee +1:20 new HpackHuffman -> @nish.HpackHuffman.constructor
@@ -1381,7 +1384,7 @@ function HpackDecoder.working(this: HpackDecoder): HpackWork -> @nish.HpackDecod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: +0:5
   calls: nish.HpackWork.constructor nish_alloc_struct
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -5:11 work: HpackWork | null (const)
   local -1:11 made: HpackWork (const)
@@ -1391,14 +1394,14 @@ function HpackDecoder.setSettingsLimit(this: HpackDecoder, limit: i32): void -> 
   sharedWrite: +0:5
   escaping: limit
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function HpackDecoder.appendNameAt(this: HpackDecoder, index: i32, out: u8[]): void -> @nish.HpackDecoder.appendNameAt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hpackAppendText
   escaping: index
   calls: nish.HpackTable.nameLength nish.HpackTable.nameStart nish.hpackAppend nish.hpackAppendText nish.hpackStaticName nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hpackAppendText#0 nish.hpackAppend#0
   stackSites=0 stackLocals=0
   callee +0:7 hpackAppendText -> @nish.hpackAppendText
@@ -1412,7 +1415,7 @@ function HpackDecoder.appendValueAt(this: HpackDecoder, index: i32, out: u8[]): 
   sharedWrite: via nish.hpackAppendText
   escaping: index
   calls: nish.HpackTable.valueLength nish.HpackTable.valueStart nish.hpackAppend nish.hpackAppendText nish.hpackStaticValue nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.hpackAppendText#0 nish.hpackAppend#0
   stackSites=0 stackLocals=0
   callee +0:7 hpackAppendText -> @nish.hpackAppendText
@@ -1425,7 +1428,7 @@ function HpackDecoder.nameLengthAt(this: HpackDecoder, index: i32): i32 -> @nish
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: nish.HpackTable.nameLength nish.hpackStaticName nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:20 hpackStaticName -> @nish.hpackStaticName
   callee +2:12 HpackTable.nameLength -> @nish.HpackTable.nameLength
@@ -1433,7 +1436,7 @@ function HpackDecoder.sizeAt(this: HpackDecoder, index: i32): i64 -> @nish.Hpack
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index
   calls: nish.HpackTable.entrySize nish.hpackStaticName nish.hpackStaticValue nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:15 hpackStaticName -> @nish.hpackStaticName
   callee +1:15 hpackStaticValue -> @nish.hpackStaticValue
@@ -1441,14 +1444,14 @@ function HpackDecoder.sizeAt(this: HpackDecoder, index: i32): i64 -> @nish.Hpack
 function HpackDecoder.hasIndex(this: HpackDecoder, index: i32): boolean -> @nish.HpackDecoder.hasIndex [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.HpackTable.count nish_panic_overflow
-  pointer this: size=64 writesThrough=false captured=false
+  pointer this: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:57 HpackTable.count -> @nish.HpackTable.count
 function HpackDecoder.clear(this: HpackDecoder): void -> @nish.HpackDecoder.clear [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.HpackDecoder.working nish.HpackWork.classOf nish.HpackWork.pool nish.hpackEmpty nish_array_grow nish_panic_index
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.HpackDecoder.working#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.HpackDecoder.working#0
   stackSites=0 stackLocals=0
   local -4:13 work: HpackWork (const)
   callee -4:31 HpackDecoder.working -> @nish.HpackDecoder.working
@@ -1466,7 +1469,7 @@ function HpackDecoder.decode(this: HpackDecoder, block: u8[], off: i32, len: i32
   sharedWrite: +0:7
   escaping: len off
   calls: nish.HpackCursor.reset nish.HpackDecoder.clear nish.HpackDecoder.decodeFields nish.HpackDecoder.working
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.HpackDecoder.clear#0 nish.HpackDecoder.working#0 nish.HpackDecoder.decodeFields#0 nish.HpackDecoder.clear#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.HpackDecoder.clear#0 nish.HpackDecoder.working#0 nish.HpackDecoder.decodeFields#0 nish.HpackDecoder.clear#0
   pointer block: size=0 writesThrough=true captured=true passedTo=nish.HpackCursor.reset#1
   stackSites=0 stackLocals=0
   callee -8:5 HpackDecoder.clear -> @nish.HpackDecoder.clear
@@ -1480,12 +1483,14 @@ function HpackDecoder.decodeFields(this: HpackDecoder, c: HpackCursor): i32 -> @
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   calls: nish.HpackDecoder.appendNameAt nish.HpackDecoder.appendValueAt nish.HpackDecoder.copyOf nish.HpackDecoder.hasIndex nish.HpackDecoder.nameLengthAt nish.HpackDecoder.sizeAt nish.HpackDecoder.working nish.HpackTable.add nish.HpackTable.evictTo nish.HpackTable.resize nish.HpackWork.take nish.hpackAppend nish.hpackDecodeInteger nish.hpackDecodeString nish.hpackEmpty nish.hpackRepresentationOf nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.sizeAt#0 nish.HpackDecoder.nameLengthAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendValueAt#0 nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.working#0 nish.HpackDecoder.nameLengthAt#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.copyOf#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.sizeAt#0 nish.HpackDecoder.nameLengthAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.working#0 nish.HpackDecoder.appendValueAt#0 nish.HpackDecoder.hasIndex#0 nish.HpackDecoder.working#0 nish.HpackDecoder.nameLengthAt#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.appendNameAt#0 nish.HpackDecoder.copyOf#0
   pointer c: size=16 writesThrough=true captured=false passedTo=nish.hpackDecodeInteger#0 nish.hpackDecodeInteger#0 nish.hpackDecodeInteger#0 nish.hpackDecodeString#1 nish.hpackDecodeString#1
   stackSites=0 stackLocals=0
-  local -22:9 listSize: i64 (let)
-  local -21:9 tooLarge: boolean (let)
-  local -20:9 sawField: boolean (let)
+  local -25:9 listSize: i64 (let)
+  local -24:9 tooLarge: boolean (let)
+  local -23:9 sawField: boolean (let)
+  local -21:9 copied: i64 (let)
+  local -20:11 length: i32 (const)
   callee -18:29 hpackRepresentationOf -> @nish.hpackRepresentationOf
   local -13:13 rep: i32 (const)
   callee -13:24 hpackRepresentationOf -> @nish.hpackRepresentationOf
@@ -1525,21 +1530,23 @@ function HpackDecoder.decodeFields(this: HpackDecoder, c: HpackCursor): i32 -> @
   local +54:17 size: i64 (const)
   local +58:17 incremental: boolean (const)
   local +59:17 fits: boolean (const)
-  callee +65:13 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
-  callee +69:15 HpackTable.add -> @nish.HpackTable.add
-  local +71:21 nothing: i32 (const)
-  callee +72:15 HpackTable.evictTo -> @nish.HpackTable.evictTo
-  local +76:19 kept: u8[] (const)
-  callee +76:32 HpackWork.take -> @nish.HpackWork.take
-  local +78:21 from: i32 (const)
-  callee +79:15 hpackAppend -> @nish.hpackAppend
-  callee +81:15 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
-  callee +84:30 HpackDecoder.copyOf -> @nish.HpackDecoder.copyOf
+  local +61:17 added: boolean (const)
+  local +62:17 cost: i64 (const)
+  callee +74:13 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
+  local +77:19 kept: u8[] (const)
+  callee +77:32 HpackWork.take -> @nish.HpackWork.take
+  local +79:21 from: i32 (const)
+  callee +80:15 hpackAppend -> @nish.hpackAppend
+  callee +82:15 HpackDecoder.appendNameAt -> @nish.HpackDecoder.appendNameAt
+  callee +85:30 HpackDecoder.copyOf -> @nish.HpackDecoder.copyOf
+  callee +90:13 HpackTable.add -> @nish.HpackTable.add
+  local +92:19 nothing: i32 (const)
+  callee +93:13 HpackTable.evictTo -> @nish.HpackTable.evictTo
 function HpackDecoder.copyOf(this: HpackDecoder, bytes: u8[]): u8[] -> @nish.HpackDecoder.copyOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.HpackDecoder.working nish.HpackWork.take nish_array_grow
-  pointer this: size=64 writesThrough=true captured=false passedTo=nish.HpackDecoder.working#0
+  pointer this: size=72 writesThrough=true captured=false passedTo=nish.HpackDecoder.working#0
   pointer bytes: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -2:11 out: u8[] (const)

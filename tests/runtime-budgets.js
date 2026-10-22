@@ -447,11 +447,28 @@ export const HTTP1_TLS_SERVER_START_BYTES = 58368
  * index 184, the timer wheel 20, the signature, state, ready, dirty, queued and free
  * tables 28), and the 64 KB receive buffer, the transmit scratch and the pools' own
  * bookkeeping, with no slot's connections built. Each slot's QUIC and HTTP/3
- * connections and address are built on the first Initial accepted into it, 111,424
- * arena bytes on the same configuration. The budget is the next 256-byte boundary
- * above the measurement, as every ceiling here was set.
+ * connections and address are built on the first Initial accepted into it, which
+ * `HTTP3_SERVER_SLOT_BYTES` pins. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
  */
 export const HTTP3_SERVER_START_BYTES = 17501696
+
+/**
+ * What one `Http3Server` slot's QUIC and HTTP/3 connections and address take from
+ * the arena when they are built: the second figure
+ * `tests/link/net_http3_server/startup.ts` prints, the slot `connection(0)` builds
+ * on the test configuration. `tests/run.js` holds it to this exactly, not under a
+ * ceiling: the arena's count is deterministic (five runs gave the same figure), so a
+ * slot that costs a byte more or less fails, and this is moved with the change that
+ * moved it.
+ *
+ * Measured **111,688 bytes** on 2026-10-22 with clang 18 on linux-x64. #474's ECN
+ * state added 120 of them: the four ECN counts of each of the three packet-number
+ * spaces (96), recovery's ECN state and the connection's `ecnMarking` and
+ * `datagramEcn` (24 with padding). Whether a packet was marked rides in its state
+ * byte, so the sent-packet rings grew by nothing.
+ */
+export const HTTP3_SERVER_SLOT_BYTES = 111688
 
 /**
  * Ceiling on what `new Http2TlsServer(tlsConfig, config, listener, 16384)` takes from

@@ -24,11 +24,9 @@
 // Anything unexpected -- unreadable stdin, a shape we do not recognise -- exits
 // 0, because a hook that cannot parse its input should not stop the session.
 //
-// The patterns themselves are in `attribution-patterns.mjs` beside this file,
-// shared with `scripts/check-pr-body.mjs`. That is the CI half of this rule:
-// a platform can append a session-link footer to a pull request body after
-// the call that opened it, where no PreToolUse hook sees it (#176), so the
-// `PR body` workflow fails a pull request whose body still carries one.
+// The patterns themselves are in `attribution-patterns.mjs` beside this file.
+// A footer a platform appends to a pull request body after the call that
+// opened it is out of this hook's sight (#176), and no CI check reads the body.
 //
 // The cases it is meant to catch, and the ones it must leave alone, are in
 // `no-attribution.test.mjs` beside this file; `npm test` runs it:

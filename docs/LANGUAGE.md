@@ -3480,6 +3480,31 @@ export const main = (): i32 => {
   parameter table, and two fresh `const`s in a generic function, are
   admitted). Two parameters may be one array and are refused. `parallelMap`
   and `parallelFrom` allocate their own `dst`, which no capture can reach.
+- **A fresh `dst` nothing was handed is apart from every capture** (#612).
+  When `dst` is a `const` bound to an array of its own, and nothing before the
+  call — or in a loop around the call that does not also declare it, or in a
+  function written inside — names it except to index it or read a member, then
+  no capture can reach it: the only way into a value is through a binding, and
+  none was given this one. So the body may read a `parallelMap` result, a
+  config object or a `const self = this` beside it
+  (`tests/link/par_into_fresh_pipeline`, `par_into_fresh_object`); indexing
+  it, reading `d.length`, calling `d.fill(0)` or walking it with `for...of`
+  first hands it to no one (`par_into_fresh_reads`). Anything that hands
+  `dst` on first is refused with the message above: a store `p.arr = d` or
+  `this.tab = d` (`reject_par_into_store_field`, `_this_field`), an argument
+  `keep(h, d)` or `ts.push(d)` (`_helper`, `_push`), an alias `const e = d`
+  (`_alias`), a branch `c ? d : w` (`_ternary`), a holder `new Holder(d)`
+  (`_holder`), a store after the call inside a loop around it
+  (`_loop_store`, and `_loop_store_while`, `_do`, `_for_of` for the other
+  loops) — the outermost such loop, so a store after an inner loop
+  inside an outer one counts (`_nested_loop`) — a hand-on on one branch of
+  an `if` (`_if_branch`), an
+  earlier call writing the same `dst` (`_twice`), `dst` passed as the call's
+  own `src` (`_as_src`), and the arrow reading `dst` itself (`_captured`). A
+  `dst` bound to a captured array is no fresh `const` (`_from_capture`). The
+  rule asks for the one binding of that name in its function, so a `dst`
+  whose name is declared twice there keeps the stricter rule above
+  (`_shadow`).
 
 ### Scoped tasks: `using s = scope()`
 
@@ -9537,7 +9562,7 @@ by the caller.
 
   | Code | Row ([wp33](wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
   | --- | --- | --- | --- |
-  | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored, compared or combined with a number literal, or taken from a width (`width - s.length`); the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
+  | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored (a data-parallel body's answer included), compared or combined with a number literal, taken from a width (`width - s.length`), used as an array index, a loop bound or `parallelFrom`'s count — directly, through a function it is passed to, or through a helper that returns it; the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
   | NL8002 | checked `slice` (3.2) | a `slice(a)` or `slice(a, b)` on a string with a bound that is a negative literal, or that is placed inside `[0, length]` neither by the bounds proof which folds a `substring` clamp nor by the receiver's own text: an ASCII string literal, a `const` bound to one, a `const` copied from such a `const`, or a module constant that folds to one has a known length, and a bound no larger than it is quiet when it is a non-negative literal, or a local the same bounds proof holds between 0 and that length — a `const` or a `let` its initialiser bounds, or one a guard bounds — and, when the receiver's length is what proves either of two bounds, the first is known to be no larger than the second, from the largest the first can be and the smallest the second can be (`tests/cases/port_str_slice_literal_quiet`; past the end, a reversed pair such as `slice(5, 2)`, a pair nothing orders, a `let` receiver and a non-ASCII literal still warn, `port_str_slice_literal_past`); one warning per call, at the first such bound | clamps the bounds and counts a negative one from the end, where this panics |
   | NL8003 | a record copied in (3.3) | a local record `p` copied into a record array `ps` (`ps.push(p)`, an element of an array literal, `ps[i] = p`), when a field of one copy is written after the copy and the other copy is read after that write; the exact predicate is below the table | stores the same object, so a write through one is seen through the other |
   | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
@@ -9574,19 +9599,58 @@ by the caller.
     names the same character in both units);
   - it is **taken from a width**: the right operand of a `-` whose left
     operand does not itself hold an offset, as in `width - s.length`, the
-    room left in a column that was not counted in bytes.
+    room left in a column that was not counted in bytes;
+  - it **indexes an array** (`a[s.indexOf(t)]` picks another element) or
+    **counts the elements** `parallelFrom(n, f)` makes — an offset or a code
+    unit alike (`table[s.charCodeAt(i) % n]` reads another slot where the
+    byte and the unit differ);
+  - it **bounds a loop**: either operand of a comparison in a `while`, `do`
+    or `for` condition, unless the other operand also holds an offset or is
+    the loop's *cursor* into a string — a local the loop uses as a string's
+    index or hands to a string's method, alone or in arithmetic — which
+    counts in the string's own unit (`for (let i = 0; i < s.length; i++)`
+    over `s.charCodeAt(i)` is quiet, and so is a bound that moves the cursor
+    by a constant to look ahead, `i + 1 < s.length`);
+  - it is **a data-parallel body's answer**: stored in the array
+    `parallelMap`, `parallelMapInto` or `parallelFrom` fills, or folded by
+    `parallelReduce` (with its identity) into the value the call answers,
+    which is followed on from the call.
+
+  The walk crosses functions of the same module that are not generic or
+  methods of a generic class, up to four calls deep. An offset passed as an
+  argument — to a function, a method or a constructor — is followed through
+  the parameter in the callee and reported at the argument, quoting the
+  callee's reason (`` `s.length` … and it is passed to `show`, where it is
+  printed ``). An offset a function returns, or an arrow answers, is followed
+  from every call of it in the module, and from the parallel call that runs
+  the arrow as its body; a call whose string argument is provably ASCII is
+  skipped. A name an arrow captures is provably ASCII when the function that
+  hosts the arrow writes only ASCII to it.
+
+  The walk is a lint, not a proof, and it is silent where it stops: past the
+  fourth call (a recursive call ends there), into a generic function, a
+  method of a generic class or a function of another module, at a parameter
+  the callee never reads, or one it reads only inside an arrow it passes on,
+  and at the answer of a `spawn` body, whose task is not followed into the
+  value its scope hands back (`tests/link/port_utf8_offset_walk_limits`).
 
   One `+ k` on the offset an `indexOf` (with or without a start) or
   `lastIndexOf` of a provably ASCII needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
   fact from outside: `line.substring(line.indexOf(":") + 1)` is quiet, and
   the stepped offset is followed on like any other, so printing it is
-  reported. Everything else is quiet: an offset handed to a string method or
-  to any function, compared with another offset or with a local, or used as a
-  loop bound, stays inside the program's own counting, so
+  reported. Everything else is quiet: an offset handed to a string method,
+  compared with another offset or with a cursor, or kept inside a function
+  the walk does not cross, stays inside the program's own counting, so
   `const width = name.length;` alone is not reported
   (`tests/cases/port_str_length_printed`, `port_str_nonascii_charcode`,
-  `port_str_needle_step_printed`; quiet: `port_str_ascii_literal_quiet`,
-  `port_str_offset_roundtrip_quiet`; the form with a start: `str_index_of_from_port`).
+  `port_str_needle_step_printed`, `port_utf8_offset_index`,
+  `port_utf8_offset_argument`, `port_utf8_offset_loop_bound`,
+  `port_utf8_offset_helper_return`; `tests/link/port_utf8_offset_parallel_body`,
+  `port_utf8_offset_parallel_from`, `port_utf8_offset_parallel_reduce`,
+  `port_utf8_offset_walk_limits`; quiet:
+  `port_str_ascii_literal_quiet`, `port_str_offset_roundtrip_quiet`,
+  `tests/link/port_utf8_offset_quiet`; the form with a start:
+  `str_index_of_from_port`).
 
   **NL8003 and NL8004, exactly.** A *record array* holds its records inline:
   its element type is an `interface` no class `implements`, and not

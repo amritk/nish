@@ -87,8 +87,7 @@ Record format and review scope: [`docs/security/README.md`](docs/security/README
 ## Git & PR Guidelines
 
 NEVER include session links, tracking IDs, model names or platform
-attributions in commits, code or PR text. Read a PR's body back after opening
-it and delete any appended session-link footer, or `pr-body.yml` fails.
+attributions in commits, code or PR text.
 
 - Before starting on an issue, search open PRs for it; put `Fixes #N` in the
   first push.
