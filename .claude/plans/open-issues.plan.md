@@ -92,6 +92,9 @@ stages:
       - id: cbb-validate
         content: Add a check to tests/run.js's crypto-bench block that runs --validate against a temp copy with a wrong expected.txt and expects failure
         status: pending
+      - id: cbb-x25519-gate
+        content: Make the crypto-bench "portable columns are portable" gate robust — on CI it fails curves openssl-portable at x25519@32 at 1.029x-1.046x against portableMinRatio 1.050x (PR runs 39749371728, 39754369094) because OpenSSL's x25519 is nearly the same code with and without the asm mask; prove portability for that kernel some other way (a kernel whose asm and portable paths actually differ, a band from repeated runs, or a documented per-kernel exemption) without weakening the check for the other families
+        status: pending
   - id: quic-ecn
     title: "feat(net): use ECN counts in QUIC recovery (#474)"
     goal: QUIC recovery reads ACK_ECN counts and treats a rise in ECN-CE as a congestion signal (RFC 9002 §7.1), and validates ECN per RFC 9000 §13.4.2
@@ -232,7 +235,7 @@ the destination could alias a capture, run after `churn()`.
 
 ## crypto-bench-band (#790)
 
-**Owns:** `bench/crypto/run.mjs`, `bench/crypto/README.md`, `bench/crypto/lib/**`, shared: `tests/run.js`
+**Owns:** `bench/crypto/run.mjs`, `bench/crypto/README.md`, `bench/crypto/lib/**`, shared: `bench/crypto/curves/family.json` (the portable-ratio fields only), `tests/run.js`
 
 ## quic-ecn (#474)
 

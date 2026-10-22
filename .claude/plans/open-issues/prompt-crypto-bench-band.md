@@ -10,7 +10,7 @@ Run ledger: issue #808
 test(bench): print the noise band per crypto row and pin the --validate mismatch (#790)
 Goal: bench/crypto prints each row's noise band beside its figure, and a test proves --validate fails on a checksum mismatch
 Owns (do not create or edit files outside these globs, generated files aside; a
-"shared" path you may edit only in your own rule, row or section): `bench/crypto/run.mjs`, `bench/crypto/README.md`, `bench/crypto/lib/**`, shared: `tests/run.js`
+"shared" path you may edit only in your own rule, row or section): `bench/crypto/run.mjs`, `bench/crypto/README.md`, `bench/crypto/lib/**`, shared: `bench/crypto/curves/family.json` (the portable-ratio fields only), `tests/run.js`
 Verification: node tests/run.js crypto-bench green with the new check; npm run check, npm run lint green
 Targeted tests: node tests/run.js <section> (.claude/testing.md lists the sections)
 Generated files (regenerate with the repo's tooling, never edit or hand-merge):
@@ -20,6 +20,7 @@ docs/IR_COOKBOOK.md's runtime prelude (docs/cookbook/regen.sh)
 Todos:
 - In bench/crypto/run.mjs, print a per-row noise band column and document it in bench/crypto/README.md
 - Add a check to tests/run.js's crypto-bench block that runs --validate against a temp copy with a wrong expected.txt and expects failure
+- Make the crypto-bench "portable columns are portable" gate robust — on CI it fails curves openssl-portable at x25519@32 at 1.029x-1.046x against portableMinRatio 1.050x (PR runs 39749371728, 39754369094) because OpenSSL's x25519 is nearly the same code with and without the asm mask; prove portability for that kernel some other way (a kernel whose asm and portable paths actually differ, a band from repeated runs, or a documented per-kernel exemption) without weakening the check for the other families
 
 Full plan, for context on how your stage fits with the others:
   git fetch origin feature/open-issues/plan
