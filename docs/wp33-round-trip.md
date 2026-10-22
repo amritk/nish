@@ -189,7 +189,7 @@ collected in §7.
 | Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
 | `write`, `readFileSync`, `getenv`, `spawnSync`, `monotonicNanos`, `toI32`, `Arena`, … are **ambient globals** | they need `runtime/nish.mjs` installed first | C | named imports from the runtime (§4.3) | Keep the ambient spelling in the language, and emit imports. The globals are why the source cannot be bundled or tree-shaken as it stands. |
-| `nish/<module>` and `nish:fs` specifiers | resolved by a Node loader hook | C | the package's own specifiers (`@amritk/nish/threads`, …; `package.json` already exports `./*` to `std/*.ts`) | — |
+| `nish/<module>` and `nish:fs` specifiers | resolved by a Node loader hook | C | the package's own specifiers (`nish/threads`, …; `package.json` already exports `./*` to `std/*.ts`) | — |
 | `export const main` is the entry, and its return is the exit code | nothing calls it under Node | C | a two-line entry module that calls `main` and exits with its answer | — |
 | `enum` | Node's `--experimental-strip-types` refuses it (not erasable); Bun accepts it | C | a `const` object and a type of the same name | — |
 | `console.log` prints `String(x)` | bare Node's console inspects, so `-0` prints as `-0`; `runtime/nish.mjs` replaces `console.log` and `console.error` with shims that print `String(x)`, so `-0` prints `0` in both readings | A under the prelude | the runtime's `log` | Not a class-C row: the reading the portability class is defined against prints what native prints, so NL8011, which flagged it, is retired. `--emit ts` keeps importing the runtime's `log`; output that did not would have to revive the row under a new code. |
@@ -231,7 +231,7 @@ node out/entry.ts                       # or bun, or a bundler for a browser
   is copied byte for byte. That makes the output reviewable as a diff against
   the input, which is how a team will read it.
 - **Types kept.** `i32`, `u8` and the rest become `number`, through
-  `import type { i32 } from "@amritk/nish/runtime"`, so the intent survives as
+  `import type { i32 } from "nish/runtime"`, so the intent survives as
   documentation. `i64` and `u64` become `bigint`.
 - **The emitted TS type-checks under `tsc --strict`**, and a test holds it to
   that.
@@ -251,11 +251,11 @@ without saying where.
 Today's `runtime/shim.mjs` is one module that imports `node:fs`,
 `node:child_process` and `node:os`. It becomes:
 
-- **`@amritk/nish/runtime`**: the host-agnostic core. Integer helpers, UTF-8
+- **`nish/runtime`**: the host-agnostic core. Integer helpers, UTF-8
   string helpers, `Result`, `Ok`, `Err`, `panic`, `log`, `parseInt`,
   `parseFloat`, the conversions and `Arena` as no-ops. No `node:` import and no
   `process`, so it bundles for a browser.
-- **`@amritk/nish/runtime/node`**, **`…/bun`**, **`…/browser`**: the file
+- **`nish/runtime/node`**, **`…/bun`**, **`…/browser`**: the file
   system, environment, process and clock. The browser adapter answers what a
   browser can (`monotonicNanos` from `performance.now`, `getenv` as `null`),
   and a file-system call there is a `panic` that names the host.

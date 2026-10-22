@@ -306,7 +306,7 @@ and `INSTALL.md` rewritten. **Closed:**
 - `release.yml` builds each binary from the seed on its own architecture, so
   every shipped binary passed `--verify` and a smoke test on its hardware.
   v0.4.0 was the first release to attach all four.
-- The package is `@amritk/nish`, the command `nish`
+- The package is `nish`, the command `nish`
   ([wp12-release.md](wp12-release.md#the-npm-name)). `bin/nish` is a launcher,
   and the compiler arrives as one `@amritk/nish-<asset>` optional dependency
   per platform, so nothing is compiled on a user's machine.

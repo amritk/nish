@@ -29,7 +29,7 @@
     "tests/differential/corpus/**",
     "tests/differential/arrow-parity/**"
   ],
-  "ignoreDependencies": ["nish", "cookbook-pkg", "elysia", "hono"],
+  "ignoreDependencies": ["cookbook-pkg", "elysia", "hono"],
   "ignoreBinaries": ["clang", "llc", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load"],
   "ignoreExportsUsedInFile": false
 }
