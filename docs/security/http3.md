@@ -289,10 +289,19 @@ the server's flight hold a slot each until the hello deadline, and none of
 the address's places (`net_relay_forged`, "they hold no place of the address
 and no global place, and none is shed", "two clients from that address then
 open sessions under its cap of two"); a validated client past the cap is
-still refused ("a third validated client from it is refused"). Without
-`retry`, forged Initials can still fill the slot pool from any addresses for
-the hello deadline, each answered within QUIC's amplification limit; `retry`
-on gives them no slot at all.
+still refused ("a third validated client from it is refused").
+
+The trade-off: before validation nothing caps an address. With `retry` off,
+one real address, forging nothing, can open every slot of the pool
+(`maxSessions + spareSlots`, 4,160 by default) and hold each until the hello
+deadline, each answered within QUIC's amplification limit; when the cap was
+claimed at the first Initial it held one address to `maxPerPeer +
+spareSlots`. Forged sources could fill the pool that way already; now no
+forging is needed. `retry` on closes both this and the hole of #806, at a
+round trip's cost to every client: the listener answers an Initial without a
+valid token with a Retry and gives it no slot (`net_relay_forged`, "with
+retry on, each of four Initials without a token is answered with a Retry",
+"and none of them holds a slot"). The relay ships with `retry` off.
 
 ## What is and is not wiped
 

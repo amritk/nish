@@ -88,7 +88,7 @@ const ofType = (c: RigClient, type: i32): u8[][] => {
 
 /** A session's life: hello and HELLO_OK, DATA both ways, PING and PONG, STATS, and a CLOSE from the client. */
 const life = (t: Suite): void => {
-  const rig = new Rig(rigConfig(), false);
+  const rig = new Rig(rigConfig(), false, false);
   const c: RigClient = rig.session(n32(1), "127.0.0.1");
   t.eqStr("the CONNECT is answered 200", c.status(), "200");
   t.eqStr("the hello is answered HELLO_OK: session 1, 1,200 bytes", toHex(c.last()), "0201000000b004");
@@ -148,7 +148,7 @@ const life = (t: Suite): void => {
 
 /** The relay's own ends of a session: idle, the rate cap, and a shutdown. */
 const relayEnds = (t: Suite): void => {
-  const rig = new Rig(rigConfig(), false);
+  const rig = new Rig(rigConfig(), false, false);
   const idle: RigClient = rig.session(n32(1), "127.0.0.1");
   rig.advance(n64(10000), n64(500));
   t.eqStr("ten seconds without a datagram is not yet idle", ended(idle), "open");
@@ -195,7 +195,7 @@ const relayEnds = (t: Suite): void => {
 
 /** The hello and the grant: each refusal with grant.rs's or main.rs's close code. */
 const refusals = (t: Suite): void => {
-  const rig = new Rig(rigConfig(), false);
+  const rig = new Rig(rigConfig(), false, false);
   const silent: RigClient = rig.connect(n32(1), "127.0.0.1");
   silent.open("/cs");
   rig.settle(n32(50));
@@ -263,7 +263,7 @@ const caps = (t: Suite): void => {
   const config: RelayConfig = rigConfig();
   config.maxSessions = 2;
   config.maxPerPeer = 2;
-  const rig = new Rig(config, false);
+  const rig = new Rig(config, false, false);
   // Three addresses, so that the third meets the global cap alone. Linux routes
   // all of 127.0.0.0/8 to lo; on a mac, `sudo ifconfig lo0 alias 127.0.0.2 up`
   // and the same for .3 first, as CI's runtime-net job does.
@@ -287,7 +287,7 @@ const caps = (t: Suite): void => {
 
   const perPeer: RelayConfig = rigConfig();
   perPeer.maxPerPeer = 2;
-  const rig2 = new Rig(perPeer, false);
+  const rig2 = new Rig(perPeer, false, false);
   const p1: RigClient = rig2.session(n32(1), "127.0.0.1");
   const p2: RigClient = rig2.session(n32(2), "127.0.0.1");
   const p3: RigClient = rig2.session(n32(3), "127.0.0.1");
@@ -303,7 +303,7 @@ const connecting = (t: Suite): void => {
   const config: RelayConfig = rigConfig();
   config.maxSessions = 66;
   config.maxPerPeer = 64;
-  const rig = new Rig(config, false);
+  const rig = new Rig(config, false, false);
   const held: RigClient[] = [];
   for (let k: i32 = 1; k <= 64; k++) {
     held.push(rig.connect(k, "127.0.0.1"));
@@ -327,7 +327,7 @@ const connecting = (t: Suite): void => {
   }
   t.ok("at five seconds from its first Initial each is closed with code 1, counted, and its places given back", closed === n32(64) && rig.relay.connectTimeouts === n32(64) && rig.relay.live === n32(0) && rig.relay.peers.used === n32(0));
 
-  const rig2 = new Rig(rigConfig(), false);
+  const rig2 = new Rig(rigConfig(), false, false);
   const pinging: RigClient = rig2.connect(n32(1), "127.0.0.1");
   for (let k: i32 = 0; k < 7; k++) {
     // An ack-eliciting PING every 700 ms, 4.9 s of them, keeps QUIC alive but opens no session.
@@ -344,7 +344,7 @@ const connecting = (t: Suite): void => {
 const oneAddress = (t: Suite): void => {
   const config: RelayConfig = rigConfig();
   config.maxPerPeer = 2;
-  const rig = new Rig(config, false);
+  const rig = new Rig(config, false, false);
   // Six handshakes from one address, none sending CONNECT: the whole pool of 4 sessions and 2 spare slots.
   for (let k: i32 = 1; k <= 6; k++) {
     rig.connect(k, "127.0.0.1");
@@ -369,7 +369,7 @@ const oneAddress = (t: Suite): void => {
 const offload = (t: Suite): void => {
   const config: RelayConfig = rigConfig();
   config.offload = true;
-  const rig = new Rig(config, true);
+  const rig = new Rig(config, true, false);
   const c: RigClient = rig.session(n32(1), "127.0.0.1");
   rig.echo.silent = true;
   c.datagram([rigData(n32(1), n32(300), n32(1)), rigData(n32(2), n32(300), n32(2)), rigData(n32(3), n32(300), n32(3)), rigData(n32(4), n32(100), n32(4))]);
@@ -396,7 +396,7 @@ const offload = (t: Suite): void => {
 
 /** A warm session keeps nothing in the arena: DATA both ways, PING, STATS, a datagram from a stranger, a stream turned away. */
 const warm = (t: Suite): void => {
-  const rig = new Rig(rigConfig(), false);
+  const rig = new Rig(rigConfig(), false, false);
   const c: RigClient = rig.session(n32(1), "127.0.0.1");
   for (let k: i32 = 0; k < 20; k++) {
     c.send(rigData(k, n32(200), n32(1)));

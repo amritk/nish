@@ -13,30 +13,39 @@
  * `config.path`, and is counted against both caps the moment QUIC has
  * validated its address (a Handshake packet from it, or with `retry` a Retry
  * token), still before the handshake is done, as main.rs claims its global
- * place before it: at most `maxPerPeer` from one address, claimed
- * first, and at most `maxSessions` at once, given only to a connection
- * inside its address's cap. Until then the address is only where one UDP
- * datagram says it came from, which anyone can forge, so a handshake not yet
- * validated holds its slot and no place: forged Initials cannot use up a real
- * address's places. The pool has `spareSlots` QUIC slots past `maxSessions`, so
- * a client over either cap is still told why — its session is accepted, sent
- * CLOSE RATE_LIMITED and closed with QUIC application code 1 — rather than
- * dropped; at most `spareSlots` connections over their address's cap wait so
- * at once, and one past that is closed with code 1 when its address is
- * validated, so one address holds at most `maxPerPeer + spareSlots`
- * validated slots. A connection that has opened no session `helloTimeout`
- * after its first Initial is closed with code 1, so a handshake alone holds
- * its slot, and any place, for no longer. Then the session has `helloTimeout` to send a HELLO carrying a
- * grant (`grant.ts`); a first datagram that is not one, another version, a
- * grant that does not verify, or an upstream that cannot be reached is
- * answered with CLOSE and the code grant.rs or main.rs gives it. A HELLO that
- * holds opens the upstream socket and answers HELLO_OK, and from then on DATA
- * is forwarded both ways, PING answered with PONG, and STATS sent every
- * `statsInterval`; a CLOSE from the client, a CLOSE_WEBTRANSPORT_SESSION or
- * the end of its CONNECT stream ends it, and so do `idleTimeout` without a
- * datagram (CLOSE IDLE) and more than `maxDatagramsPerSecond` in a one-second
- * window (CLOSE RATE_LIMITED). Every end closes the QUIC connection: code 0
- * after a session, 1 after a refusal, as main.rs's `connection.close`.
+ * place before it: at most `maxPerPeer` from one address, claimed first, and
+ * at most `maxSessions` at once, given only to a connection inside its
+ * address's cap. Until then the address is only where one UDP datagram says
+ * it came from, which anyone can forge, so a handshake not yet validated
+ * holds its slot and no place: forged Initials cannot use up a real
+ * address's places. The cost is that nothing caps an address before
+ * validation: with `retry` off, as here, one real address, forging nothing,
+ * can open every slot of the pool (`maxSessions + spareSlots`, 4,160 by
+ * default) and hold each for `helloTimeout`, where a cap claimed at the
+ * first Initial held it to `maxPerPeer + spareSlots`; forged sources could
+ * fill the pool before, and now no forging is needed. `retry` on closes
+ * both, at a round trip's cost to every client: the listener gives an
+ * Initial without a valid token a Retry and no slot. The pool has
+ * `spareSlots` QUIC slots past `maxSessions`, so a client over either cap is
+ * still told why — its session is accepted, sent CLOSE RATE_LIMITED and
+ * closed with QUIC application code 1 — rather than dropped; at most
+ * `spareSlots` connections over their address's cap wait so at once, and one
+ * past that is closed with code 1 when its address is validated, so one
+ * address holds at most `maxPerPeer + spareSlots` validated slots. A
+ * connection that has opened no session `helloTimeout` after its first
+ * Initial is closed with code 1, so a handshake alone holds its slot, and
+ * any place, for no longer. Then the session has `helloTimeout` to send a
+ * HELLO carrying a grant (`grant.ts`); a first datagram that is not one,
+ * another version, a grant that does not verify, or an upstream that cannot
+ * be reached is answered with CLOSE and the code grant.rs or main.rs gives
+ * it. A HELLO that holds opens the upstream socket and answers HELLO_OK, and
+ * from then on DATA is forwarded both ways, PING answered with PONG, and
+ * STATS sent every `statsInterval`; a CLOSE from the client, a
+ * CLOSE_WEBTRANSPORT_SESSION or the end of its CONNECT stream ends it, and
+ * so do `idleTimeout` without a datagram (CLOSE IDLE) and more than
+ * `maxDatagramsPerSecond` in a one-second window (CLOSE RATE_LIMITED). Every
+ * end closes the QUIC connection: code 0 after a session, 1 after a refusal,
+ * as main.rs's `connection.close`.
  *
  * **Time** is two numbers the caller passes in, so a test drives them: `now`,
  * a monotonic millisecond the timers run on, and `wall`, the Unix millisecond
@@ -309,7 +318,7 @@ export class Relay {
   refusedUpstream: i32 = 0
   helloTimeouts: i32 = 0
   connectTimeouts: i32 = 0
-  /** Connections closed at their first Initial: over their address's cap with every spare slot already waiting. */
+  /** Connections closed once their address is validated (`place`): over its cap with every spare slot already waiting. */
   shed: i32 = 0
   idleClosed: i32 = 0
   rateLimited: i32 = 0
@@ -503,9 +512,9 @@ export class Relay {
   /**
    * Brings `slot`'s relay state up to its connection's: a slot whose
    * connection has gone gives its places back, and one holding a new
-   * connection takes them once its address is validated (`place`). Called whenever
-   * the slot has news and whenever its timer fires, so a connection the
-   * carrier freed is noticed within `RELAY_RECHECK`.
+   * connection takes them once its address is validated (`place`). Called
+   * whenever the slot has news and whenever its timer fires, so a connection
+   * the carrier freed is noticed within `RELAY_RECHECK`.
    */
   reconcile(slot: i32, now: i64): void {
     const generation: i32 = this.server.connection(slot).generation

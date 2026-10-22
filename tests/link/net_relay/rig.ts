@@ -67,10 +67,17 @@ export const rigHello = (token: string, version: i32): u8[] => {
 /**
  * A relay under `config` on the UDP socket `fd`, serving `net_tls_common`'s
  * P-256 test certificate (which the test client checks) and verifying grants
- * with the grant secret `turn` hands each step, grant.rs's SECRET.
+ * with the grant secret `turn` hands each step, grant.rs's SECRET; `retry`
+ * turns the listener's Retry on.
  */
-export const rigRelay = (config: RelayConfig, fd: i32, entropy: u8[]): Relay =>
-  new Relay(config, relayQuicConfig([leafCertificate()], new Array<u8>(32), new Array<u8>(32)), fd, new GrantVerifier(), entropy);
+export const rigRelayRetry = (config: RelayConfig, fd: i32, entropy: u8[], retry: boolean): Relay => {
+  const quic = relayQuicConfig([leafCertificate()], new Array<u8>(32), new Array<u8>(32));
+  quic.retry = retry;
+  return new Relay(config, quic, fd, new GrantVerifier(), entropy);
+};
+
+/** `rigRelayRetry` with `retry` off, as the relay ships. */
+export const rigRelay = (config: RelayConfig, fd: i32, entropy: u8[]): Relay => rigRelayRetry(config, fd, entropy, false);
 
 /** The game server: a UDP socket that records what it is sent and, unless silent, sends it back. */
 export class RigEcho {
@@ -431,14 +438,14 @@ export class Rig {
   /** Waits for what a turn sent to land: the game server's socket, the relay's loop and each client's socket. */
   wait: WireWait;
 
-  constructor(config: RelayConfig, gro: boolean) {
+  constructor(config: RelayConfig, gro: boolean, retry: boolean) {
     const fd: i32 = rigRelaySocket();
     this.port = netLocalPort(fd);
     const entropy: u8[] = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE);
     for (let k: i32 = 0; k < QUIC_LISTENER_ENTROPY_SIZE; k++) {
       entropy[k] = toU8(0x40 + k);
     }
-    this.relay = rigRelay(config, fd, entropy);
+    this.relay = rigRelayRetry(config, fd, entropy, retry);
     this.echo = new RigEcho(gro);
     this.clients = [];
     this.wait = new WireWait();
