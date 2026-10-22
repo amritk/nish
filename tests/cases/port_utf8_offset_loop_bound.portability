@@ -1,0 +1,3 @@
+{"file":"tests/cases/port_utf8_offset_loop_bound.ts","line":9,"column":23,"endLine":9,"endColumn":34,"severity":"portability","code":"NL8001","message":"`word.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it bounds a loop over `i`"}
+{"file":"tests/cases/port_utf8_offset_loop_bound.ts","line":13,"column":14,"endLine":13,"endColumn":31,"severity":"portability","code":"NL8001","message":"`word.indexOf(\"o\")` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it bounds a loop over `k`"}
+{"file":"tests/cases/port_utf8_offset_loop_bound.ts","line":19,"column":19,"endLine":19,"endColumn":30,"severity":"portability","code":"NL8001","message":"`word.length` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it bounds a loop over `d`"}

@@ -1,0 +1,2 @@
+{"file":"tests/cases/port_utf8_offset_index.ts","line":7,"column":22,"endLine":7,"endColumn":39,"severity":"portability","code":"NL8001","message":"`word.indexOf(\"l\")` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it indexes an array"}
+{"file":"tests/cases/port_utf8_offset_index.ts","line":9,"column":22,"endLine":9,"endColumn":26,"severity":"portability","code":"NL8001","message":"`last`, which holds `word.indexOf(\"o\")`, counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it indexes an array"}

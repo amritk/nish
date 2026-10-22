@@ -401,6 +401,10 @@ cases/port_str_slice_literal_past added after R6: no rewriter to freeze it with
 cases/port_str_slice_literal_quiet added after R6: no rewriter to freeze it with
 cases/port_str_slice_negative added after R6: no rewriter to freeze it with
 cases/port_str_slice_proven_quiet added after R6: no rewriter to freeze it with
+cases/port_utf8_offset_argument added after R6: no rewriter to freeze it with
+cases/port_utf8_offset_helper_return added after R6: no rewriter to freeze it with
+cases/port_utf8_offset_index added after R6: no rewriter to freeze it with
+cases/port_utf8_offset_loop_bound added after R6: no rewriter to freeze it with
 cases/res_proof_consumers added after R6: no rewriter to freeze it with
 cases/res_result_store added after R6: no rewriter to freeze it with
 cases/res_result_store_flow added after R6: no rewriter to freeze it with
