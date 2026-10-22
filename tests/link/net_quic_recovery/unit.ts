@@ -449,6 +449,19 @@ const rcEcnChecks = (t: Suite): void => {
   rcAckEcn(bleached, n64(0), n64(3), n64(100), n64(0), n64(4), n64(0));
   t.eqI32("ECT(1) counted for packets marked ECT(0) falls short too", bleached.ecnState, QUIC_RECOVERY_ECN_FAILED);
 
+  const mixed = rcConfirmed();
+  rcSendMarked(mixed, n64(0), n64(5), n64(0));
+  rcAckEcn(mixed, n64(0), n64(3), n64(100), n64(4), n64(1), n64(0));
+  t.ok("ECT(1) 1 beside ECT(0) 4 for four marked packets validates: ECT(1) is bounded, not refused", mixed.ecnState === QUIC_RECOVERY_ECN_CAPABLE && rcApp(mixed).ect1 === n64(1));
+
+  const hidden = rcConfirmed();
+  rcSendMarked(hidden, n64(0), n64(3), n64(0));
+  rcAckEcn(hidden, n64(0), n64(3), n64(100), n64(4), n64(0), n64(0));
+  hidden.onEctSent(APP, n32(-1));
+  rcSendMarked(hidden, n64(5), n64(5), n64(150));
+  t.eqI32("an ACK_ECN raising the largest to 4, a packet that elicits no ACK, acknowledges nothing recorded", rcAckEcn(hidden, n64(4), n64(4), n64(200), n64(4), n64(0), n64(1)), n32(0));
+  t.ok("its CE rise is still read: a congestion event timed from 5's send at 150 ms halves the window", hidden.ecnCongestionEvents === n32(1) && hidden.congestionWindow === n64(6000) && hidden.recoveryStart === n64(200) && rcApp(hidden).ce === n64(1));
+
   const falls = rcConfirmed();
   rcSendMarked(falls, n64(0), n64(3), n64(0));
   rcAckEcn(falls, n64(0), n64(1), n64(100), n64(1), n64(0), n64(1));
@@ -482,7 +495,6 @@ const rcEcnChecks = (t: Suite): void => {
 };
 
 /** Every check of the module on its own. */
-
 export const recoveryUnitChecks = (t: Suite): void => {
   rcRttChecks(t);
   rcLossChecks(t);

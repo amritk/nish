@@ -479,7 +479,6 @@ const rcFlightQuantum = (t: Suite): void => {
   t.eqI32("with credit for four it sends the four together", flight.count, n32(4));
 };
 
-/** Every check of loss recovery inside the connection. */
 /** ECN inside the connection: marked only when the carrier says it marks, and an ACK_ECN's counts read (RFC 9002 §7.1). */
 const rcEcn = (t: Suite): void => {
   const off: QuicConnection = qcServer(qcDefaultConfig());
@@ -512,6 +511,7 @@ const rcEcn = (t: Suite): void => {
   t.ok("reset keeps the carrier's ecnMarking and puts ECN back to testing", bare.ecnMarking && bare.datagramEcn === n32(0) && bare.recovery.ecnState === QUIC_RECOVERY_ECN_TESTING);
 };
 
+/** Every check of loss recovery inside the connection. */
 export const recoveryConnChecks = (t: Suite): void => {
   rcLostFlight(t);
   rcPacketThreshold(t);

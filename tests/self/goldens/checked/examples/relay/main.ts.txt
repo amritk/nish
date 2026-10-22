@@ -7930,7 +7930,7 @@ function QuicRecovery.onAckEcn(this: QuicRecovery, space: i32, ranges: i64[], co
   sharedWrite: +0:7
   escaping: ackDelay ce count ect0 ect1 now space
   calls: nish.QuicRecovery.bytesInFlight nish.QuicRecovery.detectLoss nish.QuicRecovery.fineSample nish.QuicRecovery.packetAcked nish.QuicRecovery.packetsLost nish.QuicRecovery.processEcn nish.QuicRecovery.space nish.QuicRecovery.updatePacerRtt nish.QuicRecovery.updateRtt nish.QuicSentPackets.ackedSlot nish.QuicSentPackets.clearResults nish.QuicSentPackets.compact nish.QuicSentPackets.fineAt nish.QuicSentPackets.pnAt nish.QuicSentPackets.settle nish.QuicSentPackets.slot nish.QuicSentPackets.stateAt nish.QuicSentPackets.timeAt nish.quicRecoveryInRanges nish.quicRecoveryMax nish_panic_index nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.bytesInFlight#0 nish.QuicRecovery.updateRtt#0 nish.QuicRecovery.updatePacerRtt#0 nish.QuicRecovery.fineSample#0 nish.QuicRecovery.processEcn#0 nish.QuicRecovery.detectLoss#0 nish.QuicRecovery.packetsLost#0 nish.QuicRecovery.packetAcked#0
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicRecovery.space#0 nish.QuicRecovery.bytesInFlight#0 nish.QuicRecovery.processEcn#0 nish.QuicRecovery.updateRtt#0 nish.QuicRecovery.updatePacerRtt#0 nish.QuicRecovery.fineSample#0 nish.QuicRecovery.processEcn#0 nish.QuicRecovery.detectLoss#0 nish.QuicRecovery.packetsLost#0 nish.QuicRecovery.packetAcked#0
   pointer ranges: size=0 writesThrough=false captured=false passedTo=nish.quicRecoveryInRanges#0
   stackSites=0 stackLocals=0
   local -9:11 sp: QuicSentPackets | null (const)
@@ -7942,35 +7942,38 @@ function QuicRecovery.onAckEcn(this: QuicRecovery, space: i32, ranges: i64[], co
   local +4:11 inUse: boolean (const)
   callee +4:28 QuicRecovery.bytesInFlight -> @nish.QuicRecovery.bytesInFlight
   local +5:9 sampleAt: i32 (let)
-  local +6:14 k: i32 (let)
-  local +7:13 s: i32 (const)
-  callee +7:22 QuicSentPackets.slot -> @nish.QuicSentPackets.slot
-  callee +9:11 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
-  callee +12:11 QuicSentPackets.stateAt -> @nish.QuicSentPackets.stateAt
-  callee +12:51 quicRecoveryInRanges -> @nish.quicRecoveryInRanges
-  callee +12:87 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
-  callee +13:9 QuicSentPackets.settle -> @nish.QuicSentPackets.settle
-  callee +18:13 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
-  callee +27:24 quicRecoveryMax -> @nish.quicRecoveryMax
-  callee +27:46 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
-  local +29:13 none: i64 (const)
-  local +30:13 delay: i64 (const)
-  callee +30:67 quicRecoveryMax -> @nish.quicRecoveryMax
-  local +31:13 first: boolean (const)
-  callee +32:7 QuicRecovery.updateRtt -> @nish.QuicRecovery.updateRtt
-  callee +33:7 QuicRecovery.updatePacerRtt -> @nish.QuicRecovery.updatePacerRtt
-  callee +33:27 QuicRecovery.fineSample -> @nish.QuicRecovery.fineSample
-  callee +33:48 QuicSentPackets.fineAt -> @nish.QuicSentPackets.fineAt
-  callee +36:7 QuicRecovery.processEcn -> @nish.QuicRecovery.processEcn
-  callee +38:5 QuicRecovery.detectLoss -> @nish.QuicRecovery.detectLoss
-  callee +39:5 QuicRecovery.packetsLost -> @nish.QuicRecovery.packetsLost
-  local +40:14 k: i32 (let)
-  callee +41:7 QuicRecovery.packetAcked -> @nish.QuicRecovery.packetAcked
-  callee +41:28 QuicSentPackets.ackedSlot -> @nish.QuicSentPackets.ackedSlot
-function QuicRecovery.processEcn(this: QuicRecovery, sp: QuicSentPackets, raised: boolean, ect0: i64, ect1: i64, ce: i64, now: i64): void -> @nish.QuicRecovery.processEcn [exported method]
+  local +7:9 later: i64 (let)
+  local +8:14 k: i32 (let)
+  local +9:13 s: i32 (const)
+  callee +9:22 QuicSentPackets.slot -> @nish.QuicSentPackets.slot
+  callee +11:11 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
+  callee +12:17 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
+  callee +15:11 QuicSentPackets.stateAt -> @nish.QuicSentPackets.stateAt
+  callee +15:51 quicRecoveryInRanges -> @nish.quicRecoveryInRanges
+  callee +15:87 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
+  callee +16:9 QuicSentPackets.settle -> @nish.QuicSentPackets.settle
+  callee +21:13 QuicSentPackets.pnAt -> @nish.QuicSentPackets.pnAt
+  callee +31:9 QuicRecovery.processEcn -> @nish.QuicRecovery.processEcn
+  callee +36:24 quicRecoveryMax -> @nish.quicRecoveryMax
+  callee +36:46 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
+  local +38:13 none: i64 (const)
+  local +39:13 delay: i64 (const)
+  callee +39:67 quicRecoveryMax -> @nish.quicRecoveryMax
+  local +40:13 first: boolean (const)
+  callee +41:7 QuicRecovery.updateRtt -> @nish.QuicRecovery.updateRtt
+  callee +42:7 QuicRecovery.updatePacerRtt -> @nish.QuicRecovery.updatePacerRtt
+  callee +42:27 QuicRecovery.fineSample -> @nish.QuicRecovery.fineSample
+  callee +42:48 QuicSentPackets.fineAt -> @nish.QuicSentPackets.fineAt
+  callee +45:7 QuicRecovery.processEcn -> @nish.QuicRecovery.processEcn
+  callee +47:5 QuicRecovery.detectLoss -> @nish.QuicRecovery.detectLoss
+  callee +48:5 QuicRecovery.packetsLost -> @nish.QuicRecovery.packetsLost
+  local +49:14 k: i32 (let)
+  callee +50:7 QuicRecovery.packetAcked -> @nish.QuicRecovery.packetAcked
+  callee +50:28 QuicSentPackets.ackedSlot -> @nish.QuicSentPackets.ackedSlot
+function QuicRecovery.processEcn(this: QuicRecovery, sp: QuicSentPackets, raised: boolean, ect0: i64, ect1: i64, ce: i64, later: i64, now: i64): void -> @nish.QuicRecovery.processEcn [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  escaping: ce ect0 ect1 now
+  escaping: ce ect0 ect1 later now
   calls: nish.QuicRecovery.congestionEvent nish.QuicSentPackets.ackedSlot nish.QuicSentPackets.markedAt nish.QuicSentPackets.timeAt nish_panic_overflow
   pointer this: size=152 writesThrough=true captured=false passedTo=nish.QuicRecovery.congestionEvent#0
   pointer sp: size=160 writesThrough=true captured=false passedTo=nish.QuicSentPackets.markedAt#0 nish.QuicSentPackets.ackedSlot#0 nish.QuicSentPackets.timeAt#0 nish.QuicSentPackets.ackedSlot#0
@@ -7983,8 +7986,8 @@ function QuicRecovery.processEcn(this: QuicRecovery, sp: QuicSentPackets, raised
   local +25:11 rose: boolean (const)
   local +30:13 events: i32 (const)
   callee +31:7 QuicRecovery.congestionEvent -> @nish.QuicRecovery.congestionEvent
-  callee +31:28 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
-  callee +31:38 QuicSentPackets.ackedSlot -> @nish.QuicSentPackets.ackedSlot
+  callee +31:48 QuicSentPackets.timeAt -> @nish.QuicSentPackets.timeAt
+  callee +31:58 QuicSentPackets.ackedSlot -> @nish.QuicSentPackets.ackedSlot
 function QuicRecovery.updateRtt(this: QuicRecovery, ackDelay: i64, now: i64): void -> @nish.QuicRecovery.updateRtt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

@@ -611,10 +611,13 @@ export class QuicRecovery {
     // use, and so whether it may grow (§7.8).
     const inUse: boolean = this.bytesInFlight() * 2 >= this.congestionWindow
     let sampleAt: i32 = -1
+    // The send time of the first recorded packet past the largest acknowledged, or `now`: no earlier than the largest's own.
+    let later: i64 = now
     for (let k: i32 = 0; k < sp.count; k += 1) {
       const s: i32 = sp.slot(k)
       // The ring is in packet-number order, so nothing past the largest acknowledged is.
       if (sp.pnAt(s) > largest) {
+        later = sp.timeAt(s)
         break
       }
       if (sp.stateAt(s) === QUIC_RECOVERY_SENT && quicRecoveryInRanges(ranges, count, sp.pnAt(s))) {
@@ -629,6 +632,12 @@ export class QuicRecovery {
       }
     }
     if (sp.ackedCount === 0) {
+      // An ACK that raises the largest to a packet never recorded (one that
+      // elicits no ACK) still carries the newest counts. Skipping them here
+      // would hide a CE rise for good, since the next ACK raises nothing.
+      if (raised && this.ecnState !== QUIC_RECOVERY_ECN_FAILED) {
+        this.processEcn(sp, raised, ect0, ect1, ce, later, now)
+      }
       return 0
     }
     if (sampleAt >= 0) {
@@ -641,7 +650,7 @@ export class QuicRecovery {
       this.updatePacerRtt(this.fineSample(now, sp.fineAt(sampleAt)), delay, first)
     }
     if (this.ecnState !== QUIC_RECOVERY_ECN_FAILED) {
-      this.processEcn(sp, raised, ect0, ect1, ce, now)
+      this.processEcn(sp, raised, ect0, ect1, ce, later, now)
     }
     this.detectLoss(sp, now)
     this.packetsLost(sp, now)
@@ -658,9 +667,19 @@ export class QuicRecovery {
    * largest acknowledged. A failure stops ECN for the connection and its
    * counts are not used; a pass makes the path capable once a marked packet
    * is among those acknowledged, and a rise in ECN-CE halves the window from
-   * the send time of the largest packet newly acknowledged.
+   * the send time of the largest packet newly acknowledged. With none newly
+   * acknowledged it is timed from `later`, a send time no earlier than the
+   * largest acknowledged packet's, which recovery did not record.
    */
-  processEcn(sp: QuicSentPackets, raised: boolean, ect0: i64, ect1: i64, ce: i64, now: i64): void {
+  processEcn(
+    sp: QuicSentPackets,
+    raised: boolean,
+    ect0: i64,
+    ect1: i64,
+    ce: i64,
+    later: i64,
+    now: i64
+  ): void {
     let marked: i64 = 0
     for (let k: i32 = 0; k < sp.ackedCount; k += 1) {
       if (sp.markedAt(sp.ackedSlot(k))) {
@@ -701,7 +720,7 @@ export class QuicRecovery {
     sp.ce = ce
     if (rose) {
       const events: i32 = this.congestionEvents
-      this.congestionEvent(sp.timeAt(sp.ackedSlot(sp.ackedCount - 1)), now)
+      this.congestionEvent(sp.ackedCount > 0 ? sp.timeAt(sp.ackedSlot(sp.ackedCount - 1)) : later, now)
       if (this.congestionEvents > events) {
         this.ecnCongestionEvents = this.ecnCongestionEvents + 1
       }
