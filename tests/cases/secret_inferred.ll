@@ -221,6 +221,14 @@ ovf.fail:
   unreachable
 }
 
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Counter* @counterOf(i64 noundef %hits, i64 noundef %misses) #0 {
+entry:
+  %0 = call i8* @nish_alloc_struct(i64 16)
+  %1 = bitcast i8* %0 to %struct.Counter*
+  call void @Counter.constructor(%struct.Counter* %1, i64 %hits, i64 %misses)
+  ret %struct.Counter* %1
+}
+
 define noundef i32 @nish_main() #1 {
 entry:
   %literal.addr = alloca %struct.Secret$arr.i32*, align 8
@@ -234,6 +242,9 @@ entry:
   %record.addr = alloca %struct.Secret$$Pair*, align 8
   %made.addr = alloca %struct.Secret$$Pair*, align 8
   %counter.addr = alloca %struct.Secret$$Counter*, align 8
+  %held.addr = alloca %struct.Counter*, align 8
+  %aliased.addr = alloca %struct.Secret$$Counter*, align 8
+  %answered.addr = alloca %struct.Secret$$Counter*, align 8
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
@@ -369,6 +380,28 @@ cond.end:
   call void @nish_print(i8* %82)
   %83 = load %struct.Secret$$Counter*, %struct.Secret$$Counter** %counter.addr, align 8
   call void @nish.wipe$$Secret$$Counter(%struct.Secret$$Counter* %83)
+  %84 = call i8* @nish_alloc_struct(i64 16)
+  %85 = bitcast i8* %84 to %struct.Counter*
+  call void @Counter.constructor(%struct.Counter* %85, i64 5, i64 6)
+  store %struct.Counter* %85, %struct.Counter** %held.addr, align 8
+  %86 = load %struct.Counter*, %struct.Counter** %held.addr, align 8
+  %87 = call %struct.Secret$$Counter* @nish.secret$$Counter(%struct.Counter* %86)
+  store %struct.Secret$$Counter* %87, %struct.Secret$$Counter** %aliased.addr, align 8
+  %88 = load %struct.Secret$$Counter*, %struct.Secret$$Counter** %aliased.addr, align 8
+  %89 = call i64 @nish.expose$$Counter$i64$fn.4.seen(%struct.Secret$$Counter* %88)
+  %90 = call i8* @nish_str_from_i64(i64 %89)
+  call void @nish_print(i8* %90)
+  %91 = load %struct.Secret$$Counter*, %struct.Secret$$Counter** %aliased.addr, align 8
+  call void @nish.wipe$$Secret$$Counter(%struct.Secret$$Counter* %91)
+  %92 = call %struct.Counter* @counterOf(i64 10, i64 1)
+  %93 = call %struct.Secret$$Counter* @nish.secret$$Counter(%struct.Counter* %92)
+  store %struct.Secret$$Counter* %93, %struct.Secret$$Counter** %answered.addr, align 8
+  %94 = load %struct.Secret$$Counter*, %struct.Secret$$Counter** %answered.addr, align 8
+  %95 = call i64 @nish.expose$$Counter$i64$fn.4.seen(%struct.Secret$$Counter* %94)
+  %96 = call i8* @nish_str_from_i64(i64 %95)
+  call void @nish_print(i8* %96)
+  %97 = load %struct.Secret$$Counter*, %struct.Secret$$Counter** %answered.addr, align 8
+  call void @nish.wipe$$Secret$$Counter(%struct.Secret$$Counter* %97)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
