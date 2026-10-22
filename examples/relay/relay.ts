@@ -10,28 +10,42 @@
  *     const signalled: boolean = relay.step(now, wall, key, grantKey, relay.timeout(now));
  *
  * **A session** is one QUIC connection carrying one WebTransport session on
- * `config.path`, and is counted against both caps the moment its first
- * Initial takes a slot, as main.rs claims its global place before the
- * handshake: at most `maxPerPeer` from one address, claimed first, and at
- * most `maxSessions` at once, given only to a connection inside its
- * address's cap. The pool has `spareSlots` QUIC slots past `maxSessions`, so
- * a client over either cap is still told why — its session is accepted, sent
- * CLOSE RATE_LIMITED and closed with QUIC application code 1 — rather than
- * dropped; at most `spareSlots` connections over their address's cap wait so
- * at once, and one past that is closed with code 1 at its first Initial, so
- * one address holds at most `maxPerPeer + spareSlots` slots. A connection that has opened no session `helloTimeout` after its
- * first Initial is closed with code 1, so a handshake alone holds neither
- * place for longer. Then the session has `helloTimeout` to send a HELLO carrying a
- * grant (`grant.ts`); a first datagram that is not one, another version, a
- * grant that does not verify, or an upstream that cannot be reached is
- * answered with CLOSE and the code grant.rs or main.rs gives it. A HELLO that
- * holds opens the upstream socket and answers HELLO_OK, and from then on DATA
- * is forwarded both ways, PING answered with PONG, and STATS sent every
- * `statsInterval`; a CLOSE from the client, a CLOSE_WEBTRANSPORT_SESSION or
- * the end of its CONNECT stream ends it, and so do `idleTimeout` without a
- * datagram (CLOSE IDLE) and more than `maxDatagramsPerSecond` in a one-second
- * window (CLOSE RATE_LIMITED). Every end closes the QUIC connection: code 0
- * after a session, 1 after a refusal, as main.rs's `connection.close`.
+ * `config.path`, and is counted against both caps the moment QUIC has
+ * validated its address (a Handshake packet from it, or with `retry` a Retry
+ * token), still before the handshake is done, as main.rs claims its global
+ * place before it: at most `maxPerPeer` from one address, claimed first, and
+ * at most `maxSessions` at once, given only to a connection inside its
+ * address's cap. Until then the address is only where one UDP datagram says
+ * it came from, which anyone can forge, so a handshake not yet validated
+ * holds its slot and no place: forged Initials cannot use up a real
+ * address's places. The cost is that nothing caps an address before
+ * validation: with `retry` off, as here, one real address, forging nothing,
+ * can open every slot of the pool (`maxSessions + spareSlots`, 4,160 by
+ * default) and hold each for `helloTimeout`, where a cap claimed at the
+ * first Initial held it to `maxPerPeer + spareSlots`; forged sources could
+ * fill the pool before, and now no forging is needed. `retry` on closes
+ * both, at a round trip's cost to every client: the listener gives an
+ * Initial without a valid token a Retry and no slot. The pool has
+ * `spareSlots` QUIC slots past `maxSessions`, so a client over either cap is
+ * still told why — its session is accepted, sent CLOSE RATE_LIMITED and
+ * closed with QUIC application code 1 — rather than dropped; at most
+ * `spareSlots` connections over their address's cap wait so at once, and one
+ * past that is closed with code 1 when its address is validated, so one
+ * address holds at most `maxPerPeer + spareSlots` validated slots. A
+ * connection that has opened no session `helloTimeout` after its first
+ * Initial is closed with code 1, so a handshake alone holds its slot, and
+ * any place, for no longer. Then the session has `helloTimeout` to send a
+ * HELLO carrying a grant (`grant.ts`); a first datagram that is not one,
+ * another version, a grant that does not verify, or an upstream that cannot
+ * be reached is answered with CLOSE and the code grant.rs or main.rs gives
+ * it. A HELLO that holds opens the upstream socket and answers HELLO_OK, and
+ * from then on DATA is forwarded both ways, PING answered with PONG, and
+ * STATS sent every `statsInterval`; a CLOSE from the client, a
+ * CLOSE_WEBTRANSPORT_SESSION or the end of its CONNECT stream ends it, and
+ * so do `idleTimeout` without a datagram (CLOSE IDLE) and more than
+ * `maxDatagramsPerSecond` in a one-second window (CLOSE RATE_LIMITED). Every
+ * end closes the QUIC connection: code 0 after a session, 1 after a refusal,
+ * as main.rs's `connection.close`.
  *
  * **Time** is two numbers the caller passes in, so a test drives them: `now`,
  * a monotonic millisecond the timers run on, and `wall`, the Unix millisecond
@@ -170,6 +184,10 @@ const relayCheck = (what: string, value: i64, low: i64, high: i64): void => {
  * to 1,500 bytes, QUIC's 30-second idle timeout, and streams cut to what a
  * datagram-only WebTransport session needs (the CONNECT stream, and HTTP/3's
  * three unidirectional streams each way), so 4,096 slots stay small.
+ * `retry` is off, saving every client a round trip: the relay places a
+ * connection only once a Handshake packet has validated its address. Turned
+ * on, the listener answers an Initial without a valid token with a Retry and
+ * no slot, so forged Initials hold no slot either.
  */
 export const relayQuicConfig = (chain: u8[][], resetKey: u8[], retryKey: u8[]): QuicServerConfig => ({
   certificateChain: chain,
@@ -300,7 +318,7 @@ export class Relay {
   refusedUpstream: i32 = 0
   helloTimeouts: i32 = 0
   connectTimeouts: i32 = 0
-  /** Connections closed at their first Initial: over their address's cap with every spare slot already waiting. */
+  /** Connections closed once their address is validated (`place`): over its cap with every spare slot already waiting. */
   shed: i32 = 0
   idleClosed: i32 = 0
   rateLimited: i32 = 0
@@ -494,14 +512,15 @@ export class Relay {
   /**
    * Brings `slot`'s relay state up to its connection's: a slot whose
    * connection has gone gives its places back, and one holding a new
-   * connection takes them (or is marked over the global cap). Called whenever
-   * the slot has news and whenever its timer fires, so a connection the
-   * carrier freed is noticed within `RELAY_RECHECK`.
+   * connection takes them once its address is validated (`place`). Called
+   * whenever the slot has news and whenever its timer fires, so a connection
+   * the carrier freed is noticed within `RELAY_RECHECK`.
    */
   reconcile(slot: i32, now: i64): void {
     const generation: i32 = this.server.connection(slot).generation
     const holds: boolean = this.server.holds(slot)
     if (generation === this.generations[slot] && (holds || this.states[slot] === RELAY_FREE)) {
+      this.place(slot, now)
       return
     }
     if (this.states[slot] !== RELAY_FREE) {
@@ -518,9 +537,31 @@ export class Relay {
     this.sessions[slot] = RELAY_NONE64
     // A connection that never opens a session goes at the hello deadline, counted from here.
     this.connectBy[slot] = now + this.config.helloTimeout
-    // Both places are claimed before the handshake is done, the address's first: a global place goes only
-    // to a connection inside its address's cap, so handshakes alone from one address hold at most
-    // `maxPerPeer` of them. The slot keeps its own copy of the address, which `release` gives back by.
+    this.wheel.file(slot, this.recheck(slot, now), now)
+    this.place(slot, now)
+  }
+
+  /**
+   * Claims `slot`'s places once QUIC has validated its client's address (RFC
+   * 9000 §8.1): a Retry token the listener checked, or a Handshake packet
+   * from it. Before then the address is the source of one UDP datagram, which
+   * anyone can forge, so a handshake in progress holds only its slot, until
+   * the hello deadline; counted against an address it may not have, it would
+   * let forged Initials use up a real client's places. Both places are then
+   * claimed, the address's first: a global place goes only to a connection
+   * inside its address's cap, so validated handshakes from one address hold
+   * at most `maxPerPeer` of them. The slot keeps its own copy of the address,
+   * which `release` gives back by.
+   */
+  place(slot: i32, now: i64): void {
+    if (
+      this.states[slot] !== RELAY_CONNECTING ||
+      this.peerHeld[slot] ||
+      this.unplaced[slot] ||
+      !this.server.quic(slot).addressValidated
+    ) {
+      return
+    }
     const peer: u8[] = this.peerAddresses[slot]
     const from: u8[] = this.server.addresses[slot]
     for (let k: i32 = 0; k < RELAY_PEER_KEY && k < toI32(from.length) && k < toI32(peer.length); k++) {
@@ -533,7 +574,7 @@ export class Relay {
     }
     if (!this.peerHeld[slot]) {
       // Over its address's cap: it may wait in a spare slot to be told why, but no more of them wait than
-      // there are spare slots, so one address holds at most `maxPerPeer + spareSlots` slots.
+      // there are spare slots, so one address holds at most `maxPerPeer + spareSlots` validated slots.
       if (this.unplacedCount >= this.config.spareSlots) {
         this.shed = h3Count(this.shed)
         this.close(slot, RELAY_NONE, "", RELAY_QUIC_REFUSED, now)
@@ -542,7 +583,6 @@ export class Relay {
       this.unplaced[slot] = true
       this.unplacedCount = this.unplacedCount + 1
     }
-    this.wheel.file(slot, this.recheck(slot, now), now)
   }
 
   /** When a connecting slot is looked at next: in `RELAY_RECHECK`, or at its deadline if that is sooner. */
@@ -667,7 +707,7 @@ export class Relay {
     this.flushBatch()
   }
 
-  /** WT_SESSION: the path, then both caps (claimed at the first Initial), before the hello rather than after the grant. */
+  /** WT_SESSION: the path, then both caps (claimed once the address was validated), before the hello rather than after the grant. */
   session(slot: i32, wt: WebTransport, now: i64): void {
     const id: i64 = wt.sessionId
     if (this.states[slot] !== RELAY_CONNECTING || !this.isPath(wt.fields.path)) {
@@ -678,7 +718,9 @@ export class Relay {
     }
     wt.accept(id)
     this.sessions[slot] = id
-    // The address's cap first: a connection over it was given no global place either.
+    // The address's cap first: a connection over it was given no global place either. One whose address
+    // is not validated holds neither place and is refused here too, though 1-RTT data, a session's only
+    // carrier, cannot arrive before the Handshake packet that validates it.
     if (!this.peerHeld[slot]) {
       this.refusedPeer = h3Count(this.refusedPeer)
       this.close(slot, CLOSE_RATE_LIMITED, "too many sessions from this address", RELAY_QUIC_REFUSED, now)

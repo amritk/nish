@@ -22434,6 +22434,72 @@ if (!only || "c-symbols".includes(only)) {
       }
     }
   }
+  // #651: the libm names C23 declares are reserved whether or not the LLVM
+  // that runs here recognises them, so a private one is spelled apart and an
+  // exported one is refused, in each precision and for `<complex.h>` and the
+  // narrowing functions too. `tests/c-symbols/libm.ts` pins the spelling and
+  // runs natively with each function's own result.
+  const libmDir = path.join(buildDir, "c-symbols", "libm")
+  fs.rmSync(libmDir, { recursive: true, force: true })
+  fs.mkdirSync(libmDir, { recursive: true })
+  const libmLl = path.join(libmDir, "libm.ll")
+  const libmIr = spawnSync(NISH, [path.join(root, "tests", "c-symbols", "libm.ts"), "-o", libmLl], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const libmText = libmIr.status === 0 ? fs.readFileSync(libmLl, "utf8") : ""
+  check(
+    "c-symbols: a private function named after a C23 libm function LLVM 18 does not know is spelled apart",
+    libmIr.status === 0 &&
+      ["tgamma", "erf", "ilogb", "fmaximum_num"].every(
+        (name) => libmText.includes(`@${name}$(`) && !libmText.includes(`@${name}(`)
+      ) &&
+      libmText.includes("@lerp(") &&
+      !libmText.includes("@lerp$("),
+    libmIr.status === 0 ? libmText : libmIr.stderr
+  )
+  if (!HAS_CLANG) {
+    skip("c-symbols: tests/c-symbols/libm.ts is linked with clang, and clang is missing")
+  } else {
+    const libmExe = path.join(libmDir, "libm")
+    const libmLink =
+      libmIr.status === 0
+        ? spawnSync(
+            "clang",
+            ["-O2", "-Wno-override-module", libmLl, ...RUNTIME_C.map((f) => path.join(root, f)), "-lm", "-o", libmExe],
+            { cwd: libmDir, encoding: "utf8" }
+          )
+        : null
+    const libmRun = libmLink?.status === 0 ? spawnSync(libmExe, [], { encoding: "utf8" }) : null
+    check(
+      "c-symbols: tests/c-symbols/libm.ts runs natively with each function's own result",
+      libmRun?.status === 0 && libmRun.stdout === "10.5 -9 24 3 12\n",
+      libmRun !== null ? shown(libmRun) : (libmLink?.stderr ?? libmIr.stderr)
+    )
+  }
+  for (const [name, type] of [
+    ["tgamma", "f64"],
+    ["erff", "f32"],
+    ["ilogbl", "f64"],
+    ["fminimum_num", "f64"],
+    ["dsqrtl", "f64"],
+    ["cexp", "f64"],
+  ]) {
+    const file = path.join(libmDir, `export_${name}.ts`)
+    fs.writeFileSync(
+      file,
+      `export const ${name} = (x: ${type}): ${type} => x;\n\nexport const main = (): i32 => toI32(${name}(1));\n`
+    )
+    const r = spawnSync(NISH, [file, "-o", path.join(libmDir, `export_${name}.ll`)], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `c-symbols: an exported \`${name}\` is refused as the C library's (NL3037)`,
+      r.status === 1 && r.stderr.includes(`\`${name}\` is the C library's \`${name}\``),
+      shown(r)
+    )
+  }
 }
 
 // ---- #432: the `unsafe` capability, reported ----------------------------------------

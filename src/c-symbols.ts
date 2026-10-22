@@ -50,6 +50,16 @@
 //         a function of that name and type as the C one whatever its linkage,
 //         so a private `abs` returning `x + 1000` was folded, and called, as
 //         the C `abs`;
+//       - every function C23 declares in `<math.h>` (7.12, its narrowing
+//         `fadd` ... `dsqrtl` among them) and C99 in `<complex.h>` (7.3), in
+//         `double`, `float` (`f`) and `long double` (`l`), whether or not the
+//         LLVM above recognises it: a later LLVM's `TargetLibraryInfo` adds
+//         libm names (`erf`, `tgamma`, `ilogb`, `remquo`, `fdim`, `hypot`,
+//         `fmaximum_num`, ...) that LLVM 18's lacks, and a private `tgamma`
+//         built with that LLVM would be folded as the C one. The `_FloatN`
+//         variants of Annex X (`sinf128`) are not listed: the
+//         `llvm-tli-checker` check below reports any of them that the LLVM
+//         it runs recognises;
 //       - every name a wasi-libc member defines or references when
 //         `--profile wasi` links wasi-libc statically, reserved on every target
 //         like the rest: one member's reference to another binds to a program
@@ -72,6 +82,14 @@
 // reference, and every name `llvm-tli-checker` reports available on the five
 // triples above, is reserved here, or the suite fails. The exceptions are the
 // runtime's own `nish_` names (NL2202 reserves them) and `main`.
+//
+// To refresh the list, run the suite's "c-symbols" section with the toolchain
+// to track (`node tests/run.js c-symbols`, which finds `llvm-tli-checker` and
+// `llvm-nm` on `PATH` before their `-18` names, and wasi-libc under
+// `WASI_SYSROOT`) and add each name it reports. Nothing checks the libm set
+// against the C standard: when a new standard comes out, re-read the function
+// list of its `<math.h>` and `<complex.h>` by hand and add each new name in
+// its three precisions. The names are kept in byte order, one per line.
 //
 // The names are reserved on every target, not only where each one binds: a
 // name only wasi-libc defines (`strdup`, `unlink`) is refused in a native build
@@ -112,6 +130,9 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "acoshf" ||
   name === "acoshl" ||
   name === "acosl" ||
+  name === "acospi" ||
+  name === "acospif" ||
+  name === "acospil" ||
   name === "aligned_alloc" ||
   name === "asin" ||
   name === "asinf" ||
@@ -119,15 +140,24 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "asinhf" ||
   name === "asinhl" ||
   name === "asinl" ||
+  name === "asinpi" ||
+  name === "asinpif" ||
+  name === "asinpil" ||
   name === "atan" ||
   name === "atan2" ||
   name === "atan2f" ||
   name === "atan2l" ||
+  name === "atan2pi" ||
+  name === "atan2pif" ||
+  name === "atan2pil" ||
   name === "atanf" ||
   name === "atanh" ||
   name === "atanhf" ||
   name === "atanhl" ||
   name === "atanl" ||
+  name === "atanpi" ||
+  name === "atanpif" ||
+  name === "atanpil" ||
   name === "atof" ||
   name === "atoi" ||
   name === "atol" ||
@@ -139,20 +169,65 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "cabs" ||
   name === "cabsf" ||
   name === "cabsl" ||
+  name === "cacos" ||
+  name === "cacosf" ||
+  name === "cacosh" ||
+  name === "cacoshf" ||
+  name === "cacoshl" ||
+  name === "cacosl" ||
   name === "calloc" ||
+  name === "canonicalize" ||
+  name === "canonicalizef" ||
+  name === "canonicalizel" ||
+  name === "carg" ||
+  name === "cargf" ||
+  name === "cargl" ||
+  name === "casin" ||
+  name === "casinf" ||
+  name === "casinh" ||
+  name === "casinhf" ||
+  name === "casinhl" ||
+  name === "casinl" ||
+  name === "catan" ||
+  name === "catanf" ||
+  name === "catanh" ||
+  name === "catanhf" ||
+  name === "catanhl" ||
+  name === "catanl" ||
   name === "cbrt" ||
   name === "cbrtf" ||
   name === "cbrtl" ||
+  name === "ccos" ||
+  name === "ccosf" ||
+  name === "ccosh" ||
+  name === "ccoshf" ||
+  name === "ccoshl" ||
+  name === "ccosl" ||
   name === "ceil" ||
   name === "ceilf" ||
   name === "ceill" ||
+  name === "cexp" ||
+  name === "cexpf" ||
+  name === "cexpl" ||
   name === "chmod" ||
   name === "chown" ||
+  name === "cimag" ||
+  name === "cimagf" ||
+  name === "cimagl" ||
   name === "clearenv" ||
   name === "clearerr" ||
   name === "clock_gettime" ||
+  name === "clog" ||
+  name === "clogf" ||
+  name === "clogl" ||
   name === "close" ||
   name === "closedir" ||
+  name === "compoundn" ||
+  name === "compoundnf" ||
+  name === "compoundnl" ||
+  name === "conj" ||
+  name === "conjf" ||
+  name === "conjl" ||
   name === "connect" ||
   name === "copysign" ||
   name === "copysignf" ||
@@ -163,12 +238,51 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "coshf" ||
   name === "coshl" ||
   name === "cosl" ||
+  name === "cospi" ||
+  name === "cospif" ||
+  name === "cospil" ||
+  name === "cpow" ||
+  name === "cpowf" ||
+  name === "cpowl" ||
+  name === "cproj" ||
+  name === "cprojf" ||
+  name === "cprojl" ||
+  name === "creal" ||
+  name === "crealf" ||
+  name === "creall" ||
+  name === "csin" ||
+  name === "csinf" ||
+  name === "csinh" ||
+  name === "csinhf" ||
+  name === "csinhl" ||
+  name === "csinl" ||
+  name === "csqrt" ||
+  name === "csqrtf" ||
+  name === "csqrtl" ||
+  name === "ctan" ||
+  name === "ctanf" ||
+  name === "ctanh" ||
+  name === "ctanhf" ||
+  name === "ctanhl" ||
+  name === "ctanl" ||
   name === "ctermid" ||
+  name === "daddl" ||
+  name === "ddivl" ||
+  name === "dfmal" ||
+  name === "dmull" ||
   name === "dprintf" ||
+  name === "dsqrtl" ||
+  name === "dsubl" ||
   name === "environ" ||
   name === "epoll_create1" ||
   name === "epoll_ctl" ||
   name === "epoll_wait" ||
+  name === "erf" ||
+  name === "erfc" ||
+  name === "erfcf" ||
+  name === "erfcl" ||
+  name === "erff" ||
+  name === "erfl" ||
   name === "errno" ||
   name === "execl" ||
   name === "execle" ||
@@ -182,9 +296,16 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "exp" ||
   name === "exp10" ||
   name === "exp10f" ||
+  name === "exp10l" ||
+  name === "exp10m1" ||
+  name === "exp10m1f" ||
+  name === "exp10m1l" ||
   name === "exp2" ||
   name === "exp2f" ||
   name === "exp2l" ||
+  name === "exp2m1" ||
+  name === "exp2m1f" ||
+  name === "exp2m1l" ||
   name === "expf" ||
   name === "expl" ||
   name === "expm1" ||
@@ -194,13 +315,22 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "fabsf" ||
   name === "fabsl" ||
   name === "faccessat" ||
+  name === "fadd" ||
+  name === "faddl" ||
   name === "fclose" ||
   name === "fcntl" ||
+  name === "fdim" ||
+  name === "fdimf" ||
+  name === "fdiml" ||
+  name === "fdiv" ||
+  name === "fdivl" ||
   name === "fdopen" ||
   name === "fdopendir" ||
   name === "feof" ||
   name === "ferror" ||
   name === "fflush" ||
+  name === "ffma" ||
+  name === "ffmal" ||
   name === "ffs" ||
   name === "ffsl" ||
   name === "ffsll" ||
@@ -214,15 +344,44 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "floor" ||
   name === "floorf" ||
   name === "floorl" ||
+  name === "fma" ||
+  name === "fmaf" ||
+  name === "fmal" ||
   name === "fmax" ||
   name === "fmaxf" ||
+  name === "fmaximum" ||
+  name === "fmaximum_mag" ||
+  name === "fmaximum_mag_num" ||
+  name === "fmaximum_mag_numf" ||
+  name === "fmaximum_mag_numl" ||
+  name === "fmaximum_magf" ||
+  name === "fmaximum_magl" ||
+  name === "fmaximum_num" ||
+  name === "fmaximum_numf" ||
+  name === "fmaximum_numl" ||
+  name === "fmaximumf" ||
+  name === "fmaximuml" ||
   name === "fmaxl" ||
   name === "fmin" ||
   name === "fminf" ||
+  name === "fminimum" ||
+  name === "fminimum_mag" ||
+  name === "fminimum_mag_num" ||
+  name === "fminimum_mag_numf" ||
+  name === "fminimum_mag_numl" ||
+  name === "fminimum_magf" ||
+  name === "fminimum_magl" ||
+  name === "fminimum_num" ||
+  name === "fminimum_numf" ||
+  name === "fminimum_numl" ||
+  name === "fminimumf" ||
+  name === "fminimuml" ||
   name === "fminl" ||
   name === "fmod" ||
   name === "fmodf" ||
   name === "fmodl" ||
+  name === "fmul" ||
+  name === "fmull" ||
   name === "fopen" ||
   name === "fopen64" ||
   name === "fork" ||
@@ -237,16 +396,26 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "frexp" ||
   name === "frexpf" ||
   name === "frexpl" ||
+  name === "fromfp" ||
+  name === "fromfpf" ||
+  name === "fromfpl" ||
+  name === "fromfpx" ||
+  name === "fromfpxf" ||
+  name === "fromfpxl" ||
   name === "fscanf" ||
   name === "fseek" ||
   name === "fseeko" ||
   name === "fseeko64" ||
   name === "fsetpos" ||
+  name === "fsqrt" ||
+  name === "fsqrtl" ||
   name === "fstat" ||
   name === "fstat64" ||
   name === "fstatat" ||
   name === "fstatvfs" ||
   name === "fstatvfs64" ||
+  name === "fsub" ||
+  name === "fsubl" ||
   name === "ftell" ||
   name === "ftello" ||
   name === "ftello64" ||
@@ -263,6 +432,9 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "geteuid" ||
   name === "getitimer" ||
   name === "getlogin_r" ||
+  name === "getpayload" ||
+  name === "getpayloadf" ||
+  name === "getpayloadl" ||
   name === "getpid" ||
   name === "getpwnam" ||
   name === "getrandom" ||
@@ -272,6 +444,12 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "gettimeofday" ||
   name === "htonl" ||
   name === "htons" ||
+  name === "hypot" ||
+  name === "hypotf" ||
+  name === "hypotl" ||
+  name === "ilogb" ||
+  name === "ilogbf" ||
+  name === "ilogbl" ||
   name === "inet_pton" ||
   name === "isascii" ||
   name === "isdigit" ||
@@ -283,25 +461,52 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "ldexp" ||
   name === "ldexpf" ||
   name === "ldexpl" ||
+  name === "lgamma" ||
+  name === "lgammaf" ||
+  name === "lgammal" ||
   name === "link" ||
   name === "linkat" ||
   name === "listen" ||
   name === "llabs" ||
+  name === "llogb" ||
+  name === "llogbf" ||
+  name === "llogbl" ||
+  name === "llrint" ||
+  name === "llrintf" ||
+  name === "llrintl" ||
+  name === "llround" ||
+  name === "llroundf" ||
+  name === "llroundl" ||
   name === "log" ||
   name === "log10" ||
   name === "log10f" ||
   name === "log10l" ||
+  name === "log10p1" ||
+  name === "log10p1f" ||
+  name === "log10p1l" ||
   name === "log1p" ||
   name === "log1pf" ||
   name === "log1pl" ||
   name === "log2" ||
   name === "log2f" ||
   name === "log2l" ||
+  name === "log2p1" ||
+  name === "log2p1f" ||
+  name === "log2p1l" ||
   name === "logb" ||
   name === "logbf" ||
   name === "logbl" ||
   name === "logf" ||
   name === "logl" ||
+  name === "logp1" ||
+  name === "logp1f" ||
+  name === "logp1l" ||
+  name === "lrint" ||
+  name === "lrintf" ||
+  name === "lrintl" ||
+  name === "lround" ||
+  name === "lroundf" ||
+  name === "lroundl" ||
   name === "lseek" ||
   name === "lstat" ||
   name === "lstat64" ||
@@ -324,9 +529,24 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "modf" ||
   name === "modff" ||
   name === "modfl" ||
+  name === "nan" ||
+  name === "nanf" ||
+  name === "nanl" ||
   name === "nearbyint" ||
   name === "nearbyintf" ||
   name === "nearbyintl" ||
+  name === "nextafter" ||
+  name === "nextafterf" ||
+  name === "nextafterl" ||
+  name === "nextdown" ||
+  name === "nextdownf" ||
+  name === "nextdownl" ||
+  name === "nexttoward" ||
+  name === "nexttowardf" ||
+  name === "nexttowardl" ||
+  name === "nextup" ||
+  name === "nextupf" ||
+  name === "nextupl" ||
   name === "ntohl" ||
   name === "ntohs" ||
   name === "open" ||
@@ -348,6 +568,12 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "pow" ||
   name === "powf" ||
   name === "powl" ||
+  name === "pown" ||
+  name === "pownf" ||
+  name === "pownl" ||
+  name === "powr" ||
+  name === "powrf" ||
+  name === "powrl" ||
   name === "pread" ||
   name === "printf" ||
   name === "program_invocation_name" ||
@@ -388,6 +614,9 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "remainderf" ||
   name === "remainderl" ||
   name === "remove" ||
+  name === "remquo" ||
+  name === "remquof" ||
+  name === "remquol" ||
   name === "rename" ||
   name === "renameat" ||
   name === "rewind" ||
@@ -395,14 +624,25 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "rintf" ||
   name === "rintl" ||
   name === "rmdir" ||
+  name === "rootn" ||
+  name === "rootnf" ||
+  name === "rootnl" ||
   name === "round" ||
   name === "roundeven" ||
   name === "roundevenf" ||
   name === "roundevenl" ||
   name === "roundf" ||
   name === "roundl" ||
+  name === "rsqrt" ||
+  name === "rsqrtf" ||
+  name === "rsqrtl" ||
   name === "sbrk" ||
+  name === "scalbln" ||
+  name === "scalblnf" ||
+  name === "scalblnl" ||
   name === "scalbn" ||
+  name === "scalbnf" ||
+  name === "scalbnl" ||
   name === "scandir" ||
   name === "scandirat" ||
   name === "scanf" ||
@@ -412,6 +652,12 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sendmsg" ||
   name === "setbuf" ||
   name === "setitimer" ||
+  name === "setpayload" ||
+  name === "setpayloadf" ||
+  name === "setpayloadl" ||
+  name === "setpayloadsig" ||
+  name === "setpayloadsigf" ||
+  name === "setpayloadsigl" ||
   name === "setsockopt" ||
   name === "setvbuf" ||
   name === "shutdown" ||
@@ -425,6 +671,9 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sinhf" ||
   name === "sinhl" ||
   name === "sinl" ||
+  name === "sinpi" ||
+  name === "sinpif" ||
+  name === "sinpil" ||
   name === "snprintf" ||
   name === "socket" ||
   name === "sprintf" ||
@@ -485,14 +734,32 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "tanhf" ||
   name === "tanhl" ||
   name === "tanl" ||
+  name === "tanpi" ||
+  name === "tanpif" ||
+  name === "tanpil" ||
+  name === "tgamma" ||
+  name === "tgammaf" ||
+  name === "tgammal" ||
   name === "time" ||
   name === "times" ||
   name === "tmpfile" ||
   name === "tmpfile64" ||
   name === "toascii" ||
+  name === "totalorder" ||
+  name === "totalorderf" ||
+  name === "totalorderl" ||
+  name === "totalordermag" ||
+  name === "totalordermagf" ||
+  name === "totalordermagl" ||
   name === "trunc" ||
   name === "truncf" ||
   name === "truncl" ||
+  name === "ufromfp" ||
+  name === "ufromfpf" ||
+  name === "ufromfpl" ||
+  name === "ufromfpx" ||
+  name === "ufromfpxf" ||
+  name === "ufromfpxl" ||
   name === "uname" ||
   name === "ungetc" ||
   name === "unlink" ||

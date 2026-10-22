@@ -15,7 +15,7 @@ declare double @llvm.pow.f64(double, double) #0
 declare double @llvm.minnum.f64(double, double) #0
 declare double @llvm.maxnum.f64(double, double) #0
 
-define internal noundef double @hypot(double noundef %a, double noundef %b) #0 {
+define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
   %0 = fmul double %a, %a
   %1 = fmul double %b, %b
@@ -35,7 +35,7 @@ entry:
 define noundef i32 @test() #1 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = call double @hypot(double 0x4008000000000000, double 0x4010000000000000)
+  %0 = call double @hypot$(double 0x4008000000000000, double 0x4010000000000000)
   %1 = call i8* @nish_str_from_f64(double %0)
   call void @nish_print(i8* %1)
   %2 = call double @llvm.floor.f64(double 0x400599999999999A)
