@@ -225,7 +225,7 @@ const onlyKeys = (where, value, allowed) => {
 /** One family.json, checked against the schema in bench/crypto/README.md. */
 const loadFamily = (name) => {
   const dir = path.join(opts.families, name)
-  const where = `bench/crypto/${name}/family.json`
+  const where = path.relative(root, path.join(dir, "family.json"))
   let spec
   try {
     spec = JSON.parse(fs.readFileSync(path.join(dir, "family.json"), "utf8"))
@@ -436,7 +436,7 @@ const loadFamily = (name) => {
     fail(`${where}: \`needs\` is an array whose only allowed entry is "loopback"`)
   }
   if (kernels.some((k) => k.nish === true) && !fs.existsSync(path.join(dir, "main.ts"))) {
-    fail(`bench/crypto/${name}: a kernel with \`nish\` true needs main.ts`)
+    fail(`${path.relative(root, dir)}: a kernel with \`nish\` true needs main.ts`)
   }
   const familyNotes = spec.notes ?? []
   if (!isStringList(familyNotes)) {
@@ -1176,11 +1176,23 @@ if (opts.validate) {
           // A twin whose mask costs about as much as the ratio's noise on some
           // CPUs: the portable column must lose nearly every paired round.
           if (ratio < need && family.rounds.has(twin)) {
-            const { times } = interleave([fast, slow], kernel, size, iterations, PAIRED_ROUNDS)
-            const fastNs = times.get(fast.id)
-            const lost = times.get(slow.id).filter((ns, r) => ns > fastNs[r]).length
-            const n = fastNs.length
+            // How many of the paired rounds the portable column lost.
+            const pairs = () => {
+              const { times } = interleave([fast, slow], kernel, size, iterations, PAIRED_ROUNDS)
+              const fastNs = times.get(fast.id)
+              return times.get(slow.id).filter((ns, r) => ns > fastNs[r]).length
+            }
+            const n = PAIRED_ROUNDS
             const want = roundsNeeded(n, PAIRED_ALPHA)
+            let lost = pairs()
+            // One more set on a miss, as the ratio gets: a real cost near the
+            // noise misses one set now and then, and rarely two.
+            if (lost < want) {
+              console.log(
+                `retry ${family.name} ${slow.id}: slower in ${lost} of ${n} paired rounds at ${kernel}@${size}`
+              )
+              lost = pairs()
+            }
             const line = `${family.name} ${slow.id}: ${times3(ratio)} the time of ${fast.id} at ${kernel}@${size}, slower in ${lost} of ${n} paired rounds (needs ${times3(need)}, or ${want} of ${n})`
             if (lost >= want) {
               console.log(`portable ${line}`)

@@ -16221,12 +16221,14 @@ if (!only || "crypto-bench".includes(only)) {
         /^crypto: \d+ mismatch\(es\); nothing is timed$/m.test(altered.stdout),
       `unaltered: exit ${clean.status}\n${clean.stdout}${clean.stderr}\naltered: exit ${altered.status}\n${altered.stdout}${altered.stderr}`
     )
-    // The paired-rounds proof (portableRounds) on two more copies: the real
-    // mask with a ratio floor no mask reaches, so the rounds decide, must
-    // pass; a mask that clears only AVX, which X25519 does not use, must fail.
+    // The paired-rounds proof (portableRounds) on two more copies, each with a
+    // ratio floor no mask reaches so the rounds alone decide: the real mask
+    // must pass; a mask that clears only AVX, which X25519 does not use, must
+    // fail (its ratio alone would pass it on a noisy run, as 1.098x once did).
     // That mask names its second word as `~0x0`: OpenSSL reads a missing second
     // word as zero, which would clear BMI2 and ADX too. Each needs a CPU with
-    // the flags its mask clears; GitHub's runner has them.
+    // the flags its mask clears; GitHub's runner has them. The verdict line
+    // names whichever proof case decided, the last one when all fall short.
     const withFamily = (edit) => (dir) => {
       const file = path.join(dir, "family.json")
       const spec = JSON.parse(fs.readFileSync(file, "utf8"))
@@ -16235,7 +16237,7 @@ if (!only || "crypto-bench".includes(only)) {
     }
     const pairedLine = (verdict) =>
       new RegExp(
-        `^${verdict} curves openssl-portable: \\d+\\.\\d{3}x the time of openssl at x25519@32, slower in \\d+ of \\d+ paired rounds `,
+        `^${verdict} curves openssl-portable: \\d+\\.\\d{3}x the time of openssl at [\\w-]+@\\d+, slower in \\d+ of \\d+ paired rounds `,
         "m"
       )
     const paired = [
@@ -16252,6 +16254,7 @@ if (!only || "crypto-bench".includes(only)) {
         name: "crypto-bench: portableRounds fails an OpenSSL mask that clears nothing X25519 uses (AVX only)",
         dir: "paired-avx",
         edit: (spec) => {
+          spec.portableMinRatio.openssl = 100
           spec.twins.openssl.portable.env.OPENSSL_ia32cap = "~0x1000000000000000:~0x0"
           spec.portableProofFlags = ["avx"]
         },
@@ -16268,6 +16271,7 @@ if (!only || "crypto-bench".includes(only)) {
       }
       check(c.name, r.status === c.status && c.line.test(r.stdout), `exit ${r.status}\n${r.stdout}${r.stderr}`)
     }
+    fs.rmSync(copies, { recursive: true, force: true })
     // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
     // compiler it was given reaches the child, and the child's status comes
     // back. A wrapper answers --version from the compiler under test and fails
