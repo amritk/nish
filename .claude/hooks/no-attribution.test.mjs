@@ -4,8 +4,7 @@
 //
 //   node .claude/hooks/no-attribution.test.mjs
 //
-// `npm test` runs it, beside `scripts/check-pr-body.test.mjs`, which holds the
-// same patterns (`attribution-patterns.mjs`) to a pull request body. The
+// `npm test` runs it. The
 // banned strings are built by concatenation so that editing this file, and
 // grepping the repository for them, does not turn up a line that reads like
 // the real thing.
