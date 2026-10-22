@@ -1,7 +1,7 @@
 // `nish/net/prefork` end to end. With no arguments this program is the driver;
-// it runs itself again as a supervisor (`serve <port>`, `crash <port>`), and
-// each supervisor runs it once more per worker, `preforkWith` telling the two
-// apart. The driver checks, in order:
+// it runs itself again as a supervisor (`serve <port> <pid>`, `crash <port>
+// <pid>`, the pid its own), and each supervisor runs it once more per worker,
+// `preforkWith` telling the two apart. The driver checks, in order:
 //
 //   1. the helpers: `NISH_WORKERS` beats the config only when it is a positive
 //      whole number, and the worker flag is read only as the last argument;
@@ -15,8 +15,10 @@
 //      time up to the cap: each crash worker sends its start time on the
 //      system-wide monotonic clock, so the gaps have exact lower bounds.
 //
-// Every wait is bounded, and an idle worker exits after 20 s, so a supervisor
-// lost to a failure leaves nothing running past the harness's timeout.
+// Every wait is bounded. The driver passes its pid to each supervisor, which
+// adds its own; a worker that finds the driver gone (the harness killed it, or
+// it failed) sends the supervisor SIGTERM, so no supervisor outlives its driver
+// by more than a second restarting workers nobody reads.
 import {
   connectResult,
   netAddress,
@@ -67,8 +69,21 @@ const ascii = (text: string, out: u8[]): i32 => {
   return toI32(text.length);
 };
 
+/**
+ * True when the driver whose pid `args[3]` carries is gone, after sending the
+ * supervisor (`args[4]`) SIGTERM. Off Linux, where `selfPid` is 0, never.
+ */
+const orphaned = (args: string[]): boolean => {
+  const driver: i32 = args.length > 4 ? parseInt(args[3]) : 0;
+  if (driver <= 0 || kill(driver, 0) === 0) {
+    return false;
+  }
+  kill(parseInt(args[4]), 15);
+  return true;
+};
+
 /** A worker of `serve`: answer each connection with `index pid arena` and close it. */
-const serveWorker = (index: i32, port: i32): number => {
+const serveWorker = (index: i32, port: i32, args: string[]): number => {
   const fd = tcpListenFlags("127.0.0.1", port, 64, 1);
   if (fd < 0) {
     return 3;
@@ -80,7 +95,7 @@ const serveWorker = (index: i32, port: i32): number => {
   const peer: u8[] = new Array<u8>(18);
   const out: u8[] = new Array<u8>(64);
   let idle: i32 = 0;
-  while (idle < 20) {
+  while (idle < 20 && !orphaned(args)) {
     idle = pollWait(loop, ready, 1000) > 0 ? 0 : idle + 1;
     let conn = tcpAccept(fd, peer);
     while (conn >= 0) {
@@ -94,7 +109,10 @@ const serveWorker = (index: i32, port: i32): number => {
 };
 
 /** A worker of `crash`: send its start time to the driver's UDP port, then fail. */
-const crashWorker = (port: i32): number => {
+const crashWorker = (port: i32, args: string[]): number => {
+  if (orphaned(args)) {
+    return 0;
+  }
   const fd = udpBind("127.0.0.1", 0, 0);
   const to: u8[] = new Array<u8>(18);
   netAddress(to, "127.0.0.1", port);
@@ -104,7 +122,10 @@ const crashWorker = (port: i32): number => {
   return 7;
 };
 
-/** The supervisor, or a worker: whichever `preforkWith` says this process is. */
+/**
+ * The supervisor, or a worker: whichever `preforkWith` says this process is.
+ * The supervisor appends its pid to the arguments its workers get.
+ */
 const supervise = (mode: string, port: i32): number => {
   const config = new PreforkConfig();
   config.tickMs = 10;
@@ -116,11 +137,18 @@ const supervise = (mode: string, port: i32): number => {
   } else {
     config.workers = workers();
   }
-  const worker = preforkWith(process.argv, config);
+  const argv: string[] = preforkArgs(process.argv);
+  if (preforkIndex(process.argv) < 0) {
+    argv.push(`${selfPid()}`);
+  } else {
+    argv.push(process.argv[process.argv.length - 1]);
+  }
+  const worker = preforkWith(argv, config);
   if (worker < 0) {
     return worker === -1 ? 0 : 1;
   }
-  return mode === "crash" ? crashWorker(port) : serveWorker(worker, port);
+  const args = preforkArgs(argv);
+  return mode === "crash" ? crashWorker(port, args) : serveWorker(worker, port, args);
 };
 
 /** One answer from the port's workers; "refused" when nothing listens, "" on a failure. */
@@ -214,7 +242,7 @@ const helpers = (): void => {
 /** Steps 2 to 5. */
 const served = (): void => {
   const port = freePort();
-  const sup = spawn([selfPath(), "serve", `${port}`]);
+  const sup = spawn([selfPath(), "serve", `${port}`, `${selfPid()}`]);
   const first = firstAnswer(port);
   console.log(sup > 0 && first !== "" && first !== "refused");
 
@@ -275,7 +303,7 @@ const served = (): void => {
 const crashes = (): void => {
   const fd = udpBind("127.0.0.1", 0, 0);
   const port = netLocalPort(fd);
-  const sup = spawn([selfPath(), "crash", `${port}`]);
+  const sup = spawn([selfPath(), "crash", `${port}`, `${selfPid()}`]);
   const loop = pollCreate();
   pollAdd(loop, fd, 1, 0);
   const ready: i32[] = new Array<i32>(2);

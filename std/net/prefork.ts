@@ -35,21 +35,27 @@
  * **How many.** `NISH_WORKERS` when it is a positive whole number, else
  * `PreforkConfig.workers` when that is positive, else
  * `availableParallelism()` on Linux and 1 elsewhere: Darwin shares a
- * `SO_REUSEPORT` port without spreading connections across it.
+ * `SO_REUSEPORT` port without spreading connections across it. The count has
+ * no upper bound, so `NISH_WORKERS` is the operator's to set, not a client's.
  *
  * **Restarts.** A worker that exits, by a signal or with any code, is started
  * again at the same index while the supervisor is not stopping. One that dies
  * within `quickExitMs` of starting waits before its restart: `backoffMs` the
  * first time, twice the last wait after that, up to `backoffCapMs`; one that
  * ran longer starts again at once and clears its wait, so a crash loop costs a
- * spawn every `backoffCapMs`, not a core.
+ * spawn every `backoffCapMs`, not a core. A restart `spawn` refuses waits on
+ * the same backoff and is tried again; only the first start of a worker that
+ * fails ends the supervisor, with `PREFORK_SPAWN_FAILED`.
  *
  * **Shutdown.** The supervisor listens through `signalFd()`, made before the
  * first spawn so no signal falls between. On SIGTERM or SIGINT it stops
  * restarting, sends every worker SIGTERM, reaps them for `graceMs`, sends what
  * is left SIGKILL and reaps that. A second signal during the grace period sends
  * SIGKILL at once. The workers get the default dispositions back from `exec`,
- * so a worker that never asked for `signalFd()` ends on the SIGTERM.
+ * so a worker that never asked for `signalFd()` ends on the SIGTERM. A
+ * supervisor that dies any other way (SIGKILL, the OOM killer, or the default
+ * action of SIGHUP or SIGQUIT, which `signalFd()` does not catch) leaves its
+ * workers running, reparented to init.
  *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
@@ -217,8 +223,30 @@ class PreforkSupervisor {
   }
 
   /**
+   * Give `slot` the time it may start again: at once after a worker that ran
+   * at least `quickExitMs`, else, or when `failed` (`spawn` refused it), after
+   * a wait that starts at `backoffMs` and doubles up to `backoffCapMs`.
+   */
+  backoff(slot: PreforkSlot, now: i64, failed: boolean): void {
+    if (failed || now - slot.at < toI64(this.config.quickExitMs)) {
+      const cap: i32 = this.config.backoffCapMs
+      if (slot.delay === 0) {
+        slot.delay = this.config.backoffMs
+      } else {
+        // Compared before doubling, so a cap near the i32 limit cannot overflow.
+        slot.delay = slot.delay > cap / 2 ? cap : slot.delay * 2
+      }
+    } else {
+      slot.delay = 0
+    }
+    slot.at = now + toI64(slot.delay)
+  }
+
+  /**
    * Reap every worker that has exited. Unless `stopping`, each one's slot is
-   * given the time it may start again.
+   * given the time it may start again. A child that is not a worker (one the
+   * program spawned itself before calling `preforkWith`) is reaped too, and
+   * its status is discarded.
    */
   reap(stopping: boolean): void {
     while (this.running > 0) {
@@ -236,32 +264,27 @@ class PreforkSupervisor {
       const slot: PreforkSlot = this.slots[index]
       this.running = this.running - 1
       slot.pid = 0
-      if (stopping) {
-        continue
+      if (!stopping) {
+        this.backoff(slot, preforkNowMs(), false)
       }
-      const now: i64 = preforkNowMs()
-      if (now - slot.at < toI64(this.config.quickExitMs)) {
-        const cap: i32 = this.config.backoffCapMs
-        if (slot.delay === 0) {
-          slot.delay = this.config.backoffMs
-        } else {
-          // Compared before doubling, so a cap near the i32 limit cannot overflow.
-          slot.delay = slot.delay > cap / 2 ? cap : slot.delay * 2
-        }
-      } else {
-        slot.delay = 0
-      }
-      slot.at = now + toI64(slot.delay)
     }
   }
 
-  /** Start every waiting worker whose time has come; false when one failed. */
-  restart(): boolean {
+  /**
+   * Start every waiting worker whose time has come. When `first`, answer false
+   * at the first `spawn` that fails; otherwise a failed start waits on the
+   * same backoff as a worker that exited at once, and the answer is true.
+   */
+  restart(first: boolean): boolean {
     const now: i64 = preforkNowMs()
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       const slot: PreforkSlot = this.slots[i]
       if (slot.pid === 0 && slot.at <= now && !this.start(i)) {
-        return false
+        if (first) {
+          return false
+        }
+        console.error(`nish/net/prefork: cannot restart worker ${i}`)
+        this.backoff(slot, now, true)
       }
     }
     return true
@@ -276,7 +299,11 @@ class PreforkSupervisor {
     }
   }
 
-  /** SIGTERM, reap until `graceMs` or a second signal, SIGKILL, reap. */
+  /**
+   * SIGTERM, reap until `graceMs` or a second signal, SIGKILL, reap until no
+   * worker is left. Two signals that arrive before the supervisor reads the
+   * first count as the second here too.
+   */
   stop(loop: i32, signals: i32, ready: i32[]): void {
     this.signal(PREFORK_SIGTERM)
     const deadline: i64 = preforkNowMs() + toI64(this.config.graceMs)
@@ -298,7 +325,8 @@ class PreforkSupervisor {
         if (index >= 0) {
           this.slots[index].pid = 0
           this.running = this.running - 1
-        } else if (done[0] !== -4) {
+        } else if (done[0] <= 0 && done[0] !== -4) {
+          // No child is left, so no worker is either.
           return
         }
       }
@@ -314,8 +342,8 @@ const preforkInvalid = (config: PreforkConfig): string => {
   if (config.tickMs <= 0) {
     return "tickMs not above 0"
   }
-  if (config.backoffMs < 0 || config.backoffCapMs < config.backoffMs) {
-    return "backoffMs below 0 or above backoffCapMs"
+  if (config.backoffMs <= 0 || config.backoffCapMs < config.backoffMs) {
+    return "backoffMs not above 0 or above backoffCapMs"
   }
   if (config.quickExitMs < 0 || config.graceMs < 0) {
     return "quickExitMs or graceMs below 0"
@@ -325,8 +353,8 @@ const preforkInvalid = (config: PreforkConfig): string => {
 
 /**
  * In a worker, its index. In the supervisor, run the workers until SIGTERM or
- * SIGINT and answer `PREFORK_STOPPED`, or `PREFORK_SPAWN_FAILED` when one could
- * not be started (those already started are stopped first). Panics on a config
+ * SIGINT and answer `PREFORK_STOPPED`, or `PREFORK_SPAWN_FAILED` when a worker's
+ * first start failed (those already started are stopped first). Panics on a config
  * `preforkInvalid` names a field of.
  */
 export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
@@ -351,7 +379,7 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
   )
   const ready: i32[] = new Array<i32>(2)
   let result: i32 = PREFORK_STOPPED
-  if (!supervisor.restart()) {
+  if (!supervisor.restart(true)) {
     console.error(`nish/net/prefork: cannot start ${supervisor.program}`)
     result = PREFORK_SPAWN_FAILED
   } else {
@@ -363,11 +391,7 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
         running = false
       } else {
         supervisor.reap(false)
-        if (!supervisor.restart()) {
-          console.error(`nish/net/prefork: cannot restart ${supervisor.program}`)
-          result = PREFORK_SPAWN_FAILED
-          running = false
-        }
+        supervisor.restart(false)
       }
     }
   }

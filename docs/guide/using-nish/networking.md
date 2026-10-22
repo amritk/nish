@@ -161,7 +161,7 @@ export const main = (): i32 => {
 The program runs in two roles. The process you start becomes the supervisor:
 it starts the program again once per worker, and `preforkWorkers` answers it
 only when they have all exited, with `-1` (`PREFORK_STOPPED`) after a shutdown
-or `-2` (`PREFORK_SPAWN_FAILED`) when a worker could not be started. In each
+or `-2` (`PREFORK_SPAWN_FAILED`) when a worker's first start failed. In each
 worker it answers that worker's index, `0` up to one less than the count, at
 once. A worker is told its index by one extra argument at the end of its
 arguments; `preforkArgs(process.argv)` gives you the arguments without it, the
@@ -171,23 +171,27 @@ share nothing, so each one is the single-threaded server it was before.
 - **How many workers.** The `NISH_WORKERS` environment variable when it is a
   positive whole number, such as `NISH_WORKERS=2`; anything else in it is
   ignored. Otherwise one per core on Linux, and one on macOS, which lets the
-  listeners share the port but does not spread connections across them.
+  listeners share the port but does not spread connections across them. The
+  count has no upper bound, so set `NISH_WORKERS` yourself; never pass it on
+  from a client.
 - **Restarts.** A worker that exits, whatever its exit code, or is killed, is
   started again at the same index. One that dies within a second of starting
   waits first: 100 ms, then twice as long each time it does so again, up to
   5 s. A server that crashes on start costs one start every few seconds, not
-  a core.
+  a core. A restart the system refuses (out of processes or memory) waits the
+  same way and is tried again.
 - **Stopping.** SIGTERM or SIGINT (Ctrl-C) to the supervisor sends SIGTERM to
   every worker and waits up to 5 s for them, then kills the rest; a second
   signal kills them at once. The supervisor then exits with the `-1` path
-  above.
+  above. A supervisor stopped any other way (SIGKILL, the out-of-memory
+  killer, SIGHUP or SIGQUIT) leaves its workers running; stop it with SIGTERM.
 
 `preforkWith(process.argv, config)` takes a `PreforkConfig` to change those
 numbers: `workers`, `backoffMs`, `backoffCapMs`, `quickExitMs` (what counts as
 dying young), `graceMs` and `tickMs` (how often the supervisor looks for a
-restart that is due). A negative number, a `tickMs` of zero, or a
-`backoffCapMs` below `backoffMs` stops the program with a panic naming the
-field. `examples/prefork-server.ts` is a whole HTTP server built this way:
+restart that is due). A negative number, a `tickMs` or `backoffMs` of zero,
+or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
+the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
 ## Trusting a peer's address

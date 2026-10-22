@@ -871,6 +871,16 @@ median, its spread under it, and the band is `nish-copy`'s median against it:
 | plaintext close c=64 | 39,361<br>38,041–45,491 | 31,514<br>28,290–33,238 | 42,201<br>39,155–46,854 | +2.0% / −2.4% / −1.9% |
 | plaintext close c=64 + 8000 idle | 43,734<br>39,238–46,940 | 30,514<br>27,356–33,548 | 42,309<br>37,554–42,974 | −3.1% / −1.8% / −2.2% |
 
+The same runs' system CPU per request and peak RSS (summed over the workers),
+for `nish`, at 1 / 2 / 4 cores:
+
+| scenario | sys µs/req | peak RSS MB |
+| --- | ---: | ---: |
+| plaintext keep-alive c=256 | 7.42 / 6.17 / 7.43 | 4 / 8 / 13 |
+| post-json keep-alive c=256 | 18.34 / 11.51 / 10.25 | 5 / 9 / 14 |
+| plaintext close c=64 | 20.42 / 27.60 / 30.45 | 3 / 7 / 13 |
+| plaintext close c=64 + 8000 idle | 18.59 / 28.36 / 30.87 | 33 / 38 / 44 |
+
 Keep-alive scales with the server's cores while wrk keeps cores of its own:
 2.2× on plaintext and 2.7× on post-json at 2 cores, well outside the bands. At
 4 cores plaintext falls back to 196,398, because wrk's four threads now take

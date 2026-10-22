@@ -2,7 +2,7 @@
 // it: `preforkWith` panics before it reads the arguments or starts anything,
 // with
 //
-//     nish/net/prefork: backoffMs below 0 or above backoffCapMs
+//     nish/net/prefork: backoffMs not above 0 or above backoffCapMs
 //
 // and exits 1. The link harness compares stdout and the exit code only, so
 // the message is named here rather than pinned.

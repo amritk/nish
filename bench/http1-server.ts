@@ -748,14 +748,17 @@ class Bench {
 const benchCores = (): i32 => {
   const env: string | null = getenv("BENCH_CORES")
   const n: i32 = env !== null ? parseInt(env) : 1
+  // A worker's index travels in two bytes (`awaitPeers`).
+  if (n > 65535) {
+    return 65535
+  }
   return n > 1 ? n : 1
 }
 
-/** `buf[0]` set to `value`, a one-byte datagram. */
-const byteOf = (buf: u8[], value: i32): u8[] => {
-  if (buf.length > 0) {
-    buf[0] = toU8(value)
-  }
+/** `value` (below 65536) into `buf`'s first two bytes, little-endian. */
+const twoBytesOf = (buf: u8[], value: i32): u8[] => {
+  buf[0] = toU8(value & 255)
+  buf[1] = toU8(value >> 8)
   return buf
 }
 
@@ -771,7 +774,7 @@ const awaitPeers = (index: i32, count: i32, port: i32): void => {
   const loop: i32 = pollCreate()
   pollAdd(loop, fd, 1, 0)
   const ready: i32[] = new Array<i32>(2)
-  const buf: u8[] = new Array<u8>(1)
+  const buf: u8[] = new Array<u8>(2)
   const from: u8[] = new Array<u8>(18)
   const meta: i32[] = new Array<i32>(2)
   const seen: boolean[] = new Array<boolean>(count)
@@ -780,12 +783,12 @@ const awaitPeers = (index: i32, count: i32, port: i32): void => {
   netAddress(to, "127.0.0.1", port)
   for (let tries: i32 = 0; tries < 500 && left > 0; tries++) {
     if (index !== 0) {
-      udpSendTo(fd, byteOf(buf, index), 0, 1, to, 0, 0)
+      udpSendTo(fd, twoBytesOf(buf, index), 0, 2, to, 0, 0)
     }
     if (pollWait(loop, ready, 10) > 0) {
-      let n: i32 = udpRecvFrom(fd, buf, 0, 1, from, meta)
+      let n: i32 = udpRecvFrom(fd, buf, 0, 2, from, meta)
       while (n > 0) {
-        const peer: i32 = toI32(buf[0])
+        const peer: i32 = n === 2 ? toI32(buf[0]) | (toI32(buf[1]) << 8) : -1
         if (index !== 0) {
           left = 0
         } else if (peer > 0 && peer < seen.length && !seen[peer]) {
@@ -793,9 +796,9 @@ const awaitPeers = (index: i32, count: i32, port: i32): void => {
           left = left - 1
         }
         if (index === 0) {
-          udpSendTo(fd, buf, 0, 1, from, 0, 0)
+          udpSendTo(fd, buf, 0, 2, from, 0, 0)
         }
-        n = udpRecvFrom(fd, buf, 0, 1, from, meta)
+        n = udpRecvFrom(fd, buf, 0, 2, from, meta)
       }
     }
   }

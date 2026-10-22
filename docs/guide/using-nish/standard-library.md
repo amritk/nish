@@ -996,6 +996,11 @@ start-up still takes grows with it: the tables sized from the cap, such as an
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
 shows it.
 
+`nish/net/prefork` runs a server on every core: `preforkWorkers(process.argv)`
+starts the program once per worker, each on its own `SO_REUSEPORT` listener,
+restarts the ones that exit and stops them all on SIGTERM. It is native only;
+[Networking](networking.md#a-server-on-every-core-nishnetprefork) shows it.
+
 Every final response an `Http1Connection` sends carries a `Date` field, and so
 does every final response an `Http2TlsServer` or `Http3Server` slot sends, as
 a lowercase `date` field straight after `:status`. A 1xx response and trailers

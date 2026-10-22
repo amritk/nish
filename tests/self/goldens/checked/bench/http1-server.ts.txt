@@ -454,17 +454,18 @@ function benchCores(): i32 -> @benchCores
   stackSites=0 stackLocals=0
   local +0:9 env: string | null (const)
   local +1:9 n: i32 (const)
-function byteOf(buf: u8[], value: i32): u8[] -> @byteOf
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+function twoBytesOf(buf: u8[], value: i32): u8[] -> @twoBytesOf
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
   escaping: buf
+  calls: nish_panic_index
   pointer buf: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function awaitPeers(index: i32, count: i32, port: i32): void -> @awaitPeers
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:20
   escaping: count index
-  calls: byteOf nish_net_address nish_net_close nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_create nish_poll_wait nish_udp_bind nish_udp_recv_from nish_udp_send_to
+  calls: nish_net_address nish_net_close nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_create nish_poll_wait nish_udp_bind nish_udp_recv_from nish_udp_send_to twoBytesOf
   stackSites=4 stackLocals=4
   local -16:9 fd: i32 (const)
   local -15:9 loop: i32 (const)
@@ -476,7 +477,7 @@ function awaitPeers(index: i32, count: i32, port: i32): void -> @awaitPeers
   local -8:7 left: i32 (let)
   local -7:9 to: u8[] (const)
   local -5:12 tries: i32 (let)
-  callee -3:21 byteOf -> @byteOf
+  callee -3:21 twoBytesOf -> @twoBytesOf
   local +0:11 n: i32 (let)
   local +2:15 peer: i32 (const)
 function main(): i32 -> @nish_main [exported entry]
@@ -540,6 +541,7 @@ struct PreforkSupervisor (class) size=40 align=8
   constructor -> @nish.PreforkSupervisor.constructor
   method start -> @nish.PreforkSupervisor.start
   method find -> @nish.PreforkSupervisor.find
+  method backoff -> @nish.PreforkSupervisor.backoff
   method reap -> @nish.PreforkSupervisor.reap
   method restart -> @nish.PreforkSupervisor.restart
   method signal -> @nish.PreforkSupervisor.signal
@@ -608,30 +610,38 @@ function PreforkSupervisor.find(this: PreforkSupervisor, pid: i32): i32 -> @nish
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 i: i32 (let)
+function PreforkSupervisor.backoff(this: PreforkSupervisor, slot: PreforkSlot, now: i64, failed: boolean): void -> @nish.PreforkSupervisor.backoff [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  calls: nish_panic_overflow
+  pointer this: size=40 writesThrough=false captured=false
+  pointer slot: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -2:13 cap: i32 (const)
 function PreforkSupervisor.reap(this: PreforkSupervisor, stopping: boolean): void -> @nish.PreforkSupervisor.reap [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.PreforkSupervisor.find nish.preforkNowMs nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_wait_pid
-  pointer this: size=40 writesThrough=true captured=false passedTo=nish.PreforkSupervisor.find#0
+  calls: nish.PreforkSupervisor.backoff nish.PreforkSupervisor.find nish.preforkNowMs nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_wait_pid
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.PreforkSupervisor.find#0 nish.PreforkSupervisor.backoff#0
   stackSites=0 stackLocals=0
   local -12:13 done: i32[] (const)
   local -5:13 index: i32 (const)
   callee -5:26 PreforkSupervisor.find -> @nish.PreforkSupervisor.find
   local -1:13 slot: PreforkSlot (const)
-  local +5:13 now: i64 (const)
-  callee +5:24 preforkNowMs -> @nish.preforkNowMs
-  local +7:15 cap: i32 (const)
-function PreforkSupervisor.restart(this: PreforkSupervisor): boolean -> @nish.PreforkSupervisor.restart [method]
+  callee +3:9 PreforkSupervisor.backoff -> @nish.PreforkSupervisor.backoff
+  callee +3:28 preforkNowMs -> @nish.preforkNowMs
+function PreforkSupervisor.restart(this: PreforkSupervisor, first: boolean): boolean -> @nish.PreforkSupervisor.restart [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.preforkNowMs
-  calls: nish.PreforkSupervisor.start nish.preforkNowMs
-  pointer this: size=40 writesThrough=true captured=false passedTo=nish.PreforkSupervisor.start#0
+  calls: nish.PreforkSupervisor.backoff nish.PreforkSupervisor.start nish.preforkNowMs nish_str_concat nish_str_from_i32 nish_write
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.PreforkSupervisor.start#0 nish.PreforkSupervisor.backoff#0
   stackSites=0 stackLocals=0
   local +0:11 now: i64 (const)
   callee +0:22 preforkNowMs -> @nish.preforkNowMs
   local +1:14 i: i32 (let)
   local +2:13 slot: PreforkSlot (const)
   callee +3:48 PreforkSupervisor.start -> @nish.PreforkSupervisor.start
+  callee +8:9 PreforkSupervisor.backoff -> @nish.PreforkSupervisor.backoff
 function PreforkSupervisor.signal(this: PreforkSupervisor, sig: i32): void -> @nish.PreforkSupervisor.signal [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_kill
@@ -684,8 +694,8 @@ function preforkWith(args: string[], config: PreforkConfig): i32 -> @nish.prefor
   local +25:9 running: boolean (let)
   local +27:13 n: i32 (const)
   callee +32:9 PreforkSupervisor.reap -> @nish.PreforkSupervisor.reap
-  callee +33:14 PreforkSupervisor.restart -> @nish.PreforkSupervisor.restart
-  callee +41:3 PreforkSupervisor.stop -> @nish.PreforkSupervisor.stop
+  callee +33:9 PreforkSupervisor.restart -> @nish.PreforkSupervisor.restart
+  callee +37:3 PreforkSupervisor.stop -> @nish.PreforkSupervisor.stop
 function preforkWorkers(args: string[]): i32 -> @nish.preforkWorkers [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.preforkWith
