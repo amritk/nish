@@ -32,3 +32,11 @@ export const first = (n: i32): i32 => {
   // filler: keeps `first` spanning the offset of main's `parallelMapInto`.
   return d.length;
 };
+
+// This note sits last so that it moves no offset. The collision depends on
+// node ids and offsets, so a parser change can make this test pass without
+// exercising the fix. To re-check it, drop `fn.definedIn(program.source) &&`
+// from `dstHostDecl` in `src/parallel.ts`, rebuild, and compile `main.ts`: it
+// must compile. If it is refused, retune the `+ 1` count in `pad` and the
+// filler lines above and in `main.ts` until it compiles again, then restore
+// the guard.
