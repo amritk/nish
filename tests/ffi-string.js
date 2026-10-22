@@ -20,7 +20,7 @@ export const runFfiStringChecks = ({ only, check, shown, nish, root, buildDir })
   // a constructor reached by `new` included -- and the call is `ffi` under
   // `--deny ffi` whether it passes a string or a scalar. The last program puts
   // the call inside a `using` block and reads the string back through `this`
-  // stored out of a constructor, the two other ways CLAUDE.md names for a value
+  // stored out of a constructor, the two other ways `.claude/selfhost.md` names for a value
   // to reach a rule from where its tests do not write it.
   if (!only || "ffi_string checks".includes(only)) {
     const ffiDir = path.join(buildDir, "ffi-string")

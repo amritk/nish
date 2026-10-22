@@ -121,7 +121,7 @@ that `Arena.used()` stays flat. It ships with:
 **Acceptance.** The verifier's rules pass locally. Requests per second at TFB's
 concurrency levels go into [BENCHMARKS.md](BENCHMARKS.md) beside a reference
 entry measured on the same machine in the same interleaved rounds, with the
-noise band, as CLAUDE.md's `Measured:` rules require.
+noise band, as the `Measured:` rules in `.claude/testing.md` require.
 
 **Built.** `bench/techempower/` holds the program (`main.ts`, `server.ts`),
 `nish.dockerfile`, `benchmark-config.json` (upstream's `benchmark_config.json`)
