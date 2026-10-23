@@ -395,7 +395,7 @@ declare function readStdin(buf: u8[], off: i32, len: i32): i32;
 declare function waitStdin(timeoutMs: i32): boolean;
 /** Whether descriptor `fd` is a terminal (`isatty`). */
 declare function isTerminal(fd: i32): boolean;
-/** `[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one. */
+/** `[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one, `[0, 0]` when it has no size set. */
 declare function terminalSize(): i32[];
 /**
  * Raw mode on stdin's terminal, or the mode it had back: 0, -25 when stdin is
@@ -567,7 +567,7 @@ declare module "nish:term" {
   export function waitStdin(timeoutMs: i32): boolean;
   /** Whether descriptor `fd` is a terminal (`isatty`). */
   export function isTerminal(fd: i32): boolean;
-  /** `[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one. */
+  /** `[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one, `[0, 0]` when it has no size set. */
   export function terminalSize(): i32[];
   /** Raw mode on stdin's terminal (0), or the mode it had back; -25 when stdin is not a terminal. Restored at exit, on a panic and on every signal that ends the program, SIGKILL aside. */
   export function setRawMode(on: boolean): i32;

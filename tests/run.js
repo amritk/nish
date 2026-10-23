@@ -1606,8 +1606,16 @@ if (!only || "term".includes(only)) {
     const argv =
       process.platform === "darwin"
         ? ["-q", "/dev/null", "sh", sh, ptyExe, termDir]
-        : ["-qec", `sh ${sh} ${ptyExe} ${termDir}`, "/dev/null"]
-    const r = spawnSync("script", argv, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 })
+        : ["-qec", 'sh "$NISH_PTY_SH" "$NISH_PTY_EXE" "$NISH_PTY_DIR"', "/dev/null"]
+    // The util-linux command is a shell string, so the paths go in by the
+    // environment and a space in the checkout's path stays one argument.
+    const r = spawnSync("script", argv, {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, NISH_PTY_SH: sh, NISH_PTY_EXE: ptyExe, NISH_PTY_DIR: termDir },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    })
     const lines = String(r.stdout).replaceAll("\r", "").split("\n")
     if (!lines.includes("pty")) {
       skip(`term_pty: \`script\` gave no pseudo-terminal here (${shown(r).replaceAll("\n", " ")})`)
@@ -1647,20 +1655,36 @@ if (!only || "term".includes(only)) {
 
 // The same two reading programs as `--profile wasi` builds under Node's WASI,
 // where `readStdin` reads without its poll (runtime-term.c) and the terminal
-// questions answer "not a terminal", so the native expected lines hold.
+// questions answer "not a terminal", so the native expected lines hold; and a
+// `waitStdin(0)`, which there polls for 1 ms rather than not at all.
 if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
   if (WASI_SYSROOT && has("wasm-ld")) {
     const wasiDir = path.join(buildDir, "term_wasi")
     fs.rmSync(wasiDir, { recursive: true, force: true })
     fs.mkdirSync(wasiDir, { recursive: true })
+    // `waitStdin(0)` with bytes already waiting, which a poll with no wait
+    // under Node's WASI would answer false.
+    fs.writeFileSync(
+      path.join(wasiDir, "term_wait0.ts"),
+      "export const main = (): number => {\n  console.log(waitStdin(0));\n  return 0;\n};\n"
+    )
     for (const [name, feed, want] of [
       ["term_calls", "printf abcd", "4\ntrue\nfalse\nfalse\n2 -25 0\n-25\n0\n"],
       ["term_import", "head -c 1000 /dev/zero", "-25\n1000\n"],
+      ["term_wait0", "printf abcd", "true\n"],
     ]) {
       const wasm = path.join(wasiDir, `${name}.wasm`)
       const built = spawnSync(
         NISH,
-        [path.join(casesDir, `${name}.ts`), "-o", wasiDir + path.sep, "--link", wasm, "--profile", "wasi"],
+        [
+          path.join(name === "term_wait0" ? wasiDir : casesDir, `${name}.ts`),
+          "-o",
+          wasiDir + path.sep,
+          "--link",
+          wasm,
+          "--profile",
+          "wasi",
+        ],
         { cwd: root, encoding: "utf8" }
       )
       const ran =
@@ -1671,14 +1695,16 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
             })
           : built
       check(
-        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) reads piped stdin and answers -25 for the terminal, as natively`,
+        name === "term_wait0"
+          ? `${name}: under the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) waitStdin(0) sees bytes already piped`
+          : `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) reads piped stdin and answers -25 for the terminal, as natively`,
         built.status === 0 && ran.status === 0 && ran.stdout === want,
         shown(ran)
       )
     }
   } else {
     skip(
-      `skipped: term_calls, term_import: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
+      `skipped: term_calls, term_import, term_wait0: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
     )
   }
 }

@@ -35,7 +35,8 @@ every platform, so a program can branch on them:
 
 `terminalSize()` answers a pair, `[columns, rows]`. When there is no terminal
 the first number is the error and the second is `0`, so `[-25, 0]` means "not
-a terminal".
+a terminal". A terminal that no one gave a size, such as one a test harness
+opens, answers `[0, 0]`.
 
 ## Reading keys
 

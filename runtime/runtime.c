@@ -125,7 +125,8 @@ static inline void nish_panic_claim(void) {}
 __attribute__((noreturn)) void nish_fatal_exit(void);
 void (*nish_fatal_hook)(void);
 void nish_fatal_exit(void) {
-  if (nish_fatal_hook) nish_fatal_hook();
+  void (*hook)(void) = __atomic_load_n(&nish_fatal_hook, __ATOMIC_ACQUIRE);
+  if (hook) hook();
   _exit(1);
 }
 

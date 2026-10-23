@@ -71,11 +71,13 @@
    ever), which includes its end and an error, 0 when it is not or a signal
    ends the wait, and the host's `-errno` when the question fails. Outside
    WASI this asks `select`, because Darwin's `poll` does not support devices:
-   it answers POLLNVAL for a terminal at once, with no input there. */
+   it answers POLLNVAL for a terminal at once, with no input there. Under WASI
+   a timeout of 0 asks for 1 ms: Node's WASI answers a poll with no wait as
+   "nothing waiting" when bytes are. */
 static int nish_stdin_ready(int32_t timeout_ms) {
 #ifdef __wasi__
   struct pollfd p = {0, POLLIN, 0};
-  int r = poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms);
+  int r = poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms == 0 ? 1 : timeout_ms);
 #else
   fd_set in;
   FD_ZERO(&in);
@@ -94,9 +96,8 @@ static int nish_stdin_ready(int32_t timeout_ms) {
    signal interrupts is asked again; one that would block (a descriptor some
    other program made non-blocking) is -11 too, and so is a readiness check a
    signal interrupts, which would otherwise fall through to a `read` that
-   waits. Under WASI the check is left out and the read waits: Node's WASI
-   answers a poll of stdin with a timeout of 0 as "nothing waiting" when bytes
-   are, so there the program asks `waitStdin` first. */
+   waits. Under WASI the check is left out and the read waits, so there the
+   program asks `waitStdin` first. */
 int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
 #ifndef __wasi__
   int ready = nish_stdin_ready(0);
@@ -135,16 +136,20 @@ bool nish_is_terminal(int32_t fd) { return isatty(fd) == 1; }
 /* `terminalSize()`: `[columns, rows]` of the terminal on stdout, or on stderr
    when stdout is not one (the two Node keeps a size for), as a fresh
    two-element `i32[]`; `[-errno, 0]` when neither is, -25 for "not a
-   terminal". */
+   terminal" when either answered so. A terminal no one set a size for
+   answers `[0, 0]`. */
 nish_array *nish_terminal_size(void) {
   nish_array *out = nish_alloc_array(sizeof(int32_t), 2);
   int32_t *w = (int32_t *)out->data;
   struct winsize ws;
-  if (ioctl(1, TIOCGWINSZ, &ws) == 0 || ioctl(2, TIOCGWINSZ, &ws) == 0) {
+  int r = ioctl(1, TIOCGWINSZ, &ws);
+  int err = errno;
+  if (r != 0) r = ioctl(2, TIOCGWINSZ, &ws);
+  if (r == 0) {
     w[0] = ws.ws_col;
     w[1] = ws.ws_row;
   } else {
-    w[0] = errno == ENOTTY ? -25 : -errno;
+    w[0] = err == ENOTTY || errno == ENOTTY ? -25 : -errno;
     w[1] = 0;
   }
   return out;
@@ -165,12 +170,14 @@ static int nish_term_lock;
 
 /* Put the saved termios back, once: it is called from `setRawMode(false)`, an
    atexit handler, a panic and a signal handler, so it uses only `tcsetattr`,
-   which is async-signal-safe. */
+   which is async-signal-safe. The flag is cleared after the call, so a signal
+   that lands during it restores again, which is harmless, rather than not at
+   all. */
 static void nish_term_restore(void) {
   if (!nish_term_raw) return;
-  nish_term_raw = 0;
-  nish_fatal_hook = 0;
   tcsetattr(0, TCSANOW, &nish_term_saved);
+  nish_term_raw = 0;
+  __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
 }
 
 /* Where a fault's handler runs, so a SIGSEGV from an exhausted stack can:
@@ -234,11 +241,11 @@ static int32_t nish_term_set(bool on) {
   /* Raw before the call, so a signal while it drains the output, or just
      after the switch, still puts the saved termios back. */
   nish_term_raw = 1;
-  nish_fatal_hook = nish_term_restore;
+  __atomic_store_n(&nish_fatal_hook, nish_term_restore, __ATOMIC_RELEASE);
   if (tcsetattr(0, TCSAFLUSH, &t) == 0) return 0;
   int err = errno;
   nish_term_raw = 0;
-  nish_fatal_hook = 0;
+  __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
   return -err;
 }
 
