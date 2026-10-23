@@ -26,6 +26,13 @@
 # turns a failure green: the one retry, a quic-interop-runner case run once
 # more after it fails, passes only if that second run succeeds, and the
 # verdict prints both.
+#
+# The image's seed is package.json's version (server.dockerfile), so on the
+# release commit -- the Release PR's merge, `chore(release): <version>` -- it
+# names a release that does not exist yet, and install.sh finds no SHA256SUMS
+# to verify against. That push is skipped here; release.yml calls this
+# workflow instead, from its `interop` job, which needs `release`: the job that
+# attaches the binaries and SHA256SUMS the seed is fetched from.
 name: Interop
 
 on:
@@ -47,6 +54,8 @@ on:
       - ".github/workflows/interop.yml"
   push:
     branches: [main]
+  # release.yml, once the release it builds is published (see the top).
+  workflow_call:
 
 permissions:
   contents: read
@@ -87,6 +96,10 @@ env:
 jobs:
   build:
     name: build the server image
+    # Not the release commit's push: its seed is not published until
+    # release.yml's `release` job, which calls this workflow after it. Every
+    # job below needs this one, so they skip with it.
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore(release):')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
