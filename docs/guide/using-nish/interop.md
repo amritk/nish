@@ -355,6 +355,14 @@ export const main = (): i32 => {
 Argument 1 of `free` is a `CPtr | null` the program holds: a nullable foreign parameter takes the literal `null` or a pointer narrowed with `!== null`, so C is never handed a null by a path nobody tested
 ```
 
+A class with a `CPtr` field is a *handle class*: it owns the C resource, and
+its `[Symbol.dispose]` is exactly the call that closes it. The compiler checks
+such a class and every place one goes, but does not yet lower `using` of one,
+so `using f = new File(path)` is refused with "`using` of handle class `File`
+is not lowered yet". Until a release emits the close, hold the `CPtr` in a
+local and close it yourself, as above. The rules are in
+[A handle class](../../LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
+
 A declared function has no body and cannot be exported. Calling C has a cost
 beyond the call: the compiler cannot prove anything about code it cannot see,
 so it drops the optimisation facts it would otherwise give the caller and
