@@ -2497,13 +2497,14 @@ class YamlParser {
       }
       this.pos += 1
     }
+    // An empty scalar ends at its header, not at the line after it.
+    let valueEnd: i32 = this.pos
     this.checkBlockHeaderEnd()
     this.finishLine()
     const bodyStart: i32 = this.pos
     let contentIndent: i32 =
       explicitIndent > 0 ? (parentIndent > 0 ? parentIndent : toI32(0)) + explicitIndent : -1
     let leadingBlank: i32 = -1
-    let valueEnd: i32 = this.pos
     while (this.pos < this.len) {
       const lineStart: i32 = this.pos
       let i: i32 = lineStart
@@ -3209,7 +3210,51 @@ class YamlParser {
     const pair: i32 = stream.newNode(YAML_PAIR, YAML_PLAIN, stream.start(key), end)
     yamlPut(stream.firsts, pair, key)
     yamlPut(stream.counts, pair, value)
+    if (this.isMergeKey(key)) {
+      this.checkMerge(key, value)
+    }
     return pair
+  }
+
+  /**
+   * Internal: reports the value of merge key `key` unless it is a map, an alias
+   * to one or a sequence of those; an empty value is reported on the key, and a
+   * sequence on each item that is not. An alias with no target is already reported.
+   */
+  checkMerge(key: i32, value: i32): void {
+    const stream: YamlStream = this.stream
+    if (value < 0) {
+      this.badMerge(stream.start(key), stream.end(key))
+      return
+    }
+    if (stream.kind(value) === YAML_SEQ) {
+      const count: i32 = stream.count(value)
+      let i: i32 = 0
+      while (i < count) {
+        const item: i32 = stream.child(value, i)
+        if (!this.mergesMap(item)) {
+          this.badMerge(stream.start(item), stream.end(item))
+        }
+        i += 1
+      }
+    } else if (!this.mergesMap(value)) {
+      this.badMerge(stream.start(value), stream.end(value))
+    }
+  }
+
+  /** Internal: whether `n` is a map, an alias to one or an alias with no target, which merges nothing and is reported as such. */
+  mergesMap(n: i32): boolean {
+    const stream: YamlStream = this.stream
+    if (stream.kind(n) === YAML_ALIAS) {
+      const target: i32 = stream.target(n)
+      return target < 0 || stream.kind(target) === YAML_MAP
+    }
+    return stream.kind(n) === YAML_MAP
+  }
+
+  /** Internal: reports a merge value that names no map over `start` to `end`. */
+  badMerge(start: i32, end: i32): void {
+    this.error(YAML_ERR_BAD_MERGE, "Merge key value must be a map, an alias to a map or a sequence of those", start, end)
   }
 
   /** Internal: whether `key` is a `<<` merge key, which the duplicate check skips when merging is on. */

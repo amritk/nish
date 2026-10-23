@@ -97,6 +97,13 @@ const ytScalarUnits = (t: Suite): void => {
   ytBlock(t, "|\n \t\n x\n", "\t\nx\n");
   ytBlock(t, "|\r\n  l1\r\n  l2\r\n", "l1\nl2\n");
   ytBlock(t, "|\r  l1\r  l2\r", "l1\nl2\n");
+  const emptyBlock = parseYaml("a: |\nb: 1\n");
+  const emptyValue: i32 = emptyBlock.value(emptyBlock.child(emptyBlock.documentRoot(0), 0));
+  t.eqStr("an empty block scalar ends at its header", `${emptyBlock.start(emptyValue)}..${emptyBlock.end(emptyValue)}`, "3..4");
+  t.eqStr("and is empty", emptyBlock.text(emptyValue), "");
+  const commented = parseYaml("a: |  # c\n");
+  const commentedValue: i32 = commented.value(commented.child(commented.documentRoot(0), 0));
+  t.eqStr("its header's comment is not part of it", `${commented.start(commentedValue)}..${commented.end(commentedValue)}`, "3..4");
   t.eqStr("a document marker ends a block scalar of blank lines", ytRangesOf("--- |\n  \n---\n"), "");
   t.eqI32("and starts the next document", parseYaml("--- |\n  \n---\n").documentCount(), 2);
   t.eqStr("so does a document end", ytRangesOf("--- >\n\n  \n...\n"), "");
