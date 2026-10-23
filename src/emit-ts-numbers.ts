@@ -79,7 +79,7 @@ export const numbersRow = (walk: Walk, node: Node, operands: Operands): string |
     return callRow(walk, node, operands)
   }
   if (kind === N_EXPR_STMT) {
-    return statementRow(walk, node, operands)
+    return statementRow(walk, node)
   }
   if (kind === N_VAR_DECL) {
     return typedConstant(walk, node, operands)
@@ -266,7 +266,7 @@ const isCompound = (op: string): boolean =>
 /**
  * Whether a target can be read and then assigned again by repeating its text:
  * a name, a property chain over a name or `this`, or an element of one at a
- * name or literal index. A target another row rewrote is left to that row.
+ * `pure` index.
  */
 const repeatable = (node: Node): boolean => {
   if (node.kind === N_IDENT) {
@@ -278,7 +278,28 @@ const repeatable = (node: Node): boolean => {
   }
   if (node.kind === N_INDEX && node.children.length === 2) {
     const index = node.children[1]
-    return repeatable(node.children[0]) && (index.kind === N_IDENT || index.kind === N_NUMBER)
+    return repeatable(node.children[0]) && pure(index)
+  }
+  return false
+}
+
+/**
+ * Whether an index reads the same twice: names, literals and the arithmetic
+ * of them. Its only effect is a panic, and the first copy panics before the
+ * second runs.
+ */
+const pure = (node: Node): boolean => {
+  if (node.kind === N_IDENT || node.kind === N_NUMBER || node.kind === N_BIGINT) {
+    return true
+  }
+  if (node.kind === N_PAREN) {
+    return pure(node.children[0])
+  }
+  if (node.kind === N_UNARY) {
+    return node.text !== "++" && node.text !== "--" && pure(node.children[0])
+  }
+  if (node.kind === N_BINARY) {
+    return node.text !== "=" && !isCompound(node.text) && pure(node.children[0]) && pure(node.children[1])
   }
   return false
 }
@@ -287,7 +308,8 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
   const op = node.text
   if (isCompound(op)) {
     const target = node.children[0]
-    if (operands.changed[0] || !repeatable(target)) {
+    // An element target may have had its index rewritten; the rest is repeated as written.
+    if (!repeatable(target) || (operands.changed[0] && target.kind !== N_INDEX)) {
       return null
     }
     const name = operands.at(0)
@@ -402,7 +424,7 @@ const negation = (walk: Walk, node: Node, type: i32, x: string): string | null =
   const literal = node.children[0].kind === N_NUMBER || node.children[0].kind === N_BIGINT
   if (signed && literal) {
     // `-0` is a negative zero in JavaScript and the integer zero natively.
-    return node.children[0].text === "0" ? "0" : null
+    return node.children[0].text === "0" ? zero : null
   }
   if (signed && !unchecked(walk, node)) {
     return helper(walk, "checkedNeg", x)
@@ -424,9 +446,6 @@ const stepped = (
   bare: boolean
 ): string | null => {
   const type = typeOf(walk, node.children[0])
-  if (type === T_F32 && postfix) {
-    return null
-  }
   if (!isInteger(type) && type !== T_F32) {
     return null
   }
@@ -448,6 +467,10 @@ const stepped = (
   if (!postfix) {
     return assigned
   }
+  if (type === T_F32) {
+    // Stepping back would round again, so the old value is read before the store.
+    return `[${name}, ${name} = ${value}][0]`
+  }
   return wrapTo(type, `${assigned} ${up ? "-" : "+"} ${one}`)
 }
 
@@ -457,9 +480,9 @@ const stepped = (
  * value back, and a statement that opened with `(` would be read as a call
  * on the line before it when that line has no semicolon.
  */
-const statementRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+const statementRow = (walk: Walk, node: Node): string | null => {
   const expr = node.children[0]
-  if (!operands.changed[0] || expr.kind !== N_UNARY) {
+  if (expr.kind !== N_UNARY) {
     return null
   }
   if (expr.text !== "++" && expr.text !== "--") {
@@ -577,14 +600,13 @@ const arrayLength = (walk: Walk, node: Node, operands: Operands): string | null 
   if (
     operands.changed[0] ||
     operands.changed[1] ||
-    operands.changed[2] ||
     args.children.length !== 1 ||
     !isBig(typeOf(walk, args.children[0]))
   ) {
     return null
   }
-  const length = args.children[0]
-  return `${between(walk, node.start, length.start)}Number(${between(walk, length.start, length.end)})${between(walk, length.end, node.end)}`
+  // One argument: the list's text is that argument's, rewritten or not.
+  return `${between(walk, node.start, args.start)}Number(${operands.at(2)})${between(walk, args.end, node.end)}`
 }
 
 /**
