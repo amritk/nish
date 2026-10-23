@@ -161,6 +161,16 @@ const CRYPTO_AES_SPECIFIER: string = "nish/crypto/aes"
 export const isCryptoAesModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(CRYPTO_AES_SPECIFIER)
 
+/**
+ * `nish/regex`: ordinary Nish but for one call, the match-start scan's walk,
+ * which the emitter replaces with the runtime kernel (`src/kernels.ts`).
+ */
+const REGEX_SPECIFIER: string = "nish/regex"
+
+/** Whether a module is the standard library's `std/regex.ts`: the package is part of the test, as for `isTextModule`. */
+export const isRegexModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(REGEX_SPECIFIER)
+
 /** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isSecretModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(SECRET_STD_SPECIFIER)

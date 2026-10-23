@@ -2545,6 +2545,55 @@ The whole of `text.ll` is `tests/link/std_text_index_of_any`'s golden; the same
 `std/text.ts` compiled as a root keeps `call i32 @indexOfAnyFrom(` and declares
 no kernel (`tests/run.js`, "kernels:").
 
+### `nish/regex`: a match's first byte on the runtime kernel
+
+A pattern whose first few positions each take a small set of bytes, such as
+`/conta\w+/` or `/[A-Z][a-z]+/`, is searched for those positions before any
+automaton runs. `Regex.scanTo` calls the private walker `regexScanFrom`, a loop
+that tests a start's bytes against one 256-byte membership table per position,
+and in `nish/regex` that call becomes `nish_regex_scan` the way `indexOfAny`'s
+becomes its kernel. The three `i32` fields widen to the kernel's `i64`, and the
+answer narrows back:
+
+```llvm
+if.end:
+  %4 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 17
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !82
+  %6 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 64
+  %7 = load i32, i32* %6, align 4, !tbaa !99
+  %8 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 66
+  %9 = load i32, i32* %8, align 4, !tbaa !101
+  %10 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 65
+  %11 = load i32, i32* %10, align 4, !tbaa !100
+  %12 = sext i32 %7 to i64
+  %13 = sext i32 %9 to i64
+  %14 = sext i32 %11 to i64
+  %15 = sext i32 %from to i64
+  %16 = call i64 @nish_regex_scan(i8* %text, %struct.nish_array* %5, i64 %12, i64 %13, i64 %14, i64 %15)
+  %17 = trunc i64 %16 to i32
+  ret i32 %17
+}
+```
+
+The second argument is the `u8[]` itself, not its bytes: the kernel reads
+`data` through it, so the declaration says `memory(read)` rather than
+`indexOfAny`'s `argmem: read`, and the store of the chosen path is again
+`inaccessiblemem`:
+
+```llvm
+declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #7
+
+attributes #7 = { nounwind willreturn memory(read, inaccessiblemem: readwrite) }
+```
+
+The array holds each position's set twice, 288 bytes a position: first the
+32-byte form a vector path looks a block up in (sixteen rows by the low
+nibble, for bytes below and at or above 0x80, a bit for the high nibble's
+other three bits), then the 256-byte tables the scalar walker and every
+candidate's check read. The AVX2 path tests up to three positions of the
+window for thirty-two starts at once; `runtime/nish.h` has the contract and
+`tests/simd/regex-scan.c` holds every path to a reference loop.
+
 ### `Map` and `Set`: one probe, copied into the module
 
 `Map` and `Set` are generic classes in `std/collections.ts`, loaded because the

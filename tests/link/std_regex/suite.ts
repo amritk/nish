@@ -319,6 +319,25 @@ export const runSuite = (): i32 => {
   row(t, "[ab]*a[ab]{10}", "", coin(100000), "0-99999")
   row(t, "[ab]*a[ab]{12}", "", coin(200000), "0-199994")
   row(t, "(?:a|b)a[ab]{12}c", "", coin(200000) + "c", "none")
+  // A match's first bytes found by the runtime's byte-set scan, and a literal
+  // prefix the DFA steps over in one go: near misses, case folding, non-ASCII
+  // sets, assertions before the prefix, a match in the scan's last block, one
+  // that does not fit before the end, and texts shorter than a block.
+  row(t, "conta\\w+", "", rep("cont conta ", 1000) + "container", "11000-11009")
+  row(t, "conta\\w+", "i", rep("CONT conta- ", 1000) + "CoNtAiN", "12000-12007")
+  row(t, "aa+b", "", rep("a ab aa ", 1000) + "aaab", "8000-8004")
+  row(t, "aa[bc]", "", rep("a", 1000) + "c", "998-1001")
+  row(t, "abc\\d", "", rep("abcx", 5000) + "abc5", "20000-20004")
+  row(t, "[A-Z][a-z]+ing", "", rep("Abc Thin ", 1000) + "Thing", "9000-9005")
+  row(t, "日本\\w", "", rep("日 本 日本 ", 1000) + "日本x", "15000-15007")
+  row(t, "é[a-z]{2}", "", rep("éa é1 ", 1000) + "éab", "8000-8004")
+  row(t, "\\bconta\\w+", "", rep("xconta ", 1000) + " contain", "7001-7008")
+  row(t, "^conta", "m", rep("xconta\n", 1000) + "conta", "7000-7005")
+  row(t, "foo|bar\\d", "", rep("fo ba bar ", 1000) + "bar7", "10000-10004")
+  row(t, "conta\\w", "", rep("x", 26) + "contaX", "26-32")
+  row(t, "conta\\w", "", rep("x", 27) + "conta", "none")
+  row(t, "conta\\w", "", "conta", "none")
+  row(t, "co\\w", "", rep("c o ", 8) + "coX", "32-35")
   t.eqI32("x* counts 2001 in \"aé\" × 1000", compile("x*", "").count(rep("aé", 1000)), toI32(2001))
   t.eqI32("\\b counts 4000 in \"ab cd \" × 1000", compile("\\b", "").count(rep("ab cd ", 1000)), toI32(4000))
   t.eqI32("needle counts 2000 in \"a needle \" × 2000", compile("needle", "").count(rep("a needle ", 2000)), toI32(2000))
@@ -326,6 +345,8 @@ export const runSuite = (): i32 => {
   t.eqI32("\\w+ counts 2000 in \"ab, é \" × 2000", compile("\\w+", "").count(rep("ab, é ", 2000)), toI32(2000))
   t.eqI32("a[ab]{12} counts 7148 in a's and b's", compile("a[ab]{12}", "").count(coin(100000)), toI32(7148))
   t.eqI32("\\d+zzq counts 5000 in \"1zzq a zzq \" × 5000", compile("\\d+zzq", "").count(rep("1zzq a zzq ", 5000)), toI32(5000))
+  t.eqI32("conta\\w+ counts 2000 in \"cont conta container \" × 2000", compile("conta\\w+", "").count(rep("cont conta container ", 2000)), toI32(2000))
+  t.eqI32("[A-Z][a-z]+ counts 6000 in \"xx Ab The \" × 3000", compile("[A-Z][a-z]+", "").count(rep("xx Ab The ", 3000)), toI32(6000))
 
   // --- linear time -------------------------------------------------------------
   // Each of these is exponential in a backtracking engine: 30 bytes of input

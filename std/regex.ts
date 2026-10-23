@@ -62,10 +62,12 @@
  * `replace` whose template names no group track only the match's bounds, and
  * only `exec`, `find` and a template with `$1` or `$<name>` pay for every
  * group. A pattern that starts with a literal is searched for with
- * `s.indexOf`, one that starts with one of at most 16 ASCII bytes with
- * `indexOfAny`, any other whose first characters are known skips the bytes
- * that cannot start a match with a 128-entry table, and a pattern that is
- * nothing but a literal never starts an engine at all. The DFA's states are
+ * `s.indexOf`; one whose first few bytes are each one of a set rare enough to
+ * be worth it, like `[A-Z][a-z]` or `cat|dog`, is searched for those bytes by
+ * a runtime kernel that tests sixteen or thirty-two starts at a time; any
+ * other whose first characters are known skips the bytes that cannot start a
+ * match with a 128-entry table; and a pattern that is nothing but a literal
+ * never starts an engine at all. The DFA's states are
  * built as searches need them and kept, so only a search that meets new
  * states allocates, and only up to a bound:
  * its table holds at most 2,048 states and 262,144 transitions (1 MiB), and
@@ -75,7 +77,6 @@
  * memory lives in the `Regex`, one `Regex` is used by one thread at a time.
  */
 
-import { indexOfAny } from "nish/text"
 import { uncheckedGet } from "nish:unsafe"
 
 /** The most instructions a compiled pattern may have. */
@@ -178,6 +179,18 @@ const regexOtherCase = (c: i32): i32 => {
 /** Whether `b` is an ASCII word byte, `[A-Za-z0-9_]`, as `\w` and `\b` read it. */
 const isRegexWordByte = (b: i32): boolean =>
   (b >= 97 && b <= 122) || (b >= 65 && b <= 90) || (b >= 48 && b <= 57) || b === 95
+
+/** Whether every character of `s` is ASCII. */
+const isRegexAscii = (s: string): boolean => {
+  let i: i32 = 0
+  while (i < toI32(s.length)) {
+    if (toI32(s.charCodeAt(i)) >= 128) {
+      return false
+    }
+    i += 1
+  }
+  return true
+}
 
 /** The value of hex digit `c`, or -1. */
 const regexHexValue = (c: i32): i32 => {
@@ -1265,6 +1278,94 @@ const regexByteScore = (b: i32): i32 => {
   return 10
 }
 
+/** `REGEX_LETTER_ORDER`'s letters as per-mille of English text, two decimal digits each. */
+const REGEX_LETTER_PER_MILLE: string = "9570626055555048463331222219181716151411080602010101"
+
+/** How many of every thousand bytes of English text the `i`th letter of `REGEX_LETTER_ORDER` is. */
+const regexLetterPerMille = (i: i32): i32 => {
+  const tens: i32 = toI32(REGEX_LETTER_PER_MILLE.charCodeAt(2 * i)) - 48
+  return tens * 10 + toI32(REGEX_LETTER_PER_MILLE.charCodeAt(2 * i + 1)) - 48
+}
+
+/** How many of every thousand bytes of text are ASCII byte `b`, roughly: what a scan window is chosen by. */
+const regexBytePerMille = (b: i32): i32 => {
+  if (b === 32) {
+    return 170
+  }
+  if (b >= 97 && b <= 122) {
+    let i: i32 = 0
+    while (i < 26) {
+      if (toI32(REGEX_LETTER_ORDER.charCodeAt(i)) === b) {
+        return regexLetterPerMille(i)
+      }
+      i += 1
+    }
+  }
+  if (b === 46 || b === 44) {
+    return 8
+  }
+  if (b === 10) {
+    return 15
+  }
+  if ((b >= 65 && b <= 90) || (b >= 48 && b <= 57)) {
+    return 2
+  }
+  return 1
+}
+
+/** How many leading byte positions of a match `findScan` works out the sets of. */
+const REGEX_SCAN_DEPTH: i32 = 8
+/** The most of them the runtime's scan tests at once; its contract allows 4. */
+const REGEX_SCAN_WIDTH: i32 = 3
+
+/**
+ * The scan's walk: the first index at or after `from` where each of the
+ * `depth` bytes from it is in its position's set, or -1. `masks` holds each
+ * set twice, as `runtime/nish.h` says `nish_regex_scan` reads them: 32 bytes a
+ * position for the vector window, then a table of 256 a position, from
+ * `32 * depth`, which is the one read here. Under Node, where a character
+ * above ASCII is a code unit rather than bytes, any such unit reads as 0xFF,
+ * which is in a set exactly when every byte above ASCII is. The `width` positions from `off`
+ * are tested first, as the kernel looks for them first; the answer does not
+ * depend on which they are.
+ *
+ * This loop is what runs under Node. Natively the compiler replaces the calls
+ * to it with that kernel (`src/kernels.ts`), as it does `nish/text`'s
+ * `indexOfAnyFrom`. Every caller hands it a `from` in `[0, length]`, a depth
+ * of 1 to `REGEX_SCAN_DEPTH`, a window of 1 to `REGEX_SCAN_WIDTH` positions
+ * inside it and a `masks` 288 bytes a position long.
+ */
+const regexScanFrom = (text: string, masks: u8[], depth: i32, off: i32, width: i32, from: i32): i32 => {
+  const length: i32 = toI32(text.length)
+  let i: i32 = from
+  while (i >= 0 && i <= length - depth) {
+    let k: i32 = 0
+    while (k < depth) {
+      // The window's positions, then the ones before it, then the ones after.
+      let j: i32 = k
+      if (k < width) {
+        j = off + k
+      } else if (k < off + width) {
+        j = k - width
+      }
+      let b: i32 = toI32(text.charCodeAt(i + j))
+      if (b > 255) {
+        b = 255
+      }
+      const slot: i32 = 32 * depth + (j << 8) + b
+      if (masks[slot] === 0) {
+        break
+      }
+      k += 1
+    }
+    if (k === depth) {
+      return i
+    }
+    i += 1
+  }
+  return -1
+}
+
 /** One match: the input it was found in and the byte offsets of every group. */
 export class RegexMatch {
   /** The text that was searched. */
@@ -1358,15 +1459,16 @@ export class Regex {
   prefix: string
   /** The prefix's rarest byte, which `findPrefix` searches for, at `rareAt`. */
   rareStr: string
-  /** The ASCII bytes a match can start with, at most 16 of them, or "". */
-  firstBytes: string
   /** A literal inside every match that the part before it cannot read, or "": see `dfaInner`. */
   innerLit: string
-  /**
-   * Which ASCII bytes a match can start with, when `firstBytes` is too small
-   * to say, or empty when any byte can start one.
-   */
+  /** Which ASCII bytes a match can start with, or empty when any byte can start one. */
   firstSet: u8[]
+  /**
+   * The byte sets of a match's first `scanDepth` positions, 32 bytes each in
+   * `regexScanFrom`'s layout. Every position but the last is ASCII only, so
+   * each is one byte of the text.
+   */
+  posMasks: u8[]
 
   // Two lists of threads, each with a capture table indexed by pc. A list
   // holds only the threads that wait for a character or have matched, in
@@ -1423,6 +1525,14 @@ export class Regex {
   dCtxFree: boolean
   /** Each start state's offset + 1, by mode and context, or 0. */
   dStartOff: i32[]
+  /**
+   * Whether a match can start only where the ASCII `prefix` is and no
+   * assertion reads the context, so the unanchored start state after the
+   * prefix's bytes is one state, `dPrefOff`.
+   */
+  dPrefFast: boolean
+  /** That state's offset + 1, or 0 until it is computed. */
+  dPrefOff: i32
   /** Bytes the inner search read in vain past its literal, and bytes it moved past: see `dfaInner`. */
   innerWaste: f64
   innerGain: f64
@@ -1444,6 +1554,9 @@ export class Regex {
   dBegin: i32
   /** Where `rareStr` is in `prefix`. */
   rareAt: i32
+  scanDepth: i32
+  scanWidth: i32
+  scanOff: i32
   dShift: i32
   dCount: i32
   dCap: i32
@@ -1477,6 +1590,10 @@ export class Regex {
   dOk: boolean
   /** An idle state skips ahead with the prefilter. */
   dSkip: boolean
+  /** The scan's window is rare enough in text to search with. */
+  scanSel: boolean
+  /** The scan's first positions are exactly the prefix's bytes, all ASCII: see `prefixIsScan`. */
+  prefixExact: boolean
 
   constructor(source: string, flags: string) {
     this.source = source
@@ -1499,9 +1616,9 @@ export class Regex {
     this.prefix = ""
     this.literal = false
     this.anchored = false
-    this.firstBytes = ""
     this.innerLit = ""
     this.firstSet = []
+    this.posMasks = []
     this.firstWide = false
     this.cDense = []
     this.cSlots = []
@@ -1518,6 +1635,9 @@ export class Regex {
     this.mslots = []
     this.rareStr = ""
     this.rareAt = 0
+    this.scanDepth = 0
+    this.scanWidth = 0
+    this.scanOff = 0
     this.fwdCount = 0
     this.revEntry = 0
     this.innerLit = ""
@@ -1549,6 +1669,8 @@ export class Regex {
     this.dMaskR = []
     this.dCtxFree = false
     this.dStartOff = []
+    this.dPrefFast = false
+    this.dPrefOff = 0
     this.dShift = 0
     this.dCount = 0
     this.dCap = 0
@@ -1564,6 +1686,8 @@ export class Regex {
     this.dReady = false
     this.dOk = false
     this.dSkip = false
+    this.scanSel = false
+    this.prefixExact = false
   }
 
   /** How many groups there are, the whole match (group 0) included. */
@@ -1990,84 +2114,238 @@ export class Regex {
       pc += 1
     }
     this.anchored = this.op[pc] === OP_ASSERT && this.ia[pc] === ASSERT_BEGIN_TEXT
-    if (n > 0 || this.anchored) {
-      return
+    if (!this.anchored) {
+      this.findScan()
     }
-    // Every byte a match can start with, if the pattern cannot match empty:
-    // the ASCII ones in `set`, and whether any byte above them can.
+  }
+
+  /**
+   * The byte sets of a match's first positions, and the window of them the
+   * scan searches for. Each position's set is every byte the program can read
+   * there, from the instructions a match can have reached after that many
+   * bytes, which is more than a match can always read there but never less.
+   * The walk stops at a position where a match can already end, which makes
+   * the positions before it ones every match has, and after a position where
+   * a character above ASCII can start, since the next byte of the text may be
+   * inside that character.
+   */
+  findScan(): void {
     const count: i32 = this.pc()
-    const seen: u8[] = new Array<u8>(count)
-    const set: u8[] = new Array<u8>(128)
-    let wide: boolean = false
-    const work: i32[] = [0]
-    while (toI32(work.length) > 0) {
-      // The top of the stack, read before it is popped: `pop` answers
-      // `T | undefined` to TypeScript. The test always holds inside the loop
-      // and is what proves the index.
-      const top: i32 = toI32(work.length) - 1
-      if (top < 0 || top >= toI32(work.length)) {
+    const masks: u8[] = new Array<u8>(32 * REGEX_SCAN_DEPTH)
+    const odds: i32[] = new Array<i32>(REGEX_SCAN_DEPTH)
+    // `seen[at]` is the depth plus one at which `at` was last walked.
+    const seen: i32[] = new Array<i32>(count)
+    let frontier: i32[] = [REGEX_ENTRY]
+    let depth: i32 = 0
+    let ended: boolean = false
+    while (depth < REGEX_SCAN_DEPTH && !ended) {
+      const set: u8[] = new Array<u8>(128)
+      const next: i32[] = []
+      let wide: boolean = false
+      const work: i32[] = []
+      let f: i32 = 0
+      while (f < toI32(frontier.length)) {
+        work.push(frontier[f])
+        f += 1
+      }
+      while (toI32(work.length) > 0) {
+        // The top of the stack, read before it is popped: `pop` answers
+        // `T | undefined` to TypeScript. The test always holds inside the loop
+        // and is what proves the index.
+        const top: i32 = toI32(work.length) - 1
+        if (top < 0 || top >= toI32(work.length)) {
+          break
+        }
+        const at: i32 = work[top]
+        work.pop()
+        if (at < 0 || at >= toI32(seen.length) || seen[at] === depth + 1) {
+          continue
+        }
+        seen[at] = depth + 1
+        const o: i32 = this.op[at]
+        if (o === OP_JMP) {
+          work.push(this.ia[at])
+        } else if (o === OP_SPLIT) {
+          work.push(this.ib[at])
+          work.push(this.ia[at])
+        } else if (o === OP_SAVE || o === OP_CLEAR || o === OP_ASSERT || o === OP_MARK || o === OP_CHECK) {
+          work.push(at + 1)
+        } else if (o === OP_CHAR) {
+          const lower: i32 = this.ia[at]
+          const other: i32 = this.ib[at]
+          if (lower >= 0 && lower < toI32(set.length)) {
+            set[lower] = 1
+          } else {
+            wide = true
+          }
+          if (other >= 0 && other < toI32(set.length)) {
+            set[other] = 1
+          } else {
+            wide = true
+          }
+          next.push(at + 1)
+        } else if (o === OP_CLASS) {
+          const k: i32 = this.ia[at]
+          if (this.clsNeg[k] === 1 || this.clsTo[k] > this.clsFrom[k]) {
+            wide = true
+          }
+          let c: i32 = 0
+          while (c >= 0 && c < toI32(set.length)) {
+            if (this.clsAscii[k * 128 + c] === 1) {
+              set[c] = 1
+            }
+            c += 1
+          }
+          next.push(at + 1)
+        } else if (o === OP_ANY || o === OP_ANY_NL) {
+          let c: i32 = 0
+          while (c >= 0 && c < toI32(set.length)) {
+            set[c] = 1
+            c += 1
+          }
+          wide = true
+        } else {
+          // OP_MATCH: a match can end here.
+          ended = true
+          break
+        }
+      }
+      if (ended) {
         break
       }
-      const at: i32 = work[top]
-      work.pop()
-      if (at < 0 || at >= toI32(seen.length) || seen[at] === 1) {
-        continue
+      let odd: i32 = wide ? 100 : 0
+      let c: i32 = 0
+      while (c >= 0 && c < 128) {
+        if (set[c] === 1) {
+          const row: i32 = (depth << 5) | (c & 15)
+          const bit: i32 = toI32(1) << (c >> 4)
+          masks[row] |= toU8(bit)
+          odd += regexBytePerMille(c)
+        }
+        c += 1
       }
-      seen[at] = 1
-      const o: i32 = this.op[at]
-      if (o === OP_JMP) {
-        work.push(this.ia[at])
-      } else if (o === OP_SPLIT) {
-        work.push(this.ib[at])
-        work.push(this.ia[at])
-      } else if (o === OP_SAVE || o === OP_CLEAR || o === OP_ASSERT || o === OP_MARK || o === OP_CHECK) {
-        work.push(at + 1)
-      } else if (o === OP_CHAR) {
-        const lower: i32 = this.ia[at]
-        const other: i32 = this.ib[at]
-        if (lower >= 0 && lower < toI32(set.length)) {
-          set[lower] = 1
-        } else {
-          wide = true
+      if (wide) {
+        let k: i32 = 16
+        while (k < 32) {
+          const row: i32 = (depth << 5) | k
+          masks[row] = 255
+          k += 1
         }
-        if (other >= 0 && other < toI32(set.length)) {
-          set[other] = 1
-        } else {
-          wide = true
-        }
-      } else if (o === OP_CLASS) {
-        const k: i32 = this.ia[at]
-        if (this.clsNeg[k] === 1 || this.clsTo[k] > this.clsFrom[k]) {
-          wide = true
-        }
-        let c: i32 = 0
-        while (c >= 0 && c < toI32(set.length)) {
-          if (this.clsAscii[k * 128 + c] === 1) {
-            set[c] = 1
-          }
+      }
+      odds[depth] = odd > 1000 ? 1000 : odd
+      if (depth === 0 && this.prefix === "") {
+        // The first position also feeds the VM's table, which wants a set
+        // that leaves some byte out.
+        let m: i32 = 0
+        c = 0
+        while (c >= 0 && c < 128) {
+          m += toI32(set[c])
           c += 1
         }
-      } else {
-        // OP_ANY, OP_ANY_NL, or OP_MATCH: an empty match is possible.
-        return
+        if (!wide || m < 128) {
+          this.firstSet = set
+          this.firstWide = wide
+        }
       }
-    }
-    const members: u8[] = []
-    let c: i32 = 0
-    while (c >= 0 && c < toI32(set.length)) {
-      if (set[c] === 1) {
-        members.push(toU8(c))
+      depth += 1
+      if (wide) {
+        break
       }
-      c += 1
+      frontier = next
     }
-    const m: i32 = toI32(members.length)
-    if (!wide && m >= 1 && m <= 16) {
-      // The runtime's vector search, which wants a small ASCII set.
-      this.firstBytes = String.fromBytes(members, 0, m)
-    } else if (!wide || m < 128) {
-      this.firstSet = set
-      this.firstWide = wide
+    // No position, or a first one that can be inside a character: no scan.
+    if (depth === 0 || masks[16] !== 0) {
+      return
     }
+    this.scanDepth = depth
+    // The 32-byte forms the vector window reads, then a membership table of
+    // 256 bytes a position, which the walker and the kernel's other positions
+    // read a load a byte.
+    const both: u8[] = new Array<u8>(288 * depth)
+    let at: i32 = 0
+    while (at >= 0 && at < 32 * depth && at < toI32(both.length)) {
+      both[at] = masks[at]
+      at += 1
+    }
+    at = 0
+    while (at >= 0 && at < 256 * depth) {
+      const b: i32 = at & 255
+      const row: i32 = ((at >> 8) << 5) | ((b >> 7) << 4) | (b & 15)
+      const slot: i32 = 32 * depth + at
+      if (slot < toI32(both.length) && ((toI32(masks[row]) >> ((b >> 4) & 7)) & 1) === 1) {
+        both[slot] = 1
+      }
+      at += 1
+    }
+    this.posMasks = both
+    // The rarest window of each width from two, and the narrowest of them
+    // that lets through about one start in 256: a narrower window is fewer
+    // loads a block, a wider one fewer false starts.
+    const most: i32 = depth < REGEX_SCAN_WIDTH ? depth : REGEX_SCAN_WIDTH
+    let width: i32 = most < 2 ? most : 2
+    let best: i32 = -1
+    let all: i32 = 1
+    while (true) {
+      all = 1
+      best = -1
+      let off: i32 = 0
+      while (off + width <= depth) {
+        let odd: i32 = 1
+        let j: i32 = 0
+        while (j < width) {
+          odd *= odds[off + j]
+          j += 1
+        }
+        if (best < 0 || odd < best) {
+          best = odd
+          this.scanOff = off
+        }
+        off += 1
+      }
+      let j: i32 = 0
+      while (j < width) {
+        all *= 1000
+        j += 1
+      }
+      if (width >= most || best < all / 256) {
+        break
+      }
+      width += 1
+    }
+    this.scanWidth = width
+    // Worth it when fewer than one start in sixteen passes the window.
+    this.scanSel = best < all / 16
+    this.prefixExact = this.prefixIsScan()
+  }
+
+  /**
+   * Whether `posMasks` starts with the prefix's bytes, each ASCII, and nothing
+   * else. The positions after them hold for every match too, so a start the
+   * scan finds is then the prefix's next occurrence that can begin a match.
+   */
+  prefixIsScan(): boolean {
+    const n: i32 = toI32(this.prefix.length)
+    if (n === 0 || n > this.scanDepth) {
+      return false
+    }
+    let j: i32 = 0
+    while (j < n) {
+      const c: i32 = toI32(this.prefix.charCodeAt(j))
+      if (c >= 128) {
+        return false
+      }
+      let k: i32 = 0
+      while (k < 32) {
+        const bit: i32 = toI32(1) << (c >> 4)
+        const want: i32 = k === (c & 15) ? bit : 0
+        if (toI32(this.posMasks[32 * j + k]) !== want) {
+          return false
+        }
+        k += 1
+      }
+      j += 1
+    }
+    return true
   }
 
   /** Whether class `k` holds code point `cp`, which is at least 0. */
@@ -2248,6 +2526,9 @@ export class Regex {
    * rarest byte, then a comparison of the bytes around it.
    */
   findPrefix(text: string, from: i32): i32 {
+    if (this.scanSel) {
+      return this.findPrefixScan(text, from)
+    }
     if (this.rareAt === 0) {
       return toI32(text.indexOf(this.prefix, from))
     }
@@ -2274,12 +2555,52 @@ export class Regex {
     }
   }
 
+  /**
+   * `findPrefix` by the scan, which is rarer than the prefix's rarest byte
+   * alone. When `prefixExact` the scan's positions are the prefix's bytes and
+   * a start it finds is a match.
+   */
+  findPrefixScan(text: string, from: i32): i32 {
+    const len: i32 = toI32(text.length)
+    const n: i32 = toI32(this.prefix.length)
+    let p: i32 = from
+    while (p >= 0 && p <= len) {
+      const s: i32 = this.scanTo(text, p)
+      if (s < 0 || this.prefixExact) {
+        return s
+      }
+      if (s > len - n) {
+        return -1
+      }
+      let k: i32 = 0
+      while (k < n && text.charCodeAt(s + k) === this.prefix.charCodeAt(k)) {
+        k += 1
+      }
+      if (k >= n) {
+        return s
+      }
+      p = s + 1
+    }
+    return -1
+  }
+
+  /**
+   * The first index at or after `from`, which is at least 0, whose bytes pass
+   * every position of `posMasks`, or -1. No match starts anywhere it skips.
+   */
+  scanTo(text: string, from: i32): i32 {
+    if (from > toI32(text.length)) {
+      return -1
+    }
+    return regexScanFrom(text, this.posMasks, this.scanDepth, this.scanOff, this.scanWidth, from)
+  }
+
   /** Where the next match can start at or after `p`, by the prefilter, or -1. */
   dSkipTo(text: string, p: i32): i32 {
     if (this.prefix !== "") {
       return this.findPrefix(text, p)
     }
-    return toI32(indexOfAny(text, this.firstBytes, p))
+    return this.scanTo(text, p)
   }
 
   /**
@@ -2538,7 +2859,9 @@ export class Regex {
     // is never 0, the entry not yet computed.
     this.dCount = 1
     this.dStartOff = new Array<i32>(4 * CTX_SLOTS)
-    this.dSkip = !this.anchored && (this.prefix !== "" || this.firstBytes !== "")
+    this.dSkip = !this.anchored && (this.prefix !== "" || this.scanSel)
+    this.dPrefFast = this.dSkip && this.dCtxFree && this.prefix !== "" && isRegexAscii(this.prefix)
+    this.dPrefOff = 0
     this.dOk = true
   }
 
@@ -2917,6 +3240,7 @@ export class Regex {
       this.dStartOff[k] = 0
       k += 1
     }
+    this.dPrefOff = 0
     this.dEpoch = (this.dEpoch + 1) & DFA_EPOCH_MASK
     return true
   }
@@ -2944,6 +3268,32 @@ export class Regex {
     if (off >= 0) {
       this.dStartOff[k] = off + 1
     }
+    return off
+  }
+
+  /**
+   * The unanchored start state after the bytes of `prefix`, read from byte
+   * `p`, or -1 when a step on the way is not a plain transition; then
+   * `dPrefFast` goes off.
+   */
+  dAfterPrefix(p: i32): i32 {
+    let off: i32 = this.dStartAt(DFA_UNANCHORED, this.dMaskF[CTX_OTHER], p)
+    const n: i32 = toI32(this.prefix.length)
+    let k: i32 = 0
+    while (off >= 0 && k < n) {
+      const c: i32 = this.dCls[toI32(this.prefix.charCodeAt(k))]
+      let e: i32 = this.dTrans[off + c]
+      if (e === 0) {
+        e = this.dStep(off, c, p + k)
+      }
+      off = e > 0 ? e : -1
+      k += 1
+    }
+    if (off < 0) {
+      this.dPrefFast = false
+      return -1
+    }
+    this.dPrefOff = off + 1
     return off
   }
 
@@ -3004,15 +3354,25 @@ export class Regex {
     const mode: i32 = this.anchored || pinned ? DFA_ANCHORED : DFA_UNANCHORED
     let p: i32 = from
     this.dStop = len
+    let off: i32 = -1
     if (this.dSkip && !pinned) {
       p = this.dSkipTo(text, p)
       if (p < 0) {
         return DFA_NONE
       }
+      if (this.dPrefFast) {
+        // The prefix is at `p`: start past it.
+        off = this.dPrefOff > 0 ? this.dPrefOff - 1 : this.dAfterPrefix(p)
+        if (off >= 0) {
+          p += toI32(this.prefix.length)
+        }
+      }
     }
-    let off: i32 = this.dStartAt(mode, this.ctxBefore(text, p), p)
     if (off < 0) {
-      return DFA_GAVE_UP
+      off = this.dStartAt(mode, this.dCtxFree ? this.dMaskF[CTX_OTHER] : this.ctxBefore(text, p), p)
+      if (off < 0) {
+        return DFA_GAVE_UP
+      }
     }
     let end: i32 = DFA_NONE
     let trans: i32[] = this.dTrans
@@ -3097,6 +3457,10 @@ export class Regex {
           trans = this.dTrans
         }
         p = q
+        if (this.dPrefOff > 0 && this.dPrefFast) {
+          off = this.dPrefOff - 1
+          p = q + toI32(this.prefix.length)
+        }
       }
     }
   }
@@ -3321,7 +3685,7 @@ export class Regex {
     const len: i32 = toI32(text.length)
     const anchored: boolean = this.anchored || pinned
     const hasPrefix: boolean = this.prefix !== ""
-    const hasFirst: boolean = this.firstBytes !== ""
+    const hasScan: boolean = this.scanSel
     const hasSet: boolean = toI32(this.firstSet.length) > 0
     this.cCount = 0
     let matched: boolean = false
@@ -3336,8 +3700,8 @@ export class Regex {
                 break
               }
               p = at
-            } else if (hasFirst) {
-              const at: i32 = indexOfAny(text, this.firstBytes, p)
+            } else if (hasScan) {
+              const at: i32 = this.scanTo(text, p)
               if (at < 0) {
                 break
               }
