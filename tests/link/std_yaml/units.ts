@@ -97,9 +97,21 @@ const ytScalarUnits = (t: Suite): void => {
   ytBlock(t, "|\n \t\n x\n", "\t\nx\n");
   ytBlock(t, "|\r\n  l1\r\n  l2\r\n", "l1\nl2\n");
   ytBlock(t, "|\r  l1\r  l2\r", "l1\nl2\n");
+  const emptyBlock = parseYaml("a: |\nb: 1\n");
+  const emptyValue: i32 = emptyBlock.value(emptyBlock.child(emptyBlock.documentRoot(0), 0));
+  t.eqStr("an empty block scalar ends at its header", `${emptyBlock.start(emptyValue)}..${emptyBlock.end(emptyValue)}`, "3..4");
+  t.eqStr("and is empty", emptyBlock.text(emptyValue), "");
+  const commented = parseYaml("a: |  # c\n");
+  const commentedValue: i32 = commented.value(commented.child(commented.documentRoot(0), 0));
+  t.eqStr("its header's comment is not part of it", `${commented.start(commentedValue)}..${commented.end(commentedValue)}`, "3..4");
   t.eqStr("a document marker ends a block scalar of blank lines", ytRangesOf("--- |\n  \n---\n"), "");
   t.eqI32("and starts the next document", parseYaml("--- |\n  \n---\n").documentCount(), 2);
   t.eqStr("so does a document end", ytRangesOf("--- >\n\n  \n...\n"), "");
+  t.eqStr("a plain scalar's blank line of spaces and tabs folds to a break", ytScalar("x\n \t \ny\n"), "string <x\ny>");
+  t.eqStr("and is quiet", ytRangesOf("x\n \t \ny\n"), "");
+  t.eqStr("a tab-only line ends a plain scalar it trails", ytScalar("a\n\t\n"), "string <a>");
+  t.eqStr("so does a blank line the text ends on", ytScalar("a\n \t"), "string <a>");
+  t.eqStr("which is quiet", ytRangesOf("a\n \t"), "");
   const crlf = "a: x\r\nb: 'y\r\n  z'\r\n# c\r\nd: \"p\r\n  q\"\r\ne: f\r\n  g\r\n";
   t.eqStr("CR LF breaks in every scalar style and a comment", ytFlow(crlf), "{ a: x, b: y z, d: p q, e: f g }");
   t.eqStr("are quiet", ytRangesOf(crlf), "");
@@ -338,6 +350,89 @@ const ytPathUnits = (t: Suite): void => {
   t.eqI32("an alias to its own unfinished anchor stops the walk at the unresolved alias", pathMatch(loop, loop.documentRoot(0), ["l", "0", "0", "0"]), 2);
 };
 
+/** The text of the node `path` names below the first document of `text`, merging; `"-"` for an empty value. */
+const ytMergedText = (text: string, path: string[]): string => {
+  const stream = parseYaml(text);
+  const node: i32 = pathNode(stream, stream.documentRoot(0), path);
+  return node < 0 ? "-" : stream.text(node);
+};
+
+const ytMergeUnits = (t: Suite): void => {
+  const base = "base: &b {x: 1, y: 2}\n";
+  t.eqStr("an alias to a map merges", ytMergedText(`${base}m: {<<: *b, z: 3}\n`, ["m", "x"]), "1");
+  t.eqStr("a map merges", ytMergedText("m:\n  <<: {x: 1}\n", ["m", "x"]), "1");
+  t.eqStr("a sequence of maps merges", ytMergedText("m:\n  <<: [{x: 1}, {y: 2}]\n", ["m", "y"]), "2");
+  t.eqStr("a sequence of aliases merges", ytMergedText(`${base}c: &c {w: 4}\nm:\n  <<: [*c, *b]\n`, ["m", "y"]), "2");
+  t.eqStr("the map's own key wins", ytMergedText(`${base}m:\n  x: own\n  <<: *b\n`, ["m", "x"]), "own");
+  t.eqStr("whether before or after the merge key", ytMergedText(`${base}m:\n  <<: *b\n  x: own\n`, ["m", "x"]), "own");
+  t.eqStr("the first map listed wins", ytMergedText("m:\n  <<: [{x: first}, {x: second}]\n", ["m", "x"]), "first");
+  t.eqStr("so does the first merge key", ytMergedText("m:\n  <<: {x: first}\n  <<: {x: second}\n", ["m", "x"]), "first");
+  t.eqStr("a merged map's own merge keys merge too", ytMergedText("a: &a {x: 1}\nb: &b {<<: *a}\nm: {<<: *b}\n", ["m", "x"]), "1");
+  t.eqStr("searched depth first", ytMergedText("a: &a {x: deep}\nb: &b {<<: *a}\nm: {<<: [*b, {x: flat}]}\n", ["m", "x"]), "deep");
+  t.eqStr("a path keeps walking below a merged key", ytMergedText("a: &a {x: {y: 5}}\nm: {<<: *a}\n", ["m", "x", "y"]), "5");
+  t.eqStr("a << step names the merge value itself", ytMergedText("m: {<<: {x: 1}}\n", ["m", "<<", "x"]), "1");
+  const missing = parseYaml(`${base}m: {<<: *b}\n`);
+  t.eqI32("a missing key is still missing", pathMatch(missing, missing.documentRoot(0), ["m", "q"]), 1);
+  const text = "base: &b\n  x: 1\nm:\n  <<: *b\n";
+  const stream = parseYaml(text);
+  const root: i32 = stream.documentRoot(0);
+  const pair: i32 = pathPair(stream, root, ["m", "x"]);
+  t.eqI32("pathPair names the pair inside the merged map", pair, pathPair(stream, root, ["base", "x"]));
+  const lines = new YamlLineIndex(text);
+  const key: i32 = stream.key(pair);
+  t.eqStr("at the merged key's line and column", `${lines.line(stream.start(key))}:${lines.column(stream.start(key))}`, "2:3");
+  t.eqStr("named by the merged key", keyText(stream, key), "x");
+  const node: i32 = pathNode(stream, root, ["m", "x"]);
+  t.eqStr("its value is the merged value", `${lines.line(stream.start(node))}:${lines.column(stream.start(node))}`, "2:6");
+  t.eqI32("every step matches", pathMatch(stream, root, ["m", "x"]), 2);
+  const loop = parseYaml("a: &a\n  <<: *a\n  x: 1\nm:\n  <<: *a\n");
+  t.eqI32("a merge through an unresolved self-alias ends the walk", pathMatch(loop, loop.documentRoot(0), ["m", "q"]), 1);
+  t.eqStr("and still finds what is there", ytMergedText("a: &a\n  <<: *a\n  x: 1\nm:\n  <<: *a\n", ["m", "x"]), "1");
+  const cycle = parseYaml("a: &a {b: &b {<<: *a}, <<: *b}\n");
+  t.eqI32("so does one through an alias its own anchor encloses", pathMatch(cycle, cycle.documentRoot(0), ["a", "q"]), 1);
+  const diamond = "a: &a {x: 1}\nb: &b {<<: *a}\nc: &c {<<: *a}\nm: {<<: [*b, *c]}\n";
+  t.eqStr("two merges sharing a map find its keys", ytMergedText(diamond, ["m", "x"]), "1");
+  const shared = parseYaml(diamond);
+  t.eqI32("and search it once for a key it lacks", pathMatch(shared, shared.documentRoot(0), ["m", "q"]), 1);
+  const chain: string[] = ["b0: &b0 {x: 1}\n"];
+  let c: i32 = 1;
+  while (c <= 120) {
+    chain.push(`b${c}: &b${c} {<<: *b${c - 1}}\n`);
+    c += 1;
+  }
+  t.eqStr("a chain of 50 merges is followed", ytMergedText(`${chain.join("")}m: {<<: *b50}\n`, ["m", "x"]), "1");
+  const deep = parseYaml(`${chain.join("")}m: {<<: *b120}\n`);
+  t.eqI32("one of 120 stops at the hop cap", pathMatch(deep, deep.documentRoot(0), ["m", "x"]), 1);
+  const sources: string[] = [];
+  const aliases: string[] = [];
+  let n: i32 = 0;
+  while (n < 20000) {
+    sources.push("{}");
+    aliases.push("*e");
+    n += 1;
+  }
+  const wide = parseYaml(`m: {<<: [${sources.join(", ")}, {x: 1}]}\n`);
+  const wideRoot: i32 = wide.documentRoot(0);
+  t.eqI32("20000 merge sources are searched for a key none has", pathMatch(wide, wideRoot, ["m", "q"]), 1);
+  t.eqI32("and the last one's key is found", pathMatch(wide, wideRoot, ["m", "x"]), 2);
+  const repeated = parseYaml(`e: &e {}\nm: {<<: [${aliases.join(", ")}, {x: 1}]}\n`);
+  t.eqI32("20000 aliases to one map search it once", pathMatch(repeated, repeated.documentRoot(0), ["m", "x"]), 2);
+  const scalar = parseYaml("m: {<<: 1}\n");
+  t.eqI32("a scalar merges nothing", pathMatch(scalar, scalar.documentRoot(0), ["m", "x"]), 1);
+  const off = new YamlOptions();
+  off.merge = false;
+  const plain = parseYamlWith("m:\n  <<: {x: 1}\n", off);
+  const plainRoot: i32 = plain.documentRoot(0);
+  t.eqI32("without merge, a path does not look in <<", pathMatch(plain, plainRoot, ["m", "x"]), 1);
+  t.eqI32("and << is an ordinary key", pathMatch(plain, plainRoot, ["m", "<<", "x"]), 3);
+  const quoted = parseYaml("m: {'<<': {x: 1}}\n");
+  t.eqI32("a quoted << is not a merge key", pathMatch(quoted, quoted.documentRoot(0), ["m", "x"]), 1);
+  const strTagged = parseYaml("m: {!!str <<: {x: 1}}\n");
+  t.eqI32("a !!str << is not a merge key", pathMatch(strTagged, strTagged.documentRoot(0), ["m", "x"]), 1);
+  t.eqStr("a !!merge << is", ytMergedText("m: {!!merge <<: {x: 1}}\n", ["m", "x"]), "1");
+  t.eqStr("an alias to a sequence of maps merges", ytMergedText("s: &s [{x: 1}]\nm: {<<: *s}\n", ["m", "x"]), "1");
+};
+
 const ytLineUnits = (t: Suite): void => {
   const lines = new YamlLineIndex("a\nbc\r\nd\re");
   t.eqI32("LF, CRLF and CR are each one break", lines.lineCount(), 4);
@@ -364,5 +459,6 @@ export const ytUnits = (t: Suite): void => {
   ytOptionUnits(t);
   ytKeyTextUnits(t);
   ytPathUnits(t);
+  ytMergeUnits(t);
   ytLineUnits(t);
 };
