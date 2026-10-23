@@ -3643,7 +3643,7 @@ function proveSliceBounds(program: CheckedProgram, table: TypeTable, opts: Optio
   calls: BoundsWalk.constructor CheckContext.constructor DiagnosticSink.constructor State.constructor nish_alloc_struct nish_panic_index walkBoundsStatement walkExpression
   pointer program: size=656 writesThrough=true captured=true passedTo=CheckContext.constructor#2
   pointer table: size=96 writesThrough=true captured=true passedTo=CheckContext.constructor#1 State.constructor#1
-  pointer opts: size=152 writesThrough=false captured=false
+  pointer opts: size=160 writesThrough=false captured=false
   pointer body: size=40 writesThrough=true captured=true passedTo=walkBoundsStatement#2 walkExpression#2
   stackSites=1 stackLocals=1
   local -20:9 ctx: CheckContext (const)

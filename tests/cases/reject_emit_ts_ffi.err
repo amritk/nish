@@ -1,0 +1,1 @@
+--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi

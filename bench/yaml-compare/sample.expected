@@ -1,0 +1,8 @@
+# bench/yaml-compare/main.ts run on sample.yaml: `<workload> <iterations>:` and
+# the checksum line it prints. Recorded from @amritk/yaml 0.8.0, not from
+# Nish: `node bench/yaml-compare/node-bench.mjs <workload> sample.yaml 3
+# bench/yaml-compare/cache/amritk-yaml/package/dist/index.js`, after
+# `node bench/yaml-compare/fetch.mjs`. tests/run.js holds the Nish program to
+# it without a network.
+parse 3: parse 3 48 7 6 3 23 0
+walk 3: walk 3 48 7 6 3 23 0
