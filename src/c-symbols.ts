@@ -653,6 +653,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "scanf" ||
   name === "sched_getaffinity" ||
   name === "sched_yield" ||
+  name === "select" ||
   name === "send" ||
   name === "sendmsg" ||
   name === "setbuf" ||
@@ -669,6 +670,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sigaction" ||
   name === "sigaltstack" ||
   name === "sigemptyset" ||
+  name === "signal" ||
   name === "sin" ||
   name === "sincos" ||
   name === "sincosf" ||
