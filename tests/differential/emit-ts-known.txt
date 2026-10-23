@@ -130,6 +130,7 @@ cases/enum_loop_for_update control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSU
 cases/enum_loop_held_several control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/enum_loop_join_gap control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/enum_narrowing control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
+cases/f32_to_bits numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
 cases/ffi_buffer_call_sites ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_count_proved ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_declared ffi  # refused: NL4010 under --emit-ts
@@ -158,6 +159,8 @@ cases/map_iter_return control  # differ: exit 0 vs 1: ReferenceError: Arena is n
 cases/map_key_enum control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/map_key_u64 numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
 cases/math_clz32 numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
+cases/math_imul numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
+cases/math_sign numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
 cases/mem_arena_builtins control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/mem_callee_scope control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/mem_callee_scope_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
@@ -227,7 +230,6 @@ cases/perf_rng_getbyte numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is n
 cases/perf_rng_quiet numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/port_array_zero_fill records  # differ: stdout line 1 differs
 cases/port_num_div numbers  # differ: stdout line 1 differs
-cases/port_num_libm records  # differ: stdout line 1 differs
 cases/port_num_negzero numbers  # differ: stdout line 1 differs
 cases/port_num_ushr numbers  # differ: stdout line 1 differs
 cases/port_num_ushr_count numbers  # differ: stdout line 2 differs
@@ -315,7 +317,6 @@ corpus/f64_format numbers  # differ: stdout line 8 differs
 corpus/f64_i32_mixed numbers  # differ: exit 1 vs 0
 corpus/f64_libm libm  # differ: stdout line 33 differs
 corpus/f64_math numbers  # differ: stdout line 32 differs
-corpus/f64_minmax_nan records  # differ: stdout line 1 differs
 corpus/f64_round_negzero numbers  # differ: stdout line 1 differs
 corpus/i64_arith numbers  # differ: exit 0 vs 1: TypeError: Cannot mix BigInt and other types, use explicit conversions
 corpus/int_abs_minmax numbers  # differ: stdout line 1 differs
