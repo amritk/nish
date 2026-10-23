@@ -1,0 +1,426 @@
+{
+  "version": "0.20.0",
+  "date": "2026-10-23",
+  "tag": "v0.20.0",
+  "range": {
+    "from": "v0.19.0",
+    "to": "5468fd50"
+  },
+  "entries": [
+    {
+      "id": "drop-the-stale-0-18-0-platform-entries",
+      "type": "build",
+      "breaking": false,
+      "title": "drop the stale 0.18.0 platform entries from package-lock.json",
+      "body": "The 0.19.0 release bumped the optional platform packages in package.json but left their 0.18.0 entries in the lockfile, so `npm ls --package-lock-only` in CI's lint job failed on main and on every pull request cut from it. This is the lockfile `npm install` writes for the current package.json: stale entries removed, nothing added.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "d6634d7"
+      ],
+      "pr": 810,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "count-the-resets-an-http-2-server-sends",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "count the resets an HTTP/2 server sends against its reset budget",
+      "body": "A client could make the server reset streams on its behalf — a malformed frame, a flow-control error, a refused stream — without spending its own reset budget, which is the MadeYouReset attack. Every RST_STREAM the server sends for a stream error or a refusal, and every 431, is now charged to the connection's reset credit like a client's reset, and a client that runs the credit out gets GOAWAY ENHANCE_YOUR_CALM. The public `reset()` an application calls stays uncharged. A finished response still earns a credit back, so the record (H2-4) states the sustained rate this leaves and the cost to a conforming client that draws many 431s on one connection.\n\nFixes #805",
+      "metrics": [],
+      "refs": [
+        "docs/security/http2.md"
+      ],
+      "tests": [
+        "tests/link/net_http2_reset"
+      ],
+      "commits": [
+        "5e7e093"
+      ],
+      "pr": 809,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "pin-an-unannotated-secret-of-a-class-written",
+      "type": "test",
+      "scope": "checker",
+      "breaking": false,
+      "title": "pin an unannotated secret(...) of a class written as a const alias or a call result",
+      "body": "#771 made `const k = secret(v)` compile without a `Secret<T>` annotation, but for a class payload only the `secret(new C(...))` form had a golden. tests/cases/secret_inferred now also binds a class held in a `const` and a class answered by a call, reads each through `expose` and wipes it, so the inferred `Secret<Counter>` cannot regress for either form without the case failing to type-check or its IR golden changing.\n\nFixes #791",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/cases/secret_inferred"
+      ],
+      "commits": [
+        "f4ee103"
+      ],
+      "pr": 814,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "reserve-libm-s-c99-c23-names-in-c",
+      "type": "fix",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "reserve libm's C99/C23 names in c-symbols past LLVM 18's table",
+      "body": "src/c-symbols.ts reserved only the library functions LLVM 18's target library info names, so a Nish function called `tgamma`, `erf`, `ilogb` or any other C99/C23 `<math.h>` or C99 `<complex.h>` name a later LLVM recognises was emitted under that name and could be replaced by the libm call at -O2. The whole C23 `<math.h>` and C99 `<complex.h>` function sets, with their `f`/`l` variants, are now reserved: a private function with such a name is renamed (`@tgamma$`), and an exported one is refused with NL3037, as the LLVM 18 names already were. The list's header says which sources it tracks and that a new C standard means re-reading its function index by hand.\n\nFixes #651",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/guide/language/modules.md"
+      ],
+      "tests": [
+        "tests/c-symbols/libm.ts"
+      ],
+      "commits": [
+        "2dd6b23"
+      ],
+      "pr": 813,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "bump-the-go-modules-group-across-2-directories",
+      "type": "build",
+      "scope": "deps",
+      "breaking": false,
+      "title": "bump the go_modules group across 2 directories with 3 updates",
+      "body": "Bumps golang.org/x/crypto to v0.52.0 (and its golang.org/x/sys\ndependency) in the crypto bench's aead and handshake Go twins. The new\nx/crypto asks for Go 1.25, so the twins' go.mod files now say so.\n\nThe twins build with GOTOOLCHAIN=local, and the runner image ships Go\n1.24, so CI's test job now installs Go 1.25 with actions/setup-go before\nthe crypto bench runs.\n\nGo 1.25 also speeds up Go's portable (purego) X25519, which narrowed the\ncurves family's portable proof at x25519@32 to 1.09x on CI's runner,\nunder the 1.2x floor. The proof is now a list: x25519@32 first, then\np256-verify@64 for a column that comes up short there, where purego\ntakes 2.5x. bench/crypto/curves/README.md records the figures.",
+      "metrics": [
+        "Go purego vs its assembly at x25519@32, 1.63x on Go 1.24.7, 1.23x on Go 1.25.1 (local), 1.09x on CI; at p256-verify@64, 2.49x on Go 1.25.1"
+      ],
+      "refs": [
+        "bench/crypto/curves/README.md"
+      ],
+      "tests": [
+        "node tests/run.js crypto-bench"
+      ],
+      "commits": [
+        "f49e034"
+      ],
+      "pr": 803,
+      "author": "dependabot[bot]",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "cap-relay-peers-by-a-validated-address-only",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "cap relay peers by a validated address only",
+      "body": "The relay example counted a connection against its address's per-peer cap at the first Initial, before QUIC had validated that address, so Initials with a forged source address could take the places of a real client at that address. A peer now claims its place only once the slot's address is validated (a Retry or a Handshake packet from it), and std/net/http3-server.ts's doc comment says what `addressValidated` does and does not prove. The record states the trade-off this leaves: before validation an address is capped by nothing, so one non-spoofing address can hold unvalidated slots until `helloTimeout` where it was held to `maxPerPeer + spareSlots`; `retry: true` closes both holes at a round trip's cost.\n\nFixes #806",
+      "metrics": [],
+      "refs": [
+        "docs/security/http3.md",
+        "docs/guide/using-nish/networking.md"
+      ],
+      "tests": [
+        "tests/link/net_relay_forged"
+      ],
+      "commits": [
+        "7925de0"
+      ],
+      "pr": 811,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "print-the-noise-band-per-crypto-row-and",
+      "type": "test",
+      "scope": "bench",
+      "breaking": false,
+      "title": "print the noise band per crypto row and pin the --validate mismatch",
+      "body": "bench/crypto now prints each row's noise band — the spread between nish and its byte-identical copy over the same interleaved rounds — beside the figure, so a delta can be read against its own noise. tests/run.js pins `--validate`: a temp copy of the curves family with one expected.txt checksum altered must exit 1 with the exact mismatch line, and the unaltered copy must pass.\n\nThe \"portable columns are portable\" gate failed other pull requests at random on curves' openssl-portable at x25519@32 (1.029-1.046x against a 1.05x floor), because OpenSSL runs nearly the same x25519 code with and without the asm mask. A twin listed in the family's new `portableRounds` field is now also proved by interleaved pairs: the portable column must be slower in at least 36 of 48 rounds (a false pass about 3.5e-4), re-measured once on a miss. Every other family and twin keeps its ratio floor.\n\nFixes #790",
+      "metrics": [],
+      "refs": [
+        "bench/crypto/README.md"
+      ],
+      "tests": [
+        "node tests/run.js crypto-bench"
+      ],
+      "commits": [
+        "f6ae6b5"
+      ],
+      "pr": 817,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "correct-the-safegcd-changelog-s-ct-asm-claim",
+      "type": "docs",
+      "scope": "security",
+      "breaking": false,
+      "title": "correct the safegcd changelog's ct_asm claim and the off-main anchors in ct-verification.md",
+      "body": "docs/security/ct-verification.md cited six commits that never landed on main — pre-squash branch commits of #537, #584, #594, #598 and #660 — so its anchors could not be checked out. Each now cites the squash commit on main that carries the same change, with line numbers re-read at that commit. The 0.19.0 release notes said the safegcd inversion's ct_asm fixture covered the normalisation; it covers one 30-divstep batch and both matrix updates, and the rest is held by discipline, as the fixture's header says. CHANGELOG.md renders only the subject, so it needed no change.\n\nFixes #799",
+      "metrics": [],
+      "refs": [
+        "docs/security/ct-verification.md",
+        "changelog/0.19.0.json"
+      ],
+      "tests": [],
+      "commits": [
+        "e5c540b"
+      ],
+      "pr": 816,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "accept-a-fresh-parallelmapinto-destination-beside-captured-arrays",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "accept a fresh parallelMapInto destination beside captured arrays",
+      "body": "parallelMapInto refused a destination whenever the arrow also captured a fresh array or an object holding one, because it could not tell the two apart, so the programs in #612 did not compile even though nothing could alias. A destination that is a fresh `const` array, declared in the calling function and never handed on before the call — not stored, passed, aliased, captured, returned or written by an earlier parallelMapInto, and not handed on after the call inside a loop around it that it was declared outside of — is now known apart from every capture. Indexing it, reading `length`, calling its methods and iterating it with `for…of` do not hand it on. The host function is looked up in the call's own module only, so an imported function's offsets and node ids can never stand in for it. Every way in is pinned by a refusal test, each shown to compile once its condition is removed.\n\nFixes #612",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/guide/using-nish/threads.md"
+      ],
+      "tests": [
+        "tests/cases/reject_par_into_*",
+        "tests/link/par_into_fresh_*",
+        "tests/link/reject_par_into_import_host"
+      ],
+      "commits": [
+        "4fb10c0"
+      ],
+      "pr": 812,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "close-the-lazy-slot-acceptance-gaps-left-after",
+      "type": "test",
+      "scope": "net",
+      "breaking": false,
+      "title": "close the lazy-slot acceptance gaps left after #786",
+      "body": "The lazy-slot work left four acceptance gaps (#789). tests/run.js now holds the cost of building one Http3Server slot to exactly HTTP3_SERVER_SLOT_BYTES (111,568 bytes, measured by startup.ts), so a slot that keeps too much or too little fails; before, the figure appeared only in comments. net_http3_server checks that the first Initial into a never-built slot builds it and that a client taking a released slot keeps 0 bytes. net_http2_bad_config_tls drives Http2TlsServer's config validation and pins its panic message. The TLS, HTTP/3 and QUIC records now cite the merged commits (#767, #777, #779) and quote their checks verbatim.\n\nFixes #789",
+      "metrics": [],
+      "refs": [
+        "docs/security/tls.md",
+        "docs/security/http3.md",
+        "docs/security/quic.md"
+      ],
+      "tests": [
+        "tests/link/net_http3_server",
+        "tests/link/net_http2_bad_config_tls"
+      ],
+      "commits": [
+        "be1083b"
+      ],
+      "pr": 819,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "cache-the-test-job-s-apt-packages-and",
+      "type": "ci",
+      "breaking": false,
+      "title": "cache the test job's apt packages and bound each download",
+      "body": "The `test` job's \"Install LLVM 18 + lld (Ubuntu)\" step hit its five-minute\nlimit on one shard of most main runs: the Azure mirror served valgrind,\nlibc6-dbg and the wasi packages (~23 MB; clang/lld/llvm 18 are already on the\nimage) at a trickle, never idle long enough for APT_OPTS's 30-second\nconnection timeout to fire.\n\nThe job now keeps those .debs in the Actions cache, keyed by runner image, so\na shard normally downloads nothing. The cache is saved right after the\ninstall rather than at job end, so a red test still leaves it for the next\nrun. On a miss, each `--download-only` attempt is cut at one minute, and the\nsecond and third attempts drop the Azure mirror from\n/etc/apt/apt-mirrors.txt, since a retry against it stalls again.",
+      "metrics": [],
+      "refs": [
+        "docs/wp10-ci.md#shards-and-time-limits"
+      ],
+      "tests": [],
+      "commits": [
+        "29ec98d"
+      ],
+      "pr": 821,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "drop-the-pr-body-attribution-check-824",
+      "type": "ci",
+      "breaking": false,
+      "title": "drop the PR body attribution check",
+      "body": "The `PR body` workflow (`no attribution`) failed every pull request an agent\nopened from a platform that appends its own footer to the body after the\npull request is created. Nothing in the session could remove that footer, so\nthe check could only be cleared by hand in the web editor and otherwise sat\nred on every such pull request. It is removed, with `scripts/check-pr-body.mjs`\nand its test.\n\nThe PreToolUse hook `.claude/hooks/no-attribution.mjs` stays: it still\nrefuses a tool call that would write attribution into a commit, a tag or a\npull request, and `npm test` still runs its suite.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b0a2ba0"
+      ],
+      "pr": 824,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "use-ecn-counts-in-quic-recovery-820",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "use ECN counts in QUIC recovery",
+      "body": "QUIC loss recovery now reads a peer's ACK_ECN counts. They are validated against the packets this side marked ECT(0) (RFC 9000 §13.4.2.1): a falling count, counts past the packets marked, a rise too small for the marked packets newly acknowledged, a plain ACK of a marked packet, or every testing packet lost fails the path, which is never marked again. A rise in ECN-CE on a validated path is a congestion event that halves the window once per recovery period, as a loss does (RFC 9002 §7.1, §B.7). A sent packet's mark lives in a spare bit of its existing state byte, so a built HTTP/3 slot grows by 120 bytes (HTTP3_SERVER_SLOT_BYTES 111,688).\n\nMarking is opt-in (`ecnMarking`, off by default) because no carrier sets the IP ECN bits yet, so this is inert until http3-server.ts and quic-listener.ts are wired; the record (QUIC-10) is Partial until then.\n\nFixes #474",
+      "metrics": [],
+      "refs": [
+        "docs/security/quic.md",
+        "docs/security/README.md",
+        "docs/security/http3.md"
+      ],
+      "tests": [
+        "tests/link/net_quic_recovery"
+      ],
+      "commits": [
+        "1fab4c8"
+      ],
+      "pr": 820,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "carry-nl8001-into-data-parallel-arrows-and-offset",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "carry NL8001 into data-parallel arrows and offset uses (#629)",
+      "body": "NL8001 now warns when a UTF-16 offset into a non-ASCII string is the answer of a data-parallel body (parallelMap, parallelMapInto, parallelFrom, parallelReduce), an index into anything but a string, parallelFrom's count, a loop bound, a call argument, or a helper's return value. The walk follows an offset into callees and out through returns, up to four call hops.\n\nIt stays quiet in these cases:\n- an offset is compared only with another offset;\n- a loop is bounded by its own cursor, alone or moved by a constant;\n- a call passes a provably ASCII string to a parameter that is never written;\n- an arrow captures a string that is provably ASCII;\n- the offset goes back into a string method.\n\nA code unit used as an array index or as parallelFrom's count also warns.\n\nThe walk is a lint, not a proof. It is silent past four calls, into generic functions or other modules, at a parameter the callee never reads, and at a spawn answer. docs/LANGUAGE.md lists these gaps.\n\nFixes #629",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (NL8001",
+        "exactly)"
+      ],
+      "tests": [
+        "tests/cases/port_utf8_offset_argument",
+        "tests/cases/port_utf8_offset_helper_return",
+        "tests/cases/port_utf8_offset_index",
+        "tests/cases/port_utf8_offset_loop_bound",
+        "tests/link/port_utf8_offset_parallel_body",
+        "tests/link/port_utf8_offset_parallel_from",
+        "tests/link/port_utf8_offset_parallel_reduce",
+        "tests/link/port_utf8_offset_quiet",
+        "tests/link/port_utf8_offset_walk_limits"
+      ],
+      "commits": [
+        "56ac97a"
+      ],
+      "pr": 822,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "decode-hpack-into-caller-owned-storage-and-bound",
+      "type": "fix",
+      "scope": "net",
+      "breaking": false,
+      "title": "decode HPACK into caller-owned storage and bound the HTTP/2 header bomb (#473)",
+      "body": "An HTTP/2 connection now decodes header blocks into storage it owns and reuses. A small block can no longer expand about 1000:1 into fresh allocations (H2-1). The dynamic table keeps its entries in one byte store, decoded fields come from size-classed pools, and a field past the header-list limit is counted, never copied.\n\nEvery table copy is bounded per header block. A block may move at most 4 × max(table size, block length) octets through the table. Past that the connection ends with GOAWAY ENHANCE_YOUR_CALM, because the block is valid HPACK used as a lever.\n\nDecoded fields, and any `u8[]` taken from them, are valid only until the next header block on the connection, for any stream. `conn.fields` is cleared before each decode, so a held request reads empty rather than another stream's octets. A program that needs a value later copies it; docs/guide/using-nish/http-router.md shows how.\n\nMeasured: 0 arena bytes for the last 50 of 101 bomb blocks of each kind; 728 → 0 bytes kept per request in the HTTP/2 TLS and loopback tests\nFixes #473",
+      "metrics": [],
+      "refs": [
+        "docs/security/http2.md#H2-1"
+      ],
+      "tests": [
+        "tests/link/net_http2_hpack_bomb",
+        "tests/link/net_http2_hpack_table"
+      ],
+      "commits": [
+        "c6f1583"
+      ],
+      "pr": 825,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "publish-to-npm-as-nish-instead-of-amritk",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": true,
+      "breakingNote": "install `nish` rather than `@amritk/nish`, whose last release on npm is 0.18.0. Uninstall the old package (`npm uninstall -g @amritk/nish`) and install `nish`. Imports of `@amritk/nish/<module>` become `nish/<module>`.",
+      "title": "publish to npm as nish instead of @amritk/nish",
+      "body": "The unscoped npm name `nish` now belongs to this project, so the package moves to it: `npm install -g nish`. The per-platform binary packages keep their names, `@amritk/nish-<asset>`, and npm still installs the one for your machine alongside it. `bin/packaging.js` spells that prefix once, and the launcher, postinstall, the release workflow and the tests all read it from there. The release-PR bump now moves every pinned platform package rather than matching them by the main package's name.\n\nThe README and the installation guide lead with the install script, which needs neither Node nor npm, and give npm second.",
+      "metrics": [],
+      "refs": [
+        "docs/wp12-release.md#the-npm-name"
+      ],
+      "tests": [],
+      "commits": [
+        "8bf9fe7"
+      ],
+      "pr": 830,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "run-an-http-server-on-every-core-with",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "run an HTTP server on every core with a prefork supervisor (#478)",
+      "body": "* feat(net): run an HTTP server on every core with a prefork supervisor (#478)\n\nnish/net/prefork starts one worker process per core, each binding its own\nSO_REUSEPORT listener, restarts a worker that dies (with a doubling backoff\nfor one that dies young), and stops them all on SIGTERM or SIGINT.\npreforkWorkers(process.argv) answers a worker its index, and the supervisor\n-1 once its workers are gone or -2 when one could not be started.\nexamples/prefork-server.ts is a whole server built on it, and\nbench/http1-server.ts runs as BENCH_CORES workers under it.\n\nTests: tests/link/net_prefork, tests/link/net_prefork_bad_config\n\n* docs(net): measure the prefork bench server at 1, 2 and 4 cores\n\nbench/README.md records http1-server.ts under BENCH_CORES: keep-alive\nplaintext rises 2.2x at 2 cores and post-json 3.7x at 4, while\nConnection: close does not scale on a four-vCPU machine where wrk loses a\ncore to the server. The backoff's nested ternary becomes an if for lint.\n\nMeasured: plaintext keep-alive c=256 103,768 -> 224,012 req/s at 2 cores (band 8.4%)\nTests: tests/link/net_prefork\n\n* build(self): ship nish/net/prefork in the std list and the release gates\n\nThe std module registry and release.yml's three presence gates name every\nstd file; net/prefork joins both so the package ships it.\n\n* fix(net): keep a prefork supervisor running through failed restarts and foreign children\n\nReview round 1 of the prefork supervisor. `stop` no longer returns when its\nblocking reap collects a child that is not a worker: it reaps until every\nworker is accounted for or no child is left. A restart that `spawn` refuses\nwaits on the same backoff as a worker that died young and is tried again;\nonly a worker's first start ends the supervisor with `PREFORK_SPAWN_FAILED`.\n`backoffMs` must be above 0, since doubling 0 never reaches the cap.\n\nThe guide now says that `NISH_WORKERS` has no upper bound and is the\noperator's to set, and that a supervisor killed by SIGKILL, the OOM killer,\nSIGHUP or SIGQUIT leaves its workers running. The link test's workers end\ntheir supervisor once the driver is gone, so a dead harness leaves nothing\nrestarting. The bench's workers check in with a two-byte index, and its\nREADME gains the system-time and RSS columns its prose cites.\n\nTests: tests/link/net_prefork, tests/link/net_prefork_zero_backoff\n\n* fix(net): reap through one path in prefork's SIGKILL phase and pin it\n\n`stop`'s SIGKILL phase no longer blocks in `waitPid(-1, 0)` with its own\nhandling of a pid that is not a worker. It reaps through `reap(true)`, the\nsame path as the grace period, which skips a foreign pid. It waits a tick\nbetween reaps and ends only when the last worker is reaped, or when\n`waitPid` fails and so no child is left; `reap` now answers false in that\ncase. The branch the review asked to pin (a foreign pid returned by the\nblocking wait) could only be reached when a foreign child died in the\nmicroseconds between the last grace-period reap and the workers' SIGKILL\nexits, so no test could reach it reliably. The branch is now gone instead of\nkept untested.\n\ntests/link/net_prefork step 7 (Linux) pins the shutdown with a non-worker\nchild. Its supervisor spawns a child of its own before `preforkWith`. The\ntwo workers catch SIGTERM through `signalFd()` and never read it, so the\nSIGKILL phase runs. The driver SIGTERMs the supervisor, then the foreign\nchild 200 ms into the 1 s grace period, so the child is reaped during\n`stop`. `preforkWith` must return no sooner than the grace period. The\nsupervisor then lingers a second: an unreaped worker would still answer\n`kill(pid, 0)` as a zombie, and none does.\n\nThe test was run against injected regressions in `stop`:\n- A SIGKILL phase that does not reap fails, deterministically, with\n  \"worker N left behind\" for both workers.\n- A SIGKILL phase that reaps once and returns fails the same way.\n- The pre-review blocking wait (returning on a foreign pid) passes, as does\n  `reap` returning at a foreign pid. A foreign child that dies during the\n  grace period is reaped there, and both bugs need it to die in the\n  microsecond race above. With the restructure, a non-worker reap can no\n  longer end the SIGKILL phase early.\n\nAlso from the review:\n- When `signalFd`, `pollCreate` or `pollAdd` fails, `preforkWith` closes\n  the loop it made. The signal pipe stays open: it is the process's one\n  pipe, which every later `signalFd()` answers.\n- The module doc, `PREFORK_SPAWN_FAILED`, the networking guide and the\n  design note now say that -2 also covers \"could not set up signal\n  handling\", with no worker started.\n- The test's crash mode sets `quickExitMs` to 10 s, so a slow runner cannot\n  turn a young crash into a reset backoff.\n\nTests: tests/link/net_prefork\n\n* test(net): guard every pid the prefork test signals or waits on\n\nThe prefork link test now checks a pid is positive before it signals or\nwaits on it, and it never makes a blocking wait. A step whose supervisor\ndid not start, or whose children did not report, prints false and goes\nno further.\n\n`signal(pid, sig)` calls `kill` only for a positive pid. The runtime's\n`kill` already refuses a pid of 0 or below with -EINVAL, so a bad pid\ncould not have signalled a process group. But step 7's `kill(foreign, 0)\n!== 0` read that refusal as \"reaped\" and could pass when it should fail.\n\n`exitsZero(pid, ms)` replaces each `waitPid(sup, 0)`. It is a WNOHANG loop\nwith a deadline, sends SIGKILL past the deadline, and never waits on a pid\nthat is not positive: `waitPid(-1, 0)` waits for any child and would have\nblocked until the harness timed out.\n\nChecked by a scratch copy whose `selfPath` names a missing file: `spawn`\nanswers -2, each step prints false and returns, and strace shows no\n`kill` and no `wait4` from the test.\n\nTests: tests/link/net_prefork",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "fa9bfac"
+      ],
+      "pr": 823,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "print-each-runner-s-cpu-fingerprint-and-time",
+      "type": "test",
+      "scope": "ct",
+      "breaking": false,
+      "title": "print each runner's CPU fingerprint and time a same-runner A/A pass",
+      "body": "A constant-time timing reading now names the CPU it was taken on and carries\nthe false-positive rate of that machine, measured in the same job.\ntests/ct-timing.js prints one fingerprint line before its table, read from\n/proc/cpuinfo and sysfs: vendor, family, model, stepping, microcode and model\nname on x86-64; implementer, part, variant, revision and MIDR_EL1 on aarch64,\nwith only the Neoverse parts that can be cited named; and the hypervisor\nflag, the boost state and the kernel release. A field the kernel does not\ngive prints \"unreadable\", and a host without /proc/cpuinfo falls back to\nos.cpus() and says so.\n\nAfter the timing pass, every linked driver is run again under --null, with\nthe same re-measure rule, and the table gains an A/A column and a summary\nline naming what crossed. The pass never changes the exit code. When it\ncrosses on a function the timing pass flagged, the summary says so. The\ncontrols must still differ on their first measurement, and --no-aa leaves the\npass out. ct-timing.yml's report job puts each runner's fingerprint and A/A\nline in the issue comment, and files an A/A crossing.\n\ndocs/security/ct-verification.md replaces the estimated runner rate with the\nmeasured one and records what a same-machine null cannot do: it bounds false\nalarms without making them zero, and it does not catch a weak leak, a CPU\nnever sampled, or an input no fixture uses.\n\nMeasured: aa_runs dispatch run 39733213208 (10 runs, head 6717ff9), 0 of 540 function-runs above |t| = 4.5 on an EPYC 9V74 and 0 of 540 on arm64; 0 of 940 earlier on a cloud VM; --quick here, 0 of 54 in the A/A pass\nRefs #807",
+      "metrics": [],
+      "refs": [
+        "docs/security/ct-verification.md#the-cpu-fingerprint-and-the-same-runner-null"
+      ],
+      "tests": [
+        "tests/ct-timing.js --quick",
+        "--null",
+        "--no-aa; a threshold-1.5 scratch run"
+      ],
+      "commits": [
+        "07adb51"
+      ],
+      "pr": 827,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "bump-golang-org-x-net-from-0-54",
+      "type": "build",
+      "scope": "deps",
+      "breaking": false,
+      "title": "bump golang.org/x/net from 0.54.0 to 0.60.0 in /bench/crypto/handshake/go in the go_modules group across 1 directory",
+      "body": "* build(deps): bump golang.org/x/net\n\nBumps the go_modules group with 1 update in the /bench/crypto/handshake/go directory: [golang.org/x/net](https://github.com/golang/net).\n\n\nUpdates `golang.org/x/net` from 0.54.0 to 0.60.0\n- [Commits](https://github.com/golang/net/compare/v0.54.0...v0.60.0)\n\n---\nupdated-dependencies:\n- dependency-name: golang.org/x/net\n  dependency-version: 0.60.0\n  dependency-type: indirect\n  dependency-group: go_modules\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\n\n* ci: install Go 1.26 for the crypto bench's twins\n\ngolang.org/x/net v0.60.0 asks for Go 1.26, so the handshake twin's go.mod\nnow says `go 1.26.0`. The twins build with GOTOOLCHAIN=local, and the test\njob installed Go 1.25, so the strict crypto-bench check failed on the Go\ncolumns it could not build. The job now installs 1.26.x.\n\nUnder Go 1.26 the curves family's purego proof still falls through from\nx25519@32 to p256-verify@64, as bench/crypto/curves/README.md describes.\n\nMeasured: Go purego vs its assembly on Go 1.26.10 (local), 1.18x at x25519@32, 3.18x at p256-verify@64\nTests: GITHUB_ACTIONS=true node tests/run.js crypto-bench",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3465f6c"
+      ],
+      "pr": 818,
+      "author": "dependabot[bot]",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "ed25519-signatures-rfc-8032-in-std-crypto-788",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "Ed25519 signatures (RFC 8032) in std/crypto (#788)",
+      "body": "* feat(std): Ed25519 signatures (RFC 8032) in std/crypto (#788)\n\n`nish/crypto/ed25519` signs and verifies with Ed25519: `ed25519PublicKey(seed)`,\n`ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`. The seed is a\n`Secret<u8[]>`; key derivation and signing run inside `expose` and wipe the\nseed hash, nonce, digits, points, scratch and both SHA-512 states before they\nreturn. Scalar multiplication is constant time by discipline: signed radix-16\ndigits, a masked select over every table entry, complete twisted Edwards\nformulas. Verification is variable time, cofactorless, and refuses S >= L,\nnon-canonical keys and keys off the curve.\n\nThe field arithmetic is X25519's, now exported from `nish/crypto/x25519`; the\nshared part of the inversion chain is split out as `f25519Pow250` so Ed25519's\nsquare root reuses it. The `curves` bench family gains sign and verify kernels.\n\nRefs: docs/security/crypto-ecc.md (ECC-5)\nTests: tests/link/crypto_ed25519, tests/link/crypto_ed25519_f64\n\n* fix(std): list nish/crypto/ed25519 among the std modules and release gates\n\nA new std module is named in `src/std-modules.ts`, which the \"not part of the\nstandard library\" diagnostic lists, and in release.yml's three presence gates,\nso a release cannot ship without it.\n\nTests: tests/run.js (std-modules list, release.yml presence gates)\n\n* docs(security): code-span ECC-5's verification equation so it is not read as a link\n\n* docs(security): word ECC-5's verification equation without link syntax\n\n* fix(std): bound Ed25519 message length and pin more refusals\n\ned25519Sign and ed25519Verify now panic on a message longer than\n2^31 - 1 bytes, as sha512 does. Under --number-mode f64 the length goes\nthrough toI32, so both would otherwise hash a prefix, and a signature\nwould verify for any longer message sharing it. A 2 GiB test is\nimpractical, so tests/run.js reads each function's compare and panic in\nthe f64 IR. Deleting the verify guard fails the check.\n\ntests/link/crypto_ed25519 adds the refusal of an S with bit 255 set, an\nS of 2^253 or more, and an R with x = 0 and the sign bit set. It also\npins what cofactorless verification does with the order-2 key (0, -1):\nR = the identity with S = 0 verifies when k is even and is refused when\nk is odd. The module, ECC-5 and the guide say that small-order keys are\nnot refused.\n\nECC-5 records the length limit. It now presents the node:crypto\nagreement run and the wipe-deletion run as one-off checks from\n2026-10-22, not as standing evidence. ed25519 is added to the\ncrypto-ecc scope in docs/security/README.md, to std/README.md and to\ndocs/LANGUAGE.md's std/crypto lists.\n\nRefs: docs/security/crypto-ecc.md#ECC-5\nTests: tests/link/crypto_ed25519",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "5468fd5"
+      ],
+      "pr": 826,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    }
+  ]
+}
