@@ -359,8 +359,8 @@ A class with a `CPtr` field is a *handle class*: it owns the C resource, and
 its `[Symbol.dispose]` is exactly the call that closes it. The compiler checks
 such a class and every place one goes, but does not yet lower `using` of one,
 so `using f = new File(path)` is refused with "`using` of handle class `File`
-is not lowered yet". Until a release emits the close, hold the `CPtr` in a
-local and close it yourself, as above. The rules are in
+is not lowered yet: until a release emits its close, hold the `CPtr` in a
+local and close it yourself" — do exactly that, as above. The rules are in
 [A handle class](../../LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
 
 A declared function has no body and cannot be exported. Calling C has a cost

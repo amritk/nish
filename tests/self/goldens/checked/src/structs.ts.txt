@@ -356,19 +356,33 @@ function rejectMemberModifiers(ctx: CheckContext, decl: Node, what: string): boo
   local +2:9 staticFirst: boolean (const)
   callee +4:5 CheckContext.error -> @CheckContext.error
   callee +8:5 CheckContext.error -> @CheckContext.error
+function collectHandleDispose(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectHandleDispose
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error nish_panic_index nish_str_concat nish_str_eq rejectMemberModifiers spelled
+  pointer ctx: size=280 writesThrough=true captured=false passedTo=spelled#0 CheckContext.error#0 rejectMemberModifiers#0
+  pointer owner: size=152 writesThrough=false captured=false passedTo=spelled#1
+  pointer decl: size=40 writesThrough=false captured=false passedTo=rejectMemberModifiers#1
+  stackSites=0 stackLocals=0
+  local +0:9 shown: string (const)
+  callee +0:17 spelled -> @spelled
+  local +1:14 member: Node (const)
+  callee +6:7 CheckContext.error -> @CheckContext.error
+  callee +10:3 rejectMemberModifiers -> @rejectMemberModifiers
 function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
-  calls: CheckContext.error StringMap.set StructInfo.hasMember collectMethodSignature declareMethodTemplate disposeElsewhereMessage isGenericFunction isIteratorMethod isThreadsSource nish_array_grow nish_panic_index nish_str_concat nish_str_eq rejectMemberModifiers spelled
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.error#0 spelled#0 spelled#0 CheckContext.error#0 rejectMemberModifiers#0 CheckContext.error#0 declareMethodTemplate#0 collectMethodSignature#0
-  pointer owner: size=152 writesThrough=true captured=true passedTo=spelled#1 spelled#1 StructInfo.hasMember#0 declareMethodTemplate#1 collectMethodSignature#1
-  pointer decl: size=40 writesThrough=true captured=true passedTo=isIteratorMethod#0 rejectMemberModifiers#1 CheckContext.error#1 isGenericFunction#0 declareMethodTemplate#2 collectMethodSignature#2
+  calls: CheckContext.error StringMap.set StructInfo.hasMember collectHandleDispose collectMethodSignature declareMethodTemplate disposeElsewhereMessage isGenericFunction isIteratorMethod isThreadsSource nish_array_grow nish_panic_index nish_str_concat nish_str_eq rejectMemberModifiers spelled
+  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.error#0 spelled#0 collectHandleDispose#0 spelled#0 CheckContext.error#0 rejectMemberModifiers#0 CheckContext.error#0 declareMethodTemplate#0 collectMethodSignature#0
+  pointer owner: size=152 writesThrough=true captured=true passedTo=spelled#1 collectHandleDispose#1 spelled#1 StructInfo.hasMember#0 declareMethodTemplate#1 collectMethodSignature#1
+  pointer decl: size=40 writesThrough=true captured=true passedTo=collectHandleDispose#2 isIteratorMethod#0 rejectMemberModifiers#1 CheckContext.error#1 isGenericFunction#0 declareMethodTemplate#2 collectMethodSignature#2
   stackSites=0 stackLocals=0
-  local -44:9 name: string (const)
-  callee -37:27 isThreadsSource -> @isThreadsSource
-  callee -36:7 CheckContext.error -> @CheckContext.error
-  callee -36:35 disposeElsewhereMessage -> @disposeElsewhereMessage
-  callee -36:59 spelled -> @spelled
+  local -46:9 name: string (const)
+  callee -39:27 isThreadsSource -> @isThreadsSource
+  callee -38:7 CheckContext.error -> @CheckContext.error
+  callee -38:35 disposeElsewhereMessage -> @disposeElsewhereMessage
+  callee -38:59 spelled -> @spelled
+  callee -36:7 collectHandleDispose -> @collectHandleDispose
   callee -29:7 isIteratorMethod -> @isIteratorMethod
   local -26:9 what: string (const)
   local -25:9 shown: string (const)

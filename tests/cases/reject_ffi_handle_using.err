@@ -1,1 +1,2 @@
 `using` of handle class `File` is not lowered yet
+until a release emits its close, hold the `CPtr` in a local and close it yourself

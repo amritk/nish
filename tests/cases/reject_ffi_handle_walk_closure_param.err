@@ -1,1 +1,1 @@
-An arrow may only be written as the argument for a function-typed parameter of a top-level function, which lifts it into a function of its own
+reject_ffi_handle_walk_closure_param.ts:32:22: error: `File` is a handle class, and its name may be written only as the type of a parameter that borrows one

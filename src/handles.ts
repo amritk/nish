@@ -19,34 +19,22 @@ import { unwrapParens, isAssignmentOperator } from "./emit-util"
 import { StringSet } from "./map"
 import {
   FLAG_CONST,
-  FLAG_DEFAULT,
   FLAG_EXPORTED,
-  FLAG_FOREIGN,
-  FLAG_OPTIONAL,
-  FLAG_PROPERTY,
-  FLAG_REST,
-  FLAG_STATIC,
   FLAG_USING,
   N_ARROW,
   N_BINARY,
-  N_BLOCK,
   N_CALL,
-  N_CLASS,
-  N_CONSTRUCTOR,
   N_EMPTY,
   N_EXPR_STMT,
   N_FUNCTION,
   N_IDENT,
   N_IF,
-  N_LIST,
   N_MEMBER,
   N_METHOD,
   N_NEW,
   N_NULL,
   N_PARAM,
   N_PAREN,
-  N_RETURN,
-  N_SOURCE_FILE,
   N_THIS,
   N_TYPE_ARRAY,
   N_TYPE_FUNCTION,
@@ -57,8 +45,6 @@ import {
   N_TYPE_READONLY,
   N_TYPE_REF,
   N_TYPE_UNION,
-  N_VAR,
-  N_VAR_DECL,
   Node,
 } from "./nodes"
 import { CheckedProgram, FunctionSig, ROLE_FUNCTION, ROLE_METHOD, StructInfo } from "./program"
@@ -126,7 +112,7 @@ const closeCallMessage = (name: string, cls: string): string =>
   `\`${name}\` is the close of handle class \`${cls}\`, and only its \`[Symbol.dispose]\` may call it on the pointer the object owns: the \`using\` block closes it at every exit, so a close written here would be followed by a use after close and a second close`
 
 const usingMessage = (cls: string): string =>
-  `\`using\` of handle class \`${cls}\` is not lowered yet: the declaration is checked, and the close waits for the release that emits it`
+  `\`using\` of handle class \`${cls}\` is not lowered yet: until a release emits its close, hold the \`CPtr\` in a local and close it yourself`
 
 // ---- Which types are handles -----------------------------------------------
 
@@ -144,7 +130,7 @@ const handleOf = (program: CheckedProgram, table: TypeTable, type: i32): StructI
     return null
   }
   const info = program.struct(table.nameOf(bare))
-  return info !== null && info.handle && info.type === bare ? info : null
+  return info !== null && info.handle ? info : null
 }
 
 /**
@@ -205,15 +191,14 @@ class HandleClose {
   }
 }
 
-/** Whether `expr` is `this.<field>`. */
-const isThisField = (expr: Node, field: string): boolean => {
+/**
+ * Whether `expr` is `this.<field>`. Any member of `this` that checks here is
+ * the field: a handle class has no other, and a method may not be taken as a
+ * value.
+ */
+const isThisField = (expr: Node): boolean => {
   const at = unwrapParens(expr)
-  return (
-    at.kind === N_MEMBER &&
-    (at.flags & FLAG_OPTIONAL) === 0 &&
-    at.text === field &&
-    unwrapParens(at.children[0]).kind === N_THIS
-  )
+  return at.kind === N_MEMBER && unwrapParens(at.children[0]).kind === N_THIS
 }
 
 /** The `close(arg)` a statement is, when it is one call statement with a named callee and one argument; otherwise `null`. */
@@ -222,7 +207,7 @@ const closeStatement = (stmt: Node): Node | null => {
     return null
   }
   const call = unwrapParens(stmt.children[0])
-  if (call.kind !== N_CALL || (call.flags & FLAG_OPTIONAL) !== 0 || call.children[0].kind !== N_IDENT) {
+  if (call.kind !== N_CALL || call.children[0].kind !== N_IDENT) {
     return null
   }
   return call
@@ -242,28 +227,28 @@ const disposeMethod = (decl: Node): Node | null => {
  * The call a dispose body is, in one of its two shapes (§4b), and whether it
  * passes the field through a tested `const`; `null` for any other body.
  */
-const disposeCall = (body: Node, field: string): Node | null => {
+const disposeCall = (body: Node): Node | null => {
   const stmts = body.children
   if (stmts.length === 1) {
     const call = closeStatement(stmts[0])
-    return call !== null &&
-      call.children[1].children.length > 0 &&
-      isThisField(call.children[1].children[0], field)
+    return call !== null && call.children[1].children.length > 0 && isThisField(call.children[1].children[0])
       ? call
       : null
   }
   if (stmts.length !== 2) {
     return null
   }
+  // Only a variable statement or a `const enum` carries `FLAG_CONST`, and an
+  // enum is declared at module level, not in a body.
   const bind = stmts[0]
-  if (bind.kind !== N_VAR || (bind.flags & FLAG_CONST) === 0 || (bind.flags & FLAG_USING) !== 0) {
+  if ((bind.flags & FLAG_CONST) === 0 || (bind.flags & FLAG_USING) !== 0) {
     return null
   }
   const decls = bind.children[0].children
-  if (decls.length !== 1 || decls[0].children[0].kind !== N_IDENT || decls[0].children[1].kind !== N_EMPTY) {
+  if (decls.length !== 1 || decls[0].children[1].kind !== N_EMPTY) {
     return null
   }
-  if (decls[0].children[2].kind === N_EMPTY || !isThisField(decls[0].children[2], field)) {
+  if (!isThisField(decls[0].children[2])) {
     return null
   }
   const local = decls[0].children[0].text
@@ -271,8 +256,9 @@ const disposeCall = (body: Node, field: string): Node | null => {
   if (test.kind !== N_IF || test.children[2].kind !== N_EMPTY) {
     return null
   }
+  // Only a binary operator is spelled `!==`.
   const cond = unwrapParens(test.children[0])
-  if (cond.kind !== N_BINARY || cond.text !== "!==") {
+  if (cond.text !== "!==") {
     return null
   }
   const left = unwrapParens(cond.children[0])
@@ -280,8 +266,9 @@ const disposeCall = (body: Node, field: string): Node | null => {
   if (left.kind !== N_IDENT || left.text !== local || right.kind !== N_NULL) {
     return null
   }
+  // A braceless `if` has the call itself as its one child, which `closeStatement` refuses.
   const then = test.children[1]
-  if (then.kind !== N_BLOCK || then.children.length !== 1) {
+  if (then.children.length !== 1) {
     return null
   }
   const call = closeStatement(then.children[0])
@@ -316,18 +303,17 @@ const checkDispose = (
     out.push(new HandleFinding(info.decl.children[0], noDisposeMessage(cls, fieldName)))
     return null
   }
+  // Only a type reference is spelled `void`: a string literal type is not one the parser takes.
   const returns = method.children[2]
-  const returnsVoid =
-    returns.kind === N_TYPE_REF && returns.text === "void" && returns.children[0].children.length === 0
-  const generic = method.children.length > 4 && method.children[4].children.length > 0
-  const call = disposeCall(method.children[3], fieldName)
-  if (method.children[1].children.length > 0 || !returnsVoid || generic || call === null) {
+  const returnsVoid = returns.text === "void" && returns.children[0].children.length === 0
+  const call = disposeCall(method.children[3])
+  if (method.children[1].children.length > 0 || !returnsVoid || call === null) {
     out.push(new HandleFinding(method.children[0], disposeShapeMessage(cls, fieldName)))
     return null
   }
   const name = call.children[0].text
   const sig = functionNamed(program, name)
-  if (sig === null || !sig.foreign()) {
+  if (sig === null) {
     out.push(new HandleFinding(call.children[0], closeUnknownMessage(name, cls)))
     return null
   }
@@ -364,48 +350,34 @@ const checkDispose = (
 
 // ---- Where the name is written (§4d, the type positions) --------------------
 
-/** Whether a class declaration is generic or exported, so its methods' parameters are not H2 positions. */
-const closedClass = (program: CheckedProgram, decl: Node): boolean => {
-  if ((decl.flags & FLAG_EXPORTED) !== 0 || decl.children[4].children.length > 0) {
-    return false
-  }
-  const info = program.struct(decl.children[0].text)
-  return info === null || !info.exported
-}
+/**
+ * Whether a class declaration is neither generic nor exported, so its methods'
+ * parameters are H2 positions. `export class` is the one way to export a
+ * class: `export { C }` and `export default` are not supported.
+ */
+const closedClass = (decl: Node): boolean =>
+  (decl.flags & FLAG_EXPORTED) === 0 && !(decl.children.length > 4 && decl.children[4].children.length > 0)
 
 /**
- * Whether `param` is a parameter that borrows a handle (H2): a plain one, of a
- * module-level function or a method this module alone can call, neither
- * generic nor `declare`d.
+ * Whether the parameter `parents` ends at borrows a handle (H2): one of a function
+ * or a method this module alone can call, neither generic nor exported. The
+ * other parameters a handle could be written on are refused before this pass:
+ * optional, rest, default and property parameters, nested functions, `static`
+ * methods, and a class type on a `declare function`.
  */
-const borrowingParam = (program: CheckedProgram, param: Node, parents: Node[]): boolean => {
-  if ((param.flags & (FLAG_OPTIONAL | FLAG_REST | FLAG_DEFAULT | FLAG_PROPERTY)) !== 0) {
-    return false
-  }
-  if (parents.length < 3 || parents[parents.length - 2].kind !== N_LIST) {
+const borrowingParam = (parents: Node[]): boolean => {
+  if (parents.length < 3 || parents[parents.length - 1].kind !== N_PARAM) {
     return false
   }
   const owner = parents[parents.length - 3]
-  if (owner.children[1] !== parents[parents.length - 2]) {
-    return false
-  }
+  const generic = owner.children.length > 4 && owner.children[4].children.length > 0
   if (owner.kind === N_FUNCTION) {
-    const top = parents.length >= 4 && parents[parents.length - 4].kind === N_SOURCE_FILE
-    const generic = owner.children[4].kind === N_LIST && owner.children[4].children.length > 0
-    return top && !generic && (owner.flags & (FLAG_FOREIGN | FLAG_EXPORTED)) === 0
+    return !generic && (owner.flags & FLAG_EXPORTED) === 0
   }
   if (owner.kind === N_METHOD) {
-    if (
-      (owner.flags & FLAG_STATIC) !== 0 ||
-      (owner.children.length > 4 && owner.children[4].children.length > 0)
-    ) {
-      return false
-    }
-    // METHOD <- LIST of members <- CLASS
-    if (parents.length < 5 || parents[parents.length - 5].kind !== N_CLASS) {
-      return false
-    }
-    return closedClass(program, parents[parents.length - 5])
+    // METHOD <- LIST of members <- CLASS: an interface's methods and an object
+    // literal's are refused before this pass.
+    return !generic && closedClass(parents[parents.length - 5])
   }
   return false
 }
@@ -421,40 +393,25 @@ const isTypeNode = (kind: i32): boolean =>
   kind === N_TYPE_LITERAL ||
   kind === N_TYPE_OPERATOR
 
-/** Every annotation naming a handle class outside an H2 parameter, and every `new` of one outside a body. */
-const walkTypes = (
-  program: CheckedProgram,
-  node: Node,
-  parents: Node[],
-  depth: i32,
-  out: HandleFinding[]
-): void => {
+/**
+ * Every annotation naming a handle class outside an H2 parameter. A `new`
+ * outside a body cannot be written: a module constant's initialiser is a
+ * literal, and so is a field's.
+ */
+const walkTypes = (program: CheckedProgram, node: Node, parents: Node[], out: HandleFinding[]): void => {
   if (node.kind === N_TYPE_REF) {
     const info = program.struct(node.text)
     if (info !== null && info.handle) {
-      // `parents` ends at the PARAM the annotation is the type of, if it is one.
-      const parent = parents[parents.length - 1]
-      if (
-        parent.kind !== N_PARAM ||
-        parent.children[1] !== node ||
-        !borrowingParam(program, parent, parents)
-      ) {
+      // `parents` ends at the PARAM the annotation is the type of, if it is
+      // one: a parameter's name and default are not type references.
+      if (!borrowingParam(parents)) {
         out.push(new HandleFinding(node, handleTypeMessage(info.name)))
       }
     }
   }
-  if (node.kind === N_NEW && depth === 0) {
-    const callee = node.children[0]
-    const info: StructInfo | null = callee.kind === N_IDENT ? program.struct(callee.text) : null
-    if (info !== null && info.handle) {
-      out.push(new HandleFinding(node, handleValueMessage(info.name)))
-    }
-  }
-  const inner =
-    node.kind === N_FUNCTION || node.kind === N_METHOD || node.kind === N_CONSTRUCTOR || node.kind === N_ARROW
   parents.push(node)
   for (const child of node.children) {
-    walkTypes(program, child, parents, inner ? depth + 1 : depth, out)
+    walkTypes(program, child, parents, out)
   }
   parents.pop()
 }
@@ -528,104 +485,65 @@ const outermost = (walk: HandleWalk, node: Node, up: i32): Node =>
  * parentheses end.
  */
 const foreignCallOf = (walk: HandleWalk, up: i32): Node | null => {
-  const list = walk.parent(up)
+  // Two levels up is a call whose argument list holds the node: a pointer is
+  // not callable, so it is never the callee. Any callee a pointer is passed to
+  // is a `declare function`, since a function this program defines cannot
+  // take a `CPtr` and a generic one cannot be instantiated at it.
   const call = walk.parent(up + 1)
-  if (
-    list === null ||
-    call === null ||
-    list.kind !== N_LIST ||
-    call.kind !== N_CALL ||
-    call.children[1] !== list
-  ) {
+  if (call === null || call.kind !== N_CALL || walk.program.nodeCallees[call.id] === null) {
     return null
   }
-  const sig = walk.program.nodeCallees[call.id]
-  return sig !== null && sig.foreign() ? call : null
+  return call
 }
 
 /** The refusal of a foreign call that closes a handle's pointer outside its dispose (NL2572), if `call` is one. */
-const refuseClose = (walk: HandleWalk, call: Node): boolean => {
+const refuseClose = (walk: HandleWalk, call: Node): void => {
   const sig = walk.program.nodeCallees[call.id]
   const owner: StructInfo | null = sig === null ? null : walk.closeOf(sig)
-  if (owner === null) {
-    return false
+  if (owner !== null) {
+    walk.out.push(new HandleFinding(call, closeCallMessage(sig === null ? "" : sig.sourceName, owner.name)))
   }
-  walk.out.push(new HandleFinding(call, closeCallMessage(sig === null ? "" : sig.sourceName, owner.name)))
-  return true
 }
 
-/** Whether a statement holds a way out of the constructor: a `return`, or a `.orReturn` / `.orElse`. */
-const leaves = (node: Node): boolean => {
-  if (node.kind === N_RETURN) {
-    return true
-  }
-  if (node.kind === N_MEMBER && (node.text === "orReturn" || node.text === "orElse")) {
-    return true
-  }
-  for (const child of node.children) {
-    if (leaves(child)) {
-      return true
-    }
-  }
-  return false
-}
-
-/** §4c F: whether the assignment `this.<field> = ...` is the one write the constructor may make; the assignment is `walk.parent(1)`. */
-const soundWrite = (walk: HandleWalk, member: Node, assign: Node): boolean => {
-  const body = walk.ctorBody
-  if (
-    !walk.ctor ||
-    body === null ||
-    assign.text !== "=" ||
-    unwrapParens(member.children[0]).kind !== N_THIS
-  ) {
-    return false
-  }
-  const stmt = walk.parent(2)
+/**
+ * §4c F: whether the assignment `this.<field> = ...` is the one write the
+ * constructor may make; the assignment is `walk.parent(1)`. The checker has
+ * already confined it: the field is `readonly`, so only `this.<field> = ...`
+ * in the constructor is written; `CPtr` is returned by no function but a
+ * `declare`d one; and a constructor that may return, or write the field only
+ * inside a statement other than its own, leaves the field unassigned.
+ */
+const soundWrite = (walk: HandleWalk, assign: Node): boolean => {
   const block = walk.parent(3)
-  if (stmt === null || block === null || stmt.kind !== N_EXPR_STMT || block !== body || walk.wroteField) {
+  const body = walk.ctorBody
+  if (block === null || body === null || block !== body || walk.wroteField) {
     return false
   }
-  const value = unwrapParens(assign.children[1])
-  if (value.kind !== N_CALL) {
-    return false
-  }
-  const sig = walk.program.nodeCallees[value.id]
-  if (sig === null || !sig.foreign()) {
-    return false
-  }
-  for (const earlier of body.children) {
-    if (earlier === stmt) {
-      break
-    }
-    if (leaves(earlier)) {
-      return false
-    }
-  }
-  return true
+  return walk.program.nodeCallees[unwrapParens(assign.children[1]).id] !== null
 }
 
-/** A read of `this.<field>` (§4c R1, R2); the member's parent is on the stack. */
-const checkFieldRead = (walk: HandleWalk, member: Node, info: StructInfo, depth: i32): void => {
+/**
+ * A read of `this.<field>` (§4c R1, R2); the member's parent is on the stack.
+ * Never inside an arrow: the checker refuses an arrow that reads `this`. A
+ * `this` whose pointer field this is belongs to a method of that handle class.
+ */
+const checkFieldRead = (walk: HandleWalk, member: Node, info: StructInfo): void => {
   const receiver = unwrapParens(member.children[0])
-  const cls = walk.cls
-  if (receiver.kind === N_THIS && cls !== null && cls === info && !walk.ctor && depth === 0) {
+  if (receiver.kind === N_THIS && !walk.ctor) {
     const up = climbParens(walk)
     const call = foreignCallOf(walk, up)
     if (call !== null) {
       refuseClose(walk, call)
       return
     }
+    // A variable statement's grandchildren are its declarators. In a body
+    // only a variable statement carries `FLAG_CONST`: an enum and a module
+    // constant are declared at module level.
     const decl = walk.parent(up)
-    const list = walk.parent(up + 1)
     const stmt = walk.parent(up + 2)
     if (
       decl !== null &&
-      list !== null &&
       stmt !== null &&
-      decl.kind === N_VAR_DECL &&
-      decl.children[0].kind === N_IDENT &&
-      stmt.kind === N_VAR &&
       (stmt.flags & FLAG_CONST) !== 0 &&
       (stmt.flags & FLAG_USING) === 0
     ) {
@@ -639,22 +557,22 @@ const checkFieldRead = (walk: HandleWalk, member: Node, info: StructInfo, depth:
   walk.out.push(new HandleFinding(member, handlePointerMessage(info.name, info.handleField)))
 }
 
-/** A use of a `const` bound to the pointer (§4c L1, L2). */
-const checkDerivedUse = (walk: HandleWalk, ident: Node, depth: i32): void => {
-  if (depth === 0) {
-    const up = climbParens(walk)
-    const call = foreignCallOf(walk, up)
-    if (call !== null) {
-      refuseClose(walk, call)
+/**
+ * A use of a `const` bound to the pointer (§4c L1, L2). Never inside an arrow,
+ * which the checker refuses to let read a local of the body it is written in.
+ */
+const checkDerivedUse = (walk: HandleWalk, ident: Node): void => {
+  const up = climbParens(walk)
+  const call = foreignCallOf(walk, up)
+  if (call !== null) {
+    refuseClose(walk, call)
+    return
+  }
+  const test = walk.parent(up)
+  if (test !== null && test.kind === N_BINARY && (test.text === "===" || test.text === "!==")) {
+    // `null` is never the left operand: the checker gives it no type there.
+    if (unwrapParens(test.children[1]).kind === N_NULL) {
       return
-    }
-    const test = walk.parent(up)
-    if (test !== null && test.kind === N_BINARY && (test.text === "===" || test.text === "!==")) {
-      const left = unwrapParens(test.children[0])
-      const right = unwrapParens(test.children[1])
-      if (left.kind === N_NULL || right.kind === N_NULL) {
-        return
-      }
     }
   }
   const cls = walk.cls
@@ -667,7 +585,7 @@ const checkDerivedUse = (walk: HandleWalk, ident: Node, depth: i32): void => {
 }
 
 /** Whether a node of handle type `type` stands where a handle may (§4d U1, U2). */
-const admittedValue = (walk: HandleWalk, node: Node, type: i32, info: StructInfo, depth: i32): boolean => {
+const admittedValue = (walk: HandleWalk, node: Node, type: i32, depth: i32): boolean => {
   if ((node.kind !== N_IDENT && node.kind !== N_THIS) || depth > 0) {
     return false
   }
@@ -677,32 +595,27 @@ const admittedValue = (walk: HandleWalk, node: Node, type: i32, info: StructInfo
     return false
   }
   if (node.kind === N_THIS && walk.ctor) {
-    // In its constructor the object is half built: it may only be written to.
-    const assign = walk.parent(up + 1)
-    return (
-      parent.kind === N_MEMBER &&
-      assign !== null &&
-      assign.kind === N_BINARY &&
-      isAssignmentOperator(assign.text) &&
-      assign.children[0] === parent
-    )
+    // In its constructor the object is half built. Its one write,
+    // `this.<field> = ...`, is taken by the member above it, so `this`
+    // reaches here only as a value or a method's receiver.
+    return false
   }
   if (parent.kind === N_MEMBER) {
-    if ((parent.flags & FLAG_OPTIONAL) !== 0) {
-      return false
-    }
-    const call = walk.parent(up + 1)
-    if (call !== null && call.kind === N_CALL && call.children[0] === parent) {
-      return walk.program.nodeCallees[call.id] !== null
-    }
-    return parent.text !== info.handleField && info.field(parent.text) !== null
+    // A method call: the pointer is read through the member above it, a
+    // handle class has no other field, and a method is not taken as a value.
+    // `?.` is refused unless the chain ends in `??`, which the walk refuses as
+    // a value.
+    return true
   }
+  // An argument: a handle is not callable, so a call above it holds it in its
+  // argument list. A `declare function` takes no class, so the callee is one
+  // this program defines.
   const call = walk.parent(up + 1)
-  if (parent.kind !== N_LIST || call === null || call.kind !== N_CALL || call.children[1] !== parent) {
+  if (call === null || call.kind !== N_CALL) {
     return false
   }
   const sig = walk.program.nodeCallees[call.id]
-  if (sig === null || sig.foreign()) {
+  if (sig === null) {
     return false
   }
   const arg = outermost(walk, node, up)
@@ -714,14 +627,6 @@ const admittedValue = (walk: HandleWalk, node: Node, type: i32, info: StructInfo
   }
   const index = at + (sig.role === ROLE_METHOD ? 1 : 0)
   return at >= 0 && index < sig.paramTypes.length && sig.paramTypes[index] === type
-}
-
-/** Whether `node` names a binding rather than reading one: a declarator's or a parameter's name. */
-const namesBinding = (walk: HandleWalk, node: Node): boolean => {
-  const parent = walk.parent(1)
-  return (
-    parent !== null && (parent.kind === N_VAR_DECL || parent.kind === N_PARAM) && parent.children[0] === node
-  )
 }
 
 /** Whether `local` is one of the walk's pointer `const`s. */
@@ -740,21 +645,10 @@ const isDerived = (walk: HandleWalk, local: Local | null): boolean => {
 /** A `new` of a handle class in a body: only as a `using` declaration's initialiser, which is not lowered yet (NL2573). */
 const checkHandleNew = (walk: HandleWalk, node: Node, info: StructInfo, depth: i32): void => {
   const up = climbParens(walk)
-  const decl = walk.parent(up)
-  const list = walk.parent(up + 1)
+  // Two levels above a declarator's initialiser is its statement; only a
+  // variable statement carries `FLAG_USING`.
   const stmt = walk.parent(up + 2)
-  const block = walk.parent(up + 3)
-  const opened =
-    depth === 0 &&
-    decl !== null &&
-    decl.kind === N_VAR_DECL &&
-    decl.children[2] === outermost(walk, node, up) &&
-    list !== null &&
-    stmt !== null &&
-    stmt.kind === N_VAR &&
-    (stmt.flags & FLAG_USING) !== 0 &&
-    block !== null &&
-    block.kind === N_BLOCK
+  const opened = depth === 0 && stmt !== null && (stmt.flags & FLAG_USING) !== 0
   walk.out.push(new HandleFinding(node, opened ? usingMessage(info.name) : handleValueMessage(info.name)))
 }
 
@@ -773,23 +667,20 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
         isAssignmentOperator(parent.text) &&
         parent.children[0] === node
       ) {
-        if (soundWrite(walk, node, parent)) {
+        if (soundWrite(walk, parent)) {
           walk.wroteField = true
         } else {
           walk.out.push(new HandleFinding(parent, handleWriteMessage(owner.name, owner.handleField)))
         }
       } else {
-        checkFieldRead(walk, node, owner, depth)
+        checkFieldRead(walk, node, owner)
       }
       return
     }
   }
-  if (
-    node.kind === N_IDENT &&
-    !namesBinding(walk, node) &&
-    isDerived(walk, sourceLocal(program.nodeLocals[node.id]))
-  ) {
-    checkDerivedUse(walk, node, depth)
+  // A binding's own name is walked before its initialiser binds it, and has no type.
+  if (node.kind === N_IDENT && isDerived(walk, sourceLocal(program.nodeLocals[node.id]))) {
+    checkDerivedUse(walk, node)
     return
   }
   if (node.kind === N_NEW) {
@@ -802,10 +693,10 @@ const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
       return
     }
   }
-  if (node.kind !== N_PAREN && !namesBinding(walk, node)) {
+  if (node.kind !== N_PAREN) {
     const type = program.nodeTypes[node.id]
     const info = handleOf(program, walk.table, type)
-    if (info !== null && !admittedValue(walk, node, type, info, depth)) {
+    if (info !== null && !admittedValue(walk, node, type, depth)) {
       walk.out.push(new HandleFinding(node, handleValueMessage(info.name)))
       return
     }
@@ -839,7 +730,7 @@ export const handleFindings = (program: CheckedProgram, table: TypeTable): Handl
   if (!any) {
     return found
   }
-  walkTypes(program, program.file, [], 0, found)
+  walkTypes(program, program.file, [], found)
   for (const sig of program.functions) {
     const body = sig.body()
     if (body === null || sig.lifted || !sig.definedIn(program.source)) {

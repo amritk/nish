@@ -1,5 +1,6 @@
 // WP40 H1.1, Row 2: every declarator of a `using` is checked on its own, so a
-// second one that names the first is refused at it.
+// second one that names the first is refused at it, by position in the `.err`,
+// apart from the first one's NL2573.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

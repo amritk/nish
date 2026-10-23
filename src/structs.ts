@@ -663,6 +663,26 @@ const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boo
   return false
 }
 
+/**
+ * WP40 D5: a handle class declares exactly one `[Symbol.dispose]`, an instance
+ * method, so two of the member rules `collectMethod` applies to every other
+ * method apply to it too: no second one, and no modifier. The parser refuses a
+ * `?` after a computed name, so an optional one never gets here.
+ */
+const collectHandleDispose = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
+  const shown = spelled(ctx, owner)
+  for (const member of owner.decl.children[3].children) {
+    if (member === decl) {
+      break
+    }
+    if (member.kind === N_METHOD && member.children[0].text === DISPOSE_METHOD) {
+      ctx.error(decl.children[0], `Duplicate member \`${DISPOSE_METHOD}\` in class \`${shown}\``)
+      return
+    }
+  }
+  rejectMemberModifiers(ctx, decl, `Method \`${DISPOSE_METHOD}\` of class \`${shown}\``)
+}
+
 const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text
   // WP29 P2: the method `using` calls is the scope's, and the scope's join is
@@ -673,6 +693,8 @@ const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void =
     // every body is (`src/handles.ts`).
     if (!owner.handle && !isThreadsSource(ctx.program)) {
       ctx.error(decl.children[0], disposeElsewhereMessage(spelled(ctx, owner)))
+    } else if (owner.handle) {
+      collectHandleDispose(ctx, owner, decl)
     }
     return
   }

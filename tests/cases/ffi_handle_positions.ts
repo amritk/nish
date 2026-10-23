@@ -7,10 +7,30 @@
 // parameter of its own type (H2) and lent on again from there (H3). No `new`
 // and no `using`: opening one is H1.2's, so this program never makes a `File`,
 // and `--emit-checked` shows the checked program the later stages lower.
+// `Dir` is the other shape: a plain `CPtr` field, so its dispose is the bare
+// `close(this.dir)` (§4b shape 1) and its method passes the field straight on.
+// `Counter` is no handle: a `Dir` is lent to its method, and its own method
+// named `closedir` is not the close `Dir` names.
+class Counter {
+  readonly n: i32
+  constructor() {
+    this.n = 0
+  }
+  closedir(): i32 {
+    return this.n
+  }
+  count(d: Dir): i32 {
+    return d.fd() + this.n
+  }
+}
+
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
 declare function feof(p: CPtr): i32
+declare function opendir(path: string): CPtr
+declare function closedir(p: CPtr): i32
+declare function dirfd(p: CPtr): i32
 
 class File {
   readonly file: CPtr | null
@@ -44,7 +64,29 @@ class File {
   }
 }
 
+class Dir {
+  readonly dir: CPtr
+  constructor(path: string) {
+    this.dir = opendir(path)
+  }
+  fd(): i32 {
+    return dirfd(this.dir)
+  }
+  [Symbol.dispose](): void {
+    closedir(this.dir)
+  }
+}
+
 const first = (f: File): i32 => f.read()
+
+function descriptor(d: Dir): i32 {
+  return d.fd()
+}
+
+function counted(d: Dir): i32 {
+  const c = new Counter()
+  return c.count(d)
+}
 
 function firstTwo(f: File, g: File): i32 {
   return first(f) + first(g)

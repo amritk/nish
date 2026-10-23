@@ -435,7 +435,7 @@ const diagnosticRules = (): string[] => [
   "NL2123",
   "` field is one object, written once, whose keys are `noPanic` and `capabilities`, each written once",
   "NL3036",
-  "` is not lowered yet: the declaration is checked, and the close waits for the release that emits it",
+  "` is not lowered yet: until a release emits its close, hold the `CPtr` in a local and close it yourself",
   "NL2573",
   "`??` cannot default an element read: past the end of the array, JavaScript answers the default and ",
   "NL2489",

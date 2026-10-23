@@ -1,9 +1,13 @@
 // WP40 H1.1, Row 4: a closure capturing a borrowed handle could be called after
-// the `using` block closes it, so the capture is refused even for an arrow
-// called at once.
+// the `using` block closes it. Nish's arrows capture nothing, so the arrow rule
+// refuses it before the handle rules are asked.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
+function apply(g: () => i32): i32 {
+  return g()
+}
+
 class File {
   readonly file: CPtr | null
   constructor(path: string) {
@@ -25,8 +29,7 @@ class File {
 }
 
 function count(f: File): i32 {
-  const next = (): i32 => f.read()
-  return next()
+  return apply((): i32 => f.read())
 }
 
 export const main = (): i32 => 0

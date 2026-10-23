@@ -1,0 +1,1 @@
+reject_ffi_handle_walk_non_null.ts:28:11: syntax error: expected `;`, found `!`

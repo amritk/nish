@@ -1,1 +1,1 @@
-`using` of handle class `File` is not lowered yet
+reject_ffi_handle_using_second_declarator.ts:28:33: error: A `File` cannot be used here

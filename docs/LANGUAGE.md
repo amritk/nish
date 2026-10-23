@@ -5173,11 +5173,12 @@ const first = (f: File): i32 => f.read();
 
 **`using` of a handle class is not lowered yet.** The class, its methods and
 every function that borrows one are checked, and `using f = new File(p)` is
-`` `using` of handle class `File` is not lowered yet: the declaration is
-checked, and the close waits for the release that emits it `` (NL2573,
-`reject_ffi_handle_using`) until the compiler emits the close
-at every exit of the block. So no program makes a `File` yet; what the rules
-below fix is the shape a program will open one with.
+`` `using` of handle class `File` is not lowered yet: until a release emits its
+close, hold the `CPtr` in a local and close it yourself `` (NL2573,
+`reject_ffi_handle_using`) until the compiler emits the close at every exit of
+the block. Until then, a program holds the `CPtr` in a local and calls the
+close itself, as the declared-function examples above do; what the rules
+below fix is the shape a program will open a `File` with.
 
 - **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
   no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,
@@ -5196,7 +5197,9 @@ below fix is the shape a program will open one with.
 - **The close.** `[Symbol.dispose](): void` is `close(this.file);` or
   `const p = this.file; if (p !== null) { close(p); }` for a `declare
   function` `close` of one parameter (`_no_dispose`, `_dispose_body`,
-  `_dispose_arity`, `_dispose_arg_type`, `_dispose_unknown`). Nothing else may
+  `_dispose_arity`, `_dispose_arg_type`, `_dispose_unknown`, `_dispose_forms`,
+  `_dispose_shapes`). A class declares one, with no modifier
+  (`_dispose_twice`, `_dispose_static`). Nothing else may
   call that close on the field, in a method or in the constructor
   (`_close_call`), and `[Symbol.dispose]` is never called by name
   (`_dispose_call`).

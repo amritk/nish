@@ -30,4 +30,23 @@ class Reader {
   }
 }
 
+function wrap(f: File): i32 {
+  const r = new Reader(f)
+  return r.n
+}
+
+// a constructor that takes two: the second argument lines up with the first
+// parameter once the receiver is counted
+class Pair {
+  readonly n: i32
+  constructor(a: File, b: File) {
+    this.n = a.read() + b.read()
+  }
+}
+
+function pair(f: File): i32 {
+  const p = new Pair(f, f)
+  return p.n
+}
+
 export const main = (): i32 => 0
