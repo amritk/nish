@@ -11,9 +11,10 @@
 // false was ended by a signal: it prints `early`, which neither SIGTERM nor a
 // Ctrl-Z and `fg` may cause. A finite timeout, so the stop's retry asks for
 // what is left of its deadline rather than waiting for ever. `deadline` drops
-// what is waiting, then waits two seconds once and prints what it answered:
-// stopped for longer than that, it answers `false` as soon as `fg` continues
-// it, because the retry asks for what is left, which is nothing.
+// what is waiting, such as that Ctrl-D if no `hold` before it read it, then
+// waits two seconds once and prints what it answered: stopped for longer than
+// that, it answers `false` as soon as `fg` continues it, because the retry
+// asks for what is left, which is nothing.
 const probe = (): number => {
   const size = terminalSize();
   console.log(`${isTerminal(0)} ${isTerminal(1)} ${size[0] >= 0} ${size[1] >= 0}`);
