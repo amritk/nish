@@ -1,10 +1,11 @@
 /** The array half of the core: bounds-checked access, and the arena stubs. */
+import type { i32 } from "./numbers.js";
 export declare function idx<T>(a: readonly T[], i: number | bigint): T;
 export declare function pop<T>(a: T[]): T;
 export declare function setIdx<T>(a: T[], i: number | bigint, v: T): T;
 export declare function updIdx<T>(a: T[], i: number | bigint, f: (old: T) => T): T;
-export declare function uncheckedGet<T>(a: readonly T[], i: number): T;
-export declare function uncheckedSet<T>(a: T[], i: number, v: T): void;
+export declare function uncheckedGet<T extends number>(xs: readonly T[], i: i32): T;
+export declare function uncheckedSet<T extends number>(xs: T[], i: i32, v: T): void;
 export declare function copyIn<T>(v: T): T;
 export declare function storeIdx<T>(a: T[], i: number | bigint, v: T): T;
 export declare function arraySet<T>(dst: T[], src: readonly T[], offset?: number): void;

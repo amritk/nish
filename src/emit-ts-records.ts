@@ -151,11 +151,14 @@ const atomic = (node: Node): boolean =>
 
 /** A parameter name for an update callback that `text` does not already spell. */
 const updateParam = (text: string): string => {
-  let name = "old"
-  while (text.indexOf(name) >= 0) {
-    name = `${name}_`
+  if (text.indexOf("old") < 0) {
+    return "old"
   }
-  return name
+  let n = 1
+  while (text.indexOf(`old${n}`) >= 0) {
+    n = n + 1
+  }
+  return `old${n}`
 }
 
 /** `updIdx(a, i, (old) => old OP value)`, the compound store `a[i] OP= value` through a checked index. */
