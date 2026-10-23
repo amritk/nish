@@ -90,14 +90,14 @@ const envIsSet = (name: string): boolean => {
   return value !== null && value.length > 0
 }
 
-/**
- * Whether `name` is set and says yes: not empty, and neither the `0` nor the
- * `false` that mean no, as Node reads `FORCE_COLOR`.
- */
-const envSaysYes = (name: string): boolean => {
+/** Whether `name` is set to the `0` or `false` that mean no. */
+const envSaysNo = (name: string): boolean => {
   const value = getenv(name)
-  return value !== null && value.length > 0 && value !== "0" && value !== "false"
+  return value !== null && (value === "0" || value === "false")
 }
+
+/** Whether `name` is set and says yes: not empty, and not a no (`envSaysNo`). */
+const envSaysYes = (name: string): boolean => envIsSet(name) && !envSaysNo(name)
 
 /**
  * Whether file descriptor `fd` is a terminal. The language has no `isatty`,
@@ -111,14 +111,13 @@ const isTerminal = (fd: i32): boolean => spawnSync(["/bin/sh", "-c", `[ -t ${fd}
 
 /**
  * Whether an agent, rather than a person, is running the compiler.
- * `NISH_AGENT` answers for any agent, `1` for yes and `0` for no; without it,
- * the variables the agents that set one put in their commands' environment
- * (Claude Code's `CLAUDECODE`, Gemini CLI's `GEMINI_CLI`) say yes.
+ * `NISH_AGENT` answers for any agent, `1` for yes and `0` or `false` for no;
+ * without it, the variables the agents that set one put in their commands'
+ * environment (Claude Code's `CLAUDECODE`, Gemini CLI's `GEMINI_CLI`) say yes.
  */
 export const agentDriven = (): boolean => {
-  const own = getenv("NISH_AGENT")
-  if (own !== null && own.length > 0) {
-    return own !== "0"
+  if (envIsSet("NISH_AGENT")) {
+    return !envSaysNo("NISH_AGENT")
   }
   return envSaysYes("CLAUDECODE") || envSaysYes("GEMINI_CLI")
 }
@@ -126,14 +125,19 @@ export const agentDriven = (): boolean => {
 /**
  * The style for descriptor `fd` (1 or 2), for a reader `agent` says is an
  * agent or not (`agentDriven`, asked once by the caller). `NO_COLOR` wins,
- * then an agent, then a forcing variable, then `TERM=dumb`, and only then the
- * terminal check. 256 colours when `TERM` names them or `COLORTERM` is set, as
- * truecolour terminals set it.
+ * then an agent, then `FORCE_COLOR` saying no (`0` or `false`, as Node reads
+ * it), then a forcing variable, then `TERM=dumb`, and only then the terminal
+ * check. 256 colours when `TERM` names them, `COLORTERM` is set, as truecolour
+ * terminals set it, or `FORCE_COLOR` asks for level 2 or 3.
  */
 export const styleFor = (fd: i32, agent: boolean): Style => {
   const term = getenv("TERM")
-  const rich = (term !== null && term.indexOf("256") >= 0) || envIsSet("COLORTERM")
-  if (envIsSet("NO_COLOR") || agent) {
+  const level = getenv("FORCE_COLOR")
+  const rich =
+    (term !== null && term.indexOf("256") >= 0) ||
+    envIsSet("COLORTERM") ||
+    (level !== null && (level === "2" || level === "3"))
+  if (envIsSet("NO_COLOR") || agent || envSaysNo("FORCE_COLOR")) {
     return new Style(false, rich)
   }
   if (envSaysYes("CLICOLOR_FORCE") || envSaysYes("FORCE_COLOR")) {

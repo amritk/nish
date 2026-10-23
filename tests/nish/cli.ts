@@ -408,11 +408,13 @@ const checkIdentity = (t: Suite, cli: Cli): string => {
  * the code. A wrapper that cannot tell them apart reads an answer as a failure.
  */
 const checkHelp = (t: Suite, cli: Cli, name: string): void => {
-  // `NO_COLOR` wins over every other colour variable, so the environment this
-  // harness inherited cannot paint the text the checks below read.
+  // `NO_COLOR` wins over every other colour variable and `NISH_AGENT=0` over
+  // the agents' own, so the environment this harness inherited cannot paint
+  // the text the checks below read or add an agent's section to it.
   const plainEnv: string[] = [];
   if (hasEnvTool()) {
     plainEnv.push("NO_COLOR=1");
+    plainEnv.push("NISH_AGENT=0");
   }
   const help = cli.run("help", plainEnv, ["--help"]);
   t.eqI32("--help exits 0", help.status, 0);

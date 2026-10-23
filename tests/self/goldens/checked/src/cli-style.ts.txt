@@ -69,42 +69,53 @@ function envIsSet(name: string): boolean -> @envIsSet
   calls: nish_arena_mark nish_arena_release nish_getenv
   stackSites=0 stackLocals=0
   local +0:9 value: string | null (const)
-function envSaysYes(name: string): boolean -> @envSaysYes
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+function envSaysNo(name: string): boolean -> @envSaysNo
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_arena_mark nish_arena_release nish_getenv nish_str_eq
   stackSites=0 stackLocals=0
   local +0:9 value: string | null (const)
+function envSaysYes(name: string): boolean -> @envSaysYes
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via envIsSet
+  escaping: name
+  calls: envIsSet envSaysNo
+  stackSites=0 stackLocals=0
+  callee +0:47 envIsSet -> @envIsSet
+  callee +0:66 envSaysNo -> @envSaysNo
 function isTerminal(fd: i32): boolean -> @isTerminal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn
   calls: nish_spawn nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function agentDriven(): boolean -> @agentDriven [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish_getenv
-  calls: envSaysYes nish_arena_mark nish_arena_release nish_getenv nish_str_eq
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via envIsSet
+  calls: envIsSet envSaysNo envSaysYes
   stackSites=0 stackLocals=0
-  local +0:9 own: string | null (const)
-  callee +4:10 envSaysYes -> @envSaysYes
-  callee +4:38 envSaysYes -> @envSaysYes
+  callee +0:7 envIsSet -> @envIsSet
+  callee +1:13 envSaysNo -> @envSaysNo
+  callee +3:10 envSaysYes -> @envSaysYes
+  callee +3:38 envSaysYes -> @envSaysYes
 function styleFor(fd: i32, agent: boolean): Style -> @styleFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=2
   sharedWrite: via nish_getenv
   escaping: fd
-  calls: Style.constructor envIsSet envSaysYes isTerminal nish_alloc_struct nish_getenv nish_str_eq nish_str_index_of nish_str_index_of_from
+  calls: Style.constructor envIsSet envSaysNo envSaysYes isTerminal nish_alloc_struct nish_getenv nish_str_eq nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
   local +0:9 term: string | null (const)
-  local +1:9 rich: boolean (const)
-  callee +1:63 envIsSet -> @envIsSet
-  callee +2:7 envIsSet -> @envIsSet
-  callee +3:12 new Style -> @Style.constructor
-  callee +5:7 envSaysYes -> @envSaysYes
-  callee +5:39 envSaysYes -> @envSaysYes
-  callee +6:12 new Style -> @Style.constructor
-  callee +9:12 new Style -> @Style.constructor
-  callee +11:10 new Style -> @Style.constructor
-  callee +11:20 isTerminal -> @isTerminal
+  local +1:9 level: string | null (const)
+  local +2:9 rich: boolean (const)
+  callee +4:5 envIsSet -> @envIsSet
+  callee +6:7 envIsSet -> @envIsSet
+  callee +6:40 envSaysNo -> @envSaysNo
+  callee +7:12 new Style -> @Style.constructor
+  callee +9:7 envSaysYes -> @envSaysYes
+  callee +9:39 envSaysYes -> @envSaysYes
+  callee +10:12 new Style -> @Style.constructor
+  callee +13:12 new Style -> @Style.constructor
+  callee +15:10 new Style -> @Style.constructor
+  callee +15:20 isTerminal -> @isTerminal
 function helpRow(style: Style, flag: string, meta: string, description: string): string -> @helpRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: description flag meta

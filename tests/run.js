@@ -17009,6 +17009,24 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     forcedOff.stdout === help.stdout,
     JSON.stringify(forcedOff.stdout.slice(0, 200))
   )
+  const zeroWins = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", FORCE_COLOR: "0" })
+  check(
+    "--help: FORCE_COLOR=0 turns colour off, over CLICOLOR_FORCE",
+    zeroWins.stdout === help.stdout,
+    JSON.stringify(zeroWins.stdout.slice(0, 200))
+  )
+  const level2 = run(["--help"], { ...plainEnv, FORCE_COLOR: "2", TERM: "xterm", COLORTERM: "" })
+  check(
+    "--help with FORCE_COLOR=2 on an 8-colour TERM: 256 colours",
+    level2.stdout.includes(`${ESC}38;5;`),
+    JSON.stringify(level2.stdout.slice(0, 200))
+  )
+  const dumbForced = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "dumb" })
+  check(
+    "--help: CLICOLOR_FORCE=1 wins over TERM=dumb",
+    dumbForced.stdout.includes(ESC),
+    JSON.stringify(dumbForced.stdout.slice(0, 200))
+  )
   // An agent gets the plain text and a section a person does not: the rules
   // card by a path it can open, which is the package's own docs/AI.md.
   const agentHelp = run(["--help"], { ...plainEnv, NISH_AGENT: "1" })
@@ -17035,6 +17053,12 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--help under CLAUDECODE=1 is an agent's, and NISH_AGENT=0 is a person's",
     claude.stdout === agentHelp.stdout && !help.stdout.includes("\nAgents\n"),
     claude.stdout
+  )
+  const notAgent = run(["--help"], { ...plainEnv, NISH_AGENT: "false", CLAUDECODE: "1" })
+  check(
+    "--help: NISH_AGENT=false is a person's, over CLAUDECODE=1",
+    notAgent.stdout === help.stdout,
+    notAgent.stdout
   )
   const agentForced = run(["--help"], { ...plainEnv, NISH_AGENT: "1", FORCE_COLOR: "1" })
   check(
