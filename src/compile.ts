@@ -109,9 +109,7 @@ const usageText = (fd: i32): string => {
     const root = findPackage().root
     if (root.length > 0) {
       const card = realpathSync(`${root}/docs/AI.md`)
-      if (card !== null) {
-        guide = card
-      }
+      guide = card !== null ? card : `docs/AI.md in the nish package (not in ${root})`
     }
   }
   return helpText(styleFor(fd, agent), guide)

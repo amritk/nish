@@ -280,7 +280,7 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, "--number-mode", "i32|f64", "what a bare number is; i32 by default"))
   lines.push(helpRow(style, "--plain", "", "the IR without LLVM's attributes"))
   lines.push(helpRow(style, "--no-strict-exports", "", "keep every function externally visible"))
-  lines.push(helpRow(style, "--no-stack-alloc", "", "never put an array on the stack"))
+  lines.push(helpRow(style, "--no-stack-alloc", "", "keep every value off the stack"))
   lines.push(helpRow(style, "--runtime-decls", "", "declare the runtime even when unused"))
   lines.push(helpRow(style, "--unchecked-indexing", "", "deprecated: use nish:unsafe"))
   lines.push(helpRow(style, "--wrapping", "", "deprecated: use nish:unsafe"))

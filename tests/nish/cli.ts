@@ -440,7 +440,7 @@ const checkHelp = (t: Suite, cli: Cli, name: string, env: boolean): void => {
   if (env) {
     t.contains("--help prints the usage on stdout", help.stdout, "usage: ");
     // The spelling rather than the shape: the usage text has to name the tool
-    // the user typed. Both compilers build it from `CLI` in their `branding.ts`.
+    // the user typed. The compiler builds it from `CLI` in `src/branding.ts`.
     t.contains("the usage text names the tool itself", help.stdout, `usage: ${name}`);
     // Each flag between spaces, as its row prints it, so `--deny` is not found
     // inside `--deny-panics`.
