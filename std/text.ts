@@ -291,7 +291,8 @@ const SURROGATE_END: i32 = 0xe000
  *
  * `é` is two bytes and one UTF-16 unit, so its length says which host is
  * running. It is written as an escape so that how this file is saved, `é` as
- * one code point or as `e` and a combining accent, cannot change the answer. Natively the length of a literal is a load from a constant, and the
+ * one code point or as `e` and a combining accent, cannot change the answer.
+ * Natively the length of a literal is a load from a constant, and the
  * optimiser folds this call to `true` and drops the other walk in
  * `codePointLength`. The name is long for the reason `isTextBlankByte`'s is.
  */
@@ -311,11 +312,14 @@ const textUnitsAreBytes = (): boolean => toI32("\u00e9".length) === 2
  * which host it is on (`textUnitsAreBytes`) and, under Node, counts every unit
  * except the low half of a surrogate pair. Both walks answer the same for any
  * string literal, a lone surrogate escape included: it is three WTF-8 bytes
- * with one leading byte natively, and one unit under Node. The answers can
- * differ only for text that is not well-formed — bytes that are not UTF-8
- * natively, where each stray continuation byte counts nothing, or the two
- * halves of a pair joined at run time, which are one string under Node and
- * two lone surrogates natively.
+ * with one leading byte natively, and one unit under Node. They differ for
+ * text built from bytes: `String.fromBytes` and `String.fromCharCode` give one
+ * unit per byte under Node, so a string decoded that way, as `nish/json`
+ * decodes a `\u` escape, counts its UTF-8 bytes there. They also differ for text
+ * that is not well-formed — bytes that are not UTF-8 natively, where each
+ * stray continuation byte counts nothing, or the two halves of a pair joined
+ * at run time, which are one string under Node and two lone surrogates
+ * natively.
  */
 export const codePointLength = (text: string): i32 => {
   const length: i32 = toI32(text.length)
@@ -336,15 +340,13 @@ export const codePointLength = (text: string): i32 => {
   }
   // A low surrogate right after a high one closes a pair the high one already
   // counted. Any other unit, a lone surrogate included, is a code point.
-  let previous: i32 = 0
+  let afterHigh: boolean = false
   while (i < length) {
     const unit: i32 = toI32(text.charCodeAt(i))
-    const closesPair: boolean =
-      unit >= LOW_SURROGATE && unit < SURROGATE_END && previous >= HIGH_SURROGATE && previous < LOW_SURROGATE
-    if (!closesPair) {
+    if (!(afterHigh && unit >= LOW_SURROGATE && unit < SURROGATE_END)) {
       count += 1
     }
-    previous = unit
+    afterHigh = unit >= HIGH_SURROGATE && unit < LOW_SURROGATE
     i += 1
   }
   return toI32(count)

@@ -2105,7 +2105,9 @@ way JavaScript does; `slice` instead **panics** unless
 `0 <= start <= end <= s.length`, and is the faster of the two when you have
 already established the range. Every offset is a **byte** offset, so cutting a multi-byte character
 in half is possible. To count characters rather than bytes, `codePointLength(s)`
-from `nish/text` counts code points natively and under Node alike.
+from `nish/text` counts code points natively and, for text written in the
+source, under Node alike; under Node a string built from bytes (`String.fromBytes`,
+a `\u` escape `nish/json` decodes) is one unit per byte, and counts its bytes.
 
 **Process.** `process.exit(code)`, `process.argv` (a read-only `string[]`;
 `argv[0]` is the program path, one index earlier than Node),

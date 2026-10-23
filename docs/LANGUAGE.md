@@ -7615,7 +7615,8 @@ returns to it.
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
 and a code-point index would need a decode per access (`codePointLength` in
-`nish/text` counts code points, natively and under Node alike). Cutting a multi-byte
+`nish/text` counts code points natively, and under Node for any string that is
+not built from bytes). Cutting a multi-byte
 character in half is therefore possible and produces bytes that are not a
 valid string (docs/wp13-differential.md notes what Node then does with them).
 

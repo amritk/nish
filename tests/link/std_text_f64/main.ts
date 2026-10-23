@@ -60,6 +60,9 @@ export const main = (): i32 => {
   t.eqI32("codePointLength: a four-byte sequence is one", codePointLength("😀"), toI32(1));
   t.eqI32("codePointLength: a mix of every width", codePointLength("aé€😀z"), toI32(5));
   t.eqI32("codePointLength: continuation-range Latin-1 counts one each", codePointLength("©®±"), toI32(3));
+  t.eqI32("codePointLength: the pair written as two escapes is one", codePointLength("\ud83d\ude00"), toI32(1));
+  t.eqI32("codePointLength: a lone surrogate is one", codePointLength("a\ud800b"), toI32(3));
+  t.eqI32("codePointLength: a low half before a high one closes nothing", codePointLength("\ude00\ud83d"), toI32(2));
   t.eqBool("contains: an interior occurrence", contains("alphabet", "phab"), true);
   t.eqStr("replaceAll: every occurrence, not just the first", replaceAll("a-b-c", "-", "+"), "a+b+c");
 

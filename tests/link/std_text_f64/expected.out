@@ -10,6 +10,9 @@ PASS  codePointLength: a three-byte sequence is one
 PASS  codePointLength: a four-byte sequence is one
 PASS  codePointLength: a mix of every width
 PASS  codePointLength: continuation-range Latin-1 counts one each
+PASS  codePointLength: the pair written as two escapes is one
+PASS  codePointLength: a lone surrogate is one
+PASS  codePointLength: a low half before a high one closes nothing
 PASS  contains: an interior occurrence
 PASS  replaceAll: every occurrence, not just the first
 PASS  firstDifference: equal line lists answer -1
@@ -27,4 +30,4 @@ FAIL  a check that fails on purpose
 failed: a check that fails on purpose
 deliberate: 0 passed, 1 failed, 0 skipped
 PASS  a failing suite answers exit code 1
-text-f64: 25 passed, 0 failed, 0 skipped
+text-f64: 28 passed, 0 failed, 0 skipped

@@ -126,8 +126,10 @@ limit on text a person typed usually means (JSON Schema's `minLength` and
 `maxLength` count them). `.length` does not: it counts UTF-8 bytes, so
 `"é".length` is `2` and `"😀".length` is `4`, where `codePointLength` answers
 `1` for each. It answers the same when the program runs under Node, where
-`.length` counts UTF-16 units instead, for any text that is well-formed
-Unicode.
+`.length` counts UTF-16 units instead, for well-formed text, except text
+built from bytes: under Node, `String.fromBytes`, `String.fromCharCode` of a
+byte and a `\u` escape that `nish/json` decodes give one unit per byte, so
+such a string counts its UTF-8 bytes there.
 
 ## `nish/regex`
 

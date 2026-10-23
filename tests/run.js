@@ -8527,6 +8527,16 @@ if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
       `--- native (expected.out)\n${out}--- node\n${shown(run)}`
     )
   }
+  // Where the answers part: text built from bytes is one unit per byte under
+  // Node, U+0080 is a whole unit there, and the joined halves are one pair.
+  // expected.out holds the native answers; these are Node's.
+  const divergent = runUnderPrelude(path.join(linkDir, "std_text_code_points_native", "main.ts"), [])
+  check(
+    "link/std_text_code_points_native: under the Node prelude bytes count as units and the joined halves as one pair",
+    divergent.status === 0 &&
+      divergent.stdout === "built from bytes: 2\nstray continuation byte: 1\njoined halves: 1, length 2\n",
+    shown(divergent)
+  )
 }
 
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own

@@ -150,12 +150,15 @@ no prelude can reach it. They are language decisions
 - **`s.length` is UTF-16 units under Node** and UTF-8 bytes natively, and so is
   every offset `charCodeAt`, `substring` and `indexOf` take or return. ASCII
   agrees; `"héllo".length` is `5` under Node and `6` natively. To count
-  characters, `codePointLength` from `nish/text` answers `5` on both. It can
-  answer differently only for text that is not well-formed: a byte that is not
-  UTF-8, such as `String.fromCharCode(0x80)`, counts nothing natively and one
-  unit under Node, and the two halves of a surrogate pair joined at run time
-  are two lone surrogates natively and one pair under Node
-  (`tests/link/std_text_code_points_native` pins the native answers).
+  characters, `codePointLength` from `nish/text` answers `5` on both. It
+  answers differently for text built from bytes, which is one unit per byte
+  here (above): `String.fromBytes` of `é`'s two bytes, or `nish/json`'s decoding
+  of `"\u00e9"`, counts `1` natively and `2` under Node. It also answers
+  differently for text that is not well-formed: a byte that is not UTF-8, such
+  as `String.fromCharCode(0x80)`, counts nothing natively and one unit under
+  Node, and the two halves of a surrogate pair joined at run time are two lone
+  surrogates natively and one pair under Node
+  (`tests/link/std_text_code_points_native` pins both hosts' answers).
 - **`a[i]` is unchecked.** Out of range is `undefined` here and an exit-1 panic
   natively, and `pop()` on an empty array likewise. Only a program that goes out
   of range can tell the difference.

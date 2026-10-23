@@ -3420,6 +3420,5 @@ function codePointLength(text: string): i32 -> @nish.codePointLength [exported]
   local +5:7 count: u32 (let)
   local +6:7 i: i32 (let)
   callee +7:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
-  local +18:7 previous: i32 (let)
+  local +18:7 afterHigh: boolean (let)
   local +20:11 unit: i32 (const)
-  local +21:11 closesPair: boolean (const)
