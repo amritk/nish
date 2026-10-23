@@ -43,6 +43,7 @@
 // line has no semicolon.
 
 import { Operands, Walk } from "./emit-ts-edits"
+import { isAssignmentOperator } from "./emit-util"
 import {
   FLAG_POSTFIX,
   N_BINARY,
@@ -61,7 +62,19 @@ import {
   N_UNARY,
   Node,
 } from "./nodes"
-import { T_F32, T_F64, T_I32, T_I64, T_STRING, T_U16, T_U32, T_U64, T_U8, isInteger } from "./types"
+import {
+  T_F32,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  T_U16,
+  T_U32,
+  T_U64,
+  T_U8,
+  isInteger,
+  isUnsigned,
+} from "./types"
 
 /** The numbers row's rewrite of `node`, or `null` to leave it to the next row. */
 export const numbersRow = (walk: Walk, node: Node, operands: Operands): string | null => {
@@ -162,9 +175,12 @@ const wideLiteral = (walk: Walk, node: Node): string | null => {
   if (isBig(type)) {
     return bigLiteral(node.text)
   }
+  if (type !== T_F32) {
+    return null
+  }
   // A float literal at f32 is the nearest float; a short integer is one already.
   const exact = node.text.length <= 7 && !hasFraction(node.text)
-  return type === T_F32 && !exact ? `Math.fround(${node.text})` : null
+  return exact ? null : `Math.fround(${node.text})`
 }
 
 /** Whether a decimal literal has a fraction or an exponent. */
@@ -253,15 +269,10 @@ const foldedText = (walk: Walk, node: Node, type: i32): string | null => {
 }
 
 /** Whether `op` is a compound assignment (`+=`, `>>>=`, ...), not a comparison or `=`. */
-const isCompound = (op: string): boolean =>
-  op.length >= 2 &&
-  op.endsWith("=") &&
-  op !== "==" &&
-  op !== "!=" &&
-  op !== "===" &&
-  op !== "!==" &&
-  op !== "<=" &&
-  op !== ">="
+const isCompound = (op: string): boolean => op !== "=" && isAssignmentOperator(op)
+
+/** Whether `type` is i32 or i64, the widths whose overflow panics. */
+const isSigned = (type: i32): boolean => isInteger(type) && !isUnsigned(type)
 
 /**
  * Whether a target can be read and then assigned again by repeating its text:
@@ -299,7 +310,7 @@ const pure = (node: Node): boolean => {
     return node.text !== "++" && node.text !== "--" && pure(node.children[0])
   }
   if (node.kind === N_BINARY) {
-    return node.text !== "=" && !isCompound(node.text) && pure(node.children[0]) && pure(node.children[1])
+    return !isAssignmentOperator(node.text) && pure(node.children[0]) && pure(node.children[1])
   }
   return false
 }
@@ -313,11 +324,12 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
       return null
     }
     const name = operands.at(0)
+    const own = typeOf(walk, node)
     const value = operation(
       walk,
       node,
       op.substring(0, op.length - 1),
-      typeOf(walk, node) >= 0 ? typeOf(walk, node) : typeOf(walk, target),
+      own >= 0 ? own : typeOf(walk, target),
       name,
       operands.at(1)
     )
@@ -367,7 +379,7 @@ const opName = (op: string): string => {
 }
 
 const arithmetic = (walk: Walk, site: Node, op: string, type: i32, a: string, b: string): string => {
-  const signed = type === T_I32 || type === T_I64
+  const signed = isSigned(type)
   if (signed && !unchecked(walk, site)) {
     return helper(walk, `checked${opName(op)}`, `${a}, ${b}`)
   }
@@ -398,7 +410,7 @@ const shift = (walk: Walk, op: string, type: i32, a: string, b: string): string 
 const unaryRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const op = node.text
   if (op === "++" || op === "--") {
-    return stepped(walk, node, operands, (node.flags & FLAG_POSTFIX) !== 0, false)
+    return stepped(walk, node, operands.at(0), (node.flags & FLAG_POSTFIX) !== 0, false)
   }
   return negation(walk, node, typeOf(walk, node), operands.at(0))
 }
@@ -410,7 +422,7 @@ const negation = (walk: Walk, node: Node, type: i32, x: string): string | null =
     return null
   }
   if (op === "~") {
-    if (type === T_U8 || type === T_U16 || type === T_U32 || type === T_U64) {
+    if (isUnsigned(type)) {
       return wrapTo(type, `~${x}`)
     }
     return null
@@ -419,7 +431,7 @@ const negation = (walk: Walk, node: Node, type: i32, x: string): string | null =
     return null
   }
   const zero = isBig(type) ? "0n" : "0"
-  const signed = type === T_I32 || type === T_I64
+  const signed = isSigned(type)
   // A negative literal is the constant itself, never a negation that can overflow.
   const literal = node.children[0].kind === N_NUMBER || node.children[0].kind === N_BIGINT
   if (signed && literal) {
@@ -434,26 +446,19 @@ const negation = (walk: Walk, node: Node, type: i32, x: string): string | null =
 
 /**
  * `++x`, `x++`, `--x` and `x--` on an integer or f32 local: the step assigned
- * back. A postfix one's value is the old one, which is the new one stepped
- * back at the width. `null` where JavaScript's operator is already exact: a
+ * back. A postfix one's value is the old one: the new one stepped back at
+ * an integer width, read before the store at f32. `null` where JavaScript's operator is already exact: a
  * proven i32 or i64 step, and every f64 one.
  */
-const stepped = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-  postfix: boolean,
-  bare: boolean
-): string | null => {
+const stepped = (walk: Walk, node: Node, name: string, postfix: boolean, bare: boolean): string | null => {
   const type = typeOf(walk, node.children[0])
   if (!isInteger(type) && type !== T_F32) {
     return null
   }
-  const signed = type === T_I32 || type === T_I64
+  const signed = isSigned(type)
   if (signed && !walk.program.wrapping && unchecked(walk, node)) {
     return null
   }
-  const name = operands.at(0)
   const one = isBig(type) ? "1n" : "1"
   const up = node.text === "++"
   const value = operation(walk, node, up ? "+" : "-", type, name, one)
@@ -482,16 +487,12 @@ const stepped = (
  */
 const statementRow = (walk: Walk, node: Node): string | null => {
   const expr = node.children[0]
-  if (expr.kind !== N_UNARY) {
+  if (expr.kind !== N_UNARY || (expr.text !== "++" && expr.text !== "--")) {
     return null
   }
-  if (expr.text !== "++" && expr.text !== "--") {
-    return null
-  }
-  const inner = new Operands(expr, walk.source.text)
-  inner.texts.push("")
-  inner.changed.push(false)
-  const step = stepped(walk, expr, inner, false, true)
+  // A step's target is a plain local, so no row has rewritten it.
+  const target = expr.children[0]
+  const step = stepped(walk, expr, between(walk, target.start, target.end), false, true)
   if (step === null) {
     return null
   }
