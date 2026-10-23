@@ -177,16 +177,14 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   const left = operands.at(0)
   const args = idxArguments(left)
   if (node.text === "=") {
-    if (
-      args !== "" &&
-      (walk.inInstance
-        ? hasInlineRecords(walk.program)
-        : inlineRecord(walk.program, walk.program.nodeTypes[target.id]))
-    ) {
+    const record = walk.inInstance
+      ? hasInlineRecords(walk.program)
+      : inlineRecord(walk.program, walk.program.nodeTypes[target.id])
+    if (record && args !== "") {
       walk.useHelper("storeIdx")
       return `storeIdx(${args}, ${operands.at(1)})`
     }
-    if (!walk.inInstance && inlineRecord(walk.program, walk.program.nodeTypes[target.id])) {
+    if (record && !walk.inInstance) {
       return `Object.assign(${left}, ${operands.at(1)})`
     }
     if (args === "") {
@@ -216,9 +214,10 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   if (!written.endsWith(`.${method}`)) {
     return null
   }
+  const receiver = writtenReceiver(written, method)
   if (method === "pop" && args.length === 0 && checkedAt(walk, node)) {
     walk.useHelper("pop")
-    return `pop(${writtenReceiver(written, method)})`
+    return `pop(${receiver})`
   }
   if (method === "push" && args.length === 1) {
     const arg = operands.at(1)
@@ -233,7 +232,7 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
     walk.program.nodeTypes[args[0].id] === walk.program.nodeTypes[callee.children[0].id]
   ) {
     walk.useHelper("arraySet")
-    return `arraySet(${writtenReceiver(written, method)}, ${operands.at(1)})`
+    return `arraySet(${receiver}, ${operands.at(1)})`
   }
   return null
 }
