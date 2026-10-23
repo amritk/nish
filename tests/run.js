@@ -303,8 +303,11 @@ const skip = (reason) => {
  *
  * Only a check that another job proves *with the same inputs on the same
  * platform* may be delegated, and only when the workflow asks for it by flag.
- * There is one today, the bootstrap's fixed point, and the WP14 section
- * says when the request is honoured and what makes it true.
+ * There are two kinds today. The bootstrap's fixed point, and the WP14 section
+ * says when the request is honoured and what makes it true. And a link
+ * program's checks of what the compiler wrote rather than of what the program
+ * did (`DELEGATE_IR_CHECKS`), which are the same on every host: a mac runs
+ * the program, and the Linux `test` job checks the compile.
  */
 const delegated = []
 const delegate = (name, provedBy) => {
@@ -4395,6 +4398,20 @@ const { linkShard, sectionShard } = (() => {
   }
   return { linkShard: (name) => shardOf.get(name), sectionShard: (key) => sections.get(key) }
 })()
+/**
+ * `--delegate-ir-checks`, which the macOS `runtime-net` job passes: of each link
+ * program, link it and run it, and leave every check of the compile -- the
+ * module goldens, llvm-as and opt, the declare/define agreement, expected.ir,
+ * `--warn-portability`, `--emit-panics`, the capability report, and the
+ * programs that are a rejection and nothing else -- to the `test` job, which
+ * runs every tests/link program on Linux with the same compiler. Those checks
+ * read the compiler's output, not the host, and were a third of that job's
+ * link programs' time (run 39878648000). Honoured only under GitHub Actions, as `--delegate-fixed-point` is:
+ * from a terminal the flag names a job that is not running, so every check
+ * runs here. A check in the WP14 section holds ci.yml to it.
+ */
+const DELEGATE_IR_CHECKS = process.argv.includes("--delegate-ir-checks") && process.env.GITHUB_ACTIONS === "true"
+let irDelegated = 0
 const linkDealtAway = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) !== SHARD)
 
 for (const name of linkTests) {
@@ -4414,7 +4431,12 @@ for (const name of linkTests) {
   // WP35: the report is written beside the modules by the same compile, since
   // nothing here compares the IR of a second one.
   const capsJson = path.join(outDir, "capabilities.json")
-  const capsArgs = fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
+  const capsArgs =
+    !DELEGATE_IR_CHECKS && fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
+  if (DELEGATE_IR_CHECKS && fs.existsSync(side("expected.err"))) {
+    irDelegated++
+    continue
+  }
   const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
     cwd: root,
   })
@@ -4446,179 +4468,183 @@ for (const name of linkTests) {
     check(`link/${name}: compiles and links`, false, stderr)
     continue
   }
-  // The `--emit-panics` compile below reads nothing this loop writes, so it
-  // runs while the modules are checked rather than after them. Nothing between
-  // here and its `await` leaves the iteration, so no compile outlives its program.
-  const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
-  fs.rmSync(panicsDir, { recursive: true, force: true })
-  const panicsFile = path.join(panicsDir, "panics.json")
-  const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
-    cwd: root,
-    encoding: "utf8",
-  })
+  if (DELEGATE_IR_CHECKS) {
+    irDelegated++
+  } else {
+    // The `--emit-panics` compile below reads nothing this loop writes, so it
+    // runs while the modules are checked rather than after them. Nothing between
+    // here and its `await` leaves the iteration, so no compile outlives its program.
+    const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+    fs.rmSync(panicsDir, { recursive: true, force: true })
+    const panicsFile = path.join(panicsDir, "panics.json")
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
+      cwd: root,
+      encoding: "utf8",
+    })
 
-  const modules = fs
-    .readdirSync(outDir)
-    .filter((f) => f.endsWith(".ll"))
-    .sort()
-    .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
-  // A program that imports std/net is about a hundred modules, and llvm-as and
-  // opt read each one alone, so they run `defaultJobs()` modules at a time; the
-  // checks are still made in module order, so the output is the sequential
-  // loop's. One at a time they were a fifth of the runtime-net job's wall clock.
-  const verified = await pool(modules, defaultJobs(), async (m) => ({
-    as: HAS_LLVM_AS ? await spawnAsync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"]) : null,
-    v: HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)]) : null,
-  }))
-  for (const [i, m] of modules.entries()) {
-    if (fs.existsSync(side(m.file))) {
-      const actual = stripHeader(m.ir)
-      if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
-        fs.writeFileSync(side(m.file), `${actual}\n`)
-        console.log(`WROTE link/${name}/${m.file}`)
+    const modules = fs
+      .readdirSync(outDir)
+      .filter((f) => f.endsWith(".ll"))
+      .sort()
+      .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
+    // A program that imports std/net is about a hundred modules, and llvm-as and
+    // opt read each one alone, so they run `defaultJobs()` modules at a time; the
+    // checks are still made in module order, so the output is the sequential
+    // loop's. One at a time they were a fifth of the runtime-net job's wall clock.
+    const verified = await pool(modules, defaultJobs(), async (m) => ({
+      as: HAS_LLVM_AS ? await spawnAsync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"]) : null,
+      v: HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)]) : null,
+    }))
+    for (const [i, m] of modules.entries()) {
+      if (fs.existsSync(side(m.file))) {
+        const actual = stripHeader(m.ir)
+        if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
+          fs.writeFileSync(side(m.file), `${actual}\n`)
+          console.log(`WROTE link/${name}/${m.file}`)
+        }
+        const expected = read(m.file).trim()
+        check(
+          `link/${name}: ${m.file} matches golden`,
+          actual === expected,
+          `--- expected\n${expected}\n--- actual\n${actual}`
+        )
       }
-      const expected = read(m.file).trim()
+      const { as, v } = verified[i]
+      if (as !== null) {
+        check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
+      }
+      if (v !== null) {
+        check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
+      }
+    }
+
+    if (fs.existsSync(side("expected.portability"))) {
+      const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+      fs.rmSync(warnedDir, { recursive: true, force: true })
+      const warned = spawnSync(
+        NISH,
+        [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+        {
+          cwd: root,
+          encoding: "utf8",
+        }
+      )
+      const want = read("expected.portability").trim()
+      const got = warned.stdout
+        .split("\n")
+        .filter((l) => l.includes('"severity":"portability"'))
+        .join("\n")
+        .split(`${root}/`)
+        .join("")
       check(
-        `link/${name}: ${m.file} matches golden`,
-        actual === expected,
-        `--- expected\n${expected}\n--- actual\n${actual}`
+        `link/${name}: --warn-portability --json matches expected.portability`,
+        warned.status === 0 && got === want,
+        `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
+      )
+      check(
+        `link/${name}: --warn-portability changes no byte of the IR`,
+        modules.every(
+          (m) =>
+            fs.existsSync(path.join(warnedDir, m.file)) &&
+            fs.readFileSync(path.join(warnedDir, m.file), "utf8") === m.ir
+        ),
+        "the modules differ"
       )
     }
-    const { as, v } = verified[i]
-    if (as !== null) {
-      check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
-    }
-    if (v !== null) {
-      check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
-    }
-  }
 
-  if (fs.existsSync(side("expected.portability"))) {
-    const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
-    fs.rmSync(warnedDir, { recursive: true, force: true })
-    const warned = spawnSync(
-      NISH,
-      [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
-      {
-        cwd: root,
-        encoding: "utf8",
-      }
-    )
-    const want = read("expected.portability").trim()
-    const got = warned.stdout
-      .split("\n")
-      .filter((l) => l.includes('"severity":"portability"'))
-      .join("\n")
-      .split(`${root}/`)
-      .join("")
-    check(
-      `link/${name}: --warn-portability --json matches expected.portability`,
-      warned.status === 0 && got === want,
-      `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
-    )
-    check(
-      `link/${name}: --warn-portability changes no byte of the IR`,
-      modules.every(
-        (m) =>
-          fs.existsSync(path.join(warnedDir, m.file)) &&
-          fs.readFileSync(path.join(warnedDir, m.file), "utf8") === m.ir
-      ),
-      "the modules differ"
-    )
-  }
-
-  // Cross-module attribute agreement: importer `declare` == exporter `define`.
-  const defines = new Map()
-  for (const m of modules) {
-    for (const [sym, h] of functionHeaders(m.ir)) {
-      if (h.kind === "define") {
-        defines.set(sym, { ...h, file: m.file })
+    // Cross-module attribute agreement: importer `declare` == exporter `define`.
+    const defines = new Map()
+    for (const m of modules) {
+      for (const [sym, h] of functionHeaders(m.ir)) {
+        if (h.kind === "define") {
+          defines.set(sym, { ...h, file: m.file })
+        }
       }
     }
-  }
-  let declares = 0
-  const mismatches = []
-  for (const m of modules) {
-    for (const [sym, h] of functionHeaders(m.ir)) {
-      if (h.kind !== "declare" || !defines.has(sym)) {
-        continue // runtime declares have no define here
+    let declares = 0
+    const mismatches = []
+    for (const m of modules) {
+      for (const [sym, h] of functionHeaders(m.ir)) {
+        if (h.kind !== "declare" || !defines.has(sym)) {
+          continue // runtime declares have no define here
+        }
+        declares++
+        const d = defines.get(sym)
+        if (h.sig !== d.sig || h.attrs !== d.attrs) {
+          mismatches.push(
+            `${m.file}: declare ${h.sig} { ${h.attrs} }\n${d.file}: define  ${d.sig} { ${d.attrs} }`
+          )
+        }
       }
-      declares++
-      const d = defines.get(sym)
-      if (h.sig !== d.sig || h.attrs !== d.attrs) {
-        mismatches.push(
-          `${m.file}: declare ${h.sig} { ${h.attrs} }\n${d.file}: define  ${d.sig} { ${d.attrs} }`
+    }
+    check(
+      `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
+      declares > 0 && mismatches.length === 0,
+      mismatches.join("\n") || "(no cross-module declares found)"
+    )
+
+    if (fs.existsSync(side("expected.ir"))) {
+      const all = modules.map((m) => m.ir).join("\n")
+      const missing = read("expected.ir")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .filter((l) => !all.includes(l))
+      check(
+        `link/${name}: emitted IR contains every expected.ir line`,
+        missing.length === 0,
+        missing.map((l) => `missing: ${l}`).join("\n")
+      )
+    }
+
+    // `--emit-panics` over the whole program, std/ and dependency modules
+    // included, held against the IR of every module the same compile wrote
+    // (`tests/panics-oracle.js`), and against `expected.panics` where the
+    // program has one. Without `--link`, so the program is not linked twice:
+    // the list and the IR come from one compile, which is all the oracle needs.
+    // That compile was started beside the module checks above (`listing`).
+    const listed = await listing
+    if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
+      check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+    } else {
+      const listText = fs.readFileSync(panicsFile, "utf8")
+      const ir = fs
+        .readdirSync(panicsDir)
+        .filter((f) => f.endsWith(".ll"))
+        .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
+        .join("\n")
+      // The entry is named by the path it was given, `side("main.ts")`, and its
+      // `.ll` is among those joined above, so its own functions are held to the
+      // drift check too; a module of a library that writes no `.ll` of its own
+      // stays skipped (`panicOracle`'s `module`).
+      const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
+      check(
+        `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
+        oracle.failures.length === 0 && oracle.own > 0,
+        oracle.own > 0
+          ? oracle.failures.join("\n")
+          : `no listed function names ${side("main.ts")} as its module`
+      )
+      if (fs.existsSync(side("expected.panics"))) {
+        const want = read("expected.panics").trim()
+        const got = listText.split(`${root}/`).join("").trim()
+        check(
+          `link/${name}: --emit-panics matches expected.panics`,
+          got === want,
+          `--- expected\n${want}\n--- actual\n${got}`
         )
       }
     }
-  }
-  check(
-    `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
-    declares > 0 && mismatches.length === 0,
-    mismatches.join("\n") || "(no cross-module declares found)"
-  )
 
-  if (fs.existsSync(side("expected.ir"))) {
-    const all = modules.map((m) => m.ir).join("\n")
-    const missing = read("expected.ir")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .filter((l) => !all.includes(l))
-    check(
-      `link/${name}: emitted IR contains every expected.ir line`,
-      missing.length === 0,
-      missing.map((l) => `missing: ${l}`).join("\n")
-    )
-  }
-
-  // `--emit-panics` over the whole program, std/ and dependency modules
-  // included, held against the IR of every module the same compile wrote
-  // (`tests/panics-oracle.js`), and against `expected.panics` where the
-  // program has one. Without `--link`, so the program is not linked twice:
-  // the list and the IR come from one compile, which is all the oracle needs.
-  // That compile was started beside the module checks above (`listing`).
-  const listed = await listing
-  if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
-    check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
-  } else {
-    const listText = fs.readFileSync(panicsFile, "utf8")
-    const ir = fs
-      .readdirSync(panicsDir)
-      .filter((f) => f.endsWith(".ll"))
-      .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
-      .join("\n")
-    // The entry is named by the path it was given, `side("main.ts")`, and its
-    // `.ll` is among those joined above, so its own functions are held to the
-    // drift check too; a module of a library that writes no `.ll` of its own
-    // stays skipped (`panicOracle`'s `module`).
-    const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
-    check(
-      `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
-      oracle.failures.length === 0 && oracle.own > 0,
-      oracle.own > 0
-        ? oracle.failures.join("\n")
-        : `no listed function names ${side("main.ts")} as its module`
-    )
-    if (fs.existsSync(side("expected.panics"))) {
-      const want = read("expected.panics").trim()
-      const got = listText.split(`${root}/`).join("").trim()
+    if (capsArgs.length > 0) {
+      const want = read("expected.caps.json")
+      const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
       check(
-        `link/${name}: --emit-panics matches expected.panics`,
+        `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
         `--- expected\n${want}\n--- actual\n${got}`
       )
     }
-  }
-
-  if (capsArgs.length > 0) {
-    const want = read("expected.caps.json")
-    const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
-    check(
-      `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
-      got === want,
-      `--- expected\n${want}\n--- actual\n${got}`
-    )
   }
 
   const run = await runNative(`link/${name}`, exe, [])
@@ -5513,6 +5539,26 @@ if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")
     )
   }
 
+  // `--delegate-ir-checks` (DELEGATE_IR_CHECKS) hands a link program's compile
+  // checks to the `test` job, which is honest only while that job runs every
+  // program: its suite line names no filter, and no job but `runtime-net`
+  // asks for the delegation.
+  {
+    const suiteLine = /npm test -- (.*?) \|/.exec(ciJob(ciYmlText, "test"))?.[1] ?? ""
+    const words = suiteLine.split(/\s+/).filter(Boolean)
+    const filters = words.filter((w, i) => !w.startsWith("--") && !["--seed", "--shard"].includes(words[i - 1]))
+    const uncommented = ciYmlText
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("#"))
+      .join("\n")
+    const asks = (text) => text.split("--delegate-ir-checks").length - 1
+    check(
+      "ci.yml: --delegate-ir-checks is asked for by `runtime-net` alone, and the `test` job runs every tests/link program",
+      suiteLine !== "" && filters.length === 0 && asks(uncommented) === asks(ciJob(ciYmlText, "runtime-net")),
+      `test job's suite line: ${suiteLine || "(not found)"}; filters: ${filters.join(", ") || "none"}`
+    )
+  }
+
   // WP19 G3: which equalities `scripts/bootstrap.sh --verify` asserts, and
   // this check is what stops that from drifting.
   //
@@ -6280,6 +6326,12 @@ if (linkDealtAway.length > 0) {
   for (const [i, count] of [...byShard].sort((a, b) => a[0] - b[0])) {
     delegate(`${count} tests/link program(s)`, shardJob(i))
   }
+}
+if (irDelegated > 0) {
+  delegate(
+    `the compile's checks of ${irDelegated} tests/link program(s) (--delegate-ir-checks)`,
+    "ci.yml's `test` job, which runs every tests/link program on Linux"
+  )
 }
 // ---- crypto-bench: the crypto twins ------------------------------------------------
 // bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a

@@ -1082,13 +1082,20 @@ jobs:
       # and no SKIP line: a filter that matches nothing, or a section skipped
       # for a missing tool, fails it rather than leaving it green. What a shard
       # leaves to the other two is counted as delegated, never as skipped.
+      #
+      # `--delegate-ir-checks`: a mac links and runs each program, which is
+      # what only a mac can answer, and leaves every check of the compile (the
+      # goldens, llvm-as and opt, declares, --emit-panics, the programs that
+      # are a rejection alone) to the `test` job, which makes them for every
+      # program on Linux with the same compiler. tests/run.js counts them as
+      # delegated, and fails if the `test` job stops running every program.
       - name: The net_ sections, natively on Darwin
         if: ${{ !cancelled() }}
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          node tests/run.js net_ --shard "$SHARD/3" | tee "$RUNNER_TEMP/net.log"
+          node tests/run.js net_ --shard "$SHARD/3" --delegate-ir-checks | tee "$RUNNER_TEMP/net.log"
           grep -E '^[1-9][0-9]* passed, 0 failed(, [0-9]+ delegated)?\.$' "$RUNNER_TEMP/net.log"
           if grep -E '^SKIP  ' "$RUNNER_TEMP/net.log"; then exit 1; fi
 
