@@ -132,6 +132,8 @@ const jvNumbers = (t: Suite): void => {
   t.eqStr("numbers: u64 max", `${doc.isI64(doc.at(root, 5))} ${doc.isU64(doc.at(root, 5))} ${doc.u64(doc.at(root, 5))}`, "false true 18446744073709551615");
   t.eqStr("numbers: u64 max + 1 is neither, and keeps its text", `${doc.isI64(doc.at(root, 6))} ${doc.isU64(doc.at(root, 6))} ${doc.u64(doc.at(root, 6))} ${doc.numberText(doc.at(root, 6))} ${doc.f64(doc.at(root, 6))}`, "false false 0 18446744073709551616 18446744073709552000");
   t.eqStr("numbers: 1.0 is not an integer", `${doc.isI64(doc.at(root, 7))} ${doc.isU64(doc.at(root, 7))} ${doc.f64(doc.at(root, 7))}`, "false false 1");
+  t.eqStr("numbers: 1.0 is whole by value though not an i64", `${doc.isIntegral(doc.at(root, 7))} ${doc.isI64(doc.at(root, 7))}`, "true false");
+  t.eqStr("numbers: isIntegral of 1e2, u64 max + 1, 0.1000…, -1 and 1E400", `${doc.isIntegral(doc.at(root, 8))} ${doc.isIntegral(doc.at(root, 6))} ${doc.isIntegral(doc.at(root, 9))} ${doc.isIntegral(doc.at(root, 10))} ${doc.isIntegral(doc.at(root, 13))}`, "true true false true true");
   t.eqStr("numbers: 1e2 is not an integer", `${doc.isI64(doc.at(root, 8))} ${doc.f64(doc.at(root, 8))} ${doc.numberText(doc.at(root, 8))}`, "false 100 1e2");
   t.eqStr("numbers: 34 significant digits read as the nearest f64 and keep their text", `${doc.f64(doc.at(root, 9))} ${doc.numberText(doc.at(root, 9))}`, "0.1 0.1000000000000000055511151231257827");
   t.eqStr("numbers: -1 is an i64, not a u64", `${doc.i64(doc.at(root, 10))} ${doc.isU64(doc.at(root, 10))}`, "-1 false");
@@ -144,6 +146,14 @@ const jvNumbers = (t: Suite): void => {
     doc.stringify(root),
     "[-0,9223372036854775807,-9223372036854775808,9223372036854775808,-9223372036854775809,18446744073709551615,18446744073709551616,1.0,1e2,0.1000000000000000055511151231257827,-1,0,123456789012345678901234567890,1E400,5e-324]"
   );
+  const kept = doc.at(root, 7);
+  const others = doc.parseText('["1",true,null,[],{},2.0]');
+  t.eqStr(
+    "numbers: isIntegral is false on a string, a literal, an array and an object",
+    `${doc.isIntegral(doc.at(others, 0))} ${doc.isIntegral(doc.at(others, 1))} ${doc.isIntegral(doc.at(others, 2))} ${doc.isIntegral(doc.at(others, 3))} ${doc.isIntegral(doc.at(others, 4))} ${doc.isIntegral(doc.at(others, 5))}`,
+    "false false false false false true"
+  );
+  t.ok("numbers: isIntegral is false on a handle from an earlier parse", !doc.isIntegral(kept));
   const tie = doc.parseText("[9007199254740993]");
   t.eqStr("numbers: 2^53 + 1 reads as 2^53, ties to even, and keeps its text", `${doc.f64(doc.at(tie, 0))} ${doc.numberText(doc.at(tie, 0))}`, "9007199254740992 9007199254740993");
   t.ok("numbers: i64 of a string is 0", doc.i64(doc.newString("1")) === toI64(0) && !doc.isI64(doc.newString("1")));

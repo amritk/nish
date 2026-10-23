@@ -35,6 +35,7 @@ import N_WHILE from "./nodes" -> const N_WHILE
 import Node from "./nodes" -> struct Node
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
 import PortabilityWalk from "./portability" -> struct PortabilityWalk
+import isMapEntry from "./parallel" -> function @isMapEntry
 import parallelBodyOf from "./parallel" -> function @parallelBodyOf
 import parallelRoleOf from "./parallel" -> function @parallelRoleOf
 import FunctionSig from "./program" -> struct FunctionSig
@@ -290,7 +291,7 @@ function followFrom(trail: Trail, value: Node, from: Node, holder: Local | null)
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via followOutOfFunction
   escaping: from
-  calls: ParentTable.parentOf Trail.report followIntoCall followIntoParameter followIntoPlace followOutOfArrow followOutOfFunction followThroughBinary isConversion isNeedleStep isString nish_panic_index
+  calls: ParentTable.parentOf Trail.report followIntoCall followIntoParameter followIntoPlace followOutOfArrow followOutOfFunction followThroughBinary isConversion isNeedleStep nish_panic_index
   pointer trail: size=80 writesThrough=true captured=true passedTo=followOutOfFunction#0 followOutOfArrow#0 followIntoParameter#0 followIntoCall#0 isNeedleStep#0 followThroughBinary#0 Trail.report#0 followIntoPlace#0
   pointer value: size=40 writesThrough=true captured=true passedTo=followOutOfFunction#1 followOutOfArrow#2 followIntoParameter#3 followIntoCall#3 followThroughBinary#3 Trail.report#1 followIntoPlace#3
   pointer from: size=40 writesThrough=true captured=true
@@ -310,7 +311,6 @@ function followFrom(trail: Trail, value: Node, from: Node, holder: Local | null)
   callee +31:9 followIntoCall -> @followIntoCall
   callee +36:23 isNeedleStep -> @isNeedleStep
   callee +43:12 followThroughBinary -> @followThroughBinary
-  callee +49:41 isString -> @isString
   callee +50:9 Trail.report -> @Trail.report
   callee +54:7 followIntoPlace -> @followIntoPlace
 function followIntoCall(trail: Trail, call: Node, arg: Node, value: Node, holder: Local | null): void -> @followIntoCall
@@ -494,7 +494,7 @@ function isNeedleStep(trail: Trail, binary: Node): boolean -> @isNeedleStep
 function followThroughBinary(trail: Trail, binary: Node, at: Node, value: Node, holder: Local | null): boolean -> @followThroughBinary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via storeInto
-  calls: PortabilityWalk.textOf Trail.report holdsOffset isArithmetic isComparison isCursor isNumberLiteral loopOf meetsLiteral nish_panic_index nish_str_concat nish_str_eq numberValue storeInto
+  calls: PortabilityWalk.textOf Trail.report holdsOffset isArithmetic isComparison isCursor isNumberLiteral loopOf meetsLiteral nish_panic_index nish_str_concat nish_str_eq numberValue sourceReceiver storeInto
   pointer trail: size=80 writesThrough=true captured=true passedTo=storeInto#0 Trail.report#0 Trail.report#0 Trail.report#0
   pointer binary: size=40 writesThrough=true captured=true passedTo=loopOf#1
   pointer at: size=40 writesThrough=false captured=false
@@ -519,13 +519,15 @@ function followThroughBinary(trail: Trail, binary: Node, at: Node, value: Node, 
   callee +25:7 isComparison -> @isComparison
   local +26:11 loop: Node | null (const)
   callee +26:18 loopOf -> @loopOf
-  callee +30:8 holdsOffset -> @holdsOffset
-  callee +31:8 isCursor -> @isCursor
-  callee +33:7 Trail.report -> @Trail.report
-  callee +33:66 PortabilityWalk.textOf -> @PortabilityWalk.textOf
-  callee +37:58 holdsOffset -> @holdsOffset
-  callee +38:5 Trail.report -> @Trail.report
-  callee +38:59 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  local +28:11 bound: Node | null (const)
+  callee +29:52 sourceReceiver -> @sourceReceiver
+  callee +33:8 holdsOffset -> @holdsOffset
+  callee +34:8 isCursor -> @isCursor
+  callee +36:7 Trail.report -> @Trail.report
+  callee +36:66 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee +40:58 holdsOffset -> @holdsOffset
+  callee +41:5 Trail.report -> @Trail.report
+  callee +41:59 PortabilityWalk.textOf -> @PortabilityWalk.textOf
 function loopOf(walk: PortabilityWalk, comparison: Node): Node | null -> @loopOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: comparison
@@ -538,13 +540,14 @@ function loopOf(walk: PortabilityWalk, comparison: Node): Node | null -> @loopOf
   callee +2:20 ParentTable.parentOf -> @ParentTable.parentOf
   local +6:11 climbs: boolean (const)
   local +11:13 isCondition: boolean (const)
-function isCursor(walk: PortabilityWalk, expr: Node, loop: Node): boolean -> @isCursor
+function isCursor(walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | null): boolean -> @isCursor
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via readsOf
-  calls: ParentTable.parentOf isArithmetic isNumberLiteral isString nish_panic_index nish_str_eq readsOf sourceLocal unwrapParens
-  pointer walk: size=48 writesThrough=false captured=false passedTo=isNumberLiteral#0 isNumberLiteral#0 readsOf#0 isString#0 isString#0
+  calls: ParentTable.parentOf isArithmetic isNumberLiteral isSameString isString nish_panic_index nish_str_eq readsOf sourceLocal unwrapParens
+  pointer walk: size=48 writesThrough=false captured=false passedTo=isNumberLiteral#0 isNumberLiteral#0 readsOf#0 isString#0 isSameString#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer loop: size=40 writesThrough=true captured=true passedTo=readsOf#1
+  pointer bound: size=40 writesThrough=true captured=true passedTo=isSameString#2
   stackSites=1 stackLocals=1
   local +0:7 e: Node (let)
   callee +0:11 unwrapParens -> @unwrapParens
@@ -562,12 +565,29 @@ function isCursor(walk: PortabilityWalk, expr: Node, loop: Node): boolean -> @is
   callee +18:18 ParentTable.parentOf -> @ParentTable.parentOf
   callee +21:64 isArithmetic -> @isArithmetic
   callee +24:16 ParentTable.parentOf -> @ParentTable.parentOf
-  callee +29:65 isString -> @isString
-  local +32:11 call: Node | null (const)
-  callee +32:56 ParentTable.parentOf -> @ParentTable.parentOf
-  local +34:13 callee: Node (const)
-  callee +34:22 unwrapParens -> @unwrapParens
-  callee +35:39 isString -> @isString
+  local +29:11 call: Node | null (const)
+  callee +29:56 ParentTable.parentOf -> @ParentTable.parentOf
+  local +31:13 callee: Node (const)
+  callee +31:22 unwrapParens -> @unwrapParens
+  callee +34:9 isString -> @isString
+  callee +35:9 isSameString -> @isSameString
+function isSameString(walk: PortabilityWalk, receiver: Node, bound: Node | null): boolean -> @isSameString
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: PortabilityWalk.textOf nish_arena_mark nish_arena_release nish_panic_index nish_str_eq sourceLocal unwrapParens
+  pointer walk: size=48 writesThrough=false captured=false passedTo=PortabilityWalk.textOf#0 PortabilityWalk.textOf#0
+  pointer receiver: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  pointer bound: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
+  stackSites=0 stackLocals=0
+  local +0:9 a: Node (const)
+  callee +0:13 unwrapParens -> @unwrapParens
+  local +1:9 b: Node (const)
+  callee +1:13 unwrapParens -> @unwrapParens
+  local +3:11 local: Local | null (const)
+  callee +3:19 sourceLocal -> @sourceLocal
+  local +4:11 other: Local | null (const)
+  callee +4:19 sourceLocal -> @sourceLocal
+  callee +9:10 PortabilityWalk.textOf -> @PortabilityWalk.textOf
+  callee +9:29 PortabilityWalk.textOf -> @PortabilityWalk.textOf
 function storeInto(trail: Trail, target: Node, value: Node, holder: Local | null): void -> @storeInto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Trail.report
@@ -612,7 +632,7 @@ function enclosingArrow(walk: PortabilityWalk, node: Node): Node | null -> @encl
 function followOutOfArrow(trail: Trail, arrow: Node, value: Node, holder: Local | null): void -> @followOutOfArrow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via followFrom
-  calls: ParentTable.parentOf Trail.report followFrom nish_panic_index parallelRoleOf
+  calls: ParentTable.parentOf Trail.report followFrom isMapEntry nish_panic_index parallelRoleOf
   pointer trail: size=80 writesThrough=true captured=true passedTo=followFrom#0 Trail.report#0
   pointer arrow: size=40 writesThrough=false captured=false passedTo=ParentTable.parentOf#1
   pointer value: size=40 writesThrough=true captured=true passedTo=followFrom#1 Trail.report#1
@@ -626,6 +646,7 @@ function followOutOfArrow(trail: Trail, arrow: Node, value: Node, holder: Local 
   local +6:9 sig: FunctionSig | null (const)
   callee +7:23 parallelRoleOf -> @parallelRoleOf
   callee +8:5 followFrom -> @followFrom
+  callee +9:30 isMapEntry -> @isMapEntry
   callee +10:5 Trail.report -> @Trail.report
 function followLocal(trail: Trail, local: Local | null): void -> @followLocal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true

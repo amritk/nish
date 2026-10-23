@@ -300,6 +300,11 @@ window you gave it.
   correctly rounded. `isInteger()` and `numberI64()` read one that fits in an
   `i64`, and `isU64()` and `numberU64()` read one written in digits alone, with
   no minus sign, that fits in a `u64`, up to `18446744073709551615`.
+  Those go by how the number is written, so `1.0` and `1e2` are not
+  integers to them. `isIntegral()` asks whether the value is whole however it
+  is written: `1.0`, `1e2`, `100e-2` and `1e400` are, `1.5` and `10e-2` are
+  not. That is JSON Schema's "integer". It reads the text, not a double, so it
+  holds at any size and any exponent.
 - **Skipping.** `skipValue()` steps over whatever value comes next, however
   deeply it nests: use it for a field you do not want.
 - **Limits.** `JsonLimits` caps nesting depth (128), the bytes in one string
@@ -544,6 +549,9 @@ above would see `12345678901234567000` and `0.1`, and `JSON.stringify` would
 write those back. A `JsonDocument` keeps the text and reads it as what you
 ask for: `isI64` and `i64`, `isU64` and `u64` for an integer that fits,
 `f64` for the nearest double, and `numberText` for the digits themselves.
+`isIntegral` asks whether the value is whole however it is written, so `1.0`
+and `1e2` are, though `isI64` says no to both: they are not written as
+integers.
 Writing the document back writes the text, so an ID wider than any integer
 type, or a price with more digits than a double holds, comes out exactly as it
 came in.
