@@ -815,7 +815,9 @@ second: a game, a dashboard. It does no input or output of its own. A
 you print it with `write`. A `KeyDecoder` turns the bytes you read into key
 events. The terminal's size and the clock are numbers you pass in. Because
 the module reaches no capability, a program that uses it builds under
-`--deny` of all of them and prints the same bytes under Node.
+`--deny` of all of them and prints the same bytes under Node. Reading the
+keys, raw mode and the terminal's size come from
+[`nish:term`](terminal.md).
 
 ```ts nish:ok
 import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";

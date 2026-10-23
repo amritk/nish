@@ -11,7 +11,10 @@ redraw many times a second. It has five functions:
 - `setRawMode` turns off echo and line editing, and turns them back on.
 
 The rules are in the reference, under
-[`nish:term`](../../LANGUAGE.md#nishterm-terminal-input).
+[`nish:term`](../../LANGUAGE.md#nishterm-terminal-input). It reads the
+terminal; drawing on it is the standard library's
+[`nish/term`](standard-library.md#nishterm), whose `KeyDecoder` turns the
+bytes `readStdin` returns into key events.
 
 Every function is also a global, as every `nish:` export is, but importing
 them says where they come from. A program that calls any of them carries the
@@ -61,7 +64,8 @@ Three things do not change:
 
 - **Ctrl-C still ends the program.** It is still a signal, not a byte, and
   so are Ctrl-\ and Ctrl-Z. A program stuck in a loop can always be stopped
-  from the keyboard.
+  from the keyboard. So `nish/term`'s `KEY_CTRL_C` never comes from a
+  terminal `setRawMode` set up.
 - **`"\n"` still starts a new line**, so `console.log` works as it always does.
 - **The terminal is always put back.** `setRawMode(false)` restores it, and
   so does returning from `main`, `process.exit`, a panic, and a Ctrl-C or
