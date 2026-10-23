@@ -21,8 +21,9 @@ fixed: `scripts/build.sh` (how the link's arguments reach `clang`),
 
 Added after the audit, with the grouped `--help`: `isTerminal`
 (`src/cli-style.ts`) starts `/bin/sh -c '[ -t N ]'` by absolute path, with N
-the descriptor 1 or 2 and nothing taken from the arguments or the environment,
-on the paths that print the usage; and `usageText` (`src/compile.ts`) calls
+the descriptor 1 or 2, on the paths that print the usage: the command is a
+constant and takes nothing from the arguments, and the shell inherits the
+environment as every spawn of `nish` does; and `usageText` (`src/compile.ts`) calls
 `findPackage` for an agent's help only to print the absolute path of the
 package's `docs/AI.md`, which `nish` neither reads nor runs. The root it
 settles on is the one CLI-9 already covers.

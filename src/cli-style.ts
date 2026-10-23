@@ -47,15 +47,15 @@ export class Style {
   }
 
   /**
-   * `text` wrapped in the escape for `rich` (a 256-colour SGR parameter list)
-   * or `basic` (an eight-colour one), and a reset after it; `text` unchanged
+   * `text` wrapped in the escape for `code256` (a 256-colour SGR parameter
+   * list) or `code16` (an eight-colour one), and a reset after it; `text` unchanged
    * when colour is off, so a caller never has to ask.
    */
-  paint(text: string, rich: string, basic: string): string {
+  paint(text: string, code256: string, code16: string): string {
     if (!this.on || text.length === 0) {
       return text
     }
-    return `${CSI}${this.rich ? rich : basic}m${text}${CSI}0m`
+    return `${CSI}${this.rich ? code256 : code16}m${text}${CSI}0m`
   }
 
   /** A section heading: bold, in the accent. */
@@ -176,9 +176,9 @@ export const styleFor = (fd: i32, agent: boolean): Style => {
 
 /**
  * The spaces that take plain text `width` columns wide to `column`, or two
- * when it is already there, so a long flag still keeps apart from its text.
+ * when that would leave fewer, so a long flag still keeps apart from its text.
  */
-const padTo = (width: i32, column: i32): string => repeatString(" ", width < column ? column - width : 2)
+const padTo = (width: i32, column: i32): string => repeatString(" ", width + 2 <= column ? column - width : 2)
 
 /**
  * One help row: the flag, its placeholder, and what it does, the description
@@ -237,7 +237,7 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, "--cpu", "x86-64-v3", "allow AVX2; such a binary needs it to start"))
   lines.push(helpRow(style, "--target", "<triple>|host", "stamp the IR with a target's data layout"))
   lines.push(helpRow(style, "-g", "", "DWARF debug info, for gdb and lldb"))
-  lines.push(helpRow(style, "--threads", "", "an arena per thread, as nish/threads needs"))
+  lines.push(helpRow(style, "--threads", "", "an arena per thread; nish/threads sets it"))
 
   lines.push("")
   lines.push(style.heading("Check"))
