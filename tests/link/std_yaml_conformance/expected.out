@@ -1,0 +1,15 @@
+PASS  comparer: scalars match by type
+PASS  comparer: a quoted number is a string
+PASS  comparer: keys match in any order
+PASS  comparer: a missing key differs
+PASS  comparer: a sequence matches in order
+PASS  comparer: aliases are followed
+PASS  comparer: merge keys are applied
+PASS  comparer: documents are counted
+PASS  comparer: aliases count against the budget
+PASS  comparer: a walk within the budget passes
+PASS  the cases load from tests/yaml-suite/cases.txt
+PASS  every case passes but the expected failures
+400 of 402 cases pass
+PASS  the pass count is the pinned one
+std/yaml conformance: 13 passed, 0 failed, 0 skipped

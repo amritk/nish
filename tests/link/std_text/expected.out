@@ -63,4 +63,13 @@ PASS  firstDifference: the same answer with the arguments swapped
 PASS  firstDifference: two empty lists are equal
 PASS  firstDifference: an empty list against a non-empty one differs at 0
 PASS  firstDifference: a trailing blank line is a difference
-text: 65 passed, 0 failed, 0 skipped
+PASS  codePointLength: the empty string has none
+PASS  codePointLength: ASCII is one per byte
+PASS  codePointLength: a two-byte sequence is one
+PASS  codePointLength: a three-byte sequence is one
+PASS  codePointLength: a four-byte sequence, a surrogate pair under Node, is one
+PASS  codePointLength: a mix of every width
+PASS  codePointLength: continuation-range Latin-1 counts one each
+PASS  codePointLength: the pair written as two escapes is one
+PASS  codePointLength: a lone surrogate is one
+text: 74 passed, 0 failed, 0 skipped

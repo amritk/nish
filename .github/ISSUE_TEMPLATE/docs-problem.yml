@@ -1,0 +1,42 @@
+name: Documentation problem
+description: A guide page, reference rule or example that is wrong, missing, or unclear.
+labels: ["documentation"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: The file and heading, or the URL of the page.
+      placeholder: docs/guide/language/unions.md, "Narrowing"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong
+      options:
+        - It disagrees with what the compiler does
+        - An example does not compile or prints something else
+        - Something is missing
+        - It is unclear or hard to follow
+        - A broken link
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: Details
+      description: |
+        Quote the passage. If it disagrees with the compiler, paste the program, the command, what the
+        compiler did, and the version (`nish --version`); that is often a compiler bug rather than a
+        documentation one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: What it should say
+      description: Your suggested wording or fix, if you have one.

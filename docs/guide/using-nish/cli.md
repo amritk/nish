@@ -4,12 +4,14 @@ Everything Nish does goes through one command, `nish`. It has two shapes:
 `nish run`, which compiles a program and runs it at once, and the plain
 `nish <files>`, which writes LLVM IR, a native binary or the files another
 language needs to call your code. This page covers the flags you will reach
-for; `nish --help` prints the whole list on stdout and exits 0.
+for; `nish --help` prints the whole list on stdout and exits 0, grouped by what
+the flags are for (Build, Check, Capabilities, Interop, Inspect, Code
+generation) and followed by the exit codes and a few examples.
 
 ```
-nish run [flags] <file.ts> [args ...]    compile, cache and run
-nish <entry.ts> [more.ts ...] [flags]    compile: IR, a binary, sidecars
-nish --version | --help
+usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
+       nish run [flags] <file.ts> [args ...]  build, cache and run it
+       nish -v, --version | -h, --help
 ```
 
 ## Running a program: `nish run`
@@ -228,6 +230,34 @@ and it writes no IR, so `-o` and `--link` are usage errors beside it. **It
 rewrites your files in place with no backup**, so run it on a tree you have
 committed.
 
+## Colour, and when an agent runs `nish`
+
+`nish --help` is coloured when it prints to a terminal and plain when it is
+piped or redirected, so `nish --help | less` and `nish --help > flags.txt` hold
+no escape codes. Diagnostics are never coloured. These variables change that:
+
+| Variable | Effect |
+| --- | --- |
+| `NO_COLOR`, not empty | never colour; it wins over everything below |
+| `FORCE_COLOR` set to `0`, `false`, `no` or `off`, in any case | never colour, even on a terminal |
+| `FORCE_COLOR` or `CLICOLOR_FORCE`, neither empty nor one of those | colour even when piped, unless an agent is running `nish` |
+| `CLICOLOR` set to one of those, or `TERM=dumb` | no colour, unless one of the two above forces it |
+
+The palette uses 256 colours when `TERM` names a 256-colour terminal,
+`COLORTERM` is set or `FORCE_COLOR` is `2` or `3`, and the 16 basic ones
+otherwise.
+
+**Coding agents get a plain help with an extra section.** When `nish` runs
+under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything but empty
+or a no (`0`, `false`, `no`, `off`), or you set `NISH_AGENT` the same way
+(`NISH_AGENT=1`) — the help has no colour, even on a terminal or with
+`FORCE_COLOR` set, and ends with an **Agents** section: the absolute path of
+`docs/AI.md` (the language as rules, traps first) in the installed package,
+and the flags an agent's loop needs —
+`--json`, `--fix` and `nish run`. `NISH_AGENT=0` (or `false`, `no`, `off`) turns this off
+when one of those variables is set for some other reason. If the package's
+`docs/AI.md` cannot be found, the section names it without a path.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -236,7 +266,7 @@ committed.
 | 1 | the program was rejected: a compile error, or an input file that does not exist |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
 | 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written) |
-| 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input; `NISH_DEBUG=1` adds a stack trace |
+| 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |
 
 `nish run` answers these codes until the program starts, and the program's own
 exit status after that — the value `main` returns, `1` for a panic such as an
