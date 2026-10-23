@@ -6,9 +6,9 @@
  *   1. compiled and linked natively, run, stdout, stderr and exit status
  *      captured;
  *   2. written out with `nish --emit-ts <dir>` by the same compiler, and the
- *      `entry.ts` it writes run under `node --experimental-strip-types`, with
- *      `tests/emit-ts/runtime-hook.mjs` resolving `nish/runtime` to this
- *      checkout's `runtime/`;
+ *      `entry.ts` it writes run under `node --experimental-strip-types`; the
+ *      output lies inside this package, so `nish/runtime` resolves to this
+ *      checkout's `runtime/` through the package's own exports;
  *   3. compared byte for byte.
  *
  * Unlike `run.js`, nothing here is frozen: the TypeScript is written by the
@@ -43,7 +43,6 @@ import { buildDir, discoverPrograms } from "./lib.js"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const KNOWN = path.join(import.meta.dirname, "emit-ts-known.txt")
-const HOOK = path.join(root, "tests", "emit-ts", "runtime-hook.mjs")
 const WORK = path.join(path.dirname(buildDir), "emit-ts-differential")
 const RUN_TIMEOUT_MS = 30_000
 
@@ -56,8 +55,6 @@ export const NODE_FLAGS = [
   "--experimental-strip-types",
   "--no-warnings",
   ...(Number(process.versions.node.split(".")[0]) < 24 ? ["--js-explicit-resource-management"] : []),
-  "--import",
-  HOOK,
 ]
 
 /** Spawn, capture both streams as Buffers, and kill the child at the timeout. */
