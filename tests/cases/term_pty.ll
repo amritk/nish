@@ -11,6 +11,7 @@
 @.str.7 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"hold\00" }, align 8
 @.str.8 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"ready\00" }, align 8
 
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
@@ -19,11 +20,13 @@ declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, 
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #1
+declare noundef i32 @nish_read_stdin(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #0
 declare zeroext i1 @nish_wait_stdin(i32 noundef) #0
 declare zeroext i1 @nish_is_terminal(i32 noundef) #1
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size() #1
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
@@ -105,6 +108,10 @@ entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i32], align 8
+  %buf.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr.1 = alloca %struct.nish_array, align 8
+  %arr.data.1 = alloca [16 x i8], align 8
+  %n.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
   %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
@@ -226,7 +233,59 @@ if.end.2:
 
 if.then.3:
   call void @nish_print(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*))
-  %59 = call zeroext i1 @nish_wait_stdin(i32 -1)
+  %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
+  store i64 16, i64* %59, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 1
+  store i64 16, i64* %60, align 8, !alias.scope !3, !noalias !4, !tbaa !16
+  %61 = bitcast [16 x i8]* %arr.data.1 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %61, i8 0, i64 16, i1 false), !alias.scope !4, !noalias !3
+  %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 2
+  store i8* %61, i8** %62, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %buf.addr, align 8
+  store i32 -11, i32* %n.addr, align 4
+  br label %while.cond
+
+while.cond:
+  %63 = load i32, i32* %n.addr, align 4
+  %64 = icmp sgt i32 %63, 0
+  br i1 %64, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %65 = load i32, i32* %n.addr, align 4
+  %66 = icmp eq i32 %65, -11
+  br label %lor.end
+
+lor.end:
+  %67 = phi i1 [ true, %while.cond ], [ %66, %lor.rhs ]
+  br i1 %67, label %while.body, label %while.end
+
+while.body:
+  %68 = call zeroext i1 @nish_wait_stdin(i32 -1)
+  br i1 %68, label %if.then.4, label %if.end.4
+
+if.then.4:
+  %69 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %70 = add i64 0, 16
+  %71 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %69, i64 0, i32 0
+  %72 = load i64, i64* %71, align 8
+  %73 = icmp ule i64 0, %70
+  %74 = icmp ule i64 %70, %72
+  %75 = and i1 %73, %74
+  br i1 %75, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %70, i64 %72)
+  unreachable
+
+net.ok:
+  %76 = call i32 @nish_read_stdin(%struct.nish_array* %69, i64 0, i64 16)
+  store i32 %76, i32* %n.addr, align 4
+  br label %if.end.4
+
+if.end.4:
+  br label %while.cond
+
+while.end:
   br label %if.end.3
 
 if.end.3:

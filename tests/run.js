@@ -11887,6 +11887,34 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
       )
       continue
     }
+    // `terminalSize` takes nothing and answers an `i32[]`, a shape the generator
+    // below does not write, so its probe is written out too.
+    if (builtin === "terminalSize") {
+      const probeSrc = [
+        "export const probe = (arg0: string): i32[] => {",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+        "  const label = `probe ${arg0}`;",
+        "  console.log(label);",
+        "  return terminalSize();",
+        "};",
+        "",
+      ].join("\n")
+      const probeTs = path.join(buildDir, "alloc_probe_terminalSize.ts")
+      const probeLl = path.join(buildDir, "alloc_probe_terminalSize.ll")
+      fs.writeFileSync(probeTs, probeSrc)
+      const r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root, encoding: "utf8" })
+      const ir = r.status === 0 ? fs.readFileSync(probeLl, "utf8") : r.stderr
+      const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? ""
+      check(
+        "terminalSize: a function returning its result keeps the arena (no nish_arena_release before the ret)",
+        r.status === 0 &&
+          body.includes("@nish_terminal_size(") &&
+          body.includes("@nish_str_concat(") &&
+          !body.includes("nish_arena_release"),
+        `${probeSrc}\n${ir}`
+      )
+      continue
+    }
     const fn = runtimeByName.get(symbol)
     const returnTypes = nishReturnTypes(fn)
     const arity = stringArity(fn)

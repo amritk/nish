@@ -4,7 +4,10 @@
 // mode twice, the second a no-op; `exit` returns in raw mode, so the atexit
 // handler restores; `panic` fails a bounds check in raw mode, so the panic
 // path restores; `hold` waits in raw mode until SIGTERM, which the handler
-// restores before it lets the signal end the program.
+// restores before it lets the signal end the program. It reads and drops what
+// comes meanwhile: `script(1)` gives the terminal a Ctrl-D when its own stdin
+// ends, which raw mode delivers as a byte, so one wait could return before the
+// signal does.
 const probe = (): number => {
   const size = terminalSize();
   console.log(`${isTerminal(0)} ${isTerminal(1)} ${size[0] >= 0} ${size[1] >= 0}`);
@@ -28,7 +31,13 @@ export const main = (): number => {
   }
   if (mode === "hold") {
     console.log("ready");
-    waitStdin(-1);
+    const buf: u8[] = new Array<u8>(16);
+    let n = -11;
+    while (n > 0 || n === -11) {
+      if (waitStdin(-1)) {
+        n = readStdin(buf, 0, 16);
+      }
+    }
   }
   return 0;
 };
