@@ -17084,6 +17084,65 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
   }
 }
 
+if (!only || "yaml-compare".includes(only) || "bench".includes(only)) {
+  // bench/yaml-compare/run.mjs runs Nish, its copy right after it, and one or
+  // two JavaScript runtimes through json-compare's roundOrder: each in every
+  // position equally often, Nish and its copy taking turns going first.
+  for (const n of [3, 4]) {
+    const rounds = roundsFor(n, 15)
+    const impls = Array.from({ length: n }, (_, k) => k)
+    const counts = impls.map(() => new Array(n).fill(0))
+    let nishFirst = 0
+    for (let round = 0; round < rounds; round++) {
+      const order = roundOrder(impls, round)
+      order.forEach((impl, position) => {
+        counts[impl][position] += 1
+      })
+      nishFirst += order.indexOf(0) < order.indexOf(1) ? 1 : 0
+    }
+    check(
+      `yaml-compare: ${n} implementations run ${rounds} rounds by default, each in every position equally often, Nish and its copy taking turns going first`,
+      counts.every((row) => row.every((c) => c === rounds / n)) && nishFirst === rounds / 2,
+      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${rounds} rounds`
+    )
+  }
+  // The Nish program against the checksums @amritk/yaml printed for the
+  // committed sample (sample.expected says how they were recorded).
+  const dir = path.join(root, "bench", "yaml-compare")
+  const exe = path.join(buildDir, "yaml-compare", "main")
+  if (HAS_CLANG) {
+    const built = spawnSync(
+      NISH,
+      [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const sample = path.join(dir, "sample.yaml")
+    const expected = fs
+      .readFileSync(path.join(dir, "sample.expected"), "utf8")
+      .split("\n")
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map((l) => {
+        const [args, want] = l.split(": ")
+        return { args: args.split(" "), want }
+      })
+    for (const { args, want } of expected) {
+      const run = built.status === 0 ? spawnSync(exe, [args[0], sample, args[1]], { encoding: "utf8" }) : null
+      check(
+        `yaml-compare: bench/yaml-compare/main.ts ${args[0]} on sample.yaml prints the checksum @amritk/yaml printed`,
+        run !== null && run.status === 0 && run.stdout.split("\n")[0] === want,
+        run === null ? `${built.stdout}${built.stderr}` : `${run.stdout}${run.stderr}\nexpected ${want}`
+      )
+    }
+    check(
+      "yaml-compare: sample.expected holds a line for each workload",
+      ["parse", "walk"].every((w) => expected.some((e) => e.args[0] === w)),
+      expected.map((e) => e.want).join("\n")
+    )
+  } else {
+    skip("yaml-compare: bench/yaml-compare/main.ts native run (no clang)")
+  }
+}
+
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
 // noise is bigger than that. An instruction count is exact, so the twenty-one
