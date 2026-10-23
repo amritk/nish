@@ -17,9 +17,20 @@
 // the same rule: a `.length` this program reads is an `f64` here, and so is a
 // bare numeric literal passed to a user function or a method, so an `i32`
 // argument has to be converted at the call (LANGUAGE.md, *Numeric literals*).
-import { jsonField } from "../../../std/json";
-import { Suite } from "../../../std/testing";
-import { contains, firstDifference, replaceAll, splitLines, splitWhitespace, trim } from "../../../std/text";
+// The imports name the `.ts` file so that Node runs this program as written
+// (`tests/run.js`, "link/std_text_f64: under the Node prelude it exits 0 and
+// prints expected.out").
+import { jsonField } from "../../../std/json.ts";
+import { Suite } from "../../../std/testing.ts";
+import {
+  codePointLength,
+  contains,
+  firstDifference,
+  replaceAll,
+  splitLines,
+  splitWhitespace,
+  trim,
+} from "../../../std/text.ts";
 
 export const main = (): i32 => {
   const t = new Suite("text-f64");
@@ -39,6 +50,19 @@ export const main = (): i32 => {
   t.eqStr("splitWhitespace: the word after the tab", words[1], "beta");
 
   t.eqStr("trim: both ends go", trim(" \talpha \r\n"), "alpha");
+
+  // `codePointLength` masks each byte it reads, `& 0xc0`, which is an integer
+  // operator: without the `toI32` at its `charCodeAt` it would not compile here.
+  t.eqI32("codePointLength: the empty string has none", codePointLength(""), toI32(0));
+  t.eqI32("codePointLength: ASCII is one per byte", codePointLength("alpha beta"), toI32(10));
+  t.eqI32("codePointLength: a two-byte sequence is one", codePointLength("é"), toI32(1));
+  t.eqI32("codePointLength: a three-byte sequence is one", codePointLength("€"), toI32(1));
+  t.eqI32("codePointLength: a four-byte sequence is one", codePointLength("😀"), toI32(1));
+  t.eqI32("codePointLength: a mix of every width", codePointLength("aé€😀z"), toI32(5));
+  t.eqI32("codePointLength: continuation-range Latin-1 counts one each", codePointLength("©®±"), toI32(3));
+  t.eqI32("codePointLength: the pair written as two escapes is one", codePointLength("\ud83d\ude00"), toI32(1));
+  t.eqI32("codePointLength: a lone surrogate is one", codePointLength("a\ud800b"), toI32(3));
+  t.eqI32("codePointLength: a low half before a high one closes nothing", codePointLength("\ude00\ud83d"), toI32(2));
   t.eqBool("contains: an interior occurrence", contains("alphabet", "phab"), true);
   t.eqStr("replaceAll: every occurrence, not just the first", replaceAll("a-b-c", "-", "+"), "a+b+c");
 

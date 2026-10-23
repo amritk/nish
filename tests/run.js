@@ -8509,6 +8509,36 @@ if (!only || "std_text_index_of_any".includes(only)) {
   )
 }
 
+// `std/text` under the Node prelude. The link loop runs both programs natively
+// against their expected.out; here the same files run under `runtime/nish.mjs`
+// and are held to the same bytes. That is the whole claim `codePointLength`
+// makes: its native walk counts UTF-8 lead bytes and its Node walk counts
+// UTF-16 units less the second half of each pair, and é, €, 😀, "©®±" and a
+// lone surrogate print the same count both ways.
+if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
+  for (const name of ["std_text", "std_text_f64"]) {
+    const dir = path.join(linkDir, name)
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    check(
+      `link/${name}: under the Node prelude it exits ${code} and prints expected.out`,
+      run.status === code && run.stdout === out,
+      `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+    )
+  }
+  // Where the answers part: text built from bytes is one unit per byte under
+  // Node, U+0080 is a whole unit there, and the joined halves are one pair.
+  // expected.out holds the native answers; these are Node's.
+  const divergent = runUnderPrelude(path.join(linkDir, "std_text_code_points_native", "main.ts"), [])
+  check(
+    "link/std_text_code_points_native: under the Node prelude bytes count as units and the joined halves as one pair",
+    divergent.status === 0 &&
+      divergent.stdout === "built from bytes: 2\nstray continuation byte: 1\njoined halves: 1, length 2\n",
+    shown(divergent)
+  )
+}
+
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
 // `JSON.stringify`. `tests/link/std_json_writer/node.ts` writes each of these
 // values, one line apiece and in this order, and is ASCII, so its
@@ -13337,7 +13367,11 @@ if (!only || "runtime-parallel".includes(only)) {
 // sysroot is installed, and as a static AArch64 binary when the host can run one
 // (binfmt_misc and qemu-user), which is how the NEON path runs on an x86-64 host. A
 // path the host cannot run is said, not skipped quietly: the driver's own line names
-// it, as the AVX2 path on a CPU without AVX2 is.
+// it, as the AVX2 path on a CPU without AVX2 is. tests/simd/regex-scan.c holds
+// `nish_regex_scan`, the byte-set search `nish/regex` starts its matches with, to
+// the same: 1..8 positions of random sets with the window anywhere in them, every
+// planted position of every length 0..300, and the resolver's pick, on the same
+// targets.
 if (!only || "simd".includes(only)) {
   const simdDir = path.join(buildDir, "simd")
   fs.mkdirSync(simdDir, { recursive: true })
@@ -13350,7 +13384,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -13363,6 +13397,8 @@ if (!only || "simd".includes(only)) {
   }
   const native = (exe) => spawnSync(exe, [], { encoding: "utf8" })
   agree(`native ${process.arch}`, [], path.join(simdDir, "index-of-any"), native)
+  const scanDriver = "tests/simd/regex-scan.c"
+  agree(`regex-scan native ${process.arch}`, [], path.join(simdDir, "regex-scan"), native, scanDriver)
 
   // WP38 S5: runtime/runtime-aes.c runs AES-GCM on AES-NI and PCLMULQDQ, or on the
   // ARMv8 AES and PMULL instructions, and a program takes that path or the bitsliced
@@ -13407,16 +13443,22 @@ if (!only || "simd".includes(only)) {
       ["wasm32-wasi, the scalar base path", []],
       ["wasm32-wasi -msimd128", ["-msimd128"]],
     ]) {
-      agree(
-        label,
-        ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, ...flags],
-        path.join(simdDir, `index-of-any${flags.join("")}.wasm`),
-        (wasm) =>
-          spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
-            cwd: root,
-            encoding: "utf8",
-          })
-      )
+      for (const [name, source] of [
+        ["index-of-any", driver],
+        ["regex-scan", scanDriver],
+      ]) {
+        agree(
+          name === "index-of-any" ? label : `${name} ${label}`,
+          ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, ...flags],
+          path.join(simdDir, `${name}${flags.join("")}.wasm`),
+          (wasm) =>
+            spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+              cwd: root,
+              encoding: "utf8",
+            }),
+          source
+        )
+      }
     }
   } else {
     skip("simd: no WASI sysroot (set WASI_SYSROOT): the wasm32 scalar and simd128 paths are not run")
@@ -13450,6 +13492,13 @@ if (!only || "simd".includes(only)) {
       for (const [label, source, out, what, wantLine] of [
         ["aarch64 through binfmt, the NEON path", driver, a64, "the NEON path", null],
         [
+          "regex-scan aarch64 through binfmt, the NEON path",
+          scanDriver,
+          path.join(simdDir, "regex-scan.aarch64"),
+          "the NEON path of regex-scan",
+          null,
+        ],
+        [
           "aes-gcm aarch64 through binfmt (QEMU_CPU=max), the ARMv8 AES and PMULL path",
           "tests/simd/aes-gcm.c",
           path.join(simdDir, "aes-gcm.aarch64"),
@@ -13466,7 +13515,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -13516,7 +13565,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
@@ -17081,6 +17130,65 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         subset.stdout.includes("unchanged"),
       `${subset.stdout}${subset.stderr}`
     )
+  }
+}
+
+if (!only || "yaml-compare".includes(only) || "bench".includes(only)) {
+  // bench/yaml-compare/run.mjs runs Nish, its copy right after it, and one or
+  // two JavaScript runtimes through json-compare's roundOrder: each in every
+  // position equally often, Nish and its copy taking turns going first.
+  for (const n of [3, 4]) {
+    const rounds = roundsFor(n, 15)
+    const impls = Array.from({ length: n }, (_, k) => k)
+    const counts = impls.map(() => new Array(n).fill(0))
+    let nishFirst = 0
+    for (let round = 0; round < rounds; round++) {
+      const order = roundOrder(impls, round)
+      order.forEach((impl, position) => {
+        counts[impl][position] += 1
+      })
+      nishFirst += order.indexOf(0) < order.indexOf(1) ? 1 : 0
+    }
+    check(
+      `yaml-compare: ${n} implementations run ${rounds} rounds by default, each in every position equally often, Nish and its copy taking turns going first`,
+      counts.every((row) => row.every((c) => c === rounds / n)) && nishFirst === rounds / 2,
+      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${rounds} rounds`
+    )
+  }
+  // The Nish program against the checksums @amritk/yaml printed for the
+  // committed sample (sample.expected says how they were recorded).
+  const dir = path.join(root, "bench", "yaml-compare")
+  const exe = path.join(buildDir, "yaml-compare", "main")
+  if (HAS_CLANG) {
+    const built = spawnSync(
+      NISH,
+      [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const sample = path.join(dir, "sample.yaml")
+    const expected = fs
+      .readFileSync(path.join(dir, "sample.expected"), "utf8")
+      .split("\n")
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map((l) => {
+        const [args, want] = l.split(": ")
+        return { args: args.split(" "), want }
+      })
+    for (const { args, want } of expected) {
+      const run = built.status === 0 ? spawnSync(exe, [args[0], sample, args[1]], { encoding: "utf8" }) : null
+      check(
+        `yaml-compare: bench/yaml-compare/main.ts ${args[0]} on sample.yaml prints the checksum @amritk/yaml printed`,
+        run !== null && run.status === 0 && run.stdout.split("\n")[0] === want,
+        run === null ? `${built.stdout}${built.stderr}` : `${run.stdout}${run.stderr}\nexpected ${want}`
+      )
+    }
+    check(
+      "yaml-compare: sample.expected holds a line for each workload",
+      ["parse", "walk"].every((w) => expected.some((e) => e.args[0] === w)),
+      expected.map((e) => e.want).join("\n")
+    )
+  } else {
+    skip("yaml-compare: bench/yaml-compare/main.ts native run (no clang)")
   }
 }
 

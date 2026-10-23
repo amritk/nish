@@ -19,7 +19,7 @@ import { emitIndex, emitNumberFromI64, emitOffset, emitRangeCheck, loadData, loa
 import { emitPanicTail, panicTailCallees } from "./emit-builtins"
 import { templateParts } from "./emit-util"
 import { IRBlock, IRModule } from "./ir"
-import { INDEX_OF_ANY_KERNEL } from "./kernels"
+import { INDEX_OF_ANY_KERNEL, REGEX_SCAN_KERNEL } from "./kernels"
 import { N_NULL, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
 import { FunctionSig } from "./program"
 import { irEscape } from "./strings"
@@ -371,6 +371,24 @@ export const emitIndexOfAnyKernel = (emitter: Emitter, values: string[]): string
   const from = emitter.fn.emitValue(`sext i32 ${values[2]} to i64`)
   const found = emitter.fn.emitValue(
     `call i64 ${emitter.useRuntime(INDEX_OF_ANY_KERNEL)}(i8* ${values[0]}, i8* ${values[1]}, i64 ${from})`
+  )
+  return emitter.fn.emitValue(`trunc i64 ${found} to i32`)
+}
+
+/**
+ * `nish/regex`'s scan, lowered to the runtime kernel (`src/kernels.ts`):
+ * `values` are the lowered text, mask array, depth, window offset, window
+ * width and `from`, the last four `i32`s its callers have already bounded,
+ * and the answer comes back as the walker's `i32`, as
+ * `emitIndexOfAnyKernel`'s does.
+ */
+export const emitRegexScanKernel = (emitter: Emitter, values: string[]): string => {
+  const depth = emitter.fn.emitValue(`sext i32 ${values[2]} to i64`)
+  const off = emitter.fn.emitValue(`sext i32 ${values[3]} to i64`)
+  const width = emitter.fn.emitValue(`sext i32 ${values[4]} to i64`)
+  const from = emitter.fn.emitValue(`sext i32 ${values[5]} to i64`)
+  const found = emitter.fn.emitValue(
+    `call i64 ${emitter.useRuntime(REGEX_SCAN_KERNEL)}(i8* ${values[0]}, %struct.nish_array* ${values[1]}, i64 ${depth}, i64 ${off}, i64 ${width}, i64 ${from})`
   )
   return emitter.fn.emitValue(`trunc i64 ${found} to i32`)
 }
