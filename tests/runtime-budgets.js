@@ -417,7 +417,7 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  * every signal whose default ends the program run while raw mode holds, and the
  * SIGTSTP handler that gives the terminal back on Ctrl-Z and raw mode on `fg`.
  *
- * Measured **1,319 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * Measured **1,446 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
  * `.text`, 333 of them the SIGTSTP handler and the lock it shares with
  * `setRawMode` (`nish_term_on_signal`, `_mask`, `_hold`, `_drop` and `_leave`).
  * A ninth translation unit rather than more of `runtime-os.c`, which had 177

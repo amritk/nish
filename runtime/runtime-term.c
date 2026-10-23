@@ -70,6 +70,7 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <termios.h>
+#include <time.h>
 #endif
 
 #ifndef __wasi__
@@ -88,11 +89,11 @@ static int nish_term_stop_count(void) {
    ends the wait, and the host's `-errno` when the question fails. A Ctrl-Z
    and `fg` do not end it once `setRawMode(true)` has caught SIGTSTP: no
    system restarts a `select` after a handler, `SA_RESTART` or not, so one the
-   handler's stop interrupted is asked again, for what Linux left of the
-   timeout and Darwin for all of it. Before that, Linux restarts it after the
-   default stop and Darwin ends the wait. Outside WASI this asks `select`,
-   because Darwin's `poll` does not support devices: it answers POLLNVAL for a
-   terminal at once, with no input there. Under WASI a timeout under 10 ms
+   handler's stop interrupted is asked again, for what is left until a
+   deadline read once from the monotonic clock, since `select` promises
+   nothing of its timeout or its set after an error. Outside WASI this asks
+   `select`, because Darwin's `poll` does not support devices: it answers
+   POLLNVAL for a terminal at once, with no input there. Under WASI a timeout under 10 ms
    asks for 10: Node's WASI (uvwasi) runs a timer that is due before its first
    look at the descriptor, and counts it from before it set the look up, so a
    shorter wait answers "nothing waiting" while bytes are there whenever
@@ -103,11 +104,17 @@ static int nish_stdin_ready(int32_t timeout_ms) {
   int r = poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms < 10 ? 10 : timeout_ms);
 #else
   fd_set in;
-  FD_ZERO(&in);
-  FD_SET(0, &in);
-  struct timeval tv = {timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  int64_t end = now.tv_sec * 1000000LL + now.tv_nsec / 1000 + timeout_ms * 1000LL;
   int r, stops;
   do {
+    FD_ZERO(&in);
+    FD_SET(0, &in);
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int64_t left = end - (now.tv_sec * 1000000LL + now.tv_nsec / 1000);
+    if (left < 0) left = 0;
+    struct timeval tv = {left / 1000000, left % 1000000};
     stops = nish_term_stop_count();
     r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
   } while (r < 0 && errno == EINTR && stops != nish_term_stop_count());
@@ -139,8 +146,8 @@ int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
 
 /* `waitStdin(timeoutMs)`: true once stdin is readable, which includes its end
    and an error, so a read after it answers at once; false when `timeoutMs`
-   passes first, or a signal ends the wait early: not a Ctrl-Z once raw mode
-   has caught SIGTSTP. A negative timeout waits for ever. */
+   passes first, or a signal ends the wait early: not a Ctrl-Z once
+   `setRawMode(true)` has caught SIGTSTP. A negative timeout waits for ever. */
 bool nish_wait_stdin(int32_t timeout_ms) { return nish_stdin_ready(timeout_ms) != 0; }
 
 #ifdef __wasi__
