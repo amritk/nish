@@ -16528,7 +16528,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--warn-portability",
     "--fix",
     "--emit-capabilities",
-    "[--capabilities]",
+    "--capabilities",
     "--allow",
     "--deny",
     "run [flags] <file.ts> [args ...]",
@@ -16538,6 +16538,58 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     `--help lists every advertised flag (${documented.length} checked)`,
     undocumented.length === 0,
     `missing from --help: ${undocumented.join(", ")}`
+  )
+  // The help is painted only for a person at a terminal (src/cli-style.ts).
+  // Every case names each variable the policy reads, so the runner's own
+  // environment -- an agent's, a CI's -- cannot decide the answer.
+  const ESC = "\u001b["
+  const plainEnv = { NO_COLOR: "", FORCE_COLOR: "", CLICOLOR_FORCE: "", NISH_AGENT: "0" }
+  const plainHelp = run(["--help"], plainEnv)
+  check(
+    "--help into a pipe: no escape codes",
+    plainHelp.status === 0 && !plainHelp.stdout.includes(ESC),
+    JSON.stringify(plainHelp.stdout.slice(0, 200))
+  )
+  const wide = plainHelp.stdout.split("\n").filter((line) => line.length > 80)
+  check("--help: every line fits in 80 columns", wide.length === 0, wide.join("\n"))
+  const forced = run(["--help"], { ...plainEnv, FORCE_COLOR: "1", TERM: "xterm-256color" })
+  check(
+    "--help with FORCE_COLOR=1: coloured, and the same text under the escapes",
+    forced.status === 0 &&
+      forced.stdout.includes(`${ESC}38;5;`) &&
+      forced.stdout.replace(/\u001b\[[0-9;]*m/g, "") === plainHelp.stdout,
+    JSON.stringify(forced.stdout.slice(0, 200))
+  )
+  const basic = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "xterm", COLORTERM: "" })
+  check(
+    "--help with CLICOLOR_FORCE=1 on an 8-colour TERM: the basic palette only",
+    basic.stdout.includes(`${ESC}36m`) && !basic.stdout.includes("38;5;"),
+    JSON.stringify(basic.stdout.slice(0, 200))
+  )
+  const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })
+  check(
+    "--help: NO_COLOR wins over FORCE_COLOR",
+    noColor.stdout === plainHelp.stdout,
+    JSON.stringify(noColor.stdout.slice(0, 200))
+  )
+  // An agent gets the plain text and a section a person does not: the rules
+  // card by a path it can open, which is the package's own docs/AI.md.
+  const agentHelp = run(["--help"], { ...plainEnv, NISH_AGENT: "1" })
+  const card = agentHelp.stdout.split("\n").find((line) => line.trim().endsWith("/docs/AI.md"))
+  check(
+    "--help for an agent (NISH_AGENT=1): plain, with the rules card by a path that exists",
+    agentHelp.status === 0 &&
+      agentHelp.stdout.includes("\nAgents\n") &&
+      !agentHelp.stdout.includes(ESC) &&
+      card !== undefined &&
+      fs.existsSync(card.trim()),
+    agentHelp.stdout
+  )
+  const claude = run(["--help"], { ...plainEnv, NISH_AGENT: "", CLAUDECODE: "1" })
+  check(
+    "--help under CLAUDECODE=1 is an agent's, and NISH_AGENT=0 is a person's",
+    claude.stdout === agentHelp.stdout && !plainHelp.stdout.includes("\nAgents\n"),
+    claude.stdout
   )
   const badFlag = run(["--bogus", entry])
   check(

@@ -4,12 +4,14 @@ Everything Nish does goes through one command, `nish`. It has two shapes:
 `nish run`, which compiles a program and runs it at once, and the plain
 `nish <files>`, which writes LLVM IR, a native binary or the files another
 language needs to call your code. This page covers the flags you will reach
-for; `nish --help` prints the whole list on stdout and exits 0.
+for; `nish --help` prints the whole list on stdout and exits 0, grouped by what
+the flags are for (Build, Check, Capabilities, Interop, Inspect, Code
+generation) and followed by the exit codes and a few examples.
 
 ```
-nish run [flags] <file.ts> [args ...]    compile, cache and run
-nish <entry.ts> [more.ts ...] [flags]    compile: IR, a binary, sidecars
-nish --version | --help
+usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
+       nish run [flags] <file.ts> [args ...]  build, cache and run it
+       nish -v, --version | -h, --help
 ```
 
 ## Running a program: `nish run`
@@ -163,6 +165,29 @@ It never edits a standard-library module or anything under `node_modules`,
 and it writes no IR, so `-o` and `--link` are usage errors beside it. **It
 rewrites your files in place with no backup**, so run it on a tree you have
 committed.
+
+## Colour, and when an agent runs `nish`
+
+`nish --help` is coloured when it prints to a terminal and plain when it is
+piped or redirected, so `nish --help | less` and `nish --help > flags.txt` hold
+no escape codes. Diagnostics are never coloured. These variables change that:
+
+| Variable | Effect |
+| --- | --- |
+| `NO_COLOR` set to anything | never colour; it wins over the two below |
+| `FORCE_COLOR` or `CLICOLOR_FORCE`, not empty or `0` | colour even when piped |
+| `TERM=dumb` | no colour |
+
+The palette uses 256 colours when `TERM` names a 256-colour terminal or
+`COLORTERM` is set, and the 16 basic ones otherwise.
+
+**Coding agents get a plain help with an extra section.** When `nish` runs
+under an agent — `CLAUDECODE` or `GEMINI_CLI` is set, or you set
+`NISH_AGENT=1` — the help has no colour, even on a terminal, and ends with an
+**Agents** section: the absolute path of `docs/AI.md` (the language as rules,
+traps first) in the installed package, and the flags an agent's loop needs —
+`--json`, `--fix` and `nish run`. `NISH_AGENT=0` turns this off when one of
+those variables is set for some other reason.
 
 ## Exit codes
 

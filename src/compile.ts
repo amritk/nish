@@ -61,6 +61,7 @@
 import { astText } from "./ast-text"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
+import { agentDriven, helpHint, helpText, styleFor } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
 import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
@@ -89,8 +90,27 @@ import {
   sha256Hex,
 } from "./run-cache"
 
-const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--cpu x86-64-v3] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+/**
+ * The help, painted for the stream it goes to: `--help` answers on stdout and
+ * a usage error on stderr, and either may be a terminal while the other is a
+ * pipe. `src/cli-style.ts` holds the text and the colour policy. An agent's
+ * help also names the rules card shipped with the package, by the path it can
+ * read, so the package is looked for only then.
+ */
+const usageText = (fd: i32): string => {
+  let guide = ""
+  if (agentDriven()) {
+    guide = "docs/AI.md, in the nish package"
+    const root = findPackage().root
+    if (root.length > 0) {
+      const card = realpathSync(`${root}/docs/AI.md`)
+      if (card !== null) {
+        guide = card
+      }
+    }
+  }
+  return helpText(styleFor(fd), guide)
+}
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -428,7 +448,7 @@ const capabilityListMask = (flag: string, list: string): i32 => {
 
 export const main = (): number => {
   if (process.argv.length < 2) {
-    console.error(usageText())
+    console.error(usageText(2))
     return 2
   }
   const opts = new Options()
@@ -654,7 +674,7 @@ export const main = (): number => {
       // defined wrap is `--wrapping`, and the refusal says so rather than
       // letting an old build script mean something it no longer can.
       console.error(
-        `compile: \`--nsw\` is gone: signed overflow is checked and panics; write an operation meant to wrap as \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` (or use the deprecated --wrapping)\n${usageText()}`
+        "compile: `--nsw` is gone: signed overflow is checked and panics; write an operation meant to wrap as `wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe` (or use the deprecated --wrapping)"
       )
       return 2
     } else if (value === "--wrapping") {
@@ -691,7 +711,7 @@ export const main = (): number => {
       // answers it the same way (`usageText` in stage0's `src/index.ts`), so a script
       // that asks either compiler for its help sees the same shape; an actual
       // usage error still prints the usage on stderr and returns 2 below.
-      console.log(usageText())
+      console.log(usageText(1))
       return 0
     } else if (value === "-v" || value === "--version") {
       // The line stage0 prints. stage1 cannot read `package.json`, so the
@@ -700,7 +720,7 @@ export const main = (): number => {
       console.log(`${CLI} ${VERSION}`)
       return 0
     } else if (value.startsWith("-")) {
-      console.error(`compile: unknown flag \`${value}\`\n${usageText()}`)
+      console.error(`compile: unknown flag \`${value}\`; ${helpHint(styleFor(2))}`)
       return 2
     } else {
       // Every positional is a root, as it is for stage0: a program whose
@@ -717,7 +737,7 @@ export const main = (): number => {
     arg = arg + 1
   }
   if (roots.length === 0) {
-    console.error(usageText())
+    console.error(usageText(2))
     return 2
   }
   // After the loop, because `--profile` and `--target` may follow `--cpu`.

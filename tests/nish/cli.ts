@@ -108,7 +108,7 @@ const advertisedFlags = (): string[] => [
   "--warn-portability",
   "--fix",
   "--emit-capabilities",
-  "[--capabilities]",
+  "--capabilities",
   "--allow",
   "--deny",
   "run [flags] <file.ts> [args ...]",
