@@ -18995,7 +18995,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
     ).targets.map((t) => t.asset)
     const optional = manifest.optionalDependencies ?? {}
-    const expectedOptional = seedAssets.map((a) => `${manifest.name}-${a}`).sort()
+    const { platformPackageName } = await import(pathToFileURL(path.join(root, "bin", "packaging.js")).href)
+    const expectedOptional = seedAssets.map((a) => platformPackageName(a)).sort()
     check(
       `package.json declares one platform package per seed target (${seedAssets.length}: ${seedAssets.join(", ")})`,
       JSON.stringify(Object.keys(optional).sort()) === JSON.stringify(expectedOptional),
@@ -19071,7 +19072,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // there is no compiler for this machine, which machines do have one, and what to
     // do instead -- and "what to do instead" is a real instruction rather than a
     // shrug, because this is the whole of what a user gets (wp19 §6).
-    const why = noCompilerMessage({ platform: "freebsd", arch: "x64", packageName: manifest.name })
+    const why = noCompilerMessage({ platform: "freebsd", arch: "x64" })
     const unsupported = why.report
     check(
       "a platform with no prebuilt binary is told so, told which platforms have one, and told what to do",
@@ -19179,7 +19180,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // by name, because no runner here is an unsupported platform.
       check(
         "the refusal names the package npm should have installed, and a remedy",
-        refused.stderr.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`) &&
+        refused.stderr.includes(platformPackageName(assetFor(process.platform, process.arch))) &&
           refused.stderr.includes("Reinstall") &&
           refused.stderr.includes("docs/INSTALL.md"),
         JSON.stringify(refused.stderr)
@@ -19221,7 +19222,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         "the --json refusal names the missing platform package in its message",
         refusedObj !== null &&
           typeof refusedObj.message === "string" &&
-          refusedObj.message.includes(`${manifest.name}-${assetFor(process.platform, process.arch)}`),
+          refusedObj.message.includes(platformPackageName(assetFor(process.platform, process.arch))),
         refusedObj === null ? "no object" : JSON.stringify(refusedObj.message)
       )
       // Nothing is compiled on the way to either refusal: the message is the whole of
@@ -19358,7 +19359,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           addPlatform.status === 0,
           addPlatform.stdout + addPlatform.stderr
         )
-        const platformDir = path.join(prefix, "node_modules", ...`${manifest.name}-${hostAsset}`.split("/"))
+        const platformDir = path.join(prefix, "node_modules", ...platformPackageName(hostAsset).split("/"))
         {
           const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" })
           check(
@@ -19492,7 +19493,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         // The regression this file did not have, and the reason the swap is an
         // `exec` rather than a copy of the binary into the main package.
         //
-        // npm links the command as `.bin/nish -> ../@amritk/nish/bin/nish`, so
+        // npm links the command as `.bin/nish -> ../nish/bin/nish`, so
         // a user always invokes it through a symlink -- `bin` above is that
         // symlink, deliberately. The native compiler resolves `build.sh` and
         // `runtime/` from `argv[0]`'s directory and does not follow one
@@ -19899,7 +19900,7 @@ if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
       // The other half of the same defect, and the compiler answers this one too as of
       // 2026-09-21: `argv[0]` naming a **symbolic link** to the compiler rather than the
       // compiler. npm writes exactly that shape
-      // (`node_modules/.bin/nish -> ../@amritk/nish/bin/nish`), and so does an admin's
+      // (`node_modules/.bin/nish -> ../nish/bin/nish`), and so does an admin's
       // `ln -s /opt/nish/bin/nish /usr/local/bin/nish`. Neither the parent of the link's
       // directory nor the `$PATH` lookup above finds the package, because a link is
       // itself a perfectly good path -- so the real path of whatever was invoked is a

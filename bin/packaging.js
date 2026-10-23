@@ -2,7 +2,7 @@
  * Which prebuilt binary this machine wants, and what the package holding it is
  * called.
  *
- * `npm install -g @amritk/nish` is a download, not a build: the native
+ * `npm install -g nish` is a download, not a build: the native
  * compiler is already built, verified and smoke-tested per platform by
  * `release.yml`, and it reaches a user as an `optionalDependencies` entry that
  * npm installs only where `os` and `cpu` match -- the esbuild pattern. This
@@ -106,15 +106,19 @@ export const targetForAsset = (asset) => {
 }
 
 /**
- * The package holding the binary for one asset, derived from the main
- * package's own name: `@amritk/nish` + `x86_64-linux` -> `@amritk/nish-x86_64-linux`.
+ * The package holding the binary for one asset: `x86_64-linux` ->
+ * `@amritk/nish-x86_64-linux`.
  *
- * Derived rather than written out so that the scope is spelled once. The
- * registry name was settled late (`nish` belongs to somebody else, so this one
- * is scoped -- docs/wp12-release.md "The npm name"), and a list of five literal
- * names would be five places to edit if it ever moves again.
+ * Scoped while the main package is not. npm's spam check refused the unscoped
+ * `nish-<asset>` names when `nish` moved over, and the scoped ones were already
+ * published and trusted by `release.yml` -- the esbuild pattern, where `esbuild`
+ * installs `@esbuild/linux-x64` (docs/wp12-release.md "The npm name"). The
+ * prefix is spelled here and nowhere else: the launcher, `postinstall.mjs`,
+ * `platform-package.mjs`, `release.yml` and `tests/run.js` all call this.
  */
-export const platformPackageName = (packageName, asset) => `${packageName}-${asset}`
+const PLATFORM_PACKAGE_PREFIX = "@amritk/nish-"
+
+export const platformPackageName = (asset) => `${PLATFORM_PACKAGE_PREFIX}${asset}`
 
 /**
  * The diagnostic code every refusal here carries: `NL0002`, the toolchain code.
@@ -165,7 +169,7 @@ export const NO_COMPILER_CODE = "NL0002"
  * Every branch names the four platforms, because a user who has just been
  * refused wants to know whether the list is the whole list. It is.
  */
-export const noCompilerMessage = ({ platform, arch, packageName, unstartable = null }) => {
+export const noCompilerMessage = ({ platform, arch, unstartable = null }) => {
   const asset = assetFor(platform, arch)
   const published = SUPPORTED_ASSETS.join("  ")
   const preamble =
@@ -203,12 +207,7 @@ export const noCompilerMessage = ({ platform, arch, packageName, unstartable = n
         "  platform. Reinstall the package, or run `npm rebuild` if the tree moved.\n",
     }
   }
-  // A `packageName` of `null` means this package's own `package.json` could not
-  // be read, which is a broken install and not the moment to guess: naming the
-  // wrong package sends the user to install something that does not exist, so
-  // the sentence loses the name instead of inventing one.
-  const named = packageName === null ? null : platformPackageName(packageName, asset)
-  const pkg = named === null ? `the platform package for ${asset}` : named
+  const pkg = platformPackageName(asset)
   return {
     code: NO_COMPILER_CODE,
     summary:

@@ -35,9 +35,6 @@ import path from "node:path"
 import { createRequire } from "node:module"
 import { assetFor, noCompilerMessage, platformPackageName } from "./packaging.js"
 
-/** Package root: bin/launcher.js -> `..`, the directory `package.json` sits in. */
-const PKG_ROOT = path.resolve(import.meta.dirname, "..")
-
 /**
  * Exit 3, the toolchain code.
  *
@@ -55,16 +52,6 @@ const PKG_ROOT = path.resolve(import.meta.dirname, "..")
  * 3 for its own version of this, so all three spell one situation the same way.
  */
 const NO_COMPILER = 3
-
-/** This package's own name, or `null` when its `package.json` cannot be read. */
-const packageName = () => {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, "package.json"), "utf8"))
-    return typeof pkg.name === "string" ? pkg.name : null
-  } catch {
-    return null
-  }
-}
 
 /**
  * Whether this invocation asked for machine-readable output.
@@ -104,14 +91,8 @@ const writeAndExit = (stream, text, status) => {
  * exactly as it does when unpacked by hand.
  */
 const nativeCompiler = (assetName) => {
-  const name = packageName()
-  if (name === null) {
-    return null
-  }
   try {
-    const manifest = createRequire(import.meta.url).resolve(
-      `${platformPackageName(name, assetName)}/package.json`
-    )
+    const manifest = createRequire(import.meta.url).resolve(`${platformPackageName(assetName)}/package.json`)
     const binary = path.join(path.dirname(manifest), "bin", "nish")
     return fs.existsSync(binary) ? binary : null
   } catch {
@@ -135,11 +116,6 @@ const refuse = (unstartable) => {
   const why = noCompilerMessage({
     platform: process.platform,
     arch: process.arch,
-    // The name comes from this package's own `package.json` or not at all. A
-    // literal here would be the scope spelled a second time, against
-    // packaging.js's own rule, and a *wrong* package name is worse advice than
-    // none: it sends the user to install something that does not exist.
-    packageName: packageName(),
     unstartable,
   })
   if (wantsJson()) {

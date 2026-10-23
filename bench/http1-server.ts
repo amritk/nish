@@ -50,8 +50,29 @@
 // Usage: http1-server <port> <slots> [requests]. It prints `listening <port>`
 // once the pool is built and serves until it is killed, or until it has
 // answered `requests` requests, when it returns from `main`: a profile-guided
-// build writes its profile at a normal exit, never at a signal.
-import { pollAdd, pollCreate, pollModify, pollWait, tcpListen } from "nish:net"
+// build writes its profile at a normal exit, never at a signal. With
+// BENCH_CORES=N above 1 it runs as N workers under `nish/net/prefork` (see
+// `main`), `requests` counted per worker.
+import {
+  netAddress,
+  netClose,
+  pollAdd,
+  pollCreate,
+  pollModify,
+  pollWait,
+  tcpListenFlags,
+  udpBind,
+  udpRecvFrom,
+  udpSendTo,
+} from "nish:net"
+import { getenv } from "nish:process"
+import {
+  PREFORK_STOPPED,
+  PreforkConfig,
+  preforkArgs,
+  preforkWith,
+  preforkWorkerCount,
+} from "nish/net/prefork"
 import {
   H1_BODY,
   H1_DONE,
@@ -723,19 +744,103 @@ class Bench {
   }
 }
 
-export const main = (): void => {
-  const port: i32 = process.argv.length > 1 ? parseInt(process.argv[1]) : 8080
-  const slots: i32 = process.argv.length > 2 ? parseInt(process.argv[2]) : 1024
-  const limit: i32 = process.argv.length > 3 ? parseInt(process.argv[3]) : 0
-  const listener: i32 = tcpListen("127.0.0.1", port, 4096)
+/** The worker count `BENCH_CORES` asks for; 1 when it is unset or not a number. */
+const benchCores = (): i32 => {
+  const env: string | null = getenv("BENCH_CORES")
+  const n: i32 = env !== null ? parseInt(env) : 1
+  // A worker's index travels in two bytes (`awaitPeers`).
+  if (n > 65535) {
+    return 65535
+  }
+  return n > 1 ? n : 1
+}
+
+/** `value` (below 65536) into `buf`'s first two bytes, little-endian. */
+const twoBytesOf = (buf: u8[], value: i32): u8[] => {
+  buf[0] = toU8(value & 255)
+  buf[1] = toU8(value >> 8)
+  return buf
+}
+
+/**
+ * Worker `index` of `count`, its listener bound, until every worker has bound
+ * one: the others tell worker 0 over UDP on the same port number, resending
+ * until it answers, and worker 0 waits for them all. wrk opens its connections
+ * once, at `listening`, so one opened before a worker bound would stay on
+ * another worker for the whole run. Five seconds at most either way.
+ */
+const awaitPeers = (index: i32, count: i32, port: i32): void => {
+  const fd: i32 = udpBind("127.0.0.1", index === 0 ? port : 0, 0)
+  const loop: i32 = pollCreate()
+  pollAdd(loop, fd, 1, 0)
+  const ready: i32[] = new Array<i32>(2)
+  const buf: u8[] = new Array<u8>(2)
+  const from: u8[] = new Array<u8>(18)
+  const meta: i32[] = new Array<i32>(2)
+  const seen: boolean[] = new Array<boolean>(count)
+  let left: i32 = index === 0 ? count - 1 : 1
+  const to: u8[] = new Array<u8>(18)
+  netAddress(to, "127.0.0.1", port)
+  for (let tries: i32 = 0; tries < 500 && left > 0; tries++) {
+    if (index !== 0) {
+      udpSendTo(fd, twoBytesOf(buf, index), 0, 2, to, 0, 0)
+    }
+    if (pollWait(loop, ready, 10) > 0) {
+      let n: i32 = udpRecvFrom(fd, buf, 0, 2, from, meta)
+      while (n > 0) {
+        const peer: i32 = n === 2 ? toI32(buf[0]) | (toI32(buf[1]) << 8) : -1
+        if (index !== 0) {
+          left = 0
+        } else if (peer > 0 && peer < seen.length && !seen[peer]) {
+          seen[peer] = true
+          left = left - 1
+        }
+        if (index === 0) {
+          udpSendTo(fd, buf, 0, 2, from, 0, 0)
+        }
+        n = udpRecvFrom(fd, buf, 0, 2, from, meta)
+      }
+    }
+  }
+  netClose(loop)
+  netClose(fd)
+}
+
+export const main = (): i32 => {
+  // With BENCH_CORES above 1 (`bench/http.mjs --cores`) the same server runs
+  // once per core under `nish/net/prefork`, each worker on its own
+  // SO_REUSEPORT listener; the process wrk is timed against is the supervisor.
+  const cores: i32 = benchCores()
+  let worker: i32 = 0
+  let count: i32 = 1
+  if (cores > 1) {
+    const config: PreforkConfig = new PreforkConfig()
+    config.workers = cores
+    count = preforkWorkerCount(cores, getenv("NISH_WORKERS"))
+    worker = preforkWith(process.argv, config)
+    if (worker < 0) {
+      return worker === PREFORK_STOPPED ? 0 : 1
+    }
+  }
+  const args: string[] = preforkArgs(process.argv)
+  const port: i32 = args.length > 1 ? parseInt(args[1]) : 8080
+  const slots: i32 = args.length > 2 ? parseInt(args[2]) : 1024
+  const limit: i32 = args.length > 3 ? parseInt(args[3]) : 0
+  const listener: i32 = tcpListenFlags("127.0.0.1", port, 4096, cores > 1 ? 1 : 0)
   if (listener < 0) {
     console.log(`listen failed ${listener}`)
-    return
+    return 1
   }
   const bench: Bench = new Bench(listener, slots)
   bench.limit = limit
+  if (count > 1) {
+    awaitPeers(worker, count, port)
+  }
   // Only once the pool is built: a driver that starts timing on this line
-  // must not time the constructor.
-  console.log(`listening ${port}`)
+  // must not time the constructor. One line, from worker 0.
+  if (worker === 0) {
+    console.log(`listening ${port}`)
+  }
   bench.run()
+  return 0
 }

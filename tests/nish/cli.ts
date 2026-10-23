@@ -350,12 +350,11 @@ const writeFixtures = (): void => {
 /**
  * The tool the user types, which is `bin`'s key and not `name`.
  *
- * Those were one string until the package took a scope. The registry name is
- * `@amritk/nish` because `nish` belongs to somebody else, and the command is
- * still `nish` (`docs/wp12-release.md`, "The npm name"). `name` names the
- * package; `bin`'s key names the tool, and the tool is what `--version` and the
- * usage text are about — so reading `name` here was only ever right by
- * coincidence, and the scope is what ended the coincidence.
+ * The two are the same string today, and were not through 0.19.0, when
+ * the package was `@amritk/nish` and the command `nish` (`docs/wp12-release.md`,
+ * "The npm name"). `name` names the package; `bin`'s key names the tool, and
+ * the tool is what `--version` and the usage text are about — so reading
+ * `name` here would only be right by coincidence.
  */
 const toolName = (manifest: string): string | null => {
   const bin = jsonField(manifest, "bin");

@@ -168,11 +168,16 @@ jobs:
               // 0.11.0. The lockfile job in release.yml regenerates them after
               // the publish and opens a pull request with the result, and the
               // lint job in ci.yml keeps main red until that merges.
-              const scope=`${j.name??""}-`;
+              //
+              // Every key, not the ones that start with this package name: the
+              // main package is nish and its platform packages are
+              // @amritk/nish-<asset>, so a prefix test would match none of
+              // them. tests/run.js pins optionalDependencies to exactly one
+              // platform package per seed target, so every key is one.
               const pinned=[j.optionalDependencies];
               if (j.packages&&j.packages[""]) pinned.push(j.packages[""].optionalDependencies);
               for (const deps of pinned) {
-                if (deps) for (const k of Object.keys(deps)) if (k.startsWith(scope)) deps[k]=v;
+                if (deps) for (const k of Object.keys(deps)) deps[k]=v;
               }
               fs.writeFileSync(f, JSON.stringify(j,null,2)+"\n");
             }

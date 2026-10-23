@@ -12,10 +12,10 @@
  * **It execs the binary where it lies; it does not copy it here.** Copying was
  * the first attempt and it is wrong, for a reason worth writing down because
  * nothing in the test suite was looking for it. npm links the command as
- * `node_modules/.bin/nish -> ../@amritk/nish/bin/nish`, so a user always
+ * `node_modules/.bin/nish -> ../nish/bin/nish`, so a user always
  * invokes it through a symlink, and the native compiler resolves `build.sh`
  * and `runtime/` from `argv[0]`'s directory without following one. A copy at
- * `@amritk/nish/bin/nish` invoked through `.bin` therefore looks for them in
+ * `nish/bin/nish` invoked through `.bin` therefore looks for them in
  * `node_modules/`, finds neither, and every `--link` fails with "cannot find
  * scripts/build.sh" -- while `--version` and plain `-o` keep working, which is
  * what makes it a trap. The node shim never had the problem because node
@@ -79,10 +79,7 @@ const swap = async () => {
     return `no prebuilt binary for ${process.platform}/${process.arch}`
   }
 
-  const name = platformPackageName(
-    JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).name,
-    asset
-  )
+  const name = platformPackageName(asset)
   let binary
   try {
     const manifest = createRequire(import.meta.url).resolve(`${name}/package.json`)

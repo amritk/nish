@@ -10,7 +10,6 @@
 ![license](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-static%20subset-3178c6?style=flat-square&logo=typescript&logoColor=white)
 ![LLVM](https://img.shields.io/badge/LLVM-18-4b5563?style=flat-square&logo=llvm&logoColor=white)
-![node](https://img.shields.io/badge/node-%E2%89%A522.18-339933?style=flat-square&logo=node.js&logoColor=white)
 ![WebAssembly](https://img.shields.io/badge/wasm-wasm32%20%C2%B7%20wasi-654ff0?style=flat-square&logo=webassembly&logoColor=white)
 ![self-hosted](https://img.shields.io/badge/self--hosted-stage2%20fixpoint-0ea5e9?style=flat-square)
 ![GC](https://img.shields.io/badge/GC-none-f97316?style=flat-square)
@@ -60,18 +59,25 @@ a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
 ## Quickstart
 
-Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
-per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
+Requirements: clang (LLVM 18) + lld, to produce binaries; per-OS install
+commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-npm install -g @amritk/nish            # or per project: npm i -D @amritk/nish
-npx @amritk/nish --version             # or run it without installing
-# or, with no Node at all:
 curl -fsSL https://raw.githubusercontent.com/amritk/nish/main/install.sh | sh
-# `nish` on the registry is an unrelated package from 2014, so this one is
-# scoped; the command it installs is still `nish`. npm fetches the prebuilt
-# native compiler for your machine alongside it.
 ```
+
+The script needs only `sh`, `curl` and `tar`. It installs the prebuilt
+compiler into `~/.nish` and ends by printing the `export PATH=…` line to add
+to your shell profile.
+
+**Or with npm**, which needs Node.js 22.18+:
+
+```bash
+npm install -g nish            # or per project: npm i -D nish
+npx nish --version             # or run it without installing
+```
+
+npm fetches the prebuilt native compiler for your machine alongside it.
 
 > [!NOTE]
 > **From a release tarball rather than the registry, install the pair.** The

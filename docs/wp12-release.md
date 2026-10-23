@@ -8,7 +8,7 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 
 ## The package
 
-`@amritk/nish` is an installer, not a compiler. `package.json#files` ships
+`nish` is an installer, not a compiler. `package.json#files` ships
 `bin/` (`bin/nish`, `bin/launcher.js`, `bin/packaging.js`: plain JavaScript,
 no build step), `runtime/`, `scripts/` minus the repository-only tools,
 `std/`, `README.md`, `LICENSE`, `llms.txt`, `docs/AI.md` and
@@ -234,27 +234,35 @@ are the only commits at which that property can be demonstrated again
 
 ## The npm name
 
-**Decided 2026-09-19: the package is `@amritk/nish`, and the command stays
-`nish`.** The bare name `nish` has belonged since 2014 to an unrelated,
-deprecated "Node.js Interactive shell" by `stdarg`. A scope was chosen over a
-different bare name, which would have meant renaming the project (the name is
-spelled in `src/branding.ts`, environment variables, asset names and
-goldens), and over npm's dispute process, which is slow and can still fail.
-The scope is reversible into either; neither is reversible into it.
+**Decided 2026-10-22: the package is `nish`, and so is the command.** The
+bare name belonged from 2014 to `stdarg`'s deprecated "Node.js Interactive
+shell" (versions 0.0.0 and 0.0.1), which is why 0.10.0 to 0.18.0 were
+published as `@amritk/nish` (0.19.0 was built under that name too, and its npm
+publish failed) (decided 2026-09-19, when a scope was reversible
+into a bare name and npm's dispute process was slow and could fail). The name
+was handed over in October 2026, and 0.20.0 is the first release under it.
 
-What it costs:
-
-- every publish needs `--access public`;
-- the install line (`npm install -g @amritk/nish`) and the command (`nish`) are
-  two strings, and `tests/nish/cli.ts` reads the tool name from `bin`'s key
-  rather than from `package.json#name`;
-- `npm pack` names the tarball `amritk-nish-<version>.tgz`, and the platform
-  packages are `@amritk/nish-<asset>`, both derived from `package.json#name`
-  rather than spelled;
-- the standard-library prefix `STD_PREFIX` stays `nish/` and is deliberately
-  not a spelling of the package name. If third-party packages are ever
-  resolved through npm ([wp21-packages.md](wp21-packages.md) §2), that prefix
-  has to become `@amritk/nish/`.
+- The platform packages stay `@amritk/nish-<asset>`, the esbuild pattern
+  (`esbuild` installs `@esbuild/linux-x64`): nobody types their names, they
+  were already published and trusted by `release.yml`, and npm's spam check
+  refused the unscoped `nish-<asset>` names outright. So the platform name is
+  no longer the main name plus a suffix: `PLATFORM_PACKAGE_PREFIX` in
+  `bin/packaging.js` spells it once, and `platformPackageName` is what the
+  launcher, `postinstall.mjs`, `platform-package.mjs`, `release.yml` and
+  `tests/run.js` call. `release-pr.yml` bumps every `optionalDependencies`
+  key rather than the ones that start with the main name, which since this
+  move is none of them.
+- `npm pack` names the main tarball `nish-<version>.tgz` and a platform one
+  `amritk-nish-<asset>-<version>.tgz`, beside the release's
+  `nish-<version>-<asset>.tar.gz`.
+- `tests/nish/cli.ts` still reads the tool name from `bin`'s key rather than
+  from `package.json#name`. The two strings agree again, but only `bin` is
+  the tool.
+- The standard-library prefix `STD_PREFIX` is `nish/`, which is now also the
+  package's own specifier: `nish/text` from an installed package reaches
+  `std/text.ts` through `exports`, the same file the compiler reads.
+- `@amritk/nish` stays on the registry, deprecated with a pointer to `nish`,
+  so a lockfile that pins it keeps installing.
 
 ## Which compiler the package ships
 
