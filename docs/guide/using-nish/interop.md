@@ -103,6 +103,35 @@ under any WASI host.
 `.node` addon costs about 30 ns and a call into wasm about 2 ns before any work
 is done, so pass whole buffers and let the loop run on the Nish side.
 
+### A game in the browser
+
+A wasm module cannot call into the page: it has no imports, so the canvas, the
+keyboard and `requestAnimationFrame` stay in JavaScript. Split a game along
+that line. The page runs the frame loop and turns input into numbers. Nish
+steps the game and paints each frame into an `Int32Array`, and the page puts
+that array on the canvas:
+
+```js
+const image = ctx.createImageData(320, 240);
+const pixels = new Int32Array(image.data.buffer);  // one 0xAABBGGRR per pixel
+const state = new Float64Array(game.stateLength());
+game.newGame(state);
+
+function frame(now) {
+  game.step(state, dt, input, pointerX);
+  game.render(state, pixels);
+  ctx.putImageData(image, 0, 0);
+  requestAnimationFrame(frame);
+}
+```
+
+The module keeps nothing between calls, because a Nish program has no
+top-level `let`. The game's state therefore lives in a typed array that the
+page owns and passes on every call, and the loader copies it in and back
+again. `examples/browser-game` is a whole
+Breakout built this way. Its `main.ts` starts with the build commands, and
+`headless.mjs` plays it in Node without a browser.
+
 **Do not name an exported function `memory`:** the module `build.sh
 --profile wasm` links exports its linear memory under that name, so a wasm
 `--target`, `--profile wasi` or `--emit-dts` compile refuses the function

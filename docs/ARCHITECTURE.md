@@ -829,7 +829,7 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | `scripts/` | `build.sh`, `bootstrap.sh`, `fetch-seed.sh`, `size-report.sh`, `smoke.sh`, `changelog-gen.mjs`, `gen-diagnostic-codes.mjs` (frozen; `--check` only) |
 | `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself, and `collections.ts`, the global `Map` and `Set`. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
 | `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `self/` (the bootstrap and the compiler's own goldens), `wordings/`, `nish/`, `nish-cmp.js`, `differential/` (`run.js`, `lib.js`, `fuzz.js`, `corpus/`, `goldens/`, `known-failures.txt`), `runtime-test.c`, `driver.c` |
-| `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
+| `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `browser-game/` (a wasm game a page drives), `main.c`, `node-host.mjs`, `node-addon.mjs` |
 | `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild-naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |
 | `docs/` | this documentation; `docs/README.md` is the index |
 | `.github/workflows/` | `ci.yml` (Ubuntu, LLVM 18; the `bootstrap` job builds stage1 from the released seed, which is what enforces the rolling freeze), `release.yml` (tag-driven tarball), `release-pr.yml`, `pr-title.yml` |

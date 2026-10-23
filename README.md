@@ -509,7 +509,8 @@ The supported direction is Node importing Nish:
 - `scripts/build.sh --profile wasm` produces a module `WebAssembly.instantiate`
   loads directly (`examples/node-host.mjs`); exports use the plain C ABI.
   Add `runtime/runtime-wasm.c` (arena + arrays, no libc) when a function
-  takes or returns an array.
+  takes or returns an array. `examples/browser-game` is a Breakout whose
+  rules and rendering are Nish and whose page only draws the pixels.
 - `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon
   with argument type checks (`examples/node-addon.mjs`).
 - Buffers cross as typed arrays: an Nish `Int32Array` / `Float64Array` /

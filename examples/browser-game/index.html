@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  The browser half of examples/browser-game: it loads game.wasm through the
+  loader nish wrote next to it (game.mjs), then runs the frame loop. Each frame
+  it turns the keyboard and pointer into an input mask, calls step() and
+  render(), and puts the pixels render() painted on the canvas. The game
+  itself is main.ts; the build commands are at its top.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nish Breakout</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #07070f;
+        color: #e8e8ff;
+        font: 16px/1.4 system-ui, sans-serif;
+      }
+      main {
+        position: relative;
+        width: min(96vw, 960px);
+        aspect-ratio: 4 / 3;
+      }
+      canvas {
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+        touch-action: none;
+        border-radius: 6px;
+      }
+      #message {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        pointer-events: none;
+        text-shadow: 0 2px 6px #000;
+        font-size: clamp(16px, 3vw, 28px);
+      }
+      #message:empty {
+        display: none;
+      }
+      p {
+        opacity: 0.6;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <main>
+        <canvas id="screen"></canvas>
+        <div id="message">Loading…</div>
+      </main>
+      <p>← → or the mouse to move · Space or click to serve</p>
+    </div>
+    <script type="module">
+      import { load } from "./game.mjs"
+
+      const game = await load(await (await fetch("game.wasm")).arrayBuffer())
+
+      const width = game.screenWidth()
+      const height = game.screenHeight()
+      const canvas = document.getElementById("screen")
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext("2d")
+      const image = ctx.createImageData(width, height)
+      // The same bytes seen as one i32 per pixel, which is what render() fills.
+      const pixels = new Int32Array(image.data.buffer)
+
+      const state = new Float64Array(game.stateLength())
+      game.newGame(state)
+
+      // Input bits main.ts reads: 1 left, 2 right, 4 action.
+      const keys = new Set()
+      let tapped = false
+      let pointerX = -1
+      addEventListener("keydown", (e) => {
+        if (["ArrowLeft", "ArrowRight", " "].includes(e.key)) {
+          e.preventDefault()
+        }
+        keys.add(e.key)
+        pointerX = -1
+      })
+      addEventListener("keyup", (e) => keys.delete(e.key))
+      const toScreenX = (e) => {
+        const box = canvas.getBoundingClientRect()
+        return ((e.clientX - box.left) / box.width) * width
+      }
+      canvas.addEventListener("pointermove", (e) => {
+        pointerX = toScreenX(e)
+      })
+      canvas.addEventListener("pointerdown", (e) => {
+        pointerX = toScreenX(e)
+        tapped = true
+      })
+
+      const messages = [
+        "Space or click to serve",
+        "",
+        "Level cleared! Space or click for the next one",
+        "Game over. Space or click to play again",
+      ]
+      const message = document.getElementById("message")
+
+      let last = performance.now()
+      const frame = (now) => {
+        let input = 0
+        if (keys.has("ArrowLeft") || keys.has("a")) {
+          input |= 1
+        }
+        if (keys.has("ArrowRight") || keys.has("d")) {
+          input |= 2
+        }
+        if (keys.has(" ") || keys.has("Enter") || tapped) {
+          input |= 4
+        }
+        tapped = false
+
+        game.step(state, (now - last) / 1000, input, pointerX)
+        last = now
+        game.render(state, pixels)
+        ctx.putImageData(image, 0, 0)
+        message.textContent = messages[game.mode(state)]
+        requestAnimationFrame(frame)
+      }
+      requestAnimationFrame(frame)
+    </script>
+  </body>
+</html>

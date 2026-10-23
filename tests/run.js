@@ -11945,6 +11945,69 @@ if (!only || "wasm-memory".includes(only)) {
   }
 }
 
+// ---- examples/browser-game: a wasm game the page drives ----------------------------
+// The example's main.ts is built the way its header says, then headless.mjs
+// plays three minutes of it through the loader `--emit-dts` writes. The run is
+// deterministic: a change to the rules or the renderer moves this transcript
+// (the score, a cleared level, the frame's hash), and a change to the loader's
+// copy-in and copy-back of the state and pixel arrays breaks it outright.
+if (!only || "browser-game".includes(only)) {
+  if (has("wasm-ld")) {
+    const gameDir = path.join(buildDir, "browser-game")
+    fs.rmSync(gameDir, { recursive: true, force: true })
+    fs.mkdirSync(gameDir, { recursive: true })
+    const gameLl = path.join(gameDir, "game.ll")
+    const c = spawnSync(
+      NISH,
+      [
+        "examples/browser-game/main.ts",
+        "--target",
+        "wasm32-unknown-unknown",
+        "-o",
+        gameLl,
+        "--emit-dts",
+        path.join(gameDir, "game.d.ts"),
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const l =
+      c.status === 0
+        ? spawnSync(
+            "bash",
+            [
+              "scripts/build.sh",
+              gameLl,
+              "runtime/runtime-wasm.c",
+              "-o",
+              path.join(gameDir, "game.wasm"),
+              "--profile",
+              "wasm",
+            ],
+            { cwd: root, encoding: "utf8" }
+          )
+        : c
+    const run =
+      l.status === 0
+        ? spawnSync("node", ["examples/browser-game/headless.mjs", gameDir], { cwd: root, encoding: "utf8" })
+        : null
+    const want = [
+      "frames 10800",
+      "score 3050",
+      "level 2, cleared 1",
+      "lives 3, lost 0",
+      "bricks left 29",
+      "frame hash 28c02053",
+    ].join("\n")
+    check(
+      "browser-game: the wasm build plays three minutes headless with the expected outcome",
+      run !== null && run.status === 0 && run.stdout.trim() === want,
+      c.stderr + l.stderr + (run ? run.stdout + run.stderr : "")
+    )
+  } else {
+    skip("skipped: browser-game: no wasm-ld: the wasm build of examples/browser-game is not run")
+  }
+}
+
 // ---- WP7: the wasi profile ----------------------------------------------------------
 // The wasi profile links runtime.c against wasi-libc, so string programs run under any
 // WASI host; Node's own implementation runs it here. Needs a WASI sysroot
