@@ -426,11 +426,17 @@ const checkHelp = (t: Suite, cli: Cli, name: string): void => {
   t.eqBool("--help prints no stack frame", hasStackFrame(help.stdout), false);
   // Each flag between spaces, as its row prints it, so `--deny` is not found
   // inside `--deny-panics`.
+  // Without env(1) the help inherits this harness's colour variables, and a
+  // coloured row puts an escape, not a space, before its flag.
   const flags: string[] = [];
   for (const flag of advertisedFlags()) {
     flags.push(` ${flag} `);
   }
-  t.containsAll(`--help names every advertised flag (${flags.length} of them)`, help.stdout, flags);
+  if (plainEnv.length > 0) {
+    t.containsAll(`--help names every advertised flag (${flags.length} of them)`, help.stdout, flags);
+  } else {
+    t.skip("--help names every advertised flag", "needs env(1) to keep the help plain, and the probe did not find one");
+  }
 
   const short = cli.run("help_short", plainEnv, ["-h"]);
   t.eqStr("-h is --help exactly", short.stdout, help.stdout);

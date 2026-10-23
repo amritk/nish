@@ -17054,9 +17054,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     claude.stdout === agentHelp.stdout && !help.stdout.includes("\nAgents\n"),
     claude.stdout
   )
-  const notAgent = run(["--help"], { ...plainEnv, NISH_AGENT: "false", CLAUDECODE: "1" })
+  const notAgent = run(["--help"], { ...plainEnv, NISH_AGENT: "off", CLAUDECODE: "1" })
   check(
-    "--help: NISH_AGENT=false is a person's, over CLAUDECODE=1",
+    "--help: NISH_AGENT=off is a person's, over CLAUDECODE=1",
     notAgent.stdout === help.stdout,
     notAgent.stdout
   )

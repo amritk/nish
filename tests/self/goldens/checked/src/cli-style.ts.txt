@@ -116,35 +116,38 @@ function styleFor(fd: i32, agent: boolean): Style -> @styleFor [exported]
   callee +13:12 new Style -> @Style.constructor
   callee +15:10 new Style -> @Style.constructor
   callee +15:20 isTerminal -> @isTerminal
+function padTo(width: i32, column: i32): string -> @padTo
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow repeatString
+  stackSites=0 stackLocals=0
+  callee +0:52 repeatString -> @repeatString
 function helpRow(style: Style, flag: string, meta: string, description: string): string -> @helpRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: description flag meta
-  calls: Style.dim Style.flag Style.meta nish_panic_overflow nish_str_concat repeatString
+  calls: Style.dim Style.flag Style.meta nish_panic_overflow nish_str_concat padTo
   pointer style: size=2 writesThrough=false captured=false passedTo=Style.meta#0 Style.flag#0 Style.dim#0
   stackSites=0 stackLocals=0
   local +0:9 width: i32 (const)
-  local +1:9 gap: i32 (const)
-  local +2:9 placeholder: string (const)
-  callee +2:45 Style.meta -> @Style.meta
-  callee +3:15 Style.flag -> @Style.flag
-  callee +3:48 repeatString -> @repeatString
-  callee +3:73 Style.dim -> @Style.dim
+  local +1:9 placeholder: string (const)
+  callee +1:45 Style.meta -> @Style.meta
+  callee +2:15 Style.flag -> @Style.flag
+  callee +2:48 padTo -> @padTo
+  callee +2:83 Style.dim -> @Style.dim
 function usageRow(style: Style, first: boolean, shape: string, description: string): string -> @usageRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: description shape
-  calls: Style.dim Style.flag Style.heading Style.name nish_panic_overflow nish_str_concat repeatString
+  calls: Style.dim Style.flag Style.heading Style.name nish_panic_overflow nish_str_concat padTo repeatString
   pointer style: size=2 writesThrough=false captured=false passedTo=Style.heading#0 Style.dim#0 Style.name#0 Style.flag#0
   stackSites=0 stackLocals=0
   local +0:9 lead: string (const)
   callee +0:27 Style.heading -> @Style.heading
   callee +0:56 repeatString -> @repeatString
   local +1:9 width: i32 (const)
-  local +2:9 gap: i32 (const)
-  local +3:9 text: string (const)
-  callee +3:44 repeatString -> @repeatString
-  callee +3:69 Style.dim -> @Style.dim
-  callee +4:20 Style.name -> @Style.name
-  callee +4:39 Style.flag -> @Style.flag
+  local +2:9 text: string (const)
+  callee +2:44 padTo -> @padTo
+  callee +2:73 Style.dim -> @Style.dim
+  callee +3:20 Style.name -> @Style.name
+  callee +3:39 Style.flag -> @Style.flag
 function helpText(style: Style, guide: string): string -> @helpText [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: guide

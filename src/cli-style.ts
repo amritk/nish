@@ -90,10 +90,10 @@ const envIsSet = (name: string): boolean => {
   return value !== null && value.length > 0
 }
 
-/** Whether `name` is set to the `0` or `false` that mean no. */
+/** Whether `name` is set to a no: `0`, `false`, `no` or `off`. */
 const envSaysNo = (name: string): boolean => {
   const value = getenv(name)
-  return value !== null && (value === "0" || value === "false")
+  return value !== null && (value === "0" || value === "false" || value === "no" || value === "off")
 }
 
 /** Whether `name` is set and says yes: not empty, and not a no (`envSaysNo`). */
@@ -111,7 +111,7 @@ const isTerminal = (fd: i32): boolean => spawnSync(["/bin/sh", "-c", `[ -t ${fd}
 
 /**
  * Whether an agent, rather than a person, is running the compiler.
- * `NISH_AGENT` answers for any agent, `1` for yes and `0` or `false` for no;
+ * `NISH_AGENT` answers for any agent, `1` for yes and a no (`envSaysNo`) for no;
  * without it, the variables the agents that set one put in their commands'
  * environment (Claude Code's `CLAUDECODE`, Gemini CLI's `GEMINI_CLI`) say yes.
  */
@@ -125,8 +125,8 @@ export const agentDriven = (): boolean => {
 /**
  * The style for descriptor `fd` (1 or 2), for a reader `agent` says is an
  * agent or not (`agentDriven`, asked once by the caller). `NO_COLOR` wins,
- * then an agent, then `FORCE_COLOR` saying no (`0` or `false`, as Node reads
- * it), then a forcing variable, then `TERM=dumb`, and only then the terminal
+ * then an agent, then `FORCE_COLOR` saying no (`envSaysNo`; Node reads `0`
+ * and `false` so), then a forcing variable, then `TERM=dumb`, and only then the terminal
  * check. 256 colours when `TERM` names them, `COLORTERM` is set, as truecolour
  * terminals set it, or `FORCE_COLOR` asks for level 2 or 3.
  */
@@ -150,15 +150,20 @@ export const styleFor = (fd: i32, agent: boolean): Style => {
 }
 
 /**
+ * The spaces that take plain text `width` columns wide to `column`, or two
+ * when it is already there, so a long flag still keeps apart from its text.
+ */
+const padTo = (width: i32, column: i32): string => repeatString(" ", width < column ? column - width : 2)
+
+/**
  * One help row: the flag, its placeholder, and what it does, the description
  * starting at `DESCRIPTION_COLUMN`. The padding is counted on the plain text,
  * so the columns line up whether or not the escapes are there.
  */
 const helpRow = (style: Style, flag: string, meta: string, description: string): string => {
   const width = 2 + flag.length + (meta.length > 0 ? 1 + meta.length : 0)
-  const gap = width < DESCRIPTION_COLUMN ? DESCRIPTION_COLUMN - width : 2
   const placeholder = meta.length > 0 ? ` ${style.meta(meta)}` : ""
-  return `  ${style.flag(flag)}${placeholder}${repeatString(" ", gap)}${style.dim(description)}`
+  return `  ${style.flag(flag)}${placeholder}${padTo(width, DESCRIPTION_COLUMN)}${style.dim(description)}`
 }
 
 /** Where a usage line's description starts: past the longest command shape. */
@@ -172,17 +177,16 @@ const USAGE_COLUMN: i32 = 46
 const usageRow = (style: Style, first: boolean, shape: string, description: string): string => {
   const lead = first ? `${style.heading("usage:")} ` : repeatString(" ", 7)
   const width = 7 + CLI.length + 1 + shape.length
-  const gap = width < USAGE_COLUMN ? USAGE_COLUMN - width : 2
-  const text = description.length > 0 ? `${repeatString(" ", gap)}${style.dim(description)}` : ""
+  const text = description.length > 0 ? `${padTo(width, USAGE_COLUMN)}${style.dim(description)}` : ""
   return `${lead}${style.name(CLI)} ${style.flag(shape)}${text}`
 }
 
 /**
- * The help: every flag the compiler takes, grouped by what a person reaches
- * for it to do, one per line, inside 80 columns but for an agent's path to the
- * card, as long as the install made it. `--help` prints it on stdout
- * and a bare `nish` on stderr, each styled for its own stream; with colour off
- * the two are the same bytes. `guide`, when it is not empty, is where the
+ * The help: every flag the compiler takes, bar `--strict-exports`, which only
+ * restates the default, grouped by what a person reaches for it to do, one per
+ * line, inside 80 columns but for an agent's path to the card, as long as the
+ * install made it. `--help` prints it on stdout and a bare `nish` on stderr,
+ * each styled for its own stream; with colour off the two are the same bytes. `guide`, when it is not empty, is where the
  * rules card is, and adds the section for an agent (`agentDriven`).
  * `tests/run.js` checks the width and that every flag `tests/nish/cli.ts`
  * advertises is in it.

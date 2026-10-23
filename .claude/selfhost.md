@@ -192,6 +192,7 @@ What the rest forces:
 | `interop-abi.ts` `interop-header.ts` `interop-dts.ts` `interop-wasm.ts` `interop-napi.ts` | the WP8 sidecars, one module per file |
 | `dump.ts` `ast-text.ts` | the `--emit-checked` and `--emit-ast` text, printed by both the driver and the dump entries |
 | `dump-tokens.ts` `dump-ast.ts` `dump-checked.ts` `compile.ts` | the dump entry points the oracles spawn, and the CLI |
+| `cli-style.ts` | the `--help` text, its colour policy and the agent check, for `compile.ts` |
 | `run-cache.ts` | `nish run`'s cache: where an entry lives, the key a hit is compared on, and the hash that names it |
 
 Cyclic imports between family modules are fine and already used

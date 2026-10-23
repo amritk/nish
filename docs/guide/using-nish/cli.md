@@ -175,8 +175,8 @@ no escape codes. Diagnostics are never coloured. These variables change that:
 | Variable | Effect |
 | --- | --- |
 | `NO_COLOR`, not empty | never colour; it wins over everything below |
-| `FORCE_COLOR=0` or `FORCE_COLOR=false` | never colour, even on a terminal |
-| `FORCE_COLOR` or `CLICOLOR_FORCE`, set to anything else | colour even when piped, unless an agent is running `nish` |
+| `FORCE_COLOR` set to `0`, `false`, `no` or `off` | never colour, even on a terminal |
+| `FORCE_COLOR` or `CLICOLOR_FORCE`, neither empty nor one of those | colour even when piped, unless an agent is running `nish` |
 | `TERM=dumb` | no colour, unless one of the two above forces it |
 
 The palette uses 256 colours when `TERM` names a 256-colour terminal,
@@ -189,7 +189,7 @@ under an agent — `CLAUDECODE` or `GEMINI_CLI` is set, or you set
 `FORCE_COLOR` set, and ends with an **Agents** section: the absolute path of
 `docs/AI.md` (the language as rules, traps first) in the installed package,
 and the flags an agent's loop needs —
-`--json`, `--fix` and `nish run`. `NISH_AGENT=0` (or `false`) turns this off
+`--json`, `--fix` and `nish run`. `NISH_AGENT=0` (or `false`, `no`, `off`) turns this off
 when one of those variables is set for some other reason. If the package's
 `docs/AI.md` cannot be found, the section names it without a path.
 
