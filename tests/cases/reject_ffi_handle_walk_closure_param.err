@@ -1,0 +1,1 @@
+reject_ffi_handle_walk_closure_param.ts:32:22: error: `File` is a handle class, and its name may be written only as the type of a parameter that borrows one

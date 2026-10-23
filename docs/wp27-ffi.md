@@ -166,16 +166,11 @@ struct, not a `nish_str *`.
   this program defines are refused with one message
   (`reject_ffi_pointer_field`, `_array`, `_param`, `_return`,
   `_type_argument_fn`). The type-argument clause is checked where a generic
-  *function* is instantiated; a generic *class* at `CPtr` is refused by
-  whichever member rule the monomorphised class trips
-  (`reject_ffi_pointer_type_argument`).
-
-  **Known gap:** a template that never mentions `T` in a member
-  (`class Empty<T> { n: i32 = 0; }`) compiles `new Empty<CPtr>()`, because no
-  member rule is reached (`src/generics.ts` says so at the line). Nothing
-  unsound follows — no `CPtr` is laid out, stored or exported — but the rule as
-  written says a `CPtr` cannot be a type argument. Closing it is a short loop
-  in the struct instantiation plus a case.
+  function or class is instantiated (`reject_ffi_pointer_type_argument`), so
+  `new Empty<CPtr>()` is refused for a template that never mentions `T` in a
+  member (`class Empty<T> { n: i32 = 0; }`), closed with WP40 H1.1. A class
+  with a `CPtr` field is a handle class since WP40 (§4a); the field rule
+  holds for an interface and for any second pointer field.
 
 The name is PascalCase where the language's own types are lower case on
 purpose: `CPtr` is C's, borrowed for the length of a call, and its lifetime

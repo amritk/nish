@@ -1,0 +1,1 @@
+`f` is never `null` here, so `?.` has nothing to skip
