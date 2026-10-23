@@ -1585,8 +1585,8 @@ if (!only || "term".includes(only)) {
   // again, or for ever, would die of it. The stop comes half a second after
   // `ready`, so the wait has read its clock, and not at all once the program
   // said `timed`; the SIGTERM helper's process group is killed once `fg`
-  // returns, so neither signals a pid that has gone. A stop that missed the
-  // wait leaves no job for `fg`, whose failure the line reports.
+  // returns, so it signals no pid that has gone. The line gives the status
+  // the stop left, then `fg`'s, so a wait that was never stopped fails it.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1633,12 +1633,12 @@ if (!only || "term".includes(only)) {
         ': > "$D/hold.out"',
         "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
         '  sleep 0.5; grep -q timed "$D/hold.out" || kill -TSTP "$(cat "$D/hold.pid")" ) &',
-        'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" deadline > "$2/hold.out"\' sh "$E" "$D"',
+        'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" deadline > "$2/hold.out"\' sh "$E" "$D"; t=$?',
         "sleep 3",
         '( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) & k=$!',
         "fg > /dev/null; s=$?",
         'kill -TERM -$k 2>/dev/null',
-        'echo "deadline $s stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
+        'echo "deadline $t $s stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         "",
       ].join("\n")
     )
@@ -1671,7 +1671,7 @@ if (!only || "term".includes(only)) {
         `stopped ${128 + os.constants.signals.SIGTSTP} stty same was -icanon`,
         "background 1 stty same icanon",
         "continued 143 stty same was -icanon said raw 0 ready ",
-        "deadline 0 stty same said raw 0 ready timed false ",
+        `deadline ${128 + os.constants.signals.SIGTSTP} 0 stty same said raw 0 ready timed false `,
       ]
       check(
         "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and only until its deadline",
