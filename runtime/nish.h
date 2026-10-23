@@ -556,8 +556,9 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
  * for ever). `nish_is_terminal(fd)`: `isatty`. `nish_terminal_size()`: a fresh
  * `i32[]` of `[columns, rows]`, or `[-errno, 0]`, -25 for "not a terminal".
  * `nish_set_raw_mode(on)`: 0, -25 when stdin is not a terminal, or `-errno`;
- * the saved termios comes back on `false`, at exit, on a panic and on SIGINT,
- * SIGTERM, SIGQUIT and SIGHUP left at their defaults. -11 and -25 are those
+ * the saved termios comes back on `false`, at exit, on a panic and on every
+ * signal left at its default that ends the program, SIGKILL aside (the list is
+ * runtime-term.c's). -11 and -25 are those
  * numbers on WASI too, where the three TTY calls answer "not a terminal". */
 int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len);
 bool nish_wait_stdin(int32_t timeout_ms);

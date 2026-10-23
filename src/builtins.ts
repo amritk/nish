@@ -95,6 +95,19 @@ const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean => {
   return true
 }
 
+/**
+ * `nish:term` runs under WASI, whose libc has `read` and `poll` on stdin, so
+ * only a freestanding wasm32 build, whose `runtime-wasm.c` has no stdin, refuses
+ * it. True when the call was refused.
+ */
+const refuseOnFreestandingWasm = (ctx: CheckContext, call: Node, name: string): boolean => {
+  if (!ctx.wasmFreestanding) {
+    return false
+  }
+  ctx.error(call, `\`${name}\` reaches the operating system, and a wasm32 build has none to reach`)
+  return true
+}
+
 /** The type a plain-identifier builtin converts to, or -1 when the name is not one. */
 const conversionTarget = (name: string): i32 => {
   if (name === "toI32") {
@@ -1060,10 +1073,11 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   }
   // `nish:term`, runtime-term.c. `readStdin` is `netRead` without the
   // descriptor: the `u8[]` it writes and the range of it, checked as
-  // `netRead`'s are. None is refused on wasm: wasi-libc has `read` and `poll`
-  // for stdin, and the three TTY questions answer "not a terminal" there.
+  // `netRead`'s are. Refused on freestanding wasm32 only: wasi-libc has `read`
+  // and `poll` for stdin, and the three TTY questions answer "not a terminal"
+  // there.
   if (name === "readStdin") {
-    if (checkBuiltinArity(ctx, call, name, args, 3)) {
+    if (checkBuiltinArity(ctx, call, name, args, 3) && !refuseOnFreestandingWasm(ctx, call, name)) {
       checkBuffer(ctx, args.children[0], scope, name, T_U8, true)
       checkArgumentType(ctx, args.children[1], scope, name, T_I32)
       checkArgumentType(ctx, args.children[2], scope, name, T_I32)
@@ -1073,18 +1087,20 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   // The frame clock: a timeout in milliseconds, negative for none, and
   // whether stdin is readable when it ends. An `i32`, as `pollWait`'s is.
   if (name === "waitStdin" || name === "isTerminal") {
-    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnFreestandingWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_I32)
     }
     return T_BOOL
   }
   // A fresh `[columns, rows]`, or `[-errno, 0]`, as `waitPid` answers a pair.
   if (name === "terminalSize") {
-    checkBuiltinArity(ctx, call, name, args, 0)
+    if (checkBuiltinArity(ctx, call, name, args, 0)) {
+      refuseOnFreestandingWasm(ctx, call, name)
+    }
     return ctx.table.arrayOf(T_I32)
   }
   if (name === "setRawMode") {
-    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnFreestandingWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_BOOL)
     }
     return T_I32

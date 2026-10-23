@@ -22,8 +22,9 @@
  * `readStdin` asks `select` first instead, with a timeout of 0.
  *
  * Raw mode is cfmakeraw's input side without its output side: no echo, no line
- * editing, no CR-to-NL translation, no flow control, 8-bit bytes, a read that
- * answers as soon as one byte is there. `ISIG` stays on, so Ctrl-C is still
+ * editing, no translation of CR or NL and no CR dropped, a break and a parity
+ * error read as plain bytes, no flow control, 8-bit bytes, a read that answers
+ * as soon as one byte is there. `ISIG` stays on, so Ctrl-C is still
  * SIGINT and Ctrl-Z still stops the program, and `OPOST` stays on, so "\n"
  * still moves to the start of the next line. The termios that was there is
  * saved by each `setRawMode(true)` that enters raw mode and put back by
@@ -176,8 +177,12 @@ static void nish_term_restore(void) {
    64 KiB, past Darwin's MINSIGSTKSZ of 32 KiB and glibc's on any core. */
 static char nish_term_alt_stack[65536];
 
+/* `SA_RESETHAND` puts the default back, except that POSIX lets a system keep
+   the handler for SIGILL and SIGTRAP, so it is put back here too: `signal` is
+   async-signal-safe. */
 static void nish_term_on_signal(int sig) {
   nish_term_restore();
+  signal(sig, SIG_DFL);
   raise(sig);
 }
 
@@ -196,9 +201,9 @@ static int32_t nish_term_set(bool on) {
   if (!isatty(0)) return -25;
   if (tcgetattr(0, &nish_term_saved) != 0) return -errno;
   struct termios t = nish_term_saved;
-  t.c_iflag &= ~(tcflag_t)(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+  t.c_iflag &= ~(tcflag_t)(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | INPCK | IXON);
   t.c_cflag = (t.c_cflag & ~(tcflag_t)(CSIZE | PARENB)) | CS8;
-  t.c_lflag &= ~(tcflag_t)(ECHO | ICANON | IEXTEN);
+  t.c_lflag &= ~(tcflag_t)(ECHO | ECHONL | ICANON | IEXTEN);
   t.c_cc[VMIN] = 1;
   t.c_cc[VTIME] = 0;
   if (!nish_term_armed) {

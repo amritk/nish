@@ -391,17 +391,17 @@ declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 
 /** Up to `len` bytes of stdin into `buf` from `off`, never blocking: the count, 0 at end of stream, or -11 when nothing is waiting. */
 declare function readStdin(buf: u8[], off: i32, len: i32): i32;
-/** Wait up to `timeoutMs` (negative: forever) for stdin to be readable: `true` when it is, `false` when the time passed. */
+/** Wait up to `timeoutMs` (negative: forever) for stdin to be readable (its end and an error count): `true` when it is, `false` when the time passed. */
 declare function waitStdin(timeoutMs: i32): boolean;
 /** Whether descriptor `fd` is a terminal (`isatty`). */
 declare function isTerminal(fd: i32): boolean;
-/** `[columns, rows]` of the terminal on stdout, else stdin; `[-25, 0]` when neither is one. */
+/** `[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one. */
 declare function terminalSize(): i32[];
 /**
  * Raw mode on stdin's terminal, or the mode it had back: 0, -25 when stdin is
  * not a terminal. No echo, no line editing; Ctrl-C stays SIGINT and "\n"
  * still starts a line. The terminal is put back at exit, on a panic and on
- * SIGINT, SIGTERM, SIGQUIT and SIGHUP.
+ * every signal that ends the program, SIGKILL aside.
  */
 declare function setRawMode(on: boolean): i32;
 
@@ -563,13 +563,13 @@ declare module "nish:io" {
 declare module "nish:term" {
   /** Up to `len` bytes of stdin into `buf` from `off`, never blocking: the count, 0 at end of stream, or -11 when nothing is waiting. */
   export function readStdin(buf: u8[], off: i32, len: i32): i32;
-  /** Wait up to `timeoutMs` (negative: forever) for stdin to be readable: `true` when it is, `false` when the time passed. */
+  /** Wait up to `timeoutMs` (negative: forever) for stdin to be readable (its end and an error count): `true` when it is, `false` when the time passed. */
   export function waitStdin(timeoutMs: i32): boolean;
   /** Whether descriptor `fd` is a terminal (`isatty`). */
   export function isTerminal(fd: i32): boolean;
-  /** `[columns, rows]` of the terminal on stdout, else stdin; `[-25, 0]` when neither is one. */
+  /** `[columns, rows]` of the terminal on stdout, else stderr; `[-25, 0]` when neither is one. */
   export function terminalSize(): i32[];
-  /** Raw mode on stdin's terminal (0), or the mode it had back; -25 when stdin is not a terminal. Restored at exit, panic and fatal signals. */
+  /** Raw mode on stdin's terminal (0), or the mode it had back; -25 when stdin is not a terminal. Restored at exit, on a panic and on every signal that ends the program, SIGKILL aside. */
   export function setRawMode(on: boolean): i32;
 }
 

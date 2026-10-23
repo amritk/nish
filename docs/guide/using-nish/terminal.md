@@ -41,11 +41,14 @@ a terminal".
 
 `readStdin(buf, off, len)` copies at most `len` bytes into `buf`, starting at
 `off`. It never waits. It answers how many bytes it read, `0` when stdin has
-ended, or `-11` when nothing has arrived yet.
+ended, or `-11` when nothing has arrived yet. Any other negative number means
+reading stdin failed, and the loop should stop as it does at the end. Ask for
+at least one byte: a `len` of `0` reads nothing and answers `0`, which looks
+like the end.
 
 `waitStdin(timeoutMs)` waits until there is something to read, or until
 `timeoutMs` milliseconds have passed. It answers `true` when stdin is ready
-(its end counts) and `false` when the time ran out. A negative timeout waits
+(its end and an error count, so the read after it answers at once) and `false` when the time ran out. A negative timeout waits
 for ever.
 
 Together they make the loop of an interactive program. Each pass waits up to
@@ -87,7 +90,7 @@ terminal is. Type `fg` and it goes on, in raw mode.
 ## A key-echo loop
 
 This program prints the number of each key you press. It stops on `q`, on
-Ctrl-D, or when stdin ends. Run it in a terminal and press an arrow key to see
+Ctrl-D, or when stdin ends or fails. Run it in a terminal and press an arrow key to see
 its three bytes.
 
 ```ts nish:ok
@@ -103,7 +106,7 @@ export const main = (): i32 => {
   while (running) {
     if (waitStdin(100)) {
       const n = readStdin(keys, 0, keys.length);
-      if (n === 0) {
+      if (n === 0 || (n < 0 && n !== -11)) {
         running = false;
       }
       for (let i = 0; i < n && i < keys.length; i++) {
@@ -147,5 +150,7 @@ export const main = (): i32 => {
 `nish:term` works on Linux and macOS. Under WebAssembly (`--profile wasi`)
 there is no terminal: `readStdin` waits for its bytes instead of answering
 `-11`, so call `waitStdin` first, as the loop above does, and the other three
-answer "not a terminal". When a program is run under Node, `isTerminal` and
-`terminalSize` work, and the other three throw.
+answer "not a terminal". A freestanding `--target wasm32` build has no stdin
+at all, so the compiler refuses all five there. When a program is run under
+Node, `isTerminal` and `terminalSize` work, and the other three throw; in a
+browser the two answer "not a terminal".

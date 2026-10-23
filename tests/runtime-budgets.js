@@ -403,7 +403,7 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  * `terminalSize` and `setRawMode`, with the restore that the exit, a panic and
  * every signal whose default ends the program run while raw mode holds.
  *
- * Measured **890 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * Measured **899 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
  * `.text`. A ninth translation unit rather than more of `runtime-os.c`, which had 177
  * bytes of its ceiling left, because the rule is a new file with its own measured
  * ceiling, never a raised one. The budget is the next 256-byte boundary above the

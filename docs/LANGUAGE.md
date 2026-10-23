@@ -7608,7 +7608,7 @@ only, and WASI as below.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `readStdin(buf: u8[], off: i32, len: i32): i32` | at most `len` bytes of stdin into `buf[off, off + len)`, **without waiting**: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds), and the buffer is a writable `u8[]` | write | `term_calls`, `term_import`; `reject_term_read_arity`, `reject_term_read_i32_buffer`, `reject_term_read_readonly` |
-| `waitStdin(timeoutMs: i32): boolean` | wait until stdin is readable, or `timeoutMs` milliseconds pass: `true` when it is readable — its end and an error included, so the read after it answers at once — and `false` when the time ran out first or a signal ended the wait early. A negative timeout waits for ever. Not `willreturn` | write | `term_calls`, `term_import`; `reject_term_wait_string` |
+| `waitStdin(timeoutMs: i32): boolean` | wait until stdin is readable, or `timeoutMs` milliseconds pass: `true` when it is readable — its end and an error included, so the read after it answers at once, with `0` or a negative errno that is not `-11`, which a loop treats as the end — and `false` when the time ran out first or a signal ended the wait early. A negative timeout waits for ever. Not `willreturn` | write | `term_calls`, `term_import`; `reject_term_wait_string` |
 | `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
 | `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
 | `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, `-25` when stdin is not a terminal, or the host's `-errno` when the terminal refuses. Asking for the mode it is already in changes nothing and answers `0`, so `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
@@ -7639,8 +7639,8 @@ export const main = (): number => {
   while (running) {
     if (waitStdin(16)) {
       const n = readStdin(keys, 0, keys.length);
-      if (n === 0) {
-        running = false; // stdin ended
+      if (n === 0 || (n < 0 && n !== -11)) {
+        running = false; // stdin ended, or reading it failed
       }
       for (let i = 0; i < n && i < keys.length; i++) {
         if (keys[i] === 113) {
@@ -7712,14 +7712,18 @@ missing or makes no terminal, that check is a counted skip that says which.
 | --- | --- | --- | --- | --- | --- |
 | Linux, Darwin | as above | as above | `isatty` | the ioctl | as above |
 | A pipe or a file | as above | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
-| `wasm32`, `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
+| `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
+| `--target wasm32`, freestanding | refused | refused | refused | refused | refused |
 | Node ([prelude](RUN_UNDER_NODE.md)) | throws | throws | `tty.isatty` | Node's `columns` and `rows` | throws |
+| A browser (`nish/runtime/browser`) | throws | throws | `false` | `[-25, 0]` | throws |
 
 WASI has `read` and `poll` on stdin and no terminal interface. There
 `readStdin` reads without asking `poll` first, because Node's WASI answers a
 zero-timeout poll of stdin with "nothing waiting" while bytes are, so it waits
 for its bytes: call `waitStdin` first, as the loop above does. The checker
-accepts the five under `--target wasm32`, unlike `nish:net`'s. Under Node,
+accepts the five there, unlike `nish:net`'s, and refuses them on a
+freestanding `--target wasm32` build, whose runtime has no stdin
+(`reject_term_wasm`). Under Node,
 stdin is read only by the event loop, which a program that owns its loop never
 returns to, and Node's own raw mode turns Ctrl-C into a byte, so the three
 that would need either throw, each naming itself. The `term` and `term_wasi`
