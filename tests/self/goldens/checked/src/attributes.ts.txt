@@ -2131,34 +2131,34 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   pointer memory: size=104 writesThrough=false captured=false
   pointer known: size=16 writesThrough=true captured=true passedTo=FactCollector.constructor#6
   stackSites=2 stackLocals=2
-  local -136:9 program: CheckedProgram (const)
-  local -135:9 facts: FunctionFacts (const)
-  callee -135:17 new FunctionFacts -> @FunctionFacts.constructor
-  callee -133:23 structSize -> @structSize
-  callee -132:23 pointerAlign -> @pointerAlign
-  callee -129:27 isChannelSend -> @isChannelSend
-  callee -129:49 jsonRouteOf -> @jsonRouteOf
-  callee -109:23 rootsHoldNoPointer -> @rootsHoldNoPointer
-  callee -101:54 isScalarArgument -> @isScalarArgument
-  local -100:7 i: i32 (let)
-  local -98:11 type: i32 (const)
-  callee -97:9 isPointerParam -> @isPointerParam
-  callee -95:9 new PointerParamFacts -> @PointerParamFacts.constructor
-  callee -93:11 structSize -> @structSize
-  callee -93:38 TypeTable.stripNull -> @TypeTable.stripNull
-  callee -92:11 pointerAlign -> @pointerAlign
-  callee -84:7 jsonRouteOf -> @jsonRouteOf
-  callee -83:5 markJsonRoute -> @markJsonRoute
-  callee -78:7 isChannelSend -> @isChannelSend
-  callee -77:5 markChannelSend -> @markChannelSend
-  callee -72:7 isAtomicMethod -> @isAtomicMethod
-  callee -71:5 markAtomic -> @markAtomic
-  callee -53:7 FunctionSig.foreign -> @FunctionSig.foreign
-  local -52:9 at: i32 (let)
-  local -51:9 p: i32 (let)
-  callee -49:11 isPointerParam -> @isPointerParam
-  callee -48:13 isForeignBuffer -> @isForeignBuffer
-  callee -48:59 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  local -143:9 program: CheckedProgram (const)
+  local -142:9 facts: FunctionFacts (const)
+  callee -142:17 new FunctionFacts -> @FunctionFacts.constructor
+  callee -140:23 structSize -> @structSize
+  callee -139:23 pointerAlign -> @pointerAlign
+  callee -136:27 isChannelSend -> @isChannelSend
+  callee -136:49 jsonRouteOf -> @jsonRouteOf
+  callee -116:23 rootsHoldNoPointer -> @rootsHoldNoPointer
+  callee -108:54 isScalarArgument -> @isScalarArgument
+  local -107:7 i: i32 (let)
+  local -105:11 type: i32 (const)
+  callee -104:9 isPointerParam -> @isPointerParam
+  callee -102:9 new PointerParamFacts -> @PointerParamFacts.constructor
+  callee -100:11 structSize -> @structSize
+  callee -100:38 TypeTable.stripNull -> @TypeTable.stripNull
+  callee -99:11 pointerAlign -> @pointerAlign
+  callee -91:7 jsonRouteOf -> @jsonRouteOf
+  callee -90:5 markJsonRoute -> @markJsonRoute
+  callee -85:7 isChannelSend -> @isChannelSend
+  callee -84:5 markChannelSend -> @markChannelSend
+  callee -79:7 isAtomicMethod -> @isAtomicMethod
+  callee -78:5 markAtomic -> @markAtomic
+  callee -60:7 FunctionSig.foreign -> @FunctionSig.foreign
+  local -59:9 at: i32 (let)
+  local -58:9 p: i32 (let)
+  callee -56:11 isPointerParam -> @isPointerParam
+  callee -55:13 isForeignBuffer -> @isForeignBuffer
+  callee -55:59 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
   callee -24:9 TypeTable.stripNull -> @TypeTable.stripNull
   local -16:9 collector: FactCollector (const)
   callee -16:21 new FactCollector -> @FactCollector.constructor

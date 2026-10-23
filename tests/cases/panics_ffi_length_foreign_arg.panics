@@ -1,0 +1,5 @@
+{"functions":[
+{"name":"rewound","symbol":"rewound","module":"tests/cases/panics_ffi_length_foreign_arg.ts","line":9,"panics":[{"kind":"pop","line":11,"column":3,"proven":false}]},
+{"name":"credited","symbol":"credited","module":"tests/cases/panics_ffi_length_foreign_arg.ts","line":15,"panics":[{"kind":"ffi-length","line":17,"column":27,"proven":true}]},
+{"name":"uncredited","symbol":"uncredited","module":"tests/cases/panics_ffi_length_foreign_arg.ts","line":20,"panics":[{"kind":"ffi-length","line":22,"column":27,"proven":false},{"kind":"call","line":22,"column":51,"callee":"rewound","via":"pop"}]}
+]}
