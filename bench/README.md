@@ -1155,6 +1155,53 @@ other non-2xx row, when its row count differs from the requests h2load says
 it completed, or when more than 5 % of rows have no status. Results gathered
 before the error are still written and reported.
 
+## YAML against @amritk/yaml
+
+`yaml-compare/` times nish/yaml against @amritk/yaml, a YAML parser written in
+TypeScript, under Node and, when `bun --version` answers, under Bun. It runs
+over five pinned streams of different shapes: a 10 MB OpenAPI document, a
+multi-document Kubernetes manifest, a JSON file read as YAML, a CI workflow
+full of block scalars, and a compose file of anchors and merge keys.
+`fetch.mjs` pins each stream, and @amritk/yaml's npm tarball, by URL and
+sha256 into `yaml-compare/cache/`, which git ignores. It names each fixture's
+licence. Nothing is vendored, and @amritk/yaml is not in `package.json`.
+
+```bash
+npm run build
+node bench/yaml-compare/run.mjs                     # 15 rounds at least, 32 MB of input per run
+node bench/yaml-compare/run.mjs --record            # and rewrite the table below
+node tests/run.js yaml-compare                      # main.ts on sample.yaml, no network
+```
+
+There are two workloads, the same on both sides. `parse` parses every
+document of the stream. `walk` parses, then visits every node from each
+document's root and reads every scalar's text. nish/yaml decodes a scalar only
+when it is read; @amritk/yaml resolves every scalar while it parses.
+
+`main.ts` is the Nish side and `node-bench.mjs` the JavaScript one. Both print
+the same checksum: the document count, the node count of each kind, and the
+error count, never an offset. A run whose checksums disagree fails; it is not
+reported as a time. `sample.expected` holds the checksums @amritk/yaml prints
+for the committed `sample.yaml`, and `tests/run.js` holds the Nish program to
+them.
+
+The rounds are interleaved in json-compare's `rounds.mjs` order. Nish runs
+beside a byte-identical copy of its binary: the gap between their medians is
+the noise band. Each figure is ms per stream, timed by the program around its
+own loop. The "/ Nish" columns divide that runtime's median by Nish's median:
+above 1.00x, Nish is faster.
+
+**The baseline, before any tuning of nish/yaml**, on main's parser. Every
+fixture's checksums agree between the two parsers. The recorded section below
+names the commit, the machine and the toolchains.
+
+<!-- yaml-compare:begin -->
+<!-- yaml-compare:end -->
+
+Which of the parser's run scans already lower to `nish_str_index_of_any` in
+the built benchmark's IR (`build/yaml-compare/yaml.ll`), recorded for the
+tuning stage:
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
