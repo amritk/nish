@@ -74,8 +74,9 @@
 
 #ifndef __wasi__
 /* How many times the SIGTSTP handler has stopped the program, so a wait the
-   stop interrupted can tell that from any other signal. */
-static volatile sig_atomic_t nish_term_stops;
+   stop interrupted can tell that from any other signal. Atomic, because the
+   handler on one thread counts what a wait on another reads. */
+static int nish_term_stops;
 #endif
 
 /* 1 when stdin is readable within `timeout_ms` (a negative one waits for
@@ -102,9 +103,9 @@ static int nish_stdin_ready(int32_t timeout_ms) {
   struct timeval tv = {timeout_ms / 1000, (timeout_ms % 1000) * 1000};
   int r, stops;
   do {
-    stops = nish_term_stops;
+    stops = __atomic_load_n(&nish_term_stops, __ATOMIC_RELAXED);
     r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
-  } while (r < 0 && errno == EINTR && stops != nish_term_stops);
+  } while (r < 0 && errno == EINTR && stops != __atomic_load_n(&nish_term_stops, __ATOMIC_RELAXED));
 #endif
   if (r < 0) return errno == EINTR ? 0 : -errno;
   return r;
@@ -294,7 +295,7 @@ static void nish_term_on_signal(int sig) {
   int was = nish_term_raw;
   nish_term_restore();
   signal(sig, SIG_DFL);
-  nish_term_stops++;
+  __atomic_fetch_add(&nish_term_stops, 1, __ATOMIC_RELAXED);
   nish_term_mask(SIG_UNBLOCK, 0);
   raise(sig);
   nish_term_mask(SIG_BLOCK, 0);

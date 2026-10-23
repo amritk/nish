@@ -1576,7 +1576,8 @@ if (!only || "term".includes(only)) {
   // by SIGTSTP, Ctrl-Z's signal, from a background helper: the terminal is as
   // it was while it is stopped, because the shell puts back nothing, still so
   // once `bg` continues it, because it stops again by SIGTTOU entering raw
-  // mode from the background, and raw again once `fg` continues it. Where
+  // mode from the background, and raw again once `fg` continues it, its wait
+  // going on rather than ending early. Where
   // `jobs` names the signal (dash: "Stopped (tty output)"), a SIGTTIN stop,
   // a background read that never re-entered raw mode, does not count.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
@@ -1621,7 +1622,7 @@ if (!only || "term".includes(only)) {
         '( i=0; while [ $i -lt 50 ] && [ "$(icanon)" != -icanon ]; do sleep 0.1; i=$((i + 1)); done',
         '  echo "$(icanon)" > "$D/cont.out"; kill -TERM "$(cat "$D/hold.pid")" ) &',
         "fg > /dev/null",
-        'echo "continued $? stty $(same) was $(cat "$D/cont.out")"',
+        'echo "continued $? stty $(same) was $(cat "$D/cont.out") said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         "",
       ].join("\n")
     )
@@ -1653,7 +1654,7 @@ if (!only || "term".includes(only)) {
         "fault 139 stty same",
         `stopped ${128 + os.constants.signals.SIGTSTP} stty same was -icanon`,
         "background 1 stty same icanon",
-        "continued 143 stty same was -icanon",
+        "continued 143 stty same was -icanon said raw 0 ready ",
       ]
       check(
         "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back",

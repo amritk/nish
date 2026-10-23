@@ -10,6 +10,7 @@
 @.str.6 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"panic\00" }, align 8
 @.str.7 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"hold\00" }, align 8
 @.str.8 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"ready\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"early\00" }, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @nish_free_arena() #1
@@ -261,7 +262,7 @@ lor.end:
 
 while.body:
   %68 = call zeroext i1 @nish_wait_stdin(i32 -1)
-  br i1 %68, label %if.then.4, label %if.end.4
+  br i1 %68, label %if.then.4, label %if.else
 
 if.then.4:
   %69 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
@@ -280,6 +281,10 @@ net.fail:
 net.ok:
   %76 = call i32 @nish_read_stdin(%struct.nish_array* %69, i64 0, i64 16)
   store i32 %76, i32* %n.addr, align 4
+  br label %if.end.4
+
+if.else:
+  call void @nish_print(i8* bitcast ({ i64, [6 x i8] }* @.str.9 to i8*))
   br label %if.end.4
 
 if.end.4:
