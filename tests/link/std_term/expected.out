@@ -1,0 +1,76 @@
+enter: ^[[?1049h
+leave: ^[[?1049l
+hide: ^[[?25l
+show: ^[[?25h
+clear: ^[[H^[[2J
+reset: ^[[0m
+move 3,1: ^[[2;4H
+sync: ^[[?2026h..^[[?2026l
+rgb clamps: true
+palette red 196 grey 244 near-black 232 white 231 default -1
+blank 4x2: ^[[H^[[0m    ^[[2;1H    
+unchanged: 0
+one cell: ^[[2;3H^[[0mX
+gap of one, bridged: ^[[H^[[0mA B
+gap of two in another style, moved: ^[[H^[[0mC B^[[38;2;255;0;0mD^[[0m
+row start, then home: ^[[H^[[0m ^[[2;1HE
+off screen: 0
+styled run: ^[[H^[[0;1;38;2;255;0;0;48;2;0;0;255mHi^[[0;7;38;2;255;0;0;48;2;0;0;255myo^[[0mé!
+text answers 2, glyph at 4 is 233
+add inverse: ^[[H^[[0;1;7;38;2;255;0;0;48;2;0;0;255mHi^[[0m
+cleared: ^[[H^[[0m      
+unknown attribute bits: ^[[H^[[0mA
+control, negative, surrogate, DEL: ^[[H^[[0m����
+gap over a control, moved: ^[[H^[[0mA^[[CB
+C1 controls, then U+00A0: ^[[H^[[0m��� 
+256 colours: ^[[H^[[0;38;5;196;48;5;16mab^[[39;49m 
+sync first frame: ^[[?2026h^[[H^[[0m   ^[[?2026l
+sync unchanged: 0
+sync one styled cell: ^[[?2026h^[[1;2H^[[0;38;2;255;0;0mZ^[[0m^[[?2026l
+sync turned off: ^[[1;2H^[[0mY
+canvas 4x4
+pixels: ^[[H^[[0;38;2;255;0;0m▀^[[38;2;0;0;255m▄^[[38;2;255;0;0;48;2;0;0;255m▀^[[39;49m ^[[2;1H    
+fillRect: ^[[2;1H^[[0;38;2;0;255;0;48;2;0;255;0m▀▀▀▀^[[0m
+line: ^[[1;2H^[[0;38;2;255;0;0m▄^[[39m ^[[2;1H  ^[[38;2;255;0;0m▀▄^[[0m
+pixel (1,1) true (1,2) true off -1
+lines to far endpoints stop at the edge: ^[[H^[[0;38;2;0;0;255m▄^[[38;2;255;0;0m▀▀▀^[[2;2H^[[38;2;0;0;255m▀▀▄^[[0m
+text over pixels: ^[[H^[[0;38;2;0;0;255;48;2;0;0;255m▀^[[38;2;255;0;0mok^[[38;2;0;0;255m▀^[[2;1H▀▀▀▀^[[0m
+frame loop sent 27207 bytes
+steps 0 0 2 0 8 0 1 alpha 75%
+a long stall runs 3 and keeps the phase: alpha 50%
+a 100 Hz draw clock over a second of 1 ms ticks: 100 frames
+clamped: step 1000 ms, at most 1
+arrows: [up(65) down(66) right(67) left(68)]
+controls: [ctrl-c(3) enter(13) enter(10) space(32) tab(9) backspace(127) backspace(8) control(1)]
+printable: [char(113) char(81) char(126) char(233) char(9600)]
+count bounds the read: [char(97)]
+split ESC | [A, first: [] holding
+split ESC | [A, then: [up(65)]
+split ESC[ | B, first: [] holding
+split ESC[ | B, then: [down(66)]
+split ESC O | C, first: [] holding
+split ESC O | C, then: [right(67)]
+parameters, ESC[1;5A: [up(65)]
+other final, ESC[3~: [unknown(126)]
+lone ESC, first: [] holding
+lone ESC, poll early: [] holding
+lone ESC, poll late: [escape(27)]
+ESC then a letter: [escape(27) char(120)]
+ESC ESC [ A: [escape(27) up(65)]
+held ESC timed out by the next feed: [] holding
+  next feed: [escape(27) char(120)]
+split UTF-8, first: [] holding
+split UTF-8, then: [char(233)]
+unfinished UTF-8 timed out: [] holding
+  poll: [char(65533)]
+invalid bytes: [char(65533) char(65533) char(97)]
+a character cut short by another: [char(65533) char(97)]
+empty feed: []
+held over two feeds, first: [] holding
+held over two feeds, then: [] holding
+  timed from the first: [escape(27) char(91)]
+ESC O and no final: [escape(27) char(79) enter(10)]
+past U+10FFFF lead: [char(65533) char(65533) char(97)]
+C1 control, then U+00A0: [char(65533) char(160)]
+overlong, surrogate, too high: [char(65533) char(65533) char(65533)]
+four bytes: [char(128512)]

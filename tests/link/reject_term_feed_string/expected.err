@@ -1,0 +1,1 @@
+main.ts:8:23: error: Argument 1 of `KeyDecoder.feed`: expected u8[], got string
