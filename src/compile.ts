@@ -72,10 +72,11 @@ import { generateNapiShim, napiBridges } from "./interop-napi"
 import { generateWasmLoader, wasmLoaderPath } from "./interop-wasm"
 import { unsafeModule } from "./nish-modules"
 import { Options } from "./options"
-import { basenameWithout, dirname } from "./paths"
+import { basenameWithout, dirname, joinPath } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
 import { Diagnostic, formatList } from "./diagnostics"
+import { emitTypeScript } from "./emit-ts"
 import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
@@ -90,7 +91,7 @@ import {
 } from "./run-cache"
 
 const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--cpu x86-64-v3] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--cpu x86-64-v3] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-ts <dir>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -572,6 +573,14 @@ export const main = (): number => {
         return 2
       }
       opts.emitDts = process.argv[arg]
+    } else if (value === "--emit-ts") {
+      productFlag = productFlag.length === 0 ? value : productFlag
+      arg = arg + 1
+      if (arg >= process.argv.length) {
+        console.error("compile: --emit-ts needs a directory")
+        return 2
+      }
+      opts.emitTs = process.argv[arg]
     } else if (value === "--emit-napi") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
@@ -739,6 +748,38 @@ export const main = (): number => {
       console.error(`compile: --cpu ${cpu} is an x86-64 level, and ${what}`)
       return 2
     }
+  }
+  // `--emit-ts` answers in place of `emit`, so a product only `emit` or the
+  // dumps write would be dropped without a word; it is refused instead. `-o`
+  // is refused later, once the program is known to be writable: a refusal
+  // (NL4010, NL4011) is a finding about the program, and the corpus harnesses
+  // that provoke it pass `-o` to every compile. The portability pass is what
+  // tells a reader where the TypeScript will not behave as the native build
+  // does (wp33 §5.2), so it is turned on.
+  if (opts.emitTs.length > 0) {
+    let clash = ""
+    if (link.length > 0) {
+      clash = "--link"
+    } else if (emitAst) {
+      clash = "--emit-ast"
+    } else if (emitChecked) {
+      clash = "--emit-checked"
+    } else if (opts.emitHeader.length > 0) {
+      clash = "--emit-header"
+    } else if (opts.emitDts.length > 0) {
+      clash = "--emit-dts"
+    } else if (opts.emitNapi.length > 0) {
+      clash = "--emit-napi"
+    } else if (opts.emitNapiAsync.length > 0) {
+      clash = "--emit-napi-async"
+    }
+    if (clash.length > 0) {
+      console.error(
+        `compile: \`${clash}\` cannot be used with --emit-ts, which writes the program as TypeScript and emits no IR`
+      )
+      return 2
+    }
+    opts.warnPortability = true
   }
   if (runMode) {
     if (notForRun.length > 0 || productFlag.length > 0) {
@@ -951,11 +992,17 @@ export const main = (): number => {
   // and needs no entry, as it never has.
   if (
     !emitChecked &&
-    (link.length > 0 || runMode) &&
+    (link.length > 0 || runMode || opts.emitTs.length > 0) &&
     compilation.entry().checker.program.entryMain === null
   ) {
+    let asker = "--link"
+    if (runMode) {
+      asker = "run"
+    } else if (opts.emitTs.length > 0) {
+      asker = "--emit-ts"
+    }
     console.error(
-      `${runMode ? "run" : "--link"}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
+      `${asker}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
     )
     return 1
   }
@@ -997,6 +1044,34 @@ export const main = (): number => {
   // rather than after `emit`: nothing about the IR changes it.
   if (emitChecked) {
     write(checkedText(compilation))
+    return 0
+  }
+  // `--emit-ts` writes the checked program back out as TypeScript and never
+  // emits IR. Every module is written in memory first, so a refusal in the
+  // last one leaves no half-written directory behind.
+  if (opts.emitTs.length > 0) {
+    const ts = emitTypeScript(compilation)
+    if (ts.internal.length > 0) {
+      return internalErrorFor(ts.internal, json)
+    }
+    if (ts.refused) {
+      report(compilation, json)
+      return 1
+    }
+    if (output.length > 0) {
+      console.error(
+        "compile: `-o` cannot be used with --emit-ts, which writes the program as TypeScript and emits no IR"
+      )
+      return 2
+    }
+    for (const file of ts.files) {
+      const path = joinPath([opts.emitTs, file.path])
+      if (!makeDirectoryFor(path)) {
+        return 1
+      }
+      writeFileSync(path, file.text)
+    }
+    console.error(`wrote ${opts.emitTs}`)
     return 0
   }
   // A sidecar that cannot describe the program is refused before any IR is

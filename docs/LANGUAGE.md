@@ -9775,6 +9775,36 @@ by the caller.
   (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the
   linked binary's line table with `llvm-dwarfdump`).
 
+### Writing the program out as TypeScript
+
+- **`--emit-ts <dir>` writes the checked program back out as TypeScript**
+  that Node runs with its type stripping ([wp33](wp33-round-trip.md) §3),
+  one file per module, and emits no IR (`src/emit-ts.ts`). Each module of the
+  root package keeps its path relative to the directory they all share; each
+  standard-library module the program reaches is written under `nish/` beside
+  them (`std/pair.ts` as `nish/pair.ts`); a dependency package's module is not
+  written. Last comes `entry.ts`, which imports `nish/runtime/node`, calls
+  `main` and exits with what it answered. Imports are rewritten to match: a
+  `nish:` specifier becomes `nish/runtime`, the one package the output names;
+  a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
+  imported name that is only a type (an interface, a generic interface, an
+  alias) is written `type X`, because Node's type stripping does not know
+  which names are types. A module that needs none of that is written byte for
+  byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
+- **The flag turns `--warn-portability` on**: those warnings name the sites
+  where the TypeScript reading answers differently.
+- **Two kinds of module are refused, and then nothing is written** (exit 1):
+  one that declares C functions, whose bodies are not in the program
+  (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
+  or calls `signalFd` or `readSignal`, whose translation is not local to its
+  statement (NL4011, `reject_emit_ts_net`). Every refusal in the program is
+  reported before it exits.
+- **It answers in place of the other outputs.** `--link`, `--emit-ast`,
+  `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/
+  `--emit-napi-async` sidecars are refused beside it with exit 2, and so is
+  `-o`, once the program is known to be writable. `--emit-ts` without a
+  directory is exit 2 as well.
+
 ### Panic sites
 
 A compiled program can stop with exit 1 in more places than the `panic` calls

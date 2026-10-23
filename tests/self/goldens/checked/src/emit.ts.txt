@@ -303,7 +303,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer this: size=264 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=96 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=152 writesThrough=true captured=true
+  pointer opts: size=160 writesThrough=true captured=true
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=16 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
@@ -1311,7 +1311,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   calls: Emitter.constructor Emitter.emitModule
   pointer unit: size=16 writesThrough=false captured=false passedTo=Emitter.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=Emitter.constructor#2
-  pointer opts: size=152 writesThrough=true captured=true passedTo=Emitter.constructor#3
+  pointer opts: size=160 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#5
   pointer libraries: size=0 writesThrough=false captured=false passedTo=Emitter.constructor#6

@@ -292,7 +292,7 @@ function unpackResult(emitter: Emitter, type: i32, word: string, stack: boolean)
   callee +15:3 storeSlot -> @storeSlot
 function privateAbi(opts: Options, exported: boolean): boolean -> @privateAbi [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer opts: size=152 writesThrough=false captured=false
+  pointer opts: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function armsFor(isOk: boolean): string -> @armsFor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false

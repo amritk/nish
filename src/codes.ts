@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 688
+export const RULE_COUNT: i32 = 690
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -343,6 +343,10 @@ const diagnosticRules = (): string[] => [
   "NL2442",
   "` of a `Secret` is read only by `nish:secret` itself: compute with the value inside `expose(key, f)`, which runs `f` with it",
   "NL2436",
+  "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
+  "NL4011",
+  "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
+  "NL4010",
   "` was moved into another `Secret` local and cannot be read again: one key has one owner, which is the one that wipes it",
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",

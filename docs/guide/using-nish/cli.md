@@ -95,6 +95,50 @@ The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — have a page of their own:
 [Calling Nish from other languages](interop.md).
 
+## Writing TypeScript: `--emit-ts`
+
+`nish app.ts --emit-ts out/` writes your program back out as TypeScript that
+Node runs, one file per module, and no IR:
+
+```sh
+nish app.ts --emit-ts out/
+node --experimental-strip-types out/entry.ts
+```
+
+The output imports its runtime from the `nish` package, as `nish/runtime`, so
+Node has to find `nish` from `out/`, the way it finds any dependency. A program
+that uses `using` also needs `--js-explicit-resource-management`.
+
+Inside `out/`:
+
+- **Your modules** keep their paths relative to the directory they share:
+  `app.ts` and `lib/tally.ts` are written as `out/app.ts` and
+  `out/lib/tally.ts`.
+- **Each standard-library module** your program imports is written under
+  `nish/`, so `nish/pair` becomes `out/nish/pair.ts`.
+- **`entry.ts`** runs your `main` and exits with the number it returns.
+
+Imports are rewritten so Node can follow them. A `nish:` builtin becomes
+`nish/runtime`, the one package the output imports. A `nish/x` or relative
+import becomes a relative path ending in `.ts`. An imported interface or type
+alias is marked `import { type Pair }`. A module that needs none of this is
+written unchanged, byte for byte.
+
+The flag also turns on `--warn-portability`. Those warnings name the places
+where your program can answer differently under Node.
+
+Two kinds of module cannot be written. In either case `nish` exits 1 and
+writes no file:
+
+```text
+app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
+app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
+```
+
+`--emit-ts` writes a directory and nothing else, so it exits 2 if you also
+pass `-o`, `--link`, `--emit-ast`, `--emit-checked` or one of the sidecar
+flags.
+
 ## Reading diagnostics
 
 An error prints with its position and an excerpt, and the compile exits 1:

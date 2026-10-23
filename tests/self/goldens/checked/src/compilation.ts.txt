@@ -268,7 +268,7 @@ function Compilation.constructor(this: Compilation, opts: Options): void -> @Com
   escaping: opts
   calls: DiagnosticSink.constructor RuntimeTable.constructor StringMap.constructor TypeTable.constructor nish_alloc_struct nish_realpath
   pointer this: size=128 writesThrough=true captured=false
-  pointer opts: size=152 writesThrough=true captured=true
+  pointer opts: size=160 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:18 new TypeTable -> @TypeTable.constructor
   callee +2:17 new DiagnosticSink -> @DiagnosticSink.constructor
