@@ -144,7 +144,7 @@ function rejectHandleArgument(ctx: CheckContext, type: i32, at: Node): boolean -
   sharedWrite: via CheckContext.error
   escaping: type
   calls: CheckContext.error handleOf handleTypeMessage
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)

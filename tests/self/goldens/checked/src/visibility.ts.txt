@@ -18,6 +18,12 @@ function isWasmBuild(opts: Options): boolean -> @isWasmBuild [exported]
   calls: nish_str_at nish_str_eq
   pointer opts: size=152 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function isFreestandingWasmBuild(opts: Options): boolean -> @isFreestandingWasmBuild [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isWasmBuild nish_str_eq nish_str_index_of nish_str_index_of_from
+  pointer opts: size=152 writesThrough=false captured=false passedTo=isWasmBuild#0
+  stackSites=0 stackLocals=0
+  callee +0:3 isWasmBuild -> @isWasmBuild
 function buildsWasmModule(opts: Options): boolean -> @buildsWasmModule [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isWasmBuild
