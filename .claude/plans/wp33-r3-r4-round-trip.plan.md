@@ -5,7 +5,7 @@ stages:
   - id: n7-maths
     title: N7 — atan2, tan, hypot, sign and imul, JavaScript's -0 and NaN in round, min and max, and f32ToBits
     goal: Add Math.atan2, tan, hypot, sign and imul and the f32ToBits builtin, and make Math.round, min and max on floats answer JavaScript's -0 and NaN, so tests/differential/known-failures.txt loses f64_minmax_nan and f64_round_negzero and the withdrawn half of NL8010 retires
-    verification: npm run check, npm run lint, node tests/run.js math, node tests/run.js wasi (read its skip line), node tests/run.js performance, node tests/run.js instructions and an undegraded npm test green; the checked goldens regenerated and read; the N7 guard in Verification prints only float round, min and max cases
+    verification: npm run check, npm run lint, node tests/run.js math, node tests/run.js wasi (read its skip line), node tests/run.js performance, node tests/run.js instructions and an undegraded npm test green; the checked goldens regenerated and read; the N7 guard in Verification prints only float round, min and max cases; node bench/run.mjs --only math --runs 10 --warmup 2 shows Nish at or below the fastest of its C, Go and Rust twins for every N7 operation, read against the noise band
     status: pending
     todos:
       - id: n7-functions
@@ -22,6 +22,9 @@ stages:
         status: pending
       - id: n7-tests
         content: One tests/cases program per function and per zero/NaN rule, each with a golden .ll, an llvm-as pass and a native round trip; negative cases for each wrong-typed call; remove the two known-failures rows and confirm the corpus programs agree under Node — see N7, Tests
+        status: pending
+      - id: n7-bench
+        content: Bench every N7 operation — bench/math.{ts,c,go,rs} twins registered in bench/run.mjs with one shared checksum, plus a race of candidate lowerings per operation — and ship the fastest exact lowering, with Nish at or below the fastest twin outside the noise band — see N7, Benchmarks
         status: pending
       - id: n7-docs
         content: docs/LANGUAGE.md rules, docs/IR_COOKBOOK.md's Math section, the guide's numbers page, wp33 §3.1 and §3.6, and wp34 §8's N7 row marked built — see N7, Docs
@@ -289,7 +292,7 @@ Each solid edge is a merge-order edge. Development waits on it too, except the d
 
 | Stage | Owns | Model |
 | --- | --- | --- |
-| `n7-maths` | `src/builtins.ts`, `src/emit-builtins.ts`, `src/runtime.ts`, `src/c-symbols.ts`, `src/bounds.ts`, `src/portability-numbers.ts`, `src/codes.ts`, `runtime/nish.d.ts`, `runtime/runtime-wasm.c`, `tests/cases/math_*`, `tests/cases/f32_to_bits*`, `tests/cases/reject_math_*`, `tests/cases/reject_f32_to_bits*`, `tests/differential/known-failures.txt`, `tests/wordings/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/guide/language/types.md`, `docs/guide/getting-started/from-typescript.md`, `docs/wp34-hosting-cs.md`, `docs/wp33-round-trip.md` (§3.1 and §3.6 only), and, by the edge to `r3-split`, one export in `runtime/shim.mjs`, one line in `runtime/nish.mjs` and the Math rows of `docs/RUN_UNDER_NODE.md`; plus the generated files | — |
+| `n7-maths` | `src/builtins.ts`, `src/emit-builtins.ts`, `src/runtime.ts`, `src/c-symbols.ts`, `src/bounds.ts`, `src/portability-numbers.ts`, `src/codes.ts`, `runtime/nish.d.ts`, `runtime/runtime-wasm.c`, `tests/cases/math_*`, `tests/cases/f32_to_bits*`, `tests/cases/reject_math_*`, `tests/cases/reject_f32_to_bits*`, `bench/math.{ts,c,go,rs,args}`, `bench/run.mjs` (the `math` entry only), `bench/README.md` (the `math` row only), `tests/differential/known-failures.txt`, `tests/wordings/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/guide/language/types.md`, `docs/guide/getting-started/from-typescript.md`, `docs/wp34-hosting-cs.md`, `docs/wp33-round-trip.md` (§3.1 and §3.6 only), and, by the edge to `r3-split`, one export in `runtime/shim.mjs`, one line in `runtime/nish.mjs` and the Math rows of `docs/RUN_UNDER_NODE.md`; plus the generated files | — |
 | `r3-split` | `runtime/core.mjs`, `runtime/core/*.mjs`, `runtime/node.mjs`, `runtime/shim.mjs`, `runtime/nish.mjs`, `tests/runtime/**`, `tests/run.js` (the new `runtime-hosts` section only), `tests/shard-costs.json`, `docs/RUN_UNDER_NODE.md` | — |
 | `r3-browser` | `runtime/browser.mjs`, `runtime/host.d.ts`, `runtime/core.d.ts`, `runtime/core/*.d.ts`, `package.json`, `tests/runtime/**`, `tests/run.js` (the `runtime-hosts` section and the npm-pack `required` list), `docs/RUN_UNDER_NODE.md`, `docs/guide/using-nish/to-typescript.md`, `scalar.config.json` | — |
 | `r4-skeleton` | `src/emit-ts.ts`, `src/emit-ts-edits.ts`, `src/emit-ts-{numbers,strings,records,control}.ts` (stubs only), `src/compile.ts`, `src/options.ts`, `src/codes.ts`, `tests/cases/reject_emit_ts_*`, `tests/emit-ts/**`, `tests/differential/emit-ts.js`, `tests/differential/emit-ts-known.txt`, `tests/nish/cli.ts`, `tests/run.js` (the new `emit-ts` section and the `documented` flag list), `tests/wordings/**`, `tests/self/goldens/**`, `docs/guide/using-nish/cli.md`, `docs/LANGUAGE.md`, `.claude/selfhost.md` | — |
@@ -344,6 +347,16 @@ Each name is added to `SUPPORTED_BUILTINS`. A two-argument `hypot` is the only a
 ### Portability
 
 NL8010 flags libm's NaN and signed-zero rules. The `min`, `max` and `round` sites are now class A and stop being reported; whatever of the row remains (the 1-ulp transcendental is stated, not flagged, per wp33 §3.1) stays. If nothing remains, NL8010 is retired as NL8011 was: the code stays in `src/codes.ts`, and `tests/wordings/unreachable.txt` records it.
+
+### Benchmarks
+
+Every N7 operation is bench-tested, and its lowering is the fastest exact one. "Exact" is not negotiable: a lowering that is faster but gives a different answer than JavaScript for any input (NaN, `±0`, `±Infinity`, overflow in `hypot`, the wrap in `imul`) is not a candidate.
+
+- **The twins.** `bench/math.ts`, `bench/math.c`, `bench/math.go` and `bench/math.rs`, written the `bench/README.md` way: same data layout, same expression order, one printed checksum every binary must agree on (`bench/run.mjs` checks it), sized so the C version runs at least a quarter of a second. One kernel per operation — `atan2`, `tan`, `hypot`, `sign` (int and float), `imul`, `round`, `min`, `max` (floats, with NaN and `±0` in the input stream), `f32ToBits` — each a loop whose input changes every iteration and whose output folds into the checksum (`.claude/testing.md` → "A `Measured:` trailer"), timed separately so a loss in one kernel cannot hide behind a win in another. Register it in `bench/run.mjs`'s program list (`name: "math"`) and add its row to `bench/README.md`'s table. Do not regenerate `docs/BENCHMARKS.md` (README: only a quiet machine rewrites it).
+- **The race.** For each operation whose lowering has a choice (`round`'s sign fix-up: `copysign` vs a select on the sign bit; `min`/`max`: `llvm.minimum`/`maximum` vs a compare-and-select sequence with an explicit NaN and `±0` path; `sign`: select chains vs arithmetic; `hypot`: libm `hypot` vs any exact scaled form), time each exact candidate in the same interleaved rounds and ship the fastest. The table of candidates and their timings goes in the PR body.
+- **The bar.** For every kernel, Nish's time is at or below the fastest of C, Go and Rust, read against the noise band (the baseline timed against a byte-identical copy of itself). Where all four call the same libm routine, a tie inside the band is the bar. `rustc` (`~/.cargo/bin`) and `go` (`/usr/local/go/bin`) are installed in the container; use all three twins.
+- **When it is not fastest.** If a kernel stays slower outside the band after the race, do not weaken a lowering's exactness and do not drop the kernel: open the PR as a draft with the kernel, the four timings, the band and what was tried, and the lead escalates it to the owner.
+- **The figures** go in the commit's `Measured:` trailer per kernel, with the band, copied from the head being merged.
 
 ### The N7 guard
 
@@ -747,7 +760,7 @@ This restores the comparison the file's header says R6 lost (:48-52). Add a `.gi
 
 | Stage | New checks (exact names are the stage's to fix; grep them before pushing) |
 | --- | --- |
-| `n7-maths` | the `math_*` and `f32_to_bits` cases and their negatives; the two known-failures rows gone |
+| `n7-maths` | the `math_*` and `f32_to_bits` cases and their negatives; the two known-failures rows gone; `bench/math` with C, Go and Rust twins agreeing on one checksum |
 | `r3-split` | `runtime-hosts:` shim export pin, core has no Node reach; every existing prelude and differential check unmodified |
 | `r3-browser` | `runtime-hosts:` web-globals-only run, package resolution, declarations agree; the npm-pack list |
 | `r4-skeleton` | `emit-ts:` byte-for-byte class A, fixture goldens and runs, the live differential with its known list; `reject_emit_ts_ffi`, `reject_emit_ts_net` |
@@ -763,6 +776,7 @@ bash scripts/fetch-seed.sh --force        # src/ stages
 npm run check && npm run lint             # read the exit status, never a piped tail
 node tests/run.js runtime-hosts           # R3 stages
 node tests/run.js math && node tests/run.js instructions   # n7-maths
+node bench/run.mjs --only math --runs 10 --warmup 2       # n7-maths: Nish at or below the fastest twin per kernel, against the noise band
 node tests/run.js emit-ts                 # R4 stages
 node tests/run.js wasi && node tests/run.js performance   # every stage touching src/; read the wasi skip line
 node tests/self/goldens.js --update && git diff --stat tests/self/goldens   # src/ stages; read the diff
@@ -794,3 +808,4 @@ A row stage also runs `node tests/differential/emit-ts.js --update` and commits 
 10. `nish --help` lists `--emit-ts`. The guide has a routed "Back to TypeScript" page covering the runtime entry points and `--emit-ts`.
 11. A native program calling `Math.atan2`, `Math.tan`, `Math.hypot`, `Math.sign`, `Math.imul` and `f32ToBits` compiles, and prints what the same source prints under `node --import runtime/nish.mjs`, except the last bit of a transcendental.
 12. Natively, `Math.round(-0.3)` is `-0`, and `Math.min`/`Math.max` with a NaN operand is NaN, as in JavaScript; `tests/differential/known-failures.txt` no longer lists `f64_minmax_nan` or `f64_round_negzero`.
+13. `node bench/run.mjs --only math` builds Nish, C, Go and Rust twins of every N7 operation, all four print the same checksum, and for every kernel Nish's time is at or below the fastest twin, read against the noise band; each shipped lowering is the fastest exact candidate the PR body's race measured.
