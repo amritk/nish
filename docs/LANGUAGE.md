@@ -9607,11 +9607,12 @@ by the caller.
     byte and the unit differ);
   - it **bounds a loop**: either operand of a comparison in a `while`, `do`
     or `for` condition, unless the other operand also holds an offset or is
-    the loop's *cursor* into a string — a local the loop uses as a string's
-    index or hands to a string's method, alone or in arithmetic — which
-    counts in the string's own unit (`for (let i = 0; i < s.length; i++)`
-    over `s.charCodeAt(i)` is quiet, and so is a bound that moves the cursor
-    by a constant to look ahead, `i + 1 < s.length`);
+    the loop's *cursor* into the string it counted — a local the loop hands
+    to that string's method, alone or in arithmetic — which counts in the
+    string's own unit (`for (let i = 0; i < s.length; i++)` over
+    `s.charCodeAt(i)` is quiet, and so is a bound that moves the cursor by a
+    constant to look ahead, `i + 1 < s.length`; the same loop over
+    `other.charCodeAt(i)` alone is reported);
   - it is **a data-parallel body's answer**: stored in the array
     `parallelMap`, `parallelMapInto` or `parallelFrom` fills, or folded by
     `parallelReduce` (with its identity) into the value the call answers,
@@ -9633,7 +9634,11 @@ by the caller.
   method of a generic class or a function of another module, at a parameter
   the callee never reads, or one it reads only inside an arrow it passes on,
   and at the answer of a `spawn` body, whose task is not followed into the
-  value its scope hands back (`tests/link/port_utf8_offset_walk_limits`).
+  value its scope hands back. A recursive helper that answers its parameter
+  is still reported at the call that prints its answer. Once an offset has
+  crossed into another function, the string it counted is out of reach, so a
+  loop it bounds there takes any string's method as its cursor
+  (`tests/link/port_utf8_offset_walk_limits`).
 
   One `+ k` on the offset an `indexOf` (with or without a start) or
   `lastIndexOf` of a provably ASCII needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a

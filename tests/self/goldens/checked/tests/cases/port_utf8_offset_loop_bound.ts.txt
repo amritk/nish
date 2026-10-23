@@ -4,7 +4,7 @@ entry: tests/cases/port_utf8_offset_loop_bound.ts
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_panic_overflow nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish_panic_index nish_panic_overflow nish_print nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:9 word: string (const)
   local +1:7 steps: i32 (let)
@@ -21,3 +21,6 @@ function main(): i32 -> @nish_main [exported entry]
   local +39:7 at: i32 (let)
   local +40:7 rounds: i32 (let)
   local +45:7 m: i32 (let)
+  local +49:9 other: string (const)
+  local +50:7 codes: i32 (let)
+  local +51:12 i: i32 (let)

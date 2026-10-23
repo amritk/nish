@@ -54,7 +54,7 @@ import {
   Node,
 } from "./nodes"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { parallelBodyOf, parallelRoleOf } from "./parallel"
+import { isMapEntry, parallelBodyOf, parallelRoleOf } from "./parallel"
 import { FunctionSig, PAR_FROM, PAR_MAP, PAR_MAP_NEW, PAR_NONE, PAR_REDUCE } from "./program"
 import { Local, sourceLocal, STORAGE_PARAM } from "./symbols"
 import { isFloat, isNumeric, T_BOOL, T_STRING } from "./types"
@@ -130,9 +130,11 @@ const CODE_UNIT: i32 = 2
  *   slot where the byte and the unit differ);
  * - as a bound of a loop: either operand of a comparison in a `while`, `do`
  *   or `for` condition whose other operand does not hold an offset and is not
- *   the loop's cursor into a string — a local the loop uses as a string's
- *   index or hands to a string's method (`isCursor`), which counts in the
- *   string's own unit, alone or moved by a constant (`i + 1 < s.length`);
+ *   the loop's cursor into the string it counted — a local the loop hands to
+ *   that string's method (`isCursor`), which counts in the string's own
+ *   unit, alone or moved by a constant (`i + 1 < s.length`); once the offset
+ *   has crossed into another function, the string it counted is out of
+ *   reach, and any string's method makes the cursor;
  * - as the answer of a data-parallel body (`parallelMap`, `parallelMapInto`,
  *   `parallelFrom`: stored in the array it fills; `parallelReduce`: folded
  *   into the value the call answers, which is followed on from the call).
@@ -570,8 +572,8 @@ const followFrom = (trail: Trail, value: Node, from: Node, holder: Local | null)
       }
       at = parent
     } else if (parent.kind === N_INDEX) {
-      // A string's own index stays in its counting; any other is an element.
-      if (at === parent.children[1] && !isString(walk, parent.children[0])) {
+      // Only an array can be indexed, so the index picks an element.
+      if (at === parent.children[1]) {
         trail.report(value, holder, "and it indexes an array")
       }
       return
@@ -862,11 +864,14 @@ const followThroughBinary = (
   }
   if (isComparison(op)) {
     const loop = loopOf(walk, binary)
+    // The string the offset counted, while the walk is still in its body.
+    const bound: Node | null =
+      trail.via === null && trail.relay === null ? sourceReceiver(trail.source) : null
     if (
       loop !== null &&
       trail.kind === OFFSET &&
       !holdsOffset(walk, other, true) &&
-      !isCursor(walk, other, loop)
+      !isCursor(walk, other, loop, bound)
     ) {
       trail.report(value, holder, `and it bounds a loop over \`${walk.textOf(other)}\``)
     }
@@ -906,15 +911,17 @@ const loopOf = (walk: PortabilityWalk, comparison: Node): Node | null => {
 }
 
 /**
- * Whether `expr` is a cursor into a string inside `loop`: a local the loop
- * hands to a string's method or uses as a string's index, alone or in
- * arithmetic. A cursor bounded by a length counts in the string's own unit,
- * so the loop visits every byte here and every unit there and the work it
- * does per position agrees; a loop over anything else counts bytes as steps.
- * The bound may move the cursor by a constant, `i + 1 < s.length`, which
- * looks ahead in the same unit.
+ * Whether `expr` is a cursor into `bound` inside `loop`: a local the loop
+ * hands to a method of that string, alone or in arithmetic. A cursor bounded
+ * by a length counts in the string's own unit, so the loop visits every byte
+ * here and every unit there and the work it does per position agrees; a loop
+ * over anything else counts bytes as steps. The bound may move the cursor by
+ * a constant, `i + 1 < s.length`, which looks ahead in the same unit.
+ * `bound` is `null` once the offset has left the body it was counted in,
+ * where the string it counted is out of reach: any string's method then
+ * makes the cursor.
  */
-const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node): boolean => {
+const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node, bound: Node | null): boolean => {
   let e = unwrapParens(expr)
   while (e.kind === N_BINARY && (e.text === "+" || e.text === "-")) {
     if (isNumberLiteral(walk, e.children[1])) {
@@ -944,18 +951,40 @@ const isCursor = (walk: PortabilityWalk, expr: Node, loop: Node): boolean => {
     if (parent === null) {
       continue
     }
-    if (parent.kind === N_INDEX && parent.children[1] === at && isString(walk, parent.children[0])) {
-      return true
-    }
     const call: Node | null = parent.kind === N_LIST ? walk.parents.parentOf(parent) : null
     if (call !== null && call.kind === N_CALL && call.children[1] === parent) {
       const callee = unwrapParens(call.children[0])
-      if (callee.kind === N_MEMBER && isString(walk, callee.children[0])) {
+      if (
+        callee.kind === N_MEMBER &&
+        isString(walk, callee.children[0]) &&
+        isSameString(walk, callee.children[0], bound)
+      ) {
         return true
       }
     }
   }
   return false
+}
+
+/**
+ * Whether `receiver` is `bound`, the string a loop's bound counted: the same
+ * local, or the same text (`this.text`, a literal). A `null` bound is any
+ * string.
+ */
+const isSameString = (walk: PortabilityWalk, receiver: Node, bound: Node | null): boolean => {
+  if (bound === null) {
+    return true
+  }
+  const a = unwrapParens(receiver)
+  const b = unwrapParens(bound)
+  if (a.kind === N_IDENT && b.kind === N_IDENT) {
+    const local = sourceLocal(walk.program.nodeLocals[a.id])
+    const other = sourceLocal(walk.program.nodeLocals[b.id])
+    if (local !== null && other !== null) {
+      return local === other
+    }
+  }
+  return walk.textOf(a) === walk.textOf(b)
 }
 
 /** `value` is stored at `target`: a field or an element is outside, a local is followed. */
@@ -1009,8 +1038,9 @@ const enclosingArrow = (walk: PortabilityWalk, node: Node): Node | null => {
 /**
  * The value is the answer of `arrow`, a body a data-parallel form runs where
  * it is called. `parallelReduce` combines the answers into the call's value,
- * which is followed on from the call; every other form stores each answer in
- * the array it writes.
+ * which is followed on from the call; a map stores each answer in the array
+ * it writes. A `spawn` thunk is the only other arrow that captures, and it
+ * answers `void`, so nothing reaches here from it.
  */
 const followOutOfArrow = (trail: Trail, arrow: Node, value: Node, holder: Local | null): void => {
   const walk = trail.walk
@@ -1022,7 +1052,7 @@ const followOutOfArrow = (trail: Trail, arrow: Node, value: Node, holder: Local 
   const sig = walk.program.nodeCallees[call.id]
   if (sig !== null && parallelRoleOf(sig) === PAR_REDUCE) {
     followFrom(trail, value, call, holder)
-  } else {
+  } else if (sig !== null && isMapEntry(sig)) {
     trail.report(value, holder, "and it is stored in an array")
   }
 }
