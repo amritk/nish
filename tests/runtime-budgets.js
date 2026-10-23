@@ -56,6 +56,10 @@
  * hook's call and the `_exit`); the hook's pointer is `.bss`. Measured 3,698 against
  * 3,684 on 2026-10-23 with clang 18 on linux-x64; calling the hook from the inlined
  * `nish_panic_claim` instead measured 3,752, because every site grew its own test.
+ * It is not a unit of its own, as the rule for an addition asks, because `runtime.c`
+ * links alone (a C host's one file, and the direct `clang` lines in `tests/run.js`) and
+ * its own panics call it: defined in `runtime-term.c` the core measured 3,675, and a
+ * lone `runtime.c` no longer linked.
  */
 const RUNTIME_TEXT_BUDGET = 3698
 /**

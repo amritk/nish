@@ -83,12 +83,11 @@ export const cryptoRefusal = (what: string): string =>
   `\`${what}\` is refused: the one \`crypto\` member is \`crypto.getRandomValues(bytes)\``
 
 /**
- * WP34 N3. The host builtins call `runtime-host.c`, which is empty on a wasm
- * target, so there they are refused here rather than failing to link. True
- * when the call was refused.
+ * Refuses a builtin that reaches the operating system when `refused`, on a wasm
+ * build that has none to reach. True when the call was refused.
  */
-const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean => {
-  if (!ctx.wasm) {
+const refuseWhen = (ctx: CheckContext, refused: boolean, call: Node, name: string): boolean => {
+  if (!refused) {
     return false
   }
   ctx.error(call, `\`${name}\` reaches the operating system, and a wasm32 build has none to reach`)
@@ -96,17 +95,19 @@ const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean => {
 }
 
 /**
+ * WP34 N3. The host builtins call `runtime-host.c`, which is empty on a wasm
+ * target, so there they are refused here rather than failing to link. True
+ * when the call was refused.
+ */
+const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean => refuseWhen(ctx, ctx.wasm, call, name)
+
+/**
  * `nish:term` runs under WASI, whose libc has `read` and `poll` on stdin, so
  * only a freestanding wasm32 build, whose `runtime-wasm.c` has no stdin, refuses
  * it. True when the call was refused.
  */
-const refuseOnFreestandingWasm = (ctx: CheckContext, call: Node, name: string): boolean => {
-  if (!ctx.wasmFreestanding) {
-    return false
-  }
-  ctx.error(call, `\`${name}\` reaches the operating system, and a wasm32 build has none to reach`)
-  return true
-}
+const refuseOnFreestandingWasm = (ctx: CheckContext, call: Node, name: string): boolean =>
+  refuseWhen(ctx, ctx.wasmFreestanding, call, name)
 
 /** The type a plain-identifier builtin converts to, or -1 when the name is not one. */
 const conversionTarget = (name: string): i32 => {

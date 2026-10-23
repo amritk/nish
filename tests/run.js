@@ -1514,7 +1514,7 @@ if (!only || "term".includes(only)) {
   fs.rmSync(termDir, { recursive: true, force: true })
   fs.mkdirSync(termDir, { recursive: true })
 
-  // The bytes are in the pipe before the program starts, so `readStdin`'s poll,
+  // The bytes are in the pipe before the program starts, so `readStdin`'s `select`,
   // which does not wait, finds them; `waitStdin(50)` then sees the writer's end.
   const callsExe = buildCaseIn(termDir, "term_calls")
   if (callsExe !== null) {
@@ -1654,7 +1654,7 @@ if (!only || "term".includes(only)) {
 }
 
 // The same two reading programs as `--profile wasi` builds under Node's WASI,
-// where `readStdin` reads without its poll (runtime-term.c) and the terminal
+// where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
 // questions answer "not a terminal", so the native expected lines hold; and a
 // `waitStdin(0)`, which there polls for 1 ms rather than not at all.
 if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
