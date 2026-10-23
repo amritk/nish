@@ -158,8 +158,8 @@ jobs:
         #     path (docs/wp10-ci.md#what-ld64-varies-measured), so both links
         #     write one path and move each binary aside, as
         #     scripts/bootstrap.sh does.
-        #     The default runtime's is measured green on a mac by
-        #     `runtime-net (macos-latest)`; the `--threads` one is the same loop.
+        #     The default runtime's is measured green on a mac by the
+        #     `runtime-net` job; the `--threads` one is the same loop.
         #
         # STILL RED, four checks in three causes, and none of them is this line:
         #
@@ -190,8 +190,8 @@ jobs:
         # 0.4.0, and v0.4.0 and v0.5.0 both carry them -- so `bootstrap
         # (aarch64-darwin)` and `bootstrap (x86_64-darwin)` have been running,
         # and passing, since 0.4.0. They are the reason the LC_UUID cause above
-        # is known rather than suspected, and `runtime-net (macos-latest)`
-        # runs the runtime unit tests and the `net_` sections on a mac. This
+        # is known rather than suspected, and the three `runtime-net` shards
+        # run the runtime unit tests and the `net_` sections on a mac. This
         # row is the whole suite on macOS, not the whole of macOS.
         #
         # The install half is written and has now been exercised twice: the two
@@ -204,8 +204,9 @@ jobs:
         os: [ubuntu-latest] # , macos-latest -- see the four checks above
         # `npm test` is split four ways by `--shard` (tests/run.js, "Shards"):
         # shard 1 runs every section after the tests/link programs but WP14
-        # self-hosting, and the programs and that section are dealt by their
-        # cost in tests/shard-costs.json so that the four finish together.
+        # self-hosting and crypto-bench, and the programs and those two
+        # sections are dealt by their cost in tests/shard-costs.json so that
+        # the four finish together.
         # One unsharded run took 25 minutes. The `/4` in the Test step is this
         # list's length, and a check in tests/run.js holds the two together.
         shard: [1, 2, 3, 4]
@@ -588,7 +589,7 @@ jobs:
   #     rather than as the arm that decides a row.
   #
   # So `bootstrap (aarch64-darwin)` and `bootstrap (x86_64-darwin)` are rows
-  # this workflow runs, as is `runtime-net (macos-latest)` further down. The
+  # this workflow runs, as is `runtime-net` further down. The
   # macOS gaps left in the file are the `test` row above (the whole suite;
   # the network runtime is the part `runtime-net` covers) and `nish-cmp`,
   # which runs on the Linux rows only. The `stage3 == stage2` comparison that tests/self/bootstrap.js
@@ -1007,10 +1008,24 @@ jobs:
   # section natively on an AArch64 mac, through tests/run.js so the clang line
   # lives in one place. It is not the commented-out `test` row: that row is the
   # whole suite and its four named checks, and this is the network runtime alone.
+  #
+  # Split three ways by `--shard`, as the `test` job is. The `net_` sections are
+  # 188 link programs that run one at a time, and on one runner image a mac
+  # took from 11 to over 28 minutes for them unsplit: run 39877823045's first
+  # attempt was cancelled by the 30-minute limit this job had, a few programs
+  # from the end. A filtered run deals only its own programs (tests/run.js,
+  # "Shards"), so each shard gets about a third. Three rather than four, because an account runs
+  # at most five macOS jobs at once and the two `bootstrap` darwin rows are the
+  # other two. The `/3` in the net_ step is this list's length, and a check in
+  # tests/run.js holds the two together.
   runtime-net:
-    name: runtime-net (macos-latest)
+    name: runtime-net (macos-latest, shard ${{ matrix.shard }}/3)
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -1053,8 +1068,10 @@ jobs:
       # then the same with -DNISH_THREADS=1 -pthread: the two checks in
       # tests/run.js's `runtime_test` block, which a failure's detail prints
       # the test binary's output for. The grep is the guard against a green
-      # step that ran neither.
+      # step that ran neither. They answer once for the commit, so shard 1
+      # alone runs them.
       - name: The runtime unit tests, natively on Darwin
+        if: matrix.shard == 1
         run: |
           set -o pipefail
           node tests/run.js runtime_test | tee "$RUNNER_TEMP/runtime-test.log"
@@ -1063,13 +1080,23 @@ jobs:
 
       # Every net_ section runs on a mac, so the step needs checks that passed
       # and no SKIP line: a filter that matches nothing, or a section skipped
-      # for a missing tool, fails it rather than leaving it green.
+      # for a missing tool, fails it rather than leaving it green. What a shard
+      # leaves to the other two is counted as delegated, never as skipped.
+      #
+      # `--delegate-ir-checks`: a mac links and runs each program, which is
+      # what only a mac can answer, and leaves every check of the compile (the
+      # goldens, llvm-as and opt, declares, --emit-panics, the programs that
+      # are a rejection alone) to the `test` job, which makes them for every
+      # program on Linux with the same compiler. tests/run.js counts them as
+      # delegated, and fails if the `test` job stops running every program.
       - name: The net_ sections, natively on Darwin
         if: ${{ !cancelled() }}
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          node tests/run.js net_ | tee "$RUNNER_TEMP/net.log"
-          grep -E '^[1-9][0-9]* passed, 0 failed\.$' "$RUNNER_TEMP/net.log"
+          node tests/run.js net_ --shard "$SHARD/3" --delegate-ir-checks | tee "$RUNNER_TEMP/net.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed(, [0-9]+ delegated)?\.$' "$RUNNER_TEMP/net.log"
           if grep -E '^SKIP  ' "$RUNNER_TEMP/net.log"; then exit 1; fi
 
       # Every skip is named with its reason, so a green job that skipped its
