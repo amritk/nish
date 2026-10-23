@@ -230,7 +230,7 @@ function mayPanic(walk: Walk, node: Node): boolean -> @mayPanic
   local +4:13 left: i32 (const)
   callee +5:27 isInteger -> @isInteger
   callee +5:37 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +8:31 checksOverflow -> @checksOverflow
+  callee +9:26 checksOverflow -> @checksOverflow
 function readsLocal(walk: Walk, node: Node, i: i32): boolean -> @readsLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -309,18 +309,18 @@ function changedText(walk: Walk, node: Node, out: Operands, slot: i32): void -> 
   callee +1:7 changedText -> @changedText
   callee +2:11 readsState -> @readsState
   callee +5:11 readsLocal -> @readsLocal
-  callee +16:32 inOptionalChain -> @inOptionalChain
-  callee +16:75 writes -> @writes
-  local +17:9 hoisted: i32 (const)
-  local +20:7 rewritten: string | null (let)
-  callee +20:19 numbersRow -> @numbersRow
-  callee +22:17 stringsRow -> @stringsRow
-  callee +25:17 recordsRow -> @recordsRow
-  callee +28:17 controlRow -> @controlRow
-  callee +36:14 hasEffect -> @hasEffect
-  callee +36:33 mayPanic -> @mayPanic
-  callee +40:23 Walk.spanOf -> @Walk.spanOf
-  callee +47:23 splice -> @splice
+  callee +15:47 inOptionalChain -> @inOptionalChain
+  callee +15:90 writes -> @writes
+  local +16:9 hoisted: i32 (const)
+  local +19:7 rewritten: string | null (let)
+  callee +19:19 numbersRow -> @numbersRow
+  callee +21:17 stringsRow -> @stringsRow
+  callee +24:17 recordsRow -> @recordsRow
+  callee +27:17 controlRow -> @controlRow
+  callee +35:14 hasEffect -> @hasEffect
+  callee +35:33 mayPanic -> @mayPanic
+  callee +39:23 Walk.spanOf -> @Walk.spanOf
+  callee +46:23 splice -> @splice
 function changedAcrossInstances(walk: Walk, node: Node, out: Operands, slot: i32): void -> @changedAcrossInstances
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

@@ -6,16 +6,16 @@
 // called over operands the range analysis cannot close (a divisor of either
 // sign, factors up to 100000 each), so no proof takes its check away. A float
 // division cannot panic, so `ratio` still hoists.
-import { Result, Ok, Err, toF64, caught } from "nish/runtime"
+import { Result, strLen, Ok, Err, toF64, caught } from "nish/runtime"
 import type { i32, f64 } from "nish/runtime"
 const f = (s: string): Result<i32, string> => {
   console.log(`f ${s}`)
-  return s.length > 0 ? Ok(s.length) : Err("empty")
+  return strLen(s) > 0 ? Ok(strLen(s)) : Err("empty")
 }
 
 const half = (s: string): Result<f64, string> => {
   console.log(`half ${s}`)
-  return s.length > 0 ? Ok(toF64(1) / 2.0) : Err("empty")
+  return strLen(s) > 0 ? Ok(toF64(1) / 2.0) : Err("empty")
 }
 
 const divide = (a: i32, b: i32, s: string): Result<i32, string> => { try {

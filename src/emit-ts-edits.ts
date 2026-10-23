@@ -469,7 +469,9 @@ const mayPanic = (walk: Walk, node: Node): boolean => {
       return left >= 0 && isInteger(walk.table.baseOf(left)) && !program.nodeProvenIndex[node.id]
     }
   }
-  return !program.wrapping && checksOverflow(program, walk.table, node) && !program.nodeProvenNoOverflow[node.id]
+  return (
+    !program.wrapping && checksOverflow(program, walk.table, node) && !program.nodeProvenNoOverflow[node.id]
+  )
 }
 
 /**
@@ -616,8 +618,7 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     i = i + 1
   }
   walk.hoistHere = here
-  walk.hoistable =
-    here && !effectsBefore && !inOptionalChain(node) && !(localsBefore && writes(node))
+  walk.hoistable = here && !effectsBefore && !inOptionalChain(node) && !(localsBefore && writes(node))
   const hoisted = walk.preludes.length
   // The fixed order. A later row sees a node only when every earlier row left
   // it alone, so two rows never both rewrite one node.
