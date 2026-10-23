@@ -71,7 +71,7 @@ itself.
 
 | Ask | Command | Answer |
 | --- | --- | --- |
-| what the CLI accepts | `nish --help` | usage text on **stdout**, exit **0**. A usage *error* prints the same text on stderr with exit 2, so the stream and the code tell a request apart from a refusal |
+| what the CLI accepts | `nish --help` | usage text on **stdout**, exit **0**. A usage *error* is on stderr with exit 2: the same text for no inputs, one line naming the flag and `nish --help` for an unknown flag. The stream and the code tell a request apart from a refusal |
 | what is wrong with a program | `nish --json <files>` | one JSON object per line on **stdout**, which carries nothing else — the `wrote <file>` progress line and the human report are on stderr — exit unchanged |
 | fix what can be fixed mechanically | `nish --fix <files>` | the named files rewritten in place, then the remaining diagnostics as a plain run reports them, and its exit code |
 | the version | `nish --version` | `nish <semver>` on stdout, exit 0 |

@@ -66,9 +66,17 @@ PASS  block |\r\n  l1\r\n  l2\r\n
 PASS  block |\r\n  l1\r\n  l2\r\n is quiet
 PASS  block |\r  l1\r  l2\r
 PASS  block |\r  l1\r  l2\r is quiet
+PASS  an empty block scalar ends at its header
+PASS  and is empty
+PASS  its header's comment is not part of it
 PASS  a document marker ends a block scalar of blank lines
 PASS  and starts the next document
 PASS  so does a document end
+PASS  a plain scalar's blank line of spaces and tabs folds to a break
+PASS  and is quiet
+PASS  a tab-only line ends a plain scalar it trails
+PASS  so does a blank line the text ends on
+PASS  which is quiet
 PASS  CR LF breaks in every scalar style and a comment
 PASS  are quiet
 PASS  a lone CR is a break too
@@ -218,6 +226,41 @@ PASS  a step onto an empty value matches
 PASS  names its pair
 PASS  and no node
 PASS  an alias to its own unfinished anchor stops the walk at the unresolved alias
+PASS  an alias to a map merges
+PASS  a map merges
+PASS  a sequence of maps merges
+PASS  a sequence of aliases merges
+PASS  the map's own key wins
+PASS  whether before or after the merge key
+PASS  the first map listed wins
+PASS  so does the first merge key
+PASS  a merged map's own merge keys merge too
+PASS  searched depth first
+PASS  a path keeps walking below a merged key
+PASS  a << step names the merge value itself
+PASS  a missing key is still missing
+PASS  pathPair names the pair inside the merged map
+PASS  at the merged key's line and column
+PASS  named by the merged key
+PASS  its value is the merged value
+PASS  every step matches
+PASS  a merge through an unresolved self-alias ends the walk
+PASS  and still finds what is there
+PASS  so does one through an alias its own anchor encloses
+PASS  two merges sharing a map find its keys
+PASS  and search it once for a key it lacks
+PASS  a chain of 50 merges is followed
+PASS  one of 120 stops at the hop cap
+PASS  20000 merge sources are searched for a key none has
+PASS  and the last one's key is found
+PASS  20000 aliases to one map search it once
+PASS  a scalar merges nothing
+PASS  without merge, a path does not look in <<
+PASS  and << is an ordinary key
+PASS  a quoted << is not a merge key
+PASS  a !!str << is not a merge key
+PASS  a !!merge << is
+PASS  an alias to a sequence of maps merges
 PASS  LF, CRLF and CR are each one break
 PASS  line of 0
 PASS  line of 3
@@ -240,6 +283,14 @@ PASS  ranges of a: |12\n  b\n
 PASS  ranges of a: |#c\n  b\n
 PASS  ranges of [1,#c\n]\n
 PASS  ranges of %TAG !x\n--- 1\n
+PASS  ranges of <<: 1\n
+PASS  ranges of a: &a [1]\nb:\n  <<: *a\n
+PASS  ranges of <<: [{a: 1}, x, {b: 2}]\n
+PASS  ranges of <<:\n
+PASS  ranges of a: &a {x: 1}\nb: {<<: [*a, {y: 2}]}\nc: {<<: *a}\n
+PASS  ranges of s: &s [{x: 1}]\nm: {<<: *s}\n
+PASS  ranges of s: &s [{x: 1}, 2]\nm: {<<: *s}\n
+PASS  ranges of m: {!!str <<: 1}\n
 PASS  ranges of %YAML 1.x\n--- 1\n
 PASS  ranges of %YAML 1.2 x\n--- 1\n
 PASS  ranges of "\q"\n
@@ -294,6 +345,8 @@ PASS  scalars do not count toward maxDepth
 PASS  maxDepth 1 allows one collection
 PASS  maxDepth 1 stops a nested one
 PASS  the message form of DUPLICATE_KEY
+PASS  the message form of BAD_MERGE
+PASS  without merge, << takes any value
 PASS  the message form of a warning
 PASS  two errors
 PASS  no warnings
@@ -301,4 +354,4 @@ PASS  diagnostics are in source order
 report 2:10 (byte 10) UNEXPECTED_COMMA Missing value before ","
 report 3:5 (byte 9) UNRESOLVED_ALIAS Alias "*nope" has no matching anchor
 report 5:1 (byte 1) DUPLICATE_KEY Map key "k" is duplicated
-std/yaml: 300 passed, 0 failed, 0 skipped
+std/yaml: 353 passed, 0 failed, 0 skipped

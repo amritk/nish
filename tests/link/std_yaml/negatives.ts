@@ -1,5 +1,4 @@
-// Every diagnostic code but BAD_MERGE (merge keys are not applied, so nothing
-// reports it yet), each on the smallest input that reaches it: the code, its
+// Every diagnostic code, each on the smallest input that reaches it: the code, its
 // kind (`~` marks a warning) and its exact byte range, then the
 // `line:col kind CODE message` form a person reads.
 import { YamlOptions, YamlStream, parseYamlWith } from "../../../std/yaml";
@@ -27,6 +26,14 @@ export const ytNegatives = (t: Suite): void => {
   ytCase(t, "a: |#c\n  b\n", "BAD_BLOCK_HEADER@4..6");
   ytCase(t, "[1,#c\n]\n", "BAD_COMMENT@3..5");
   ytCase(t, "%TAG !x\n--- 1\n", "~BAD_DIRECTIVE@0..7");
+  ytCase(t, "<<: 1\n", "BAD_MERGE@4..5");
+  ytCase(t, "a: &a [1]\nb:\n  <<: *a\n", "BAD_MERGE@19..21");
+  ytCase(t, "<<: [{a: 1}, x, {b: 2}]\n", "BAD_MERGE@13..14");
+  ytCase(t, "<<:\n", "BAD_MERGE@0..2");
+  ytCase(t, "a: &a {x: 1}\nb: {<<: [*a, {y: 2}]}\nc: {<<: *a}\n", "");
+  ytCase(t, "s: &s [{x: 1}]\nm: {<<: *s}\n", "");
+  ytCase(t, "s: &s [{x: 1}, 2]\nm: {<<: *s}\n", "BAD_MERGE@26..28");
+  ytCase(t, "m: {!!str <<: 1}\n", "");
   ytCase(t, "%YAML 1.x\n--- 1\n", "BAD_DIRECTIVE@0..9");
   ytCase(t, "%YAML 1.2 x\n--- 1\n", "BAD_DIRECTIVE@10..11");
   ytCase(t, "\"\\q\"\n", "BAD_ESCAPE@1..3");
@@ -87,6 +94,10 @@ export const ytNegatives = (t: Suite): void => {
   t.eqStr("maxDepth 1 stops a nested one", ytAtDepth("- [1]\n", 1), "DEPTH_LIMIT@2..2");
 
   t.eqStr("the message form of DUPLICATE_KEY", ytDiagnosticsOf("a: 1\na: 2\n"), "2:1 error DUPLICATE_KEY Map key \"a\" is duplicated\n");
+  t.eqStr("the message form of BAD_MERGE", ytDiagnosticsOf("<<: [1]\n"), "1:6 error BAD_MERGE Merge key value must be a map, an alias to a map or a sequence of those\n");
+  const unmerged = new YamlOptions();
+  unmerged.merge = false;
+  t.eqStr("without merge, << takes any value", ytRanges("<<: 1\n", unmerged), "");
   t.eqStr("the message form of a warning", ytDiagnosticsOf("%FOO bar\n--- 1\n"), "1:1 warning UNKNOWN_DIRECTIVE Unknown directive \"%FOO\"\n");
   const two: YamlStream = parseYamlWith("x: [1,,2]\ny: *nope\n", new YamlOptions());
   t.eqI32("two errors", two.errorCount(), 2);
