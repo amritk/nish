@@ -19,6 +19,9 @@ export interface ResultMethods<T, E> {
 /** The outcome of an operation that can fail. */
 export type Result<T, E> = (ResultOk<T> | ResultErr<E>) & ResultMethods<T, E>;
 
+/** The class every `Result` is an instance of; `--emit-ts` imports it under the type's name. */
+export declare const Result: { prototype: ResultMethods<unknown, unknown> };
+
 export declare function Ok<T, E>(value: T): Result<T, E>;
 export declare function Ok<E>(): Result<void, E>;
 export declare function Err<T, E>(error: E): Result<T, E>;

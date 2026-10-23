@@ -125,6 +125,22 @@ import becomes a relative path ending in `.ts`. An imported interface or type
 alias is marked `import { type Pair }`. A module that needs none of this is
 written unchanged, byte for byte.
 
+Some constructs JavaScript spells differently are rewritten too:
+
+- **`x.orReturn()`** becomes a local, `const __t0 = x;`, and
+  `if (__t0.isErr()) return Err(__t0.error);` before its statement, with
+  `__t0.value` in its place. Where that would change when the call runs —
+  the right of `&&`, a branch of `?:`, a loop's condition, after a call in
+  the same statement — it stays a call, and the function around it gets a
+  `try` that turns the call's throw into the `Err` it returns.
+- **An `enum`** becomes a `const` object of its members' values and a type of
+  the same name: `enum Shape { Circle, Square = 4 }` is written as
+  `const Shape = { Circle: 0, Square: 4 } as const;` and
+  `type Shape = (typeof Shape)[keyof typeof Shape];`.
+- **`Arena.used()`** and its siblings become `nish/runtime`'s `arenaUsed`,
+  `arenaMark`, `arenaRelease` and `arenaReset`, and a `Result` annotation
+  imports `Result` from it.
+
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 

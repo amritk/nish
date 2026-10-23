@@ -1,0 +1,5 @@
+ok 4
+ok 3
+err cannot parse six
+ok 5
+err cannot parse ten

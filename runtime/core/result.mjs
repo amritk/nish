@@ -99,6 +99,12 @@ class NishResult {
   }
 }
 
+/**
+ * The class behind every `Result`, under the type's name, so a module
+ * `--emit-ts` writes can import `Result` for its annotations from here.
+ */
+export { NishResult as Result };
+
 /** `Ok(v)`; `Ok()` on a `Result<void, E>` carries nothing. */
 export function Ok(value) {
   return new NishResult(true, value, undefined);
