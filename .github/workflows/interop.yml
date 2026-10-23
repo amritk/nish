@@ -165,11 +165,69 @@ jobs:
       - name: Enable IPv6 in Docker networks
         run: sudo modprobe ip6table_filter
 
+      # tshark and its libraries are 26.5 MB, 23.7 MB of it libwireshark17t64.
+      # The Azure mirror sometimes serves that at a trickle, never idle for
+      # `APT_OPTS`'s thirty seconds, so the step's five-minute limit fired
+      # before any case ran (main, and #854, in October 2026). As in ci.yml's
+      # `test` job: the .debs are kept in the Actions cache, keyed by runner
+      # image, and on a miss each download attempt is cut at a minute and
+      # retried without the Azure mirror, since a retry against it stalls again.
+      - name: Apt cache key
+        id: apt-key
+        run: |
+          echo "prefix=apt-tshark-$ImageOS-" >> "$GITHUB_OUTPUT"
+          echo "key=apt-tshark-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt packages
+        id: apt-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: ${{ steps.apt-key.outputs.key }}
+          restore-keys: ${{ steps.apt-key.outputs.prefix }}
+
       - name: Install tshark, which the runner reads the traces with
         timeout-minutes: 5
         run: |
+          archives="$RUNNER_TEMP/apt-archives"
+          mkdir -p "$archives/partial"
+          apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
+          pkgs="tshark=4.2.2-1.1build3"
           sudo apt-get $APT_OPTS update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS install -y --no-install-recommends tshark=4.2.2-1.1build3
+          for attempt in 1 2 3; do
+            if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
+              --download-only $pkgs; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::apt could not download tshark in three one-minute attempts"
+              exit 1
+            fi
+            echo "::warning::apt download attempt $attempt stalled or failed; retrying without the Azure mirror"
+            # The image's sources name `mirror+file:/etc/apt/apt-mirrors.txt`,
+            # Azure first, then archive.ubuntu.com and security.ubuntu.com. apt
+            # reads the list on each run, so no second `update` is needed.
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+              cat /etc/apt/apt-mirrors.txt
+            fi
+          done
+          sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $pkgs
+          # Drop .debs the mirror no longer offers and hand the directory back
+          # to the runner user, so the save step below can read it.
+          sudo apt-get $apt_cache autoclean
+          sudo rm -rf "$archives/partial" "$archives/lock"
+          sudo chown -R "$(id -u):$(id -g)" "$archives"
+
+      # Saved here rather than by actions/cache's post step, which saves only
+      # when the whole job passes. The two clients race to save one key; the
+      # loser logs a warning and carries on.
+      - name: Save apt packages
+        if: steps.apt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: ${{ steps.apt-key.outputs.key }}
 
       - name: Fetch the runner at its pinned commit
         timeout-minutes: 5

@@ -14,7 +14,8 @@ what you import but never call is dropped from the binary. A name the library
 does not have is an error that lists the modules it does.
 
 The language itself has few string helpers — there is no `split`, `trim` or
-regular expression — so `nish/text` is where you look first. `Map` and `Set`
+`RegExp` — so `nish/text` is where you look first, and `nish/regex` when a
+pattern is what you need. `Map` and `Set`
 need no import at all ([Maps and sets](../language/maps-and-sets.md)), and the
 built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 `nish:io`, `nish:net`) are part of the language rather than this library; see
@@ -29,12 +30,13 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
-| [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
+| [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `codePointLength`, `indexOfAny` |
+| [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
-| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key; `nish/yaml-lines` for `line:column` |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column` |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
@@ -118,6 +120,74 @@ it is not constant-time, so it is never for secret data
 ([Byte search](../../LANGUAGE.md#byte-search-indexofany-in-nishtext)).
 `firstDifference(left, right)` answers the index of the first line where two
 arrays of lines differ.
+
+`codePointLength(text)` counts Unicode code points, which is what a length
+limit on text a person typed usually means (JSON Schema's `minLength` and
+`maxLength` count them). `.length` does not: it counts UTF-8 bytes, so
+`"é".length` is `2` and `"😀".length` is `4`, where `codePointLength` answers
+`1` for each. It answers the same when the program runs under Node, where
+`.length` counts UTF-16 units instead, for well-formed text, except text
+built from bytes: under Node, `String.fromBytes`, `String.fromCharCode` of a
+byte and a `\u` escape that `nish/json` decodes give one unit per byte, so
+such a string counts its UTF-8 bytes there.
+
+## `nish/regex`
+
+Regular expressions in JavaScript's syntax. `regexCompile(pattern, flags)`
+answers a `Result`: the `Regex`, or the reason the pattern is refused.
+
+```ts nish:ok
+import { Regex, RegexMatch, regexCompile } from "nish/regex";
+
+export const main = (): i32 => {
+  const compiled = regexCompile("(?<year>\\d{4})-(?<month>\\d\\d)", "");
+  if (compiled.isErr()) {
+    console.log(compiled.error);
+    return 1;
+  }
+  const date: Regex = compiled.value;
+  const m = new RegexMatch();
+  if (date.exec("due 2026-10, paid 2026-11", 0, m)) {
+    console.log(`${m.text()} at ${m.start()}, month ${m.named("month")}`);
+  }
+  console.log(date.findAll("due 2026-10, paid 2026-11").join(" "));
+  console.log(date.replaceAll("2026-10", "$<month>/$<year>"));
+  const bad = regexCompile("(a", "");
+  if (bad.isErr()) {
+    console.log(bad.error);
+  }
+  return 0;
+};
+```
+
+```console
+$ nish run regex.ts
+2026-10 at 4, month 10
+2026-10 2026-11
+10/2026
+regex: missing ) at byte 0
+```
+
+A `Regex` has `test`, `exec` (into a `RegexMatch` you reuse), `find`,
+`findAll`, `count`, `replace`, `replaceAll` and `split`. A replacement
+template reads `$&`, `$1` to `$99`, `$<name>`, `` $` ``, `$'` and `$$`, as
+in JavaScript. `regexEscape(text)` makes a pattern that matches `text`
+exactly. The flags are `i` (ASCII letters), `m` and `s`; there is no `g`,
+since `findAll` and `replaceAll` are the global forms.
+
+Matching never backtracks, so a pattern cannot make it slow: `(a+)+$` against
+a long run of `a`s takes as long as `a+$`. The price is that backreferences
+(`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused when the pattern is
+compiled. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
+`\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
+letters, where JavaScript's folds every letter: `é` does not match `É`.
+
+A search runs a lazy DFA, a table of states built as the text needs them,
+and falls back to a slower engine only to fill in groups or when a pattern
+would need more states than the table holds (about 1 MiB). A `Regex` keeps
+that table and its other scratch memory between calls, so repeated searches
+allocate little beyond their answers — which also means one `Regex` is used
+by one thread at a time.
 
 ## `nish/json`
 
@@ -678,6 +748,33 @@ text it was written as, so `1` and `01` are different keys and a null key
 wins. A step onto an empty value (`a:`) matches, so `pathMatch` counts it and
 `pathPair` names its pair, but it reaches no node: `pathNode` answers `-1`.
 
+**Merge keys.** A path follows `<<` merge keys (a plain `<<`, untagged or
+`!!merge`): a key a map does not hold is looked up in the maps its `<<` keys
+name — a map, an alias to one, or a sequence of those or an alias to one — in
+the order they are written. The map's own keys win,
+then the first merged map that has the key, and the node and pair found are
+the ones inside that map, so a message points at the line that set it. A
+recursive alias ends the search. A `<<` whose value names no map is an error,
+`BAD_MERGE`. The nodes themselves are not changed: a map still holds the pairs
+it was written with.
+
+```ts nish:ok
+import { parseYaml, pathNode, pathPair } from "nish/yaml";
+import { YamlLineIndex } from "nish/yaml-lines";
+
+export const main = (): i32 => {
+  const text = "defaults: &defaults\n  adapter: postgres\n  host: localhost\n\ndevelopment:\n  <<: *defaults\n  host: dev.local\n";
+  const stream = parseYaml(text);
+  const root = stream.documentRoot(0);
+  const lines = new YamlLineIndex(text);
+  const adapter = pathNode(stream, root, ["development", "adapter"]);
+  console.log(`${stream.text(adapter)} at ${lines.line(stream.start(adapter))}:${lines.column(stream.start(adapter))}`); // postgres at 2:12
+  console.log(stream.text(pathNode(stream, root, ["development", "host"]))); // dev.local
+  const pair = pathPair(stream, root, ["development", "adapter"]);
+  return pair === pathPair(stream, root, ["defaults", "adapter"]) ? 0 : 1;
+};
+```
+
 **A read never panics.** A handle that names no node, or a read that does
 not fit the node — `count` of a scalar, `intValue` of a string — answers a
 default: `-1` for a node or an offset, and `0`, `false` or `""` otherwise.
@@ -698,12 +795,12 @@ repeats a key is an error, `DUPLICATE_KEY`.
 **Options.** `parseYamlWith(text, options)` takes a `YamlOptions`:
 `maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1000 by
 default; a value outside 1 to 1000 is a mistake in the program, so
-`parseYamlWith` panics on it), `uniqueKeys`, `merge` (whether a `<<` key is exempt from the
-duplicate check), `keepComments` (keep every comment's range, for
-`commentCount` and `comment`) and `firstDocumentOnly` (warn
-`MULTIPLE_DOCUMENTS` and stop after the first). Merge keys are not applied: a
-map holds the pairs it was written with. Tabs are never indentation, as YAML
-says.
+`parseYamlWith` panics on it), `uniqueKeys`, `merge` (whether a plain `<<`
+key is a merge key: exempt from the duplicate check, checked for `BAD_MERGE`
+and followed by paths; on by default), `keepComments` (keep every comment's
+range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
+`MULTIPLE_DOCUMENTS` and stop after the first). Tabs are never indentation, as
+YAML says.
 
 ## `nish/pair`
 

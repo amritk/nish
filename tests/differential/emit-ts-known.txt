@@ -12,9 +12,7 @@
 
 cases/argv_echo numbers  # differ: stdout line 1 differs
 cases/arr_bounds_break_for records  # differ: exit 1 vs 0
-cases/arr_bounds_break_for_string records  # differ: exit 1 vs 0
 cases/arr_bounds_break_while records  # differ: exit 1 vs 0
-cases/arr_bounds_break_while_string records  # differ: exit 1 vs 0
 cases/arr_bounds_cond_assign records  # differ: exit 1 vs 0
 cases/arr_bounds_cond_effect records  # differ: exit 1 vs 0
 cases/arr_bounds_continue_do records  # differ: exit 1 vs 0
@@ -66,13 +64,11 @@ cases/arr_new_zeroed records  # differ: stdout line 2 differs
 cases/arr_path_alias_shrink records  # differ: exit 1 vs 0
 cases/arr_path_alias_store records  # differ: exit 1 vs 0
 cases/arr_path_callee_pop records  # differ: exit 1 vs 0
-cases/arr_path_callee_string records  # differ: exit 1 vs 0
 cases/arr_path_cond_call records  # differ: exit 1 vs 0
 cases/arr_path_cond_generic records  # differ: exit 1 vs 0
 cases/arr_path_cond_or records  # differ: exit 1 vs 0
 cases/arr_path_cond_root records  # differ: exit 1 vs 0
 cases/arr_path_cond_store records  # differ: exit 1 vs 0
-cases/arr_path_cond_string records  # differ: exit 1 vs 0
 cases/arr_path_cond_ternary records  # differ: exit 1 vs 0
 cases/arr_path_cond_while records  # differ: exit 1 vs 0
 cases/arr_path_continue_do records  # differ: exit 1 vs 0
@@ -98,7 +94,6 @@ cases/arr_range_call_wrap records  # differ: exit 1 vs 0
 cases/arr_typed_push_pop records  # differ: exit 0 vs 1: TypeError: a.push is not a function
 cases/arr_typed_views numbers  # differ: exit 0 vs 1: TypeError: Cannot mix BigInt and other types, use explicit conversions
 cases/arr_u8 numbers  # differ: stdout line 3 differs
-cases/attr_panic_charcodeat records  # differ: stderr line 1 differs
 cases/bit_shift_narrow numbers  # differ: stdout line 1 differs
 cases/bytes_offset_float numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
 cases/bytes_offset_u64 numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
@@ -116,7 +111,6 @@ cases/conv_f64_bits numbers  # differ: stdout line 1 differs
 cases/ct_asm_p256 numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/ct_asm_x25519 records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/ct_u64 numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
-cases/dbg_utf8 numbers  # differ: exit 0 vs 254
 cases/deny_panics_clean numbers  # differ: stdout line 3 differs
 cases/deny_panics_overflow_proven numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/deny_panics_overflow_wrapping numbers  # differ: stdout line 1 differs
@@ -196,7 +190,6 @@ cases/panics_overflow_via records  # differ: stdout line 1 differs
 cases/panics_overflow_wrapping numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'wrappingAdd'
 cases/panics_slice records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
 cases/perf_arena_control numbers  # differ: stdout line 4 differs
-cases/perf_bounds_toi32_user records  # differ: exit 1 vs 0
 cases/perf_rng_counter numbers  # differ: exit 1 vs 0
 cases/perf_rng_getbyte numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/perf_rng_quiet numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
@@ -219,13 +212,6 @@ cases/port_record_alias_ctor_write numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_bump numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_copy numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_write numbers  # differ: stdout line 1 differs
-cases/port_str_length_printed numbers  # differ: stdout line 1 differs
-cases/port_str_needle_step_printed numbers  # differ: stdout line 1 differs
-cases/port_str_nonascii_charcode numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_argument numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_helper_return numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_index numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_loop_bound numbers  # differ: stdout line 1 differs
 cases/res_by_value_payloads numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
 cases/rng_entry_bitwise_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic numbers  # differ: exit 1 vs 0
@@ -242,18 +228,11 @@ cases/secret_wipe_o2 numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not
 cases/secret_wipe_o2_inferred numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/secret_wipe_o2_inferred_plain numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/secret_wipe_o2_plain numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/str_from_bytes strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_arrow strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_lifetime strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_ways strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_index_of_from_port numbers  # differ: stdout line 1 differs
-cases/str_slice_panic strings  # differ: exit 1 vs 0
-cases/str_surrogate_lone records  # differ: stdout line 1 differs
-cases/str_surrogate_pair numbers  # differ: stdout line 1 differs
+cases/str_surrogate_lone numbers  # differ: stdout line 1 differs
 cases/u_div_zero_panic numbers  # differ: exit 1 vs 0
 cases/unsafe_get_set records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/unsafe_wrapping numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'wrappingAdd'
-corpus/argv_words numbers  # differ: exit 29 vs 105
+corpus/argv_words numbers  # differ: exit 29 vs 106
 corpus/arr_2d numbers  # differ: exit 1 vs 0
 corpus/arr_bounds_edge records  # differ: stdout line 4 differs
 corpus/arr_oob_exit records  # differ: exit 1 vs 0
@@ -283,17 +262,12 @@ corpus/int_divmod numbers  # differ: stdout line 1 differs
 corpus/int_incdec numbers  # differ: stdout line 2 differs
 corpus/int_literal_edges numbers  # differ: stdout line 5 differs
 corpus/int_wrap numbers  # differ: stdout line 1 differs
-corpus/io_roundtrip numbers  # differ: stdout line 1 differs
 corpus/modules_basic numbers  # differ: exit 1 vs 5
 corpus/parse_argv_sum numbers  # differ: exit 1 vs 27
 corpus/prng_lcg numbers  # differ: stdout line 1 differs
 corpus/recursion numbers  # differ: stdout line 29 differs
 corpus/str_large numbers  # differ: exit 1 vs 0
-corpus/str_methods strings  # differ: stdout line 5 differs
-corpus/str_nul_escapes numbers  # differ: stdout line 8 differs
-corpus/str_slice strings  # differ: stdout line 2 differs
 corpus/str_template numbers  # differ: stdout line 15 differs
-corpus/str_unicode numbers  # differ: stdout line 2 differs
 corpus/u_convert_shift numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
 corpus/u_div_cmp numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
 corpus/u_wrap numbers  # differ: stdout line 1 differs
