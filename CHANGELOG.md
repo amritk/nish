@@ -26,6 +26,50 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-23
+
+### Breaking changes
+
+- cli: Publish to npm as nish instead of @amritk/nish ([#830](https://github.com/amritk/nish/pull/830))
+
+### Added
+
+- net: Use ECN counts in QUIC recovery ([#820](https://github.com/amritk/nish/pull/820))
+- net: Run an HTTP server on every core with a prefork supervisor (#478) ([#823](https://github.com/amritk/nish/pull/823))
+- std: Ed25519 signatures (RFC 8032) in std/crypto (#788) ([#826](https://github.com/amritk/nish/pull/826))
+
+### Fixed
+
+- net: Count the resets an HTTP/2 server sends against its reset budget ([#809](https://github.com/amritk/nish/pull/809))
+- codegen: Reserve libm's C99/C23 names in c-symbols past LLVM 18's table ([#813](https://github.com/amritk/nish/pull/813))
+- net: Cap relay peers by a validated address only ([#811](https://github.com/amritk/nish/pull/811))
+- checker: Accept a fresh parallelMapInto destination beside captured arrays ([#812](https://github.com/amritk/nish/pull/812))
+- checker: Carry NL8001 into data-parallel arrows and offset uses (#629) ([#822](https://github.com/amritk/nish/pull/822))
+- net: Decode HPACK into caller-owned storage and bound the HTTP/2 header bomb (#473) ([#825](https://github.com/amritk/nish/pull/825))
+
+### Documentation
+
+- security: Correct the safegcd changelog's ct_asm claim and the off-main anchors in ct-verification.md ([#816](https://github.com/amritk/nish/pull/816))
+
+### Tests
+
+- checker: Pin an unannotated secret(...) of a class written as a const alias or a call result ([#814](https://github.com/amritk/nish/pull/814))
+- bench: Print the noise band per crypto row and pin the --validate mismatch ([#817](https://github.com/amritk/nish/pull/817))
+- net: Close the lazy-slot acceptance gaps left after #786 ([#819](https://github.com/amritk/nish/pull/819))
+- ct: Print each runner's CPU fingerprint and time a same-runner A/A pass ([#827](https://github.com/amritk/nish/pull/827))
+
+### Build
+
+- Drop the stale 0.18.0 platform entries from package-lock.json ([#810](https://github.com/amritk/nish/pull/810))
+- deps: Bump the go_modules group across 2 directories with 3 updates ([#803](https://github.com/amritk/nish/pull/803))
+- deps: Bump golang.org/x/net from 0.54.0 to 0.60.0 in /bench/crypto/handshake/go in the go_modules group across 1 directory ([#818](https://github.com/amritk/nish/pull/818))
+
+### CI
+
+- Cache the test job's apt packages and bound each download ([#821](https://github.com/amritk/nish/pull/821))
+- Drop the PR body attribution check ([#824](https://github.com/amritk/nish/pull/824))
+
+
 ## [0.19.0] - 2026-10-22
 
 ### Breaking changes
@@ -1010,3 +1054,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.17.0]: https://github.com/amritk/nish/releases/tag/v0.17.0
 [0.18.0]: https://github.com/amritk/nish/releases/tag/v0.18.0
 [0.19.0]: https://github.com/amritk/nish/releases/tag/v0.19.0
+[0.20.0]: https://github.com/amritk/nish/releases/tag/v0.20.0

@@ -1,12 +1,14 @@
 @.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"h\C3\A9llo\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"o\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"l\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"abcdef\00" }, align 8
 
 declare void @nish_free_arena() #1
 declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare i64 @llvm.smin.i64(i64, i64) #4
 declare i64 @llvm.smax.i64(i64, i64) #4
@@ -29,6 +31,9 @@ entry:
   %at.addr = alloca i32, align 4
   %rounds.addr = alloca i32, align 4
   %m.addr = alloca i32, align 4
+  %other.addr = alloca i8*, align 8
+  %codes.addr = alloca i32, align 4
+  %i.addr.2 = alloca i32, align 4
   store i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8** %word.addr, align 8
   store i32 0, i32* %steps.addr, align 4
   store i32 0, i32* %i.addr, align 4
@@ -405,38 +410,90 @@ ovf.ok.12:
   br label %while.cond.4
 
 while.end.4:
-  %180 = load i32, i32* %steps.addr, align 4
-  %181 = load i32, i32* %k.addr, align 4
-  %182 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %180, i32 %181)
-  %183 = extractvalue { i32, i1 } %182, 0
-  %184 = extractvalue { i32, i1 } %182, 1
-  br i1 %184, label %ovf.fail, label %ovf.ok.13
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.3 to i8*), i8** %other.addr, align 8
+  store i32 0, i32* %codes.addr, align 4
+  store i32 0, i32* %i.addr.2, align 4
+  br label %for.cond.4
+
+for.cond.4:
+  %180 = load i32, i32* %i.addr.2, align 4
+  %181 = load i8*, i8** %word.addr, align 8
+  %182 = bitcast i8* %181 to i64*
+  %183 = load i64, i64* %182, align 8
+  %184 = trunc i64 %183 to i32
+  %185 = icmp slt i32 %180, %184
+  br i1 %185, label %for.body.4, label %for.end.4
+
+for.body.4:
+  %186 = load i32, i32* %codes.addr, align 4
+  %187 = load i8*, i8** %other.addr, align 8
+  %188 = load i32, i32* %i.addr.2, align 4
+  %189 = sext i32 %188 to i64
+  %190 = bitcast i8* %187 to i64*
+  %191 = load i64, i64* %190, align 8
+  %192 = icmp ult i64 %189, %191
+  br i1 %192, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 %189, i64 %191)
+  unreachable
+
+bounds.ok:
+  %193 = getelementptr inbounds i8, i8* %187, i64 8
+  %194 = getelementptr inbounds i8, i8* %193, i64 %189
+  %195 = load i8, i8* %194, align 1
+  %196 = zext i8 %195 to i32
+  %197 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %186, i32 %196)
+  %198 = extractvalue { i32, i1 } %197, 0
+  %199 = extractvalue { i32, i1 } %197, 1
+  br i1 %199, label %ovf.fail, label %ovf.ok.13
 
 ovf.ok.13:
-  %185 = load i32, i32* %d.addr, align 4
-  %186 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %183, i32 %185)
-  %187 = extractvalue { i32, i1 } %186, 0
-  %188 = extractvalue { i32, i1 } %186, 1
-  br i1 %188, label %ovf.fail, label %ovf.ok.14
+  store i32 %198, i32* %codes.addr, align 4
+  br label %for.inc.4
+
+for.inc.4:
+  %200 = load i32, i32* %i.addr.2, align 4
+  %201 = add nsw i32 %200, 1
+  store i32 %201, i32* %i.addr.2, align 4
+  br label %for.cond.4
+
+for.end.4:
+  %202 = load i32, i32* %steps.addr, align 4
+  %203 = load i32, i32* %k.addr, align 4
+  %204 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %202, i32 %203)
+  %205 = extractvalue { i32, i1 } %204, 0
+  %206 = extractvalue { i32, i1 } %204, 1
+  br i1 %206, label %ovf.fail, label %ovf.ok.14
 
 ovf.ok.14:
-  %189 = call i8* @nish_str_from_i32(i32 %187)
-  call void @nish_print(i8* %189)
-  %190 = load i32, i32* %sum.addr, align 4
-  %191 = call i8* @nish_str_from_i32(i32 %190)
-  call void @nish_print(i8* %191)
-  %192 = load i32, i32* %pairs.addr, align 4
-  %193 = load i32, i32* %rounds.addr, align 4
-  %194 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %192, i32 %193)
-  %195 = extractvalue { i32, i1 } %194, 0
-  %196 = extractvalue { i32, i1 } %194, 1
-  br i1 %196, label %ovf.fail, label %ovf.ok.15
+  %207 = load i32, i32* %d.addr, align 4
+  %208 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %205, i32 %207)
+  %209 = extractvalue { i32, i1 } %208, 0
+  %210 = extractvalue { i32, i1 } %208, 1
+  br i1 %210, label %ovf.fail, label %ovf.ok.15
 
 ovf.ok.15:
-  %197 = call i8* @nish_str_from_i32(i32 %195)
-  call void @nish_print(i8* %197)
-  %198 = load i8*, i8** %rest.addr, align 8
-  call void @nish_print(i8* %198)
+  %211 = call i8* @nish_str_from_i32(i32 %209)
+  call void @nish_print(i8* %211)
+  %212 = load i32, i32* %sum.addr, align 4
+  %213 = call i8* @nish_str_from_i32(i32 %212)
+  call void @nish_print(i8* %213)
+  %214 = load i32, i32* %pairs.addr, align 4
+  %215 = load i32, i32* %rounds.addr, align 4
+  %216 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %214, i32 %215)
+  %217 = extractvalue { i32, i1 } %216, 0
+  %218 = extractvalue { i32, i1 } %216, 1
+  br i1 %218, label %ovf.fail, label %ovf.ok.16
+
+ovf.ok.16:
+  %219 = call i8* @nish_str_from_i32(i32 %217)
+  call void @nish_print(i8* %219)
+  %220 = load i8*, i8** %rest.addr, align 8
+  call void @nish_print(i8* %220)
+  %221 = load i32, i32* %codes.addr, align 4
+  %222 = call i8* @nish_str_from_i32(i32 %221)
+  call void @nish_print(i8* %222)
   ret i32 0
 
 ovf.fail:

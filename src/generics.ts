@@ -31,6 +31,7 @@ import { jsonRefusal, jsonRouteCallees, jsonRouteOf, jsonRouteRole } from "./jso
 import { resolveType } from "./annotations"
 import { LANGUAGE } from "./branding"
 import { rejectForeignPointer, unionArgumentMessage } from "./annotations"
+import { rejectHandleArgument } from "./handles"
 import { CheckContext } from "./context"
 import { Edit } from "./diagnostics"
 import { checkSignatureBody } from "./checker"
@@ -1056,20 +1057,23 @@ const instantiateStructHere = (
   if (!checkStructConstraints(ctx, template, args, at, site.asker)) {
     return null
   }
+  // WP27 S2, as `instantiate` below has it for a function template: a class
+  // at `CPtr` would hold a foreign address however its members spell `T`,
+  // `class Empty<T> { n: i32 = 0; }` included. WP40 §4d: and a handle class
+  // is never a type argument, which would name it outside a parameter.
+  for (const arg of args) {
+    if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
+    if (rejectHandleArgument(site.asker, arg, at)) {
+      return null
+    }
+  }
   const name = instanceSymbol(ctx.table, template.sourceName, args)
   const existing = ctx.program.structInstance(name)
   if (existing !== null) {
     return existing.info
   }
-  // TODO (WP27 S2, known gap): no `rejectForeignPointer` loop here, the way
-  // there is one in `instantiate` below. A generic class at `CPtr` is
-  // refused by whichever member rule the monomorphised class trips — the field
-  // rule, the array-element rule, the parameter rule of a method that takes a
-  // `T` — which is every shape that lays the type out or puts it across an
-  // exported boundary. It is not the whole of the rule: a template that never
-  // mentions `T` in a member (`class Empty<T> { n: i32 = 0; }`) compiles
-  // `new Empty<CPtr>()`, here and in stage0's `src/checker/index.ts`, which agree.
-  // `docs/wp27-ffi.md` §7a.
 
   // Termination, the struct half. A field whose type puts one of the struct's
   // own type arguments under a constructor starts a chain with no end, and it
@@ -1346,6 +1350,9 @@ const instantiateHere = (
   // message is the same, because it is the same rule.
   for (const arg of args) {
     if (rejectForeignPointer(site.asker, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null
+    }
+    if (rejectHandleArgument(site.asker, arg, at)) {
       return null
     }
   }

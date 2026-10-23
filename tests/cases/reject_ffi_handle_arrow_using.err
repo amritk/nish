@@ -1,0 +1,2 @@
+reject_ffi_handle_arrow_using.ts:34:15: error: A `File` cannot be used here
+reject_ffi_handle_arrow_using.ts:35:12: error: A `File` cannot be used here

@@ -186,6 +186,45 @@ PASS  numberI64(1e2)
 PASS  isInteger is false on a string token
 PASS  numberI64 is 0 on a string token
 PASS  numberF64 is 0 on a string token
+PASS  isIntegral(0)
+PASS  isIntegral(-0)
+PASS  isIntegral(0.0)
+PASS  isIntegral(-0.0e5)
+PASS  isIntegral(1.0)
+PASS  isIntegral(1.000)
+PASS  isIntegral(1e2)
+PASS  isIntegral(1E+2)
+PASS  isIntegral(100e-2)
+PASS  isIntegral(150e-1)
+PASS  isIntegral(1.5e1)
+PASS  isIntegral(12345678901234567890.0)
+PASS  isIntegral(1e400)
+PASS  isIntegral(1e99999999999)
+PASS  isIntegral(0e-99999999999)
+PASS  isIntegral(1.25e000000000000000000000000000000000000002)
+PASS  isIntegral(1.5e2147483647)
+PASS  isIntegral(1.5e2147483648)
+PASS  isIntegral(1.5e21474836500)
+PASS  isIntegral(1.5e1000000000000000000000000000000000000000)
+PASS  isIntegral(1000e-3)
+PASS  isIntegral(10.0e-1)
+PASS  isIntegral(0.1e1)
+PASS  isIntegral(0.10e1)
+PASS  isIntegral(1.5)
+PASS  isIntegral(-1.5)
+PASS  isIntegral(1e-1)
+PASS  isIntegral(10e-2)
+PASS  isIntegral(15e-1)
+PASS  isIntegral(123.456e2)
+PASS  isIntegral(1e-400)
+PASS  isIntegral(1e-99999999999)
+PASS  isIntegral(1.5e-1000000000000000000000000000000000000000)
+PASS  isIntegral(100e-0000000000000000000000000000000000000003)
+PASS  isIntegral(1.5e0)
+PASS  isIntegral(100e-3)
+PASS  isIntegral(1.0e-5)
+PASS  isIntegral is false on a string token
+PASS  1.0 is isIntegral but neither isInteger nor integral: the spelling readers are unchanged
 PASS  numberF64(0)
 PASS  numberF64(-0) is negative zero
 PASS  numberF64(-0.0e5) is negative zero
@@ -415,4 +454,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 417 passed, 0 failed, 0 skipped
+std/json-tokenizer: 456 passed, 0 failed, 0 skipped

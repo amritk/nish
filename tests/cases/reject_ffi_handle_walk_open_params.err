@@ -1,0 +1,6 @@
+reject_ffi_handle_walk_open_params.ts:22:11: error: `File` is a handle class, and its name may be written only as the type of a parameter
+reject_ffi_handle_walk_open_params.ts:28:11: error: `File` is a handle class, and its name may be written only as the type of a parameter
+reject_ffi_handle_walk_open_params.ts:32:24: error: `File` is a handle class, and its name may be written only as the type of a parameter
+reject_ffi_handle_walk_open_params.ts:37:14: error: `File` is a handle class, and its name may be written only as the type of a parameter
+reject_ffi_handle_walk_open_params.ts:41:19: error: `File` is a handle class, and its name may be written only as the type of a parameter
+reject_ffi_handle_walk_open_params.ts:45:16: error: A `File` cannot be used here
