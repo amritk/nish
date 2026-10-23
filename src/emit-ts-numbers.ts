@@ -573,20 +573,30 @@ const stringIndices = (walk: Walk, node: Node, operands: Operands): string | nul
   if (operands.changed[1]) {
     return null
   }
-  let text = ""
-  let from = args.start
   let wrapped = false
   for (const arg of args.children) {
-    if (isBig(typeOf(walk, arg))) {
-      text = `${text}${between(walk, from, arg.start)}Number(${between(walk, arg.start, arg.end)})`
-      from = arg.end
-      wrapped = true
-    }
+    wrapped = wrapped || isBig(typeOf(walk, arg))
   }
   if (!wrapped) {
     return null
   }
-  return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}${text}${between(walk, from, node.end)}`
+  return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}${wrappedFrom(walk, args, 0, args.start, node.end)}`
+}
+
+/**
+ * The source from `from` to `end` with each i64 or u64 argument of `args`,
+ * from the `i`th on, wrapped in `Number`. It recurses rather than loops, so
+ * the text it builds is the result and no loop keeps it per pass.
+ */
+const wrappedFrom = (walk: Walk, args: Node, i: i32, from: i32, end: i32): string => {
+  if (i >= args.children.length) {
+    return between(walk, from, end)
+  }
+  const arg = args.children[i]
+  if (!isBig(typeOf(walk, arg))) {
+    return wrappedFrom(walk, args, i + 1, from, end)
+  }
+  return `${between(walk, from, arg.start)}Number(${between(walk, arg.start, arg.end)})${wrappedFrom(walk, args, i + 1, arg.end, end)}`
 }
 
 /**

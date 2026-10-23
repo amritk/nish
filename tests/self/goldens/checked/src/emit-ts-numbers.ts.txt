@@ -359,23 +359,34 @@ function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @
   callee +48:84 between -> @between
 function stringIndices(walk: Walk, node: Node, operands: Operands): string | null -> @stringIndices
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: Operands.at between isBig nish_panic_index nish_str_concat typeOf
-  pointer walk: size=112 writesThrough=false captured=false passedTo=typeOf#0 between#0 between#0 between#0 between#0
+  calls: Operands.at between isBig nish_panic_index nish_str_concat typeOf wrappedFrom
+  pointer walk: size=112 writesThrough=false captured=false passedTo=typeOf#0 between#0 wrappedFrom#0
   pointer node: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
-  local +4:7 text: string (let)
-  local +5:7 from: i32 (let)
-  local +6:7 wrapped: boolean (let)
-  local +7:14 arg: Node (const)
-  callee +8:9 isBig -> @isBig
-  callee +8:15 typeOf -> @typeOf
-  callee +9:24 between -> @between
-  callee +9:64 between -> @between
-  callee +17:13 Operands.at -> @Operands.at
-  callee +17:30 between -> @between
-  callee +17:87 between -> @between
+  local +4:7 wrapped: boolean (let)
+  local +5:14 arg: Node (const)
+  callee +6:26 isBig -> @isBig
+  callee +6:32 typeOf -> @typeOf
+  callee +11:13 Operands.at -> @Operands.at
+  callee +11:30 between -> @between
+  callee +11:80 wrappedFrom -> @wrappedFrom
+function wrappedFrom(walk: Walk, args: Node, i: i32, from: i32, end: i32): string -> @wrappedFrom
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: end from i
+  calls: between isBig nish_panic_index nish_str_concat typeOf wrappedFrom
+  pointer walk: size=112 writesThrough=false captured=false passedTo=between#0 typeOf#0 wrappedFrom#0 between#0 between#0 wrappedFrom#0
+  pointer args: size=40 writesThrough=false captured=false passedTo=wrappedFrom#1 wrappedFrom#1
+  stackSites=0 stackLocals=0
+  callee +0:12 between -> @between
+  local +2:9 arg: Node (const)
+  callee +3:8 isBig -> @isBig
+  callee +3:14 typeOf -> @typeOf
+  callee +4:12 wrappedFrom -> @wrappedFrom
+  callee +6:13 between -> @between
+  callee +6:53 between -> @between
+  callee +6:90 wrappedFrom -> @wrappedFrom
 function arrayLength(walk: Walk, node: Node, operands: Operands): string | null -> @arrayLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Operands.at between isBig nish_panic_index nish_str_concat nish_str_eq typeOf
