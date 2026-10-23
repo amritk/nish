@@ -14,14 +14,16 @@
 // An agent is a reader of its own kind: it may drive a pseudo-terminal, so the
 // terminal check says yes, but every escape is tokens it pays for and reads
 // past. `agentDriven` says when one is at the keyboard, and then the help is
-// plain and gains the section an agent needs before it writes a line of Nish.
+// plain, whatever forcing variable its shell inherited, and gains the section
+// an agent needs before it writes a line of Nish.
 //
-// Diagnostics are not painted here. Their text is pinned byte for byte by the
+// Diagnostics, the one-line hint an unknown flag ends with among them, are not
+// painted. Their text is pinned byte for byte by the
 // goldens and read by editors and CI logs, and a change to how they look is
 // its own decision.
 
 import { CLI, VERSION } from "./branding"
-import { StringBuilder } from "./strings"
+import { repeatString } from "./strings"
 
 /** The Control Sequence Introducer every SGR escape opens with. */
 const CSI: string = "\u001b["
@@ -119,35 +121,25 @@ export const agentDriven = (): boolean => {
 }
 
 /**
- * The style for descriptor `fd` (1 or 2). `NO_COLOR` wins, then a forcing
- * variable, then an agent or `TERM=dumb`, and only then the terminal check.
- * 256 colours when `TERM` names them or `COLORTERM` is set, as truecolour
- * terminals set it.
+ * The style for descriptor `fd` (1 or 2), for a reader `agent` says is an
+ * agent or not (`agentDriven`, asked once by the caller). `NO_COLOR` wins,
+ * then an agent, then a forcing variable, then `TERM=dumb`, and only then the
+ * terminal check. 256 colours when `TERM` names them or `COLORTERM` is set, as
+ * truecolour terminals set it.
  */
-export const styleFor = (fd: i32): Style => {
+export const styleFor = (fd: i32, agent: boolean): Style => {
   const term = getenv("TERM")
   const rich = (term !== null && term.indexOf("256") >= 0) || envIsSet("COLORTERM")
-  if (envIsSet("NO_COLOR")) {
+  if (envIsSet("NO_COLOR") || agent) {
     return new Style(false, rich)
   }
   if (envSaysYes("CLICOLOR_FORCE") || envSaysYes("FORCE_COLOR")) {
     return new Style(true, rich)
   }
-  if (agentDriven() || (term !== null && term === "dumb")) {
+  if (term !== null && term === "dumb") {
     return new Style(false, rich)
   }
   return new Style(isTerminal(fd), rich)
-}
-
-/** `count` spaces; zero or fewer is the empty string. */
-const spaces = (count: i32): string => {
-  const text = new StringBuilder()
-  let i: i32 = 0
-  while (i < count) {
-    text.addChar(32)
-    i = i + 1
-  }
-  return text.toText()
 }
 
 /**
@@ -159,7 +151,7 @@ const helpRow = (style: Style, flag: string, meta: string, description: string):
   const width = 2 + flag.length + (meta.length > 0 ? 1 + meta.length : 0)
   const gap = width < DESCRIPTION_COLUMN ? DESCRIPTION_COLUMN - width : 2
   const placeholder = meta.length > 0 ? ` ${style.meta(meta)}` : ""
-  return `  ${style.flag(flag)}${placeholder}${spaces(gap)}${style.dim(description)}`
+  return `  ${style.flag(flag)}${placeholder}${repeatString(" ", gap)}${style.dim(description)}`
 }
 
 /** Where a usage line's description starts: past the longest command shape. */
@@ -171,16 +163,17 @@ const USAGE_COLUMN: i32 = 46
  * the plain text as `helpRow`'s is.
  */
 const usageRow = (style: Style, first: boolean, shape: string, description: string): string => {
-  const lead = first ? `${style.heading("usage:")} ` : spaces(7)
+  const lead = first ? `${style.heading("usage:")} ` : repeatString(" ", 7)
   const width = 7 + CLI.length + 1 + shape.length
   const gap = width < USAGE_COLUMN ? USAGE_COLUMN - width : 2
-  const text = description.length > 0 ? `${spaces(gap)}${style.dim(description)}` : ""
+  const text = description.length > 0 ? `${repeatString(" ", gap)}${style.dim(description)}` : ""
   return `${lead}${style.name(CLI)} ${style.flag(shape)}${text}`
 }
 
 /**
  * The help: every flag the compiler takes, grouped by what a person reaches
- * for it to do, one per line, inside 80 columns. `--help` prints it on stdout
+ * for it to do, one per line, inside 80 columns but for an agent's path to the
+ * card, as long as the install made it. `--help` prints it on stdout
  * and a bare `nish` on stderr, each styled for its own stream; with colour off
  * the two are the same bytes. `guide`, when it is not empty, is where the
  * rules card is, and adds the section for an agent (`agentDriven`).
@@ -273,8 +266,8 @@ export const helpText = (style: Style, guide: string): string => {
 }
 
 /**
- * The line an unknown flag or a missing input ends with, in place of the whole
- * help: the refusal above it is the news, and the help is one command away.
+ * What an unknown flag's refusal ends with, in place of the whole help: the
+ * refusal is the news, and the help is one command away. Plain, as every
+ * diagnostic is.
  */
-export const helpHint = (style: Style): string =>
-  `${style.dim("run")} ${style.flag(`${CLI} --help`)} ${style.dim("for the flags")}`
+export const helpHint = (): string => `run \`${CLI} --help\` for the flags`

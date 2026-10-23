@@ -16911,7 +16911,12 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     v.stdout + v.stderr
   )
 
-  const noInputs = run([])
+  // The help is painted only for a person at a terminal (src/cli-style.ts).
+  // Every help run names each variable the policy reads, so the runner's own
+  // environment -- an agent's, a CI's -- cannot decide the answer.
+  const ESC = "\u001b["
+  const plainEnv = { NO_COLOR: "", FORCE_COLOR: "", CLICOLOR_FORCE: "", NISH_AGENT: "0" }
+  const noInputs = run([], plainEnv)
   check(
     "no inputs: usage on stderr, exit 2",
     noInputs.status === 2 && noInputs.stderr.includes("usage: nish"),
@@ -16922,13 +16927,13 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   // two are told apart by the stream and the exit code, so a wrapper -- a
   // script, an editor, an agent -- can ask for the text without reading the
   // run as a failure. `noInputs` above is the other half of this pair.
-  const help = run(["--help"])
+  const help = run(["--help"], plainEnv)
   check(
     "--help: usage on stdout, nothing on stderr, exit 0",
     help.status === 0 && help.stdout.includes("usage: nish") && help.stderr === "",
     help.stdout + help.stderr
   )
-  const shortHelp = run(["-h"])
+  const shortHelp = run(["-h"], plainEnv)
   check(
     "-h: identical to --help",
     shortHelp.status === 0 && shortHelp.stdout === help.stdout,
@@ -16962,17 +16967,15 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--deny",
     "run [flags] <file.ts> [args ...]",
   ]
-  const undocumented = documented.filter((f) => !help.stdout.includes(f))
+  // Delimited, so `--deny` is not found inside `--deny-panics`.
+  const listed = (f) =>
+    new RegExp(`(?<![\\w-])${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`).test(help.stdout)
+  const undocumented = documented.filter((f) => !listed(f))
   check(
     `--help lists every advertised flag (${documented.length} checked)`,
     undocumented.length === 0,
     `missing from --help: ${undocumented.join(", ")}`
   )
-  // The help is painted only for a person at a terminal (src/cli-style.ts).
-  // Every case names each variable the policy reads, so the runner's own
-  // environment -- an agent's, a CI's -- cannot decide the answer.
-  const ESC = "\u001b["
-  const plainEnv = { NO_COLOR: "", FORCE_COLOR: "", CLICOLOR_FORCE: "", NISH_AGENT: "0" }
   const plainHelp = run(["--help"], plainEnv)
   check(
     "--help into a pipe: no escape codes",
@@ -17014,16 +17017,33 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
       fs.existsSync(card.trim()),
     agentHelp.stdout
   )
+  // The path to the card is as long as the install made it; every other line
+  // keeps to the width a person's help does.
+  const agentWide = agentHelp.stdout.split("\n").filter((line) => line.length > 80 && line !== card)
+  check(
+    "--help for an agent: every line but the card's path fits in 80 columns",
+    agentWide.length === 0,
+    agentWide.join("\n")
+  )
   const claude = run(["--help"], { ...plainEnv, NISH_AGENT: "", CLAUDECODE: "1" })
   check(
     "--help under CLAUDECODE=1 is an agent's, and NISH_AGENT=0 is a person's",
     claude.stdout === agentHelp.stdout && !plainHelp.stdout.includes("\nAgents\n"),
     claude.stdout
   )
-  const badFlag = run(["--bogus", entry])
+  const agentForced = run(["--help"], { ...plainEnv, NISH_AGENT: "1", FORCE_COLOR: "1" })
   check(
-    "unknown flag: names it, exit 2",
-    badFlag.status === 2 && badFlag.stderr.includes("unknown flag `--bogus`"),
+    "--help for an agent stays plain under FORCE_COLOR=1",
+    agentForced.stdout === agentHelp.stdout,
+    JSON.stringify(agentForced.stdout.slice(0, 200))
+  )
+  // An unknown flag is refused in one line that points at the help, and that
+  // line is a diagnostic, so it is plain even when colour is forced.
+  const badFlag = run(["--bogus", entry], { ...plainEnv, FORCE_COLOR: "1" })
+  check(
+    "unknown flag: names it and points at --help, plain, exit 2",
+    badFlag.status === 2 &&
+      badFlag.stderr.trim() === "compile: unknown flag `--bogus`; run `nish --help` for the flags",
     badFlag.stderr
   )
   const noValue = run([entry, "-o"])

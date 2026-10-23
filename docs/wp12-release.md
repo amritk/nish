@@ -81,12 +81,12 @@ worse than the startup cost, and it does nothing in a checkout (the landmark is
 | ---: | --- | --- |
 | 0 | success, and `--help` / `--version` | `wrote <file.ll>` / `linked <exe>: <bytes> bytes (<profile>)` on stderr; the usage text or the version on **stdout** |
 | 1 | a diagnostic from the parser, validator or checker; a driver refusal (`--link` without `main`, several modules with a single `-o file.ll`); an unreadable input or unwritable output | `file:line:col: error: ...` with caret excerpt, or one line |
-| 2 | usage *error*: unknown flag, missing argument, no inputs | `usage: ...` on stderr |
+| 2 | usage *error*: unknown flag, missing argument, no inputs | `usage: ...` on stderr for no inputs; ``compile: unknown flag `--x`; run `nish --help` for the flags`` for a flag |
 | 3 | a program that had to run would not: no `scripts/build.sh` beside the compiler; `build.sh` (or the `clang` / `$CC` it runs) failed or could not be spawned; or `bin/nish` found no prebuilt compiler for this platform, or one that would not start | `--link: cannot find scripts/build.sh (looked in ...)`; build.sh's stderr then `--link: <build.sh> failed (exit N); the IR is in ...`; or the launcher's refusal naming the supported platforms |
 | 70 | internal compiler error (`EX_SOFTWARE`, `src/ice.ts`) | `nish <version>: internal compiler error`, what broke, and a request to report it with the input and command line |
 
-`--help` answers a question, so it prints on stdout and exits 0; a usage error
-prints the same text on stderr with exit 2. All three causes of exit 3 are one
+`--help` answers a question, so it prints on stdout and exits 0; no inputs
+print the same text on stderr with exit 2, and an unknown flag one line. All three causes of exit 3 are one
 `NL0002` object under `--json`, told apart by `message`. Every failure,
 including exit 3 and 70, is one JSON object on stdout under `--json`
 ([wp10-ci.md](wp10-ci.md#failures-without-a-source-position)). `build.sh` runs

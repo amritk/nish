@@ -95,11 +95,15 @@ import {
  * a usage error on stderr, and either may be a terminal while the other is a
  * pipe. `src/cli-style.ts` holds the text and the colour policy. An agent's
  * help also names the rules card shipped with the package, by the path it can
- * read, so the package is looked for only then.
+ * read, so the package is looked for only then, and through `findPackage`: the
+ * owner checks a compile runs keep a card in a package this user may not trust
+ * from being handed to an agent as its rules. Those checks are processes, and
+ * a person's help never pays for them.
  */
 const usageText = (fd: i32): string => {
+  const agent = agentDriven()
   let guide = ""
-  if (agentDriven()) {
+  if (agent) {
     guide = "docs/AI.md, in the nish package"
     const root = findPackage().root
     if (root.length > 0) {
@@ -109,7 +113,7 @@ const usageText = (fd: i32): string => {
       }
     }
   }
-  return helpText(styleFor(fd), guide)
+  return helpText(styleFor(fd, agent), guide)
 }
 
 /**
@@ -709,8 +713,9 @@ export const main = (): number => {
     } else if (value === "-h" || value === "--help") {
       // A request that succeeded, not a refusal: stdout and exit 0. stage0
       // answers it the same way (`usageText` in stage0's `src/index.ts`), so a script
-      // that asks either compiler for its help sees the same shape; an actual
-      // usage error still prints the usage on stderr and returns 2 below.
+      // that asks either compiler for its help sees the same shape. A bare
+      // `nish` and a command line with no input still print the usage on
+      // stderr and return 2; an unknown flag returns 2 with one line.
       console.log(usageText(1))
       return 0
     } else if (value === "-v" || value === "--version") {
@@ -720,7 +725,7 @@ export const main = (): number => {
       console.log(`${CLI} ${VERSION}`)
       return 0
     } else if (value.startsWith("-")) {
-      console.error(`compile: unknown flag \`${value}\`; ${helpHint(styleFor(2))}`)
+      console.error(`compile: unknown flag \`${value}\`; ${helpHint()}`)
       return 2
     } else {
       // Every positional is a root, as it is for stage0: a program whose
@@ -885,7 +890,8 @@ export const main = (): number => {
   // Where `nish/<module>` is resolved from and `scripts/build.sh` is run
   // from, worked out once here because this is the only place `process.argv`
   // is legal, and only now that the command line is known to compile
-  // something, because the owner checks are processes (`findPackage`). A
+  // something, because the owner checks are processes (`findPackage`; an
+  // agent's help is the one other caller, in `usageText`). A
   // compiler with no package beside it is still handed a root, the one it
   // would have had, so that `Compilation` does not fall back to the working
   // directory and compile a `std/` the checkout it was run in supplied
