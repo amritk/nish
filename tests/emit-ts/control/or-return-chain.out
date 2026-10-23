@@ -1,5 +1,12 @@
 ok 4
-ok 3
 err cannot parse six
+err cannot parse seven
+err 6 is too big
+err cannot parse eight
+ok -1
+ok 3
+err cannot parse five
+err cannot parse ten
+err cannot parse five
 ok 5
 err cannot parse ten

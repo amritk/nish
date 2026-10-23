@@ -13,7 +13,7 @@ const parse = (s: string): Result<i32, string> => {
   return Err(`cannot parse ${s}`)
 }
 
-const check = (n: i32): Result<void, string> => (n < 10 ? Ok() : Err(`${n} is too big`))
+const check = (n: i32): Result<void, string> => (n < 6 ? Ok() : Err(`${n} is too big`))
 
 class Fallback {
   orReturn(): i32 {
@@ -23,14 +23,19 @@ class Fallback {
 
 const base = (): i32 => new Fallback().orReturn() - 1
 
-const sum = (a: string, b: string): Result<i32, string> => {
+const sum = (a: string, b: string, c: string): Result<i32, string> => {
   const __t0: i32 = base()
   const x = parse(a).orReturn() + __t0
-  const y = parse(b).orReturn(), z = parse(a).orReturn()
+  const y = parse(b).orReturn()
+  const z = parse(a).orReturn()
   check(x + y + z).orReturn()
-  if (parse(b).orReturn() > 1) {
+  if (parse(c).orReturn() > 1) {
     return Ok(x + y + z)
   }
+  return Ok(x - y)
+}
+
+const both = (a: string, b: string): Result<i32, string> => {
   return Ok(parse(a).orReturn() + parse(b).orReturn())
 }
 
@@ -45,9 +50,16 @@ const loop = (words: string[]): Result<i32, string> => {
 const show = (r: Result<i32, string>): string => (r.isOk() ? `ok ${r.value}` : `err ${r.error}`)
 
 export const main = (): number => {
-  console.log(show(sum("one", "two")))
-  console.log(show(sum("two", "one")))
-  console.log(show(sum("one", "six")))
+  console.log(show(sum("one", "two", "two")))
+  console.log(show(sum("six", "two", "two")))
+  console.log(show(sum("one", "seven", "two")))
+  console.log(show(sum("two", "two", "two")))
+  console.log(show(sum("one", "two", "eight")))
+  console.log(show(sum("one", "two", "one")))
+  console.log(show(both("one", "two")))
+  console.log(show(both("five", "two")))
+  console.log(show(both("one", "ten")))
+  console.log(show(both("five", "ten")))
   console.log(show(loop(["one", "two", "two"])))
   console.log(show(loop(["one", "ten"])))
   return 0

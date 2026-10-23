@@ -1,5 +1,9 @@
-// An `orReturn` inside a `using a = arena()` block: the hoisted return leaves
-// the block, which releases the arena as the block's end would. (`using s =
+// An `orReturn` inside a `using a = arena()` block: the hoisted return stays
+// inside the block, so JavaScript disposes `a` on that exit as on the block's
+// end. Node cannot show the disposal: every value `using` takes — `arena()`,
+// `scope()`, a `Mutex`'s `lock()` — disposes as a no-op there, and a program's
+// own `[Symbol.dispose]` is refused (`reject_thread_dispose_elsewhere`), so this
+// row pins the shape and the result, not the release. (`using s =
 // scope()` is the same block to this row, but `nish/threads` imports
 // `nish:unsafe`'s wrapping arithmetic, which the numbers row brings to Node.)
 const check = (ok: boolean): Result<i32, i32> => (ok ? Ok(3) : Err(-1))

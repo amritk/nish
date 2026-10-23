@@ -15,7 +15,7 @@ const parse = (s: string): Result<i32, string> => {
   return Err(`cannot parse ${s}`)
 }
 
-const check = (n: i32): Result<void, string> => (n < 10 ? Ok() : Err(`${n} is too big`))
+const check = (n: i32): Result<void, string> => (n < 6 ? Ok() : Err(`${n} is too big`))
 
 class Fallback {
   orReturn(): i32 {
@@ -25,24 +25,29 @@ class Fallback {
 
 const base = (): i32 => new Fallback().orReturn() - 1
 
-const sum = (a: string, b: string): Result<i32, string> => {
+const sum = (a: string, b: string, c: string): Result<i32, string> => {
   const __t0: i32 = base()
   const __t1 = parse(a);
   if (__t1.isErr()) return Err(__t1.error);
   const x = __t1.value + __t0
   const __t2 = parse(b);
   if (__t2.isErr()) return Err(__t2.error);
+  const y = __t2.value
   const __t3 = parse(a);
   if (__t3.isErr()) return Err(__t3.error);
-  const y = __t2.value, z = __t3.value
+  const z = __t3.value
   const __t4 = check(x + y + z);
   if (__t4.isErr()) return Err(__t4.error);
   __t4.value
-  const __t5 = parse(b);
+  const __t5 = parse(c);
   if (__t5.isErr()) return Err(__t5.error);
   if (__t5.value > 1) {
     return Ok(x + y + z)
   }
+  return Ok(x - y)
+}
+
+const both = (a: string, b: string): Result<i32, string> => {
   const __t6 = parse(a);
   if (__t6.isErr()) return Err(__t6.error);
   const __t7 = parse(b);
@@ -63,9 +68,16 @@ const loop = (words: string[]): Result<i32, string> => {
 const show = (r: Result<i32, string>): string => (r.isOk() ? `ok ${r.value}` : `err ${r.error}`)
 
 export const main = (): number => {
-  console.log(show(sum("one", "two")))
-  console.log(show(sum("two", "one")))
-  console.log(show(sum("one", "six")))
+  console.log(show(sum("one", "two", "two")))
+  console.log(show(sum("six", "two", "two")))
+  console.log(show(sum("one", "seven", "two")))
+  console.log(show(sum("two", "two", "two")))
+  console.log(show(sum("one", "two", "eight")))
+  console.log(show(sum("one", "two", "one")))
+  console.log(show(both("one", "two")))
+  console.log(show(both("five", "two")))
+  console.log(show(both("one", "ten")))
+  console.log(show(both("five", "ten")))
   console.log(show(loop(["one", "two", "two"])))
   console.log(show(loop(["one", "ten"])))
   return 0

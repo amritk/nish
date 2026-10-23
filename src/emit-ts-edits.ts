@@ -33,15 +33,21 @@
 // - the node is evaluated exactly once whenever its statement runs, so it is
 //   not the right of `&&`, `||` or `??`, a branch of `?:`, a loop's condition
 //   or update, an `if` or loop body that is not a block, a `case` label, a
-//   field initializer, a concise arrow body, or a module-level statement
+//   field initializer, a concise arrow body, a link of an optional chain past
+//   its first `?.` or an argument of one, or a module-level statement
 //   (`hoistChild` lists the positions that are; a block's statements start
 //   afresh, so a nested function's block body hoists into itself); and
-// - nothing with an effect (a call, a `new`, an assignment, `++` or `--`) ran
-//   in the statement before it, except what an earlier hoist already moved.
+// - nothing ran in the statement before it that the move would reorder it
+//   against, except what an earlier hoist already moved: an effect (a call, a
+//   `new`, an assignment, `++`, `--`, or a declarator with an initializer,
+//   which binds a name a later declarator may read) or a read of a field or an
+//   element, which the node may change. `this.pos + this.read().orReturn()`
+//   reads `this.pos` first, so it is not hoisted. A read of a local is no
+//   such read: an arrow captures nothing, so no call can reach one, and an
+//   assignment to it in the statement is an effect already.
 //
-// What the second rule does not see is a plain read: `x + f().orReturn()` is
-// hoisted even when `f` assigns `x`. A hook that cannot hoist writes the node
-// some other way; the control row has one for every node it hoists.
+// A hook that cannot hoist writes the node some other way; the control row
+// has one for every node it hoists.
 
 import { Edit, SourceFile } from "./diagnostics"
 import { controlRow } from "./emit-ts-control"
@@ -52,12 +58,14 @@ import { StringSet } from "./map"
 import { isNetExport } from "./nish-modules"
 import {
   FLAG_FOREIGN,
+  FLAG_OPTIONAL,
   FLAG_TYPE_ONLY,
   N_ARRAY,
   N_AS,
   N_BINARY,
   N_BLOCK,
   N_CALL,
+  N_EMPTY,
   N_EXPR_STMT,
   N_FOR,
   N_FOR_OF,
@@ -168,7 +176,7 @@ export class Walk {
   hoistHere: boolean
   /** What `canHoist` answers to the hook being asked about the current node. */
   hoistable: boolean
-  /** Something with an effect has run in the current statement, and was not hoisted. */
+  /** An effect or a read of a field or an element ran in the current statement, and was not hoisted. */
   effects: boolean
 
   constructor(program: CheckedProgram, source: SourceFile, nodeCount: i32) {
@@ -368,6 +376,9 @@ const hoistChild = (node: Node, i: i32): boolean => {
   if (kind === N_FOR_OF) {
     return i < 2
   }
+  if (kind === N_CALL || kind === N_MEMBER || kind === N_INDEX) {
+    return i === 0 || !inOptionalChain(node)
+  }
   return (
     kind === N_VAR ||
     kind === N_MODULE_CONST ||
@@ -376,10 +387,7 @@ const hoistChild = (node: Node, i: i32): boolean => {
     kind === N_EXPR_STMT ||
     kind === N_RETURN ||
     kind === N_THROW ||
-    kind === N_CALL ||
     kind === N_NEW ||
-    kind === N_MEMBER ||
-    kind === N_INDEX ||
     kind === N_PAREN ||
     kind === N_UNARY ||
     kind === N_ARRAY ||
@@ -391,10 +399,29 @@ const hoistChild = (node: Node, i: i32): boolean => {
   )
 }
 
+/**
+ * Whether `node` is a link of an optional chain at or past its first `?.`:
+ * `a?.b`, `a?.b.c` and `a?.f(x)` are, `a.b` and `a` itself are not. Such a
+ * link runs only when nothing before it in the chain was null.
+ */
+const inOptionalChain = (node: Node): boolean => {
+  let link = node
+  while (link.kind === N_CALL || link.kind === N_MEMBER || link.kind === N_INDEX) {
+    if ((link.flags & FLAG_OPTIONAL) !== 0) {
+      return true
+    }
+    link = link.children[0]
+  }
+  return false
+}
+
 /** Whether evaluating `node` itself, apart from its children, may have an effect. */
 const hasEffect = (node: Node): boolean => {
   if (node.kind === N_CALL || node.kind === N_NEW) {
     return true
+  }
+  if (node.kind === N_VAR_DECL) {
+    return node.children[2].kind !== N_EMPTY
   }
   if (node.kind === N_UNARY) {
     return node.text === "++" || node.text === "--"
@@ -411,6 +438,28 @@ const hasEffect = (node: Node): boolean => {
     op !== "!==" &&
     op !== "<=" &&
     op !== ">="
+  )
+}
+
+/**
+ * Whether child `i` of `node` reads a field or an element, which a call later
+ * in the statement may change. The target of a plain `=` is written, not
+ * read, and a member of an enum is a constant.
+ */
+const readsState = (walk: Walk, node: Node, i: i32): boolean => {
+  const child = node.children[i]
+  if (child.kind !== N_MEMBER && child.kind !== N_INDEX) {
+    return false
+  }
+  if (i === 0 && node.kind === N_BINARY && node.text === "=") {
+    return false
+  }
+  const target = child.children[0]
+  return !(
+    child.kind === N_MEMBER &&
+    target.kind === N_IDENT &&
+    walk.program.nodeLocals[target.id] === null &&
+    walk.program.enumNamed(target.text) !== null
   )
 }
 
@@ -486,6 +535,9 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     } else {
       walk.hoistHere = here && hoistChild(node, i)
       changedText(walk, node.children[i], operands, i)
+      if (readsState(walk, node, i)) {
+        walk.effects = true
+      }
     }
     if (operands.changed[i]) {
       operands.any = true
@@ -493,7 +545,7 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     i = i + 1
   }
   walk.hoistHere = here
-  walk.hoistable = here && !effectsBefore
+  walk.hoistable = here && !effectsBefore && !inOptionalChain(node)
   const hoisted = walk.preludes.length
   // The fixed order. A later row sees a node only when every earlier row left
   // it alone, so two rows never both rewrite one node.
@@ -679,7 +731,7 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
     const holder = new Operands(stmt, walk.source.text)
     holder.texts.push("")
     holder.changed.push(false)
-    statementText(walk, stmt, holder, 0)
+    changedText(walk, stmt, holder, 0)
     if (holder.changed[0]) {
       edits.push(new Edit(stmt.start, stmt.end, holder.texts[0]))
     }
