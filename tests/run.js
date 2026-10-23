@@ -9553,7 +9553,7 @@ if (!only || "runtime-hosts".includes(only)) {
   const declared = new Set(
     checker
       .getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(coreDts)))
-      .filter((s) => checker.getExportSymbolOfSymbol(s).flags & ts.SymbolFlags.Value || ts.skipAlias(s, checker).flags & ts.SymbolFlags.Value)
+      .filter((s) => ts.skipAlias(s, checker).flags & ts.SymbolFlags.Value)
       .map((s) => s.name)
   )
   const exported = exportsOf(path.join(runtimeDir, "core.mjs"))
