@@ -194,6 +194,10 @@ Releases ride a train; nothing is published from a developer machine.
    versions already on the registry. A package for a newly added platform must
    be published by hand once before trust can be set on it; the job names the
    two commands. `lockfile` then opens the lockfile pull request and merges it.
+   Beside `npm`, `interop` runs `interop.yml` with the compiler `release` just
+   published as the server image's seed; a red `interop` after a good publish
+   is re-run alone (or fixed in a patch release), not a reason to delete the
+   release.
 
 If a release is wrong, delete the GitHub release and the tag, fix, and release
 a *new* patch version; never move a tag CI has already built. To preview the

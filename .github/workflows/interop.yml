@@ -5,7 +5,7 @@
 # agree with them.
 #
 # build:  the server image, tests/interop/server.dockerfile — Nish built from this
-#         checkout by the pinned seed with LLVM 18, compiling
+#         checkout by the seed (the newest release, or `seed`) with LLVM 18, compiling
 #         tests/link/net_interop_server — shared with every job below.
 # quic-interop-runner: the runner's server role against quic-go and ngtcp2:
 #         handshake, transfer, retry, chacha20, multiplexing, keyupdate,
@@ -27,12 +27,10 @@
 # more after it fails, passes only if that second run succeeds, and the
 # verdict prints both.
 #
-# The image's seed is package.json's version (server.dockerfile), so on the
-# release commit -- the Release PR's merge, `chore(release): <version>` -- it
-# names a release that does not exist yet, and install.sh finds no SHA256SUMS
-# to verify against. That push is skipped here; release.yml calls this
-# workflow instead, from its `interop` job, which needs `release`: the job that
-# attaches the binaries and SHA256SUMS the seed is fetched from.
+# The image's seed is the newest published release (server.dockerfile).
+# release.yml also calls this workflow, from its `interop` job, once `release`
+# has published the tag's binaries and SHA256SUMS, with `seed` naming that
+# release: the compiler just shipped builds and serves the interop server.
 name: Interop
 
 on:
@@ -56,6 +54,11 @@ on:
     branches: [main]
   # release.yml, once the release it builds is published (see the top).
   workflow_call:
+    inputs:
+      seed:
+        description: the release whose compiler builds the image; empty for the newest
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -96,10 +99,6 @@ env:
 jobs:
   build:
     name: build the server image
-    # Not the release commit's push: its seed is not published until
-    # release.yml's `release` job, which calls this workflow after it. Every
-    # job below needs this one, so they skip with it.
-    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore(release):')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -107,7 +106,9 @@ jobs:
 
       - name: Build tests/interop/server.dockerfile
         timeout-minutes: 10
-        run: docker build -f tests/interop/server.dockerfile -t nish-interop:ci .
+        env:
+          SEED: ${{ inputs.seed }}
+        run: docker build -f tests/interop/server.dockerfile --build-arg SEED_VERSION="$SEED" -t nish-interop:ci .
 
       - name: Save the image
         run: docker save nish-interop:ci | gzip -1 > nish-interop.tar.gz
