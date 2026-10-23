@@ -362,10 +362,11 @@ skips the download. §2a has what the build does with it.
 The published package ships `bin/` (the `nish` command, which is a launcher),
 `runtime/` (the C runtime — eight translation units, the wasm subset and their header),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
-`docs/AI.md` (the rules card an agent's `nish --help` points at). The
+`docs/AI.md` (the rules card). The
 compiler itself is not in it: it arrives as one prebuilt
 `@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
-whichever one npm installed. `nish` locates the runtime, the script and `std/`
+whichever one npm installed. That package carries its own copy of all of
+these, and its `docs/AI.md` is the one an agent's `nish --help` names. `nish` locates the runtime, the script and `std/`
 relative to its own install directory, so a global install works from any
 working directory — and the binary runs from inside its own platform package
 for exactly that reason.

@@ -105,7 +105,7 @@ const usageText = (fd: i32): string => {
   const agent = agentDriven()
   let guide = ""
   if (agent) {
-    guide = "docs/AI.md, in the nish package"
+    guide = "docs/AI.md in the nish package (its root was not found or was refused)"
     const root = findPackage().root
     if (root.length > 0) {
       const card = realpathSync(`${root}/docs/AI.md`)

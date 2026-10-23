@@ -98,6 +98,8 @@ const spells = (value: string, word: string): boolean => {
   if (value.length !== word.length) {
     return false
   }
+  // Both bounds, though the lengths match: the checker proves an index in range
+  // only for a string its loop condition names.
   for (let i = 0; i < value.length && i < word.length; i++) {
     let code = value.charCodeAt(i)
     if (code >= 65 && code <= 90) {
