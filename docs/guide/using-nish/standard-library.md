@@ -168,8 +168,9 @@ since `findAll` and `replaceAll` are the global forms.
 Matching never backtracks, so a pattern cannot make it slow: `(a+)+$` against
 a long run of `a`s takes as long as `a+$`. The price is that backreferences
 (`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused when the pattern is
-compiled. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d`, `\b`
-and the `i` flag are ASCII, as they are in JavaScript.
+compiled. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
+`\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
+letters, where JavaScript's folds every letter: `é` does not match `É`.
 
 A search runs a lazy DFA, a table of states built as the text needs them,
 and falls back to a slower engine only to fill in groups or when a pattern

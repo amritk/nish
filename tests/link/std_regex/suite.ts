@@ -275,11 +275,25 @@ export const runSuite = (): i32 => {
   t.eqStr("regexEscape: nothing to escape", regexEscape("plain"), "plain")
   const escaped = compile(regexEscape(special), "")
   t.eqStr("regexEscape: matches its text exactly", escaped.findAll(`x${special}y`).join(""), special)
+  t.eqStr("regexEscape: one syntax character", regexEscape("."), "\\.")
+  t.eqStr("regexEscape: a syntax character first", regexEscape("*x"), "\\*x")
+  t.eqStr("regexEscape: a syntax character last", regexEscape("x$"), "x\\$")
+  row(t, regexEscape("$5"), "", "costs $5", "6-8")
 
-  // The one documented difference from JavaScript, which captures "a" here:
-  // the VM keeps one thread per instruction and position, and the thread for
-  // a third iteration loses that slot to the second iteration's own.
-  row(t, "(a*?)+?$", "", "aa", "0-2|aa")
+  // --- iterations that can match empty, nested -------------------------------
+  // A thread that comes round an outer loop into a fresh inner iteration is
+  // kept apart from one already inside it, so these end and capture where
+  // JavaScript's do.
+  row(t, "(a*?)+?$", "", "aa", "0-2|a")
+  row(t, "(?:a*?)*", "", "aa", "0-2")
+  row(t, "(?:\\w*?\\s?)+", "", "ab cd", "0-5")
+  row(t, "((?:(a*?))*)*", "", "aa", "0-2|aa|a")
+
+  // --- a quantified assertion in a group -------------------------------------
+  row(t, "(?:^)?a", "", "a", "0-1")
+  row(t, "(?:\\b)*a", "", "a", "0-1")
+  row(t, "x(?:^|y)+", "", "xy", "0-2")
+  row(t, "^*", "", "a", "regex: nothing to repeat at byte 0")
 
   // --- flags -----------------------------------------------------------------
   row(t, "a", "g", "a", "regex: invalid flags \"g\"")

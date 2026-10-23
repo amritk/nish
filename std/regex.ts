@@ -43,12 +43,11 @@
  * the first alternative and the greediest quantifier prefer — and a group
  * inside a quantifier keeps only its last iteration's capture, as in
  * JavaScript. An iteration past a quantifier's minimum that matches empty is
- * rejected, as JavaScript rejects it. One corner differs: where a quantified
- * body that can match empty sits inside another quantifier, the VM follows
- * only one thread per instruction and position, so a group's capture, and
- * now and then the match's end, can be a different iteration's than
- * JavaScript's — `(a*?)+?$` on "aa" captures "aa" where JavaScript captures
- * "a".
+ * rejected, as JavaScript rejects it. The VM keeps one thread per
+ * instruction, position and set of iterations begun, so `(a*?)+?$` on "aa"
+ * captures "a", as JavaScript does; past three such quantifiers nested in one
+ * another the deeper ones share their threads, and a capture there can be a
+ * different iteration's than JavaScript's.
  *
  * **Strings are UTF-8 and offsets are bytes**, like `s.length`. The VM steps
  * a code point at a time, so `.` and `[^a]` consume a whole character; a byte
@@ -58,10 +57,10 @@
  * After an empty match `findAll`, `replaceAll` and `split` step one character.
  *
  * **What a call costs.** The VM's two thread lists, its capture tables and
- * its stack are allocated once by `regexCompile`. `test` tracks no captures, `findAll`, `split` and a
- * `replace` whose template names no group track only the match's bounds, and
- * only `exec`, `find` and a template with `$1` or `$<name>` pay for every
- * group. A pattern that starts with a literal is searched for with
+ * its stack are allocated once by `regexCompile`. `test` tracks no captures,
+ * `findAll` and a `replace` whose template names no group track only the
+ * match's bounds, and only `exec`, `find`, `split` and a template with `$1` or
+ * `$<name>` pay for every group. A pattern that starts with a literal is searched for with
  * `s.indexOf`; one whose first few bytes are each one of a set rare enough to
  * be worth it, like `[A-Z][a-z]` or `cat|dog`, is searched for those bytes by
  * a runtime kernel that tests sixteen or thirty-two starts at a time; any
@@ -87,6 +86,11 @@ export const REGEX_MAX_REPEAT: i32 = 1000
 export const REGEX_MAX_DEPTH: i32 = 250
 /** The most entries one thread list's capture table may have: instructions × slots per thread. */
 const REGEX_MAX_SLOT_TABLE: i32 = 4194304
+/**
+ * How many levels of nested marked iterations the VM keeps apart; a mark
+ * nested deeper leaves the closure's stamps as they are.
+ */
+const REGEX_MAX_LEVELS: i32 = 3
 
 // Instructions. Each is an opcode with up to two operands, `ia` and `ib`.
 /** Consume a code point equal to `ia` or `ib` (its other case under `i`). */
@@ -109,7 +113,7 @@ const OP_CLEAR: i32 = 7
 const OP_ASSERT: i32 = 8
 /** The pattern has matched. */
 const OP_MATCH: i32 = 9
-/** Record where an optional iteration starts, in slot `ia`. */
+/** Record where an optional iteration starts, in slot `ia`; `ib` is how deep it nests. */
 const OP_MARK: i32 = 10
 /** Go on only if the iteration that slot `ia` marked consumed something. */
 const OP_CHECK: i32 = 11
@@ -495,7 +499,9 @@ class RegexParser {
     } else {
       return atom
     }
-    if (this.kind[atom] === NODE_ASSERT) {
+    // A bare `^`, `$`, `\b` or `\B` takes no quantifier, as in JavaScript,
+    // but one in a group does: `(?:^)?` is an assertion node too.
+    if (this.kind[atom] === NODE_ASSERT && this.byteAt(atomAt) !== 40) {
       return this.fail("nothing to repeat", atomAt)
     }
     let greedy: i32 = 1
@@ -1535,6 +1541,13 @@ export class Regex {
   groups: i32
   /** Slots a thread carries: two per group, then one mark per repeat that can iterate empty. */
   width: i32
+  /**
+   * How deep the marked iterations nest, up to `REGEX_MAX_LEVELS`, so a
+   * closure tells `1 << levels` sets of them apart; `checkDepth` is the
+   * nesting where the compiler is.
+   */
+  levels: i32
+  checkDepth: i32
   cCount: i32
   nCount: i32
   gen: i32
@@ -1606,6 +1619,8 @@ export class Regex {
     this.flags = flags
     this.groups = 1
     this.width = 2
+    this.levels = 0
+    this.checkDepth = 0
     this.markOf = []
     this.names = []
     this.hasNames = false
@@ -1896,16 +1911,12 @@ export class Regex {
     if (max === -1) {
       const split: i32 = this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL)
       splits.push(split)
-      this.emit(OP_MARK, k, REGEX_NIL)
-      this.compileIteration(p, n, rev)
-      this.emit(OP_CHECK, k, REGEX_NIL)
+      this.compileMarked(p, n, k, rev)
       this.emit(OP_JMP, split, REGEX_NIL)
     } else {
       while (i < max && !this.tooBig) {
         splits.push(this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL))
-        this.emit(OP_MARK, k, REGEX_NIL)
-        this.compileIteration(p, n, rev)
-        this.emit(OP_CHECK, k, REGEX_NIL)
+        this.compileMarked(p, n, k, rev)
         i += 1
       }
     }
@@ -1914,6 +1925,23 @@ export class Regex {
       this.ia[s] = greedy ? s + 1 : exit
       this.ib[s] = greedy ? exit : s + 1
     }
+  }
+
+  /**
+   * One optional iteration of repeat `n`, between a mark in slot `k` and the
+   * check that it moved on. The mark records how deep it nests, which the VM
+   * keys its closure's stamps by.
+   */
+  compileMarked(p: RegexParser, n: i32, k: i32, rev: boolean): void {
+    const level: i32 = this.checkDepth
+    if (level < REGEX_MAX_LEVELS && level >= this.levels) {
+      this.levels = level + 1
+    }
+    this.emit(OP_MARK, k, level)
+    this.checkDepth += 1
+    this.compileIteration(p, n, rev)
+    this.checkDepth -= 1
+    this.emit(OP_CHECK, k, REGEX_NIL)
   }
 
   /** Compile the parsed pattern and size the VM. Answers an error, or "". */
@@ -1956,11 +1984,12 @@ export class Regex {
     this.cSlots = new Array<i32>(count * slots)
     this.nDense = new Array<i32>(count)
     this.nSlots = new Array<i32>(count * slots)
-    this.visit = new Array<i32>(count)
+    const states: i32 = 1 << this.levels
+    this.visit = new Array<i32>(count * states)
     this.caps = new Array<i32>(slots)
     this.mslots = new Array<i32>(slots)
-    // Each instruction is visited once per closure, and pushes at most one
-    // frame, or one per slot it clears.
+    // Each instruction is visited once per closure and set of marks, and
+    // pushes at most one frame, or one per slot it clears.
     let frames: i32 = 1
     let pc: i32 = 0
     while (pc < count) {
@@ -1972,6 +2001,7 @@ export class Regex {
       }
       pc += 1
     }
+    frames *= states
     this.stkKind = new Array<i32>(frames)
     this.stkA = new Array<i32>(frames)
     this.stkB = new Array<i32>(frames)
@@ -2447,11 +2477,19 @@ export class Regex {
    * Add the thread at `pc0` to a list, following every instruction that
    * consumes nothing, at byte `p`. The thread's captures are in `caps`, which
    * is as it was when this returns. Answers the list's new length.
+   *
+   * An instruction that consumes nothing is visited once for each set of
+   * levels whose marks this closure has made, not once in all: a thread
+   * that comes round a loop, past a check and through a new mark, is not the
+   * thread that was here before it, since the check it meets next fails for
+   * it alone. `(?:a*?)*` on "aa" goes on to the second `a` that way.
    */
   addThread(dense: i32[], slots: i32[], count0: i32, pc0: i32, text: string, p: i32, len: i32, ns: i32): i32 {
     let count: i32 = count0
+    const states: i32 = 1 << this.levels
     this.stkKind[0] = 0
     this.stkA[0] = pc0
+    this.stkB[0] = 0
     let top: i32 = 1
     while (top > 0) {
       top -= 1
@@ -2460,12 +2498,14 @@ export class Regex {
         continue
       }
       let pc: i32 = this.stkA[top]
+      let marked: i32 = this.stkB[top]
       while (true) {
-        if (this.visit[pc] === this.gen) {
+        const o: i32 = this.op[pc]
+        const at: i32 = o >= OP_SPLIT && o !== OP_MATCH ? pc * states + marked : pc * states
+        if (this.visit[at] === this.gen) {
           break
         }
-        this.visit[pc] = this.gen
-        const o: i32 = this.op[pc]
+        this.visit[at] = this.gen
         if (o === OP_JMP) {
           pc = this.ia[pc]
           continue
@@ -2473,6 +2513,7 @@ export class Regex {
         if (o === OP_SPLIT) {
           this.stkKind[top] = 0
           this.stkA[top] = this.ib[pc]
+          this.stkB[top] = marked
           top += 1
           pc = this.ia[pc]
           continue
@@ -2485,6 +2526,9 @@ export class Regex {
             this.stkB[top] = this.caps[k]
             top += 1
             this.caps[k] = p
+            if (o === OP_MARK && this.ib[pc] < this.levels) {
+              marked = marked | (1 << this.ib[pc])
+            }
           }
           pc += 1
           continue
@@ -4163,6 +4207,7 @@ export const regexCompile = (pattern: string, flags: string): Result<Regex, stri
 export const regexEscape = (text: string): string => {
   const parts: string[] = []
   const n: i32 = toI32(text.length)
+  // Where the text not yet copied starts; a syntax character at byte 0 leaves it at 0.
   let lit: i32 = 0
   let i: i32 = 0
   while (i < n) {
@@ -4191,7 +4236,7 @@ export const regexEscape = (text: string): string => {
     }
     i += 1
   }
-  if (lit === 0) {
+  if (parts.length === 0) {
     return text
   }
   parts.push(text.slice(lit, n))

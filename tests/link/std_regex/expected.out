@@ -173,7 +173,18 @@ PASS  split: separators at both ends
 PASS  regexEscape
 PASS  regexEscape: nothing to escape
 PASS  regexEscape: matches its text exactly
+PASS  regexEscape: one syntax character
+PASS  regexEscape: a syntax character first
+PASS  regexEscape: a syntax character last
+PASS  /\$5/
 PASS  /(a*?)+?$/
+PASS  /(?:a*?)*/
+PASS  /(?:\w*?\s?)+/
+PASS  /((?:(a*?))*)*/
+PASS  /(?:^)?a/
+PASS  /(?:\b)*a/
+PASS  /x(?:^|y)+/
+PASS  /^*/
 PASS  /a/g
 PASS  /a/ii
 PASS  /a/u
@@ -233,4 +244,4 @@ PASS  (x+x+)+y on x's
 PASS  (a*)*b counts no matches
 PASS  a{1000} counts 20 matches
 PASS  (a+)+ matches everything
-regex: 235 passed, 0 failed, 0 skipped
+regex: 246 passed, 0 failed, 0 skipped
