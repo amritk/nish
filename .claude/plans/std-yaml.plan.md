@@ -6,50 +6,50 @@ stages:
     title: Vendor the yaml-test-suite as packed test data
     goal: Put the yaml-test-suite's cases (input, expected JSON stream, error flag) into tests/yaml-suite/ in a packed text form a Nish program and Node can both read, with its MIT notice recorded
     verification: node tests/yaml-suite/pack.js --check exits 0; npm run lint; node tests/run.js third-party passes
-    status: pending
+    status: completed
     todos:
       - id: suite-pack
         content: Write tests/yaml-suite/pack.js that fetches the suite at a pinned data-release tag, checks its sha256 and writes tests/yaml-suite/cases.txt — see Stage 1, The packed form
-        status: pending
+        status: completed
       - id: suite-licence
         content: Add tests/yaml-suite/LICENSE-yaml-test-suite and the notice block and Files-table row in THIRD_PARTY_NOTICES.md — see Stage 1, Licence
-        status: pending
+        status: completed
       - id: suite-readme
         content: Write tests/yaml-suite/README.md naming the pin, the format and how to repack — see Stage 1, The packed form
-        status: pending
+        status: completed
   - id: yaml-parser
     title: std/yaml — the parser, the node model, diagnostics, lines and paths
     goal: Ship nish/yaml, which parses a YAML stream into a struct-of-arrays tree with byte ranges on every node, pair and diagnostic, converts an offset to 1-based line and column, resolves a path to a node or a pair, and renders a key as text
     verification: npm run check; npm run lint; node tests/run.js std_yaml; node tests/run.js performance; node tests/run.js wasi; an undegraded npm test before the PR
-    status: pending
+    status: completed
     todos:
       - id: parser-model
         content: Define YamlStream's struct-of-arrays node store, node kinds, styles, scalar types and handles in std/yaml.ts — see Stage 2, The node model
-        status: pending
+        status: completed
       - id: parser-scan
         content: Implement the block and flow parser in std/yaml.ts and std/yaml-*.ts (all scalar styles, block scalars, multi-document streams, directives, anchors, aliases, tags, explicit keys) with every scan of a run of bytes on indexOfAny — see Stage 2, Parsing and Stage 2, Performance from the start
-        status: pending
+        status: completed
       - id: parser-resolve
         content: Resolve plain scalars to the core schema (null, bool, int, float, string) lazily, on first read — see Stage 2, Scalars
-        status: pending
+        status: completed
       - id: parser-diagnostics
         content: Report every problem as a code, a kind, a message and a byte range, with the 29 codes named as mjst names them — see Stage 2, Diagnostics
-        status: pending
+        status: completed
       - id: parser-lines
         content: Add YamlLineIndex (offset to 1-based line, character column and byte column, CRLF and lone CR as one break) — see Stage 2, Lines
-        status: pending
+        status: completed
       - id: parser-paths
         content: Add yamlKeyText, pathNode and pathPair with closest-ancestor fallback and alias following — see Stage 2, Paths
-        status: pending
+        status: completed
       - id: parser-register
         content: Add the new modules to stdModuleNames in src/std-modules.ts and regenerate tests/self/goldens with node tests/self/goldens.js --update — see Stage 2, Registration
-        status: pending
+        status: completed
       - id: parser-tests
         content: Add tests/link/std_yaml/ (units per feature, one negative per diagnostic code, a lint-style line and column printout) and one link case per panic — see Tests
-        status: pending
+        status: completed
       - id: parser-docs
         content: Add the nish/yaml row to std/README.md and a nish/yaml section with compiled examples to docs/guide/using-nish/standard-library.md — see Stage 2, Docs
-        status: pending
+        status: completed
   - id: yaml-conformance
     title: Merge-aware paths, and the yaml-test-suite run
     goal: Make pathNode and pathPair follow merge keys, and hold the parser to the vendored yaml-test-suite at mjst's pass count or better
@@ -65,13 +65,19 @@ stages:
       - id: conformance-fixes
         content: Fix the parser bugs the conformance run finds in std/yaml*.ts until the pass count is at least mjst's 397 of 402 — see Stage 3, Conformance
         status: pending
+      - id: merge-diagnostic
+        content: Report BAD_MERGE (a `<<` value that is not a map, an alias to one, or a seq of those) with a negative test asserting its code, kind and byte range — see Stage 3, Merge-aware paths
+        status: pending
+      - id: empty-block-range
+        content: End an empty block scalar's range at its header, not at the next line's start (`a: |\nb: 1\n`, `a: |  # c\n`), with a unit pinning both — see Stage 3, Conformance
+        status: pending
       - id: conformance-docs
         content: Document merge-aware paths in the nish/yaml guide section — see Stage 3, Docs
         status: pending
-  - id: yaml-perf
-    title: Benchmark against @amritk/yaml and make nish/yaml faster
-    goal: Measure nish/yaml against mjst's @amritk/yaml on the same fixtures and tune the parser until it is at least 2x faster at the median on every fixture and both workloads, with the figures recorded
-    verification: node bench/yaml-compare/run.mjs prints every fixture with both implementations and a checksum match; node tests/run.js yaml-compare; node tests/run.js std_yaml; node tests/run.js std_yaml_conformance; node tests/run.js performance; an undegraded npm test before the PR
+  - id: yaml-perf-harness
+    title: Benchmark nish/yaml against @amritk/yaml
+    goal: Add bench/yaml-compare/ (pinned fixtures and @amritk/yaml, a Nish and a Node runner with matching checksums, interleaved rounds) and a yaml-compare check in tests/run.js, and record the baseline table on the parser as main has it
+    verification: node bench/yaml-compare/run.mjs prints every fixture with both implementations and both workloads; node tests/run.js yaml-compare; npm run check; npm run lint; an undegraded npm test before the PR
     status: pending
     todos:
       - id: perf-harness
@@ -81,14 +87,24 @@ stages:
         content: Add the yaml-compare check to tests/run.js that builds main.ts and holds it to sample.expected without the network — see Stage 4, The harness
         status: pending
       - id: perf-baseline
-        content: Record the baseline table in bench/README.md before any tuning — see Stage 4, Measuring
+        content: Record the baseline table in bench/README.md before any tuning, marking any fixture whose checksums disagree — see Stage 4, Measuring
         status: pending
+  - id: yaml-perf-tune
+    title: Make nish/yaml at least 2x faster than @amritk/yaml
+    goal: Tune std/yaml*.ts until nish/yaml is at least 2x faster than @amritk/yaml under Node at the median on every fixture and both workloads, checksums matching, with the figures recorded
+    verification: node bench/yaml-compare/run.mjs shows ratio >= 2.0 at the median on every row with checksums matching; node tests/run.js yaml-compare; node tests/run.js std_yaml; node tests/run.js std_yaml_conformance; node tests/run.js performance; an undegraded npm test before the PR
+    status: pending
+    todos:
       - id: perf-tune
-        content: Profile and tune std/yaml*.ts (perf record, the hot scans onto indexOfAny, no per-node allocation, no substring until a scalar is read, presized stores) and re-measure after each change — see Stage 4, Techniques
+        content: Profile and tune std/yaml*.ts (perf record, the hot scans onto indexOfAny, no per-node allocation, no substring until a scalar is read, presized stores) and re-measure after each change — see Stage 4, Techniques and Stage 4, Deferred hotspots
+        status: pending
+      - id: perf-kernel
+        content: Show in the built benchmark's IR that the parser's run scans call nish_str_index_of_any — see Stage 4, Techniques
         status: pending
       - id: perf-record
         content: Record the final table with its noise band in bench/README.md and docs/BENCHMARKS.md between yaml-compare markers — see Stage 4, Measuring
         status: pending
+
 ---
 
 ## Context
@@ -216,16 +232,19 @@ A row in [std/README.md](../../std/README.md)'s module table, and a `## \`nish/y
 
 ## Stage 3 — Merge-aware paths and conformance
 
-**Owns:** `std/yaml.ts`, `std/yaml-*.ts`, `tests/link/std_yaml_conformance/**`, `tests/link/std_yaml/**`, `tests/link/std_yaml_*/**`, `tests/run.js`, `src/std-modules.ts`, `tests/self/goldens/checked/**` (generated), `std/README.md`, `docs/guide/using-nish/standard-library.md`
-**Depends on:** yaml-suite and yaml-parser merged (it reads both)
+**Owns:** `std/yaml.ts`, `std/yaml-lines.ts`, `tests/link/std_yaml/**`, `tests/link/std_yaml_*/**` (including `std_yaml_conformance`), `tests/self/goldens/checked/**` (generated), `std/README.md`, `docs/guide/using-nish/standard-library.md`
+**Depends on:** yaml-suite and yaml-parser (both merged: #849, #852)
+**Runs beside:** yaml-perf-harness, so it does not own `tests/run.js` and adds no new `std/*.ts` module (a new module needs `src/std-modules.ts` and `.github/workflows/release.yml`, which a worker cannot edit). Its data comes through `readFileSyncOrNull`, as `std_json_conformance` reads its own.
 
 ### Merge-aware paths
 
-When `options.merge` is on, `pathNode` and `pathPair` look a map segment up in the map's own keys first, then in the maps its `<<` pairs name, in order: a `<<` whose value is an alias to a map, a map, or a seq of those (YAML merge-key spec; mjst lint's `yaml-merge-key.ts` is the behaviour to match). Explicit keys win over merged ones; among merged maps the first listed wins. Following is bounded (the 100-hop alias limit, and a visited check so a recursive alias terminates). `pathPair` on a merged key returns the pair inside the merged map, so the range points at the key where it is written. With `merge` off, `<<` is an ordinary key. Unit tests in `tests/link/std_yaml/` cover each shape, override order, a recursive alias, and `merge` off.
+When `options.merge` is on, `pathNode` and `pathPair` look a map segment up in the map's own keys first, then in the maps its `<<` pairs name, in order: a `<<` whose value is an alias to a map, a map, or a seq of those (YAML merge-key spec; mjst lint's `yaml-merge-key.ts` is the behaviour to match). Explicit keys win over merged ones; among merged maps the first listed wins. Following is bounded (the 100-hop alias limit, and a visited check so a recursive alias terminates). `pathPair` on a merged key returns the pair inside the merged map, so the range points at the key where it is written. With `merge` off, `<<` is an ordinary key. Unit tests in `tests/link/std_yaml/` cover each shape, override order, a recursive alias, and `merge` off. Report `BAD_MERGE` for a `<<` whose value is none of those shapes, with a negative test asserting its code, kind and byte range (deferred from #852 because merge keys did not exist yet).
 
 ### Conformance
 
-`tests/link/std_yaml_conformance/` reads `tests/yaml-suite/cases.txt` (decode the `%XX` form in Nish, as `tests/link/std_json_tokenizer/corpus.ts` does for JSONTestSuite) and for each case: an `error` case passes if any document reports an error; otherwise no document may report one, and each document must equal the case's JSON stream. The comparison is a test-local walker, not std API: parse the expected JSON with `JsonDocument` and walk it beside the `YamlStream` — scalars by resolved type against JSON kinds (numbers compared by value), maps against objects by `yamlKeyText` with key order ignored and the last duplicate winning, aliases followed to their target, `<<` merge keys applied, with a node budget so an alias bomb in the suite fails the case rather than hanging the run. `!!binary`, `!!set` and `!!omap` cases are the expected failures mjst also has. The program prints the pass count and fails on a regression, on a pass listed in the expected-failure list (stale), and on an unknown id. The bar is **at least 397 of 402 with `uniqueKeys` on**, mjst's figure; list each remaining failure with a one-line reason. Fix the parser bugs found here in `std/yaml*.ts`. Wire the data path into `tests/run.js` only if the link runner cannot hand the file to the program otherwise (check how `std_json_conformance` reads its data first; it uses `readFileSyncOrNull`).
+`tests/link/std_yaml_conformance/` reads `tests/yaml-suite/cases.txt` (decode the `%XX` form in Nish, as `tests/link/std_json_tokenizer/corpus.ts` does for JSONTestSuite) and for each case: an `error` case passes if any document reports an error; otherwise no document may report one, and each document must equal the case's JSON stream. The comparison is a test-local walker, not std API: parse the expected JSON with `JsonDocument` and walk it beside the `YamlStream` — scalars by resolved type against JSON kinds (numbers compared by value), maps against objects by `yamlKeyText` with key order ignored and the last duplicate winning, aliases followed to their target, `<<` merge keys applied, with a node budget so an alias bomb in the suite fails the case rather than hanging the run. `!!binary`, `!!set` and `!!omap` cases are the expected failures mjst also has. The program prints the pass count and fails on a regression, on a pass listed in the expected-failure list (stale), and on an unknown id. The bar is **at least 397 of 402 with `uniqueKeys` on**, mjst's figure; list each remaining failure with a one-line reason. Fix the parser bugs found here in `std/yaml*.ts`. Read the data with `readFileSyncOrNull`, as `std_json_conformance` does; this stage does not own `tests/run.js`. If that path proves impossible, stop and open the PR as a draft saying why.
+
+Also carried from #852's review: an empty block scalar's range (`a: |\nb: 1\n`, `a: |  # c\n`) currently ends at the next line's start, taking in the header's break and comment; end it at the header.
 
 ### Docs
 
@@ -233,8 +252,25 @@ Extend the `nish/yaml` guide section with a compiled example of a path through a
 
 ## Stage 4 — Benchmark and tune
 
-**Owns:** `std/yaml.ts`, `std/yaml-*.ts`, `bench/yaml-compare/**`, `bench/README.md`, `.gitignore`, `docs/BENCHMARKS.md`, `tests/run.js`, `tests/link/std_yaml/**`, `tests/link/std_yaml_conformance/**`, `tests/self/goldens/checked/**` (generated)
-**Depends on:** yaml-conformance merged
+Two stages. **yaml-perf-harness** builds the harness and takes the baseline; it runs beside yaml-conformance against the parser on `main`.
+
+**Owns (yaml-perf-harness):** `bench/yaml-compare/**`, `.gitignore`, `tests/run.js`, `bench/README.md`
+**Depends on:** yaml-parser (merged, #852)
+
+**yaml-perf-tune** tunes the parser once both yaml-conformance and the harness have merged.
+
+**Owns (yaml-perf-tune):** `std/yaml.ts`, `std/yaml-lines.ts`, `tests/link/std_yaml/**`, `tests/link/std_yaml_*/**`, `bench/yaml-compare/**`, `bench/README.md`, `docs/BENCHMARKS.md`, `tests/run.js`, `tests/self/goldens/checked/**` (generated)
+**Depends on:** yaml-conformance and yaml-perf-harness merged
+
+### Deferred hotspots
+
+Found in #852's review and left for this stage. Measure before touching any:
+
+- Byte loops not on `indexOfAny`: `plainColonAt`, `findKeyColon`, `quotedKeyEnd`, `flowKeyEnd`, `endsAtComment`, `plainLineEnd`, `tokenEnd`, `propTokenEnd`, `scanAlias`.
+- `findAnchor` is a linear backwards scan, so N anchors followed by N aliases is O(N²).
+- `columnOf` and `findKeyColon` rescan a line once per nesting level in `parseCompactCollection`; `- - - … [long flow]` costs up to maxDepth × the line length.
+- `YamlFlowWriter.append` concatenates strings, quadratic per key, bounded by 4096 bytes.
+- Diagnostics are sorted by insertion sort, bounded by maxDepth.
 
 ### The harness
 
@@ -242,7 +278,7 @@ On [bench/json-compare/](../../bench/json-compare/)'s pattern. `fetch.mjs` pins 
 
 ### Measuring
 
-Take the baseline table on the parser as Stage 3 left it, before any change, and put it in `bench/README.md`. After tuning, record the final table in both `bench/README.md` and `docs/BENCHMARKS.md` between `yaml-compare` markers, with the commit, the machine, and the noise band per `.claude/testing.md` → "A `Measured:` trailer". The bar: **nish/yaml at least 2x faster than @amritk/yaml under Node at the median on every fixture, on both workloads.** If a fixture misses it after tuning, record why from the profile and open the PR as a draft saying so.
+The harness stage takes the baseline table on the parser as `main` has it (#852), before any change, and puts it in `bench/README.md`; a fixture whose checksums disagree there is marked, not hidden. After tuning, record the final table in both `bench/README.md` and `docs/BENCHMARKS.md` between `yaml-compare` markers, with the commit, the machine, and the noise band per `.claude/testing.md` → "A `Measured:` trailer". The bar: **nish/yaml at least 2x faster than @amritk/yaml under Node at the median on every fixture, on both workloads.** If a fixture misses it after tuning, record why from the profile and open the PR as a draft saying so.
 
 ### Techniques
 
