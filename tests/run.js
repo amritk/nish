@@ -9495,6 +9495,7 @@ if (!only || "runtime-hosts".includes(only)) {
   const coreDir = path.join(runtimeDir, "core")
   const unreached = fs
     .readdirSync(coreDir)
+    .filter((f) => f.endsWith(".mjs"))
     .map((f) => path.join(coreDir, f))
     .filter((f) => !seen.has(f))
   // The scan's own two answers: a Node import and a `process` in code are
@@ -9527,6 +9528,164 @@ if (!only || "runtime-hosts".includes(only)) {
     "runtime-hosts: runtime/core.mjs alone computes, and throws NishNoHost at the first call that needs a host",
     r.status === 0 && r.stdout === want,
     `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+
+  // The core and the browser adapter in a vm context holding only web globals,
+  // linked by a loader that refuses `node:`: the script asserts the console
+  // lines, each `NishExit` code, and the browser's file-system panic.
+  const web = spawnSync("node", ["--experimental-vm-modules", path.join(root, "tests", "runtime", "web-context.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "runtime-hosts: the core and the browser adapter run with only web globals",
+    web.status === 0 && web.stdout === "web-context: ok\n",
+    `exit ${web.status}\n${web.stdout}${web.stderr}`
+  )
+
+  // A package that depends on `nish` reaches the three entry points by name; a
+  // self-reference from inside the checkout resolves through the same
+  // `exports` map.
+  const entries = { "nish/runtime": "core.mjs", "nish/runtime/node": "node.mjs", "nish/runtime/browser": "browser.mjs" }
+  const resolved = spawnSync(
+    "node",
+    ["--input-type=module", "-e", `for (const s of ${JSON.stringify(Object.keys(entries))}) console.log(import.meta.resolve(s))`],
+    { cwd: root, encoding: "utf8" }
+  )
+  const wantResolved = Object.values(entries)
+    .map((f) => `${pathToFileURL(path.join(runtimeDir, f)).href}\n`)
+    .join("")
+  check(
+    "runtime-hosts: the package resolves nish/runtime, /node and /browser",
+    resolved.status === 0 && resolved.stdout === wantResolved,
+    `exit ${resolved.status}\n--- want\n${wantResolved}--- got\n${resolved.stdout}${resolved.stderr}`
+  )
+
+  // The declarations: `core.d.ts` declares exactly the values `core.mjs`
+  // exports; a program importing the three entry points by name typechecks
+  // under `nodenext`, each through its own `types` condition; and every function both `core/*.d.ts` and
+  // `runtime/nish.d.ts` declare has the same overloads, width for width, once
+  // `bigint` (what the core's i64 and u64 are at run time) reads as `number`.
+  const ts = require("typescript")
+  const probePath = path.join(root, "runtime-hosts-probe.mts")
+  const probeText = [
+    'import { Ok, toI64, type Result, type i64 } from "nish/runtime";',
+    // A bare `import "nish/runtime/node"` goes unchecked; a namespace import
+    // of a module without declarations is an error under `strict`.
+    'import * as node from "nish/runtime/node";',
+    'import * as browser from "nish/runtime/browser";',
+    "const r: Result<i64, string> = Ok(toI64(3));",
+    "export const n: i64 = r.ok ? r.value : 0n;",
+    "export const hosts = [node, browser];",
+  ].join("\n")
+  const options = {
+    strict: true,
+    noEmit: true,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    target: ts.ScriptTarget.ES2022,
+    lib: ["lib.es2022.d.ts"],
+    types: [],
+    noUncheckedSideEffectImports: true,
+  }
+  const host = ts.createCompilerHost(options)
+  const { fileExists, readFile, getSourceFile } = host
+  host.fileExists = (f) => f === probePath || fileExists(f)
+  host.readFile = (f) => (f === probePath ? probeText : readFile(f))
+  host.getSourceFile = (f, ...rest) =>
+    f === probePath ? ts.createSourceFile(f, probeText, ts.ScriptTarget.ES2022, true) : getSourceFile(f, ...rest)
+  const coreDts = path.join(runtimeDir, "core.d.ts")
+  const program = ts.createProgram([probePath, coreDts], options, host)
+  const diagnostics = ts
+    .getPreEmitDiagnostics(program)
+    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"))
+  const checker = program.getTypeChecker()
+  const declared = new Set(
+    checker
+      .getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(coreDts)))
+      .filter((s) => ts.skipAlias(s, checker).flags & ts.SymbolFlags.Value)
+      .map((s) => s.name)
+  )
+  const exported = exportsOf(path.join(runtimeDir, "core.mjs"))
+  const runtimeNames = exported.stdout.split("\n").filter(Boolean)
+  const undeclared = runtimeNames.filter((name) => !declared.has(name))
+  const unexported = [...declared].filter((name) => !runtimeNames.includes(name))
+
+  const typeText = (node) => {
+    if (!node) return "any"
+    if (ts.isParenthesizedTypeNode(node)) return typeText(node.type)
+    if (ts.isUnionTypeNode(node)) return [...new Set(node.types.map(typeText))].sort().join(" | ")
+    if (node.kind === ts.SyntaxKind.BigIntKeyword) return "number"
+    if (ts.isArrayTypeNode(node)) return `${typeText(node.elementType)}[]`
+    if (ts.isTypeOperatorNode(node)) return `${ts.tokenToString(node.operator)} ${typeText(node.type)}`
+    if (ts.isFunctionTypeNode(node)) return `(${node.parameters.map(paramText).join(", ")}) => ${typeText(node.type)}`
+    if (ts.isTypeReferenceNode(node)) {
+      const name = node.typeName.getText()
+      return node.typeArguments ? `${name}<${node.typeArguments.map(typeText).join(", ")}>` : name
+    }
+    return node.getText().replace(/\s+/g, " ")
+  }
+  const paramText = (p) => `${p.dotDotDotToken ? "..." : ""}${p.questionToken ? "?" : ""}${typeText(p.type)}`
+  const signature = (fn) => {
+    const generics = (fn.typeParameters ?? []).map((t) => (t.constraint ? `${t.name.text} extends ${typeText(t.constraint)}` : t.name.text))
+    return `<${generics.join(", ")}>(${fn.parameters.map(paramText).join(", ")}): ${typeText(fn.type)}`
+  }
+  // Every function declaration in a file, at the top or in a `declare module`,
+  // by name: the set of its overloads' signatures.
+  const functionsOf = (file, text) => {
+    const found = new Map()
+    const visit = (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        if (!found.has(node.name.text)) found.set(node.name.text, new Set())
+        found.get(node.name.text).add(signature(node))
+      }
+      if (ts.isModuleDeclaration(node) || ts.isModuleBlock(node) || ts.isSourceFile(node)) ts.forEachChild(node, visit)
+    }
+    visit(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true))
+    return found
+  }
+  // `arena()` is `Disposable` in nish.d.ts, which declares that interface for
+  // itself; the core's declarations cannot assume a `lib` that has it.
+  const DIFFERS = new Set(["arena"])
+  const disagreements = (core, nish) =>
+    [...core]
+      .filter(([name]) => nish.has(name) && !DIFFERS.has(name))
+      .filter(([name, sigs]) => [...sigs].sort().join("\n") !== [...nish.get(name)].sort().join("\n"))
+      .map(([name, sigs]) => `${name}: core.d.ts ${[...sigs].join(" / ")}, nish.d.ts ${[...nish.get(name)].join(" / ")}`)
+  const coreFunctions = new Map()
+  for (const f of fs.readdirSync(coreDir).filter((f) => f.endsWith(".d.ts"))) {
+    for (const [name, sigs] of functionsOf(f, fs.readFileSync(path.join(coreDir, f), "utf8"))) coreFunctions.set(name, sigs)
+  }
+  const nishFunctions = functionsOf("nish.d.ts", fs.readFileSync(path.join(runtimeDir, "nish.d.ts"), "utf8"))
+  const disagreeing = disagreements(coreFunctions, nishFunctions)
+  const shared = [...coreFunctions.keys()].filter((name) => nishFunctions.has(name)).length
+  // The comparison's own two answers: a `bigint` the core also takes agrees
+  // with `number`, and one width in place of another does not.
+  const pair = (a, b) => disagreements(functionsOf("a.d.ts", a), functionsOf("b.d.ts", b)).length
+  const agrees = pair("declare function f(x: number | bigint): i64;", "declare function f(x: number): i64;") === 0
+  const differs = pair("declare function f(x: f64): f64;", "declare function f(x: f64): i64;") === 1
+  check(
+    "runtime-hosts: core.d.ts declares every name the core exports, and agrees with nish.d.ts",
+    exported.status === 0 &&
+      diagnostics.length === 0 &&
+      undeclared.length === 0 &&
+      unexported.length === 0 &&
+      disagreeing.length === 0 &&
+      shared > 20 &&
+      agrees &&
+      differs,
+    [
+      exported.status === 0 ? "" : exported.stderr,
+      ...diagnostics,
+      ...undeclared.map((name) => `core.mjs exports ${name}, which core.d.ts does not declare`),
+      ...unexported.map((name) => `core.d.ts declares ${name}, which core.mjs does not export`),
+      ...disagreeing,
+      shared > 20 ? "" : `only ${shared} functions compared`,
+      agrees ? "" : "the comparison reads `bigint` as other than `number`",
+      differs ? "" : "the comparison reads one width as another",
+    ]
+      .filter(Boolean)
+      .join("\n")
   )
 }
 
@@ -19067,6 +19226,24 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
+      // The three entry points `exports` names for a TypeScript caller, the
+      // core's files they load, and the declarations of all three.
+      "runtime/core.mjs",
+      "runtime/core.d.ts",
+      "runtime/node.mjs",
+      "runtime/browser.mjs",
+      "runtime/host.d.ts",
+      "runtime/core/arrays.mjs",
+      "runtime/core/checks.mjs",
+      "runtime/core/host.mjs",
+      "runtime/core/numbers.mjs",
+      "runtime/core/result.mjs",
+      "runtime/core/strings.mjs",
+      "runtime/core/arrays.d.ts",
+      "runtime/core/host.d.ts",
+      "runtime/core/numbers.d.ts",
+      "runtime/core/result.d.ts",
+      "runtime/core/strings.d.ts",
       "scripts/build.sh",
       // The standard library is source, so shipping it *is* shipping the library
       // (wp21 §2). A tarball without it would install a compiler whose `std/`
