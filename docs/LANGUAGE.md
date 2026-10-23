@@ -136,7 +136,8 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   **`undefined`** is forbidden (`` `undefined` is forbidden in Nish; use `null` with a `T | null` type ``,
   `tests/cases/reject_undefined_value`).
 - **Bigint** literals (`10n`) and regex literals are forbidden
-  (`tests/cases/reject_bigint_literal`, `reject_regex`).
+  (`tests/cases/reject_bigint_literal`, `reject_regex`); a pattern is a
+  library instead, `regexCompile` from `nish/regex` (`std/regex.ts`).
 - **Reserved prefix.** Function, class, and interface names starting with
   `nish_` are reserved for the runtime: `` Function names starting with `nish_` are reserved for the runtime ``
   *(CLI only; `src/declarations.ts`)*.

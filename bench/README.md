@@ -1155,6 +1155,199 @@ other non-2xx row, when its row count differs from the requests h2load says
 it completed, or when more than 5 % of rows have no status. Results gathered
 before the error are still written and reported.
 
+## YAML against @amritk/yaml
+
+`yaml-compare/` times nish/yaml against @amritk/yaml, a YAML parser written in
+TypeScript, under Node and, when `bun --version` answers, under Bun. It runs
+over five pinned streams of different shapes: a 10 MB OpenAPI document, a
+multi-document Kubernetes manifest, a JSON file read as YAML, a CI workflow
+full of block scalars, and a compose file of anchors and merge keys.
+`fetch.mjs` pins each stream, and @amritk/yaml's npm tarball, by URL and
+sha256 into `yaml-compare/cache/`, which git ignores. It names each fixture's
+licence. Nothing is vendored, and @amritk/yaml is not in `package.json`.
+
+```bash
+npm run build
+node bench/yaml-compare/run.mjs                     # 15 rounds at least, 32 MB of input per run
+node bench/yaml-compare/run.mjs --record            # and rewrite the table below
+node tests/run.js yaml-compare                      # main.ts on sample.yaml, no network
+```
+
+There are two workloads, the same on both sides. `parse` parses every
+document of the stream. `walk` parses, then visits every node from each
+document's root and reads every scalar's text. nish/yaml decodes a scalar only
+when it is read; @amritk/yaml resolves every scalar while it parses.
+
+`main.ts` is the Nish side and `node-bench.mjs` the JavaScript one. Both print
+the same checksum: the document count, the node count of each kind, and the
+error count, never an offset. A run whose checksums disagree fails; it is not
+reported as a time. `sample.expected` holds the checksums @amritk/yaml prints
+for the committed `sample.yaml`, and `tests/run.js` holds the Nish program to
+them.
+
+The rounds are interleaved in json-compare's `rounds.mjs` order. Nish runs
+beside a byte-identical copy of its binary: the gap between their medians is
+the noise band. Each figure is ms per stream, timed by the program around its
+own loop. The "/ Nish" columns divide that runtime's median by Nish's median:
+above 1.00x, Nish is faster.
+
+**The baseline, before any tuning of nish/yaml**, on main's parser. Every
+fixture's checksums agree between the two parsers. The recorded section below
+names the commit, the machine and the toolchains.
+
+<!-- yaml-compare:begin -->
+| | |
+| --- | --- |
+| Date | 2026-10-23 |
+| nish | nish 0.20.0 (commit 35ca64a0) |
+| CPU | Intel(R) Xeon(R) Processor, 4 logical cores |
+| OS | linux 6.18.44-fc-v153 (x64) |
+| Toolchains | Nish: nish 0.20.0; Node v22.22.0; Bun 1.4.4 |
+| Command | `npm run build && node bench/yaml-compare/run.mjs --rounds 15 --mb 32 --record` |
+| Runs | 16 interleaved rounds, 32 MB of input per run; ms per stream, min and median over the rounds |
+
+| Fixture | Workload | Nish median | Node median | Bun median | Node / Nish | Bun / Nish | Noise band |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| openapi.yaml | parse | 70.1 ms | 179.0 ms | 105.2 ms | 2.55x | 1.50x | 0.6% |
+| openapi.yaml | walk | 87.1 ms | 190.4 ms | 122.8 ms | 2.19x | 1.41x | 1.0% |
+| cert-manager.yaml | parse | 3.525 ms | 5.369 ms | 5.401 ms | 1.52x | 1.53x | 0.8% |
+| cert-manager.yaml | walk | 4.923 ms | 5.989 ms | 5.917 ms | 1.22x | 1.20x | 0.2% |
+| citm_catalog.json | parse | 7.892 ms | 20.3 ms | 12.3 ms | 2.57x | 1.55x | 0.5% |
+| citm_catalog.json | walk | 9.062 ms | 22.0 ms | 13.4 ms | 2.43x | 1.48x | 0.0% |
+| deno-ci.yml | parse | 1.673 ms | 2.948 ms | 3.038 ms | 1.76x | 1.82x | 1.6% |
+| deno-ci.yml | walk | 2.581 ms | 3.301 ms | 3.337 ms | 1.28x | 1.29x | 1.6% |
+| airflow-compose.yaml | parse | 0.059 ms | 0.078 ms | 0.109 ms | 1.32x | 1.85x | 2.5% |
+| airflow-compose.yaml | walk | 0.074 ms | 0.082 ms | 0.112 ms | 1.11x | 1.52x | 0.1% |
+
+### parse, openapi.yaml (10,309,289 bytes, 3 per run)
+
+Checksum `parse 1 395136 80793 11553 0 223204 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 66.8 | 70.1 | 147 |
+| Nish (byte-identical copy) | 67.6 | 70.5 | 146 |
+| @amritk/yaml 0.8.0, Node | 164.0 | 179.0 | 58 |
+| @amritk/yaml 0.8.0, Bun | 97.9 | 105.2 | 98 |
+
+### walk, openapi.yaml (10,309,289 bytes, 3 per run)
+
+Checksum `walk 1 395136 80793 11553 0 223204 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 84.5 | 87.1 | 118 |
+| Nish (byte-identical copy) | 84.1 | 86.2 | 120 |
+| @amritk/yaml 0.8.0, Node | 177.7 | 190.4 | 54 |
+| @amritk/yaml 0.8.0, Bun | 115.0 | 122.8 | 84 |
+
+### parse, cert-manager.yaml (986,843 bytes, 34 per run)
+
+Checksum `parse 55 13380 2694 576 0 7773 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 3.311 | 3.525 | 280 |
+| Nish (byte-identical copy) | 3.339 | 3.553 | 278 |
+| @amritk/yaml 0.8.0, Node | 5.186 | 5.369 | 184 |
+| @amritk/yaml 0.8.0, Bun | 5.062 | 5.401 | 183 |
+
+### walk, cert-manager.yaml (986,843 bytes, 34 per run)
+
+Checksum `walk 55 13380 2694 576 0 7773 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 4.662 | 4.923 | 200 |
+| Nish (byte-identical copy) | 4.710 | 4.934 | 200 |
+| @amritk/yaml 0.8.0, Node | 5.762 | 5.989 | 165 |
+| @amritk/yaml 0.8.0, Bun | 5.480 | 5.917 | 167 |
+
+### parse, citm_catalog.json (1,727,204 bytes, 19 per run)
+
+Checksum `parse 1 42259 10937 10451 0 25869 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 7.638 | 7.892 | 219 |
+| Nish (byte-identical copy) | 7.605 | 7.929 | 218 |
+| @amritk/yaml 0.8.0, Node | 19.1 | 20.3 | 85 |
+| @amritk/yaml 0.8.0, Bun | 11.5 | 12.3 | 141 |
+
+### walk, citm_catalog.json (1,727,204 bytes, 19 per run)
+
+Checksum `walk 1 42259 10937 10451 0 25869 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 8.642 | 9.062 | 191 |
+| Nish (byte-identical copy) | 8.674 | 9.065 | 191 |
+| @amritk/yaml 0.8.0, Node | 20.4 | 22.0 | 79 |
+| @amritk/yaml 0.8.0, Bun | 12.6 | 13.4 | 129 |
+
+### parse, deno-ci.yml (424,426 bytes, 79 per run)
+
+Checksum `parse 1 8326 1421 87 0 4460 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 1.591 | 1.673 | 254 |
+| Nish (byte-identical copy) | 1.573 | 1.646 | 258 |
+| @amritk/yaml 0.8.0, Node | 2.760 | 2.948 | 144 |
+| @amritk/yaml 0.8.0, Bun | 2.901 | 3.038 | 140 |
+
+### walk, deno-ci.yml (424,426 bytes, 79 per run)
+
+Checksum `walk 1 8326 1421 87 0 4460 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 2.496 | 2.581 | 164 |
+| Nish (byte-identical copy) | 2.507 | 2.622 | 162 |
+| @amritk/yaml 0.8.0, Node | 3.136 | 3.301 | 129 |
+| @amritk/yaml 0.8.0, Bun | 3.022 | 3.337 | 127 |
+
+### parse, airflow-compose.yaml (13,045 bytes, 2572 per run)
+
+Checksum `parse 1 287 44 18 18 164 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 0.057 | 0.059 | 221 |
+| Nish (byte-identical copy) | 0.056 | 0.057 | 227 |
+| @amritk/yaml 0.8.0, Node | 0.074 | 0.078 | 168 |
+| @amritk/yaml 0.8.0, Bun | 0.097 | 0.109 | 120 |
+
+### walk, airflow-compose.yaml (13,045 bytes, 2572 per run)
+
+Checksum `walk 1 287 44 18 18 164 0`, the same from every implementation.
+
+| Implementation | ms min | ms median | MB/s (median) |
+| --- | ---: | ---: | ---: |
+| Nish (nish/yaml) | 0.072 | 0.074 | 176 |
+| Nish (byte-identical copy) | 0.073 | 0.074 | 176 |
+| @amritk/yaml 0.8.0, Node | 0.079 | 0.082 | 159 |
+| @amritk/yaml 0.8.0, Bun | 0.103 | 0.112 | 116 |
+<!-- yaml-compare:end -->
+
+Which of the parser's run scans already lower to `nish_str_index_of_any` in
+the built benchmark's IR (`build/yaml-compare/yaml.ll`), recorded for the
+tuning stage. The kernel has one call site, in nish/text's `indexOfAny`
+(`text.ll`). Three functions of the parser call `indexOfAny`:
+
+- `yamlLineEnd`, the search for a line break. It serves `nextLineStart`, so
+  it covers skipping a comment, the lines of a block scalar and a plain
+  scalar's continuation lines.
+- `YamlParser.scanQuoted`, the run to a quote, a backslash or a break.
+- `YamlParser.flowPlainLineEnd`, a plain scalar inside a flow collection.
+
+These scans still step one byte at a time:
+
+- `plainLineEnd`, the first line of a plain scalar in block context. It stops
+  at a break or at a ` #`.
+- `plainColonAt`, the search for an implicit key's `: `.
+- `skipInlineSpaces` and the indentation counts.
+
 ## Other files
 
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),

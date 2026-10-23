@@ -2545,6 +2545,55 @@ The whole of `text.ll` is `tests/link/std_text_index_of_any`'s golden; the same
 `std/text.ts` compiled as a root keeps `call i32 @indexOfAnyFrom(` and declares
 no kernel (`tests/run.js`, "kernels:").
 
+### `nish/regex`: a match's first byte on the runtime kernel
+
+A pattern whose first few positions each take a small set of bytes, such as
+`/conta\w+/` or `/[A-Z][a-z]+/`, is searched for those positions before any
+automaton runs. `Regex.scanTo` calls the private walker `regexScanFrom`, a loop
+that tests a start's bytes against one 256-byte membership table per position,
+and in `nish/regex` that call becomes `nish_regex_scan` the way `indexOfAny`'s
+becomes its kernel. The three `i32` fields widen to the kernel's `i64`, and the
+answer narrows back:
+
+```llvm
+if.end:
+  %4 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 17
+  %5 = load %struct.nish_array*, %struct.nish_array** %4, align 8, !tbaa !82
+  %6 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 64
+  %7 = load i32, i32* %6, align 4, !tbaa !99
+  %8 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 66
+  %9 = load i32, i32* %8, align 4, !tbaa !101
+  %10 = getelementptr inbounds %struct.Regex, %struct.Regex* %this, i32 0, i32 65
+  %11 = load i32, i32* %10, align 4, !tbaa !100
+  %12 = sext i32 %7 to i64
+  %13 = sext i32 %9 to i64
+  %14 = sext i32 %11 to i64
+  %15 = sext i32 %from to i64
+  %16 = call i64 @nish_regex_scan(i8* %text, %struct.nish_array* %5, i64 %12, i64 %13, i64 %14, i64 %15)
+  %17 = trunc i64 %16 to i32
+  ret i32 %17
+}
+```
+
+The second argument is the `u8[]` itself, not its bytes: the kernel reads
+`data` through it, so the declaration says `memory(read)` rather than
+`indexOfAny`'s `argmem: read`, and the store of the chosen path is again
+`inaccessiblemem`:
+
+```llvm
+declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #7
+
+attributes #7 = { nounwind willreturn memory(read, inaccessiblemem: readwrite) }
+```
+
+The array holds each position's set twice, 288 bytes a position: first the
+32-byte form a vector path looks a block up in (sixteen rows by the low
+nibble, for bytes below and at or above 0x80, a bit for the high nibble's
+other three bits), then the 256-byte tables the scalar walker and every
+candidate's check read. The AVX2 path tests up to three positions of the
+window for thirty-two starts at once; `runtime/nish.h` has the contract and
+`tests/simd/regex-scan.c` holds every path to a reference loop.
+
 ### `Map` and `Set`: one probe, copied into the module
 
 `Map` and `Set` are generic classes in `std/collections.ts`, loaded because the
@@ -22014,6 +22063,7 @@ declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, 
 declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #5
+declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
@@ -22023,7 +22073,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare noundef double @nish_random() #2
-declare void @nish_exit(i32 noundef) #6
+declare void @nish_exit(i32 noundef) #7
 declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
@@ -22079,11 +22129,11 @@ declare noundef nonnull align 8 i8* @nish_platform() #0
 declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef) #3
-declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #7
-declare void @nish_panic_index(i64 noundef, i64 noundef) #7
-declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #7
-declare void @nish_panic_div(i1 noundef zeroext) #7
-declare extern_weak void @nish_panic_overflow(i32 noundef) #7
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #8
+declare void @nish_panic_index(i64 noundef, i64 noundef) #8
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #8
+declare void @nish_panic_div(i1 noundef zeroext) #8
+declare extern_weak void @nish_panic_overflow(i32 noundef) #8
 declare void @nish_parallel_range(void (i64, i64, i8*)* noundef nonnull, i8* noundef, i64 noundef, i64 noundef) #3
 declare void @nish_scope_spawn(i8* noundef nonnull, void (i8*)* noundef nonnull, void (i8*)* noundef nonnull, i8* noundef nonnull, i64 noundef) #3
 declare void @nish_scope_join(i8* noundef nonnull) #3
@@ -22102,13 +22152,13 @@ declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #3
 declare noundef i64 @nish_cpu_count() #2
 declare noundef i64 @nish_cpu_online() #2
 declare noundef i64 @nish_total_memory() #2
-declare i32 @nish_aes_hw() #8
+declare i32 @nish_aes_hw() #9
 declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_ctr(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 declare void @nish_aes_ghash(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #9 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #10 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -22143,9 +22193,10 @@ attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind }
 attributes #4 = { nounwind willreturn memory(argmem: read) }
 attributes #5 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
-attributes #6 = { noreturn nounwind }
-attributes #7 = { nounwind noreturn cold }
-attributes #8 = { nounwind willreturn memory(inaccessiblemem: readwrite) }
-attributes #9 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #6 = { nounwind willreturn memory(read, inaccessiblemem: readwrite) }
+attributes #7 = { noreturn nounwind }
+attributes #8 = { nounwind noreturn cold }
+attributes #9 = { nounwind willreturn memory(inaccessiblemem: readwrite) }
+attributes #10 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end runtime-prelude -->
