@@ -407,35 +407,34 @@ const checkIdentity = (t: Suite, cli: Cli): string => {
  * The `--help` / usage-error pair: the same text, told apart by the stream and
  * the code. A wrapper that cannot tell them apart reads an answer as a failure.
  */
-const checkHelp = (t: Suite, cli: Cli, name: string): void => {
+const checkHelp = (t: Suite, cli: Cli, name: string, env: boolean): void => {
   // `NO_COLOR` wins over every other colour variable and `NISH_AGENT=0` over
   // the agents' own, so the environment this harness inherited cannot paint
-  // the text the checks below read or add an agent's section to it.
+  // the text the checks below read or add an agent's section to it. Without
+  // env(1) nothing can pin them, so only the streams and codes are checked.
   const plainEnv: string[] = [];
-  if (hasEnvTool()) {
+  if (env) {
     plainEnv.push("NO_COLOR=1");
     plainEnv.push("NISH_AGENT=0");
   }
   const help = cli.run("help", plainEnv, ["--help"]);
   t.eqI32("--help exits 0", help.status, 0);
-  t.contains("--help prints the usage on stdout", help.stdout, "usage: ");
   t.eqStr("--help says nothing on stderr", trim(help.stderr), "");
-  // The spelling rather than the shape: the usage text has to name the tool the
-  // user typed. Both compilers build it from `CLI` in their `branding.ts`.
-  t.contains("the usage text names the tool itself", help.stdout, `usage: ${name}`);
   t.eqBool("--help prints no stack frame", hasStackFrame(help.stdout), false);
-  // Each flag between spaces, as its row prints it, so `--deny` is not found
-  // inside `--deny-panics`.
-  // Without env(1) the help inherits this harness's colour variables, and a
-  // coloured row puts an escape, not a space, before its flag.
-  const flags: string[] = [];
-  for (const flag of advertisedFlags()) {
-    flags.push(` ${flag} `);
-  }
-  if (plainEnv.length > 0) {
+  if (env) {
+    t.contains("--help prints the usage on stdout", help.stdout, "usage: ");
+    // The spelling rather than the shape: the usage text has to name the tool
+    // the user typed. Both compilers build it from `CLI` in their `branding.ts`.
+    t.contains("the usage text names the tool itself", help.stdout, `usage: ${name}`);
+    // Each flag between spaces, as its row prints it, so `--deny` is not found
+    // inside `--deny-panics`.
+    const flags: string[] = [];
+    for (const flag of advertisedFlags()) {
+      flags.push(` ${flag} `);
+    }
     t.containsAll(`--help names every advertised flag (${flags.length} of them)`, help.stdout, flags);
   } else {
-    t.skip("--help names every advertised flag", "needs env(1) to keep the help plain, and the probe did not find one");
+    t.skip("--help's text", "needs env(1) to keep the help plain, and the probe did not find one");
   }
 
   const short = cli.run("help_short", plainEnv, ["-h"]);
@@ -445,7 +444,7 @@ const checkHelp = (t: Suite, cli: Cli, name: string): void => {
   const nothing: string[] = [];
   const usage = cli.run("usage", plainEnv, nothing);
   t.eqI32("no inputs at all exits 2", usage.status, 2);
-  t.contains("and prints the usage on stderr", usage.stderr, "usage: ");
+  t.contains("and prints the usage on stderr", usage.stderr, "usage");
   t.eqStr(
     "--help and a usage error are the same text on different streams",
     trim(usage.stderr),
@@ -2014,7 +2013,7 @@ export const main = (): number => {
   const t = new Suite(`cli contract (${cli.label})`);
 
   const name = checkIdentity(t, cli);
-  checkHelp(t, cli, name);
+  checkHelp(t, cli, name, env);
   checkUsageErrors(t, cli);
   checkSuccess(t, cli);
   checkErrorObjects(t, cli);

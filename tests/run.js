@@ -16915,7 +16915,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   // Every help run names each variable the policy reads, so the runner's own
   // environment -- an agent's, a CI's -- cannot decide the answer.
   const ESC = "\u001b["
-  const plainEnv = { NO_COLOR: "", FORCE_COLOR: "", CLICOLOR_FORCE: "", NISH_AGENT: "0" }
+  const plainEnv = { NO_COLOR: "", FORCE_COLOR: "", CLICOLOR_FORCE: "", CLICOLOR: "", NISH_AGENT: "0" }
   const noInputs = run([], plainEnv)
   check(
     "no inputs: usage on stderr, exit 2",
@@ -17003,9 +17003,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     noColor.stdout === help.stdout,
     JSON.stringify(noColor.stdout.slice(0, 200))
   )
-  const forcedOff = run(["--help"], { ...plainEnv, FORCE_COLOR: "false" })
+  const forcedOff = run(["--help"], { ...plainEnv, FORCE_COLOR: "False" })
   check(
-    "--help: FORCE_COLOR=false forces nothing",
+    "--help: FORCE_COLOR=False forces nothing, in any case",
     forcedOff.stdout === help.stdout,
     JSON.stringify(forcedOff.stdout.slice(0, 200))
   )
@@ -17026,6 +17026,12 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--help: CLICOLOR_FORCE=1 wins over TERM=dumb",
     dumbForced.stdout.includes(ESC),
     JSON.stringify(dumbForced.stdout.slice(0, 200))
+  )
+  const clicolorOff = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", CLICOLOR: "0" })
+  check(
+    "--help: CLICOLOR_FORCE=1 wins over CLICOLOR=0",
+    clicolorOff.stdout.includes(ESC),
+    JSON.stringify(clicolorOff.stdout.slice(0, 200))
   )
   // An agent gets the plain text and a section a person does not: the rules
   // card by a path it can open, which is the package's own docs/AI.md.
@@ -17998,7 +18004,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       wasi.status === 2 && wasi.stderr.includes("cannot use --profile wasi"),
       wasi.stderr
     )
-    const noFile = nishRun([])
+    const noFile = nishRun([], { NO_COLOR: "1", NISH_AGENT: "0" })
     check(
       "nish run: no file is the usage on stderr, exit 2",
       noFile.status === 2 && noFile.stderr.includes("nish run [flags] <file.ts> [args ...]"),

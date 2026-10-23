@@ -90,14 +90,38 @@ const envIsSet = (name: string): boolean => {
   return value !== null && value.length > 0
 }
 
-/** Whether `name` is set to a no: `0`, `false`, `no` or `off`. */
-const envSaysNo = (name: string): boolean => {
-  const value = getenv(name)
-  return value !== null && (value === "0" || value === "false" || value === "no" || value === "off")
+/** Whether `value` spells `word`, which is lower case, in any ASCII case. */
+const spells = (value: string, word: string): boolean => {
+  if (value.length !== word.length) {
+    return false
+  }
+  for (let i = 0; i < value.length; i++) {
+    let code = value.charCodeAt(i)
+    if (code >= 65 && code <= 90) {
+      code = code + 32
+    }
+    if (code !== word.charCodeAt(i)) {
+      return false
+    }
+  }
+  return true
 }
 
-/** Whether `name` is set and says yes: not empty, and not a no (`envSaysNo`). */
-const envSaysYes = (name: string): boolean => envIsSet(name) && !envSaysNo(name)
+/** Whether `value` is a no: `0`, `false`, `no` or `off`, in any case. */
+const isNo = (value: string): boolean =>
+  value === "0" || spells(value, "false") || spells(value, "no") || spells(value, "off")
+
+/** Whether `name` is set to a no (`isNo`). */
+const envSaysNo = (name: string): boolean => {
+  const value = getenv(name)
+  return value !== null && isNo(value)
+}
+
+/** Whether `name` is set and says yes: not empty, and not a no (`isNo`). */
+const envSaysYes = (name: string): boolean => {
+  const value = getenv(name)
+  return value !== null && value.length > 0 && !isNo(value)
+}
 
 /**
  * Whether file descriptor `fd` is a terminal. The language has no `isatty`,
@@ -125,25 +149,28 @@ export const agentDriven = (): boolean => {
 /**
  * The style for descriptor `fd` (1 or 2), for a reader `agent` says is an
  * agent or not (`agentDriven`, asked once by the caller). `NO_COLOR` wins,
- * then an agent, then `FORCE_COLOR` saying no (`envSaysNo`; Node reads `0`
- * and `false` so), then a forcing variable, then `TERM=dumb`, and only then the terminal
- * check. 256 colours when `TERM` names them, `COLORTERM` is set, as truecolour
- * terminals set it, or `FORCE_COLOR` asks for level 2 or 3.
+ * then an agent, then `FORCE_COLOR` saying no (`isNo`; Node reads `0` and
+ * `false` so), then a forcing variable, then `CLICOLOR` saying no or
+ * `TERM=dumb`, and only then the terminal check. 256 colours when `TERM`
+ * names them, `COLORTERM` is set, as truecolour terminals set it, or
+ * `FORCE_COLOR` asks for level 2 or 3.
  */
 export const styleFor = (fd: i32, agent: boolean): Style => {
   const term = getenv("TERM")
   const level = getenv("FORCE_COLOR")
+  const forceNo = level !== null && isNo(level)
+  const forceYes = level !== null && level.length > 0 && !forceNo
   const rich =
     (term !== null && term.indexOf("256") >= 0) ||
     envIsSet("COLORTERM") ||
     (level !== null && (level === "2" || level === "3"))
-  if (envIsSet("NO_COLOR") || agent || envSaysNo("FORCE_COLOR")) {
+  if (envIsSet("NO_COLOR") || agent || forceNo) {
     return new Style(false, rich)
   }
-  if (envSaysYes("CLICOLOR_FORCE") || envSaysYes("FORCE_COLOR")) {
+  if (forceYes || envSaysYes("CLICOLOR_FORCE")) {
     return new Style(true, rich)
   }
-  if (term !== null && term === "dumb") {
+  if (envSaysNo("CLICOLOR") || (term !== null && term === "dumb")) {
     return new Style(false, rich)
   }
   return new Style(isTerminal(fd), rich)

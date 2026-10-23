@@ -175,9 +175,9 @@ no escape codes. Diagnostics are never coloured. These variables change that:
 | Variable | Effect |
 | --- | --- |
 | `NO_COLOR`, not empty | never colour; it wins over everything below |
-| `FORCE_COLOR` set to `0`, `false`, `no` or `off` | never colour, even on a terminal |
+| `FORCE_COLOR` set to `0`, `false`, `no` or `off`, in any case | never colour, even on a terminal |
 | `FORCE_COLOR` or `CLICOLOR_FORCE`, neither empty nor one of those | colour even when piped, unless an agent is running `nish` |
-| `TERM=dumb` | no colour, unless one of the two above forces it |
+| `CLICOLOR` set to one of those, or `TERM=dumb` | no colour, unless one of the two above forces it |
 
 The palette uses 256 colours when `TERM` names a 256-colour terminal,
 `COLORTERM` is set or `FORCE_COLOR` is `2` or `3`, and the 16 basic ones
