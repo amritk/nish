@@ -3,11 +3,10 @@
  *
  * The language gives a string `length`, `charCodeAt`, `substring`, `indexOf`,
  * `startsWith`, `endsWith` and `===` by content, and an array `join`. It does
- * **not** give `split`, `trim`, `toLowerCase` or a regular expression, and that
- * is a decision rather than a gap: each of those allocates, and several of them
- * need a locale or a character table that this runtime has no room for
- * (`docs/wp7-runtime.md` keeps the runtime under a measured byte budget). A
- * regular expression is a library instead, `std/regex` (`nish/regex`).
+ * **not** give `split`, `trim`, `toLowerCase` or a regular expression (that is
+ * `std/regex`), and that is a decision rather than a gap: each allocates, and
+ * several need a locale or a character table this runtime has no room for
+ * (`docs/wp7-runtime.md` keeps the runtime under a measured byte budget).
  *
  * So a program that reads a file and wants its lines writes the loop. This
  * module is that loop, written once. Every offset here is a **byte** offset,
