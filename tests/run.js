@@ -303,8 +303,11 @@ const skip = (reason) => {
  *
  * Only a check that another job proves *with the same inputs on the same
  * platform* may be delegated, and only when the workflow asks for it by flag.
- * There is one today, the bootstrap's fixed point, and the WP14 section
- * says when the request is honoured and what makes it true.
+ * There are two kinds today. The bootstrap's fixed point, and the WP14 section
+ * says when the request is honoured and what makes it true. And a link
+ * program's checks of what the compiler wrote rather than of what the program
+ * did (`DELEGATE_IR_CHECKS`), which are the same on every host: a mac runs
+ * the program, and the Linux `test` job checks the compile.
  */
 const delegated = []
 const delegate = (name, provedBy) => {
@@ -545,11 +548,13 @@ if (RETIRED.length > 0) {
 // `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
 // below are two thirds of the suite's wall clock and run one at a time. Every
 // shard builds the compiler and runs everything before the link programs, which
-// is under two minutes. Shard 1 then runs every section after them but the WP14
-// self-hosting section, and the link programs a later section reads the output
-// of (`LINK_READ_LATER`). The self-hosting section and the other link programs
-// are dealt by their cost in `tests/shard-costs.json` (see `linkShard`), and
-// every shard but 1 stops once its share is done. What a shard leaves to
+// is under two minutes. Shard 1 then runs every section after them but the
+// dealt ones (`DEALT_SECTIONS`: WP14 self-hosting and crypto-bench), and the
+// link programs a later section reads the output of (`LINK_READ_LATER`). The
+// dealt sections and the other link programs are dealt by their cost in
+// `tests/shard-costs.json` (see `linkShard`), and every shard but 1 stops once
+// its share is done. A filtered run (`node tests/run.js net_ --shard 2/3`)
+// deals only the programs its filter selects. What a shard leaves to
 // another is a delegation, named in its summary, and never a skip that reads as
 // unproven or a check that silently was not made. No `--shard`, or
 // `--shard 1/1`, is the whole suite.
@@ -560,8 +565,12 @@ if (SHARDS < 1 || SHARD < 1 || SHARD > SHARDS) {
   console.error(`tests/run.js: --shard wants <i>/<n> with 1 <= i <= n, not ${shardSpec || "nothing"}`)
   process.exit(2)
 }
-/** The CI job that proves what this shard leaves to shard `i`. */
-const shardJob = (i) => `the \`test\` job's shard ${i}/${SHARDS}`
+/**
+ * The CI job that proves what this shard leaves to shard `i`: the same job's
+ * shard `i`, since more than one job is sharded (the \`test\` job's whole suite
+ * and \`runtime-net\`'s \`net_\` sections).
+ */
+const shardJob = (i) => `shard ${i}/${SHARDS} of this job`
 
 // ---- The compiler under test -----------------------------------------------------
 //
@@ -2343,6 +2352,34 @@ for (const name of [
     `${name}: the refusal is the only diagnostic, and the uses after it are silent`,
     r.status === 1 && errors.length === 1,
     String(r.stderr)
+  )
+}
+
+// ---- A handle case reports exactly its own refusals (WP40 H1.1) -----------------------
+// The same blind spot for the handle pass: each `.err` line names one refusal,
+// and the count says nothing else was found, so a check that starts firing
+// twice, or on a body it should skip (an arrow lifted out of its method), fails.
+for (const [name, count] of [
+  ["reject_ffi_handle_arrow_using", 2],
+  ["reject_ffi_handle_dispose_forms", 15],
+  ["reject_ffi_handle_walk_forms", 9],
+  ["reject_ffi_handle_walk_ctor_param", 6],
+  ["reject_ffi_handle_walk_function_type", 2],
+]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  const at = selectedCases.indexOf(name)
+  const errors =
+    at < 0
+      ? []
+      : String(caseResults[at].stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: exactly ${count} refusals`,
+    at >= 0 && caseResults[at].status === 1 && errors.length === count,
+    at < 0 ? "(no such case)" : String(caseResults[at].stderr)
   )
 }
 
@@ -4323,10 +4360,24 @@ const LINK_READ_LATER = [
   "unsafe_flag_scope",
 ]
 /**
- * The shard each link program runs in, and the shard that runs the WP14
- * self-hosting section: a greedy deal by cost, so that the shards finish
- * together. `tests/shard-costs.json` holds the seconds each piece took in a CI
- * shard -- `link` per program, `selfHosting` for the WP14 section, and
+ * The sections after the link programs that are dealt like them rather than
+ * run by shard 1: each runs in the shard `sectionShard` names, sits before the
+ * point where every other shard stops, and reads nothing a section after that
+ * point writes. The key is its cost's in `tests/shard-costs.json`; `selected`
+ * says whether the run's filter selects it, which is also whether it is dealt.
+ */
+const DEALT_SECTIONS = {
+  selfHosting: {
+    name: "the WP14 self-hosting section",
+    selected: !only || "selfhost".includes(only) || only.includes("self"),
+  },
+  cryptoBench: { name: "the crypto-bench section", selected: !only || "crypto-bench".includes(only) },
+}
+/**
+ * The shard each link program runs in, and the shard each of `DEALT_SECTIONS`
+ * runs in: a greedy deal by cost, so that the shards finish together.
+ * `tests/shard-costs.json` holds the seconds each piece took in a CI shard --
+ * `link` per program, one entry per dealt section under its key, and
  * `shardOne` for what only shard 1 runs: every other section after the link
  * programs and its job's steps after the suite. Shard 1 starts with that and
  * its `LINK_READ_LATER` programs; the rest go largest first, ties by name, each
@@ -4334,16 +4385,26 @@ const LINK_READ_LATER = [
  * program the table does not name yet costs the table's median, so a new one
  * moves the deal without waiting for a measurement. The deal reads nothing a
  * run measures, so every shard of one CI run computes the same one.
+ *
+ * A filtered run deals only what its filter selects, and starts shard 1 at
+ * nothing, since the sections it alone runs are filtered too: dealt from the
+ * whole table, the 188 `net_` programs the macOS `runtime-net` job runs fell
+ * 1.3, 4.2, 7.4 and 7.6 minutes to its four shards rather than about 5 each.
  */
-const { linkShard, selfHostShard } = (() => {
+const { linkShard, sectionShard } = (() => {
   const costs = JSON.parse(fs.readFileSync(path.join(root, "tests", "shard-costs.json"), "utf8"))
   const known = Object.values(costs.link).sort((a, b) => a - b)
   const cost = (name) => costs.link[name] ?? known[known.length >> 1] ?? 1
   const shardOf = new Map()
   const load = Array.from({ length: SHARDS }, () => 0)
-  load[0] = costs.shardOne
-  const items = [{ name: null, cost: costs.selfHosting }]
+  load[0] = only ? 0 : costs.shardOne
+  const items = Object.entries(DEALT_SECTIONS)
+    .filter(([, section]) => section.selected)
+    .map(([key]) => ({ section: key, cost: costs[key] ?? 1 }))
   for (const name of linkTests) {
+    if (only && !name.includes(only)) {
+      continue
+    }
     if (SHARDS === 1 || LINK_READ_LATER.includes(name)) {
       shardOf.set(name, 1)
       load[0] += cost(name)
@@ -4351,19 +4412,34 @@ const { linkShard, selfHostShard } = (() => {
       items.push({ name, cost: cost(name) })
     }
   }
-  items.sort((a, b) => b.cost - a.cost || (a.name ?? "").localeCompare(b.name ?? ""))
-  let selfHosting = 1
+  const label = (item) => item.name ?? item.section
+  items.sort((a, b) => b.cost - a.cost || label(a).localeCompare(label(b)))
+  const sections = new Map()
   for (const item of items) {
     const least = load.indexOf(Math.min(...load))
     load[least] += item.cost
-    if (item.name === null) {
-      selfHosting = least + 1
+    if (item.section !== undefined) {
+      sections.set(item.section, least + 1)
     } else {
       shardOf.set(item.name, least + 1)
     }
   }
-  return { linkShard: (name) => shardOf.get(name), selfHostShard: selfHosting }
+  return { linkShard: (name) => shardOf.get(name), sectionShard: (key) => sections.get(key) }
 })()
+/**
+ * `--delegate-ir-checks`, which the macOS `runtime-net` job passes: of each link
+ * program, link it and run it, and leave every check of the compile -- the
+ * module goldens, llvm-as and opt, the declare/define agreement, expected.ir,
+ * `--warn-portability`, `--emit-panics`, the capability report, and the
+ * programs that are a rejection and nothing else -- to the `test` job, which
+ * runs every tests/link program on Linux with the same compiler. Those checks
+ * read the compiler's output, not the host, and were a third of that job's
+ * link programs' time (run 39878648000). Honoured only under GitHub Actions, as `--delegate-fixed-point` is:
+ * from a terminal the flag names a job that is not running, so every check
+ * runs here. A check in the WP14 section holds ci.yml to it.
+ */
+const DELEGATE_IR_CHECKS = process.argv.includes("--delegate-ir-checks") && process.env.GITHUB_ACTIONS === "true"
+let irDelegated = 0
 const linkDealtAway = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) !== SHARD)
 
 for (const name of linkTests) {
@@ -4383,7 +4459,12 @@ for (const name of linkTests) {
   // WP35: the report is written beside the modules by the same compile, since
   // nothing here compares the IR of a second one.
   const capsJson = path.join(outDir, "capabilities.json")
-  const capsArgs = fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
+  const capsArgs =
+    !DELEGATE_IR_CHECKS && fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
+  if (DELEGATE_IR_CHECKS && fs.existsSync(side("expected.err"))) {
+    irDelegated++
+    continue
+  }
   const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
     cwd: root,
   })
@@ -4415,167 +4496,183 @@ for (const name of linkTests) {
     check(`link/${name}: compiles and links`, false, stderr)
     continue
   }
+  if (DELEGATE_IR_CHECKS) {
+    irDelegated++
+  } else {
+    // The `--emit-panics` compile below reads nothing this loop writes, so it
+    // runs while the modules are checked rather than after them. Nothing between
+    // here and its `await` leaves the iteration, so no compile outlives its program.
+    const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+    fs.rmSync(panicsDir, { recursive: true, force: true })
+    const panicsFile = path.join(panicsDir, "panics.json")
+    const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
+      cwd: root,
+      encoding: "utf8",
+    })
 
-  const modules = fs
-    .readdirSync(outDir)
-    .filter((f) => f.endsWith(".ll"))
-    .sort()
-    .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
-  for (const m of modules) {
-    if (fs.existsSync(side(m.file))) {
-      const actual = stripHeader(m.ir)
-      if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
-        fs.writeFileSync(side(m.file), `${actual}\n`)
-        console.log(`WROTE link/${name}/${m.file}`)
+    const modules = fs
+      .readdirSync(outDir)
+      .filter((f) => f.endsWith(".ll"))
+      .sort()
+      .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
+    // A program that imports std/net is about a hundred modules, and llvm-as and
+    // opt read each one alone, so they run `defaultJobs()` modules at a time; the
+    // checks are still made in module order, so the output is the sequential
+    // loop's. One at a time they were a fifth of the runtime-net job's wall clock.
+    const verified = await pool(modules, defaultJobs(), async (m) => ({
+      as: HAS_LLVM_AS ? await spawnAsync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"]) : null,
+      v: HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)]) : null,
+    }))
+    for (const [i, m] of modules.entries()) {
+      if (fs.existsSync(side(m.file))) {
+        const actual = stripHeader(m.ir)
+        if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
+          fs.writeFileSync(side(m.file), `${actual}\n`)
+          console.log(`WROTE link/${name}/${m.file}`)
+        }
+        const expected = read(m.file).trim()
+        check(
+          `link/${name}: ${m.file} matches golden`,
+          actual === expected,
+          `--- expected\n${expected}\n--- actual\n${actual}`
+        )
       }
-      const expected = read(m.file).trim()
+      const { as, v } = verified[i]
+      if (as !== null) {
+        check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
+      }
+      if (v !== null) {
+        check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
+      }
+    }
+
+    if (fs.existsSync(side("expected.portability"))) {
+      const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+      fs.rmSync(warnedDir, { recursive: true, force: true })
+      const warned = spawnSync(
+        NISH,
+        [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
+        {
+          cwd: root,
+          encoding: "utf8",
+        }
+      )
+      const want = read("expected.portability").trim()
+      const got = warned.stdout
+        .split("\n")
+        .filter((l) => l.includes('"severity":"portability"'))
+        .join("\n")
+        .split(`${root}/`)
+        .join("")
       check(
-        `link/${name}: ${m.file} matches golden`,
-        actual === expected,
-        `--- expected\n${expected}\n--- actual\n${actual}`
+        `link/${name}: --warn-portability --json matches expected.portability`,
+        warned.status === 0 && got === want,
+        `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
+      )
+      check(
+        `link/${name}: --warn-portability changes no byte of the IR`,
+        modules.every(
+          (m) =>
+            fs.existsSync(path.join(warnedDir, m.file)) &&
+            fs.readFileSync(path.join(warnedDir, m.file), "utf8") === m.ir
+        ),
+        "the modules differ"
       )
     }
-    if (HAS_LLVM_AS) {
-      const as = spawnSync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"])
-      check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
-    }
-    if (HAS_OPT) {
-      const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)])
-      check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
-    }
-  }
 
-  if (fs.existsSync(side("expected.portability"))) {
-    const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
-    fs.rmSync(warnedDir, { recursive: true, force: true })
-    const warned = spawnSync(
-      NISH,
-      [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
-      {
-        cwd: root,
-        encoding: "utf8",
-      }
-    )
-    const want = read("expected.portability").trim()
-    const got = warned.stdout
-      .split("\n")
-      .filter((l) => l.includes('"severity":"portability"'))
-      .join("\n")
-      .split(`${root}/`)
-      .join("")
-    check(
-      `link/${name}: --warn-portability --json matches expected.portability`,
-      warned.status === 0 && got === want,
-      `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
-    )
-    check(
-      `link/${name}: --warn-portability changes no byte of the IR`,
-      modules.every(
-        (m) =>
-          fs.existsSync(path.join(warnedDir, m.file)) &&
-          fs.readFileSync(path.join(warnedDir, m.file), "utf8") === m.ir
-      ),
-      "the modules differ"
-    )
-  }
-
-  // Cross-module attribute agreement: importer `declare` == exporter `define`.
-  const defines = new Map()
-  for (const m of modules) {
-    for (const [sym, h] of functionHeaders(m.ir)) {
-      if (h.kind === "define") {
-        defines.set(sym, { ...h, file: m.file })
+    // Cross-module attribute agreement: importer `declare` == exporter `define`.
+    const defines = new Map()
+    for (const m of modules) {
+      for (const [sym, h] of functionHeaders(m.ir)) {
+        if (h.kind === "define") {
+          defines.set(sym, { ...h, file: m.file })
+        }
       }
     }
-  }
-  let declares = 0
-  const mismatches = []
-  for (const m of modules) {
-    for (const [sym, h] of functionHeaders(m.ir)) {
-      if (h.kind !== "declare" || !defines.has(sym)) {
-        continue // runtime declares have no define here
+    let declares = 0
+    const mismatches = []
+    for (const m of modules) {
+      for (const [sym, h] of functionHeaders(m.ir)) {
+        if (h.kind !== "declare" || !defines.has(sym)) {
+          continue // runtime declares have no define here
+        }
+        declares++
+        const d = defines.get(sym)
+        if (h.sig !== d.sig || h.attrs !== d.attrs) {
+          mismatches.push(
+            `${m.file}: declare ${h.sig} { ${h.attrs} }\n${d.file}: define  ${d.sig} { ${d.attrs} }`
+          )
+        }
       }
-      declares++
-      const d = defines.get(sym)
-      if (h.sig !== d.sig || h.attrs !== d.attrs) {
-        mismatches.push(
-          `${m.file}: declare ${h.sig} { ${h.attrs} }\n${d.file}: define  ${d.sig} { ${d.attrs} }`
+    }
+    check(
+      `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
+      declares > 0 && mismatches.length === 0,
+      mismatches.join("\n") || "(no cross-module declares found)"
+    )
+
+    if (fs.existsSync(side("expected.ir"))) {
+      const all = modules.map((m) => m.ir).join("\n")
+      const missing = read("expected.ir")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .filter((l) => !all.includes(l))
+      check(
+        `link/${name}: emitted IR contains every expected.ir line`,
+        missing.length === 0,
+        missing.map((l) => `missing: ${l}`).join("\n")
+      )
+    }
+
+    // `--emit-panics` over the whole program, std/ and dependency modules
+    // included, held against the IR of every module the same compile wrote
+    // (`tests/panics-oracle.js`), and against `expected.panics` where the
+    // program has one. Without `--link`, so the program is not linked twice:
+    // the list and the IR come from one compile, which is all the oracle needs.
+    // That compile was started beside the module checks above (`listing`).
+    const listed = await listing
+    if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
+      check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+    } else {
+      const listText = fs.readFileSync(panicsFile, "utf8")
+      const ir = fs
+        .readdirSync(panicsDir)
+        .filter((f) => f.endsWith(".ll"))
+        .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
+        .join("\n")
+      // The entry is named by the path it was given, `side("main.ts")`, and its
+      // `.ll` is among those joined above, so its own functions are held to the
+      // drift check too; a module of a library that writes no `.ll` of its own
+      // stays skipped (`panicOracle`'s `module`).
+      const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
+      check(
+        `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
+        oracle.failures.length === 0 && oracle.own > 0,
+        oracle.own > 0
+          ? oracle.failures.join("\n")
+          : `no listed function names ${side("main.ts")} as its module`
+      )
+      if (fs.existsSync(side("expected.panics"))) {
+        const want = read("expected.panics").trim()
+        const got = listText.split(`${root}/`).join("").trim()
+        check(
+          `link/${name}: --emit-panics matches expected.panics`,
+          got === want,
+          `--- expected\n${want}\n--- actual\n${got}`
         )
       }
     }
-  }
-  check(
-    `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
-    declares > 0 && mismatches.length === 0,
-    mismatches.join("\n") || "(no cross-module declares found)"
-  )
 
-  if (fs.existsSync(side("expected.ir"))) {
-    const all = modules.map((m) => m.ir).join("\n")
-    const missing = read("expected.ir")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .filter((l) => !all.includes(l))
-    check(
-      `link/${name}: emitted IR contains every expected.ir line`,
-      missing.length === 0,
-      missing.map((l) => `missing: ${l}`).join("\n")
-    )
-  }
-
-  // `--emit-panics` over the whole program, std/ and dependency modules
-  // included, held against the IR of every module the same compile wrote
-  // (`tests/panics-oracle.js`), and against `expected.panics` where the
-  // program has one. Without `--link`, so the program is not linked twice:
-  // the list and the IR come from one compile, which is all the oracle needs.
-  const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
-  fs.rmSync(panicsDir, { recursive: true, force: true })
-  const panicsFile = path.join(panicsDir, "panics.json")
-  const listed = spawnSync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
-    cwd: root,
-    encoding: "utf8",
-  })
-  if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
-    check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
-  } else {
-    const listText = fs.readFileSync(panicsFile, "utf8")
-    const ir = fs
-      .readdirSync(panicsDir)
-      .filter((f) => f.endsWith(".ll"))
-      .map((f) => fs.readFileSync(path.join(panicsDir, f), "utf8"))
-      .join("\n")
-    // The entry is named by the path it was given, `side("main.ts")`, and its
-    // `.ll` is among those joined above, so its own functions are held to the
-    // drift check too; a module of a library that writes no `.ll` of its own
-    // stays skipped (`panicOracle`'s `module`).
-    const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
-    check(
-      `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
-      oracle.failures.length === 0 && oracle.own > 0,
-      oracle.own > 0
-        ? oracle.failures.join("\n")
-        : `no listed function names ${side("main.ts")} as its module`
-    )
-    if (fs.existsSync(side("expected.panics"))) {
-      const want = read("expected.panics").trim()
-      const got = listText.split(`${root}/`).join("").trim()
+    if (capsArgs.length > 0) {
+      const want = read("expected.caps.json")
+      const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
       check(
-        `link/${name}: --emit-panics matches expected.panics`,
+        `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
         `--- expected\n${want}\n--- actual\n${got}`
       )
     }
-  }
-
-  if (capsArgs.length > 0) {
-    const want = read("expected.caps.json")
-    const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
-    check(
-      `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
-      got === want,
-      `--- expected\n${want}\n--- actual\n${got}`
-    )
   }
 
   const run = await runNative(`link/${name}`, exe, [])
@@ -4653,8 +4750,8 @@ const llFilesIn = (dir) =>
 // hold each phase to something outside it and the bootstrap's fixed point. It
 // sits here, where the split of a sharded run ends, because it is the one
 // section after the link programs that is dealt like them: it runs in the shard
-// `selfHostShard` names, and reads nothing the sections after it write.
-if (SHARD === selfHostShard && (!only || "selfhost".includes(only) || only.includes("self"))) {
+// `sectionShard("selfHosting")` names, and reads nothing the sections after it write.
+if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")) {
   const selfDir = path.join(root, "src")
   const modules = fs.existsSync(selfDir)
     ? fs
@@ -5455,8 +5552,8 @@ if (SHARD === selfHostShard && (!only || "selfhost".includes(only) || only.inclu
   // and the two numbers are written apart. A list shorter than `n` is a green
   // run in which the missing shard's programs ran nowhere; a longer one is a
   // shard the suite refuses. So the list's length is held to `n`, for the
-  // suite's own job and for the Nish runner's.
-  for (const job of ["test", "runner"]) {
+  // suite's own job, the Nish runner's and the macOS `net_` job's.
+  for (const job of ["test", "runner", "runtime-net"]) {
     const text = ciJob(ciYmlText, job)
     const list = /^\s+shard: \[([\d, ]+)\]$/m.exec(text)
     const flag = /^\s+SHARD: \$\{\{ matrix\.shard \}\}$/m.test(text)
@@ -5467,6 +5564,26 @@ if (SHARD === selfHostShard && (!only || "selfhost".includes(only) || only.inclu
       `ci.yml: the \`${job}\` job's shard list is 1..n for the n its --shard names`,
       flag !== null && shards.length === Number(flag[1]) && shards.every((n, i) => n === i + 1),
       `shard list: ${list ? list[1] : "(none)"}, --shard .../${flag ? flag[1] : "(none)"}`
+    )
+  }
+
+  // `--delegate-ir-checks` (DELEGATE_IR_CHECKS) hands a link program's compile
+  // checks to the `test` job, which is honest only while that job runs every
+  // program: its suite line names no filter, and no job but `runtime-net`
+  // asks for the delegation.
+  {
+    const suiteLine = /npm test -- (.*?) \|/.exec(ciJob(ciYmlText, "test"))?.[1] ?? ""
+    const words = suiteLine.split(/\s+/).filter(Boolean)
+    const filters = words.filter((w, i) => !w.startsWith("--") && !["--seed", "--shard"].includes(words[i - 1]))
+    const uncommented = ciYmlText
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("#"))
+      .join("\n")
+    const asks = (text) => text.split("--delegate-ir-checks").length - 1
+    check(
+      "ci.yml: --delegate-ir-checks is asked for by `runtime-net` alone, and the `test` job runs every tests/link program",
+      suiteLine !== "" && filters.length === 0 && asks(uncommented) === asks(ciJob(ciYmlText, "runtime-net")),
+      `test job's suite line: ${suiteLine || "(not found)"}; filters: ${filters.join(", ") || "none"}`
     )
   }
 
@@ -6238,11 +6355,279 @@ if (linkDealtAway.length > 0) {
     delegate(`${count} tests/link program(s)`, shardJob(i))
   }
 }
-if (SHARD !== selfHostShard && (!only || "selfhost".includes(only) || only.includes("self"))) {
-  delegate("the WP14 self-hosting section", shardJob(selfHostShard))
+if (irDelegated > 0) {
+  delegate(
+    `the compile's checks of ${irDelegated} tests/link program(s) (--delegate-ir-checks)`,
+    "ci.yml's `test` job, which runs every tests/link program on Linux"
+  )
+}
+// ---- crypto-bench: the crypto twins ------------------------------------------------
+// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
+// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
+// every program to print the checksums its expected.txt pins, and proves the
+// portable columns portable. Each family must report every kernel size matched,
+// found by listing the directories, so a new family is checked without an edit
+// here. A missing toolchain is the runner's note and a column of —, not a
+// failure; so is a family that needs a loopback socket the machine refuses, and
+// a portable column this host cannot prove. Those notes and unproved lines are
+// printed under the check on a pass too, so a green run says what it left out.
+//
+// It is dealt like the link programs (`DEALT_SECTIONS`) rather than left to
+// shard 1: it builds every twin of five families, four and a half minutes of
+// a CI shard, and reads nothing another section writes.
+if (DEALT_SECTIONS.cryptoBench.selected && SHARD === sectionShard("cryptoBench")) {
+  if (HAS_CLANG) {
+    const families = fs
+      .readdirSync(path.join(root, "bench", "crypto"))
+      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
+      .sort()
+    const proved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .portableProof !== undefined
+    )
+    const v = spawnSync(
+      "node",
+      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    // The runner accounts for every column of every family it validated: a
+    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
+    // (the family's own word) or `<family> did not run <id>:` (this machine's
+    // reason). The test takes that account rather than probing toolchains
+    // itself, which disagreed with the runner on a host whose Go was older
+    // than go.mod or whose cargo could not fetch. The column list is the
+    // runner's own `crypto: columns …` line; without it the check fails.
+    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
+    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
+    const unaccounted = validated.flatMap((f) => {
+      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
+      return COLUMNS.filter(
+        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
+      ).map((id) => `${f} ${id}`)
+    })
+    // GitHub's x86-64 Linux runner has every twin's toolchain and the
+    // extensions their portable builds give up, so there a column this machine
+    // did not run, or an `unproved` line, means a gate failed open: every twin
+    // must run and the OpenSSL and Go proofs must be measured ones.
+    const strict =
+      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
+    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
+    check(
+      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
+      v.status === 0 &&
+        families.length > 0 &&
+        COLUMNS.length > 0 &&
+        families.every((f) =>
+          new RegExp(
+            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
+            "m"
+          ).test(v.stdout)
+        ) &&
+        unaccounted.length === 0 &&
+        proved.every((f) =>
+          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
+            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
+          )
+        ) &&
+        (!strict ||
+          (validated.length === families.length &&
+            !/ did not run /.test(v.stdout) &&
+            proved.every((f) =>
+              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ))),
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+    )
+    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
+        console.log(`      ${line}`)
+      }
+    }
+    // --validate fails, not only passes: a copy of the curves family, read
+    // through --families, passes as committed and fails once one line of its
+    // expected.txt is altered. Nish and OpenSSL alone, at x25519's one size.
+    const copies = path.join(buildDir, "crypto-bench", "families")
+    const copyCurves = (name, edit) => {
+      const dir = path.join(copies, name)
+      fs.rmSync(dir, { recursive: true, force: true })
+      // main.ts imports ../lib/gen, so the shared library comes along.
+      for (const d of ["curves", "lib"]) {
+        fs.cpSync(path.join(root, "bench", "crypto", d), path.join(dir, d), { recursive: true })
+      }
+      edit(path.join(dir, "curves"))
+      return dir
+    }
+    const validateCopy = (dir, only) =>
+      spawnSync(
+        "node",
+        [
+          path.join(root, "bench", "crypto", "run.mjs"),
+          "--compiler",
+          path.relative(root, NISH),
+          "--families",
+          dir,
+          "--only",
+          only,
+          "--no-go",
+          "--no-rust",
+          "--no-node",
+          "--validate",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    const clean = validateCopy(
+      copyCurves("clean", () => {}),
+      "x25519"
+    )
+    const altered = validateCopy(
+      copyCurves("altered", (dir) => {
+        const file = path.join(dir, "expected.txt")
+        const text = fs.readFileSync(file, "utf8")
+        // The checksum's last hex digit, moved by one: still a well-formed line.
+        const next = text.replace(/^(x25519 32 \d+ [0-9a-f]{7})([0-9a-f])$/m, (_, head, d) =>
+          `${head}${((parseInt(d, 16) + 1) % 16).toString(16)}`
+        )
+        fs.writeFileSync(file, next === text ? `${text}# no x25519 32 line to alter\n` : next)
+      }),
+      "x25519"
+    )
+    check(
+      "crypto-bench: --validate exits 1 with a CHECKSUM MISMATCH line when one expected.txt line is altered, and 0 on the unaltered copy",
+      clean.status === 0 &&
+        /^curves: 1 of 1 kernel size\(s\) match expected\.txt$/m.test(clean.stdout) &&
+        altered.status === 1 &&
+        /^CHECKSUM MISMATCH x25519 32 nish: printed [0-9a-f]{8}, expected\.txt has [0-9a-f]{8}$/m.test(
+          altered.stdout
+        ) &&
+        /^crypto: \d+ mismatch\(es\); nothing is timed$/m.test(altered.stdout),
+      `unaltered: exit ${clean.status}\n${clean.stdout}${clean.stderr}\naltered: exit ${altered.status}\n${altered.stdout}${altered.stderr}`
+    )
+    // The paired-rounds proof (portableRounds) on two more copies, each with a
+    // ratio floor no mask reaches so the rounds alone decide: the real mask
+    // must pass; a mask that clears only AVX, which X25519 does not use, must
+    // fail (its ratio alone would pass it on a noisy run, as 1.098x once did).
+    // That mask names its second word as `~0x0`: OpenSSL reads a missing second
+    // word as zero, which would clear BMI2 and ADX too. Each needs a CPU with
+    // the flags its mask clears; GitHub's runner has them. The verdict line
+    // names whichever proof case decided, the last one when all fall short.
+    const withFamily = (edit) => (dir) => {
+      const file = path.join(dir, "family.json")
+      const spec = JSON.parse(fs.readFileSync(file, "utf8"))
+      edit(spec)
+      fs.writeFileSync(file, `${JSON.stringify(spec, null, 2)}\n`)
+    }
+    const pairedLine = (verdict) =>
+      new RegExp(
+        `^${verdict} curves openssl-portable: \\d+\\.\\d{3}x the time of openssl at [\\w-]+@\\d+, slower in \\d+ of \\d+ paired rounds `,
+        "m"
+      )
+    const paired = [
+      {
+        name: "crypto-bench: portableRounds proves the curves family's OpenSSL mask by its paired rounds when the ratio falls short",
+        dir: "paired-real",
+        edit: (spec) => {
+          spec.portableMinRatio.openssl = 100
+        },
+        status: 0,
+        line: pairedLine("portable"),
+      },
+      {
+        name: "crypto-bench: portableRounds fails an OpenSSL mask that clears nothing X25519 uses (AVX only)",
+        dir: "paired-avx",
+        edit: (spec) => {
+          spec.portableMinRatio.openssl = 100
+          spec.twins.openssl.portable.env.OPENSSL_ia32cap = "~0x1000000000000000:~0x0"
+          spec.portableProofFlags = ["avx"]
+        },
+        status: 1,
+        line: pairedLine("NOT PORTABLE"),
+      },
+    ]
+    for (const c of paired) {
+      const r = validateCopy(copyCurves(c.dir, withFamily(c.edit)), "curves")
+      const unproved = /^portable curves openssl-portable: unproved \((.*)\)$/m.exec(r.stdout)
+      if (unproved !== null && !strict) {
+        skip(`${c.name} (${unproved[1]})`)
+        continue
+      }
+      check(c.name, r.status === c.status && c.line.test(r.stdout), `exit ${r.status}\n${r.stdout}${r.stderr}`)
+    }
+    fs.rmSync(copies, { recursive: true, force: true })
+    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
+    // compiler it was given reaches the child, and the child's status comes
+    // back. A wrapper answers --version from the compiler under test and fails
+    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    // That build is whichever family sorts first, so the log may name any
+    // family's main.ts.
+    const wrapDir = path.join(buildDir, "crypto-bench")
+    const wrapper = path.join(wrapDir, "nish-wrapper")
+    const wrapLog = path.join(wrapDir, "wrapper.log")
+    fs.mkdirSync(wrapDir, { recursive: true })
+    fs.rmSync(wrapLog, { force: true })
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
+      { mode: 0o755 }
+    )
+    const deleg = spawnSync(
+      "node",
+      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
+      deleg.status === 1 && /bench[\\/]crypto[\\/][a-z0-9-]+[\\/]main\.ts/.test(forwarded),
+      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
+    )
+    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
+    // only, one run, into a copy of the file.
+    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
+    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- crypto:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+  } else {
+    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
+  }
+}
+
+for (const [key, section] of Object.entries(DEALT_SECTIONS)) {
+  if (section.selected && SHARD !== sectionShard(key)) {
+    delegate(section.name, shardJob(sectionShard(key)))
+  }
 }
 if (SHARD > 1) {
-  delegate("every section after the tests/link programs and WP14 self-hosting", shardJob(1))
+  delegate("every section after the tests/link programs but the WP14 self-hosting and crypto-bench ones", shardJob(1))
   summarise()
 }
 // A name in `LINK_READ_LATER` that is no longer a program would pin nothing,
@@ -6991,6 +7376,22 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+/** Run a link fixture's `main` under runtime/nish.mjs, its output read as `encoding`. */
+const runFixtureUnderNode = (entry, encoding) =>
+  spawnSync(
+    "node",
+    [
+      "--experimental-strip-types",
+      "--js-explicit-resource-management",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+    ],
+    { cwd: root, encoding }
+  )
+
 // #224: a `nish/threads` program prints the same under Node, through the path
 // docs/RUN_UNDER_NODE.md documents, as it does natively. The std bodies are the
 // sequential meaning and are what Node runs, so a reduce whose blocking used
@@ -7186,21 +7587,7 @@ for (const name of [
   }
   const entry = path.join(linkDir, name, "main.ts")
   const fixture = fs.existsSync(entry)
-  const run = fixture
-    ? spawnSync(
-        "node",
-        [
-          "--experimental-strip-types",
-          "--js-explicit-resource-management",
-          "--no-warnings",
-          "--import",
-          path.join(root, "runtime", "nish.mjs"),
-          "-e",
-          `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
-        ],
-        { cwd: root, encoding: "utf8" }
-      )
-    : null
+  const run = fixture ? runFixtureUnderNode(entry, "utf8") : null
   const want = fixture ? fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8") : ""
   check(
     `link/${name}: nish/threads-under-node prints what the native binary prints`,
@@ -7208,6 +7595,50 @@ for (const name of [
     run === null
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
+// `nish/term` does no I/O, so a frame and a key decode are pure functions of
+// what was drawn or fed, and a program that prints them prints the same bytes
+// under runtime/nish.mjs as compiled. The comparison is of bytes, not decoded
+// text: the canvas lines carry raw half blocks, and Node builds them from
+// UTF-16 code units where the native screen builds UTF-8, so a wrong lead or
+// continuation byte would decode to U+FFFD on both sides of a string compare.
+for (const name of ["std_term", "std_term_f64"]) {
+  if (only && !name.includes(only) && !"term-under-node".includes(only)) {
+    continue
+  }
+  const entry = path.join(linkDir, name, "main.ts")
+  const run = runFixtureUnderNode(entry, "buffer")
+  const want = fs.readFileSync(path.join(linkDir, name, "expected.out"))
+  check(
+    `link/${name}: nish/term prints the same bytes under runtime/nish.mjs as natively`,
+    run.status === 0 && Buffer.compare(run.stdout, want) === 0,
+    `exit ${run.status}\n--- native (expected.out)\n${want.toString("utf8")}--- node\n${run.stdout.toString("utf8")}${run.stderr.toString("utf8")}`
+  )
+}
+
+// A game calls `flush` on a screen made before its frame loop. Were the call to
+// store into the screen (growing its byte buffer, say), the loop could not take
+// a pass's string back, and a 200×60 frame would keep its ~100 KB to the end of
+// the run on every pass. std_term's frame loop holds the placement to `pass`.
+if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
+  const arenaFile = path.join(buildDir, "std_term.arena.json")
+  const placed = spawnSync(
+    NISH,
+    [path.join(linkDir, "std_term", "main.ts"), "-o", path.join(buildDir, "std_term-arena") + "/", "--emit-arena", arenaFile],
+    { cwd: root, encoding: "utf8" }
+  )
+  const main =
+    placed.status === 0
+      ? JSON.parse(fs.readFileSync(arenaFile, "utf8")).functions.find((f) => f.symbol === "nish_main")
+      : undefined
+  const sites = main === undefined ? [] : main.sites
+  const piling = sites.filter((s) => s.accumulates === true)
+  check(
+    "link/std_term: a frame loop's `flush` is taken back every pass, and nothing in main piles up",
+    sites.some((s) => s.callee === "Screen.flush" && s.placement === "pass") && piling.length === 0,
+    placed.status !== 0 ? `exit ${placed.status}\n${placed.stderr}` : JSON.stringify(main === undefined ? null : piling)
   )
 }
 
@@ -7627,8 +8058,8 @@ if (!only || "std_json_tokenizer".includes(only)) {
 // gives a BigInt) breaks it there and nowhere natively. `node.ts` tokenizes a
 // small ASCII input under the plain prelude, through the parseFloat path,
 // `numberI64` at the i64 edges, `numberU64` at the u64 edges, an escaped
-// surrogate pair's decoded bytes and `keyEquals` both ways, and prints the
-// lines the native build prints.
+// surrogate pair's decoded bytes, `keyEquals` both ways and `isIntegral` out
+// to an exponent past any `i32`, and prints the lines the native build prints.
 if (!only || "std_json_tokenizer".includes(only)) {
   const entry = path.join(linkDir, "std_json_tokenizer", "node.ts")
   const want = [
@@ -7636,6 +8067,7 @@ if (!only || "std_json_tokenizer".includes(only)) {
     "3 7:-9223372036854776000/-9223372036854775808 7:9223372036854776000+9223372036854775808 7:0/0 4 0@-1",
     "3 7:1/1+1 -1@3",
     "3 7:18446744073709552000+18446744073709551615 7:18446744073709552000 7:10000000000000000000+10000000000000000000 7:10000000000000000000+9999999999999999999 7:0/0+0 4 0@-1",
+    "isIntegral 1 1 0 0 1 1 1 0 0",
     "",
   ].join("\n")
   const run = runUnderPrelude(entry, [])
@@ -8306,8 +8738,9 @@ if (!only || "std_json_value".includes(only)) {
   }
   // `nish/json-value` has to load under Node, as every `std/` module does:
   // `node.ts` calls every public method of `JsonDocument` once on ASCII text,
-  // `u64` at its edge and past it, a handle kept across a same-size refill and
-  // `maxValues`, and both runs must print these lines.
+  // `u64` at its edge and past it, `isIntegral` out to an exponent past any
+  // `i32`, a handle kept across a same-size refill and `maxValues`, and both
+  // runs must print these lines.
   const entry = path.join(linkDir, "std_json_value", "node.ts")
   const want = [
     "parseText true kind 6 length 9 keyAt a",
@@ -8320,6 +8753,7 @@ if (!only || "std_json_value".includes(only)) {
     "parse true [7] error -3@6",
     "duplicates -30@7",
     'last {"a":2,"b":0}',
+    "isIntegral 1 0 1 1 0 0 isI64 false",
     'stale 0 0 "" fresh two',
     "maxValues -34@3 1",
     "set 0 0 0",
@@ -9029,6 +9463,257 @@ if (!only || "bytes_prelude_bigint".includes(only)) {
     "bytes_prelude_bigint: under runtime/nish.mjs a bigint offset of set or fill throws a TypeError and writes nothing",
     r.status === 0 && r.stdout === want,
     `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+}
+
+// ---- WP33 R3: the runtime's hosts ----------------------------------------------
+//
+// `runtime/shim.mjs` is the host-agnostic core (`runtime/core.mjs` and
+// `runtime/core/*.mjs`) with the Node host (`runtime/node.mjs`) installed. The
+// frozen rewrites import the shim's exports by name, so none of the names it
+// had before the split may go; `tests/runtime/shim-exports.txt` is that list.
+// And the core may reach the world only through its host, so no module it
+// imports names a `node:` module, `process` or `Buffer`.
+if (!only || "runtime-hosts".includes(only)) {
+  const runtimeDir = path.join(root, "runtime")
+  const exportsOf = (file) =>
+    spawnSync(
+      "node",
+      ["--input-type=module", "-e", `const m = await import(${JSON.stringify(pathToFileURL(file).href)}); console.log(Object.keys(m).sort().join("\\n"))`],
+      { cwd: root, encoding: "utf8" }
+    )
+  const pinned = fs.readFileSync(path.join(root, "tests", "runtime", "shim-exports.txt"), "utf8").split("\n").filter(Boolean)
+  const shim = exportsOf(path.join(runtimeDir, "shim.mjs"))
+  const now = new Set(shim.stdout.split("\n").filter(Boolean))
+  const lost = pinned.filter((name) => !now.has(name))
+  check(
+    "runtime-hosts: shim.mjs exports every name it exported before the split",
+    shim.status === 0 && pinned.length > 0 && lost.length === 0,
+    shim.status === 0 ? `no longer exported: ${lost.join(", ")}` : shim.stderr
+  )
+
+  // The scan reads code, not comments: a block comment, or a `//` comment that
+  // starts a line or follows whitespace, may name `process` to say what the
+  // core stands in for. Every import must be relative, so the walk from
+  // `core.mjs` reaches every module the core loads.
+  const codeOf = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1")
+  const offences = (text) => {
+    const code = codeOf(text)
+    const found = []
+    for (const m of code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+      if (!m[1].startsWith("./") && !m[1].startsWith("../")) found.push(`imports "${m[1]}"`)
+    }
+    for (const word of ["process", "Buffer"]) {
+      if (new RegExp(`\\b${word}\\b`).test(code)) found.push(`names ${word}`)
+    }
+    return found
+  }
+  const seen = new Set()
+  const problems = []
+  const walk = (file) => {
+    if (seen.has(file)) return
+    seen.add(file)
+    const text = fs.readFileSync(file, "utf8")
+    for (const o of offences(text)) problems.push(`${path.relative(root, file)} ${o}`)
+    for (const m of codeOf(text).matchAll(/\b(?:from|import)\s*["'](\.{1,2}\/[^"']+)["']/g)) {
+      walk(path.resolve(path.dirname(file), m[1]))
+    }
+  }
+  walk(path.join(runtimeDir, "core.mjs"))
+  const coreDir = path.join(runtimeDir, "core")
+  const unreached = fs
+    .readdirSync(coreDir)
+    .filter((f) => f.endsWith(".mjs"))
+    .map((f) => path.join(coreDir, f))
+    .filter((f) => !seen.has(f))
+  // The scan's own two answers: a Node import and a `process` in code are
+  // caught, and the same words in comments are not.
+  const caught = offences('import fs from "node:fs";\nprocess.exit(1)\n').length === 2
+  const spared = offences("/** `process.exit` */\n// Buffer\nconst a = 1 // node:fs\n").length === 0
+  check(
+    "runtime-hosts: the core imports no node: module and names no process or Buffer",
+    problems.length === 0 && unreached.length === 0 && seen.size > 1 && caught && spared,
+    [
+      ...problems,
+      ...unreached.map((f) => `${path.relative(root, f)} is not reached from runtime/core.mjs`),
+      caught ? "" : "the scan misses a node: import or process",
+      spared ? "" : "the scan reads comments",
+    ]
+      .filter(Boolean)
+      .join("\n")
+  )
+
+  // With no adapter imported, the core still loads and its pure half answers,
+  // and the first call that needs the world throws a `NishNoHost` naming it.
+  const probe = [
+    `const core = await import(${JSON.stringify(pathToFileURL(path.join(runtimeDir, "core.mjs")).href)});`,
+    "const tryIt = (f) => { try { return String(f()); } catch (e) { return e.name + ' ' + e.requested; } };",
+    "console.log([core.strLen('h\\u00e9'), core.toI32(2 ** 40), tryIt(() => core.log(1)), tryIt(() => core.readFileSync('x')), tryIt(() => core.exit(0))].join('\\n'));",
+  ].join("\n")
+  const r = spawnSync("node", ["--input-type=module", "-e", probe], { cwd: root, encoding: "utf8" })
+  const want = "3\n2147483647\nNishNoHost writeOut\nNishNoHost readFileSync\nNishNoHost exit\n"
+  check(
+    "runtime-hosts: runtime/core.mjs alone computes, and throws NishNoHost at the first call that needs a host",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+
+  // The core and the browser adapter in a vm context holding only web globals,
+  // linked by a loader that refuses `node:`: the script asserts the console
+  // lines, each `NishExit` code, and the browser's file-system panic.
+  const web = spawnSync("node", ["--experimental-vm-modules", path.join(root, "tests", "runtime", "web-context.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "runtime-hosts: the core and the browser adapter run with only web globals",
+    web.status === 0 && web.stdout === "web-context: ok\n",
+    `exit ${web.status}\n${web.stdout}${web.stderr}`
+  )
+
+  // A package that depends on `nish` reaches the three entry points by name; a
+  // self-reference from inside the checkout resolves through the same
+  // `exports` map.
+  const entries = { "nish/runtime": "core.mjs", "nish/runtime/node": "node.mjs", "nish/runtime/browser": "browser.mjs" }
+  const resolved = spawnSync(
+    "node",
+    ["--input-type=module", "-e", `for (const s of ${JSON.stringify(Object.keys(entries))}) console.log(import.meta.resolve(s))`],
+    { cwd: root, encoding: "utf8" }
+  )
+  const wantResolved = Object.values(entries)
+    .map((f) => `${pathToFileURL(path.join(runtimeDir, f)).href}\n`)
+    .join("")
+  check(
+    "runtime-hosts: the package resolves nish/runtime, /node and /browser",
+    resolved.status === 0 && resolved.stdout === wantResolved,
+    `exit ${resolved.status}\n--- want\n${wantResolved}--- got\n${resolved.stdout}${resolved.stderr}`
+  )
+
+  // The declarations: `core.d.ts` declares exactly the values `core.mjs`
+  // exports; a program importing the three entry points by name typechecks
+  // under `nodenext`, each through its own `types` condition; and every function both `core/*.d.ts` and
+  // `runtime/nish.d.ts` declare has the same overloads, width for width, once
+  // `bigint` (what the core's i64 and u64 are at run time) reads as `number`.
+  const ts = require("typescript")
+  const probePath = path.join(root, "runtime-hosts-probe.mts")
+  const probeText = [
+    'import { Ok, toI64, type Result, type i64 } from "nish/runtime";',
+    // A bare `import "nish/runtime/node"` goes unchecked; a namespace import
+    // of a module without declarations is an error under `strict`.
+    'import * as node from "nish/runtime/node";',
+    'import * as browser from "nish/runtime/browser";',
+    "const r: Result<i64, string> = Ok(toI64(3));",
+    "export const n: i64 = r.ok ? r.value : 0n;",
+    "export const hosts = [node, browser];",
+  ].join("\n")
+  const options = {
+    strict: true,
+    noEmit: true,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    target: ts.ScriptTarget.ES2022,
+    lib: ["lib.es2022.d.ts"],
+    types: [],
+    noUncheckedSideEffectImports: true,
+  }
+  const host = ts.createCompilerHost(options)
+  const { fileExists, readFile, getSourceFile } = host
+  host.fileExists = (f) => f === probePath || fileExists(f)
+  host.readFile = (f) => (f === probePath ? probeText : readFile(f))
+  host.getSourceFile = (f, ...rest) =>
+    f === probePath ? ts.createSourceFile(f, probeText, ts.ScriptTarget.ES2022, true) : getSourceFile(f, ...rest)
+  const coreDts = path.join(runtimeDir, "core.d.ts")
+  const program = ts.createProgram([probePath, coreDts], options, host)
+  const diagnostics = ts
+    .getPreEmitDiagnostics(program)
+    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"))
+  const checker = program.getTypeChecker()
+  const declared = new Set(
+    checker
+      .getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(coreDts)))
+      .filter((s) => ts.skipAlias(s, checker).flags & ts.SymbolFlags.Value)
+      .map((s) => s.name)
+  )
+  const exported = exportsOf(path.join(runtimeDir, "core.mjs"))
+  const runtimeNames = exported.stdout.split("\n").filter(Boolean)
+  const undeclared = runtimeNames.filter((name) => !declared.has(name))
+  const unexported = [...declared].filter((name) => !runtimeNames.includes(name))
+
+  const typeText = (node) => {
+    if (!node) return "any"
+    if (ts.isParenthesizedTypeNode(node)) return typeText(node.type)
+    if (ts.isUnionTypeNode(node)) return [...new Set(node.types.map(typeText))].sort().join(" | ")
+    if (node.kind === ts.SyntaxKind.BigIntKeyword) return "number"
+    if (ts.isArrayTypeNode(node)) return `${typeText(node.elementType)}[]`
+    if (ts.isTypeOperatorNode(node)) return `${ts.tokenToString(node.operator)} ${typeText(node.type)}`
+    if (ts.isFunctionTypeNode(node)) return `(${node.parameters.map(paramText).join(", ")}) => ${typeText(node.type)}`
+    if (ts.isTypeReferenceNode(node)) {
+      const name = node.typeName.getText()
+      return node.typeArguments ? `${name}<${node.typeArguments.map(typeText).join(", ")}>` : name
+    }
+    return node.getText().replace(/\s+/g, " ")
+  }
+  const paramText = (p) => `${p.dotDotDotToken ? "..." : ""}${p.questionToken ? "?" : ""}${typeText(p.type)}`
+  const signature = (fn) => {
+    const generics = (fn.typeParameters ?? []).map((t) => (t.constraint ? `${t.name.text} extends ${typeText(t.constraint)}` : t.name.text))
+    return `<${generics.join(", ")}>(${fn.parameters.map(paramText).join(", ")}): ${typeText(fn.type)}`
+  }
+  // Every function declaration in a file, at the top or in a `declare module`,
+  // by name: the set of its overloads' signatures.
+  const functionsOf = (file, text) => {
+    const found = new Map()
+    const visit = (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        if (!found.has(node.name.text)) found.set(node.name.text, new Set())
+        found.get(node.name.text).add(signature(node))
+      }
+      if (ts.isModuleDeclaration(node) || ts.isModuleBlock(node) || ts.isSourceFile(node)) ts.forEachChild(node, visit)
+    }
+    visit(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true))
+    return found
+  }
+  // `arena()` is `Disposable` in nish.d.ts, which declares that interface for
+  // itself; the core's declarations cannot assume a `lib` that has it.
+  const DIFFERS = new Set(["arena"])
+  const disagreements = (core, nish) =>
+    [...core]
+      .filter(([name]) => nish.has(name) && !DIFFERS.has(name))
+      .filter(([name, sigs]) => [...sigs].sort().join("\n") !== [...nish.get(name)].sort().join("\n"))
+      .map(([name, sigs]) => `${name}: core.d.ts ${[...sigs].join(" / ")}, nish.d.ts ${[...nish.get(name)].join(" / ")}`)
+  const coreFunctions = new Map()
+  for (const f of fs.readdirSync(coreDir).filter((f) => f.endsWith(".d.ts"))) {
+    for (const [name, sigs] of functionsOf(f, fs.readFileSync(path.join(coreDir, f), "utf8"))) coreFunctions.set(name, sigs)
+  }
+  const nishFunctions = functionsOf("nish.d.ts", fs.readFileSync(path.join(runtimeDir, "nish.d.ts"), "utf8"))
+  const disagreeing = disagreements(coreFunctions, nishFunctions)
+  const shared = [...coreFunctions.keys()].filter((name) => nishFunctions.has(name)).length
+  // The comparison's own two answers: a `bigint` the core also takes agrees
+  // with `number`, and one width in place of another does not.
+  const pair = (a, b) => disagreements(functionsOf("a.d.ts", a), functionsOf("b.d.ts", b)).length
+  const agrees = pair("declare function f(x: number | bigint): i64;", "declare function f(x: number): i64;") === 0
+  const differs = pair("declare function f(x: f64): f64;", "declare function f(x: f64): i64;") === 1
+  check(
+    "runtime-hosts: core.d.ts declares every name the core exports, and agrees with nish.d.ts",
+    exported.status === 0 &&
+      diagnostics.length === 0 &&
+      undeclared.length === 0 &&
+      unexported.length === 0 &&
+      disagreeing.length === 0 &&
+      shared > 20 &&
+      agrees &&
+      differs,
+    [
+      exported.status === 0 ? "" : exported.stderr,
+      ...diagnostics,
+      ...undeclared.map((name) => `core.mjs exports ${name}, which core.d.ts does not declare`),
+      ...unexported.map((name) => `core.d.ts declares ${name}, which core.mjs does not export`),
+      ...disagreeing,
+      shared > 20 ? "" : `only ${shared} functions compared`,
+      agrees ? "" : "the comparison reads `bigint` as other than `number`",
+      differs ? "" : "the comparison reads one width as another",
+    ]
+      .filter(Boolean)
+      .join("\n")
   )
 }
 
@@ -11567,7 +12252,7 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
 // translation units "compile warning-free together", so compiling them is the
 // check and a cached object would skip it. Two links is what that costs.
 // They run under `node tests/run.js runtime_test` on their own, which is how
-// CI's `runtime-net (macos-latest)` job runs runtime-net.c's Darwin branch.
+// CI's `runtime-net` job runs runtime-net.c's Darwin branch.
 if (!only || "runtime_test".includes(only)) {
   const rt = spawnSync(
     "clang",
@@ -16167,262 +16852,6 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
   }
 }
 
-// ---- crypto-bench: the crypto twins ------------------------------------------------
-// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
-// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
-// every program to print the checksums its expected.txt pins, and proves the
-// portable columns portable. Each family must report every kernel size matched,
-// found by listing the directories, so a new family is checked without an edit
-// here. A missing toolchain is the runner's note and a column of —, not a
-// failure; so is a family that needs a loopback socket the machine refuses, and
-// a portable column this host cannot prove. Those notes and unproved lines are
-// printed under the check on a pass too, so a green run says what it left out.
-if (!only || "crypto-bench".includes(only)) {
-  if (HAS_CLANG) {
-    const families = fs
-      .readdirSync(path.join(root, "bench", "crypto"))
-      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
-      .sort()
-    const proved = families.filter(
-      (f) =>
-        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
-          .portableProof !== undefined
-    )
-    const v = spawnSync(
-      "node",
-      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
-      { cwd: root, encoding: "utf8" }
-    )
-    // The runner accounts for every column of every family it validated: a
-    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
-    // (the family's own word) or `<family> did not run <id>:` (this machine's
-    // reason). The test takes that account rather than probing toolchains
-    // itself, which disagreed with the runner on a host whose Go was older
-    // than go.mod or whose cargo could not fetch. The column list is the
-    // runner's own `crypto: columns …` line; without it the check fails.
-    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
-    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
-    const unaccounted = validated.flatMap((f) => {
-      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
-      return COLUMNS.filter(
-        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
-      ).map((id) => `${f} ${id}`)
-    })
-    // GitHub's x86-64 Linux runner has every twin's toolchain and the
-    // extensions their portable builds give up, so there a column this machine
-    // did not run, or an `unproved` line, means a gate failed open: every twin
-    // must run and the OpenSSL and Go proofs must be measured ones.
-    const strict =
-      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
-    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
-    check(
-      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
-      v.status === 0 &&
-        families.length > 0 &&
-        COLUMNS.length > 0 &&
-        families.every((f) =>
-          new RegExp(
-            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
-            "m"
-          ).test(v.stdout)
-        ) &&
-        unaccounted.length === 0 &&
-        proved.every((f) =>
-          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
-            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
-          )
-        ) &&
-        (!strict ||
-          (validated.length === families.length &&
-            !/ did not run /.test(v.stdout) &&
-            proved.every((f) =>
-              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
-            ))),
-      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
-    )
-    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
-      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
-        console.log(`      ${line}`)
-      }
-    }
-    // --validate fails, not only passes: a copy of the curves family, read
-    // through --families, passes as committed and fails once one line of its
-    // expected.txt is altered. Nish and OpenSSL alone, at x25519's one size.
-    const copies = path.join(buildDir, "crypto-bench", "families")
-    const copyCurves = (name, edit) => {
-      const dir = path.join(copies, name)
-      fs.rmSync(dir, { recursive: true, force: true })
-      // main.ts imports ../lib/gen, so the shared library comes along.
-      for (const d of ["curves", "lib"]) {
-        fs.cpSync(path.join(root, "bench", "crypto", d), path.join(dir, d), { recursive: true })
-      }
-      edit(path.join(dir, "curves"))
-      return dir
-    }
-    const validateCopy = (dir, only) =>
-      spawnSync(
-        "node",
-        [
-          path.join(root, "bench", "crypto", "run.mjs"),
-          "--compiler",
-          path.relative(root, NISH),
-          "--families",
-          dir,
-          "--only",
-          only,
-          "--no-go",
-          "--no-rust",
-          "--no-node",
-          "--validate",
-        ],
-        { cwd: root, encoding: "utf8" }
-      )
-    const clean = validateCopy(
-      copyCurves("clean", () => {}),
-      "x25519"
-    )
-    const altered = validateCopy(
-      copyCurves("altered", (dir) => {
-        const file = path.join(dir, "expected.txt")
-        const text = fs.readFileSync(file, "utf8")
-        // The checksum's last hex digit, moved by one: still a well-formed line.
-        const next = text.replace(/^(x25519 32 \d+ [0-9a-f]{7})([0-9a-f])$/m, (_, head, d) =>
-          `${head}${((parseInt(d, 16) + 1) % 16).toString(16)}`
-        )
-        fs.writeFileSync(file, next === text ? `${text}# no x25519 32 line to alter\n` : next)
-      }),
-      "x25519"
-    )
-    check(
-      "crypto-bench: --validate exits 1 with a CHECKSUM MISMATCH line when one expected.txt line is altered, and 0 on the unaltered copy",
-      clean.status === 0 &&
-        /^curves: 1 of 1 kernel size\(s\) match expected\.txt$/m.test(clean.stdout) &&
-        altered.status === 1 &&
-        /^CHECKSUM MISMATCH x25519 32 nish: printed [0-9a-f]{8}, expected\.txt has [0-9a-f]{8}$/m.test(
-          altered.stdout
-        ) &&
-        /^crypto: \d+ mismatch\(es\); nothing is timed$/m.test(altered.stdout),
-      `unaltered: exit ${clean.status}\n${clean.stdout}${clean.stderr}\naltered: exit ${altered.status}\n${altered.stdout}${altered.stderr}`
-    )
-    // The paired-rounds proof (portableRounds) on two more copies, each with a
-    // ratio floor no mask reaches so the rounds alone decide: the real mask
-    // must pass; a mask that clears only AVX, which X25519 does not use, must
-    // fail (its ratio alone would pass it on a noisy run, as 1.098x once did).
-    // That mask names its second word as `~0x0`: OpenSSL reads a missing second
-    // word as zero, which would clear BMI2 and ADX too. Each needs a CPU with
-    // the flags its mask clears; GitHub's runner has them. The verdict line
-    // names whichever proof case decided, the last one when all fall short.
-    const withFamily = (edit) => (dir) => {
-      const file = path.join(dir, "family.json")
-      const spec = JSON.parse(fs.readFileSync(file, "utf8"))
-      edit(spec)
-      fs.writeFileSync(file, `${JSON.stringify(spec, null, 2)}\n`)
-    }
-    const pairedLine = (verdict) =>
-      new RegExp(
-        `^${verdict} curves openssl-portable: \\d+\\.\\d{3}x the time of openssl at [\\w-]+@\\d+, slower in \\d+ of \\d+ paired rounds `,
-        "m"
-      )
-    const paired = [
-      {
-        name: "crypto-bench: portableRounds proves the curves family's OpenSSL mask by its paired rounds when the ratio falls short",
-        dir: "paired-real",
-        edit: (spec) => {
-          spec.portableMinRatio.openssl = 100
-        },
-        status: 0,
-        line: pairedLine("portable"),
-      },
-      {
-        name: "crypto-bench: portableRounds fails an OpenSSL mask that clears nothing X25519 uses (AVX only)",
-        dir: "paired-avx",
-        edit: (spec) => {
-          spec.portableMinRatio.openssl = 100
-          spec.twins.openssl.portable.env.OPENSSL_ia32cap = "~0x1000000000000000:~0x0"
-          spec.portableProofFlags = ["avx"]
-        },
-        status: 1,
-        line: pairedLine("NOT PORTABLE"),
-      },
-    ]
-    for (const c of paired) {
-      const r = validateCopy(copyCurves(c.dir, withFamily(c.edit)), "curves")
-      const unproved = /^portable curves openssl-portable: unproved \((.*)\)$/m.exec(r.stdout)
-      if (unproved !== null && !strict) {
-        skip(`${c.name} (${unproved[1]})`)
-        continue
-      }
-      check(c.name, r.status === c.status && c.line.test(r.stdout), `exit ${r.status}\n${r.stdout}${r.stderr}`)
-    }
-    fs.rmSync(copies, { recursive: true, force: true })
-    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
-    // compiler it was given reaches the child, and the child's status comes
-    // back. A wrapper answers --version from the compiler under test and fails
-    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
-    // That build is whichever family sorts first, so the log may name any
-    // family's main.ts.
-    const wrapDir = path.join(buildDir, "crypto-bench")
-    const wrapper = path.join(wrapDir, "nish-wrapper")
-    const wrapLog = path.join(wrapDir, "wrapper.log")
-    fs.mkdirSync(wrapDir, { recursive: true })
-    fs.rmSync(wrapLog, { force: true })
-    fs.writeFileSync(
-      wrapper,
-      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
-      { mode: 0o755 }
-    )
-    const deleg = spawnSync(
-      "node",
-      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
-      { cwd: root, encoding: "utf8" }
-    )
-    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
-    check(
-      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
-      deleg.status === 1 && /bench[\\/]crypto[\\/][a-z0-9-]+[\\/]main\.ts/.test(forwarded),
-      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
-    )
-    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
-    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
-    // only, one run, into a copy of the file.
-    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
-    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
-    fs.mkdirSync(path.dirname(out), { recursive: true })
-    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
-    const r = spawnSync(
-      "node",
-      [
-        path.join(root, "bench", "run.mjs"),
-        "--compiler",
-        path.relative(root, NISH),
-        "--only",
-        "fib",
-        "--n",
-        "fib=20",
-        "--runs",
-        "1",
-        "--warmup",
-        "0",
-        "--no-rust",
-        "--no-go",
-        "--out",
-        out,
-      ],
-      { cwd: root, encoding: "utf8" }
-    )
-    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
-    check(
-      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
-      text.includes(section) &&
-        text.split("<!-- crypto:begin -->").length === 2 &&
-        !text.includes("stale table"),
-      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
-    )
-  } else {
-    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
-  }
-}
-
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
 // noise is bigger than that. An instruction count is exact, so the twenty-one
@@ -18877,6 +19306,24 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
+      // The three entry points `exports` names for a TypeScript caller, the
+      // core's files they load, and the declarations of all three.
+      "runtime/core.mjs",
+      "runtime/core.d.ts",
+      "runtime/node.mjs",
+      "runtime/browser.mjs",
+      "runtime/host.d.ts",
+      "runtime/core/arrays.mjs",
+      "runtime/core/checks.mjs",
+      "runtime/core/host.mjs",
+      "runtime/core/numbers.mjs",
+      "runtime/core/result.mjs",
+      "runtime/core/strings.mjs",
+      "runtime/core/arrays.d.ts",
+      "runtime/core/host.d.ts",
+      "runtime/core/numbers.d.ts",
+      "runtime/core/result.d.ts",
+      "runtime/core/strings.d.ts",
       "scripts/build.sh",
       // The standard library is source, so shipping it *is* shipping the library
       // (wp21 §2). A tarball without it would install a compiler whose `std/`

@@ -1401,6 +1401,14 @@ export const main = (): i32 => {
 ```
 
 - **No body, and it cannot be `export`ed.**
+- **A class with a `CPtr` field is a handle class, and `using` of one is not
+  lowered yet** (NL2573). The class is checked: one `readonly` `CPtr` or
+  `CPtr | null` field written once by the constructor's foreign call, read only
+  as `this.f` in its own methods, and a `[Symbol.dispose]` that is exactly the
+  close. A handle is never copied, stored, returned or captured: it is called
+  or lent to a parameter of its type. Do not write one in a program until a
+  release lowers `using` of it — keep the `CPtr` in a local and close it
+  yourself. The rules: `LANGUAGE.md` → "A handle class".
 - **It costs the caller its attributes.** Nothing about a body the compiler
   cannot see is provable, so a function that calls C loses `readnone` and
   `willreturn`, and so does everything above it in the call graph. A program

@@ -1,0 +1,1 @@
+Module constant `shared` must be a number, boolean, or string, not File; there is no top-level code to build anything else
