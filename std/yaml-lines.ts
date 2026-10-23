@@ -27,7 +27,6 @@
  */
 
 const YAML_LINES_LF: i32 = 10
-const YAML_LINES_CR: i32 = 13
 /** A UTF-8 continuation byte is `10xxxxxx`: at least this and below `0xC0`. */
 const YAML_LINES_CONTINUATION: i32 = 128
 const YAML_LINES_LEAD: i32 = 192

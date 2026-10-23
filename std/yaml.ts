@@ -184,7 +184,6 @@ const YAML_PIPE: i32 = 124
 const YAML_RBRACE: i32 = 125
 
 /** The byte sets the scanners hand `indexOfAny`. */
-const YAML_PLAIN_BLOCK_STOPS: string = ":#\n\r"
 const YAML_PLAIN_FLOW_STOPS: string = ":#,[]{}\n\r"
 const YAML_DOUBLE_STOPS: string = '"\\\n\r'
 const YAML_SINGLE_STOPS: string = "'\n\r"
@@ -528,7 +527,8 @@ export class YamlStream {
 
   /** Diagnostic `i`'s `YAML_ERR_*` code, or `0`. */
   diagnosticCode(i: i32): i32 {
-    return i < 0 ? 0 : yamlAt(this.diagCodes, i) < 0 ? 0 : yamlAt(this.diagCodes, i)
+    const code: i32 = i < 0 ? 0 : yamlAt(this.diagCodes, i)
+    return code < 0 ? 0 : code
   }
 
   /** Whether diagnostic `i` is a warning rather than an error. */
@@ -1007,7 +1007,14 @@ const yamlDecodeEscape = (text: string, at: i32, to: i32, out: YamlBuffer): i32 
     return at + 1
   }
   const e: i32 = yamlByte(text, at + 1)
-  const digits: i32 = e === 120 ? 2 : e === 117 ? 4 : e === 85 ? 8 : 0
+  let digits: i32 = 0
+  if (e === 120) {
+    digits = 2
+  } else if (e === 117) {
+    digits = 4
+  } else if (e === 85) {
+    digits = 8
+  }
   if (digits > 0) {
     let cp: i32 = 0
     let k: i32 = 0
@@ -1524,7 +1531,10 @@ class YamlParser {
   isDocMarker(i: i32): boolean {
     const c: i32 = this.at(i)
     return (
-      (c === YAML_DASH || c === YAML_DOT) && this.at(i + 1) === c && this.at(i + 2) === c && yamlIsWs(this.at(i + 3))
+      (c === YAML_DASH || c === YAML_DOT) &&
+      this.at(i + 1) === c &&
+      this.at(i + 2) === c &&
+      yamlIsWs(this.at(i + 3))
     )
   }
 
@@ -1745,14 +1755,19 @@ class YamlParser {
       if (start > 0 && yamlIsBlank(this.at(start - 1))) {
         return
       }
-      this.error(YAML_ERR_BAD_COMMENT, "A comment must be preceded by whitespace", start, this.plainLineEnd(start))
+      this.error(
+        YAML_ERR_BAD_COMMENT,
+        "A comment must be preceded by whitespace",
+        start,
+        this.plainLineEnd(start)
+      )
       return
     }
     this.error(
       YAML_ERR_UNEXPECTED_CONTENT,
       "Unexpected content after the end of a node",
       start,
-      this.plainLineEnd(start),
+      this.plainLineEnd(start)
     )
   }
 
@@ -1810,7 +1825,7 @@ class YamlParser {
       YAML_ERR_UNKNOWN_TAG_HANDLE,
       `Tag handle "${handle}" was never declared by a %TAG directive`,
       start,
-      end,
+      end
     )
     return written
   }
@@ -1827,7 +1842,7 @@ class YamlParser {
       YAML_ERR_BAD_ANCHOR,
       `${what} name "${name}" cannot run on into "${next}": a flow indicator is not part of a name, so it needs a space before it`,
       start,
-      end + 1,
+      end + 1
     )
   }
 
@@ -1841,7 +1856,7 @@ class YamlParser {
       YAML_ERR_AMBIGUOUS_ANCHOR_NAME,
       `${what} name "${name}" ends in ":", which YAML reads as part of the name rather than as a mapping separator`,
       start,
-      end,
+      end
     )
   }
 
@@ -1895,7 +1910,11 @@ class YamlParser {
     }
     if (slot >= 0 && yamlAt(this.stream.propAnchorStarts, slot) >= 0) {
       yamlStackPush(this.pendingEnds, this.pendingTop, yamlAt(this.stream.propAnchorEnds, slot))
-      this.pendingTop = yamlStackPush(this.pendingStarts, this.pendingTop, yamlAt(this.stream.propAnchorStarts, slot))
+      this.pendingTop = yamlStackPush(
+        this.pendingStarts,
+        this.pendingTop,
+        yamlAt(this.stream.propAnchorStarts, slot)
+      )
     }
     return slot
   }
@@ -1959,7 +1978,12 @@ class YamlParser {
     const anchorFrom: i32 = yamlAt(stream.propAnchorStarts, slot)
     const anchorTo: i32 = yamlAt(stream.propAnchorEnds, slot)
     if (stream.kind(node) === YAML_ALIAS) {
-      this.error(YAML_ERR_BAD_PROPERTY, "An alias cannot carry an anchor or a tag", stream.start(node), stream.end(node))
+      this.error(
+        YAML_ERR_BAD_PROPERTY,
+        "An alias cannot carry an anchor or a tag",
+        stream.start(node),
+        stream.end(node)
+      )
       if (anchorFrom >= 0) {
         yamlPut(stream.props, node, slot)
         this.defineAnchor(anchorFrom, anchorTo, node, slot)
@@ -1977,7 +2001,7 @@ class YamlParser {
             YAML_ERR_BAD_PROPERTY,
             "A node cannot carry more than one anchor",
             stream.start(node),
-            stream.end(node),
+            stream.end(node)
           )
         }
         yamlPut(stream.propAnchorStarts, own, anchorFrom)
@@ -2063,7 +2087,7 @@ class YamlParser {
       YAML_ERR_BAD_INDENT,
       "A quoted scalar continued over lines must be indented deeper than its parent",
       lineStart,
-      i,
+      i
     )
     return true
   }
@@ -2135,7 +2159,7 @@ class YamlParser {
       YAML_SCALAR,
       single ? YAML_SINGLE_QUOTED : YAML_DOUBLE_QUOTED,
       start,
-      i,
+      i
     )
     yamlPut(this.stream.firsts, node, start + 1)
     yamlPut(this.stream.counts, node, contentEnd)
@@ -2169,12 +2193,14 @@ class YamlParser {
     const name: string = this.text.substring(start + 1, i)
     let p: i32 = this.pendingTop - 1
     while (p >= 0) {
-      if (yamlSameBytes(this.text, yamlAt(this.pendingStarts, p), yamlAt(this.pendingEnds, p), start + 1, i)) {
+      if (
+        yamlSameBytes(this.text, yamlAt(this.pendingStarts, p), yamlAt(this.pendingEnds, p), start + 1, i)
+      ) {
         this.error(
           YAML_ERR_RECURSIVE_ALIAS,
           `Alias "*${name}" refers to the node that contains it; recursive structures are not supported`,
           start,
-          i,
+          i
         )
         return node
       }
@@ -2191,11 +2217,7 @@ class YamlParser {
 
   /** Internal: whether `code` may not start a plain scalar: `1` always, `2` for `-?:` before a blank. */
   plainStartClass(code: i32): i32 {
-    if (
-      code === YAML_DASH ||
-      code === YAML_QUESTION ||
-      code === YAML_COLON
-    ) {
+    if (code === YAML_DASH || code === YAML_QUESTION || code === YAML_COLON) {
       return 2
     }
     if (
@@ -2242,14 +2264,14 @@ class YamlParser {
             YAML_ERR_BAD_SCALAR_START,
             'A "-" sequence indicator cannot start a flow collection entry',
             pos,
-            pos + 1,
+            pos + 1
           )
         } else {
           this.error(
             YAML_ERR_UNEXPECTED_CONTENT,
             "A block sequence cannot start on the line of the key it belongs to",
             pos,
-            pos + 1,
+            pos + 1
           )
         }
         return
@@ -2258,7 +2280,7 @@ class YamlParser {
         YAML_ERR_BAD_SCALAR_START,
         '"?" is an explicit-key indicator here and cannot start a plain scalar — quote the value',
         pos,
-        pos + 1,
+        pos + 1
       )
       return
     }
@@ -2270,7 +2292,7 @@ class YamlParser {
       YAML_ERR_BAD_SCALAR_START,
       `Indicator "${written}" cannot start a plain scalar — quote the value`,
       pos,
-      pos + 1,
+      pos + 1
     )
   }
 
@@ -2292,7 +2314,7 @@ class YamlParser {
       YAML_ERR_BAD_SCALAR_CONTENT,
       'A plain scalar cannot contain ": " — quote the value, or indent it as a nested mapping',
       at,
-      at + 1,
+      at + 1
     )
   }
 
@@ -2373,7 +2395,7 @@ class YamlParser {
         ? "A comment must be preceded by whitespace"
         : "A block scalar header holds only its chomping and indentation indicators",
       i,
-      this.plainLineEnd(i),
+      this.plainLineEnd(i)
     )
   }
 
@@ -2406,7 +2428,8 @@ class YamlParser {
     this.checkBlockHeaderEnd()
     this.finishLine()
     const bodyStart: i32 = this.pos
-    let contentIndent: i32 = explicitIndent > 0 ? (parentIndent > 0 ? parentIndent : toI32(0)) + explicitIndent : -1
+    let contentIndent: i32 =
+      explicitIndent > 0 ? (parentIndent > 0 ? parentIndent : toI32(0)) + explicitIndent : -1
     let leadingBlank: i32 = -1
     let valueEnd: i32 = this.pos
     while (this.pos < this.len) {
@@ -2437,7 +2460,7 @@ class YamlParser {
             YAML_ERR_BAD_INDENT,
             "A leading blank line of a block scalar is indented deeper than its first content line",
             lineStart,
-            i,
+            i
           )
         }
       }
@@ -2487,7 +2510,7 @@ class YamlParser {
               YAML_ERR_DUPLICATE_DIRECTIVE,
               `Tag handle "${handle}" is declared more than once`,
               at,
-              prefixEnd,
+              prefixEnd
             )
             break
           }
@@ -2504,7 +2527,7 @@ class YamlParser {
       YAML_ERR_UNKNOWN_DIRECTIVE,
       `Unknown directive "%${this.text.substring(at + 1, nameEnd)}"`,
       at,
-      nameEnd,
+      nameEnd
     )
   }
 
@@ -2542,7 +2565,7 @@ class YamlParser {
         YAML_ERR_BAD_DIRECTIVE,
         "Unexpected content after the %YAML version",
         after,
-        this.tokenEnd(after),
+        this.tokenEnd(after)
       )
     }
     if (version !== "1.2") {
@@ -2697,7 +2720,7 @@ class YamlParser {
       YAML_ERR_BAD_INDENT,
       "A flow collection continued over lines must be indented deeper than its parent",
       lineStart,
-      i,
+      i
     )
   }
 
@@ -2716,14 +2739,19 @@ class YamlParser {
             YAML_ERR_UNEXPECTED_CONTENT,
             "A document marker cannot appear inside a flow collection",
             p,
-            p + 3,
+            p + 3
           )
         } else if (!this.flowIndentReported) {
           this.checkFlowIndent(p)
         }
       } else if (c === YAML_HASH) {
         if (p > 0 && !yamlIsWs(this.at(p - 1))) {
-          this.error(YAML_ERR_BAD_COMMENT, "A comment must be preceded by whitespace", p, this.plainLineEnd(p))
+          this.error(
+            YAML_ERR_BAD_COMMENT,
+            "A comment must be preceded by whitespace",
+            p,
+            this.plainLineEnd(p)
+          )
         } else {
           this.recordComment(p)
         }
@@ -2872,7 +2900,7 @@ class YamlParser {
         YAML_ERR_BAD_IMPLICIT_KEY,
         'An implicit key must be followed by its ":" on the same line',
         afterKey,
-        this.pos + 1,
+        this.pos + 1
       )
     }
   }
@@ -2883,7 +2911,7 @@ class YamlParser {
       YAML_ERR_BAD_IMPLICIT_KEY,
       `An implicit key may not run more than ${YAML_MAX_KEY_LENGTH} characters before its ":"`,
       keyStart,
-      colon + 1,
+      colon + 1
     )
   }
 
@@ -2901,7 +2929,7 @@ class YamlParser {
       YAML_ERR_UNEXPECTED_CONTENT,
       `Unexpected "${this.text.substring(from, to)}" between a mapping key and its ":"`,
       from,
-      to,
+      to
     )
   }
 
@@ -2911,7 +2939,7 @@ class YamlParser {
       YAML_ERR_BAD_PROPERTY,
       'Node properties cannot come before a "?" explicit key indicator on its line; write them after the "?", or on a line of their own above',
       at,
-      at + 1,
+      at + 1
     )
   }
 
@@ -2958,9 +2986,11 @@ class YamlParser {
     }
     this.error(
       YAML_ERR_UNTERMINATED_FLOW,
-      close === YAML_RBRACKET ? 'Missing closing "]" for flow sequence' : 'Missing closing "}" for flow mapping',
+      close === YAML_RBRACKET
+        ? 'Missing closing "]" for flow sequence'
+        : 'Missing closing "}" for flow mapping',
       start,
-      this.pos,
+      this.pos
     )
   }
 
@@ -3120,7 +3150,11 @@ class YamlParser {
   /** Internal: whether two keys share a style and their source bytes, which makes them equal without decoding. */
   sameKeyBytes(a: i32, b: i32): boolean {
     const stream: YamlStream = this.stream
-    if (stream.kind(a) !== YAML_SCALAR || stream.kind(b) !== YAML_SCALAR || stream.style(a) !== stream.style(b)) {
+    if (
+      stream.kind(a) !== YAML_SCALAR ||
+      stream.kind(b) !== YAML_SCALAR ||
+      stream.style(a) !== stream.style(b)
+    ) {
       return false
     }
     return yamlSameBytes(this.text, stream.start(a), stream.end(a), stream.start(b), stream.end(b))
@@ -3196,7 +3230,7 @@ class YamlParser {
       YAML_ERR_DUPLICATE_KEY,
       `Map key "${yamlKeyText(stream, key)}" is duplicated`,
       stream.start(key),
-      stream.end(key),
+      stream.end(key)
     )
   }
 
@@ -3239,7 +3273,7 @@ class YamlParser {
       YAML_ERR_UNEXPECTED_CONTENT,
       'Unexpected content after the "..." document-end marker',
       after,
-      this.plainLineEnd(after),
+      this.plainLineEnd(after)
     )
   }
 
@@ -3263,9 +3297,11 @@ class YamlParser {
     if (seq || this.opensBlockMapping(contentPos)) {
       this.error(
         YAML_ERR_UNEXPECTED_CONTENT,
-        seq ? 'A block sequence cannot start on the "---" line' : 'A block mapping cannot start on the "---" line',
+        seq
+          ? 'A block sequence cannot start on the "---" line'
+          : 'A block mapping cannot start on the "---" line',
         contentPos,
-        this.plainLineEnd(contentPos),
+        this.plainLineEnd(contentPos)
       )
     }
     this.pos = contentPos
@@ -3325,7 +3361,12 @@ class YamlParser {
       end = yamlAt(stream.propTagEnds, slot)
     }
     if (stream.kind(node) !== want) {
-      const what: string = want === YAML_SCALAR ? "a scalar" : want === YAML_MAP ? "a mapping" : "a sequence"
+      let what: string = "a sequence"
+      if (want === YAML_SCALAR) {
+        what = "a scalar"
+      } else if (want === YAML_MAP) {
+        what = "a mapping"
+      }
       this.warn(YAML_ERR_BAD_TAG_VALUE, `!!${tag} describes ${what}, and cannot be applied here`, start, end)
       return
     }
@@ -3335,7 +3376,7 @@ class YamlParser {
           YAML_ERR_BAD_TAG_VALUE,
           `"${stream.text(node)}" is not a valid !!${tag} value; it is kept as a string`,
           start,
-          end,
+          end
         )
       }
     }
@@ -3361,7 +3402,7 @@ class YamlParser {
       YAML_ERR_UNEXPECTED_CONTENT,
       'Unexpected content after the document node — start a new document with "---"',
       this.lineContent,
-      this.plainLineEnd(this.lineContent),
+      this.plainLineEnd(this.lineContent)
     )
     return -1
   }
@@ -3392,7 +3433,7 @@ class YamlParser {
       YAML_ERR_MULTIPLE_DOCUMENTS,
       "Only the first document of this stream was parsed — turn off firstDocumentOnly to read the rest",
       marker,
-      marker + 3,
+      marker + 3
     )
     return footerEnd
   }
@@ -3418,7 +3459,7 @@ class YamlParser {
             YAML_ERR_UNEXPECTED_DIRECTIVE,
             'A directive must be preceded by a "..." document-end marker',
             p,
-            this.tokenEnd(p),
+            this.tokenEnd(p)
           )
         }
         this.readDirective(p)
@@ -3446,7 +3487,7 @@ class YamlParser {
         YAML_ERR_UNEXPECTED_DIRECTIVE,
         'A directive must be followed by a "---" document start',
         this.pos,
-        this.pos,
+        this.pos
       )
     }
     return seen
@@ -3454,7 +3495,11 @@ class YamlParser {
 
   /** Internal: steps past a UTF-8 byte order mark. */
   skipBom(): void {
-    if (yamlByte(this.text, 0) === 0xef && yamlByte(this.text, 1) === 0xbb && yamlByte(this.text, 2) === 0xbf) {
+    if (
+      yamlByte(this.text, 0) === 0xef &&
+      yamlByte(this.text, 1) === 0xbb &&
+      yamlByte(this.text, 2) === 0xbf
+    ) {
       this.pos = 3
     }
   }
@@ -3500,7 +3545,7 @@ class YamlParser {
               YAML_ERR_UNEXPECTED_CONTENT,
               'Unexpected content — start a new document with "---"',
               p,
-              this.plainLineEnd(p),
+              this.plainLineEnd(p)
             )
           }
           root = this.parseBareRoot(p, this.lineIndent)
@@ -3549,7 +3594,10 @@ class YamlParser {
   /** Internal: records a document whose root is `root` (or `-1`), closed by a `...` ending at `footerEnd` (or `-1`). */
   pushDocument(root: i32, footerEnd: i32): void {
     const stream: YamlStream = this.stream
-    let start: i32 = this.markerAt >= 0 ? this.markerAt : root >= 0 ? stream.start(root) : this.pos
+    let start: i32 = root >= 0 ? stream.start(root) : this.pos
+    if (this.markerAt >= 0) {
+      start = this.markerAt
+    }
     let end: i32 = footerEnd
     if (end < 0) {
       end = root >= 0 ? stream.end(root) : start
@@ -3824,7 +3872,7 @@ class YamlParser {
           YAML_ERR_BAD_IMPLICIT_KEY,
           "An implicit key must be on one line",
           stream.start(key),
-          stream.end(key),
+          stream.end(key)
         )
       }
     } else if (c === YAML_STAR) {
@@ -3927,7 +3975,7 @@ class YamlParser {
           YAML_ERR_UNEXPECTED_CONTENT,
           "A block sequence cannot start on the line its node properties are written on",
           this.pos,
-          this.pos + 1,
+          this.pos + 1
         )
       }
       if (this.atLineEnd()) {
@@ -3952,7 +4000,7 @@ class YamlParser {
             YAML_ERR_BAD_IMPLICIT_KEY,
             "An implicit key must be on one line",
             stream.start(node),
-            stream.end(node),
+            stream.end(node)
           )
         }
         this.pos += 1
