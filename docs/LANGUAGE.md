@@ -9803,7 +9803,9 @@ by the caller.
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/
   `--emit-napi-async` sidecars are refused beside it with exit 2, and so is
   `-o`, once the program is known to be writable. `--emit-ts` without a
-  directory is exit 2 as well.
+  directory is exit 2 as well, and so is a program that cannot be laid out
+  under one directory: a module above the directory of the others, or two
+  modules (or one and `entry.ts`) that would be written to one path.
 
 ### Panic sites
 

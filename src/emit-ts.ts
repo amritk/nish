@@ -50,24 +50,29 @@ export class EmittedFile {
 
 /**
  * What `emitTypeScript` answers. `refused` means a diagnostic was reported and
- * nothing may be written; `internal` is a broken invariant, for the driver's
- * internal-error exit. Neither set, `files` is the whole output.
+ * nothing may be written; `unwritable` says why the program's files cannot be
+ * laid out under one directory, for the driver's usage exit; `internal` is a
+ * broken invariant, for the driver's internal-error exit. None set, `files` is
+ * the whole output.
  */
 export class EmittedProgram {
   files: EmittedFile[]
   refused: boolean
+  unwritable: string
   internal: string
 
   constructor() {
     this.files = []
     this.refused = false
+    this.unwritable = ""
     this.internal = ""
   }
 }
 
 /**
  * The directory `a` and `b` both lie in: their longest common prefix, cut back
- * to the last `/` that ends a whole segment of both.
+ * to the last `/` that ends a whole segment of both. Two relative paths with no
+ * segment in common lie in `.`, two absolute ones in `/`.
  */
 const commonDirectory = (a: string, b: string): string => {
   if (a === b) {
@@ -87,7 +92,10 @@ const commonDirectory = (a: string, b: string): string => {
   if (whole) {
     return i === a.length ? a : b
   }
-  return cut === 0 ? "/" : a.substring(0, cut)
+  if (cut === 0) {
+    return a.charCodeAt(0) === 47 ? "/" : "."
+  }
+  return a.substring(0, cut)
 }
 
 /**
@@ -103,6 +111,16 @@ const outputPathOf = (unit: ModuleUnit, base: string): string => {
     return `nish/${unit.name.substring(4)}`
   }
   return ""
+}
+
+/** Whether `list` holds `text`. */
+const holds = (list: string[], text: string): boolean => {
+  for (const item of list) {
+    if (item === text) {
+      return true
+    }
+  }
+  return false
 }
 
 /** `to` as a specifier written in a file at `from`, both output paths. */
@@ -197,11 +215,19 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       base = commonDirectory(base, dirname(normalizePath(unit.path)))
     }
   }
+  // Without a working directory to resolve against, a module above the
+  // directory of the others (`../shared/s.ts`) has no place inside the output
+  // directory, and two modules that land on one path would overwrite each
+  // other; both are refused rather than written somewhere else.
   const outputs: string[] = []
   for (const unit of modules) {
     const out = outputPathOf(unit, base)
-    if (out === ENTRY_FILE) {
-      result.internal = `--emit-ts: the module ${unit.path} would be written over the launcher, ${ENTRY_FILE}`
+    if (out === ".." || out.startsWith("../") || out.startsWith("/")) {
+      result.unwritable = `--emit-ts cannot place ${unit.path}, which lies above the directory of the program's other modules`
+      return result
+    }
+    if (out === ENTRY_FILE || (out.length > 0 && holds(outputs, out))) {
+      result.unwritable = `--emit-ts would write ${unit.path} over another file at ${out}; rename or move the module`
       return result
     }
     outputs.push(out)
@@ -221,6 +247,10 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       }
       if (stmt.text === NET_SPECIFIER) {
         walk.refuse(stmt, SIGNAL_REFUSAL)
+      } else if (holds(walk.specifierFrom, stmt.text)) {
+        // A second import of one specifier: its rewrite is already listed, and
+        // listing it twice would edit each import twice.
+        continue
       } else if (isNishSpecifier(stmt.text)) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(RUNTIME)

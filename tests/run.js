@@ -3927,6 +3927,50 @@ if (!only || "emit-ts".includes(only)) {
     withDts.stderr
   )
 
+  // A program that cannot be laid out under one directory is a usage error,
+  // exit 2, with nothing written: a module above the others' directory, which
+  // would land outside the output, and a module of the root package at
+  // `nish/pair.ts` beside the standard library's `nish/pair`, which would
+  // overwrite each other.
+  const layout = (name, files, entry) => {
+    const tree = path.join(work, name)
+    fs.rmSync(tree, { recursive: true, force: true })
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), { recursive: true })
+      fs.writeFileSync(path.join(tree, file), text)
+    }
+    const cwd = path.join(tree, path.dirname(entry))
+    const r = spawnSync(NISH, [path.basename(entry), "--emit-ts", "out"], { cwd, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, wrote: fs.existsSync(path.join(cwd, "out")) }
+  }
+  const above = layout(
+    "above",
+    {
+      "app/main.ts": 'import { two } from "../shared/s"\nexport const main = (): number => two() - 2\n',
+      "shared/s.ts": "export const two = (): number => 2\n",
+    },
+    "app/main.ts"
+  )
+  check(
+    "emit-ts: a module above the program's directory exits 2 and writes nothing",
+    above.status === 2 && above.stderr.includes("lies above the directory") && !above.wrote,
+    `exit ${above.status}\n${above.stderr}`
+  )
+  const clash = layout(
+    "clash",
+    {
+      "main.ts":
+        'import { Pair } from "nish/pair"\nimport { mine } from "./nish/pair"\nexport const main = (): number => {\n  const p: Pair<number, number> = { first: mine(), second: 0 }\n  return p.first\n}\n',
+      "nish/pair.ts": "export const mine = (): number => 0\n",
+    },
+    "main.ts"
+  )
+  check(
+    "emit-ts: two modules written to one path exit 2 and write nothing",
+    clash.status === 2 && clash.stderr.includes("over another file at nish/pair.ts") && !clash.wrote,
+    `exit ${clash.status}\n${clash.stderr}`
+  )
+
   // The refusals: a finding about the program, exit 1, under its code, with
   // not one file written -- the output is all or nothing.
   for (const [code, name] of [

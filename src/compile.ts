@@ -1054,6 +1054,10 @@ export const main = (): number => {
     if (ts.internal.length > 0) {
       return internalErrorFor(ts.internal, json)
     }
+    if (ts.unwritable.length > 0) {
+      console.error(`compile: ${ts.unwritable}`)
+      return 2
+    }
     if (ts.refused) {
       report(compilation, json)
       return 1

@@ -135,9 +135,12 @@ app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; ke
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
 ```
 
-`--emit-ts` writes a directory and nothing else, so it exits 2 if you also
-pass `-o`, `--link`, `--emit-ast`, `--emit-checked` or one of the sidecar
-flags.
+`--emit-ts` writes a directory instead of IR, so it exits 2 if you also
+pass `-o`, `--link`, `--emit-ast`, `--emit-checked`, `--emit-header`,
+`--emit-dts`, `--emit-napi` or `--emit-napi-async`. It also exits 2 when a
+module lies above the directory of the others (`../shared/s.ts`), or when two
+modules would land on one file — a module of your own at `nish/pair.ts` and
+the standard library's `nish/pair`, say.
 
 ## Reading diagnostics
 
