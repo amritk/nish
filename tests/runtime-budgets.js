@@ -419,10 +419,11 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  *
  * Measured **1,319 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
  * `.text`, 333 of them the SIGTSTP handler and the lock it shares with
- * `setRawMode` (`nish_term_on_signal`, `_mask`, `_hold`, `_drop` and `_leave`). A ninth translation unit rather than more of `runtime-os.c`, which
- * had 177 bytes of its ceiling left, because the rule is a new file with its own
- * measured ceiling, never a raised one. The budget is the next 256-byte boundary above the
- * measurement, as every ceiling here was set.
+ * `setRawMode` (`nish_term_on_signal`, `_mask`, `_hold`, `_drop` and `_leave`).
+ * A ninth translation unit rather than more of `runtime-os.c`, which had 177
+ * bytes of its ceiling left, because the rule is a new file with its own
+ * measured ceiling, never a raised one. The budget is the next 256-byte boundary
+ * above the measurement, as every ceiling here was set.
  */
 const RUNTIME_TERM_TEXT_BUDGET = 1536
 

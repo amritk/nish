@@ -77,6 +77,10 @@
    stop interrupted can tell that from any other signal. Atomic, because the
    handler on one thread counts what a wait on another reads. */
 static int nish_term_stops;
+
+static int nish_term_stopped(void) {
+  return __atomic_load_n(&nish_term_stops, __ATOMIC_RELAXED);
+}
 #endif
 
 /* 1 when stdin is readable within `timeout_ms` (a negative one waits for
@@ -103,9 +107,9 @@ static int nish_stdin_ready(int32_t timeout_ms) {
   struct timeval tv = {timeout_ms / 1000, (timeout_ms % 1000) * 1000};
   int r, stops;
   do {
-    stops = __atomic_load_n(&nish_term_stops, __ATOMIC_RELAXED);
+    stops = nish_term_stopped();
     r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
-  } while (r < 0 && errno == EINTR && stops != __atomic_load_n(&nish_term_stops, __ATOMIC_RELAXED));
+  } while (r < 0 && errno == EINTR && stops != nish_term_stopped());
 #endif
   if (r < 0) return errno == EINTR ? 0 : -errno;
   return r;

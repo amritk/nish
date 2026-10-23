@@ -1577,9 +1577,9 @@ if (!only || "term".includes(only)) {
   // it was while it is stopped, because the shell puts back nothing, still so
   // once `bg` continues it, because it stops again by SIGTTOU entering raw
   // mode from the background, and raw again once `fg` continues it, its wait
-  // going on rather than ending early. Where
-  // `jobs` names the signal (dash: "Stopped (tty output)"), a SIGTTIN stop,
-  // a background read that never re-entered raw mode, does not count.
+  // going on rather than ending early. Where `jobs` names the signal (dash:
+  // "Stopped (tty output)"), a SIGTTIN stop, a background read that never
+  // re-entered raw mode, does not count.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1657,7 +1657,7 @@ if (!only || "term".includes(only)) {
         "continued 143 stty same was -icanon said raw 0 ready ",
       ]
       check(
-        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back",
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
       )
