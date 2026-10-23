@@ -250,8 +250,8 @@ function declareHandle(ctx: CheckContext, info: StructInfo, decl: Node): void ->
   pointer info: size=152 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -2:14 member: Node (const)
-  callee -1:74 isHandleFieldAnnotation -> @isHandleFieldAnnotation
+  local -6:14 member: Node (const)
+  callee -2:7 isHandleFieldAnnotation -> @isHandleFieldAnnotation
   callee +9:5 CheckContext.error -> @CheckContext.error
   callee +9:33 handleHeaderMessage -> @handleHeaderMessage
   callee +11:5 CheckContext.error -> @CheckContext.error

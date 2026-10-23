@@ -84,19 +84,19 @@ function HandleFinding.constructor(this: HandleFinding, node: Node, message: str
   pointer this: size=16 writesThrough=true captured=false
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-function handlePointerMessage(cls: string, field: string): string -> @handlePointerMessage [exported]
+function handlePointerMessage(cls: string, field: string): string -> @handlePointerMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function handleValueMessage(cls: string): string -> @handleValueMessage [exported]
+function handleValueMessage(cls: string): string -> @handleValueMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function handleTypeMessage(cls: string): string -> @handleTypeMessage [exported]
+function handleTypeMessage(cls: string): string -> @handleTypeMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function handleWriteMessage(cls: string, field: string): string -> @handleWriteMessage [exported]
+function handleWriteMessage(cls: string, field: string): string -> @handleWriteMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
@@ -140,7 +140,7 @@ function usingMessage(cls: string): string -> @usingMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function handleOf(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @handleOf [exported]
+function handleOf(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @handleOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull
@@ -309,10 +309,10 @@ function walkTypes(program: CheckedProgram, node: Node, parents: Node[], depth: 
   pointer parents: size=0 writesThrough=true captured=false passedTo=borrowingParam#2 walkTypes#2
   pointer out: size=0 writesThrough=true captured=false passedTo=walkTypes#4
   stackSites=0 stackLocals=0
-  local -5:11 info: StructInfo | null (const)
-  callee -5:18 CheckedProgram.struct -> @CheckedProgram.struct
-  local -2:13 parent: Node (const)
-  callee -1:70 borrowingParam -> @borrowingParam
+  local -9:11 info: StructInfo | null (const)
+  callee -9:18 CheckedProgram.struct -> @CheckedProgram.struct
+  local -6:13 parent: Node (const)
+  callee -2:10 borrowingParam -> @borrowingParam
   callee +0:18 new HandleFinding -> @HandleFinding.constructor
   callee +0:42 handleTypeMessage -> @handleTypeMessage
   local +5:11 callee: Node (const)
@@ -399,17 +399,17 @@ function soundWrite(walk: HandleWalk, member: Node, assign: Node): boolean -> @s
   pointer assign: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 body: Node | null (const)
-  callee +1:61 unwrapParens -> @unwrapParens
-  local +4:9 stmt: Node | null (const)
-  callee +4:16 HandleWalk.parent -> @HandleWalk.parent
-  local +5:9 block: Node | null (const)
-  callee +5:17 HandleWalk.parent -> @HandleWalk.parent
-  local +9:9 value: Node (const)
-  callee +9:17 unwrapParens -> @unwrapParens
-  local +13:9 sig: FunctionSig | null (const)
-  callee +14:24 FunctionSig.foreign -> @FunctionSig.foreign
-  local +17:14 earlier: Node (const)
-  callee +21:9 leaves -> @leaves
+  callee +5:5 unwrapParens -> @unwrapParens
+  local +9:9 stmt: Node | null (const)
+  callee +9:16 HandleWalk.parent -> @HandleWalk.parent
+  local +10:9 block: Node | null (const)
+  callee +10:17 HandleWalk.parent -> @HandleWalk.parent
+  local +14:9 value: Node (const)
+  callee +14:17 unwrapParens -> @unwrapParens
+  local +18:9 sig: FunctionSig | null (const)
+  callee +19:24 FunctionSig.foreign -> @FunctionSig.foreign
+  local +22:14 earlier: Node (const)
+  callee +26:9 leaves -> @leaves
 function checkFieldRead(walk: HandleWalk, member: Node, info: StructInfo, depth: i32): void -> @checkFieldRead
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9

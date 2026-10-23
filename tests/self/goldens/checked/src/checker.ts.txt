@@ -447,14 +447,14 @@ function Checker.registerStructTemplate(this: Checker, stmt: Node, kind: i32): v
   callee +22:9 Checker.nameTaken -> @Checker.nameTaken
   callee +23:7 CheckContext.error -> @CheckContext.error
   local +29:18 member: Node (const)
-  callee +30:78 isHandleFieldAnnotation -> @isHandleFieldAnnotation
-  callee +31:11 CheckContext.error -> @CheckContext.error
-  callee +31:36 handleHeaderMessage -> @handleHeaderMessage
-  local +36:11 template: StructTemplateInfo (const)
-  callee +36:22 new StructTemplateInfo -> @StructTemplateInfo.constructor
-  callee +37:25 isExported -> @isExported
-  callee +38:27 collectStructTypeParamNames -> @collectStructTypeParamNames
-  callee +39:5 CheckedProgram.addStructTemplate -> @CheckedProgram.addStructTemplate
+  callee +33:11 isHandleFieldAnnotation -> @isHandleFieldAnnotation
+  callee +35:11 CheckContext.error -> @CheckContext.error
+  callee +35:36 handleHeaderMessage -> @handleHeaderMessage
+  local +40:11 template: StructTemplateInfo (const)
+  callee +40:22 new StructTemplateInfo -> @StructTemplateInfo.constructor
+  callee +41:25 isExported -> @isExported
+  callee +42:27 collectStructTypeParamNames -> @collectStructTypeParamNames
+  callee +43:5 CheckedProgram.addStructTemplate -> @CheckedProgram.addStructTemplate
 function Checker.drainInstantiations(this: Checker): boolean -> @Checker.drainInstantiations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
