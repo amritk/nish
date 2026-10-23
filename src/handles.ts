@@ -468,14 +468,14 @@ class HandleWalk {
   closes: HandleClose[]
   /** The handle class whose method or constructor this is, or `null`. */
   cls: StructInfo | null
-  ctor: boolean
   /** The constructor's block, where the field's one write stands. */
   ctorBody: Node | null
   /** The `const`s bound to `this.<field>` (§4c R2). */
   derived: Local[]
-  wroteField: boolean
   parents: Node[]
   out: HandleFinding[]
+  ctor: boolean
+  wroteField: boolean
 
   constructor(program: CheckedProgram, table: TypeTable, closes: HandleClose[], out: HandleFinding[]) {
     this.program = program
