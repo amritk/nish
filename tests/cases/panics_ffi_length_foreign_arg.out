@@ -1,0 +1,3 @@
+credited returned -1
+`pwrite`: argument 3 (n) counts more bytes than argument 2 (buf) holds
+uncredited exit 1
