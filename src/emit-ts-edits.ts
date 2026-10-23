@@ -382,19 +382,6 @@ const splice = (walk: Walk, node: Node, operands: Operands): string => {
 }
 
 /**
- * The text of `node` as the emitted module spells it: a row hook's rewrite,
- * or the node's own source with each changed child spliced in. A row hook
- * that builds its rewrite out of a grandchild calls this.
- */
-const emitNode = (walk: Walk, node: Node): string => {
-  const holder = new Operands(node, walk.source.text)
-  holder.texts.push("")
-  holder.changed.push(false)
-  changedText(walk, node, holder, 0)
-  return holder.changed[0] ? holder.texts[0] : walk.spanOf(node)
-}
-
-/**
  * The specifier literal of `node`, an import, as a byte span of the source:
  * the parser keeps the decoded text and not where the literal was, so it is
  * found again as the last quoted copy of that text inside the statement.

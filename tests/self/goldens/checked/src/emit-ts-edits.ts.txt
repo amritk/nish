@@ -208,17 +208,6 @@ function splice(walk: Walk, node: Node, operands: Operands): string -> @splice
   callee +14:7 StringBuilder.add -> @StringBuilder.add
   callee +19:3 StringBuilder.add -> @StringBuilder.add
   callee +20:10 StringBuilder.toText -> @StringBuilder.toText
-function emitNode(walk: Walk, node: Node): string -> @emitNode
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via changedText
-  calls: Operands.constructor Walk.spanOf changedText nish_array_grow nish_panic_index
-  pointer walk: size=112 writesThrough=true captured=false passedTo=changedText#0 Walk.spanOf#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=Operands.constructor#1 changedText#1 Walk.spanOf#1
-  stackSites=1 stackLocals=1
-  local +0:9 holder: Operands (const)
-  callee +0:18 new Operands -> @Operands.constructor
-  callee +3:3 changedText -> @changedText
-  callee +4:48 Walk.spanOf -> @Walk.spanOf
 function specifierStart(walk: Walk, node: Node): i32 -> @specifierStart
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: Walk.spanOf lastOf nish_arena_mark nish_arena_release nish_panic_overflow nish_str_concat
