@@ -178,10 +178,42 @@ PASS  /a/g
 PASS  /a/ii
 PASS  /a/u
 PASS  /A/ims
+PASS  /é+日/
+PASS  /[^a]+z/
+PASS  /\s+x/
+PASS  /(\w+)\s日/
+PASS  /^b/m
+PASS  /^b/
+PASS  /a$/m
+PASS  /x+$/
+PASS  /\bfoo\b/
+PASS  /\Bo+/
+PASS  /\b\w+\b/
+PASS  /a.*b/
+PASS  /a.*b/s
+PASS  /a+/
+PASS  /(a+)(b*)/
+PASS  /<.+?>/
+PASS  /[a-z]+ing/
+PASS  /\w+@example\.com/
+PASS  /\d+zzq/
+PASS  /foo\d+/
+PASS  /[xy]z+/
+PASS  /h[a-z]+o/i
+PASS  /[ab]*a[ab]{10}/
+PASS  /[ab]*a[ab]{12}/
+PASS  /(?:a|b)a[ab]{12}c/
+PASS  x* counts 2001 in "aé" × 1000
+PASS  \b counts 4000 in "ab cd " × 1000
+PASS  needle counts 2000 in "a needle " × 2000
+PASS  [xy]z+ counts 2000 in "xz yq " × 2000
+PASS  \w+ counts 2000 in "ab, é " × 2000
+PASS  a[ab]{12} counts 7148 in a's and b's
+PASS  \d+zzq counts 5000 in "1zzq a zzq " × 5000
 PASS  (a+)+$ on a's and a b
 PASS  (a|a)*c on a's
 PASS  (x+x+)+y on x's
 PASS  (a*)*b counts no matches
 PASS  a{1000} counts 20 matches
 PASS  (a+)+ matches everything
-regex: 186 passed, 0 failed, 0 skipped
+regex: 218 passed, 0 failed, 0 skipped

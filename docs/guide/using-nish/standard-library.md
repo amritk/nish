@@ -167,9 +167,14 @@ Matching never backtracks, so a pattern cannot make it slow: `(a+)+$` against
 a long run of `a`s takes as long as `a+$`. The price is that backreferences
 (`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused when the pattern is
 compiled. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d`, `\b`
-and the `i` flag are ASCII, as they are in JavaScript. A search allocates
-nothing but its answer, because a `Regex` keeps its own scratch memory —
-which also means one `Regex` is used by one thread at a time.
+and the `i` flag are ASCII, as they are in JavaScript.
+
+A search runs a lazy DFA, a table of states built as the text needs them,
+and falls back to a slower engine only to fill in groups or when a pattern
+would need more states than the table holds (about 1 MiB). A `Regex` keeps
+that table and its other scratch memory between calls, so repeated searches
+allocate little beyond their answers — which also means one `Regex` is used
+by one thread at a time.
 
 ## `nish/json`
 

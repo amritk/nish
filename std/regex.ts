@@ -29,19 +29,26 @@
  * backtrack, and this one never does. A repeat count is at most 1,000 and a
  * pattern at most 100,000 instructions once its repeats are written out.
  *
- * **Matching is a Pike VM**, the construction RE2, Go's `regexp` and Rust's
- * `regex` use: every alternative is followed at once, one step per character,
- * so a match costs O(pattern × input) at worst and `(a+)+$` against a
- * thousand `a`s and a `b` is as quick as `a+$`. Which match is found is the
- * one JavaScript finds — the leftmost, and of those the one the first
- * alternative and the greediest quantifier prefer — and a group inside a
- * quantifier keeps only its last iteration's capture, as in JavaScript. An
- * iteration past a quantifier's minimum that matches empty is rejected, as
- * JavaScript rejects it. One corner differs: where a quantified body that can
- * match empty sits inside another quantifier, the VM follows only one thread
- * per instruction and position, so a group's capture can be a different
- * iteration's than JavaScript's — `(a*?)+?$` on "aa" captures "aa" where
- * JavaScript captures "a". The match's bounds are the same.
+ * **Matching never backtracks.** A search runs a lazy DFA first: it builds
+ * its states from the compiled program as the text needs them, so it reads a
+ * byte per step and the leftmost-first match's end comes from a table lookup.
+ * A reverse DFA, run back from that end, finds where the match starts, and a
+ * Pike VM, the construction RE2, Go's `regexp` and Rust's `regex` use, runs
+ * from that start only when a group's capture is wanted. A pattern with a
+ * literal no match can avoid, such as `\w+@example`, is searched for by that
+ * literal and the match grown both ways from it. Every engine follows every
+ * alternative at once, so a match costs O(pattern × input) at worst and
+ * `(a+)+$` against a thousand `a`s and a `b` is as quick as `a+$`. Which match
+ * is found is the one JavaScript finds — the leftmost, and of those the one
+ * the first alternative and the greediest quantifier prefer — and a group
+ * inside a quantifier keeps only its last iteration's capture, as in
+ * JavaScript. An iteration past a quantifier's minimum that matches empty is
+ * rejected, as JavaScript rejects it. One corner differs: where a quantified
+ * body that can match empty sits inside another quantifier, the VM follows
+ * only one thread per instruction and position, so a group's capture, and
+ * now and then the match's end, can be a different iteration's than
+ * JavaScript's — `(a*?)+?$` on "aa" captures "aa" where JavaScript captures
+ * "a".
  *
  * **Strings are UTF-8 and offsets are bytes**, like `s.length`. The VM steps
  * a code point at a time, so `.` and `[^a]` consume a whole character; a byte
@@ -50,21 +57,26 @@
  * JavaScript; `\s` is JavaScript's whitespace, U+FEFF and U+3000 included.
  * After an empty match `findAll`, `replaceAll` and `split` step one character.
  *
- * **What a call costs.** A search allocates nothing: the VM's two thread
- * lists, its capture tables and its stack are allocated once by
- * `regexCompile`. `test` tracks no captures, `findAll`, `split` and a
+ * **What a call costs.** The VM's two thread lists, its capture tables and
+ * its stack are allocated once by `regexCompile`. `test` tracks no captures, `findAll`, `split` and a
  * `replace` whose template names no group track only the match's bounds, and
  * only `exec`, `find` and a template with `$1` or `$<name>` pay for every
  * group. A pattern that starts with a literal is searched for with
- * `s.indexOf` before the VM runs, one that starts with one of at most 16
- * ASCII bytes with `indexOfAny`, any other whose first characters are known
- * skips the bytes that cannot start a match with a 128-entry table, and a
- * pattern that is nothing but a literal never starts the VM at all. Because
- * the scratch memory lives in the
- * `Regex`, one `Regex` is used by one thread at a time.
+ * `s.indexOf`, one that starts with one of at most 16 ASCII bytes with
+ * `indexOfAny`, any other whose first characters are known skips the bytes
+ * that cannot start a match with a 128-entry table, and a pattern that is
+ * nothing but a literal never starts an engine at all. The DFA's states are
+ * built as searches need them and kept, so only a search that meets new
+ * states allocates, and only up to a bound:
+ * its table holds at most 2,048 states and 262,144 transitions (1 MiB), and
+ * a search that fills it clears it and goes on; one that keeps clearing it
+ * without reading at least 10 bytes per state hands the rest of the text to
+ * the VM, which is slower but never needs more memory. Because the scratch
+ * memory lives in the `Regex`, one `Regex` is used by one thread at a time.
  */
 
 import { indexOfAny } from "nish/text"
+import { uncheckedGet } from "nish:unsafe"
 
 /** The most instructions a compiled pattern may have. */
 export const REGEX_MAX_INSTRUCTIONS: i32 = 100000
@@ -1110,6 +1122,149 @@ const regexNullable = (p: RegexParser, n: i32): boolean => {
   return true
 }
 
+// The lazy DFA. A state is a list of instructions waiting for a character, in
+// priority order, with flags: whether a match may still start at the next
+// byte (`DFA_RESTART`), the kind of character just read and whether it runs
+// the reverse program. A transition is one i32, 0 until it is computed. A
+// plain one is the next state's offset itself, which is never 0 because the
+// first row is never a state, so the hot loop's chain from one byte to the
+// next is a load and an `|`. Any other is `-(next << 4 | flags)`, with
+// `DFA_MATCH` when a match ends before the character, `DFA_DEAD` when no
+// thread survives it and `DFA_IDLE` when the next state waits for a match to
+// start and a prefilter can find one. The hot loop follows a plain entry and
+// one with only `DFA_MATCH`, and leaves on any other.
+const DFA_MATCH: i32 = 1
+const DFA_DEAD: i32 = 2
+const DFA_IDLE: i32 = 4
+const DFA_KNOWN: i32 = 8
+const DFA_RESTART: i32 = 1
+const DFA_REV: i32 = 16
+const DFA_UNANCHORED: i32 = 0
+const DFA_ANCHORED: i32 = 1
+const DFA_REVERSE: i32 = 2
+const DFA_INNER: i32 = 3
+/** A search that finds no match. */
+const DFA_NONE: i32 = -1
+/** A search that built too many states for the bytes it read, and leaves the rest to the VM. */
+const DFA_GAVE_UP: i32 = -2
+/** At most this many units are refined into byte classes, and this much work spent doing it. */
+const DFA_MAX_UNITS: i32 = 1048576
+const DFA_MAX_WORK: i32 = 4194304
+/** At most 2^12 classes, so a state's row is at most 4096 transitions. */
+const DFA_MAX_SHIFT: i32 = 12
+const DFA_MAX_STATES: i32 = 2048
+const DFA_MAX_TABLE: i32 = 262144
+const DFA_FIRST_STATES: i32 = 64
+const DFA_FIRST_POOL: i32 = 1024
+const DFA_MIN_POOL: i32 = 16384
+const DFA_HASH_MASK: i32 = 1048575
+/** A cache cleared more than this often must read 10 bytes per state it can hold, or the search gives up. */
+const DFA_FREE_FLUSHES: i32 = 3
+const DFA_BYTES_PER_STATE: i32 = 10
+const DFA_EPOCH_MASK: i32 = 1073741823
+/** How far the inner search may read in vain before it gives way to the plain one. */
+const DFA_INNER_SLACK: f64 = 65536.0
+
+// The kind of a character, as the assertions read it. `CTX_START` stands
+// before the text (or after it, read in reverse) and `CTX_EOT` after it.
+const CTX_START: i32 = 0
+const CTX_WORD: i32 = 1
+const CTX_LINE: i32 = 2
+const CTX_OTHER: i32 = 3
+const CTX_EOT: i32 = 4
+const CTX_KINDS: i32 = 5
+const CTX_SLOTS: i32 = 4
+
+/**
+ * Which kinds a program's assertions tell apart, as a map from each kind to
+ * the one a state records. `bits` has bit `1 << kind` for every assertion
+ * kind present; a pattern with none keeps one context, so it builds no state
+ * twice.
+ */
+const regexContextMask = (bits: i32): i32[] => {
+  const m: i32[] = new Array<i32>(CTX_KINDS)
+  const line: boolean = (bits & (1 << ASSERT_BEGIN_LINE)) !== 0
+  if ((bits & (1 << ASSERT_BEGIN_TEXT)) !== 0) {
+    m[CTX_START] = CTX_START
+  } else if (line) {
+    m[CTX_START] = CTX_LINE
+  } else {
+    m[CTX_START] = CTX_OTHER
+  }
+  const word: boolean = (bits & ((1 << ASSERT_WORD) | (1 << ASSERT_NOT_WORD))) !== 0
+  m[CTX_WORD] = word ? CTX_WORD : CTX_OTHER
+  m[CTX_LINE] = line ? CTX_LINE : CTX_OTHER
+  m[CTX_OTHER] = CTX_OTHER
+  m[CTX_EOT] = CTX_OTHER
+  return m
+}
+
+/** Sort `a` ascending, a bottom-up merge sort. */
+const regexSortPoints = (a: i32[]): void => {
+  const n: i32 = toI32(a.length)
+  const tmp: i32[] = new Array<i32>(n)
+  let width: i32 = 1
+  while (width < n) {
+    let lo: i32 = 0
+    while (lo < n) {
+      const mid: i32 = n - lo > width ? lo + width : n
+      const hi: i32 = n - mid > width ? mid + width : n
+      let i: i32 = lo
+      let j: i32 = mid
+      let k: i32 = lo
+      while (k < hi) {
+        if (i < mid && (j >= hi || a[i] <= a[j])) {
+          tmp[k] = a[i]
+          i += 1
+        } else {
+          tmp[k] = a[j]
+          j += 1
+        }
+        k += 1
+      }
+      lo = hi
+    }
+    let k: i32 = 0
+    while (k < n) {
+      a[k] = tmp[k]
+      k += 1
+    }
+    width *= 2
+  }
+}
+
+/** English letters, most frequent first. */
+const REGEX_LETTER_ORDER: string = "etaoinshrdlcumwfgypbvkjxqz"
+
+/** How common ASCII byte `b` is in text, roughly: a prefix is searched for by its rarest byte. */
+const regexByteScore = (b: i32): i32 => {
+  if (b === 32) {
+    return 100
+  }
+  if (b >= 97 && b <= 122) {
+    let i: i32 = 0
+    while (i < 26) {
+      if (toI32(REGEX_LETTER_ORDER.charCodeAt(i)) === b) {
+        return 95 - i
+      }
+      i += 1
+    }
+  }
+  if (b === 46 || b === 44) {
+    return 50
+  }
+  if (b === 10) {
+    return 45
+  }
+  if (b >= 65 && b <= 90) {
+    return 40
+  }
+  if (b >= 48 && b <= 57) {
+    return 30
+  }
+  return 10
+}
+
 /** One match: the input it was found in and the byte offsets of every group. */
 export class RegexMatch {
   /** The text that was searched. */
@@ -1201,8 +1356,12 @@ export class Regex {
 
   /** The literal every match starts with, or "". */
   prefix: string
+  /** The prefix's rarest byte, which `findPrefix` searches for, at `rareAt`. */
+  rareStr: string
   /** The ASCII bytes a match can start with, at most 16 of them, or "". */
   firstBytes: string
+  /** A literal inside every match that the part before it cannot read, or "": see `dfaInner`. */
+  innerLit: string
   /**
    * Which ASCII bytes a match can start with, when `firstBytes` is too small
    * to say, or empty when any byte can start one.
@@ -1227,6 +1386,47 @@ export class Regex {
   /** The best match so far. */
   mslots: i32[]
 
+  // The lazy DFA, built on first use by `dfaInit`. State `id` lives at
+  // offset `id << dShift` of `dTrans`, one transition per byte class; its
+  // instructions are `dPool[dStart[id] .. + dLen[id])` and `dHash` finds a
+  // state by them, holding `id + 1`.
+  dTrans: i32[]
+  dPool: i32[]
+  dStart: i32[]
+  dLen: i32[]
+  dFlags: i32[]
+  dHash: i32[]
+  // Scratch for one step: the closure's stamps, leaves and stack, and the
+  // next state's instructions.
+  dVisit: i32[]
+  dLeaf: i32[]
+  dBuf: i32[]
+  dStk: i32[]
+  /** The class of each ASCII byte; every byte above it maps to the spare column, never filled. */
+  dCls: i32[]
+  /** The classes of the code points from `dWlo[i]` up to the next: every one above ASCII. */
+  dWlo: i32[]
+  dWcls: i32[]
+  /** A code point of each class, or -1 for the end of the text, and its kind. */
+  dRep: i32[]
+  dNextK: i32[]
+  /** The context a class leaves behind, read forward and in reverse. */
+  dCtxF: i32[]
+  dCtxR: i32[]
+  dMaskF: i32[]
+  dMaskR: i32[]
+  /**
+   * Whether no forward assertion reads the character before it, so every
+   * forward state after a character holds the same context and a state with
+   * no thread left is the unanchored start state wherever the text resumes.
+   */
+  dCtxFree: boolean
+  /** Each start state's offset + 1, by mode and context, or 0. */
+  dStartOff: i32[]
+  /** Bytes the inner search read in vain past its literal, and bytes it moved past: see `dfaInner`. */
+  innerWaste: f64
+  innerGain: f64
+
   /** Capture groups, the whole match included. */
   groups: i32
   /** Slots a thread carries: two per group, then one mark per repeat that can iterate empty. */
@@ -1234,6 +1434,31 @@ export class Regex {
   cCount: i32
   nCount: i32
   gen: i32
+  /** The forward program's length; the reverse one follows it, at `revEntry`. */
+  fwdCount: i32
+  revEntry: i32
+  /** The reverse of the part before `innerLit`, which the inner search runs back from it. */
+  innerEntry: i32
+  /** Where `dfaForward` stopped reading, and where `dfaInner`'s match starts. */
+  dStop: i32
+  dBegin: i32
+  /** Where `rareStr` is in `prefix`. */
+  rareAt: i32
+  dShift: i32
+  dCount: i32
+  dCap: i32
+  dMax: i32
+  dPoolLen: i32
+  dPoolMax: i32
+  dGen: i32
+  /** Bumped by every flush, so a step can tell its row was cleared under it. */
+  dEpoch: i32
+  dFlushes: i32
+  /** Where the last flush happened. */
+  dPos: i32
+  /** The class of the end of the text, and how many intervals above ASCII there are. */
+  dEot: i32
+  dWide: i32
 
   hasNames: boolean
   tooBig: boolean
@@ -1243,6 +1468,15 @@ export class Regex {
   anchored: boolean
   /** Whether a byte above ASCII can start a match, when `firstSet` is not empty. */
   firstWide: boolean
+  /** The pattern can match the empty string. */
+  nullable: boolean
+  /** The reverse program was compiled. */
+  revOk: boolean
+  /** `dfaInit` has run, and whether the DFA may be used. */
+  dReady: boolean
+  dOk: boolean
+  /** An idle state skips ahead with the prefilter. */
+  dSkip: boolean
 
   constructor(source: string, flags: string) {
     this.source = source
@@ -1266,6 +1500,7 @@ export class Regex {
     this.literal = false
     this.anchored = false
     this.firstBytes = ""
+    this.innerLit = ""
     this.firstSet = []
     this.firstWide = false
     this.cDense = []
@@ -1281,6 +1516,54 @@ export class Regex {
     this.stkB = []
     this.caps = []
     this.mslots = []
+    this.rareStr = ""
+    this.rareAt = 0
+    this.fwdCount = 0
+    this.revEntry = 0
+    this.innerLit = ""
+    this.innerEntry = 0
+    this.innerWaste = 0.0
+    this.innerGain = 0.0
+    this.dStop = 0
+    this.dBegin = 0
+    this.nullable = true
+    this.revOk = false
+    this.dTrans = []
+    this.dPool = []
+    this.dStart = []
+    this.dLen = []
+    this.dFlags = []
+    this.dHash = []
+    this.dVisit = []
+    this.dLeaf = []
+    this.dBuf = []
+    this.dStk = []
+    this.dCls = []
+    this.dWlo = []
+    this.dWcls = []
+    this.dRep = []
+    this.dNextK = []
+    this.dCtxF = []
+    this.dCtxR = []
+    this.dMaskF = []
+    this.dMaskR = []
+    this.dCtxFree = false
+    this.dStartOff = []
+    this.dShift = 0
+    this.dCount = 0
+    this.dCap = 0
+    this.dMax = 0
+    this.dPoolLen = 0
+    this.dPoolMax = 0
+    this.dGen = 0
+    this.dEpoch = 0
+    this.dFlushes = 0
+    this.dPos = 0
+    this.dEot = 0
+    this.dWide = 0
+    this.dReady = false
+    this.dOk = false
+    this.dSkip = false
   }
 
   /** How many groups there are, the whole match (group 0) included. */
@@ -1313,14 +1596,19 @@ export class Regex {
   }
 
   /** One iteration of a repeat's body: its groups cleared, then the body. */
-  compileIteration(p: RegexParser, r: i32): void {
+  compileIteration(p: RegexParser, r: i32, rev: boolean): void {
     if (p.ne[r] > p.nd[r]) {
       this.emit(OP_CLEAR, 2 * p.nd[r], 2 * p.ne[r])
     }
-    this.compileNode(p, p.kid[r])
+    this.compileNode(p, p.kid[r], rev)
   }
 
-  compileNode(p: RegexParser, n: i32): void {
+  /**
+   * Emit node `n`. Reversed (`rev`), it matches the same text read from its
+   * end: a concatenation's parts come last first and each assertion trades
+   * places with its mirror, `^` with `$`. The reverse DFA runs that program.
+   */
+  compileNode(p: RegexParser, n: i32, rev: boolean): void {
     if (this.tooBig) {
       return
     }
@@ -1341,20 +1629,34 @@ export class Regex {
       return
     }
     if (kind === NODE_ASSERT) {
-      this.emit(OP_ASSERT, p.na[n], REGEX_NIL)
+      // The text and line assertions are numbered so that the low bit picks
+      // the beginning or the end.
+      const a: i32 = p.na[n]
+      this.emit(OP_ASSERT, rev && a < ASSERT_WORD ? a ^ 1 : a, REGEX_NIL)
       return
     }
     if (kind === NODE_CAT) {
+      const kids: i32[] = []
       let c: i32 = p.kid[n]
       while (c !== -1) {
-        this.compileNode(p, c)
+        kids.push(c)
         c = p.next[c]
+      }
+      const count: i32 = toI32(kids.length)
+      let i: i32 = 0
+      while (i < count) {
+        let k: i32 = i
+        if (rev) {
+          k = count - 1 - i
+        }
+        this.compileNode(p, kids[k], rev)
+        i += 1
       }
       return
     }
     if (kind === NODE_GROUP) {
       this.emit(OP_SAVE, 2 * p.na[n], REGEX_NIL)
-      this.compileNode(p, p.kid[n])
+      this.compileNode(p, p.kid[n], rev)
       this.emit(OP_SAVE, 2 * p.na[n] + 1, REGEX_NIL)
       return
     }
@@ -1365,11 +1667,11 @@ export class Regex {
         if (p.next[c] !== -1) {
           const split: i32 = this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL)
           this.ia[split] = this.pc()
-          this.compileNode(p, c)
+          this.compileNode(p, c, rev)
           jumps.push(this.emit(OP_JMP, REGEX_NIL, REGEX_NIL))
           this.ib[split] = this.pc()
         } else {
-          this.compileNode(p, c)
+          this.compileNode(p, c, rev)
         }
         c = p.next[c]
       }
@@ -1384,13 +1686,13 @@ export class Regex {
     const max: i32 = p.nb[n]
     const greedy: boolean = p.nc[n] === 1
     if (max !== min && regexNullable(p, p.kid[n])) {
-      this.compileEmptyCheckedRepeat(p, n, min, max, greedy)
+      this.compileEmptyCheckedRepeat(p, n, min, max, greedy, rev)
       return
     }
     if (max === -1 && min === 0) {
       // L: SPLIT body, exit; body; JMP L
       const split: i32 = this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL)
-      this.compileIteration(p, n)
+      this.compileIteration(p, n, rev)
       this.emit(OP_JMP, split, REGEX_NIL)
       const exit: i32 = this.pc()
       this.ia[split] = greedy ? split + 1 : exit
@@ -1401,11 +1703,11 @@ export class Regex {
       // body × (min - 1); L: body; SPLIT L, exit
       let i: i32 = 1
       while (i < min && !this.tooBig) {
-        this.compileIteration(p, n)
+        this.compileIteration(p, n, rev)
         i += 1
       }
       const loop: i32 = this.pc()
-      this.compileIteration(p, n)
+      this.compileIteration(p, n, rev)
       const split: i32 = this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL)
       this.ia[split] = greedy ? loop : split + 1
       this.ib[split] = greedy ? split + 1 : loop
@@ -1414,14 +1716,14 @@ export class Regex {
     // body × min; then (SPLIT next, exit; body) × (max - min)
     let i: i32 = 0
     while (i < min && !this.tooBig) {
-      this.compileIteration(p, n)
+      this.compileIteration(p, n, rev)
       i += 1
     }
     const splits: i32[] = []
     i = min
     while (i < max && !this.tooBig) {
       splits.push(this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL))
-      this.compileIteration(p, n)
+      this.compileIteration(p, n, rev)
       i += 1
     }
     const exit: i32 = this.pc()
@@ -1443,7 +1745,7 @@ export class Regex {
    *   body × min; L: SPLIT M, exit; M: MARK k; body; CHECK k; JMP L     (unbounded)
    *   body × min; (SPLIT M, exit; M: MARK k; body; CHECK k) × (max - min)
    */
-  compileEmptyCheckedRepeat(p: RegexParser, n: i32, min: i32, max: i32, greedy: boolean): void {
+  compileEmptyCheckedRepeat(p: RegexParser, n: i32, min: i32, max: i32, greedy: boolean, rev: boolean): void {
     while (toI32(this.markOf.length) <= n) {
       this.markOf.push(REGEX_NONE)
     }
@@ -1454,7 +1756,7 @@ export class Regex {
     const k: i32 = this.markOf[n]
     let i: i32 = 0
     while (i < min && !this.tooBig) {
-      this.compileIteration(p, n)
+      this.compileIteration(p, n, rev)
       i += 1
     }
     const splits: i32[] = []
@@ -1462,14 +1764,14 @@ export class Regex {
       const split: i32 = this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL)
       splits.push(split)
       this.emit(OP_MARK, k, REGEX_NIL)
-      this.compileIteration(p, n)
+      this.compileIteration(p, n, rev)
       this.emit(OP_CHECK, k, REGEX_NIL)
       this.emit(OP_JMP, split, REGEX_NIL)
     } else {
       while (i < max && !this.tooBig) {
         splits.push(this.emit(OP_SPLIT, REGEX_NIL, REGEX_NIL))
         this.emit(OP_MARK, k, REGEX_NIL)
-        this.compileIteration(p, n)
+        this.compileIteration(p, n, rev)
         this.emit(OP_CHECK, k, REGEX_NIL)
         i += 1
       }
@@ -1494,13 +1796,25 @@ export class Regex {
     this.clsTo = p.clsTo
     this.clsNeg = p.clsNeg
     this.emit(OP_SAVE, 2 * REGEX_WHOLE, REGEX_NIL)
-    this.compileNode(p, root)
+    this.compileNode(p, root, false)
     this.emit(OP_SAVE, 2 * REGEX_WHOLE + 1, REGEX_NIL)
     this.emit(OP_MATCH, REGEX_NIL, REGEX_NIL)
     if (this.tooBig) {
       return "the pattern compiles to more than 100000 instructions"
     }
     const count: i32 = this.pc()
+    this.fwdCount = count
+    this.nullable = regexNullable(p, root)
+    // The reverse program, which the reverse DFA runs to find where a match
+    // starts once the forward one has found where it ends. Without marks
+    // only: a mark reorders the matches, and the reverse search reads none.
+    if (this.width === 2 * this.groups && 2 * count <= REGEX_MAX_INSTRUCTIONS) {
+      this.revEntry = count
+      this.compileNode(p, root, true)
+      this.emit(OP_MATCH, REGEX_NIL, REGEX_NIL)
+      this.revOk = !this.tooBig
+      this.tooBig = false
+    }
     const slots: i32 = this.width
     if (count > REGEX_MAX_SLOT_TABLE / slots) {
       return "too many groups for the pattern's size"
@@ -1529,7 +1843,112 @@ export class Regex {
     this.stkA = new Array<i32>(frames)
     this.stkB = new Array<i32>(frames)
     this.findPrefilters()
+    if (this.revOk && !this.anchored && this.prefix === "") {
+      this.findInner(p, root)
+    }
     return ""
+  }
+
+  /**
+   * A run of literal ASCII characters among the top-level parts of the
+   * pattern, not the first, whose first byte no part before it can read:
+   * every match then holds the run's first occurrence at or after where it
+   * starts, so the search looks for the run and runs back from it. Takes the
+   * run with the rarest first byte, the longest of those, and compiles the
+   * parts before it reversed, at `innerEntry`.
+   */
+  findInner(p: RegexParser, root: i32): void {
+    if (p.kind[root] !== NODE_CAT) {
+      return
+    }
+    const kids: i32[] = []
+    let c: i32 = p.kid[root]
+    while (c !== -1) {
+      kids.push(c)
+      c = p.next[c]
+    }
+    const count: i32 = toI32(kids.length)
+    let best: i32 = 0
+    let bestLen: i32 = 0
+    let bestScore: i32 = 0
+    let i: i32 = 1
+    while (i < count) {
+      let n: i32 = 0
+      while (i + n < count && this.isAsciiChar(p, kids[i + n])) {
+        n += 1
+      }
+      if (n > 0) {
+        const b: i32 = p.na[kids[i]]
+        const score: i32 = regexByteScore(b)
+        if (bestLen === 0 || score < bestScore || (score === bestScore && n > bestLen)) {
+          let j: i32 = 0
+          while (j < i && !this.canConsume(p, kids[j], b)) {
+            j += 1
+          }
+          if (j === i) {
+            best = i
+            bestLen = n
+            bestScore = score
+          }
+        }
+        i += n
+      } else {
+        i += 1
+      }
+    }
+    if (bestLen === 0) {
+      return
+    }
+    const bytes: u8[] = new Array<u8>(bestLen)
+    i = 0
+    while (i < bestLen) {
+      bytes[i] = toU8(p.na[kids[best + i]])
+      i += 1
+    }
+    this.innerEntry = this.pc()
+    i = best - 1
+    while (i >= 0) {
+      this.compileNode(p, kids[i], true)
+      i -= 1
+    }
+    this.emit(OP_MATCH, REGEX_NIL, REGEX_NIL)
+    if (this.tooBig) {
+      this.tooBig = false
+      return
+    }
+    this.innerLit = String.fromBytes(bytes, 0, bestLen)
+  }
+
+  /** Whether node `n` is one ASCII character, matched exactly. */
+  isAsciiChar(p: RegexParser, n: i32): boolean {
+    return p.kind[n] === NODE_CHAR && p.na[n] === p.nb[n] && p.na[n] < 128
+  }
+
+  /** Whether node `n` can read the ASCII byte `b`. */
+  canConsume(p: RegexParser, n: i32, b: i32): boolean {
+    const kind: i32 = p.kind[n]
+    if (kind === NODE_CHAR) {
+      return p.na[n] === b || p.nb[n] === b
+    }
+    if (kind === NODE_CLASS) {
+      return this.classHas(p.na[n], b)
+    }
+    if (kind === NODE_ANY) {
+      return true
+    }
+    if (kind === NODE_GROUP || kind === NODE_REPEAT) {
+      return this.canConsume(p, p.kid[n], b)
+    }
+    if (kind === NODE_CAT || kind === NODE_ALT) {
+      let c: i32 = p.kid[n]
+      while (c !== -1) {
+        if (this.canConsume(p, c, b)) {
+          return true
+        }
+        c = p.next[c]
+      }
+    }
+    return false
   }
 
   /** The literal prefix, whether the pattern is only that literal, the anchor, and the first-byte set. */
@@ -1554,6 +1973,17 @@ export class Regex {
     if (n > 0) {
       this.prefix = String.fromBytes(bytes, 0, n)
       this.literal = this.op[pc] === OP_MATCH && this.groups === 1
+      let best: i32 = 1000
+      let i: i32 = 0
+      while (i < n) {
+        const b: i32 = toI32(bytes[i])
+        if (b < 128 && regexByteScore(b) < best) {
+          best = regexByteScore(b)
+          this.rareAt = i
+        }
+        i += 1
+      }
+      this.rareStr = this.prefix.slice(this.rareAt, this.rareAt + 1)
     }
     pc = 0
     while (this.op[pc] === OP_SAVE) {
@@ -1814,29 +2244,1082 @@ export class Regex {
   }
 
   /**
-   * The VM: whether the pattern matches `text` at or after byte `from`, and
-   * the leftmost-first match's first `want` slots in `mslots`. `want` is 0 to
-   * learn only whether there is a match, 2 for its bounds, or every group's.
-   * Any slots at all bring the marks along, because which match comes first
-   * depends on them.
+   * The first match of `prefix` at or after `from`, or -1: a search for its
+   * rarest byte, then a comparison of the bytes around it.
+   */
+  findPrefix(text: string, from: i32): i32 {
+    if (this.rareAt === 0) {
+      return toI32(text.indexOf(this.prefix, from))
+    }
+    const len: i32 = toI32(text.length)
+    const n: i32 = toI32(this.prefix.length)
+    let p: i32 = from + this.rareAt
+    while (true) {
+      const at: i32 = toI32(text.indexOf(this.rareStr, p))
+      if (at < 0) {
+        return -1
+      }
+      const s: i32 = at - this.rareAt
+      if (s > len - n) {
+        return -1
+      }
+      let k: i32 = 0
+      while (k < n && text.charCodeAt(s + k) === this.prefix.charCodeAt(k)) {
+        k += 1
+      }
+      if (k === n) {
+        return s
+      }
+      p = at + 1
+    }
+  }
+
+  /** Where the next match can start at or after `p`, by the prefilter, or -1. */
+  dSkipTo(text: string, p: i32): i32 {
+    if (this.prefix !== "") {
+      return this.findPrefix(text, p)
+    }
+    return toI32(indexOfAny(text, this.firstBytes, p))
+  }
+
+  /**
+   * Split the characters into the classes the program cannot tell apart, and
+   * size the DFA. Each ASCII byte, the end of the text and each interval of
+   * code points between the program's boundaries is a unit; every literal,
+   * class and kind the assertions read splits the units it holds from those
+   * it does not. Leaves `dOk` false when the split or the table would be too
+   * big, and the VM does all the work.
+   */
+  dfaInit(): void {
+    this.dReady = true
+    const total: i32 = this.pc()
+    const count: i32 = this.fwdCount
+    let bitsF: i32 = 0
+    let bitsR: i32 = 0
+    let anyNl: boolean = false
+    let pc: i32 = 0
+    while (pc < total) {
+      const o: i32 = this.op[pc]
+      if (o === OP_ASSERT) {
+        if (pc < count) {
+          bitsF |= 1 << this.ia[pc]
+        } else {
+          bitsR |= 1 << this.ia[pc]
+        }
+      } else if (o === OP_ANY_NL) {
+        anyNl = true
+      }
+      pc += 1
+    }
+    const bits: i32 = bitsF | bitsR
+    const lines: boolean = anyNl || (bits & ((1 << ASSERT_BEGIN_LINE) | (1 << ASSERT_END_LINE))) !== 0
+    const words: boolean = (bits & ((1 << ASSERT_WORD) | (1 << ASSERT_NOT_WORD))) !== 0
+    // The boundaries above ASCII: where a literal, a range or a line
+    // terminator starts and where it stops. The reverse program reads the
+    // same characters, so the forward one is enough.
+    const classes: i32 = toI32(this.clsFrom.length)
+    const seenCls: u8[] = new Array<u8>(classes)
+    const points: i32[] = []
+    pc = 0
+    while (pc < count) {
+      const o: i32 = this.op[pc]
+      if (o === OP_CHAR) {
+        const a: i32 = this.ia[pc]
+        const b: i32 = this.ib[pc]
+        if (a >= 128) {
+          points.push(a)
+          points.push(a + 1)
+        }
+        if (b >= 128 && b !== a) {
+          points.push(b)
+          points.push(b + 1)
+        }
+      } else if (o === OP_CLASS) {
+        const k: i32 = this.ia[pc]
+        if (seenCls[k] === 0) {
+          seenCls[k] = 1
+          let r: i32 = this.clsFrom[k]
+          while (r < this.clsTo[k]) {
+            const hi: i32 = this.clsHi[r]
+            if (hi >= 128) {
+              const lo: i32 = this.clsLo[r]
+              points.push(lo > 128 ? lo : 128)
+              points.push(hi + 1)
+            }
+            r += 1
+          }
+        }
+      }
+      pc += 1
+    }
+    if (lines) {
+      points.push(0x2028)
+      points.push(0x202a)
+    }
+    regexSortPoints(points)
+    const lows: i32[] = [128]
+    let i: i32 = 0
+    while (i < toI32(points.length)) {
+      const v: i32 = points[i]
+      if (v > lows[toI32(lows.length) - 1]) {
+        lows.push(v)
+      }
+      i += 1
+    }
+    const wide: i32 = toI32(lows.length)
+    const units: i32 = 129 + wide
+    if (units > DFA_MAX_UNITS) {
+      return
+    }
+    const rep: i32[] = new Array<i32>(units)
+    let u: i32 = 0
+    while (u < 128) {
+      rep[u] = u
+      u += 1
+    }
+    rep[128] = -1
+    i = 0
+    while (i < wide) {
+      rep[129 + i] = lows[i]
+      i += 1
+    }
+    // Refine one predicate at a time: a unit's class is its old class and
+    // whether the predicate holds for it.
+    const cls: i32[] = new Array<i32>(units)
+    const hit: u8[] = new Array<u8>(units)
+    const remap: i32[] = new Array<i32>(2 * units)
+    let n: i32 = 1
+    let work: i32 = 0
+    u = 0
+    while (u < units) {
+      hit[u] = toU8(u === 128 ? 1 : 0)
+      u += 1
+    }
+    n = this.dRefine(cls, hit, units, n, remap)
+    const pairs: u8[] = new Array<u8>(16384)
+    i = 0
+    while (i < classes) {
+      seenCls[i] = 0
+      i += 1
+    }
+    pc = 0
+    while (pc < count) {
+      const o: i32 = this.op[pc]
+      const a: i32 = this.ia[pc]
+      const b: i32 = this.ib[pc]
+      let use: boolean = false
+      if (o === OP_CHAR) {
+        if (a < 128 && b < 128) {
+          const key: i32 = a * 128 + b
+          use = pairs[key] === 0
+          pairs[key] = 1
+        } else {
+          use = true
+        }
+        if (use) {
+          u = 0
+          while (u < units) {
+            hit[u] = toU8(rep[u] === a || rep[u] === b ? 1 : 0)
+            u += 1
+          }
+        }
+      } else if (o === OP_CLASS) {
+        use = seenCls[a] === 0
+        seenCls[a] = 1
+        if (use) {
+          u = 0
+          while (u < units) {
+            hit[u] = toU8(u !== 128 && this.classHas(a, rep[u]) ? 1 : 0)
+            u += 1
+          }
+        }
+      }
+      if (use) {
+        work += units
+        if (work > DFA_MAX_WORK) {
+          return
+        }
+        n = this.dRefine(cls, hit, units, n, remap)
+      }
+      pc += 1
+    }
+    if (lines) {
+      u = 0
+      while (u < units) {
+        const r: i32 = rep[u]
+        hit[u] = toU8(r === 10 || r === 13 || r === 0x2028 || r === 0x2029 ? 1 : 0)
+        u += 1
+      }
+      n = this.dRefine(cls, hit, units, n, remap)
+    }
+    if (words) {
+      u = 0
+      while (u < units) {
+        const r: i32 = rep[u]
+        hit[u] = toU8(r >= 0 && r < 128 && isRegexWordByte(r) ? 1 : 0)
+        u += 1
+      }
+      n = this.dRefine(cls, hit, units, n, remap)
+    }
+    // One column past the classes for every byte above ASCII, whose entries
+    // stay 0: the hot loop reads such a byte as a transition it cannot take
+    // and leaves for the slow path, which decodes the character.
+    let shift: i32 = 0
+    while (1 << shift < n + 1) {
+      shift += 1
+    }
+    if (shift > DFA_MAX_SHIFT) {
+      return
+    }
+    this.dShift = shift
+    this.dCls = new Array<i32>(256)
+    u = 0
+    while (u < 256) {
+      this.dCls[u] = u < 128 ? cls[u] : n
+      u += 1
+    }
+    this.dEot = cls[128]
+    this.dWlo = lows
+    this.dWide = wide
+    this.dWcls = new Array<i32>(wide)
+    i = 0
+    while (i < wide) {
+      this.dWcls[i] = cls[129 + i]
+      i += 1
+    }
+    // Each class's representative and kind: the first unit in it.
+    this.dMaskF = regexContextMask(bitsF)
+    this.dMaskR = regexContextMask(bitsR)
+    this.dCtxFree =
+      this.dMaskF[CTX_START] === CTX_OTHER &&
+      this.dMaskF[CTX_WORD] === CTX_OTHER &&
+      this.dMaskF[CTX_LINE] === CTX_OTHER
+    this.dRep = new Array<i32>(n)
+    this.dNextK = new Array<i32>(n)
+    this.dCtxF = new Array<i32>(n)
+    this.dCtxR = new Array<i32>(n)
+    const done: u8[] = new Array<u8>(n)
+    u = 0
+    while (u < units) {
+      const c: i32 = cls[u]
+      if (done[c] === 0) {
+        done[c] = 1
+        const r: i32 = rep[u]
+        this.dRep[c] = r
+        let kind: i32 = CTX_OTHER
+        if (r < 0) {
+          kind = CTX_EOT
+        } else if (r === 10 || r === 13 || r === 0x2028 || r === 0x2029) {
+          kind = CTX_LINE
+        } else if (r < 128 && isRegexWordByte(r)) {
+          kind = CTX_WORD
+        }
+        this.dNextK[c] = kind
+        this.dCtxF[c] = this.dMaskF[kind]
+        this.dCtxR[c] = this.dMaskR[kind]
+      }
+      u += 1
+    }
+    this.dVisit = new Array<i32>(total)
+    this.dLeaf = new Array<i32>(total)
+    this.dBuf = new Array<i32>(total)
+    this.dStk = new Array<i32>(total + 1)
+    this.dMax = DFA_MAX_TABLE >> shift < DFA_MAX_STATES ? DFA_MAX_TABLE >> shift : DFA_MAX_STATES
+    this.dCap = this.dMax < DFA_FIRST_STATES ? this.dMax : DFA_FIRST_STATES
+    this.dTrans = new Array<i32>(this.dCap << shift)
+    this.dStart = new Array<i32>(this.dCap)
+    this.dLen = new Array<i32>(this.dCap)
+    this.dFlags = new Array<i32>(this.dCap)
+    this.dHash = new Array<i32>(this.dHashSize(this.dCap))
+    this.dPoolMax = 2 * total > DFA_MIN_POOL ? 2 * total : DFA_MIN_POOL
+    this.dPool = new Array<i32>(DFA_FIRST_POOL)
+    this.dPoolLen = 0
+    // Row 0 is never a state, so a plain transition, the next row's offset,
+    // is never 0, the entry not yet computed.
+    this.dCount = 1
+    this.dStartOff = new Array<i32>(4 * CTX_SLOTS)
+    this.dSkip = !this.anchored && (this.prefix !== "" || this.firstBytes !== "")
+    this.dOk = true
+  }
+
+  /**
+   * Split each of the `n` classes of `cls` by `hit`, numbering the new
+   * classes in order of first appearance. Answers how many there are.
+   */
+  dRefine(cls: i32[], hit: u8[], units: i32, n: i32, remap: i32[]): i32 {
+    let k: i32 = 0
+    while (k < 2 * n) {
+      remap[k] = -1
+      k += 1
+    }
+    let next: i32 = 0
+    let u: i32 = 0
+    while (u < units) {
+      const key: i32 = cls[u] * 2 + toI32(hit[u])
+      if (remap[key] < 0) {
+        remap[key] = next
+        next += 1
+      }
+      cls[u] = remap[key]
+      u += 1
+    }
+    return next
+  }
+
+  /** The smallest power of two that holds `cap` states at most half full. */
+  dHashSize(cap: i32): i32 {
+    let size: i32 = 1
+    while (size < 2 * cap) {
+      size *= 2
+    }
+    return size
+  }
+
+  /** The class of code point `cp`, which is above ASCII. */
+  dWideClass(cp: i32): i32 {
+    if (this.dWide === 1) {
+      return this.dWcls[0]
+    }
+    let lo: i32 = 0
+    let hi: i32 = this.dWide - 1
+    while (lo < hi) {
+      const mid: i32 = (lo + hi + 1) >> 1
+      if (this.dWlo[mid] <= cp) {
+        lo = mid
+      } else {
+        hi = mid - 1
+      }
+    }
+    return this.dWcls[lo]
+  }
+
+  /** Whether assertion `kind` holds between a character of kind `ctx` and one of kind `nk`. */
+  dAssert(kind: i32, ctx: i32, nk: i32): boolean {
+    if (kind === ASSERT_BEGIN_TEXT) {
+      return ctx === CTX_START
+    }
+    if (kind === ASSERT_END_TEXT) {
+      return nk === CTX_EOT
+    }
+    if (kind === ASSERT_BEGIN_LINE) {
+      return ctx === CTX_START || ctx === CTX_LINE
+    }
+    if (kind === ASSERT_END_LINE) {
+      return nk === CTX_EOT || nk === CTX_LINE
+    }
+    const boundary: boolean = (ctx === CTX_WORD) !== (nk === CTX_WORD)
+    return kind === ASSERT_WORD ? boundary : !boundary
+  }
+
+  /**
+   * Follow every instruction from `pc0` that consumes nothing, between a
+   * character of kind `ctx` and one of kind `nk`, and append the ones that
+   * wait for a character or match to `dLeaf` in priority order. Answers the
+   * new length.
+   */
+  dClose(pc0: i32, ctx: i32, nk: i32, n0: i32): i32 {
+    let n: i32 = n0
+    this.dStk[0] = pc0
+    let top: i32 = 1
+    while (top > 0) {
+      top -= 1
+      let pc: i32 = this.dStk[top]
+      while (true) {
+        if (this.dVisit[pc] === this.dGen) {
+          break
+        }
+        this.dVisit[pc] = this.dGen
+        const o: i32 = this.op[pc]
+        if (o === OP_JMP) {
+          pc = this.ia[pc]
+          continue
+        }
+        if (o === OP_SPLIT) {
+          this.dStk[top] = this.ib[pc]
+          top += 1
+          pc = this.ia[pc]
+          continue
+        }
+        if (o === OP_SAVE || o === OP_MARK || o === OP_CLEAR || o === OP_CHECK) {
+          pc += 1
+          continue
+        }
+        if (o === OP_ASSERT) {
+          if (this.dAssert(this.ia[pc], ctx, nk)) {
+            pc += 1
+            continue
+          }
+          break
+        }
+        this.dLeaf[n] = pc
+        n += 1
+        break
+      }
+    }
+    return n
+  }
+
+  /**
+   * Compute and record the transition from the state at `off` on class `c`,
+   * read at byte `p`. Answers the entry as stored, or 0 when the cache gave up.
+   */
+  dStep(off: i32, c: i32, p: i32): i32 {
+    const id: i32 = off >> this.dShift
+    const start: i32 = this.dStart[id]
+    const len: i32 = this.dLen[id]
+    const flags: i32 = this.dFlags[id]
+    const restart: boolean = (flags & DFA_RESTART) !== 0
+    const rev: boolean = (flags & DFA_REV) !== 0
+    const ctx: i32 = (flags >> 1) & 3
+    const nk: i32 = this.dNextK[c]
+    const epoch: i32 = this.dEpoch
+    if (this.dGen >= 2147483647) {
+      let k: i32 = 0
+      while (k < toI32(this.dVisit.length)) {
+        this.dVisit[k] = 0
+        k += 1
+      }
+      this.dGen = 0
+    }
+    this.dGen += 1
+    let n: i32 = 0
+    let i: i32 = 0
+    while (i < len) {
+      n = this.dClose(this.dPool[start + i], ctx, nk, n)
+      i += 1
+    }
+    if (restart) {
+      n = this.dClose(REGEX_ENTRY, ctx, nk, n)
+    }
+    let matched: boolean = false
+    let entry: i32 = DFA_KNOWN | DFA_DEAD
+    let to: i32 = 0
+    if (c === this.dEot) {
+      i = 0
+      while (i < n) {
+        if (this.op[this.dLeaf[i]] === OP_MATCH) {
+          matched = true
+          break
+        }
+        i += 1
+      }
+    } else {
+      const r: i32 = this.dRep[c]
+      let nb: i32 = 0
+      i = 0
+      while (i < n) {
+        const pc: i32 = this.dLeaf[i]
+        i += 1
+        const o: i32 = this.op[pc]
+        let hit: boolean = false
+        if (o === OP_CHAR) {
+          hit = r === this.ia[pc] || r === this.ib[pc]
+        } else if (o === OP_CLASS) {
+          hit = this.classHas(this.ia[pc], r)
+        } else if (o === OP_ANY) {
+          hit = true
+        } else if (o === OP_ANY_NL) {
+          hit = nk !== CTX_LINE
+        } else if (o === OP_MATCH) {
+          matched = true
+          if (!rev) {
+            // Every thread after this one has lower priority.
+            break
+          }
+        }
+        if (hit) {
+          this.dBuf[nb] = pc + 1
+          nb += 1
+        }
+      }
+      const restart2: boolean = restart && !matched
+      if (nb > 0 || restart2) {
+        const ctx2: i32 = rev ? this.dCtxR[c] : this.dCtxF[c]
+        let flags2: i32 = ctx2 << 1
+        if (restart2) {
+          flags2 |= DFA_RESTART
+        }
+        if (rev) {
+          flags2 |= DFA_REV
+        }
+        const next: i32 = this.dIntern(nb, flags2, p)
+        if (next < 0) {
+          return 0
+        }
+        to = next
+        entry = (next << 4) | DFA_KNOWN
+        if (nb === 0 && this.dSkip) {
+          entry |= DFA_IDLE
+        }
+      }
+    }
+    if (matched) {
+      entry |= DFA_MATCH
+    }
+    if (to !== 0 && entry === ((to << 4) | DFA_KNOWN)) {
+      entry = to
+    } else {
+      entry = -entry
+    }
+    if (epoch === this.dEpoch) {
+      this.dTrans[off + c] = entry
+    }
+    return entry
+  }
+
+  /** The hash of a state's flags and its `n` instructions in `src` from `at`. */
+  dHashOf(src: i32[], at: i32, n: i32, flags: i32): i32 {
+    let h: i32 = flags
+    let i: i32 = 0
+    while (i < n) {
+      h = (h * 31 + src[at + i]) & DFA_HASH_MASK
+      i += 1
+    }
+    return h
+  }
+
+  /**
+   * The offset of the state with flags `flags` and the `n` instructions in
+   * `dBuf`, made if it is new. Answers -1 when the cache is full and was
+   * cleared too recently, at byte `p`, to clear again.
+   */
+  dIntern(n: i32, flags: i32, p: i32): i32 {
+    const mask: i32 = toI32(this.dHash.length) - 1
+    const at: i32 = 0
+    let slot: i32 = this.dHashOf(this.dBuf, at, n, flags) & mask
+    while (this.dHash[slot] !== 0) {
+      const id: i32 = this.dHash[slot] - 1
+      if (this.dFlags[id] === flags && this.dLen[id] === n) {
+        const start: i32 = this.dStart[id]
+        let k: i32 = 0
+        while (k < n && this.dPool[start + k] === this.dBuf[k]) {
+          k += 1
+        }
+        if (k === n) {
+          return id << this.dShift
+        }
+      }
+      slot = (slot + 1) & mask
+    }
+    if (this.dCount === this.dCap) {
+      if (this.dCap < this.dMax) {
+        this.dGrow()
+      } else if (!this.dFlush(p)) {
+        return -1
+      }
+      return this.dIntern(n, flags, p)
+    }
+    if (this.dPoolLen + n > toI32(this.dPool.length)) {
+      const size: i32 = toI32(this.dPool.length)
+      if (size >= this.dPoolMax) {
+        if (!this.dFlush(p)) {
+          return -1
+        }
+        return this.dIntern(n, flags, p)
+      }
+      let grown: i32 = 2 * size
+      while (grown < this.dPoolLen + n) {
+        grown *= 2
+      }
+      if (grown > this.dPoolMax) {
+        grown = this.dPoolMax
+      }
+      const pool: i32[] = new Array<i32>(grown)
+      let k: i32 = 0
+      while (k < this.dPoolLen) {
+        pool[k] = this.dPool[k]
+        k += 1
+      }
+      this.dPool = pool
+    }
+    const id: i32 = this.dCount
+    this.dCount += 1
+    this.dStart[id] = this.dPoolLen
+    this.dLen[id] = n
+    this.dFlags[id] = flags
+    let k: i32 = 0
+    while (k < n) {
+      this.dPool[this.dPoolLen + k] = this.dBuf[k]
+      k += 1
+    }
+    this.dPoolLen += n
+    const off: i32 = id << this.dShift
+    const row: i32 = 1 << this.dShift
+    k = 0
+    while (k < row) {
+      this.dTrans[off + k] = 0
+      k += 1
+    }
+    this.dHash[slot] = id + 1
+    return off
+  }
+
+  /** Double the state table, up to `dMax` states. */
+  dGrow(): void {
+    let cap: i32 = 2 * this.dCap
+    if (cap > this.dMax) {
+      cap = this.dMax
+    }
+    const used: i32 = this.dCount << this.dShift
+    const trans: i32[] = new Array<i32>(cap << this.dShift)
+    let k: i32 = 0
+    while (k < used) {
+      trans[k] = this.dTrans[k]
+      k += 1
+    }
+    const start: i32[] = new Array<i32>(cap)
+    const len: i32[] = new Array<i32>(cap)
+    const flags: i32[] = new Array<i32>(cap)
+    const hash: i32[] = new Array<i32>(this.dHashSize(cap))
+    const mask: i32 = toI32(hash.length) - 1
+    k = 1
+    while (k < this.dCount) {
+      start[k] = this.dStart[k]
+      len[k] = this.dLen[k]
+      flags[k] = this.dFlags[k]
+      let slot: i32 = this.dHashOf(this.dPool, start[k], len[k], flags[k]) & mask
+      while (hash[slot] !== 0) {
+        slot = (slot + 1) & mask
+      }
+      hash[slot] = k + 1
+      k += 1
+    }
+    this.dTrans = trans
+    this.dStart = start
+    this.dLen = len
+    this.dFlags = flags
+    this.dHash = hash
+    this.dCap = cap
+  }
+
+  /**
+   * Forget every state, unless the cache was cleared more than a few times
+   * already and fewer than 10 bytes per state ago: then the DFA is building a
+   * state for nearly every byte and the VM is cheaper. Answers whether it
+   * cleared.
+   */
+  dFlush(p: i32): boolean {
+    this.dFlushes += 1
+    const moved: i32 = p > this.dPos ? p - this.dPos : this.dPos - p
+    if (this.dFlushes > DFA_FREE_FLUSHES && moved < DFA_BYTES_PER_STATE * this.dMax) {
+      return false
+    }
+    this.dPos = p
+    this.dCount = 1
+    this.dPoolLen = 0
+    let k: i32 = 0
+    while (k < toI32(this.dHash.length)) {
+      this.dHash[k] = 0
+      k += 1
+    }
+    k = 0
+    while (k < toI32(this.dStartOff.length)) {
+      this.dStartOff[k] = 0
+      k += 1
+    }
+    this.dEpoch = (this.dEpoch + 1) & DFA_EPOCH_MASK
+    return true
+  }
+
+  /** The start state for `mode` after a character of kind `ctx`, or -1. */
+  dStartAt(mode: i32, ctx: i32, p: i32): i32 {
+    const k: i32 = mode * CTX_SLOTS + ctx
+    const cached: i32 = this.dStartOff[k]
+    if (cached > 0) {
+      return cached - 1
+    }
+    let n: i32 = 0
+    let flags: i32 = ctx << 1
+    if (mode === DFA_UNANCHORED) {
+      flags |= DFA_RESTART
+    } else if (mode === DFA_ANCHORED) {
+      this.dBuf[0] = REGEX_ENTRY
+      n = 1
+    } else {
+      this.dBuf[0] = mode === DFA_INNER ? this.innerEntry : this.revEntry
+      n = 1
+      flags |= DFA_REV
+    }
+    const off: i32 = this.dIntern(n, flags, p)
+    if (off >= 0) {
+      this.dStartOff[k] = off + 1
+    }
+    return off
+  }
+
+  /** The kind of the character before byte `p`, as the forward program tells kinds apart. */
+  ctxBefore(text: string, p: i32): i32 {
+    let kind: i32 = CTX_OTHER
+    if (p <= 0) {
+      kind = CTX_START
+    } else {
+      const b: i32 = toI32(text.charCodeAt(p - 1))
+      if (b === 10 || b === 13) {
+        kind = CTX_LINE
+      } else if (isRegexWordByte(b)) {
+        kind = CTX_WORD
+      } else if (
+        (b === 0xa8 || b === 0xa9) &&
+        p >= 3 &&
+        toI32(text.charCodeAt(p - 2)) === 0x80 &&
+        toI32(text.charCodeAt(p - 3)) === 0xe2
+      ) {
+        kind = CTX_LINE
+      }
+    }
+    return this.dMaskF[kind]
+  }
+
+  /** The kind of the character at byte `p`, as the reverse program tells kinds apart. */
+  ctxAt(text: string, p: i32): i32 {
+    const len: i32 = toI32(text.length)
+    let kind: i32 = CTX_OTHER
+    if (p >= len) {
+      kind = CTX_START
+    } else {
+      const b: i32 = toI32(text.charCodeAt(p))
+      if (b === 10 || b === 13) {
+        kind = CTX_LINE
+      } else if (isRegexWordByte(b)) {
+        kind = CTX_WORD
+      } else if (b === 0xe2 && p + 2 < len && toI32(text.charCodeAt(p + 1)) === 0x80) {
+        const b2: i32 = toI32(text.charCodeAt(p + 2))
+        if (b2 === 0xa8 || b2 === 0xa9) {
+          kind = CTX_LINE
+        }
+      }
+    }
+    return this.dMaskR[kind]
+  }
+
+  /**
+   * The forward DFA: where the leftmost-first match at or after `from` ends,
+   * or, with `first`, where the earliest-ending match does — enough to know
+   * there is one. `pinned` tries only a match that starts at `from`. Answers
+   * `DFA_NONE` or `DFA_GAVE_UP` otherwise, and leaves where it stopped
+   * reading in `dStop`.
+   */
+  dfaForward(text: string, from: i32, first: boolean, pinned: boolean): i32 {
+    const len: i32 = toI32(text.length)
+    const mode: i32 = this.anchored || pinned ? DFA_ANCHORED : DFA_UNANCHORED
+    let p: i32 = from
+    this.dStop = len
+    if (this.dSkip && !pinned) {
+      p = this.dSkipTo(text, p)
+      if (p < 0) {
+        return DFA_NONE
+      }
+    }
+    let off: i32 = this.dStartAt(mode, this.ctxBefore(text, p), p)
+    if (off < 0) {
+      return DFA_GAVE_UP
+    }
+    let end: i32 = DFA_NONE
+    let trans: i32[] = this.dTrans
+    const cls: i32[] = this.dCls
+    while (true) {
+      // The hot loop: an ASCII byte and a transition already computed.
+      while (p < len) {
+        const b: i32 = toI32(text.charCodeAt(p))
+        const e: i32 = uncheckedGet(trans, off | uncheckedGet(cls, b))
+        if (e > 0) {
+          off = e
+          p += 1
+        } else if (e === 0 || (-e & (DFA_DEAD | DFA_IDLE)) !== 0) {
+          break
+        } else {
+          // A match ends before this byte and the search goes on.
+          if (first) {
+            this.dStop = p
+            return p
+          }
+          end = p
+          off = -e >> 4
+          p += 1
+        }
+      }
+      let c: i32 = this.dEot
+      let w: i32 = 1
+      if (p < len) {
+        const b: i32 = toI32(text.charCodeAt(p))
+        if (b < 128) {
+          c = cls[b]
+        } else {
+          const packed: i32 = regexDecodeAt(text, p, len)
+          c = this.dWideClass(packed >> 3)
+          w = packed & 7
+        }
+      }
+      let e: i32 = trans[off + c]
+      if (e === 0) {
+        e = this.dStep(off, c, p)
+        if (e === 0) {
+          return DFA_GAVE_UP
+        }
+        trans = this.dTrans
+      }
+      if (e > 0) {
+        if (p >= len) {
+          this.dStop = p
+          return end
+        }
+        off = e
+        p += w
+        continue
+      }
+      e = -e
+      if ((e & DFA_MATCH) !== 0) {
+        if (first) {
+          this.dStop = p
+          return p
+        }
+        end = p
+      }
+      if ((e & DFA_DEAD) !== 0 || p >= len) {
+        this.dStop = p
+        return end
+      }
+      off = e >> 4
+      p += w
+      if ((e & DFA_IDLE) !== 0) {
+        // No thread is alive and no match has been seen: skip to where the
+        // next one can start. The state reached is the start state there
+        // when the skip stays put or no assertion reads the context.
+        const q: i32 = this.dSkipTo(text, p)
+        if (q < 0) {
+          return end
+        }
+        if (q !== p && !this.dCtxFree) {
+          off = this.dStartAt(DFA_UNANCHORED, this.ctxBefore(text, q), q)
+          if (off < 0) {
+            return DFA_GAVE_UP
+          }
+          trans = this.dTrans
+        }
+        p = q
+      }
+    }
+  }
+
+  /**
+   * The reverse DFA: where the match that ends at `e` starts, the furthest
+   * back at or after `from`, or in `DFA_INNER` mode where the part before
+   * `innerLit` does when the literal is at `e`. Answers `DFA_NONE` or
+   * `DFA_GAVE_UP` otherwise.
+   */
+  dfaReverse(text: string, from: i32, e: i32, mode: i32): i32 {
+    const len: i32 = toI32(text.length)
+    let p: i32 = e
+    let off: i32 = this.dStartAt(mode, this.ctxAt(text, e), e)
+    if (off < 0) {
+      return DFA_GAVE_UP
+    }
+    let s: i32 = DFA_NONE
+    let trans: i32[] = this.dTrans
+    const cls: i32[] = this.dCls
+    while (true) {
+      while (p > from) {
+        const b: i32 = toI32(text.charCodeAt(p - 1))
+        const t: i32 = uncheckedGet(trans, off | uncheckedGet(cls, b))
+        if (t > 0) {
+          off = t
+          p -= 1
+        } else if (t === 0 || (-t & DFA_DEAD) !== 0) {
+          break
+        } else {
+          if ((-t & DFA_MATCH) !== 0) {
+            s = p
+          }
+          off = -t >> 4
+          p -= 1
+        }
+      }
+      // The character before `p`. At `from` it is read only for its kind,
+      // so it is decoded from the start of the text.
+      let c: i32 = this.dEot
+      let w: i32 = 1
+      if (p > 0) {
+        const b: i32 = toI32(text.charCodeAt(p - 1))
+        if (b < 128) {
+          c = cls[b]
+        } else {
+          const lim: i32 = p > from ? from : 0
+          let cp: i32 = REGEX_INVALID + b
+          let k: i32 = 2
+          while (k <= 4 && p - k >= lim) {
+            const lead: i32 = toI32(text.charCodeAt(p - k))
+            if (lead >= 0xc2) {
+              const packed: i32 = regexDecodeAt(text, p - k, len)
+              if ((packed & 7) === k) {
+                cp = packed >> 3
+                w = k
+              }
+              break
+            }
+            if (lead < 0x80 || lead >= 0xc0) {
+              break
+            }
+            k += 1
+          }
+          c = this.dWideClass(cp)
+        }
+      }
+      let t: i32 = trans[off + c]
+      if (t === 0) {
+        t = this.dStep(off, c, p)
+        if (t === 0) {
+          return DFA_GAVE_UP
+        }
+        trans = this.dTrans
+      }
+      if (t > 0) {
+        if (p <= from) {
+          return s
+        }
+        off = t
+        p -= w
+        continue
+      }
+      t = -t
+      if ((t & DFA_MATCH) !== 0) {
+        s = p
+      }
+      if ((t & DFA_DEAD) !== 0 || p <= from) {
+        return s
+      }
+      off = t >> 4
+      p -= w
+    }
+  }
+
+  /**
+   * The leftmost-first match at or after `from`, found by `innerLit`: its end,
+   * with its start in `dBegin`, or with `first` the earliest end of a match
+   * that starts there. Answers `DFA_NONE` or `DFA_GAVE_UP` otherwise.
+   *
+   * The part before the literal cannot read its first byte, so a match that
+   * starts at or before the literal's first occurrence `i` holds that
+   * occurrence, and one that starts after it, a later one. The reverse DFA
+   * finds the furthest-back start of the part before `i`; whether a match
+   * goes on from the literal does not depend on that start, so the forward
+   * DFA from it either finds the match or rules out every start up to `i`.
+   * That forward search can read past `i` in vain each time, so the bytes it
+   * wastes are counted against those the search moves past, over the life of
+   * the regex: past twice those and a slack, the inner search is dropped for
+   * the plain one, which keeps the cost linear.
+   */
+  dfaInner(text: string, from: i32, first: boolean): i32 {
+    let lower: i32 = from
+    while (this.innerLit !== "") {
+      const i: i32 = toI32(text.indexOf(this.innerLit, lower))
+      if (i < 0) {
+        return DFA_NONE
+      }
+      this.innerGain += toF64(i + 1 - lower)
+      const s: i32 = this.dfaReverse(text, lower, i, DFA_INNER)
+      if (s === DFA_GAVE_UP) {
+        return DFA_GAVE_UP
+      }
+      if (s >= 0) {
+        const e: i32 = this.dfaForward(text, s, first, true)
+        if (e !== DFA_NONE) {
+          this.dBegin = s
+          return e
+        }
+        this.innerWaste += toF64(this.dStop - i)
+        if (this.innerWaste > 2.0 * this.innerGain + DFA_INNER_SLACK) {
+          this.innerLit = ""
+        }
+      }
+      lower = i + 1
+    }
+    // No match starts before `lower`.
+    const e: i32 = this.dfaForward(text, lower, first, false)
+    if (e < 0) {
+      return e
+    }
+    this.dBegin = this.dfaReverse(text, lower, e, DFA_REVERSE)
+    return this.dBegin < 0 ? DFA_GAVE_UP : e
+  }
+
+  /**
+   * Whether the pattern matches `text` at or after byte `from`, and the
+   * leftmost-first match's first `want` slots in `mslots`: the DFA finds
+   * whether there is one and where it ends, the reverse DFA where it starts,
+   * and the VM, from that start, the groups.
    */
   run(text: string, from: i32, want: i32): boolean {
-    const ns: i32 = want > 0 && this.width > 2 * this.groups ? this.width : want
     const len: i32 = toI32(text.length)
     if (from < 0 || from > len) {
       return false
     }
     if (this.literal) {
-      const at: i32 = toI32(text.indexOf(this.prefix, from))
+      const at: i32 = this.findPrefix(text, from)
       if (at < 0) {
         return false
       }
-      if (ns >= 2) {
+      if (want >= REGEX_WANT_BOUNDS) {
         this.mslots[0] = at
         this.mslots[1] = at + toI32(this.prefix.length)
       }
       return true
     }
+    if (!this.dReady) {
+      this.dfaInit()
+    }
+    if (this.dOk && this.innerLit !== "") {
+      const e: i32 = this.dfaInner(text, from, want === REGEX_WANT_NONE)
+      if (e === DFA_NONE) {
+        return false
+      }
+      if (e >= 0 && want <= REGEX_WANT_BOUNDS) {
+        if (want > 0) {
+          this.mslots[0] = this.dBegin
+          this.mslots[1] = e
+        }
+        return true
+      }
+      if (e >= 0) {
+        return this.vm(text, this.dBegin, want, true)
+      }
+    } else if (this.dOk) {
+      if (want === REGEX_WANT_NONE) {
+        const e: i32 = this.dfaForward(text, from, true, false)
+        if (e !== DFA_GAVE_UP) {
+          return e >= 0
+        }
+      } else if (this.revOk) {
+        const e: i32 = this.dfaForward(text, from, false, false)
+        if (e === DFA_NONE) {
+          return false
+        }
+        if (e >= 0) {
+          const s: i32 = this.dfaReverse(text, from, e, DFA_REVERSE)
+          if (s >= 0 && want <= REGEX_WANT_BOUNDS) {
+            this.mslots[0] = s
+            this.mslots[1] = e
+            return true
+          }
+          if (s >= 0) {
+            return this.vm(text, s, want, true)
+          }
+        }
+      }
+    }
+    return this.vm(text, from, want, false)
+  }
+
+  /**
+   * The VM: whether the pattern matches `text` at or after byte `from`, and
+   * the leftmost-first match's first `want` slots in `mslots`. `want` is 0 to
+   * learn only whether there is a match, 2 for its bounds, or every group's.
+   * Any slots at all bring the marks along, because which match comes first
+   * depends on them. `pinned` tries only a match that starts at `from`.
+   */
+  vm(text: string, from: i32, want: i32, pinned: boolean): boolean {
+    const ns: i32 = want > 0 && this.width > 2 * this.groups ? this.width : want
+    const len: i32 = toI32(text.length)
+    const anchored: boolean = this.anchored || pinned
     const hasPrefix: boolean = this.prefix !== ""
     const hasFirst: boolean = this.firstBytes !== ""
     const hasSet: boolean = toI32(this.firstSet.length) > 0
@@ -1844,11 +3327,11 @@ export class Regex {
     let matched: boolean = false
     let p: i32 = from
     while (true) {
-      if (!matched && (p === from || !this.anchored)) {
+      if (!matched && (p === from || !anchored)) {
         if (this.cCount === 0) {
-          if (!this.anchored) {
+          if (!anchored) {
             if (hasPrefix) {
-              const at: i32 = toI32(text.indexOf(this.prefix, p))
+              const at: i32 = this.findPrefix(text, p)
               if (at < 0) {
                 break
               }
@@ -1885,7 +3368,7 @@ export class Regex {
         this.cCount = this.addThread(this.cDense, this.cSlots, this.cCount, REGEX_ENTRY, text, p, len, ns)
       }
       if (this.cCount === 0) {
-        if (matched || this.anchored || p >= len) {
+        if (matched || anchored || p >= len) {
           break
         }
         p += regexWidthAt(text, p, len)
@@ -2023,6 +3506,40 @@ export class Regex {
     const len: i32 = toI32(text.length)
     let n: i32 = 0
     let pos: i32 = 0
+    if (this.literal && this.prefix !== "") {
+      const n0: i32 = toI32(this.prefix.length)
+      while (true) {
+        const at: i32 = this.findPrefix(text, pos)
+        if (at < 0) {
+          return n
+        }
+        n += 1
+        pos = at + n0
+      }
+    }
+    if (!this.dReady) {
+      this.dfaInit()
+    }
+    // A match that cannot be empty ends past where its search started, so
+    // the forward DFA alone counts them; marks could move the end.
+    if (this.dOk && !this.literal && !this.nullable && this.width === 2 * this.groups) {
+      while (pos <= len) {
+        let e: i32 = DFA_NONE
+        if (this.innerLit !== "") {
+          e = this.dfaInner(text, pos, false)
+        } else {
+          e = this.dfaForward(text, pos, false, false)
+        }
+        if (e === DFA_NONE) {
+          return n
+        }
+        if (e === DFA_GAVE_UP) {
+          break
+        }
+        n += 1
+        pos = e
+      }
+    }
     while (pos <= len && this.run(text, pos, REGEX_WANT_BOUNDS)) {
       n += 1
       const s: i32 = this.mslots[0]

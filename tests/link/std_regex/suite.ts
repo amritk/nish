@@ -4,9 +4,9 @@
 // and input: `"start-end|group1|…"`, `-` for a group that took no part, `none`
 // for no match, and the error text for a pattern this engine refuses. Each row
 // also checks that `test` and `findAll` agree with `exec`, because the three
-// run the VM with different numbers of slots. The pathological patterns at the
-// end are the ones a backtracking engine takes exponential time on; here they
-// finish in time linear in the input.
+// take different paths through the DFA, the reverse DFA and the VM. The
+// pathological patterns at the end are the ones a backtracking engine takes
+// exponential time on; here they finish in time linear in the input.
 import { Suite } from "../../../std/testing";
 import { Regex, RegexMatch, regexCompile, regexEscape } from "../../../std/regex";
 
@@ -42,6 +42,30 @@ const row = (t: Suite, pattern: string, flags: string, text: string, expected: s
   if (found && (all.length === 0 || all[0] !== m.text())) {
     t.fail(name, "findAll disagrees with exec")
   }
+}
+
+/** `unit`, `n` times over. */
+const rep = (unit: string, n: i32): string => {
+  const parts: string[] = []
+  let i: i32 = 0
+  while (i < n) {
+    parts.push(unit)
+    i += 1
+  }
+  return parts.join("")
+}
+
+/** `n` a's and b's from a fixed coin, the one the rows' JavaScript generator flips. */
+const coin = (n: i32): string => {
+  const parts: string[] = []
+  let seed: i32 = 1
+  let i: i32 = 0
+  while (i < n) {
+    seed = (seed * 25173 + 13849) % 65536
+    parts.push(((seed >> 15) & 1) === 1 ? "b" : "a")
+    i += 1
+  }
+  return parts.join("")
 }
 
 const compile = (pattern: string, flags: string): Regex => {
@@ -262,6 +286,46 @@ export const runSuite = (): i32 => {
   row(t, "a", "ii", "a", "regex: invalid flags \"ii\"")
   row(t, "a", "u", "a", "regex: invalid flags \"u\"")
   row(t, "A", "ims", "a", "0-1")
+
+  // --- the lazy DFA ----------------------------------------------------------
+  // Texts long enough that the match is found by the DFA's table rather than
+  // on the first few bytes: non-ASCII bytes, read forward and back, the
+  // assertions' context, a match that goes on past an earlier one, a literal
+  // inside the pattern that is mostly found in vain, the prefilters, and
+  // patterns with more states than the cache holds, which clear it and then
+  // hand the text to the VM.
+  row(t, "é+日", "", rep("aé", 2000) + "éé日", "5998-6007")
+  row(t, "[^a]+z", "", "a" + rep("é日x", 1000) + "z", "1-6002")
+  row(t, "\\s+x", "", rep("a\u3000", 1000) + "\u3000\ufeffx", "3997-4007")
+  row(t, "(\\w+)\\s日", "", rep("日 ", 1000) + "ab 日", "4000-4006|ab")
+  row(t, "^b", "m", rep("a\n", 2000) + "b", "4000-4001")
+  row(t, "^b", "", rep("a\n", 2000) + "b", "none")
+  row(t, "a$", "m", rep("ab\n", 2000) + "a\nb", "6000-6001")
+  row(t, "x+$", "", rep("xy", 2000) + "xx", "4000-4002")
+  row(t, "\\bfoo\\b", "", rep("foox xfoo ", 1000) + " foo.", "10001-10004")
+  row(t, "\\Bo+", "", rep("o o ", 1000) + "boo", "4001-4003")
+  row(t, "\\b\\w+\\b", "", rep("é ", 1000) + "word", "3000-3004")
+  row(t, "a.*b", "", rep("a\nb", 1000) + "axxb", "3000-3004")
+  row(t, "a.*b", "s", "x" + rep("a\nc", 1000) + "b", "1-3002")
+  row(t, "a+", "", rep("b", 1000) + "aaaab", "1000-1004")
+  row(t, "(a+)(b*)", "", rep("c", 1000) + "aaabbc", "1000-1005|aaa|bb")
+  row(t, "<.+?>", "", "x" + rep("<a ", 1000) + "<b>", "1-3004")
+  row(t, "[a-z]+ing", "", rep("sin ", 1000) + "thing", "4000-4005")
+  row(t, "\\w+@example\\.com", "", rep("word ", 3000) + "me@example.com", "15000-15014")
+  row(t, "\\d+zzq", "", rep("a zzq ", 20000) + "12zzq", "120000-120005")
+  row(t, "foo\\d+", "", rep("foo ", 5000) + "foo42", "20000-20005")
+  row(t, "[xy]z+", "", rep("x y ", 5000) + "xzz", "20000-20003")
+  row(t, "h[a-z]+o", "i", rep("HELL ", 2000) + "HeLlO", "10000-10005")
+  row(t, "[ab]*a[ab]{10}", "", coin(100000), "0-99999")
+  row(t, "[ab]*a[ab]{12}", "", coin(200000), "0-199994")
+  row(t, "(?:a|b)a[ab]{12}c", "", coin(200000) + "c", "none")
+  t.eqI32("x* counts 2001 in \"aé\" × 1000", compile("x*", "").count(rep("aé", 1000)), toI32(2001))
+  t.eqI32("\\b counts 4000 in \"ab cd \" × 1000", compile("\\b", "").count(rep("ab cd ", 1000)), toI32(4000))
+  t.eqI32("needle counts 2000 in \"a needle \" × 2000", compile("needle", "").count(rep("a needle ", 2000)), toI32(2000))
+  t.eqI32("[xy]z+ counts 2000 in \"xz yq \" × 2000", compile("[xy]z+", "").count(rep("xz yq ", 2000)), toI32(2000))
+  t.eqI32("\\w+ counts 2000 in \"ab, é \" × 2000", compile("\\w+", "").count(rep("ab, é ", 2000)), toI32(2000))
+  t.eqI32("a[ab]{12} counts 7148 in a's and b's", compile("a[ab]{12}", "").count(coin(100000)), toI32(7148))
+  t.eqI32("\\d+zzq counts 5000 in \"1zzq a zzq \" × 5000", compile("\\d+zzq", "").count(rep("1zzq a zzq ", 5000)), toI32(5000))
 
   // --- linear time -------------------------------------------------------------
   // Each of these is exponential in a backtracking engine: 30 bytes of input
