@@ -97,6 +97,7 @@ import emitForeignBuffers from "./emit-strings" -> function @emitForeignBuffers
 import emitForeignString from "./emit-strings" -> function @emitForeignString
 import emitForeignStringResult from "./emit-strings" -> function @emitForeignStringResult
 import emitIndexOfAnyKernel from "./emit-strings" -> function @emitIndexOfAnyKernel
+import emitRegexScanKernel from "./emit-strings" -> function @emitRegexScanKernel
 import emitTemplate from "./emit-strings" -> function @emitTemplate
 import dottedName from "./emit-util" -> function @dottedName
 import intrinsicType from "./emit-util" -> function @intrinsicType
@@ -115,6 +116,7 @@ import BYTES_WALK_NONE from "./kernels" -> const BYTES_WALK_NONE
 import bytesWalkOf from "./kernels" -> function @bytesWalkOf
 import isAesSeam from "./kernels" -> function @isAesSeam
 import isIndexOfAnyWalk from "./kernels" -> function @isIndexOfAnyWalk
+import isRegexScanWalk from "./kernels" -> function @isRegexScanWalk
 import StringMap from "./map" -> struct StringMap
 import StringSet from "./map" -> struct StringSet
 import N_ARRAY from "./nodes" -> const N_ARRAY
@@ -1062,8 +1064,8 @@ function Emitter.emitMember(this: Emitter, expr: Node): string -> @Emitter.emitM
 function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCall [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: CaptureSlot.type Emitter.beginReclaim Emitter.captureValue Emitter.emitAesKernelArm Emitter.emitArgument Emitter.emitScopeExit Emitter.endReclaim Emitter.llvmAbi Emitter.marksTailCall Emitter.typeOf Emitter.useRuntime FunctionSig.foreign FunctionSig.isCompileTime FunctionSig.visibleOutside FusionTable.roleOf IRFunction.emit IRFunction.emitValue IRFunction.placeBlock TypeTable.isResult TypeTable.resultByValue TypeTable.stripNull bytesWalkOf capturesOf dottedName elementKeepSize emitBuiltinCall emitBytesKernel emitForeignBuffers emitForeignString emitForeignStringResult emitFusedCall emitIdentifierBuiltinCall emitIndexOfAnyKernel emitJsonRoute emitMapIntrinsic emitMethodCall emitPackedResult emitParallelRegion emitResultConstructor emitResultMethod emitResultReturningCall emitSpawnTask emitStoredKey internalErrorFor isAesSeam isIdentifierBuiltinCall isIndexOfAnyWalk isParallelRegionCall isResultConstructorCall isSpawnTaskCall isWasmBuild jsonRouteOf keepElement mapIntrinsicOf nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_index_of nish_str_index_of_from privateAbi receiverIsValue
-  pointer this: size=264 writesThrough=true captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitFusedCall#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 emitBuiltinCall#0 emitIdentifierBuiltinCall#0 emitStoredKey#0 emitPackedResult#0 Emitter.emitArgument#0 emitForeignString#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.captureValue#0 emitMapIntrinsic#0 emitSpawnTask#0 emitParallelRegion#0 elementKeepSize#0 Emitter.marksTailCall#0 Emitter.emitScopeExit#0 Emitter.useRuntime#0 emitJsonRoute#0 keepElement#0 Emitter.llvmAbi#0 emitIndexOfAnyKernel#0 emitBytesKernel#0 Emitter.emitAesKernelArm#0 Emitter.beginReclaim#0 emitForeignBuffers#0 Emitter.llvmAbi#0 emitResultReturningCall#0 emitForeignStringResult#0 keepElement#0 Emitter.llvmAbi#0 Emitter.endReclaim#0
+  calls: CaptureSlot.type Emitter.beginReclaim Emitter.captureValue Emitter.emitAesKernelArm Emitter.emitArgument Emitter.emitScopeExit Emitter.endReclaim Emitter.llvmAbi Emitter.marksTailCall Emitter.typeOf Emitter.useRuntime FunctionSig.foreign FunctionSig.isCompileTime FunctionSig.visibleOutside FusionTable.roleOf IRFunction.emit IRFunction.emitValue IRFunction.placeBlock TypeTable.isResult TypeTable.resultByValue TypeTable.stripNull bytesWalkOf capturesOf dottedName elementKeepSize emitBuiltinCall emitBytesKernel emitForeignBuffers emitForeignString emitForeignStringResult emitFusedCall emitIdentifierBuiltinCall emitIndexOfAnyKernel emitJsonRoute emitMapIntrinsic emitMethodCall emitPackedResult emitParallelRegion emitRegexScanKernel emitResultConstructor emitResultMethod emitResultReturningCall emitSpawnTask emitStoredKey internalErrorFor isAesSeam isIdentifierBuiltinCall isIndexOfAnyWalk isParallelRegionCall isRegexScanWalk isResultConstructorCall isSpawnTaskCall isWasmBuild jsonRouteOf keepElement mapIntrinsicOf nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat nish_str_index_of nish_str_index_of_from privateAbi receiverIsValue
+  pointer this: size=264 writesThrough=true captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitFusedCall#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 emitBuiltinCall#0 emitIdentifierBuiltinCall#0 emitStoredKey#0 emitPackedResult#0 Emitter.emitArgument#0 emitForeignString#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.captureValue#0 emitMapIntrinsic#0 emitSpawnTask#0 emitParallelRegion#0 elementKeepSize#0 Emitter.marksTailCall#0 Emitter.emitScopeExit#0 Emitter.useRuntime#0 emitJsonRoute#0 keepElement#0 Emitter.llvmAbi#0 emitIndexOfAnyKernel#0 emitBytesKernel#0 emitRegexScanKernel#0 Emitter.emitAesKernelArm#0 Emitter.beginReclaim#0 emitForeignBuffers#0 Emitter.llvmAbi#0 emitResultReturningCall#0 emitForeignStringResult#0 keepElement#0 Emitter.llvmAbi#0 Emitter.endReclaim#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitBuiltinCall#1 emitResultMethod#1 emitFusedCall#1 emitMethodCall#1 isResultConstructorCall#2 emitResultConstructor#1 emitIdentifierBuiltinCall#1 emitBuiltinCall#1 isIdentifierBuiltinCall#1 emitIdentifierBuiltinCall#1 Emitter.marksTailCall#1 emitForeignBuffers#1 emitResultReturningCall#3
   stackSites=2 stackLocals=2
   local -67:11 callee: Node (const)
@@ -1139,32 +1141,34 @@ function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCal
   local +70:11 bytesWalk: i32 (const)
   callee +70:23 bytesWalkOf -> @bytesWalkOf
   callee +72:14 emitBytesKernel -> @emitBytesKernel
-  local +77:11 aesSeam: i32 (const)
-  callee +77:21 isWasmBuild -> @isWasmBuild
-  callee +77:62 isAesSeam -> @isAesSeam
-  local +78:11 aesJoin: IRBlock | null (const)
-  callee +79:42 Emitter.emitAesKernelArm -> @Emitter.emitAesKernelArm
-  local +82:11 reclaim: string (const)
-  callee +82:42 Emitter.beginReclaim -> @Emitter.beginReclaim
-  local +83:11 mark: string (const)
-  local +84:11 marker: string (const)
-  callee +85:9 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +86:7 emitForeignBuffers -> @emitForeignBuffers
-  local +88:11 call: string (const)
-  callee +88:35 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +90:7 IRFunction.emit -> @IRFunction.emit
-  callee +92:9 IRFunction.emit -> @IRFunction.emit
-  callee +93:9 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +99:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee +100:14 emitResultReturningCall -> @emitResultReturningCall
-  local +102:9 answer: string (let)
-  callee +102:18 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +105:9 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +105:26 TypeTable.stripNull -> @TypeTable.stripNull
-  callee +106:16 emitForeignStringResult -> @emitForeignStringResult
-  callee +109:14 keepElement -> @keepElement
-  callee +109:32 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee +111:12 Emitter.endReclaim -> @Emitter.endReclaim
+  callee +74:9 isRegexScanWalk -> @isRegexScanWalk
+  callee +75:14 emitRegexScanKernel -> @emitRegexScanKernel
+  local +80:11 aesSeam: i32 (const)
+  callee +80:21 isWasmBuild -> @isWasmBuild
+  callee +80:62 isAesSeam -> @isAesSeam
+  local +81:11 aesJoin: IRBlock | null (const)
+  callee +82:42 Emitter.emitAesKernelArm -> @Emitter.emitAesKernelArm
+  local +85:11 reclaim: string (const)
+  callee +85:42 Emitter.beginReclaim -> @Emitter.beginReclaim
+  local +86:11 mark: string (const)
+  local +87:11 marker: string (const)
+  callee +88:9 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +89:7 emitForeignBuffers -> @emitForeignBuffers
+  local +91:11 call: string (const)
+  callee +91:35 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +93:7 IRFunction.emit -> @IRFunction.emit
+  callee +95:9 IRFunction.emit -> @IRFunction.emit
+  callee +96:9 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +102:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee +103:14 emitResultReturningCall -> @emitResultReturningCall
+  local +105:9 answer: string (let)
+  callee +105:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +108:9 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +108:26 TypeTable.stripNull -> @TypeTable.stripNull
+  callee +109:16 emitForeignStringResult -> @emitForeignStringResult
+  callee +112:14 keepElement -> @keepElement
+  callee +112:32 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee +114:12 Emitter.endReclaim -> @Emitter.endReclaim
 function Emitter.emitAesKernelArm(this: Emitter, seam: i32, operands: string[]): IRBlock -> @Emitter.emitAesKernelArm [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: via IRFunction.emitValue

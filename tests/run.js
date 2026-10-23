@@ -13352,7 +13352,11 @@ if (!only || "runtime-parallel".includes(only)) {
 // sysroot is installed, and as a static AArch64 binary when the host can run one
 // (binfmt_misc and qemu-user), which is how the NEON path runs on an x86-64 host. A
 // path the host cannot run is said, not skipped quietly: the driver's own line names
-// it, as the AVX2 path on a CPU without AVX2 is.
+// it, as the AVX2 path on a CPU without AVX2 is. tests/simd/regex-scan.c holds
+// `nish_regex_scan`, the byte-set search `nish/regex` starts its matches with, to
+// the same: 1..8 positions of random sets with the window anywhere in them, every
+// planted position of every length 0..300, and the resolver's pick, on the same
+// targets.
 if (!only || "simd".includes(only)) {
   const simdDir = path.join(buildDir, "simd")
   fs.mkdirSync(simdDir, { recursive: true })
@@ -13365,7 +13369,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -13378,6 +13382,8 @@ if (!only || "simd".includes(only)) {
   }
   const native = (exe) => spawnSync(exe, [], { encoding: "utf8" })
   agree(`native ${process.arch}`, [], path.join(simdDir, "index-of-any"), native)
+  const scanDriver = "tests/simd/regex-scan.c"
+  agree(`regex-scan native ${process.arch}`, [], path.join(simdDir, "regex-scan"), native, scanDriver)
 
   // WP38 S6a: the byte-class runs of runtime-bytes.c, which `nish/bytes`'s skips
   // lower to, are held to the same standard by tests/simd/byte-runs.c: every class
@@ -13433,6 +13439,8 @@ if (!only || "simd".includes(only)) {
       ["wasm32-wasi -msimd128", ["-msimd128"], driver, "index-of-any"],
       ["byte-runs wasm32-wasi, the scalar base path", [], runs, "byte-runs"],
       ["byte-runs wasm32-wasi -msimd128", ["-msimd128"], runs, "byte-runs"],
+      ["regex-scan wasm32-wasi, the scalar base path", [], scanDriver, "regex-scan"],
+      ["regex-scan wasm32-wasi -msimd128", ["-msimd128"], scanDriver, "regex-scan"],
     ]) {
       agree(
         label,
@@ -13485,6 +13493,13 @@ if (!only || "simd".includes(only)) {
           /cases agree across scalar base;/,
         ],
         [
+          "regex-scan aarch64 through binfmt, the NEON path",
+          scanDriver,
+          path.join(simdDir, "regex-scan.aarch64"),
+          "the NEON path of regex-scan",
+          null,
+        ],
+        [
           "aes-gcm aarch64 through binfmt (QEMU_CPU=max), the ARMv8 AES and PMULL path",
           "tests/simd/aes-gcm.c",
           path.join(simdDir, "aes-gcm.aarch64"),
@@ -13501,7 +13516,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -13551,7 +13566,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )

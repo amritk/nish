@@ -132,6 +132,7 @@ import {
   emitForeignString,
   emitForeignStringResult,
   emitIndexOfAnyKernel,
+  emitRegexScanKernel,
   emitTemplate,
 } from "./emit-strings"
 import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
@@ -145,6 +146,7 @@ import {
   bytesWalkOf,
   isAesSeam,
   isIndexOfAnyWalk,
+  isRegexScanWalk,
 } from "./kernels"
 import { StringMap, StringSet } from "./map"
 import {
@@ -1610,6 +1612,9 @@ export class Emitter {
     const bytesWalk = bytesWalkOf(this.program, sig)
     if (bytesWalk !== BYTES_WALK_NONE) {
       return emitBytesKernel(this, bytesWalk, operandValues)
+    }
+    if (isRegexScanWalk(this.program, sig)) {
+      return emitRegexScanKernel(this, operandValues)
     }
     // WP38 S5: a seam of `nish/crypto/aes` runs the runtime kernel when
     // `nish_aes_hw` says so and the walker below when not (`src/kernels.ts`).

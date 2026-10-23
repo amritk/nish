@@ -314,6 +314,17 @@ export class RuntimeTable {
         )
       )
     }
+    // `nish/regex`'s scan, beside it in runtime-simd.c: the same path store,
+    // but the masks are an array, whose elements sit behind a pointer the
+    // kernel loads, so `argmem` would understate its reads.
+    this.add(
+      new RuntimeFunction(
+        "nish_regex_scan",
+        `declare i64 @nish_regex_scan(${STR_NOCAP}, ${AES_ARRAY}, i64 noundef, i64 noundef, i64 noundef, i64 noundef)`,
+        attrs3("nounwind", "willreturn", "memory(read, inaccessiblemem: readwrite)"),
+        EFFECT_READ
+      )
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_index_of_from",

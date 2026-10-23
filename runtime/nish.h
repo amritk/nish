@@ -257,6 +257,20 @@ typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array
  * `elem_size` is `sizeof` one element, so for a record element type it is
  * `sizeof(struct Point)` and the block is a C array of them. */
 nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
+/* `nish/regex`'s match-start search: the first i >= from with i + depth <=
+   len where every s[i + j], j < depth, is in position j's byte set, or -1.
+   Position j's set is written twice: as the 32 bytes of masks from 32 * j,
+   where byte b is in it when bit (b >> 4) & 7 of byte (b & 15) | (b >> 7) << 4
+   is set, and as the 256 bytes from 32 * depth + 256 * j, where it is in it
+   when byte b of them is not 0; the two must agree. The vector paths look for
+   the width positions from off first, in the first form, and test the others
+   in the second; the answer does not depend on them. from is already in
+   [0, len], depth is 1..8, width is 1..4, off + width <= depth and masks
+   holds at least 288 * depth bytes. It lives
+   in runtime/runtime-simd.c and picks its path as nish_str_index_of_any does.
+   Variable-time: never call it on a secret. */
+int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t depth, int64_t off, int64_t width,
+                        int64_t from);
 /* No array grows past 2^31 - 1 elements and no string past 2^31 - 1 bytes:
  * `nish_array_grow`, `nish_alloc_array` and `nish_str_concat` fail as an
  * allocation does (`nish: out of memory`, exit 1; a trap on wasm) rather than

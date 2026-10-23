@@ -17,6 +17,12 @@
 // than from the kernel: it reads its two strings and nothing else, which is
 // all the kernel does that a caller can see.
 //
+// `std/regex.ts` has one walker of the same kind: `regexScanFrom`, the search
+// for a window of bytes each in its position's set that starts every match
+// search, lowered to `nish_regex_scan`. Its callers hand it a `from` in
+// `[0, length]`, a depth of 1 to 8, a window of 1 to 4 positions inside it and
+// a mask array 32 bytes a position, the contract `runtime/nish.h` states.
+//
 // WP38 S5: four private functions of `std/crypto/aes.ts` — the key schedule,
 // one block, GCTR over a run of bytes and GHASH over a run of bytes — have a
 // runtime kernel each in `runtime/runtime-aes.c`, on AES-NI and PCLMULQDQ or
@@ -53,7 +59,7 @@
 // the copy only ranges that lie inside their arrays.
 
 import { CheckedProgram, FunctionSig } from "./program"
-import { isBytesModule, isCryptoAesModule, isTextModule } from "./std-modules"
+import { isBytesModule, isCryptoAesModule, isRegexModule, isTextModule } from "./std-modules"
 import { T_VOID } from "./types"
 
 /** The runtime symbol the walker's call becomes. */
@@ -75,6 +81,16 @@ export const isIndexOfAnyWalk = (program: CheckedProgram, sig: FunctionSig): boo
   sig.instance === null &&
   sig.sourceName === INDEX_OF_ANY_WALK &&
   isTextModule(program.packageName, program.source.path)
+
+/** The runtime symbol `nish/regex`'s scan becomes. */
+export const REGEX_SCAN_KERNEL: string = "nish_regex_scan"
+
+/** Whether a call in `program` to `sig` is `nish/regex`'s scan, tested as `isIndexOfAnyWalk` tests its walk. */
+export const isRegexScanWalk = (program: CheckedProgram, sig: FunctionSig): boolean =>
+  sig.owner === null &&
+  sig.instance === null &&
+  sig.sourceName === "regexScanFrom" &&
+  isRegexModule(program.packageName, program.source.path)
 
 /** A call that is none of the AES seams. */
 export const AES_SEAM_NONE: i32 = 0

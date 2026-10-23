@@ -88,7 +88,7 @@ export const isStdModuleName = (name: string): boolean => {
  * against `package.json`.
  */
 export const stdModuleNames = (): string =>
-  "bytes, collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, json, json-tokenizer, json-typed, json-value, map, net/buffer-pool, net/hpack, net/http-fields, net/http1, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/tls, net/tls-tcp, net/tls/codec, net/tls/record, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/url, net/websocket, net/webtransport, pair, random, secret, term, testing, text, threads, yaml, yaml-lines"
+  "bytes, collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305, crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha1, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, crypto/x509-random, json, json-tokenizer, json-typed, json-value, map, net/buffer-pool, net/hpack, net/http-fields, net/http1, net/http1-server, net/http2, net/http2-frame, net/http2-tls, net/http3, net/http3-frame, net/http3-server, net/prefork, net/qpack, net/quic, net/quic-conn-ack, net/quic-conn-cid, net/quic-conn-params, net/quic-datagram, net/quic-frame, net/quic-listener, net/quic-packet, net/quic-recovery, net/quic-stream, net/router, net/tls, net/tls-tcp, net/tls/codec, net/tls/record, net/tls/record-server, net/tls/schedule, net/tls/ticket, net/url, net/websocket, net/webtransport, pair, random, regex, secret, term, testing, text, threads, yaml, yaml-lines"
 
 /**
  * `nish/collections`: the module the global `Map` and `Set` are declared in
@@ -171,6 +171,16 @@ const CRYPTO_AES_SPECIFIER: string = "nish/crypto/aes"
 /** Whether a module is the standard library's `std/crypto/aes.ts`: the package is part of the test, as for `isTextModule`. */
 export const isCryptoAesModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(CRYPTO_AES_SPECIFIER)
+
+/**
+ * `nish/regex`: ordinary Nish but for one call, the match-start scan's walk,
+ * which the emitter replaces with the runtime kernel (`src/kernels.ts`).
+ */
+const REGEX_SPECIFIER: string = "nish/regex"
+
+/** Whether a module is the standard library's `std/regex.ts`: the package is part of the test, as for `isTextModule`. */
+export const isRegexModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(REGEX_SPECIFIER)
 
 /** Whether a module is `std/secret.ts`: the package is part of the test, as for `isCollectionsModule`. */
 export const isSecretModule = (packageName: string, name: string): boolean =>
