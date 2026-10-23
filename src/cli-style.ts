@@ -135,8 +135,8 @@ const isTerminal = (fd: i32): boolean => spawnSync(["/bin/sh", "-c", `[ -t ${fd}
 
 /**
  * Whether an agent, rather than a person, is running the compiler.
- * `NISH_AGENT` answers for any agent, `1` for yes and a no (`envSaysNo`) for no;
- * without it, the variables the agents that set one put in their commands'
+ * `NISH_AGENT` answers for any agent: a no (`envSaysNo`) for no, any other
+ * value for yes. Without it, the variables the agents that set one put in their commands'
  * environment (Claude Code's `CLAUDECODE`, Gemini CLI's `GEMINI_CLI`) say yes.
  */
 export const agentDriven = (): boolean => {

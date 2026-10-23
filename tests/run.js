@@ -17239,9 +17239,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     help.stdout.trim() === noInputs.stderr.trim(),
     `stdout:\n${help.stdout}\nstderr:\n${noInputs.stderr}`
   )
-  // Every flag the driver accepts is listed: a wrapper that reads --help to
-  // learn the surface must not be missing one.
+  // Every flag the driver accepts is listed, by one of its spellings, bar
+  // --help itself, the test hook `--range-reference`, the refused `--nsw` and
+  // the default `--strict-exports`: a wrapper that reads --help to learn the
+  // surface must not be missing one.
   const documented = [
+    "--output",
+    "-g",
+    "--version",
+    "--plain",
+    "--no-stack-alloc",
+    "--no-strict-exports",
+    "--no-warn-performance",
+    "--unchecked-indexing",
+    "--wrapping",
+    "--number-mode",
+    "--runtime-decls",
+    "--threads",
+    "--emit-ast",
+    "--emit-checked",
     "--json",
     "--link",
     "--emit-header",
