@@ -5,6 +5,10 @@
 # ledger row whose stage fixes it (numbers, strings, records, control, libm,
 # ffi, refused); the comment is the evidence. A stage that fixes a program
 # regenerates this list, and the program leaves it.
+#
+# The run fails on a program that does not agree and is not listed, on a
+# listed one that agrees, on one whose row has moved, and on a listed name
+# the corpus no longer has. A build, emit or timeout failure is never listed.
 
 cases/argv_echo numbers  # differ: stdout line 1 differs
 cases/arr_bounds_break_for records  # differ: exit 1 vs 0
@@ -178,15 +182,15 @@ cases/mem_wait_pid_scope numbers  # differ: exit 0 vs 1: throw new Error(
 cases/neg_literal_i64_min numbers  # differ: stdout line 1 differs
 cases/neg_literal_unsigned numbers  # differ: stdout line 1 differs
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
-cases/net_loop_calls numbers  # differ: exit 0 vs 1: ReferenceError: pollCreate is not defined
+cases/net_loop_calls refused  # refused: NL4011 under --emit-ts
 cases/net_loop_two refused  # refused: NL4011 under --emit-ts
-cases/net_tcp_calls numbers  # differ: exit 0 vs 1: ReferenceError: netAddress is not defined
-cases/net_tcp_connect numbers  # differ: exit 0 vs 1: ReferenceError: tcpConnect is not defined
+cases/net_tcp_calls refused  # refused: NL4011 under --emit-ts
+cases/net_tcp_connect refused  # refused: NL4011 under --emit-ts
 cases/net_tcp_connect_import refused  # refused: NL4011 under --emit-ts
 cases/net_tcp_echo refused  # refused: NL4011 under --emit-ts
 cases/net_tcp_import refused  # refused: NL4011 under --emit-ts
 cases/net_tcp_reuseport refused  # refused: NL4011 under --emit-ts
-cases/net_udp_calls numbers  # differ: exit 0 vs 1: ReferenceError: udpBind is not defined
+cases/net_udp_calls refused  # refused: NL4011 under --emit-ts
 cases/net_udp_echo refused  # refused: NL4011 under --emit-ts
 cases/net_udp_offload refused  # refused: NL4011 under --emit-ts
 cases/os_cpu numbers  # differ: stdout line 2 differs

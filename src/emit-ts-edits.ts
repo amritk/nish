@@ -27,6 +27,7 @@ import { numbersRow } from "./emit-ts-numbers"
 import { recordsRow } from "./emit-ts-records"
 import { stringsRow } from "./emit-ts-strings"
 import { StringSet } from "./map"
+import { isNetExport } from "./nish-modules"
 import {
   FLAG_FOREIGN,
   FLAG_TYPE_ONLY,
@@ -249,7 +250,9 @@ const observe = (walk: Walk, node: Node): void => {
   }
   const imported = program.nodeBuiltins[node.id]
   const name = imported.length > 0 ? imported : node.children[0].text
-  if (name === "signalFd" || name === "readSignal") {
+  // Every `nish:net` name is a global builtin too, so a call spelled without
+  // the import is refused here, by the same table the checker binds it by.
+  if (name === "signalFd" || name === "readSignal" || isNetExport(name)) {
     walk.refuse(node, SIGNAL_REFUSAL)
     return
   }

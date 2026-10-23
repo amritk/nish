@@ -9796,9 +9796,10 @@ by the caller.
 - **Two kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
-  or calls `signalFd` or `readSignal`, whose translation is not local to its
-  statement (NL4011, `reject_emit_ts_net`). Every refusal in the program is
-  reported before it exits.
+  or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
+  its global name, whose translation is not local to its statement (NL4011,
+  `reject_emit_ts_net`, `reject_emit_ts_net_global`, `reject_emit_ts_signal`).
+  Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/
   `--emit-napi-async` sidecars are refused beside it with exit 2, and so is

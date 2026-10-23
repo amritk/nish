@@ -3920,6 +3920,12 @@ if (!only || "emit-ts".includes(only)) {
     bare.status === 2 && bare.stderr.includes("--emit-ts needs a directory"),
     bare.stderr
   )
+  const empty = usage(["--emit-ts", ""])
+  check(
+    "emit-ts: an empty --emit-ts directory exits 2 rather than compiling natively",
+    empty.status === 2 && empty.stderr.includes("--emit-ts needs a directory"),
+    `exit ${empty.status}\n${empty.stderr}`
+  )
   const withDts = usage(["--emit-ts", "<dir>", "--emit-dts", path.join(work, "usage.d.ts")])
   check(
     "emit-ts: --emit-ts with --emit-dts exits 2 and writes nothing",
@@ -3976,6 +3982,8 @@ if (!only || "emit-ts".includes(only)) {
   for (const [code, name] of [
     ["NL4010", "reject_emit_ts_ffi"],
     ["NL4011", "reject_emit_ts_net"],
+    ["NL4011", "reject_emit_ts_net_global"],
+    ["NL4011", "reject_emit_ts_signal"],
   ]) {
     const dir = path.join(work, name)
     const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {

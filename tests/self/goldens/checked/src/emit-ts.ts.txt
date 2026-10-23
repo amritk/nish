@@ -10,7 +10,7 @@ import emitModule from "./emit-ts-edits" -> function @emitModule
 import SIGNAL_REFUSAL from "./emit-ts-edits" -> const SIGNAL_REFUSAL
 import Walk from "./emit-ts-edits" -> struct Walk
 import StringSet from "./map" -> struct StringSet
-import isNishSpecifier from "./nish-modules" -> function @isNishSpecifier
+import isBuiltinSpecifier from "./nish-modules" -> function @isBuiltinSpecifier
 import N_IMPORT from "./nodes" -> const N_IMPORT
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import dirname from "./paths" -> function @dirname
@@ -119,7 +119,7 @@ function launcher(entryOut: string): string -> @launcher
 function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeScript [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via Walk.constructor
-  calls: Compilation.entry DiagnosticSink.report Edit.constructor EmittedFile.constructor EmittedProgram.constructor StringMap.get Walk.constructor Walk.refuse applyModuleEdits commonDirectory dirname emitModule holds importOffset isNishSpecifier launcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq normalizePath outputPathOf relativeSpecifier runtimeImport
+  calls: Compilation.entry DiagnosticSink.report Edit.constructor EmittedFile.constructor EmittedProgram.constructor StringMap.get Walk.constructor Walk.refuse applyModuleEdits commonDirectory dirname emitModule holds importOffset isBuiltinSpecifier launcher nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq normalizePath outputPathOf relativeSpecifier runtimeImport
   pointer compilation: size=128 writesThrough=false captured=false passedTo=Compilation.entry#0
   stackSites=2 stackLocals=2
   local +0:9 result: EmittedProgram (const)
@@ -147,29 +147,29 @@ function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeSc
   local +35:16 stmt: Node (const)
   callee +40:9 Walk.refuse -> @Walk.refuse
   callee +45:11 holds -> @holds
-  callee +48:11 isNishSpecifier -> @isNishSpecifier
-  local +53:13 target: i32 (const)
-  callee +53:22 StringMap.get -> @StringMap.get
-  local +54:13 dest: string (const)
-  callee +57:31 relativeSpecifier -> @relativeSpecifier
-  local +60:9 edits: Edit[] (let)
-  callee +61:5 emitModule -> @emitModule
-  local +66:9 r: i32 (let)
-  local +68:13 node: Node (const)
-  callee +69:7 DiagnosticSink.report -> @DiagnosticSink.report
-  local +76:11 header: string (const)
-  callee +76:20 runtimeImport -> @runtimeImport
-  callee +76:60 runtimeImport -> @runtimeImport
-  local +78:13 at: i32 (const)
-  callee +78:18 importOffset -> @importOffset
-  local +81:13 ordered: Edit[] (const)
-  local +82:11 placed: boolean (let)
-  local +83:18 edit: Edit (const)
-  callee +85:24 new Edit -> @Edit.constructor
-  callee +91:22 new Edit -> @Edit.constructor
-  local +95:11 text: string (const)
-  callee +95:18 applyModuleEdits -> @applyModuleEdits
-  callee +100:23 new EmittedFile -> @EmittedFile.constructor
-  local +106:7 entryOut: string (let)
-  callee +114:21 new EmittedFile -> @EmittedFile.constructor
-  callee +114:49 launcher -> @launcher
+  callee +50:11 isBuiltinSpecifier -> @isBuiltinSpecifier
+  local +55:13 target: i32 (const)
+  callee +55:22 StringMap.get -> @StringMap.get
+  local +56:13 dest: string (const)
+  callee +59:31 relativeSpecifier -> @relativeSpecifier
+  local +62:9 edits: Edit[] (let)
+  callee +63:5 emitModule -> @emitModule
+  local +68:9 r: i32 (let)
+  local +70:13 node: Node (const)
+  callee +71:7 DiagnosticSink.report -> @DiagnosticSink.report
+  local +78:11 header: string (const)
+  callee +78:20 runtimeImport -> @runtimeImport
+  callee +78:60 runtimeImport -> @runtimeImport
+  local +80:13 at: i32 (const)
+  callee +80:18 importOffset -> @importOffset
+  local +83:13 ordered: Edit[] (const)
+  local +84:11 placed: boolean (let)
+  local +85:18 edit: Edit (const)
+  callee +87:24 new Edit -> @Edit.constructor
+  callee +93:22 new Edit -> @Edit.constructor
+  local +97:11 text: string (const)
+  callee +97:18 applyModuleEdits -> @applyModuleEdits
+  callee +102:23 new EmittedFile -> @EmittedFile.constructor
+  local +108:7 entryOut: string (let)
+  callee +116:21 new EmittedFile -> @EmittedFile.constructor
+  callee +116:49 launcher -> @launcher

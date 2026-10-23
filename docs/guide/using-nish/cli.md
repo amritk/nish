@@ -119,7 +119,8 @@ Inside `out/`:
 - **`entry.ts`** runs your `main` and exits with the number it returns.
 
 Imports are rewritten so Node can follow them. A `nish:` builtin becomes
-`nish/runtime`, the one package the output imports. A `nish/x` or relative
+`nish/runtime`, the one package the output imports, except `nish:secret`,
+which is written like a standard-library module, as `nish/secret.ts`. A `nish/x` or relative
 import becomes a relative path ending in `.ts`. An imported interface or type
 alias is marked `import { type Pair }`. A module that needs none of this is
 written unchanged, byte for byte.
@@ -135,12 +136,26 @@ app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; ke
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
 ```
 
+The second is reported at each `nish:net` import and at each call to a
+`nish:net` function, `signalFd` or `readSignal`, imported or not.
+
+Not every builtin has a runtime export yet. The `nish:unsafe` functions
+(`uncheckedGet`, `wrappingAdd`, `readCString` and the rest) are written as
+imports from `nish/runtime` that Node cannot resolve, so a program that uses
+them does not run under Node yet.
+
 `--emit-ts` writes a directory instead of IR, so it exits 2 if you also
 pass `-o`, `--link`, `--emit-ast`, `--emit-checked`, `--emit-header`,
-`--emit-dts`, `--emit-napi` or `--emit-napi-async`. It also exits 2 when a
+`--emit-dts`, `--emit-napi` or `--emit-napi-async`, or give it an empty
+directory. It also exits 2 when a
 module lies above the directory of the others (`../shared/s.ts`), or when two
 modules would land on one file — a module of your own at `nish/pair.ts` and
 the standard library's `nish/pair`, say.
+
+`--emit-panics`, `--emit-arena` and `--emit-capabilities` still write their
+files alongside `--emit-ts`, and they are written before the TypeScript, so
+they are there even when the program is refused or its modules cannot be laid
+out.
 
 ## Reading diagnostics
 

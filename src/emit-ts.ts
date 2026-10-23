@@ -5,7 +5,8 @@
 // share; every standard-library module the program reaches is written under
 // `nish/` beside them, so a `nish/x` import becomes a relative one and the
 // output needs nothing installed but the runtime. A `nish:` builtin import
-// becomes `nish/runtime`, the one package the output names. Last comes
+// becomes `nish/runtime`, the one package the output names; `nish:secret`,
+// which has source, becomes the relative path of its `std/secret.ts`. Last comes
 // `entry.ts`, the launcher: it installs the Node host, calls `main` and exits
 // with what it answered, which a module cannot do for itself because Nish's
 // `main` is called, not run at load.
@@ -22,7 +23,7 @@ import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
 import { applyModuleEdits, emitModule, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
-import { isNishSpecifier } from "./nish-modules"
+import { isBuiltinSpecifier } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
@@ -254,7 +255,9 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       if (holds(walk.specifierFrom, stmt.text)) {
         continue
       }
-      if (isNishSpecifier(stmt.text)) {
+      // `nish:secret` has source behind it, written under `nish/` like any
+      // standard-library module, so it falls through to the path it resolved to.
+      if (isBuiltinSpecifier(stmt.text)) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(RUNTIME)
         continue

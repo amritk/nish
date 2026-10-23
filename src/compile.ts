@@ -576,7 +576,9 @@ export const main = (): number => {
     } else if (value === "--emit-ts") {
       productFlag = productFlag.length === 0 ? value : productFlag
       arg = arg + 1
-      if (arg >= process.argv.length) {
+      // An empty value would read as the flag left off, so it is refused
+      // rather than compiling natively in its place.
+      if (arg >= process.argv.length || process.argv[arg].length === 0) {
         console.error("compile: --emit-ts needs a directory")
         return 2
       }
