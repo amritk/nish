@@ -70,7 +70,7 @@ function relativeSpecifier(from: string, to: string): string -> @relativeSpecifi
   callee +0:29 dirname -> @dirname
 function importOffset(text: string): i32 -> @importOffset
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
   local +1:7 after: i32 (let)
@@ -146,29 +146,30 @@ function emitTypeScript(compilation: Compilation): EmittedProgram -> @emitTypeSc
   callee +34:18 new Walk -> @Walk.constructor
   local +35:16 stmt: Node (const)
   callee +40:9 Walk.refuse -> @Walk.refuse
-  callee +41:18 holds -> @holds
-  callee +45:18 isNishSpecifier -> @isNishSpecifier
-  local +49:15 target: i32 (const)
-  callee +49:24 StringMap.get -> @StringMap.get
-  callee +52:33 relativeSpecifier -> @relativeSpecifier
-  local +56:9 edits: Edit[] (let)
-  callee +57:5 emitModule -> @emitModule
-  local +62:9 r: i32 (let)
-  local +64:13 node: Node (const)
-  callee +65:7 DiagnosticSink.report -> @DiagnosticSink.report
-  local +72:11 header: string (const)
-  callee +72:20 runtimeImport -> @runtimeImport
-  callee +72:60 runtimeImport -> @runtimeImport
-  local +74:13 at: i32 (const)
-  callee +74:18 importOffset -> @importOffset
-  local +77:13 ordered: Edit[] (const)
-  local +78:11 placed: boolean (let)
-  local +79:18 edit: Edit (const)
-  callee +81:24 new Edit -> @Edit.constructor
-  callee +87:22 new Edit -> @Edit.constructor
-  local +91:11 text: string (const)
-  callee +91:18 applyModuleEdits -> @applyModuleEdits
-  callee +96:23 new EmittedFile -> @EmittedFile.constructor
-  local +102:7 entryOut: string (let)
-  callee +110:21 new EmittedFile -> @EmittedFile.constructor
-  callee +110:49 launcher -> @launcher
+  callee +45:11 holds -> @holds
+  callee +48:11 isNishSpecifier -> @isNishSpecifier
+  local +53:13 target: i32 (const)
+  callee +53:22 StringMap.get -> @StringMap.get
+  local +54:13 dest: string (const)
+  callee +57:31 relativeSpecifier -> @relativeSpecifier
+  local +60:9 edits: Edit[] (let)
+  callee +61:5 emitModule -> @emitModule
+  local +66:9 r: i32 (let)
+  local +68:13 node: Node (const)
+  callee +69:7 DiagnosticSink.report -> @DiagnosticSink.report
+  local +76:11 header: string (const)
+  callee +76:20 runtimeImport -> @runtimeImport
+  callee +76:60 runtimeImport -> @runtimeImport
+  local +78:13 at: i32 (const)
+  callee +78:18 importOffset -> @importOffset
+  local +81:13 ordered: Edit[] (const)
+  local +82:11 placed: boolean (let)
+  local +83:18 edit: Edit (const)
+  callee +85:24 new Edit -> @Edit.constructor
+  callee +91:22 new Edit -> @Edit.constructor
+  local +95:11 text: string (const)
+  callee +95:18 applyModuleEdits -> @applyModuleEdits
+  callee +100:23 new EmittedFile -> @EmittedFile.constructor
+  local +106:7 entryOut: string (let)
+  callee +114:21 new EmittedFile -> @EmittedFile.constructor
+  callee +114:49 launcher -> @launcher

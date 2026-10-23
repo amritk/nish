@@ -137,7 +137,7 @@ const relativeSpecifier = (from: string, to: string): string => {
 const importOffset = (text: string): i32 => {
   let at = 0
   let after = 0
-  while (at < text.length) {
+  while (at >= 0 && at < text.length) {
     const c = text.charCodeAt(at)
     if (c === 32 || c === 9 || c === 10 || c === 13) {
       at = at + 1
@@ -233,7 +233,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     outputs.push(out)
   }
   let k = 0
-  while (k < modules.length) {
+  while (k < modules.length && k < outputs.length) {
     const unit = modules[k]
     const out = outputs[k]
     k = k + 1
@@ -247,19 +247,23 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       }
       if (stmt.text === NET_SPECIFIER) {
         walk.refuse(stmt, SIGNAL_REFUSAL)
-      } else if (holds(walk.specifierFrom, stmt.text)) {
-        // A second import of one specifier: its rewrite is already listed, and
-        // listing it twice would edit each import twice.
         continue
-      } else if (isNishSpecifier(stmt.text)) {
+      }
+      // A second import of one specifier: its rewrite is already listed, and
+      // listing it twice would edit each import twice.
+      if (holds(walk.specifierFrom, stmt.text)) {
+        continue
+      }
+      if (isNishSpecifier(stmt.text)) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(RUNTIME)
-      } else {
-        const target = unit.resolved.get(stmt.text, -1)
-        if (target >= 0 && outputs[target].length > 0) {
-          walk.specifierFrom.push(stmt.text)
-          walk.specifierTo.push(relativeSpecifier(out, outputs[target]))
-        }
+        continue
+      }
+      const target = unit.resolved.get(stmt.text, -1)
+      const dest = target >= 0 && target < outputs.length ? outputs[target] : ""
+      if (dest.length > 0) {
+        walk.specifierFrom.push(stmt.text)
+        walk.specifierTo.push(relativeSpecifier(out, dest))
       }
     }
     let edits: Edit[] = []
@@ -310,7 +314,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
   }
   let entryOut = ""
   k = 0
-  while (k < modules.length) {
+  while (k < modules.length && k < outputs.length) {
     if (modules[k].isEntry) {
       entryOut = outputs[k]
     }

@@ -371,7 +371,7 @@ const splice = (walk: Walk, node: Node, operands: Operands): string => {
         )
         return walk.spanOf(node)
       }
-      sb.add(text.substring(cursor, child.start))
+      sb.add(text.slice(cursor, child.start))
       sb.add(operands.texts[i])
       cursor = child.end
     }
@@ -488,7 +488,7 @@ export const applyModuleEdits = (walk: Walk, text: string, edits: Edit[]): strin
       walk.fail(`--emit-ts: two edits to ${walk.source.path} overlap at byte ${edit.start}`)
       return text
     }
-    sb.add(text.substring(cursor, edit.start))
+    sb.add(text.slice(cursor, edit.start))
     sb.add(edit.text)
     cursor = edit.end
   }

@@ -189,7 +189,7 @@ function changedAcrossInstances(walk: Walk, node: Node, out: Operands, slot: i32
 function splice(walk: Walk, node: Node, operands: Operands): string -> @splice
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.fail
-  calls: SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText Walk.fail Walk.spanOf nish_panic_index nish_str_concat nish_str_from_i32 nish_str_new
+  calls: SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText Walk.fail Walk.spanOf nish_panic_index nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_new
   pointer walk: size=112 writesThrough=true captured=false passedTo=Walk.fail#0 Walk.spanOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=Walk.spanOf#1
   pointer operands: size=40 writesThrough=false captured=false
@@ -261,10 +261,10 @@ function emitModule(walk: Walk, file: Node, edits: Edit[]): void -> @emitModule 
   callee +27:5 changedText -> @changedText
   callee +29:18 new Edit -> @Edit.constructor
 function applyModuleEdits(walk: Walk, text: string, edits: Edit[]): string -> @applyModuleEdits [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.fail
   escaping: text
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText Walk.fail nish_str_concat nish_str_from_i32 nish_str_new
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText Walk.fail nish_panic_slice nish_str_concat nish_str_from_i32 nish_str_new
   pointer walk: size=112 writesThrough=true captured=false passedTo=Walk.fail#0
   pointer edits: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
