@@ -11,6 +11,7 @@ at `083339e`.
 | `src/run-cache.ts` | `runCacheRoot`, `runBinaryName` (new), `fnv1a64Hex`, `fileFingerprint`, `runCacheKey` |
 | `src/compile.ts` | `main` (the `run` split and `--link` probe), `makeDirectory`, `makeDirectoryFor`, `planOutputs`, `perModule`, `cCompiler`, `missingToolchain`, `programOnPath`, `packageRootCandidates`, `runProgram`, `buildIntoCache`, `linkProgram`, `writeSidecars`; and, since #546 (at `02d90e7`), `distrustOf`, `refuseCacheRoot`, `considerRoot`, `findPackage` and `PackageSearch`, which replaced the audit's `packageRoot` and `libraryRoot` |
 | `src/run-cache.ts`, `src/compile.ts`, `scripts/build.sh` (CLI-11, the runtime cache) | `runtimeCacheRoot`, `runtimeUnits`, `addRecipeFingerprints`, `addUnitFingerprints`, `runtimeCacheKey`; `cachedRuntime`, `pushRecipeFlags`, and `linkProgram`'s call into them; `build.sh`'s `--runtime-objects` and `--runtime-from` modes, `join_jobs` and `stop_jobs` |
+| `src/cli-style.ts` | `isTerminal`, `styleFor`, `agentDriven`: added after the audit, with the grouped `--help`, and read for process and environment access only (below) |
 | `src/compilation.ts` | `Compilation.resolveSpecifier` (where `nish/<module>` is read from); the rest of the file was read for file and process access and has none beyond `readFileSyncOrNull` on module paths |
 
 Read but not owned, so any finding in them is recorded as open rather than
@@ -18,6 +19,15 @@ fixed: `scripts/build.sh` (how the link's arguments reach `clang`),
 `scripts/bootstrap.sh` (where the intermediate stages live), and
 `runtime/runtime-os.c` (`nish_put_file`, `nish_mkdir`, `nish_spawn_impl`,
 `nish_realpath`: what each builtin actually does to the file system).
+
+Added after the audit, with the grouped `--help`: `isTerminal`
+(`src/cli-style.ts`) starts `/bin/sh -c '[ -t N ]'` by absolute path, with N
+the descriptor 1 or 2, on the paths that print the usage: the command is a
+constant and takes nothing from the arguments, and the shell inherits the
+environment as every spawn of `nish` does; and `usageText` (`src/compile.ts`) calls
+`findPackage` for an agent's help only to print the absolute path of the
+package's `docs/AI.md`, which `nish` neither reads nor runs. The root it
+settles on is the one CLI-9 already covers.
 
 ## Threat model
 
