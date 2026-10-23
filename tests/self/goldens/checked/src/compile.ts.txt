@@ -88,8 +88,8 @@ function usageText(fd: i32): string -> @usageText
   local +4:11 root: string (const)
   callee +4:18 findPackage -> @findPackage
   local +6:13 card: string | null (const)
-  callee +12:10 helpText -> @helpText
-  callee +12:19 styleFor -> @styleFor
+  callee +10:10 helpText -> @helpText
+  callee +10:19 styleFor -> @styleFor
 function isProfile(name: string): boolean -> @isProfile
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
