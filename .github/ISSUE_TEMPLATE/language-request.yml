@@ -1,0 +1,80 @@
+name: Language or library request
+description: A TypeScript construct, builtin, `nish:` or `std/` module, or CLI flag that Nish does not have yet.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Nish compiles a strictly static subset of TypeScript, and some of what it leaves out is left out on
+        purpose. [`docs/LANGUAGE.md`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md) lists the
+        [forbidden constructs](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)
+        and what is [rejected by the checker](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#rejected-by-the-checker),
+        each with its reason. A request for one of those is welcome, but it needs to answer that reason.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Language construct (syntax or typing)
+        - Builtin or `nish:` module
+        - "`std/` module"
+        - CLI flag or output
+        - Interop (C, N-API, wasm, FFI)
+        - Diagnostics or `--fix`
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: The code you want to write
+      description: A small, complete program using the thing you are asking for, as you would write it.
+      render: typescript
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What Nish does with it today
+      description: The command and the diagnostic it prints, with its `NL` code (`--json` shows it), and the version (`nish --version`).
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: semantics
+    attributes:
+      label: What it should do
+      description: |
+        The behaviour you expect, including the edge cases (overflow, `null`, empty input, errors).
+        Where TypeScript already defines it, say whether Nish should match TypeScript and Node exactly
+        or differ, and why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why you need it
+      description: The program or library you are writing, and what you do instead today (the workaround, and what it costs).
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other shapes the feature could take, or an existing construct that comes close.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send
+      options:
+        - label: I searched the [open and closed issues](https://github.com/amritk/nish/issues?q=is%3Aissue) and this is not one of them.
+          required: true
+        - label: I checked [`docs/LANGUAGE.md`](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md) for the construct, and for a recorded reason it is left out.
+          required: true
