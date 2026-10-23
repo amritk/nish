@@ -12,11 +12,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
+// Each console call is recorded with its arguments as given, the format
+// included: a line printed without its `"%s"` would have a `%d` in the
+// program's text read as a directive.
 const lines = [];
 const context = vm.createContext({
   console: {
-    log: (format, ...rest) => lines.push(["out", format === "%s" ? rest.join(" ") : [format, ...rest].join(" ")]),
-    error: (format, ...rest) => lines.push(["err", format === "%s" ? rest.join(" ") : [format, ...rest].join(" ")]),
+    log: (...args) => lines.push(["out", ...args]),
+    error: (...args) => lines.push(["err", ...args]),
   },
   performance,
   crypto,
@@ -77,16 +80,16 @@ assert.equal(exitOf(() => core.exit(259)), 3);
 assert.equal(exitOf(() => core.readFileSync("/etc/hosts")), 1);
 
 assert.deepEqual(lines, [
-  ["out", "2"],
-  ["out", "6"],
-  ["out", "20"],
-  ["out", "7"],
-  ["out", "50% of %d"],
+  ["out", "%s", "2"],
+  ["out", "%s", "6"],
+  ["out", "%s", "20"],
+  ["out", "%s", "7"],
+  ["out", "%s", "50% of %d"],
   // The panic's line, then the exit's flush of the unfinished one: the order
   // a native run's buffered stdout leaves too.
-  ["err", "boom"],
-  ["out", "no newline"],
-  ["err", "readFileSync is not available in a browser"],
+  ["err", "%s", "boom"],
+  ["out", "%s", "no newline"],
+  ["err", "%s", "readFileSync is not available in a browser"],
 ]);
 
 // A line left unfinished is printed once the program yields to its caller.
@@ -94,5 +97,5 @@ lines.length = 0;
 core.write("partial");
 assert.deepEqual(lines, []);
 await Promise.resolve();
-assert.deepEqual(lines, [["out", "partial"]]);
+assert.deepEqual(lines, [["out", "%s", "partial"]]);
 console.log("web-context: ok");

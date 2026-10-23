@@ -13,7 +13,8 @@ module, in three entry points:
 | `nish/runtime/browser` | Installs the answers a web page can give | a page, a worker, any engine with `console`, `performance` and `queueMicrotask` |
 
 `nish/runtime` names no Node module, so it bundles for a browser; it reads
-the web `crypto` global as it loads, which Node 20 and every browser have. On its own it
+the web `crypto`, `TextEncoder` and `TextDecoder` globals as it loads, which
+Node 20 and every browser have. On its own it
 computes — `toI64`, `strLen`, `Ok(7).unwrapOr(0)` — but anything that needs the
 outside world (`log`, a file, the clock) throws `NishNoHost` until one of the
 other two has been imported. Import a host once, first, from the program's
@@ -45,8 +46,7 @@ export const main = (): void => {
 };
 ```
 
-The translation is written by hand today; a later release adds a compiler
-flag that writes it. As TypeScript, it imports the builtins it uses from `nish/runtime`, spells a
+The translation is written by hand today. As TypeScript, it imports the builtins it uses from `nish/runtime`, spells a
 string's length with `strLen`, which counts UTF-8 bytes as Nish does, and
 prints with `log`, which is Nish's `console.log`:
 
@@ -72,14 +72,15 @@ export const main = (): void => {
 ## The types
 
 Each entry point ships its declarations, so TypeScript with
-`"moduleResolution": "nodenext"` (or `"bundler"`) finds them with no
+`"moduleResolution": "nodenext"` finds them with no
 configuration. They follow what the helpers return at run time:
 
 - `i64` and `u64` are `bigint`: a 64-bit integer does not fit a JavaScript
   `number`, so `toI64` answers a `bigint` and 64-bit arithmetic stays exact.
 - Every other width (`i32`, `u8`, `u16`, `u32`, `f32`, `f64`) is `number`.
 - `Result<T, E>` is `{ ok: true, value: T } | { ok: false, error: E }` with
-  the methods a Nish `Result` has (`isOk`, `isErr`, `unwrapOr`, `expect`).
+  the methods a Nish `Result` has (`isOk`, `isErr`, `unwrapOr`, `expect`,
+  `orReturn`).
 
 ## What each host answers
 
