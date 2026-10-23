@@ -20,7 +20,7 @@ function controlRow(walk: Walk, node: Node, operands: Operands): string | null -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via hoistOrReturn
   calls: arenaMember enumText hoistOrReturn isOrReturn typeRef wrapBody
-  pointer walk: size=136 writesThrough=true captured=false passedTo=isOrReturn#0 hoistOrReturn#0 wrapBody#0 enumText#0 typeRef#0 arenaMember#0
+  pointer walk: size=128 writesThrough=true captured=false passedTo=isOrReturn#0 hoistOrReturn#0 wrapBody#0 enumText#0 typeRef#0 arenaMember#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isOrReturn#1 hoistOrReturn#1 wrapBody#1 enumText#1 typeRef#1 arenaMember#1
   pointer operands: size=40 writesThrough=true captured=false passedTo=hoistOrReturn#2 wrapBody#2
   stackSites=0 stackLocals=0
@@ -34,7 +34,7 @@ function controlRow(walk: Walk, node: Node, operands: Operands): string | null -
 function isOrReturn(walk: Walk, call: Node): boolean -> @isOrReturn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
-  pointer walk: size=136 writesThrough=false captured=false
+  pointer walk: size=128 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -42,7 +42,7 @@ function hoistOrReturn(walk: Walk, call: Node, operands: Operands): string | nul
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.fail
   calls: Operands.at SourceFile.lineOf Walk.canHoist Walk.fail Walk.hoist Walk.temporary Walk.useHelper nish_panic_index nish_str_at nish_str_concat nish_str_from_i32 nish_str_new
-  pointer walk: size=136 writesThrough=true captured=false passedTo=Walk.canHoist#0 Walk.fail#0 Walk.temporary#0 Walk.hoist#0 Walk.hoist#0 Walk.useHelper#0
+  pointer walk: size=128 writesThrough=true captured=false passedTo=Walk.canHoist#0 Walk.fail#0 Walk.temporary#0 Walk.hoist#0 Walk.hoist#0 Walk.useHelper#0
   pointer call: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
@@ -63,7 +63,7 @@ function wrapBody(walk: Walk, node: Node, operands: Operands): string | null -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Operands.at Walk.temporary Walk.useHelper callsOrReturn nish_panic_index nish_str_concat nish_str_index_of nish_str_index_of_from splice
-  pointer walk: size=136 writesThrough=true captured=false passedTo=callsOrReturn#0 Walk.temporary#0 Walk.useHelper#0 splice#0
+  pointer walk: size=128 writesThrough=true captured=false passedTo=callsOrReturn#0 Walk.temporary#0 Walk.useHelper#0 splice#0
   pointer node: size=40 writesThrough=false captured=false passedTo=splice#1
   pointer operands: size=40 writesThrough=true captured=false passedTo=Operands.at#0 splice#2
   stackSites=0 stackLocals=0
@@ -79,7 +79,7 @@ function wrapBody(walk: Walk, node: Node, operands: Operands): string | null -> 
 function callsOrReturn(walk: Walk, node: Node): boolean -> @callsOrReturn
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: callsOrReturn isOrReturn
-  pointer walk: size=136 writesThrough=false captured=false passedTo=isOrReturn#0 callsOrReturn#0
+  pointer walk: size=128 writesThrough=false captured=false passedTo=isOrReturn#0 callsOrReturn#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isOrReturn#1
   stackSites=0 stackLocals=0
   callee +0:31 isOrReturn -> @isOrReturn
@@ -89,7 +89,7 @@ function callsOrReturn(walk: Walk, node: Node): boolean -> @callsOrReturn
 function enumText(walk: Walk, node: Node): string | null -> @enumText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.ownEnum StringBuilder.add StringBuilder.constructor StringBuilder.toText StringMap.get nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer walk: size=136 writesThrough=false captured=false
+  pointer walk: size=128 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 name: Node (const)
@@ -125,7 +125,7 @@ function typeRef(walk: Walk, node: Node): string | null -> @typeRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.useHelper
   calls: CheckedProgram.enumNamed Walk.spanOf Walk.useHelper nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer walk: size=136 writesThrough=false captured=false passedTo=Walk.useHelper#0 Walk.spanOf#0
+  pointer walk: size=128 writesThrough=false captured=false passedTo=Walk.useHelper#0 Walk.spanOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=Walk.spanOf#1
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
@@ -137,7 +137,7 @@ function arenaMember(walk: Walk, node: Node): string | null -> @arenaMember
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.useHelper
   calls: Walk.useHelper arenaHelper nish_panic_index nish_str_eq
-  pointer walk: size=136 writesThrough=false captured=false passedTo=Walk.useHelper#0
+  pointer walk: size=128 writesThrough=false captured=false passedTo=Walk.useHelper#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 receiver: Node (const)
