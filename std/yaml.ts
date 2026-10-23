@@ -4545,7 +4545,7 @@ class YamlPathWalker {
         let pair: i32 = this.ownPair(at, step)
         if (pair < 0 && stream.merge) {
           this.seen = [at]
-          pair = this.mergedPair(at, step, 0)
+          pair = this.mergedPair(at, step, toI32(0))
         }
         if (pair < 0) {
           return
