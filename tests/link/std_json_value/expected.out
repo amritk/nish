@@ -44,6 +44,8 @@ PASS  numbers: i64 min - 1 is neither
 PASS  numbers: u64 max
 PASS  numbers: u64 max + 1 is neither, and keeps its text
 PASS  numbers: 1.0 is not an integer
+PASS  numbers: 1.0 is whole by value though not an i64
+PASS  numbers: isIntegral of 1e2, u64 max + 1, 0.1000…, -1 and 1E400
 PASS  numbers: 1e2 is not an integer
 PASS  numbers: 34 significant digits read as the nearest f64 and keep their text
 PASS  numbers: -1 is an i64, not a u64
@@ -52,6 +54,8 @@ PASS  numbers: 30 digits
 PASS  numbers: 1E400 reads as an infinity
 PASS  numbers: 5e-324 reads as the smallest subnormal
 PASS  numbers: every one written back as its text, byte for byte
+PASS  numbers: isIntegral is false on a string, a literal, an array and an object
+PASS  numbers: isIntegral is false on a handle from an earlier parse
 PASS  numbers: 2^53 + 1 reads as 2^53, ties to even, and keeps its text
 PASS  numbers: i64 of a string is 0
 PASS  numbers: u64 of null is 0
@@ -188,4 +192,4 @@ PASS  alloc: 10,000 reused bodies parse, read and write
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers and the write included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the last body as written
-std/json-value: 190 passed, 0 failed, 0 skipped
+std/json-value: 194 passed, 0 failed, 0 skipped

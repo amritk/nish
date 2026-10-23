@@ -38,6 +38,13 @@ export const main = (): number => {
   doc.duplicates = JSON_VALUE_DUPLICATE_LAST;
   console.log(`last ${doc.stringify(doc.parseText('{"a":1,"b":0,"a":2}'))}`);
 
+  const whole = doc.parseText('[1.0,1.5,1e400,1e99999999999,1e-99999999999,"1"]');
+  let integral = "isIntegral";
+  for (let k: i32 = 0; k < doc.length(whole); k += 1) {
+    integral = `${integral} ${doc.isIntegral(doc.at(whole, k)) ? 1 : 0}`;
+  }
+  console.log(`${integral} isI64 ${doc.isI64(doc.at(whole, 0))}`);
+
   doc.duplicates = 0;
   const kept = doc.parseText('{"a":"one"}');
   const member = doc.get(kept, "a");

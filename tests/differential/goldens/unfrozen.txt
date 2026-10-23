@@ -163,6 +163,8 @@ cases/ffi_buffer_declared added after R6: no rewriter to freeze it with
 cases/ffi_buffer_late_load added after R6: no rewriter to freeze it with
 cases/ffi_buffer_memcpy added after R6: no rewriter to freeze it with
 cases/ffi_buffer_write added after R6: no rewriter to freeze it with
+cases/ffi_handle_class_template added after R6: no rewriter to freeze it with
+cases/ffi_handle_positions added after R6: no rewriter to freeze it with
 cases/ffi_owned_string added after R6: no rewriter to freeze it with
 cases/ffi_string_loops added after R6: no rewriter to freeze it with
 cases/ffi_string_param added after R6: no rewriter to freeze it with

@@ -4,7 +4,8 @@
 // loop over `i` below that reads `word.charCodeAt(i)` counts in the string's
 // own unit and stays quiet, and so does a cursor the bound moves by a
 // constant to look ahead (`i + 1 < s.length`). A step counter moved the same
-// way is no cursor. An offset bounded by another offset, or by a local that
+// way is no cursor, and neither is a cursor into another string: the loop
+// over `i` that reads only `other.charCodeAt(i)` runs once per byte of `word`. An offset bounded by another offset, or by a local that
 // holds one, is quiet; a plain count against an offset is not.
 export const main = (): number => {
   const word = "héllo";
@@ -56,9 +57,15 @@ export const main = (): number => {
   while (m < word.length) {
     m = m + rounds;
   }
+  const other = "abcdef";
+  let codes = 0;
+  for (let i = 0; i < word.length; i++) {
+    codes = codes + other.charCodeAt(i);
+  }
   console.log(steps + k + d);
   console.log(sum);
   console.log(pairs + rounds);
   console.log(rest);
+  console.log(codes);
   return 0;
 };

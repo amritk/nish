@@ -302,9 +302,12 @@ GVN dropping `!alias.scope` named no program and was withdrawn.
   chain of field names as well as by a variable. A path fact is dropped by a
   store to any field named on the path (by name, through any holder), by a
   whole-record element store, by an assignment to the root, and by **any call
-  or `new`**. Every call drops every path because `resizesArray` is computed
-  after the checker runs, and because a callee that stores `h.xs = shorter`
-  resizes nothing and still rebinds the path. No path is built through a
+  or `new`**. Every call dropped every path because the checker cannot read
+  `resizesArray`, which is computed after it runs, and because a callee that
+  stores `h.xs = shorter` resizes nothing and still rebinds the path. The
+  checker still does not read it: a user callee now answers with its own
+  summary of what it stores (`callSummary` in `src/bounds.ts`), and a foreign
+  callee, which has none, drops every path. No path is built through a
   nullable link. Each of these rules has a must-panic program in
   `tests/cases/arr_path_*`.
 

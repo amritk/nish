@@ -61,6 +61,21 @@ const nodeTokens = (text: string): string => {
   return words.join(" ");
 };
 
+/** `isIntegral` of each token of `text`, `1` or `0`, a string token's included. */
+const nodeIntegral = (text: string): string => {
+  const bytes = nodeBytes(text);
+  const t = new JsonTokenizer(bytes, 0, toI32(bytes.length), new JsonLimits());
+  const words: string[] = [];
+  let k: i32 = t.next();
+  while (k > 0) {
+    if (k === JSON_TOK_NUMBER || k === JSON_TOK_STRING) {
+      words.push(t.isIntegral() ? "1" : "0");
+    }
+    k = t.next();
+  }
+  return `isIntegral ${words.join(" ")}`;
+};
+
 export const main = (): number => {
   // ASCII only, so that bytes and UTF-16 code units agree, with an escaped
   // surrogate pair (U+1F600) that decodes to four UTF-8 bytes; `keyEquals` is
@@ -75,5 +90,8 @@ export const main = (): number => {
   console.log(
     nodeTokens("[18446744073709551615,18446744073709551616,10000000000000000000,9999999999999999999,0]")
   );
+  // `isIntegral` by value: whole spellings, fractions, a number wider than an
+  // i64 and an exponent past any i32 of each sign, then a string.
+  console.log(nodeIntegral('[1.0,1e2,1.5,10e-2,12345678901234567890.0,1e400,1e99999999999,1e-99999999999,"1"]'));
   return 0;
 };

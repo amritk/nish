@@ -1,0 +1,15 @@
+The `[Symbol.dispose]` of handle class `VoidArgument` must take no parameters
+The `[Symbol.dispose]` of handle class `NoArgument` must take no parameters
+The `[Symbol.dispose]` of handle class `NotAClose` must take no parameters
+The `[Symbol.dispose]` of handle class `ThreeStatements` must take no parameters
+The `[Symbol.dispose]` of handle class `Untested` must take no parameters
+The `[Symbol.dispose]` of handle class `ConstantTest` must take no parameters
+The `[Symbol.dispose]` of handle class `EqualsNull` must take no parameters
+The `[Symbol.dispose]` of handle class `FieldTested` must take no parameters
+The `[Symbol.dispose]` of handle class `NoArgumentInIf` must take no parameters
+The `[Symbol.dispose]` of handle class `FieldClosed` must take no parameters
+The `[Symbol.dispose]` of handle class `OtherHandle` must take no parameters
+The `[Symbol.dispose]` of handle class `BoundToNull` must take no parameters
+The `[Symbol.dispose]` of handle class `ParenCallee` must take no parameters
+The `[Symbol.dispose]` of handle class `SameNameTested` must take no parameters
+The `[Symbol.dispose]` of handle class `SameNameClosed` must take no parameters

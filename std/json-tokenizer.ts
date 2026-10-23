@@ -65,7 +65,8 @@
  * so it leaves the arena where it was. `isInteger` and `numberI64` read a number
  * written without a fraction or an exponent that fits in an `i64`, and
  * `isU64` and `numberU64` one written without a sign either that fits in a
- * `u64`.
+ * `u64`. Those go by spelling; `isIntegral` asks whether the value is whole,
+ * however it is written (`1.0`, `1e2`), from the text and at any size.
  *
  * **Runs are read in bulk.** A string's plain bytes, the blanks between
  * tokens and a number's digits are each stepped over by a loop that reads
@@ -269,6 +270,33 @@ const JSON_TOK_SMALLEST_POWER: i32 = -342
 const JSON_TOK_LARGEST_POWER: i32 = 308
 /** Where an exponent's digits stop being added up: past it, `parseFloat` reads the text. */
 const JSON_TOK_EXPONENT_CAP: i32 = 100000
+/** 2^31 - 1 is 214748364 tens and 7: one more digit on a larger value, or a digit past 7 on that one, leaves `i32`. */
+const JSON_TOK_I32_TENS: i32 = 214748364
+const JSON_TOK_I32_LAST_DIGIT: i32 = 7
+
+/**
+ * Whether the decimal digits `src[i, end)` add up to more than `bound`, which
+ * is at least `0`. The sum stops as soon as it passes `bound`, and before a
+ * step that would leave `i32`, which is past any `bound` too, so an exponent
+ * of any length is compared exactly and nothing overflows, under Node as in
+ * a native build.
+ */
+const jsonTokDigitsExceed = (src: u8[], i: i32, end: i32, bound: i32): boolean => {
+  let value: i32 = 0
+  let at: i32 = i
+  while (at < end && at < toI32(src.length)) {
+    const digit: i32 = toI32(src[at]) - JSON_TOK_DIGIT_0
+    if (value > JSON_TOK_I32_TENS || (value === JSON_TOK_I32_TENS && digit > JSON_TOK_I32_LAST_DIGIT)) {
+      return true
+    }
+    value = value * JSON_TOK_TEN + digit
+    if (value > bound) {
+      return true
+    }
+    at += 1
+  }
+  return false
+}
 
 /**
  * The furthest a window may end. The scan reads up to twelve bytes past a
@@ -550,7 +578,10 @@ export class JsonTokenizer {
   errorAt: i32
   /** The current string's or key's length once decoded; shorter than its raw length exactly when it holds an escape. */
   stringBytes: i32
-  /** Whether the current number has neither a fraction nor an exponent. */
+  /**
+   * Whether the current number is written with neither a fraction nor an
+   * exponent: the spelling, so `1.0` is not. `isIntegral()` reads the value.
+   */
   integral: boolean
 
   constructor(src: u8[], off: i32, len: i32, limits: JsonLimits) {
@@ -1071,7 +1102,8 @@ export class JsonTokenizer {
   /**
    * Whether the current token is a number written without a fraction or an
    * exponent whose value fits in an `i64`: `-0` and `9223372036854775807`
-   * are, `1.0`, `1e2` and `9223372036854775808` are not.
+   * are, `1.0`, `1e2` and `9223372036854775808` are not. That is the
+   * spelling rule; `isIntegral()` asks whether the value is whole.
    */
   isInteger(): boolean {
     return this.kind === JSON_TOK_NUMBER && this.integral && this.integerScan()
@@ -1189,6 +1221,78 @@ export class JsonTokenizer {
     }
     this.unsignedValue = acc
     return true
+  }
+
+  /**
+   * Whether the current token is a number whose value is a whole number,
+   * however it is written: JSON Schema 2020-12's "integer". `-0.0`, `1.0`,
+   * `1e2`, `100e-2` and `1e400` are; `1.5`, `10e-2` and `1e-400` are not. It
+   * says nothing about fitting an `i64`, and it is not the `integral` field
+   * or `isInteger()`, which go by spelling and refuse `1.0` and `1e2`.
+   *
+   * It reads the text, never an `f64`, so `12345678901234567890.0` and
+   * `1e400` answer exactly. With F fraction digits, z trailing zeros across
+   * all the digits and the exponent E, the value is whole when every digit is
+   * zero or E - F + z >= 0. F and z count bytes of the token, so F - z fits an
+   * `i32` whatever the limits, and `jsonTokDigitsExceed` compares E with it
+   * without adding up more of E than it needs, so `1e99999999999` answers too.
+   */
+  isIntegral(): boolean {
+    if (this.kind !== JSON_TOK_NUMBER) {
+      return false
+    }
+    const src: u8[] = this.src
+    const end: i32 = this.tokEnd
+    const n: i32 = toI32(src.length)
+    let i: i32 = this.tokStart
+    if (i < 0 || end > n) {
+      return false
+    }
+    if (jsonTokByteAt(src, i, end) === JSON_TOK_MINUS) {
+      i += 1
+    }
+    let fraction: i32 = 0
+    let zeros: i32 = 0
+    let allZero = true
+    let afterDot = false
+    while (i < end && i < n) {
+      const b: i32 = toI32(src[i])
+      if (b === JSON_TOK_DOT) {
+        afterDot = true
+      } else if (jsonTokIsDigit(b)) {
+        if (b === JSON_TOK_DIGIT_0) {
+          zeros += 1
+        } else {
+          zeros = 0
+          allZero = false
+        }
+        if (afterDot) {
+          fraction += 1
+        }
+      } else {
+        break
+      }
+      i += 1
+    }
+    if (allZero) {
+      return true
+    }
+    // The exponent the value needs to be whole: E >= need.
+    const need: i32 = fraction - zeros
+    if (i >= end) {
+      return need <= 0
+    }
+    // `i` is at the `e` or `E`.
+    i += 1
+    const sign: i32 = jsonTokByteAt(src, i, end)
+    const minus: boolean = sign === JSON_TOK_MINUS
+    if (minus || sign === JSON_TOK_PLUS) {
+      i += 1
+    }
+    if (minus) {
+      return need <= 0 && !jsonTokDigitsExceed(src, i, end, -need)
+    }
+    return need <= 0 || jsonTokDigitsExceed(src, i, end, need - 1)
   }
 
   /**

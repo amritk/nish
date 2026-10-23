@@ -5,7 +5,7 @@
 # agree with them.
 #
 # build:  the server image, tests/interop/server.dockerfile — Nish built from this
-#         checkout by the pinned seed with LLVM 18, compiling
+#         checkout by the seed (the newest release, or `seed`) with LLVM 18, compiling
 #         tests/link/net_interop_server — shared with every job below.
 # quic-interop-runner: the runner's server role against quic-go and ngtcp2:
 #         handshake, transfer, retry, chacha20, multiplexing, keyupdate,
@@ -26,6 +26,11 @@
 # turns a failure green: the one retry, a quic-interop-runner case run once
 # more after it fails, passes only if that second run succeeds, and the
 # verdict prints both.
+#
+# The image's seed is the newest published release (server.dockerfile).
+# release.yml also calls this workflow, from its `interop` job, once `release`
+# has published the tag's binaries and SHA256SUMS, with `seed` naming that
+# release: the compiler just shipped builds and serves the interop server.
 name: Interop
 
 on:
@@ -48,6 +53,13 @@ on:
       - ".github/workflows/interop.yml"
   push:
     branches: [main]
+  # release.yml, once the release it builds is published (see the top).
+  workflow_call:
+    inputs:
+      seed:
+        description: the release whose compiler builds the image; empty for the newest
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -95,7 +107,9 @@ jobs:
 
       - name: Build tests/interop/server.dockerfile
         timeout-minutes: 10
-        run: docker build -f tests/interop/server.dockerfile -t nish-interop:ci .
+        env:
+          SEED: ${{ inputs.seed }}
+        run: docker build -f tests/interop/server.dockerfile --build-arg SEED_VERSION="$SEED" -t nish-interop:ci .
 
       - name: Save the image
         run: docker save nish-interop:ci | gzip -1 > nish-interop.tar.gz

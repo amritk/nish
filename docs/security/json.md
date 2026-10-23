@@ -29,7 +29,7 @@ layer, all Low; the typed layer's own findings follow in its section, JSON-13
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen`, `jsonTokW64`, `jsonTokMulHigh`, `jsonTokLeadingZeros`, `jsonTokEiselLemire`, `jsonTokPowerOfFive` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `isIntegral`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen`, `jsonTokW64`, `jsonTokMulHigh`, `jsonTokLeadingZeros`, `jsonTokEiselLemire`, `jsonTokPowerOfFive`, `jsonTokDigitsExceed` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -118,6 +118,21 @@ digits no greater than 8446744073709551615, which are added up below 10^19
 before 10^19 is added, so the sum never wraps ("isU64(18446744073709551615)",
 "isU64(18446744073709551616)", "isU64(28446744073709551615)",
 "isU64(100000000000000000000)", "isU64(-0)").
+
+**Whole by value** (`isIntegral`, `jsonTokDigitsExceed`): `isIntegral` reads
+the token's text and never a double, so it does not round. With F digits
+after the point, z of them trailing zeros and an exponent E, a number not all
+zeros is whole when E ≥ F − z. F − z is below the number's length, which
+`maxNumberBytes` holds in an `i32` whatever the limits (`JsonDocument` sets
+it to `i32`'s maximum). E is not added up: `jsonTokDigitsExceed` compares its
+digits with that one bound, stopping as soon as the sum passes the bound and
+before it would leave an `i32`, so an exponent of any length is answered
+exactly, without overflow under Node or natively, and without the 100,000 cap
+`numberF64` uses ("isIntegral(1e99999999999)", "isIntegral(1e-99999999999)",
+"isIntegral(0e-99999999999)", "isIntegral(1.5e21474836500)", and the 39- and
+40-digit exponents, "isIntegral(1.25e000000000000000000000000000000000000002)"
+among them). A token that is not a number is not whole ("isIntegral is false on a
+string token").
 
 **Long strings** (at `2d9a369f`: `:818`, `string`; `:320`,
 `jsonTokSkipPlain`): the limit counts raw bytes between the quotes. A run of
@@ -221,7 +236,7 @@ The checks in `tests/run.js` that hold the above:
   scanners read is proven, with no check left in the hot loops.
 - `link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively`
   and `link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to`:
-  the module runs under `runtime/nish.mjs`, through `numberF64`'s three paths, `numberI64` and `numberU64`.
+  the module runs under `runtime/nish.mjs`, through `numberF64`'s three paths, `numberI64`, `numberU64` and `isIntegral`.
 - `json: the power-of-five table in std/json-tokenizer.ts is what scripts/gen-json-pow5.mjs generates`.
 - `third-party-licence: ${noticesDoc} lists ${rows.length} files, and each exists and carries the notice of its licence`,
   for the vendored corpus.
@@ -552,7 +567,10 @@ again on the next parse").
 ("numbers: every one written back as its text, byte for byte"), and each reader
 answers only for text that fits it: `i64` and `u64` at both edges and one past
 each ("numbers: i64 max" through "numbers: u64 max + 1 is neither, and keeps
-its text"), with `u64` read without wrapping under Node too.
+its text"), with `u64` read without wrapping under Node too. `isIntegral` is
+the tokenizer's, and false on any other kind and on a handle from an earlier
+parse ("numbers: isIntegral is false on a string, a literal, an array and an
+object", "numbers: isIntegral is false on a handle from an earlier parse").
 
 **Handles.** A handle from before a `parse` or a `clear`, failed parses
 included, reads as no value in every reader and is refused by every builder,

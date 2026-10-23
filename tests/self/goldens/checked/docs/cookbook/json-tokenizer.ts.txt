@@ -126,6 +126,8 @@ const JSON_TOK_FAST_EXPONENT: i32 = 22
 const JSON_TOK_SMALLEST_POWER: i32 = -342
 const JSON_TOK_LARGEST_POWER: i32 = 308
 const JSON_TOK_EXPONENT_CAP: i32 = 100000
+const JSON_TOK_I32_TENS: i32 = 214748364
+const JSON_TOK_I32_LAST_DIGIT: i32 = 7
 const JSON_TOK_END_CEILING: i32 = 2147483583
 struct JsonLimits (class) size=16 align=4 exported
   field maxDepth: i32 index=0 offset=0
@@ -179,6 +181,7 @@ struct JsonTokenizer (class) size=96 align=8 exported
   method isU64 -> @nish.JsonTokenizer.isU64
   method numberU64 -> @nish.JsonTokenizer.numberU64
   method unsignedScan -> @nish.JsonTokenizer.unsignedScan
+  method isIntegral -> @nish.JsonTokenizer.isIntegral
   method numberF64 -> @nish.JsonTokenizer.numberF64
   method numberSlow -> @nish.JsonTokenizer.numberSlow
   method skipValue -> @nish.JsonTokenizer.skipValue
@@ -186,6 +189,15 @@ function JsonLimits.constructor(this: JsonLimits): void -> @nish.JsonLimits.cons
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=16 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function jsonTokDigitsExceed(src: u8[], i: i32, end: i32, bound: i32): boolean -> @nish.jsonTokDigitsExceed
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 value: i32 (let)
+  local +1:7 at: i32 (let)
+  local +3:11 digit: i32 (const)
 function jsonTokByteAt(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokByteAt
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -643,6 +655,28 @@ function JsonTokenizer.unsignedScan(this: JsonTokenizer): boolean -> @nish.JsonT
   local -8:13 million: u64 (const)
   local -7:13 tail: u64 (const)
   local -3:13 billion: u64 (const)
+function JsonTokenizer.isIntegral(this: JsonTokenizer): boolean -> @nish.JsonTokenizer.isIntegral [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.jsonTokByteAt nish.jsonTokDigitsExceed nish.jsonTokIsDigit nish_panic_overflow
+  pointer this: size=96 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 src: u8[] (const)
+  local +1:11 end: i32 (const)
+  local +2:11 n: i32 (const)
+  local +3:9 i: i32 (let)
+  callee +7:9 jsonTokByteAt -> @nish.jsonTokByteAt
+  local +10:9 fraction: i32 (let)
+  local +11:9 zeros: i32 (let)
+  local +12:9 allZero: boolean (let)
+  local +13:9 afterDot: boolean (let)
+  local +15:13 b: i32 (const)
+  callee +18:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  local +37:11 need: i32 (const)
+  local +43:11 sign: i32 (const)
+  callee +43:23 jsonTokByteAt -> @nish.jsonTokByteAt
+  local +44:11 minus: boolean (const)
+  callee +49:28 jsonTokDigitsExceed -> @nish.jsonTokDigitsExceed
+  callee +51:25 jsonTokDigitsExceed -> @nish.jsonTokDigitsExceed
 function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokEiselLemire nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow

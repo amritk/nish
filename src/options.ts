@@ -81,6 +81,13 @@ export class Options {
    */
   emitNapiAsync: string
   /**
+   * `--emit-ts`: the directory the program is written back out to as
+   * TypeScript (`src/emit-ts.ts`), or the empty string. Read only by the
+   * driver, after the check and in place of `emit`, so it changes no byte of
+   * the IR because no IR is made.
+   */
+  emitTs: string
+  /**
    * `--link`: the executable this invocation writes, or the empty string when
    * it writes IR alone; and `--profile`, the recipe `scripts/build.sh` links it
    * with. The IR reads both only through `hostVisible` (`src/visibility.ts`):
@@ -196,6 +203,7 @@ export class Options {
     this.emitDts = ""
     this.emitNapi = ""
     this.emitNapiAsync = ""
+    this.emitTs = ""
     this.link = ""
     this.profile = "speed"
     this.packageRoot = ""
