@@ -394,7 +394,7 @@ export class YamlStream {
     return this.kind(pair) === YAML_PAIR ? yamlAt(this.firsts, pair) : -1
   }
 
-  /** A pair's value node, or `-1` for a node that is not a pair. */
+  /** A pair's value node, or `-1` for an empty value (`a:`, which reads as null) and any node that is not a pair. */
   value(pair: i32): i32 {
     return this.kind(pair) === YAML_PAIR ? yamlAt(this.counts, pair) : -1
   }
@@ -1437,6 +1437,8 @@ class YamlParser {
   pos: i32 = 0
   len: i32 = 0
   depth: i32 = 0
+  /** Whether `DEPTH_LIMIT` cut the text short, so the collections it left open are not reported. */
+  depthHit: boolean = false
   maxDepth: i32 = 1000
   doc: i32 = 0
   /** The indent a flow collection's continuation lines must pass. */
@@ -2404,7 +2406,7 @@ class YamlParser {
     this.checkBlockHeaderEnd()
     this.finishLine()
     const bodyStart: i32 = this.pos
-    let contentIndent: i32 = explicitIndent > 0 ? parentIndent + explicitIndent : -1
+    let contentIndent: i32 = explicitIndent > 0 ? (parentIndent > 0 ? parentIndent : toI32(0)) + explicitIndent : -1
     let leadingBlank: i32 = -1
     let valueEnd: i32 = this.pos
     while (this.pos < this.len) {
@@ -2825,22 +2827,12 @@ class YamlParser {
     const at: i32 = this.pos
     this.error(YAML_ERR_DEPTH_LIMIT, `Exceeded maximum nesting depth of ${this.maxDepth}`, at, at)
     this.pos = this.len
+    this.depthHit = true
     return this.emptyScalar(at)
   }
 
-  /** Internal: reads one flow node, guarding the nesting depth. */
-  parseFlowNode(): i32 {
-    if (this.depth >= this.maxDepth) {
-      return this.depthLimitNode()
-    }
-    this.depth += 1
-    const node: i32 = this.parseFlowNodeInner()
-    this.depth -= 1
-    return node
-  }
-
   /** Internal: reads one flow node with its properties. */
-  parseFlowNodeInner(): i32 {
+  parseFlowNode(): i32 {
     this.skipFlowWs()
     const props: i32 = this.scanProps(true)
     this.skipFlowWs()
@@ -2961,6 +2953,9 @@ class YamlParser {
 
   /** Internal: reports a flow collection opened at `start` that never closes. */
   reportUnterminatedFlow(close: i32, start: i32): void {
+    if (this.depthHit) {
+      return
+    }
     this.error(
       YAML_ERR_UNTERMINATED_FLOW,
       close === YAML_RBRACKET ? 'Missing closing "]" for flow sequence' : 'Missing closing "}" for flow mapping',
@@ -2971,6 +2966,17 @@ class YamlParser {
 
   /** Internal: reads the flow sequence opening at the cursor. */
   parseFlowSeq(): i32 {
+    if (this.depth >= this.maxDepth) {
+      return this.depthLimitNode()
+    }
+    this.depth += 1
+    const node: i32 = this.parseFlowSeqBody()
+    this.depth -= 1
+    return node
+  }
+
+  /** Internal: the body of `parseFlowSeq`, inside its depth guard. */
+  parseFlowSeqBody(): i32 {
     const start: i32 = this.pos
     const base: i32 = this.scratchTop
     this.pos += 1
@@ -3023,6 +3029,17 @@ class YamlParser {
 
   /** Internal: reads the flow mapping opening at the cursor. */
   parseFlowMap(): i32 {
+    if (this.depth >= this.maxDepth) {
+      return this.depthLimitNode()
+    }
+    this.depth += 1
+    const node: i32 = this.parseFlowMapBody()
+    this.depth -= 1
+    return node
+  }
+
+  /** Internal: the body of `parseFlowMap`, inside its depth guard. */
+  parseFlowMapBody(): i32 {
     const start: i32 = this.pos
     const base: i32 = this.scratchTop
     let keySet: i32 = -1
@@ -3629,11 +3646,7 @@ class YamlParser {
     if (!seq && !explicit && colon < 0) {
       return -1
     }
-    if (this.depth >= this.maxDepth) {
-      return this.depthLimitNode()
-    }
     const column: i32 = this.columnOf(at)
-    this.depth += 1
     let node: i32 = -1
     if (seq) {
       node = this.parseBlockSeq(column)
@@ -3652,7 +3665,6 @@ class YamlParser {
         node = this.parseBlockMap(column, colon, YAML_NONE, props)
       }
     }
-    this.depth -= 1
     return node
   }
 
@@ -3698,6 +3710,17 @@ class YamlParser {
    * `-1`, an explicit `?` key at the cursor.
    */
   parseBlockMap(indent: i32, firstColon: i32, firstKey: i32, firstProps: i32): i32 {
+    if (this.depth >= this.maxDepth) {
+      return this.depthLimitNode()
+    }
+    this.depth += 1
+    const node: i32 = this.parseBlockMapBody(indent, firstColon, firstKey, firstProps)
+    this.depth -= 1
+    return node
+  }
+
+  /** Internal: the body of `parseBlockMap`, inside its depth guard. */
+  parseBlockMapBody(indent: i32, firstColon: i32, firstKey: i32, firstProps: i32): i32 {
     const stream: YamlStream = this.stream
     const base: i32 = this.scratchTop
     let keySet: i32 = -1
@@ -3823,6 +3846,17 @@ class YamlParser {
 
   /** Internal: reads a block sequence at `indent`, whose first `-` is at the cursor. */
   parseBlockSeq(indent: i32): i32 {
+    if (this.depth >= this.maxDepth) {
+      return this.depthLimitNode()
+    }
+    this.depth += 1
+    const node: i32 = this.parseBlockSeqBody(indent)
+    this.depth -= 1
+    return node
+  }
+
+  /** Internal: the body of `parseBlockSeq`, inside its depth guard. */
+  parseBlockSeqBody(indent: i32): i32 {
     const stream: YamlStream = this.stream
     const base: i32 = this.scratchTop
     let start: i32 = -1
@@ -3878,21 +3912,10 @@ class YamlParser {
 
   /**
    * Internal: reads the block node at the cursor, at `indent`, whose parent
-   * is at `parentIndent`, guarding the nesting depth. `seqAtParentIndent` lets
-   * a sequence at the parent's own indent be the value of lone properties.
+   * is at `parentIndent`. `seqAtParentIndent` lets a sequence at the parent's
+   * own indent be the value of lone properties.
    */
   parseNode(indent: i32, parentIndent: i32, seqAtParentIndent: boolean): i32 {
-    if (this.depth >= this.maxDepth) {
-      return this.depthLimitNode()
-    }
-    this.depth += 1
-    const node: i32 = this.parseNodeInner(indent, parentIndent, seqAtParentIndent)
-    this.depth -= 1
-    return node
-  }
-
-  /** Internal: `parseNode`, past the depth guard. */
-  parseNodeInner(indent: i32, parentIndent: i32, seqAtParentIndent: boolean): i32 {
     if (this.isSeqEntryDash(this.pos)) {
       return this.parseBlockSeq(indent)
     }
@@ -4209,7 +4232,7 @@ class YamlPathWalker {
       if (!yamlIsWord(stream.source, start, end, step)) {
         return step === "" && stream.type(key) === YAML_NULL
       }
-      return stream.type(key) !== YAML_NULL || step === ""
+      return true
     }
     return yamlKeyText(stream, key) === step
   }

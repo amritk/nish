@@ -1,0 +1,252 @@
+PASS  resolves ~
+PASS  resolves null
+PASS  resolves Null
+PASS  resolves NULL
+PASS  resolves nULL
+PASS  resolves true
+PASS  resolves False
+PASS  resolves yes
+PASS  resolves 0
+PASS  resolves -12
+PASS  resolves +7
+PASS  resolves 0o17
+PASS  resolves 0x1F
+PASS  resolves 007
+PASS  resolves 0x
+PASS  resolves 1_000
+PASS  resolves 0b11
+PASS  resolves 1.5
+PASS  resolves .5
+PASS  resolves 0.
+PASS  resolves 1e3
+PASS  resolves -1.5e-3
+PASS  resolves -.inf
+PASS  resolves +.inf
+PASS  resolves .Inf
+PASS  resolves .NaN
+PASS  resolves 1:2
+PASS  resolves a b  c
+PASS  resolves '1'
+PASS  resolves 'it''s'
+PASS  resolves "x\u00e9\n"
+PASS  resolves "\x41\t\""
+PASS  resolves !!str 12
+PASS  resolves !!int "3"
+PASS  resolves !!float 1
+PASS  resolves !!null ''
+PASS  resolves !custom x
+PASS  resolves a\n b\n\n c\n
+PASS  resolves 'a\n  b\n\n  c'\n
+PASS  resolves "a\\n  b"\n
+PASS  block |\n a\n b\n
+PASS  block |\n a\n b\n is quiet
+PASS  block |-\n a\n\n
+PASS  block |-\n a\n\n is quiet
+PASS  block |+\n a\n\n
+PASS  block |+\n a\n\n is quiet
+PASS  block |\n a\n\n
+PASS  block |\n a\n\n is quiet
+PASS  block >\n a\n b\n\n c\n
+PASS  block >\n a\n b\n\n c\n is quiet
+PASS  block >\n a\n  b\n c\n
+PASS  block >\n a\n  b\n c\n is quiet
+PASS  block >-\n a\n b\n
+PASS  block >-\n a\n b\n is quiet
+PASS  block |2\n   a\n
+PASS  block |2\n   a\n is quiet
+PASS  block |1\n  a\n
+PASS  block |1\n  a\n is quiet
+PASS  block |\n
+PASS  block |\n is quiet
+PASS  block |\n  a\n   b\n
+PASS  block |\n  a\n   b\n is quiet
+PASS  eleven items
+PASS  0o17 is 15
+PASS  0x1F is 31
+PASS  -12
+PASS  i64 max
+PASS  past i64 max wraps
+PASS  1.5
+PASS  -.inf is minus infinity
+PASS  .nan is not a number
+PASS  an int as a float
+PASS  true
+PASS  false
+PASS  a string is not true
+PASS  a string's int is 0
+PASS  a block seq
+PASS  style of item 0
+PASS  style of item 1
+PASS  style of item 2
+PASS  style of item 3
+PASS  style of item 4
+PASS  style of item 5
+PASS  style of item 6
+PASS  the root is a map
+PASS  of two pairs
+PASS  a child of a map is a pair
+PASS  its key
+PASS  its value is a seq
+PASS  the flow seq starts at its [
+PASS  and ends past its ]
+PASS  its second item
+PASS  past the last child
+PASS  an item is a scalar
+PASS  a scalar has no children
+PASS  a scalar's start
+PASS  an anchor
+PASS  a node's range leaves its properties out
+PASS  an alias
+PASS  names its anchor
+PASS  resolved follows it
+PASS  resolved leaves a scalar
+PASS  a scalar is no alias
+PASS  a handle that is no node
+PASS  a pair's key of a non-pair
+PASS  !!str is the core tag
+PASS  a tagged node's range is its text
+PASS  a local tag
+PASS  a verbatim tag
+PASS  no tag
+PASS  an int tag makes an int
+PASS  a float tag makes a float
+PASS  an empty text has no documents
+PASS  nor does a comment
+PASS  an empty value reads as null
+PASS  an empty value is no node
+PASS  three documents, quietly
+PASS  three documents
+PASS  document 0 starts at its ---
+PASS  document 0 ends past its ...
+PASS  document 1 starts at its ---
+PASS  document 1 ends past its ...
+PASS  document 2 starts at its ---
+PASS  document 2 ends past its ...
+PASS  past the last document
+PASS  two comments
+PASS  a comment's text drops its #
+PASS  its start is the #
+PASS  its end is the line's
+PASS  a trailing comment
+PASS  starts at its #
+PASS  comments are not kept by default
+PASS  a bare document
+PASS  a byte order mark is skipped
+PASS  and is quiet
+PASS  a diagnostic names its document
+PASS  uniqueKeys off
+PASS  << repeats as a merge key
+PASS  without merge, << is a plain key
+PASS  a quoted key matches a plain one
+PASS  1 and 01 are different keys
+PASS  null and ~ are the same key
+PASS  equal flow keys
+PASS  a big map hashes its keys and still finds the repeat
+PASS  the hashed check names it
+PASS  keyText 0
+PASS  keyText 1
+PASS  keyText 2
+PASS  keyText 3
+PASS  keyText 4
+PASS  keyText 5
+PASS  keyText 6
+PASS  a long key is cut
+PASS  with an ellipsis
+PASS  path a/b/1/c
+PASS  path a/b/1/c matches every step
+PASS  path a/1
+PASS  path a/1 matches every step
+PASS  path a/null
+PASS  path a/null matches every step
+PASS  path a/
+PASS  path a/ matches every step
+PASS  path q
+PASS  path q matches every step
+PASS  path t/s
+PASS  path t/s matches every step
+PASS  an empty path names the root
+PASS  and no pair
+PASS  pathPair gives the pair stepped through
+PASS  a step past the end matches less
+PASS  and pathNode stops at the deepest node reached
+PASS  a missing key matches nothing
+PASS  a key step on a seq does not match
+PASS  a negative index does not match
+PASS  LF, CRLF and CR are each one break
+PASS  line of 0
+PASS  line of 3
+PASS  column of 3
+PASS  line of 6
+PASS  line of 8
+PASS  the end has a position
+PASS  a negative offset clamps
+PASS  lineStart
+PASS  lineStart clamps
+PASS  byteColumn
+PASS  an empty text has one line
+PASS  ranges of a: &x: 1\n
+PASS  ranges of a: & 1\n
+PASS  ranges of a: |x\n  b\n
+PASS  ranges of a: |--\n  b\n
+PASS  ranges of a: |12\n  b\n
+PASS  ranges of a: |#c\n  b\n
+PASS  ranges of [1,#c\n]\n
+PASS  ranges of %TAG !x\n--- 1\n
+PASS  ranges of %YAML 1.x\n--- 1\n
+PASS  ranges of %YAML 1.2 x\n--- 1\n
+PASS  ranges of "\q"\n
+PASS  ranges of "\x4"\n
+PASS  ranges of "\U00110000"\n
+PASS  ranges of "a\nb": 1\n
+PASS  ranges of a:\n  "x\ny"\n
+PASS  ranges of a: |\n    \n  x\n
+PASS  ranges of a:\n  - [1,\n  2]\n
+PASS  ranges of &a &b x\n
+PASS  ranges of !x !y x\n
+PASS  ranges of &a ? x\n: y\n
+PASS  ranges of &a *b\n
+PASS  ranges of a: b: c\n
+PASS  ranges of a\n: 1\n
+PASS  ranges of [- x]\n
+PASS  ranges of @x\n
+PASS  ranges of !<x 1\n
+PASS  ranges of !x{ 1\n
+PASS  ranges of !!map x\n
+PASS  ranges of !!int x\n
+PASS  ranges of !!str &a\n- x\n
+PASS  ranges of %TAG !e! x:\n%TAG !e! y:\n--- 1\n
+PASS  ranges of %YAML 1.2\n%YAML 1.2\n--- 1\n
+PASS  ranges of a: 1\na: 2\n
+PASS  ranges of &a [*a]\n
+PASS  ranges of a:\n\t- b\n
+PASS  ranges of [1,,2]\n
+PASS  ranges of 'x' y\n
+PASS  ranges of a: - b\n
+PASS  ranges of [1,\n---\n]\n
+PASS  ranges of ... x\n
+PASS  ranges of --- a: 1\n
+PASS  ranges of 'a'\n'b'\n
+PASS  ranges of %YAML 1.2\n
+PASS  ranges of %FOO bar\n--- 1\n
+PASS  ranges of !e!x 1\n
+PASS  ranges of *nope\n
+PASS  ranges of %YAML 1.1\n--- 1\n
+PASS  ranges of %YAML 2.0\n--- 1\n
+PASS  ranges of {a: 1\n
+PASS  ranges of [1, 2\n
+PASS  ranges of 'abc\n
+PASS  ranges of a: 'x\n
+PASS  MULTIPLE_DOCUMENTS warns at the second marker
+PASS  firstDocumentOnly keeps one document
+PASS  firstDocumentOnly with one document is quiet
+PASS  DEPTH_LIMIT at the third flow level
+PASS  DEPTH_LIMIT at the third block level
+PASS  scalars do not count toward maxDepth
+PASS  maxDepth 1 allows one collection
+PASS  maxDepth 1 stops a nested one
+PASS  the message form of DUPLICATE_KEY
+PASS  the message form of a warning
+PASS  two errors
+PASS  no warnings
+PASS  diagnostics are in source order
+std/yaml: 251 passed, 0 failed, 0 skipped
