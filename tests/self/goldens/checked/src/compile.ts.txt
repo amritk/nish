@@ -334,30 +334,30 @@ function main(): i32 -> @nish_main [exported entry]
   callee +621:16 emitTypeScript -> @emitTypeScript
   callee +623:14 internalErrorFor -> @internalErrorFor
   callee +626:7 report -> @report
-  local +633:16 file: EmittedFile (const)
-  local +634:13 path: string (const)
-  callee +634:20 joinPath -> @joinPath
-  callee +635:12 makeDirectoryFor -> @makeDirectoryFor
-  local +646:9 anySidecar: boolean (const)
-  local +651:9 fns: ExternalFunction[] (const)
-  callee +651:48 externalFunctions -> @externalFunctions
-  callee +652:22 acceptsSidecars -> @acceptsSidecars
-  callee +652:56 cDeclared -> @cDeclared
-  callee +653:5 report -> @report
-  local +656:9 emitted: EmittedModule[] (const)
-  callee +656:19 Compilation.emit -> @Compilation.emit
-  callee +658:12 runProgram -> @runProgram
-  callee +661:7 basenameWithout -> @basenameWithout
-  local +670:9 stems: string[] (const)
-  local +671:9 paths: string[] (const)
-  local +674:14 module: EmittedModule (const)
-  local +678:9 outputs: string[] (const)
-  callee +678:19 planOutputs -> @planOutputs
-  local +683:7 i: i32 (let)
-  local +685:11 file: string (const)
-  callee +686:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +695:22 writeSidecars -> @writeSidecars
-  callee +701:10 linkProgram -> @linkProgram
+  local +635:16 file: EmittedFile (const)
+  local +636:13 path: string (const)
+  callee +636:20 joinPath -> @joinPath
+  callee +637:12 makeDirectoryFor -> @makeDirectoryFor
+  local +648:9 anySidecar: boolean (const)
+  local +653:9 fns: ExternalFunction[] (const)
+  callee +653:48 externalFunctions -> @externalFunctions
+  callee +654:22 acceptsSidecars -> @acceptsSidecars
+  callee +654:56 cDeclared -> @cDeclared
+  callee +655:5 report -> @report
+  local +658:9 emitted: EmittedModule[] (const)
+  callee +658:19 Compilation.emit -> @Compilation.emit
+  callee +660:12 runProgram -> @runProgram
+  callee +663:7 basenameWithout -> @basenameWithout
+  local +672:9 stems: string[] (const)
+  local +673:9 paths: string[] (const)
+  local +676:14 module: EmittedModule (const)
+  local +680:9 outputs: string[] (const)
+  callee +680:19 planOutputs -> @planOutputs
+  local +685:7 i: i32 (let)
+  local +687:11 file: string (const)
+  callee +688:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +697:22 writeSidecars -> @writeSidecars
+  callee +703:10 linkProgram -> @linkProgram
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv

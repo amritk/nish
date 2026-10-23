@@ -244,9 +244,9 @@ function emitModule(walk: Walk, file: Node, edits: Edit[]): void -> @emitModule 
   pointer file: size=40 writesThrough=false captured=false
   pointer edits: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=1
-  local -5:14 stmt: Node (const)
-  local -2:20 spec: Node (const)
-  callee -1:85 StringSet.has -> @StringSet.has
+  local -13:14 stmt: Node (const)
+  local -6:20 spec: Node (const)
+  callee -2:13 StringSet.has -> @StringSet.has
   callee +0:24 new Edit -> @Edit.constructor
   local +4:11 k: i32 (let)
   local +7:17 start: i32 (const)

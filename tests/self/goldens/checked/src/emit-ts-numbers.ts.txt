@@ -4,9 +4,9 @@ entry: src/emit-ts-numbers.ts src/emit-ts-edits.ts src/diagnostics.ts src/codes.
 import Operands from "./emit-ts-edits" -> struct Operands
 import Walk from "./emit-ts-edits" -> struct Walk
 import Node from "./nodes" -> struct Node
-function numbersRow(walk: Walk, node: Node, operands: Operands): string | null -> @numbersRow [exported]
+function numbersRow(_walk: Walk, _node: Node, _operands: Operands): string | null -> @numbersRow [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer walk: size=112 writesThrough=false captured=false
-  pointer node: size=40 writesThrough=false captured=false
-  pointer operands: size=40 writesThrough=false captured=false
+  pointer _walk: size=112 writesThrough=false captured=false
+  pointer _node: size=40 writesThrough=false captured=false
+  pointer _operands: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
