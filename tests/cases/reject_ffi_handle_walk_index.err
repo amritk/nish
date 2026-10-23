@@ -1,0 +1,1 @@
+String-keyed element access is forbidden in Nish; use `obj.name` (no dynamic property lookup)

@@ -4950,10 +4950,10 @@ declare function free(block: CPtr): void;
   analysis walks; the second would put one across a boundary `--emit-header`,
   `--emit-dts` and `--emit-napi` describe, and none of the three has a spelling
   for an address whose provenance and lifetime are unknown. The type-argument
-  clause is stated at a generic *function*'s instantiation; a generic *class* at
-  `CPtr` is refused by whichever member rule the monomorphised class reaches
-  (`reject_ffi_pointer_type_argument`), which is every shape that lays the type
-  out — see `docs/wp27-ffi.md` §7a for the one that does not.
+  clause is stated where a generic function or class is instantiated
+  (`reject_ffi_pointer_type_argument`), so `new Empty<CPtr>()` is refused even
+  when no member of `Empty<T>` names `T`. The one field that may hold a `CPtr`
+  is a handle class's, below.
 - **A `null` reaches C only as the literal.** A `declare function` may return
   `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
   either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
@@ -5135,6 +5135,96 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   only on a target where `size_t` is 64 bits, until a later release gives the
   count a target-width type. The freestanding `--profile wasm` link resolves
   the declaration against the C the link is given.
+
+#### A handle class: a class that owns a `CPtr`
+
+**A class with a `CPtr` or `CPtr | null` field is a handle class: it owns the C
+resource the pointer names, and its `[Symbol.dispose]` names the C function
+that closes it** (`tests/cases/ffi_handle_positions`, `docs/wp40-ffi-buffers-handles.md`
+§4a–§4d).
+
+```ts
+declare function fopen(path: string, mode: string): CPtr | null;
+declare function fclose(p: CPtr): i32;
+declare function fgetc(p: CPtr): i32;
+
+class File {
+  readonly file: CPtr | null;
+  constructor(path: string) {
+    this.file = fopen(path, "r");
+  }
+  read(): i32 {
+    const p = this.file;
+    if (p === null) {
+      return -1;
+    }
+    return fgetc(p);
+  }
+  [Symbol.dispose](): void {
+    const p = this.file;
+    if (p !== null) {
+      fclose(p);
+    }
+  }
+}
+
+const first = (f: File): i32 => f.read();
+```
+
+**`using` of a handle class is not lowered yet.** The class, its methods and
+every function that borrows one are checked, and `using f = new File(p)` is
+`` `using` of handle class `File` is not lowered yet: until a release emits its
+close, hold the `CPtr` in a local and close it yourself `` (NL2573,
+`reject_ffi_handle_using`) until the compiler emits the close at every exit of
+the block. Until then, a program holds the `CPtr` in a local and calls the
+close itself, as the declared-function examples above do; what the rules
+below fix is the shape a program will open a `File` with.
+
+- **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
+  no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,
+  `_field_initialiser`). No type parameters, no `implements`, no `export`
+  (`_generic_class`, `_implements`, `_export`), and no `static readonly json`
+  (`_json`).
+- **The write.** The constructor writes the field once, as
+  `this.file = g(...)` at its top level, with `g` a `declare function` and no
+  exit before it (`_field_copy`, `_field_copy_twice`, `_field_copy_branch`,
+  `_field_copy_non_foreign`).
+- **The read.** The pointer is read only as `this.file` inside a method of the
+  class, passed straight to a `declare function` or bound once to a `const`
+  (`_field_read_outside`, `_field_other_instance`, `_field_alias_copy`,
+  `_field_alias_let`, `_field_position`): `` The pointer `file` of handle class
+  `File` cannot be used here ``.
+- **The close.** `[Symbol.dispose](): void` is `close(this.file);` or
+  `const p = this.file; if (p !== null) { close(p); }` for a `declare
+  function` `close` of one parameter (`_no_dispose`, `_dispose_body`,
+  `_dispose_arity`, `_dispose_arg_type`, `_dispose_unknown`, `_dispose_forms`,
+  `_dispose_shapes`). A class declares one, with no modifier
+  (`_dispose_twice`, `_dispose_static`). Nothing else may
+  call that close on the field, in a method or in the constructor
+  (`_close_call`), and `[Symbol.dispose]` is never called by name
+  (`_dispose_call`).
+- **Where a `File` may be.** It is opened by `using` (once lowered), called
+  (`f.read()`), or lent to a parameter of type `File`, which may lend it on.
+  Everything else is `` A `File` cannot be used here `` (`_position`): `new`
+  outside a `using` initialiser, `this` leaving the constructor, a copy into
+  another binding, an array element, an object literal, a capture, a builtin's
+  argument, a comparison (`_new_outside_using`, `_this_escapes`, `_alias`,
+  `_array`, `_object_literal`, `_closure_capture`, `_builtin_arg`,
+  `_walk_compare`).
+- **Where `File` may be written.** Only as the type of such a parameter. A
+  local's annotation, a field, a return, a `Result` arm, a nullable, a type
+  argument and an exported function's parameter are `` `File` is a handle
+  class, and its name may be written only as the type of a parameter that
+  borrows one `` (`_type_position`, `_field`, `_return`, `_result`,
+  `_nullable`, `_type_argument`, `_exported_param`).
+
+**Two things stay C contracts, as a buffer's count does.** The class's methods
+pass the field only to functions that use it and return, and that neither close
+what it owns nor hand it back: `freopen`, a close through a C wrapper with
+another name, `close(fileno(p))`, or a C function returning its argument are
+not seen by the rules above. And the constructor's foreign call returns a
+pointer the object owns: two objects built from one shared pointer would both
+close it.
 
 #### What a declaration cannot say
 

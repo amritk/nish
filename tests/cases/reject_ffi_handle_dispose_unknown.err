@@ -1,0 +1,1 @@
+`fclsoe` in the `[Symbol.dispose]` of handle class `File` is not a `declare function`

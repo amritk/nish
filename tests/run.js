@@ -2356,6 +2356,34 @@ for (const name of [
   )
 }
 
+// ---- A handle case reports exactly its own refusals (WP40 H1.1) -----------------------
+// The same blind spot for the handle pass: each `.err` line names one refusal,
+// and the count says nothing else was found, so a check that starts firing
+// twice, or on a body it should skip (an arrow lifted out of its method), fails.
+for (const [name, count] of [
+  ["reject_ffi_handle_arrow_using", 2],
+  ["reject_ffi_handle_dispose_forms", 15],
+  ["reject_ffi_handle_walk_forms", 9],
+  ["reject_ffi_handle_walk_ctor_param", 6],
+  ["reject_ffi_handle_walk_function_type", 2],
+]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  const at = selectedCases.indexOf(name)
+  const errors =
+    at < 0
+      ? []
+      : String(caseResults[at].stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: exactly ${count} refusals`,
+    at >= 0 && caseResults[at].status === 1 && errors.length === count,
+    at < 0 ? "(no such case)" : String(caseResults[at].stderr)
+  )
+}
+
 // ---- A computed key cut short is one syntax error (#348) -------------------------------
 // The same blind spot for the parser: the literal skips the broken property to
 // its `,` and parses the next one, where abandoning the literal would report
