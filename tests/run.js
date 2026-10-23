@@ -9517,17 +9517,20 @@ if (!only || "runtime-hosts".includes(only)) {
 
   // The declarations: `core.d.ts` declares exactly the values `core.mjs`
   // exports; a program importing the three entry points by name typechecks
-  // under `nodenext`; and every function both `core/*.d.ts` and
+  // under `nodenext`, each through its own `types` condition; and every function both `core/*.d.ts` and
   // `runtime/nish.d.ts` declare has the same overloads, width for width, once
   // `bigint` (what the core's i64 and u64 are at run time) reads as `number`.
   const ts = require("typescript")
   const probePath = path.join(root, "runtime-hosts-probe.mts")
   const probeText = [
     'import { Ok, toI64, type Result, type i64 } from "nish/runtime";',
-    'import "nish/runtime/node";',
-    'import "nish/runtime/browser";',
+    // A bare `import "nish/runtime/node"` goes unchecked; a namespace import
+    // of a module without declarations is an error under `strict`.
+    'import * as node from "nish/runtime/node";',
+    'import * as browser from "nish/runtime/browser";',
     "const r: Result<i64, string> = Ok(toI64(3));",
     "export const n: i64 = r.ok ? r.value : 0n;",
+    "export const hosts = [node, browser];",
   ].join("\n")
   const options = {
     strict: true,
@@ -9537,6 +9540,7 @@ if (!only || "runtime-hosts".includes(only)) {
     target: ts.ScriptTarget.ES2022,
     lib: ["lib.es2022.d.ts"],
     types: [],
+    noUncheckedSideEffectImports: true,
   }
   const host = ts.createCompilerHost(options)
   const { fileExists, readFile, getSourceFile } = host
@@ -19176,12 +19180,24 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
-      // The three entry points `exports` names for a TypeScript caller, and the
-      // core's declarations.
+      // The three entry points `exports` names for a TypeScript caller, the
+      // core's files they load, and the declarations of all three.
       "runtime/core.mjs",
       "runtime/core.d.ts",
       "runtime/node.mjs",
       "runtime/browser.mjs",
+      "runtime/host.d.ts",
+      "runtime/core/arrays.mjs",
+      "runtime/core/checks.mjs",
+      "runtime/core/host.mjs",
+      "runtime/core/numbers.mjs",
+      "runtime/core/result.mjs",
+      "runtime/core/strings.mjs",
+      "runtime/core/arrays.d.ts",
+      "runtime/core/host.d.ts",
+      "runtime/core/numbers.d.ts",
+      "runtime/core/result.d.ts",
+      "runtime/core/strings.d.ts",
       "scripts/build.sh",
       // The standard library is source, so shipping it *is* shipping the library
       // (wp21 §2). A tarball without it would install a compiler whose `std/`

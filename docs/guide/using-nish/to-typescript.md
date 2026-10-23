@@ -10,9 +10,10 @@ module, in three entry points:
 | --- | --- | --- |
 | `nish/runtime` | The builtins: integer and float helpers, UTF-8 string helpers, arrays, `Result`, `Ok`, `Err`, `Secret`, `log`, `panic`, `exit`, and the file, process and clock calls | any engine with ES modules |
 | `nish/runtime/node` | Installs the Node answers to every call that reaches outside the program | Node |
-| `nish/runtime/browser` | Installs the answers a web page can give | a page, a worker, any engine with `console` and `performance` |
+| `nish/runtime/browser` | Installs the answers a web page can give | a page, a worker, any engine with `console`, `performance` and `queueMicrotask` |
 
-`nish/runtime` names no Node module, so it bundles for a browser. On its own it
+`nish/runtime` names no Node module, so it bundles for a browser; it reads
+the web `crypto` global as it loads, which Node 20 and every browser have. On its own it
 computes — `toI64`, `strLen`, `Ok(7).unwrapOr(0)` — but anything that needs the
 outside world (`log`, a file, the clock) throws `NishNoHost` until one of the
 other two has been imported. Import a host once, first, from the program's
@@ -44,7 +45,8 @@ export const main = (): void => {
 };
 ```
 
-As TypeScript, it imports the builtins it uses from `nish/runtime`, spells a
+The translation is written by hand today; a later release adds a compiler
+flag that writes it. As TypeScript, it imports the builtins it uses from `nish/runtime`, spells a
 string's length with `strLen`, which counts UTF-8 bytes as Nish does, and
 prints with `log`, which is Nish's `console.log`:
 
@@ -77,7 +79,7 @@ configuration. They follow what the helpers return at run time:
   `number`, so `toI64` answers a `bigint` and 64-bit arithmetic stays exact.
 - Every other width (`i32`, `u8`, `u16`, `u32`, `f32`, `f64`) is `number`.
 - `Result<T, E>` is `{ ok: true, value: T } | { ok: false, error: E }` with
-  the methods a Nish `Result` has (`map`, `unwrapOr`, `isOk`, …).
+  the methods a Nish `Result` has (`isOk`, `isErr`, `unwrapOr`, `expect`).
 
 ## What each host answers
 
@@ -90,7 +92,10 @@ configuration. They follow what the helpers return at run time:
 | `monotonicNanos()` | `process.hrtime.bigint()` | `performance.now()`, in nanoseconds |
 | `getenv(name)` | the environment | `null` |
 | `argv()` | the process's arguments | `["main"]` |
-| a file, process or machine call (`readFileSync`, `spawn`, …) | Node's `fs`, `child_process` and `os` | panics, naming the call: `readFileSync is not available in a browser` |
+| a file, process or machine call (`readFileSync`, `spawnSync`, …) | Node's `fs`, `child_process` and `os` | panics, naming the call: `readFileSync is not available in a browser` |
+
+`spawn`, `waitPid`, `signalFd` and `readSignal` have no synchronous reading in
+JavaScript, so under either host they throw an `Error` that says so.
 
 In a browser, output that `write` leaves without a newline waits for the next
 newline, for `exit`, or for the program to yield, and is then printed as its

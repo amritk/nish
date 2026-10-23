@@ -3,8 +3,9 @@
  * (`node --experimental-vm-modules tests/runtime/web-context.mjs`): a vm
  * context holds only what a page has that the two read, both files are linked
  * as `SourceTextModule`s, and the linker refuses any `node:` specifier. One
- * helper from each core file runs, then `write`, `panic`, `exit` and a
- * file-system call; the console lines and each `NishExit` are asserted.
+ * helper from each core file runs, then `argv`, `write`, `panic`, `exit` and a
+ * file-system call; the console lines, each `NishExit` and the flush of an
+ * unfinished line once the program yields are asserted.
  * `tests/run.js` (`runtime-hosts`) runs it and reads its exit status.
  */
 import assert from "node:assert/strict";
@@ -68,6 +69,7 @@ core.log(core.idx([10, 20, 30], 1)); // arrays
 core.log(core.Ok(7).unwrapOr(0)); // result
 core.write("50% of ");
 core.write("%d\nno newline");
+assert.deepEqual([...core.argv()], ["main"]);
 assert.equal(typeof core.monotonicNanos(), "bigint");
 assert.equal(core.getenv("HOME"), null);
 assert.equal(exitOf(() => core.panic("boom")), 1);
@@ -86,4 +88,11 @@ assert.deepEqual(lines, [
   ["out", "no newline"],
   ["err", "readFileSync is not available in a browser"],
 ]);
+
+// A line left unfinished is printed once the program yields to its caller.
+lines.length = 0;
+core.write("partial");
+assert.deepEqual(lines, []);
+await Promise.resolve();
+assert.deepEqual(lines, [["out", "partial"]]);
 console.log("web-context: ok");
